@@ -18,7 +18,8 @@ use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus};
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::{
-    AgentKind, GitDiff, GitStatus, Repo, Seq, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, Seq, Session, SessionStatus, Workspace,
+    WorkspaceId, WorkspaceStatus,
 };
 use protocol::paths::Paths;
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -484,6 +485,40 @@ impl Hub {
             WorkerResponse::GitDiff(diff) => Ok(diff),
             other => Err(unexpected(other)),
         }
+    }
+
+    pub(crate) async fn workspace_pull_request(self: &Arc<Self>, id: String) -> Result<Option<PullRequest>, ApiError> {
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        match link.call(WorkerRequest::PullRequest { path }).await? {
+            WorkerResponse::PullRequest { pull_request } => Ok(pull_request),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    pub(crate) async fn comment_add(
+        &self,
+        workspace_id: String,
+        path: String,
+        side: DiffSide,
+        line: u32,
+        text: String,
+    ) -> Result<DiffComment, ApiError> {
+        if text.trim().is_empty() {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "a comment can't be empty"));
+        }
+        self.workspace(&workspace_id).await?;
+        let comment = DiffComment { id: new_id(), workspace_id, path, side, line, text, created_at_ms: now_ms() };
+        let stored = comment.clone();
+        self.blocking(move |store| store.add_comment(&stored)).await?;
+        Ok(comment)
+    }
+
+    pub(crate) async fn comment_list(&self, workspace_id: String) -> Result<Vec<DiffComment>, ApiError> {
+        self.blocking(move |store| store.list_comments(&workspace_id)).await
+    }
+
+    pub(crate) async fn comment_delete(&self, id: String) -> Result<(), ApiError> {
+        self.blocking(move |store| store.delete_comment(&id)).await
     }
 
     pub(crate) async fn session_create(

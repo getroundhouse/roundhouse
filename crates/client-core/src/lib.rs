@@ -22,7 +22,9 @@ use protocol::client::{
 };
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::frame;
-use protocol::model::{AgentKind, GitDiff, GitStatus, Repo, Seq, Session, Workspace};
+use protocol::model::{
+    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, Seq, Session, Workspace,
+};
 use protocol::paths::Paths;
 use protocol::tail::{StreamDelta, Tail};
 
@@ -223,6 +225,45 @@ impl Client {
         }
     }
 
+    pub fn workspace_pull_request(&self, id: &str) -> Result<Option<PullRequest>> {
+        match self.call(ClientRequest::WorkspacePullRequest { id: id.to_string() })? {
+            ClientResponse::PullRequest { pull_request } => Ok(pull_request),
+            other => unexpected(other),
+        }
+    }
+
+    pub fn comment_add(
+        &self,
+        workspace_id: &str,
+        path: &str,
+        side: DiffSide,
+        line: u32,
+        text: &str,
+    ) -> Result<DiffComment> {
+        let request = ClientRequest::CommentAdd {
+            workspace_id: workspace_id.to_string(),
+            path: path.to_string(),
+            side,
+            line,
+            text: text.to_string(),
+        };
+        match self.call(request)? {
+            ClientResponse::Comment(comment) => Ok(comment),
+            other => unexpected(other),
+        }
+    }
+
+    pub fn comment_list(&self, workspace_id: &str) -> Result<Vec<DiffComment>> {
+        match self.call(ClientRequest::CommentList { workspace_id: workspace_id.to_string() })? {
+            ClientResponse::Comments { comments } => Ok(comments),
+            other => unexpected(other),
+        }
+    }
+
+    pub fn comment_delete(&self, id: &str) -> Result<()> {
+        self.expect_ok(ClientRequest::CommentDelete { id: id.to_string() })
+    }
+
     pub fn session_create(
         &self,
         workspace_id: &str,
@@ -389,7 +430,14 @@ fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&paths.data_dir)?;
     let log = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
     let mut command = Command::new(daemon);
-    command.arg("hub").stdin(Stdio::null()).stdout(Stdio::from(log.try_clone()?)).stderr(Stdio::from(log));
+    command
+        .arg("hub")
+        // The hub this client will look for, whatever this process's environment says.
+        .env(protocol::paths::ENV_HOME, &paths.data_dir)
+        .env(protocol::paths::ENV_WORKSPACES, &paths.workspaces_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log.try_clone()?))
+        .stderr(Stdio::from(log));
     // SAFETY: setsid is async-signal-safe, which is all pre_exec requires. It detaches the hub from
     // this terminal and process group, so closing the client doesn't reach it.
     unsafe {

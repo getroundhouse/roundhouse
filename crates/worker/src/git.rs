@@ -6,10 +6,11 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GitDiff, GitFile, GitStatus};
+use protocol::model::{GitDiff, GitFile, GitStatus, PullRequest};
 use tokio::process::Command;
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+const GH_TIMEOUT: Duration = Duration::from_secs(15);
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
 const MAX_UNTRACKED_FILES: usize = 200;
 const MAX_UNTRACKED_BYTES: usize = 8 * 1024 * 1024;
@@ -286,6 +287,34 @@ pub async fn diff(path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiErro
     Ok(GitDiff { base_commit: base, patch, truncated })
 }
 
+/// The pull request for the current branch. `None` covers both "there isn't one" and "`gh` isn't
+/// installed or isn't logged in", because neither should stop anyone working.
+pub async fn pull_request(path: &str) -> Option<PullRequest> {
+    let output = Command::new("gh")
+        .args(["pr", "view", "--json", "number,url,title,state,isDraft"])
+        .current_dir(path)
+        .env("GH_PROMPT_DISABLED", "1")
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    let output = tokio::time::timeout(GH_TIMEOUT, output).await.ok()?.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_pull_request(&output.stdout)
+}
+
+fn parse_pull_request(json: &[u8]) -> Option<PullRequest> {
+    let value: serde_json::Value = serde_json::from_slice(json).ok()?;
+    Some(PullRequest {
+        number: value["number"].as_u64()?,
+        url: value["url"].as_str()?.to_string(),
+        title: value["title"].as_str().unwrap_or_default().to_string(),
+        state: value["state"].as_str().unwrap_or_default().to_string(),
+        is_draft: value["isDraft"].as_bool().unwrap_or(false),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +432,15 @@ mod tests {
         remove_workspace(repo_str, &prepared.path, true).await.unwrap();
         assert!(!path.exists());
         assert!(!run(&repo, &["rev-parse", "--verify", "--quiet", "refs/heads/alder"]).is_empty());
+    }
+
+    #[test]
+    fn pull_requests_parse_from_what_gh_prints() {
+        let json = br#"{"isDraft":true,"number":12,"state":"OPEN","title":"Fix login","url":"https://example.com/12"}"#;
+        let pr = parse_pull_request(json).unwrap();
+        assert_eq!((pr.number, pr.state.as_str(), pr.is_draft), (12, "OPEN", true));
+        assert_eq!(parse_pull_request(b"not json"), None);
+        assert_eq!(parse_pull_request(br#"{"state":"OPEN"}"#), None);
     }
 
     #[tokio::test]

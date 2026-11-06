@@ -184,6 +184,9 @@ async fn handle(
         WorkerRequest::GitDiff { path, base_ref } => {
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
         }
+        WorkerRequest::PullRequest { path } => {
+            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await })
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, text } => {
             let delivered = match state.live_agent(&session_id) {

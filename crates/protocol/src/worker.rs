@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
-use crate::model::{AgentKind, GitDiff, GitStatus, SessionId};
+use crate::model::{AgentKind, GitDiff, GitStatus, PullRequest, SessionId};
 use crate::tail::StreamDelta;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -47,6 +47,9 @@ pub enum WorkerRequest {
     GitDiff {
         path: String,
         base_ref: Option<String>,
+    },
+    PullRequest {
+        path: String,
     },
     AgentStart(AgentSpec),
     AgentPrompt {
@@ -99,6 +102,9 @@ pub enum WorkerResponse {
     },
     GitStatus(GitStatus),
     GitDiff(GitDiff),
+    PullRequest {
+        pull_request: Option<PullRequest>,
+    },
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {
         pid: u32,

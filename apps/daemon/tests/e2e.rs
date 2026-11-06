@@ -12,7 +12,7 @@ use protocol::client::{ClientRequest, ErrorCode, HubNotice};
 use protocol::event::{
     ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, ExitReason, SessionEvent, TurnOutcome,
 };
-use protocol::model::{AgentKind, Session, SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{AgentKind, DiffSide, Session, SessionStatus, Workspace, WorkspaceStatus};
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
@@ -1325,6 +1325,56 @@ fn status_and_diff_come_from_the_worker() {
     let diff = client.workspace_diff(&workspace.id).unwrap();
     assert!(diff.patch.contains("+changed"), "{}", diff.patch);
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
+}
+
+#[test]
+fn comments_are_kept_by_the_hub_and_survive_a_restart() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    let added = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this").unwrap();
+    assert!(client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "  ").is_err(), "an empty comment");
+    drop(client);
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![added.clone()]);
+    client.comment_delete(&added.id).unwrap();
+    assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![]);
+}
+
+#[test]
+fn a_workspace_with_no_pull_request_reports_none_rather_than_failing() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    assert_eq!(client.workspace_pull_request(&workspace.id).unwrap(), None);
+}
+
+#[test]
+fn a_workspace_reports_its_pull_request_from_gh() {
+    let mut stack = Stack::start();
+    stack.kill_hub();
+    // No login shell, so this PATH is the one used, with a stand-in `gh` at the front of it.
+    let bin = stack.path("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let source = stack.path("gh.source");
+    std::fs::write(
+        &source,
+        "#!/bin/sh\nprintf '{\"isDraft\":false,\"number\":7,\"state\":\"OPEN\",\"title\":\"T\",\"url\":\"https://example.com/7\"}'\n",
+    )
+    .unwrap();
+    install_executable(&source, &bin.join("gh"));
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let mut command = stack.command();
+    command.env("PATH", path).env("SHELL", "/usr/bin/false");
+    stack.hub = Some(command.spawn().unwrap());
+    wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
+
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    let pr = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
+    assert_eq!((pr.number, pr.state.as_str(), pr.url.as_str()), (7, "OPEN", "https://example.com/7"));
 }
 
 #[test]

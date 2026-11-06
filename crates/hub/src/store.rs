@@ -8,14 +8,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{AgentKind, Repo, Seq, Session, SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{AgentKind, DiffComment, Repo, Seq, Session, SessionStatus, Workspace, WorkspaceStatus};
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
     CREATE TABLE repos (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -63,7 +64,20 @@ const MIGRATIONS: &[&str] = &[r#"
     );
     CREATE UNIQUE INDEX events_client_msg ON events (session_id, client_msg_id) WHERE client_msg_id IS NOT NULL;
     CREATE INDEX events_by_kind ON events (session_id, kind);
-"#];
+"#,
+    r#"
+    CREATE TABLE diff_comments (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        path TEXT NOT NULL,
+        side TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+    );
+    CREATE INDEX diff_comments_by_workspace ON diff_comments (workspace_id, created_at_ms);
+"#,
+];
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.
@@ -364,6 +378,56 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(internal)
     }
 
+    // Comments ------------------------------------------------------------------------------------
+
+    pub fn add_comment(&self, comment: &DiffComment) -> Result<(), ApiError> {
+        lock(&self.writer)
+            .execute(
+                "INSERT INTO diff_comments (id, workspace_id, path, side, line, text, created_at_ms)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    comment.id,
+                    comment.workspace_id,
+                    comment.path,
+                    text_of(&comment.side),
+                    comment.line,
+                    comment.text,
+                    comment.created_at_ms,
+                ],
+            )
+            .map_err(internal)?;
+        Ok(())
+    }
+
+    pub fn list_comments(&self, workspace_id: &str) -> Result<Vec<DiffComment>, ApiError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn
+            .prepare_cached(
+                "SELECT id, workspace_id, path, side, line, text, created_at_ms FROM diff_comments
+                 WHERE workspace_id = ? ORDER BY created_at_ms, id",
+            )
+            .map_err(internal)?;
+        let rows = statement
+            .query_map([workspace_id], |row| {
+                Ok(DiffComment {
+                    id: row.get(0)?,
+                    workspace_id: row.get(1)?,
+                    path: row.get(2)?,
+                    side: from_text(row.get(3)?)?,
+                    line: row.get(4)?,
+                    text: row.get(5)?,
+                    created_at_ms: row.get(6)?,
+                })
+            })
+            .map_err(internal)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+    }
+
+    pub fn delete_comment(&self, id: &str) -> Result<(), ApiError> {
+        lock(&self.writer).execute("DELETE FROM diff_comments WHERE id = ?", [id]).map_err(internal)?;
+        Ok(())
+    }
+
     // Events --------------------------------------------------------------------------------------
 
     /// `new_status` commits with the event, so nobody can see one without the other. A client that
@@ -647,6 +711,26 @@ mod tests {
         drop(Store::open(&path).unwrap());
         Connection::open(&path).unwrap().pragma_update(None, "user_version", 999).unwrap();
         assert!(Store::open(&path).is_err());
+    }
+
+    #[test]
+    fn comments_belong_to_a_workspace_and_can_be_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with_session(dir.path());
+        let comment = DiffComment {
+            id: "c1".into(),
+            workspace_id: "w".into(),
+            path: "src/a.rs".into(),
+            side: protocol::model::DiffSide::New,
+            line: 12,
+            text: "Rename this".into(),
+            created_at_ms: 1,
+        };
+        store.add_comment(&comment).unwrap();
+        assert_eq!(store.list_comments("w").unwrap(), vec![comment]);
+        assert_eq!(store.list_comments("other").unwrap(), vec![]);
+        store.delete_comment("c1").unwrap();
+        assert_eq!(store.list_comments("w").unwrap(), vec![]);
     }
 
     #[test]

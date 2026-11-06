@@ -56,24 +56,86 @@ fn the_license_check_itself_works() {
     assert!(!is_allowed("LGPL-2.1-only OR GPL-3.0"));
 }
 
-#[test]
-fn nothing_copyleft_is_in_the_tree() {
-    let metadata = metadata();
-    let mut bad = BTreeMap::new();
-    for package in metadata["packages"].as_array().unwrap() {
-        // Workspace members have no license field until the project chooses one.
-        if package["source"].is_null() {
-            continue;
-        }
-        let name = package["name"].as_str().unwrap();
-        match package["license"].as_str() {
-            Some(license) if is_allowed(license) => {}
-            license => {
-                bad.insert(name.to_string(), license.unwrap_or("none declared").to_string());
+/// What ends up in a binary on one platform: its dependencies, leaving out build tools and proc macros,
+/// which only run while compiling.
+fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, String> {
+    let packages: HashMap<&str, &Value> =
+        metadata["packages"].as_array().unwrap().iter().map(|p| (p["id"].as_str().unwrap(), p)).collect();
+    let nodes: HashMap<&str, &Value> =
+        metadata["resolve"]["nodes"].as_array().unwrap().iter().map(|n| (n["id"].as_str().unwrap(), n)).collect();
+    let is_proc_macro = |package: &Value| {
+        package["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|target| target["kind"].as_array().unwrap().iter().any(|kind| kind == "proc-macro"))
+    };
+    let start = packages.iter().find(|(_, p)| p["name"] == root).map(|(id, _)| *id).expect("the root package");
+    let mut shipped = BTreeMap::new();
+    let mut seen = HashSet::new();
+    let mut stack = vec![start];
+    while let Some(id) = stack.pop() {
+        for dep in nodes[id]["deps"].as_array().unwrap() {
+            let dep_id = dep["pkg"].as_str().unwrap();
+            let linked = dep["dep_kinds"].as_array().unwrap().iter().any(|kind| kind["kind"].is_null());
+            if !linked || is_proc_macro(packages[dep_id]) || !seen.insert(dep_id) {
+                continue;
             }
+            let package = packages[dep_id];
+            // Workspace members have no license field until the project chooses one.
+            if !package["source"].is_null() {
+                let license = package["license"].as_str().unwrap_or("none declared").to_string();
+                shipped.insert(package["name"].as_str().unwrap().to_string(), license);
+            }
+            stack.push(dep_id);
         }
     }
-    assert!(bad.is_empty(), "dependencies with licenses we can't ship: {bad:#?}");
+    shipped
+}
+
+fn metadata_for(target: &str) -> Value {
+    let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--filter-platform",
+            target,
+            "--manifest-path",
+            manifest,
+        ])
+        .output()
+        .expect("running cargo metadata");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+/// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`. That also
+/// holds build tools and other platforms' crates, some of them MPL-2.0: `cbindgen` (a build tool),
+/// `dwrote` (Windows only) and `option-ext` (only reached through a proc macro). Windows and iOS are
+/// here so that adding either has to face this.
+#[test]
+fn nothing_copyleft_ships() {
+    for (root, targets) in [
+        ("desktop", &["aarch64-apple-darwin", "x86_64-apple-darwin"][..]),
+        (
+            "daemon",
+            &["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"][..],
+        ),
+        (
+            "cli",
+            &["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"][..],
+        ),
+    ] {
+        for target in targets {
+            let shipped = shipped_packages(&metadata_for(target), root);
+            assert!(!shipped.is_empty(), "{root} on {target} should have dependencies");
+            let bad: BTreeMap<_, _> = shipped.into_iter().filter(|(_, license)| !is_allowed(license)).collect();
+            assert!(bad.is_empty(), "{root} on {target} would ship licenses we can't: {bad:#?}");
+        }
+    }
 }
 
 /// Everything `package` pulls in, excluding dev-dependencies.

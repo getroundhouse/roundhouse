@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::{ApprovalDecision, SessionEvent};
-use crate::model::{AgentKind, GitDiff, GitStatus, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId};
+use crate::model::{
+    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, RepoId, Seq, Session, SessionId,
+    Workspace, WorkspaceId,
+};
 use crate::tail::{StreamDelta, Tail};
 
 /// Replies to a [`ClientFrame`] carry its `id`, and can arrive in any order.
@@ -52,6 +55,24 @@ pub enum ClientRequest {
     },
     WorkspaceDiff {
         id: WorkspaceId,
+    },
+    /// The pull request for this workspace's branch. The reply is `None` if there isn't one, or if
+    /// GitHub's CLI isn't available.
+    WorkspacePullRequest {
+        id: WorkspaceId,
+    },
+    CommentAdd {
+        workspace_id: WorkspaceId,
+        path: String,
+        side: DiffSide,
+        line: u32,
+        text: String,
+    },
+    CommentList {
+        workspace_id: WorkspaceId,
+    },
+    CommentDelete {
+        id: String,
     },
 
     SessionCreate {
@@ -131,6 +152,13 @@ pub enum ClientResponse {
     },
     GitStatus(GitStatus),
     GitDiff(GitDiff),
+    PullRequest {
+        pull_request: Option<PullRequest>,
+    },
+    Comment(DiffComment),
+    Comments {
+        comments: Vec<DiffComment>,
+    },
     Session(Session),
     Sessions {
         sessions: Vec<Session>,

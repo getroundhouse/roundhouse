@@ -108,3 +108,32 @@ pub struct GitDiff {
     /// True when untracked files were left out to keep the response bounded.
     pub truncated: bool,
 }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffSide {
+    Old,
+    New,
+}
+
+/// A review comment on a changed line, waiting to be sent to the agent.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct DiffComment {
+    pub id: String,
+    pub workspace_id: WorkspaceId,
+    pub path: String,
+    pub side: DiffSide,
+    pub line: u32,
+    pub text: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct PullRequest {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    /// As GitHub reports it: `OPEN`, `CLOSED` or `MERGED`.
+    pub state: String,
+    pub is_draft: bool,
+}

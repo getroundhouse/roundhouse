@@ -153,6 +153,15 @@ async fn handle(
         R::WorkspaceRestore { id } => C::Workspace(hub.workspace_restore(id).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
+        R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },
+        R::CommentAdd { workspace_id, path, side, line, text } => {
+            C::Comment(hub.comment_add(workspace_id, path, side, line, text).await?)
+        }
+        R::CommentList { workspace_id } => C::Comments { comments: hub.comment_list(workspace_id).await? },
+        R::CommentDelete { id } => {
+            hub.comment_delete(id).await?;
+            C::Ok
+        }
         R::SessionCreate { workspace_id, agent, model, permission_mode } => {
             C::Session(hub.session_create(workspace_id, agent, model, permission_mode).await?)
         }
