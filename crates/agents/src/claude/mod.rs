@@ -5,4 +5,4 @@ mod normalize;
 mod process;
 
 pub use normalize::{Parsed, parse_line};
-pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
+pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at, write_pid_file};

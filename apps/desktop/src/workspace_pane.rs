@@ -3,13 +3,15 @@
 use client_core::Client;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use protocol::model::{AgentKind, PullRequest, Session, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{AgentKind, PullRequest, Session, SessionStatus, SetupStatus, Workspace, WorkspaceId};
 use transcript::{Transcript, TranscriptEvent};
 
 use crate::diff_panel::{DiffEvent, DiffPanel};
+
+const SETUP_LOG_REFRESH: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Clone, Debug)]
 pub enum PaneEvent {
@@ -38,6 +40,9 @@ pub struct WorkspacePane {
     pub diff: Option<Entity<DiffPanel>>,
     pub diff_open: bool,
     pub pull_request: Option<PullRequest>,
+    pub setup_log: Option<String>,
+    /// Keeps the open log current while setup runs.
+    setup_log_refresh: Option<Task<()>>,
     window: AnyWindowHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -72,6 +77,8 @@ impl WorkspacePane {
             diff: None,
             diff_open: false,
             pull_request: None,
+            setup_log: None,
+            setup_log_refresh: None,
             window: window.window_handle(),
             _subscriptions: vec![on_enter],
         };
@@ -119,7 +126,113 @@ impl WorkspacePane {
 
     pub fn set_workspace(&mut self, workspace: Workspace, cx: &mut Context<Self>) {
         self.workspace = workspace;
+        // Picks up the last lines of the log once setup has finished.
+        if self.setup_log.is_some() {
+            self.load_setup_log(cx);
+        }
         cx.notify();
+    }
+
+    /// Shows or hides the setup log. It stays current until setup finishes.
+    pub fn toggle_setup_log(&mut self, cx: &mut Context<Self>) {
+        if self.setup_log.take().is_some() {
+            self.setup_log_refresh = None;
+            cx.notify();
+            return;
+        }
+        self.setup_log = Some(String::new());
+        self.load_setup_log(cx);
+        self.setup_log_refresh = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(SETUP_LOG_REFRESH).await;
+                let running = this.update(cx, |t, cx| {
+                    let running = t.workspace.setup == SetupStatus::Running;
+                    if running {
+                        t.load_setup_log(cx);
+                    }
+                    running
+                });
+                if !matches!(running, Ok(true)) {
+                    return;
+                }
+            }
+        }));
+        cx.notify();
+    }
+
+    fn load_setup_log(&mut self, cx: &mut Context<Self>) {
+        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        cx.spawn(async move |this, cx| {
+            let log = cx.background_spawn(async move { client.workspace_setup_log(&id) }).await;
+            let _ = this.update(cx, |t, cx| {
+                if t.setup_log.is_some() {
+                    t.setup_log = Some(log.unwrap_or_else(|e| format!("Couldn't read the log: {e}")));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub fn rerun_setup(&mut self, cx: &mut Context<Self>) {
+        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        cx.spawn(async move |this, cx| {
+            let started = cx.background_spawn(async move { client.workspace_rerun_setup(&id) }).await;
+            let _ = this.update(cx, |t, cx| match started {
+                Ok(workspace) => t.set_workspace(workspace, cx),
+                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))),
+            });
+        })
+        .detach();
+    }
+
+    /// A line above the composer while setup matters: when it's running, or if it failed.
+    fn setup_line(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (message, running) = match self.workspace.setup {
+            SetupStatus::Running => ("Setting up this workspace. Messages you send now wait until it's ready.", true),
+            SetupStatus::Failed { code: Some(_) } => ("Setup failed, so the agent may find things missing.", false),
+            SetupStatus::Failed { code: None } => ("Setup didn't finish, so the agent may find things missing.", false),
+            _ => return None,
+        };
+        let theme = cx.theme();
+        let (border, muted, warning) = (theme.border, theme.muted_foreground, theme.warning);
+        let log_label = if self.setup_log.is_some() { "Hide log" } else { "View log" };
+        Some(
+            h_flex()
+                .flex_none()
+                .w_full()
+                .px_3()
+                .py_1()
+                .gap_2()
+                .border_t_1()
+                .border_color(border)
+                .text_xs()
+                .text_color(if running { muted } else { warning })
+                .child(div().flex_1().min_w_0().child(message))
+                .child(
+                    Button::new("setup-log")
+                        .ghost()
+                        .xsmall()
+                        .label(log_label)
+                        .on_click(cx.listener(|t, _, _, cx| t.toggle_setup_log(cx))),
+                )
+                .child(if running {
+                    Button::new("stop-setup")
+                        .ghost()
+                        .xsmall()
+                        .label("Stop")
+                        .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
+                        .into_any_element()
+                } else {
+                    Button::new("rerun-setup")
+                        .ghost()
+                        .xsmall()
+                        .label("Run again")
+                        .on_click(cx.listener(|t, _, _, cx| t.rerun_setup(cx)))
+                        .into_any_element()
+                })
+                .into_any_element(),
+        )
     }
 
     pub fn set_session(&mut self, session: Session, cx: &mut Context<Self>) {
@@ -265,7 +378,9 @@ impl Render for WorkspacePane {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
         let working = self.is_working();
         let interrupted = self.session.as_ref().is_some_and(|s| s.status == SessionStatus::Interrupted);
+        let setup_line = self.setup_line(cx);
         let header = self.header(cx);
+        let log = self.setup_log.clone();
         let transcript = self.transcript.clone();
         let diff = if self.diff_open { self.diff.clone() } else { None };
         v_flex().size_full().child(header).child(
@@ -279,6 +394,29 @@ impl Render for WorkspacePane {
                         .min_w_0()
                         .h_full()
                         .child(div().flex_1().min_h_0().w_full().when_some(transcript, |d, t| d.child(t)))
+                        .when_some(log, |d, text| {
+                            d.child(
+                                div()
+                                    .id("setup-log-text")
+                                    .flex_none()
+                                    .w_full()
+                                    .max_h(px(220.))
+                                    .overflow_y_scroll()
+                                    .px_3()
+                                    .py_2()
+                                    .border_t_1()
+                                    .border_color(border)
+                                    .font_family("Menlo")
+                                    .text_size(px(12.))
+                                    .text_color(muted)
+                                    .child(SharedString::from(if text.is_empty() {
+                                        "Nothing yet.".to_string()
+                                    } else {
+                                        text
+                                    })),
+                            )
+                        })
+                        .children(setup_line)
                         .when(interrupted, |d| {
                             d.child(div().flex_none().w_full().px_3().py_1().text_xs().text_color(muted).child(
                                 "The agent stopped before it finished. Send a message to pick up where it left off.",

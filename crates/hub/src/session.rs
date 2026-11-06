@@ -12,7 +12,7 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{
     AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel, SessionEvent,
 };
-use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, SetupStatus, WorkspaceId, WorkspaceStatus};
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -97,6 +97,8 @@ pub struct LiveSession {
     model: Option<String>,
     permission_mode: Option<String>,
     created_at_ms: i64,
+    /// So a failed setup is mentioned once, rather than on every prompt.
+    warned_about_setup: std::sync::atomic::AtomicBool,
     hub: Weak<Hub>,
     commands: mpsc::Sender<Command>,
     ingest: mpsc::Sender<Item>,
@@ -167,6 +169,7 @@ impl LiveSession {
             model: stored.session.model.clone(),
             permission_mode: stored.session.permission_mode.clone(),
             created_at_ms: stored.session.created_at_ms,
+            warned_about_setup: std::sync::atomic::AtomicBool::new(false),
             hub: Arc::downgrade(hub),
             commands: commands_tx,
             ingest: ingest_tx,
@@ -344,6 +347,12 @@ impl LiveSession {
             self.agent_lost(previous.link, ExitReason::WorkerLost).await;
         }
         let workspace = hub.workspace(&self.workspace_id).await?;
+        let repo = {
+            let repo_id = workspace.repo_id.clone();
+            hub.blocking(move |store| store.get_repo(&repo_id)).await?
+        };
+        let mut env = crate::workspace_env(&workspace, &repo);
+        env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.clone()));
         let cwd =
             workspace.path.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the workspace has no worktree yet"))?;
         let resume = self.state.lock().unwrap().agent_opened;
@@ -356,6 +365,7 @@ impl LiveSession {
             resume,
             model: self.model.clone(),
             permission_mode: self.permission_mode.clone(),
+            env,
         };
         match link.call(WorkerRequest::AgentStart(spec)).await? {
             WorkerResponse::AgentStarted { pid, run, already_running } => {
@@ -426,6 +436,17 @@ impl LiveSession {
         let _ = reply.send(Ok((event.seq, duplicate)));
         if duplicate {
             return;
+        }
+        hub.wait_for_setup(&self.workspace_id).await;
+        if let Ok(workspace) = hub.workspace(&self.workspace_id).await
+            && let SetupStatus::Failed { .. } = workspace.setup
+            && !self.warned_about_setup.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            self.record_or_log(EventBody::Notice {
+                level: NoticeLevel::Warning,
+                message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
+            })
+            .await;
         }
         if let Err(e) = self.forward_prompt(text).await {
             warn!(session = self.id, "could not deliver a prompt: {e}");

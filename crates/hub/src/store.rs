@@ -8,7 +8,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{AgentKind, DiffComment, Repo, Seq, Session, SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, DiffComment, Repo, Seq, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
+};
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -77,7 +79,14 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX diff_comments_by_workspace ON diff_comments (workspace_id, created_at_ms);
 "#,
+    r#"
+    ALTER TABLE workspaces ADD COLUMN setup TEXT NOT NULL DEFAULT '{"state":"not_started"}';
+    ALTER TABLE workspaces ADD COLUMN port_base INTEGER NOT NULL DEFAULT 0;
+"#,
 ];
+
+const FIRST_PORT_BASE: i64 = 55_000;
+const PORTS_PER_WORKSPACE: i64 = 10;
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.
@@ -130,8 +139,7 @@ fn repo_from_row(row: &Row) -> rusqlite::Result<Repo> {
     Ok(Repo { id: row.get(0)?, name: row.get(1)?, path: row.get(2)?, created_at_ms: row.get(3)? })
 }
 
-const WORKSPACE_COLUMNS: &str =
-    "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms";
+const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base";
 
 fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -146,6 +154,8 @@ fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         instance_id: row.get(8)?,
         created_at_ms: row.get(9)?,
         archived_at_ms: row.get(10)?,
+        setup: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or(SetupStatus::Unknown),
+        port_base: row.get::<_, i64>(12)? as u16,
     })
 }
 
@@ -225,7 +235,7 @@ impl Store {
         let inserted = lock(&self.writer)
             .execute(
                 &format!(
-                    "INSERT INTO workspaces ({WORKSPACE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    "INSERT INTO workspaces ({WORKSPACE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
                 ),
                 params![
@@ -240,6 +250,8 @@ impl Store {
                     workspace.instance_id,
                     workspace.created_at_ms,
                     workspace.archived_at_ms,
+                    serde_json::to_string(&workspace.setup).map_err(internal)?,
+                    i64::from(workspace.port_base),
                 ],
             )
             .map_err(internal)?;
@@ -271,6 +283,37 @@ impl Store {
             )
             .map_err(internal)?;
         self.get_workspace(id)
+    }
+
+    pub fn set_workspace_setup(&self, id: &str, setup: SetupStatus) -> Result<Workspace, ApiError> {
+        lock(&self.writer)
+            .execute(
+                "UPDATE workspaces SET setup = ? WHERE id = ?",
+                params![serde_json::to_string(&setup).map_err(internal)?, id],
+            )
+            .map_err(internal)?;
+        self.get_workspace(id)
+    }
+
+    /// The start of ten ports nothing else has. Never reused, so a restored workspace keeps its own.
+    pub fn next_port_base(&self) -> Result<u16, ApiError> {
+        let highest: i64 = lock(&self.reader)
+            .query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], |row| row.get(0))
+            .map_err(internal)?;
+        let next = if highest == 0 { FIRST_PORT_BASE } else { highest + PORTS_PER_WORKSPACE };
+        // Past the top of the range, start again rather than fail. A clash is possible, but only
+        // after thousands of workspaces, and it only matters if both are running a server.
+        Ok(if next + PORTS_PER_WORKSPACE > 65_000 { FIRST_PORT_BASE as u16 } else { next as u16 })
+    }
+
+    /// A setup that was running when the hub stopped never finished, and its worker has gone.
+    pub fn fail_interrupted_setups(&self) -> Result<(), ApiError> {
+        let running = serde_json::to_string(&SetupStatus::Running).map_err(internal)?;
+        let failed = serde_json::to_string(&SetupStatus::Failed { code: None }).map_err(internal)?;
+        lock(&self.writer)
+            .execute("UPDATE workspaces SET setup = ? WHERE setup = ?", params![failed, running])
+            .map_err(internal)?;
+        Ok(())
     }
 
     pub fn set_workspace_branch(&self, id: &str, branch: &str) -> Result<(), ApiError> {
@@ -589,6 +632,8 @@ mod tests {
                 instance_id: "w".into(),
                 created_at_ms: now,
                 archived_at_ms: None,
+                setup: SetupStatus::NotStarted,
+                port_base: 55_000,
             })
             .unwrap();
         store
@@ -731,6 +776,31 @@ mod tests {
         assert_eq!(store.list_comments("other").unwrap(), vec![]);
         store.delete_comment("c1").unwrap();
         assert_eq!(store.list_comments("w").unwrap(), vec![]);
+    }
+
+    #[test]
+    fn each_workspace_gets_its_own_ports() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with_session(dir.path());
+        assert_eq!(store.next_port_base().unwrap(), 55_010);
+        let mut next = store.get_workspace("w").unwrap();
+        next.id = "w2".into();
+        next.name = "birch".into();
+        next.port_base = 55_010;
+        store.insert_workspace(&next).unwrap();
+        assert_eq!(store.next_port_base().unwrap(), 55_020);
+    }
+
+    #[test]
+    fn a_setup_cut_off_by_a_restart_counts_as_failed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with_session(dir.path());
+        store.set_workspace_setup("w", SetupStatus::Running).unwrap();
+        store.fail_interrupted_setups().unwrap();
+        assert_eq!(store.get_workspace("w").unwrap().setup, SetupStatus::Failed { code: None });
+        store.set_workspace_setup("w", SetupStatus::Succeeded).unwrap();
+        store.fail_interrupted_setups().unwrap();
+        assert_eq!(store.get_workspace("w").unwrap().setup, SetupStatus::Succeeded);
     }
 
     #[test]

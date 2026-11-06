@@ -42,6 +42,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
                 resume: false,
                 model: None,
                 permission_mode: None,
+                env: vec![],
             }),
         ];
         for (id, request) in calls.into_iter().enumerate() {

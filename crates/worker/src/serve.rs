@@ -1,7 +1,7 @@
 //! The worker's main loop: one stream in from the hub, one stream out.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -16,7 +16,10 @@ use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use crate::git;
+use crate::{git, setup};
+
+/// Enough to see what went wrong, without sending a whole install log across.
+const SETUP_LOG_TAIL_BYTES: u64 = 256 * 1024;
 
 pub struct Config {
     pub workspaces_root: PathBuf,
@@ -37,6 +40,8 @@ struct State {
     /// Set under `start_lock` once the hub has gone, so a start still in flight can't add an agent
     /// after the worker has decided what to stop.
     shutting_down: AtomicBool,
+    /// The running setup script, so it can be stopped.
+    setup_pid: Arc<Mutex<Option<u32>>>,
     frames: mpsc::Sender<WorkerFrame>,
 }
 
@@ -65,6 +70,7 @@ where
         agents: Mutex::new(HashMap::new()),
         start_lock: tokio::sync::Mutex::new(()),
         shutting_down: AtomicBool::new(false),
+        setup_pid: Arc::new(Mutex::new(None)),
         frames: frames.clone(),
     });
     let forwarders = Arc::new(tokio::sync::Mutex::new(JoinSet::new()));
@@ -110,6 +116,7 @@ where
         let _no_more_starts = state.start_lock.lock().await;
         state.shutting_down.store(true, Ordering::SeqCst);
     }
+    stop_setup_script(&state);
     let agents: Vec<_> = state.agents.lock().unwrap().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
     for agent in agents {
@@ -187,6 +194,18 @@ async fn handle(
         WorkerRequest::PullRequest { path } => {
             Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await })
         }
+        WorkerRequest::SetupWorkspace { repo_path, path, env } => run_setup(state, &repo_path, &path, &env).await,
+        WorkerRequest::CancelSetup => {
+            stop_setup_script(state);
+            Ok(WorkerResponse::Ok)
+        }
+        WorkerRequest::SetupLog { path } => {
+            let log = setup::setup_log_path(state.config.state_dir.as_deref(), Path::new(&path));
+            Ok(WorkerResponse::SetupLog { text: setup::read_log_tail(&log, SETUP_LOG_TAIL_BYTES) })
+        }
+        WorkerRequest::ArchiveScript { repo_path, path, env } => {
+            run_archive_script(state, &repo_path, &path, &env).await
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, text } => {
             let delivered = match state.live_agent(&session_id) {
@@ -221,6 +240,87 @@ async fn handle(
             }
         }
     }
+}
+
+/// Signals the script's whole group, because stopping only the shell would leave what it started.
+fn stop_setup_script(state: &State) {
+    if let Some(pid) = *state.setup_pid.lock().unwrap() {
+        // SAFETY: kill(2) has no memory effects. The script was started as a group leader, and its
+        // entry is cleared as soon as it has been waited on.
+        unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
+    }
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+async fn run_setup(
+    state: &Arc<State>,
+    repo: &str,
+    path: &str,
+    env: &[(String, String)],
+) -> Result<WorkerResponse, ApiError> {
+    let (repo, worktree) = (Path::new(repo), Path::new(path));
+    let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
+    let _ = std::fs::remove_file(&log);
+    let mut warnings = Vec::new();
+    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut warnings);
+    let copied = setup::copy_local_files(repo, worktree, &settings, &mut warnings).await;
+    for file in &copied {
+        setup::append_log(&log, &format!("Copied {file}"));
+    }
+    for warning in &warnings {
+        setup::append_log(&log, &format!("Warning: {warning}"));
+    }
+    let Some(script) = settings.setup else {
+        return Ok(WorkerResponse::SetupDone { code: Some(0) });
+    };
+    setup::append_log(&log, "Running the setup script");
+    // Recorded like an agent, so the provider can stop it if this worker is killed.
+    let record = state.config.state_dir.as_ref().map(|dir| dir.join("agents/setup.pid"));
+    let (setup_pid, for_start) = (state.setup_pid.clone(), record.clone());
+    let status = setup::run_script(&script, worktree, env, &log, move |pid| {
+        *setup_pid.lock().unwrap() = Some(pid);
+        if let Some(path) = &for_start {
+            let _ = agents::claude::write_pid_file(path, pid);
+        }
+    })
+    .await;
+    *state.setup_pid.lock().unwrap() = None;
+    if let Some(path) = &record {
+        let _ = std::fs::remove_file(path);
+    }
+    let code = status?.code();
+    match code {
+        Some(code) => setup::append_log(&log, &format!("The setup script exited with {code}")),
+        None => setup::append_log(&log, "The setup script was stopped"),
+    }
+    Ok(WorkerResponse::SetupDone { code })
+}
+
+async fn run_archive_script(
+    state: &Arc<State>,
+    repo: &str,
+    path: &str,
+    env: &[(String, String)],
+) -> Result<WorkerResponse, ApiError> {
+    let (repo, worktree) = (Path::new(repo), Path::new(path));
+    if !worktree.exists() {
+        return Ok(WorkerResponse::Ok);
+    }
+    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut Vec::new());
+    let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
+    let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
+    setup::append_log(&log, "Running the archive script");
+    let status = setup::run_script(&script, worktree, env, &log, |_| {}).await?;
+    if status.success() {
+        return Ok(WorkerResponse::Ok);
+    }
+    Err(ApiError::new(
+        ErrorCode::Conflict,
+        format!("the archive script failed with {:?}. Fix it, or archive with force", status.code()),
+    ))
 }
 
 fn agent_error(e: anyhow::Error) -> ApiError {

@@ -56,6 +56,14 @@ pub enum ClientRequest {
     WorkspaceDiff {
         id: WorkspaceId,
     },
+    /// The end of the setup log, which the worker keeps.
+    WorkspaceSetupLog {
+        id: WorkspaceId,
+    },
+    /// Copies local files and runs the setup script again.
+    WorkspaceRerunSetup {
+        id: WorkspaceId,
+    },
     /// The pull request for this workspace's branch. The reply is `None` if there isn't one, or if
     /// GitHub's CLI isn't available.
     WorkspacePullRequest {
@@ -152,6 +160,9 @@ pub enum ClientResponse {
     },
     GitStatus(GitStatus),
     GitDiff(GitDiff),
+    SetupLog {
+        text: String,
+    },
     PullRequest {
         pull_request: Option<PullRequest>,
     },

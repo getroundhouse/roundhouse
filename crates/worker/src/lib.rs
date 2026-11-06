@@ -2,5 +2,6 @@
 
 pub mod git;
 mod serve;
+pub mod setup;
 
 pub use serve::{Config, serve};

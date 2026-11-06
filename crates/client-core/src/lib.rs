@@ -225,6 +225,17 @@ impl Client {
         }
     }
 
+    pub fn workspace_setup_log(&self, id: &str) -> Result<String> {
+        match self.call(ClientRequest::WorkspaceSetupLog { id: id.to_string() })? {
+            ClientResponse::SetupLog { text } => Ok(text),
+            other => unexpected(other),
+        }
+    }
+
+    pub fn workspace_rerun_setup(&self, id: &str) -> Result<Workspace> {
+        self.expect_workspace(ClientRequest::WorkspaceRerunSetup { id: id.to_string() })
+    }
+
     pub fn workspace_pull_request(&self, id: &str) -> Result<Option<PullRequest>> {
         match self.call(ClientRequest::WorkspacePullRequest { id: id.to_string() })? {
             ClientResponse::PullRequest { pull_request } => Ok(pull_request),

@@ -15,7 +15,7 @@ use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{SessionStatus, WorkspaceStatus};
+use protocol::model::{SessionStatus, SetupStatus, WorkspaceStatus};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -40,11 +40,15 @@ fn binaries() -> &'static PathBuf {
 fn point_daemons_at_the_fake_agent() {
     static DONE: OnceLock<()> = OnceLock::new();
     DONE.get_or_init(|| {
-        let state = std::env::temp_dir().join(format!("ahui-agent-{}", std::process::id()));
+        // Under Cargo's target directory, so runs can't pile up in the system's. Conversation IDs are
+        // unique, so nothing here carries over from one run to the next.
+        let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
         // SAFETY: guarded by the OnceLock, and this runs before any daemon or thread here reads it.
         unsafe {
             std::env::set_var("AGENTHUB_CLAUDE_BIN", binaries().join("examples/fake_claude"));
-            std::env::set_var("FAKE_CLAUDE_STATE", state);
+            std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
+            // So a real ~/.conductor/settings.toml can't change what these tests do.
+            std::env::set_var("HOME", scratch.join("ui-home"));
         }
     });
 }
@@ -227,6 +231,15 @@ impl<'a> Ui<'a> {
     }
 }
 
+/// Closes the window, so the app isn't there to start a new hub when the test stops this one. A real
+/// window does that on purpose, and in a test it would leave a hub running after the test has finished.
+impl Drop for Ui<'_> {
+    fn drop(&mut self) {
+        let _ = self.cx.update_window(self.handle, |_, window, _| window.remove_window());
+        self.cx.run_until_parked();
+    }
+}
+
 /// Reads the view without holding a borrow of the test context across a wait.
 struct AppViewRef<'a>(*const AppView, std::marker::PhantomData<&'a ()>);
 
@@ -402,6 +415,60 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     let before = ui.view().workspaces.len();
     ui.press("cmd-n");
     ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && !ui.view().busy);
+}
+
+fn commit_settings(stack: &Stack, toml: &str) {
+    let dir = stack.repo().join(".conductor");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("settings.toml"), toml).unwrap();
+    git(&stack.repo(), &["add", "."]);
+    git(&stack.repo(), &["commit", "-qm", "settings"]);
+}
+
+#[gpui_kit::test]
+fn a_failed_setup_is_shown_with_its_log_and_can_be_run_again(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    // Fails until the file it's looking for exists.
+    let flag = stack.dir.path().join("may-succeed");
+    commit_settings(&stack, &format!("[scripts]\nsetup = \"echo from-the-script; test -f {}\"\n", flag.display()));
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let pane = ui.pane().unwrap();
+    let setup = |ui: &Ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup);
+    ui.wait("setup to fail", |ui| matches!(setup(ui), SetupStatus::Failed { .. }));
+
+    ui.click("setup-log");
+    ui.wait("the log", |ui| {
+        ui.cx.read_entity(&pane, |p, _| p.setup_log.as_deref().is_some_and(|log| log.contains("from-the-script")))
+    });
+    ui.click("setup-log");
+    assert!(ui.cx.read_entity(&pane, |p, _| p.setup_log.is_none()));
+
+    std::fs::write(&flag, "").unwrap();
+    ui.click("rerun-setup");
+    ui.wait("setup to succeed", |ui| setup(ui) == SetupStatus::Succeeded);
+    // Nothing more to say, so the line and its buttons go.
+    ui.frame();
+    let gone = ui.cx.update_window(ui.handle, |_, window, _| window.try_find("rerun-setup").is_none()).unwrap();
+    assert!(gone);
+}
+
+#[gpui_kit::test]
+fn setup_can_be_stopped_from_the_app(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    commit_settings(&stack, "[scripts]\nsetup = \"sleep 300\"\n");
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let pane = ui.pane().unwrap();
+    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
+    ui.click("stop-setup");
+    ui.wait("setup to stop", |ui| {
+        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace.setup, SetupStatus::Failed { code: None }))
+    });
 }
 
 #[gpui_kit::test]

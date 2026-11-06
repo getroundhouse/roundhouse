@@ -190,6 +190,7 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
     for name in SCRUBBED_ENV {
         command.env_remove(name);
     }
+    command.envs(spec.env.iter().map(|(k, v)| (k, v)));
     let mut child =
         command.spawn().map_err(|e| anyhow::anyhow!("could not start {} in {}: {e}", bin.display(), spec.cwd))?;
     let pid = child.id().unwrap_or_default();
@@ -205,7 +206,7 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
 }
 
 /// The PID and its start time, because a PID alone could have been reused by the time anyone reads it.
-fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
+pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -545,6 +546,7 @@ mod tests {
             resume: false,
             model: model.map(String::from),
             permission_mode: mode.map(String::from),
+            env: vec![],
         }
     }
 

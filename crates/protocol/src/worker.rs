@@ -51,6 +51,23 @@ pub enum WorkerRequest {
     PullRequest {
         path: String,
     },
+    /// Copies local files and runs the setup script. Resolves when it's finished, however long that is.
+    SetupWorkspace {
+        repo_path: String,
+        path: String,
+        env: Vec<(String, String)>,
+    },
+    /// Stops a running setup script. Harmless if there isn't one.
+    CancelSetup,
+    SetupLog {
+        path: String,
+    },
+    /// Runs the archive script, if there is one. Fails if the script does.
+    ArchiveScript {
+        repo_path: String,
+        path: String,
+        env: Vec<(String, String)>,
+    },
     AgentStart(AgentSpec),
     AgentPrompt {
         session_id: SessionId,
@@ -84,6 +101,8 @@ pub struct AgentSpec {
     pub resume: bool,
     pub model: Option<String>,
     pub permission_mode: Option<String>,
+    /// Set in the agent's environment, along with the worker's own.
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -104,6 +123,13 @@ pub enum WorkerResponse {
     GitDiff(GitDiff),
     PullRequest {
         pull_request: Option<PullRequest>,
+    },
+    SetupDone {
+        /// `None` if it was stopped.
+        code: Option<i32>,
+    },
+    SetupLog {
+        text: String,
     },
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {

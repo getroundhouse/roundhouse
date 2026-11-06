@@ -96,6 +96,9 @@ impl WorkerLink {
             }
             return Err(lost());
         }
+        // Not held while waiting. A long call, like setup, would otherwise keep the worker's stdin open
+        // after `close`, and it wouldn't find out that it should stop.
+        drop(calls);
         reply_rx.await.map_err(|_| lost())?
     }
 

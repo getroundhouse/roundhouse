@@ -39,6 +39,25 @@ pub struct Workspace {
     pub instance_id: String,
     pub created_at_ms: i64,
     pub archived_at_ms: Option<i64>,
+    pub setup: SetupStatus,
+    /// The first of ten ports set aside for this workspace, so workspaces don't collide.
+    pub port_base: u16,
+}
+
+/// Where a workspace's setup has got to. Copying local files counts, even with no script to run.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SetupStatus {
+    #[default]
+    NotStarted,
+    Running,
+    Succeeded,
+    /// The workspace is still usable. The code is `None` if the script was stopped, or never finished.
+    Failed {
+        code: Option<i32>,
+    },
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

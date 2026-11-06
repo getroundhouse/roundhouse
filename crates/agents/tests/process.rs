@@ -33,6 +33,7 @@ fn spec(dir: &Path) -> AgentSpec {
         resume: false,
         model: None,
         permission_mode: None,
+        env: vec![],
     }
 }
 

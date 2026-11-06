@@ -18,8 +18,8 @@ use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus};
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::{
-    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, Seq, Session, SessionStatus, Workspace,
-    WorkspaceId, WorkspaceStatus,
+    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, Seq, Session, SessionStatus, SetupStatus,
+    Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::paths::Paths;
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -27,7 +27,7 @@ use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use session::{Command, Item, LiveSession};
 use store::{Store, StoredSession, cancelled_approval, now_ms};
-use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
+use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot, watch};
 use tracing::{error, info, warn};
 use worker_link::WorkerLink;
 
@@ -53,6 +53,8 @@ pub struct Hub {
     /// workspace, because a slow or stuck worker mustn't hold up the others.
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
+    setup_gates: Mutex<HashMap<WorkspaceId, watch::Sender<bool>>>,
     feed: broadcast::Sender<HubNotice>,
     started_at_ms: i64,
     shutdown: Notify,
@@ -296,6 +298,8 @@ impl Hub {
             instance_id: id.clone(),
             created_at_ms: now_ms(),
             archived_at_ms: None,
+            setup: SetupStatus::NotStarted,
+            port_base: self.blocking(|store| store.next_port_base()).await?,
         };
         let record = workspace.clone();
         if !self.blocking(move |store| store.insert_workspace(&record)).await? {
@@ -341,7 +345,7 @@ impl Hub {
         let id = workspace.id.clone();
         let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
         self.notify(HubNotice::Workspace(ready.clone()));
-        Ok(ready)
+        Ok(self.start_setup(repo.clone(), ready))
     }
 
     async fn discard_workspace(&self, id: &str, provider: &dyn Provider) {
@@ -391,6 +395,19 @@ impl Hub {
                     workspace.name
                 ),
             ));
+        }
+
+        // Interrupt setup first, so the script isn't running in a worktree that's about to go.
+        let _ = link.call(WorkerRequest::CancelSetup).await;
+        let script = WorkerRequest::ArchiveScript {
+            repo_path: repo.path.clone(),
+            path: path.clone(),
+            env: workspace_env(&workspace, &repo),
+        };
+        match link.call(script).await {
+            Ok(_) => {}
+            Err(e) if !force => return Err(e),
+            Err(e) => warn!(workspace = workspace.name, "the archive script failed: {}", e.message),
         }
 
         self.stop_workspace_agents(&id).await?;
@@ -448,14 +465,16 @@ impl Hub {
             .clone()
             .ok_or_else(|| ApiError::new(ErrorCode::Internal, "an archived workspace has no path"))?;
         let link = self.ensure_worker(&id).await?;
+        let setup_repo = repo.clone();
         let reply =
             link.call(WorkerRequest::RestoreWorkspace { repo_path: repo.path, path, branch: workspace.branch }).await?;
         if !matches!(reply, WorkerResponse::Ok) {
             return Err(unexpected(reply));
         }
-        self.blocking(move |store| store.set_workspace_archived(&id, false))
-            .await
-            .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))
+        let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
+        self.notify(HubNotice::Workspace(restored.clone()));
+        // A restored worktree has lost what setup made, since none of it is committed.
+        Ok(self.start_setup(setup_repo, restored))
     }
 
     async fn ready_worktree(self: &Arc<Self>, id: &str) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
@@ -484,6 +503,92 @@ impl Hub {
         match link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await? {
             WorkerResponse::GitDiff(diff) => Ok(diff),
             other => Err(unexpected(other)),
+        }
+    }
+
+    /// Starts setup in the background, and returns the workspace as it now stands. Prompts wait for it.
+    fn start_setup(self: &Arc<Self>, repo: Repo, workspace: Workspace) -> Workspace {
+        let (gate_tx, _) = watch::channel(false);
+        self.setup_gates.lock().unwrap().insert(workspace.id.clone(), gate_tx.clone());
+        let mut running = workspace.clone();
+        running.setup = SetupStatus::Running;
+        let hub = self.clone();
+        let id = workspace.id.clone();
+        tokio::spawn(async move {
+            let marked = id.clone();
+            match hub.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await {
+                Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
+                Err(e) => warn!(workspace = id, "recording setup: {e}"),
+            }
+            let outcome = hub.run_setup(&repo, &workspace).await;
+            let marked = id.clone();
+            match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
+                Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
+                Err(e) => warn!(workspace = id, "recording setup: {e}"),
+            }
+            hub.setup_gates.lock().unwrap().remove(&id);
+            gate_tx.send_replace(true);
+        });
+        running
+    }
+
+    async fn run_setup(self: &Arc<Self>, repo: &Repo, workspace: &Workspace) -> SetupStatus {
+        let Some(path) = workspace.path.clone() else { return SetupStatus::Failed { code: None } };
+        let link = match self.ensure_worker(&workspace.id).await {
+            Ok(link) => link,
+            Err(e) => {
+                warn!(workspace = workspace.name, "setup couldn't start: {}", e.message);
+                return SetupStatus::Failed { code: None };
+            }
+        };
+        let request =
+            WorkerRequest::SetupWorkspace { repo_path: repo.path.clone(), path, env: workspace_env(workspace, repo) };
+        match link.call(request).await {
+            Ok(WorkerResponse::SetupDone { code: Some(0) }) => SetupStatus::Succeeded,
+            Ok(WorkerResponse::SetupDone { code }) => SetupStatus::Failed { code },
+            Ok(other) => {
+                warn!(workspace = workspace.name, "unexpected reply to setup: {other:?}");
+                SetupStatus::Failed { code: None }
+            }
+            Err(e) => {
+                warn!(workspace = workspace.name, "setup failed: {}", e.message);
+                SetupStatus::Failed { code: None }
+            }
+        }
+    }
+
+    /// Waits for setup, if it's running. Agents shouldn't start in a half-prepared worktree.
+    pub(crate) async fn wait_for_setup(&self, workspace_id: &str) {
+        let gate = self.setup_gates.lock().unwrap().get(workspace_id).map(|gate| gate.subscribe());
+        if let Some(mut gate) = gate {
+            let _ = gate.wait_for(|done| *done).await;
+        }
+    }
+
+    pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: String) -> Result<String, ApiError> {
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        match link.call(WorkerRequest::SetupLog { path }).await? {
+            WorkerResponse::SetupLog { text } => Ok(text),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: String) -> Result<Workspace, ApiError> {
+        let (workspace, _, _) = self.ready_worktree(&id).await?;
+        if self.setup_gates.lock().unwrap().contains_key(&id) {
+            return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
+        }
+        let repo_id = workspace.repo_id.clone();
+        let repo = self.blocking(move |store| store.get_repo(&repo_id)).await?;
+        Ok(self.start_setup(repo, workspace))
+    }
+
+    /// Stops the setup script, if one is running. The workspace stays usable.
+    pub(crate) async fn cancel_setup(&self, workspace_id: &str) {
+        if self.setup_gates.lock().unwrap().contains_key(workspace_id)
+            && let Some(link) = self.existing_worker(workspace_id)
+        {
+            let _ = link.call(WorkerRequest::CancelSetup).await;
         }
     }
 
@@ -623,6 +728,8 @@ impl Hub {
 
     pub(crate) async fn session_cancel(self: &Arc<Self>, id: String) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
+        // A prompt waiting on setup holds this session's commands, so stopping has to reach setup directly.
+        self.cancel_setup(&session.workspace_id).await;
         let (reply, done) = oneshot::channel();
         session.command(Command::Cancel { reply }).await?;
         done.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))?
@@ -663,6 +770,23 @@ async fn close_worker(link: &WorkerLink, provider: &dyn Provider, instance_id: &
     }
 }
 
+/// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
+pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
+    let base = workspace.base_ref.as_deref().unwrap_or("main");
+    let mut env = vec![
+        ("CONDUCTOR_WORKSPACE_NAME".to_string(), workspace.name.clone()),
+        ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.clone()),
+        ("CONDUCTOR_ROOT_PATH".to_string(), repo.path.clone()),
+        ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.strip_prefix("origin/").unwrap_or(base).to_string()),
+        ("CONDUCTOR_PORT".to_string(), workspace.port_base.to_string()),
+        ("CONDUCTOR_IS_LOCAL".to_string(), "1".to_string()),
+    ];
+    if let Some(path) = &workspace.path {
+        env.push(("CONDUCTOR_WORKSPACE_PATH".to_string(), path.clone()));
+    }
+    env
+}
+
 fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
@@ -678,6 +802,7 @@ fn find_repo_root(path: &Path) -> Result<PathBuf, ApiError> {
 
 /// Anything left mid-turn or half-made by the last run. Its workers exited when it went away.
 fn recover(store: &Store) -> Result<Vec<Workspace>, ApiError> {
+    store.fail_interrupted_setups()?;
     for id in store.active_session_ids()? {
         for approval_id in store.open_approvals(&id)? {
             store.append(&id, &cancelled_approval(approval_id), None, None, None)?;
@@ -751,6 +876,7 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
         workers: Mutex::new(HashMap::new()),
         worker_gates: Mutex::new(HashMap::new()),
         sessions: Mutex::new(HashMap::new()),
+        setup_gates: Mutex::new(HashMap::new()),
         feed: broadcast::channel(FEED_CAPACITY).0,
         started_at_ms: now_ms(),
         shutdown: Notify::new(),
