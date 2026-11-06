@@ -1,0 +1,110 @@
+//! Records the hub owns and serves.
+
+use serde::{Deserialize, Serialize};
+
+pub type RepoId = String;
+pub type WorkspaceId = String;
+pub type SessionId = String;
+/// Position in a session's event log. The first event is 1, and there are no gaps.
+pub type Seq = u64;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Repo {
+    pub id: RepoId,
+    pub name: String,
+    pub path: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceStatus {
+    Creating,
+    Ready,
+    Archived,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Workspace {
+    pub id: WorkspaceId,
+    pub repo_id: RepoId,
+    pub name: String,
+    pub branch: String,
+    /// What the branch was created from, such as `origin/main`. Diffs are taken against this.
+    pub base_ref: Option<String>,
+    /// The worktree's path on the worker's machine. Empty until the worker has created it.
+    pub path: Option<String>,
+    pub status: WorkspaceStatus,
+    pub provider: String,
+    pub instance_id: String,
+    pub created_at_ms: i64,
+    pub archived_at_ms: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentKind {
+    Claude,
+}
+
+impl AgentKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AgentKind::Claude => "claude",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStatus {
+    /// Nothing is happening, and the next prompt starts a turn.
+    Idle,
+    Running,
+    WaitingApproval,
+    /// The agent went away mid-turn. The next prompt resumes the conversation.
+    Interrupted,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Session {
+    pub id: SessionId,
+    pub workspace_id: WorkspaceId,
+    pub agent: AgentKind,
+    pub model: Option<String>,
+    /// Passed through to the agent. `None` leaves the choice to the user's own agent settings.
+    pub permission_mode: Option<String>,
+    pub status: SessionStatus,
+    pub last_seq: Seq,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+pub struct GitStatus {
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    /// Against the branch's upstream. Workspace branches have none until they're pushed, so these
+    /// don't say how far a branch is from its base.
+    pub ahead: u32,
+    pub behind: u32,
+    pub files: Vec<GitFile>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GitFile {
+    pub path: String,
+    /// Set for renames and copies.
+    pub orig_path: Option<String>,
+    /// Two-letter porcelain status, such as `.M`, `A.` or `??`.
+    pub status: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+pub struct GitDiff {
+    /// The commit the diff is taken from: the merge base with the workspace's base ref.
+    pub base_commit: Option<String>,
+    pub patch: String,
+    /// True when untracked files were left out to keep the response bounded.
+    pub truncated: bool,
+}

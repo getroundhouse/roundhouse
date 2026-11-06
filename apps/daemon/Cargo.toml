@@ -1,0 +1,28 @@
+[package]
+name = "daemon"
+description = "Runs as a hub or a worker. `agenthubd` is a placeholder until the product has a name."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "agenthubd"
+path = "src/main.rs"
+
+[dependencies]
+protocol.workspace = true
+hub.workspace = true
+worker.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+client-core.workspace = true
+flume.workspace = true
+libc.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
