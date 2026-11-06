@@ -1,0 +1,21 @@
+diff --git src/input/base/state.rs src/input/base/state.rs
+index 051acab..2fa1c30 100644
+--- src/input/base/state.rs
++++ src/input/base/state.rs
+@@ -4533,6 +4533,16 @@ impl<M: InputModeKind> InputBaseState<M> {
+ }
+ 
+ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
++    // gpui_ios refuses to show the keyboard or apply edits unless it knows the document's
++    // extent: its `document_range` needs this or `text_input_editable_range`.
++    fn text_length_utf16(
++        &mut self,
++        _window: &mut Window,
++        _cx: &mut Context<Self>,
++    ) -> Option<usize> {
++        Some(self.offset_to_utf16(self.text.len()))
++    }
++
+     fn text_for_range(
+         &mut self,
+         range_utf16: Range<usize>,

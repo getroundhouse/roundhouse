@@ -1,0 +1,32 @@
+# Packaging and signing only. The app is the Rust binary; see ../src/main.rs.
+name: GpuiKitPoc
+options:
+  bundleIdPrefix: dev.gpuikit
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  GpuiKitPoc:
+    type: application
+    platform: iOS
+    sources:
+      - path: Stub.swift
+    settings:
+      base:
+        PRODUCT_NAME: gpui_kit_ios_poc
+        BUNDLE_ID: ${POC_BUNDLE_ID}
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
+        INFOPLIST_FILE: ../app/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        ENABLE_DEBUG_DYLIB: NO
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        CODE_SIGN_STYLE: Automatic
+    postCompileScripts:
+      - name: Replace the stub with the Rust binary
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          if [ "${PLATFORM_NAME}" = "iphonesimulator" ]; then triple=aarch64-apple-ios-sim; else triple=aarch64-apple-ios; fi
+          if [ "${CONFIGURATION}" = "Release" ]; then profile=release; else profile=debug; fi
+          cp "${PROJECT_DIR}/../target/${triple}/${profile}/gpui_kit_ios_poc" "${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"

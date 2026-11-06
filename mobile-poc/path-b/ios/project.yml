@@ -1,0 +1,40 @@
+name: GpuiKitPocB
+options:
+  bundleIdPrefix: dev.gpuikit
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    # Ad hoc signing for the simulator. Device signing is a separate decision; see ../README.md.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+targets:
+  GpuiKitPocB:
+    type: application
+    platform: iOS
+    sources:
+      - path: App.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gpuikit.iospocb
+        PRODUCT_NAME: GpuiKitPocB
+        INFOPLIST_FILE: Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: Embedding.h
+        ENABLE_DEBUG_DYLIB: NO
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        "POC_STATIC_LIB[sdk=iphonesimulator*]": "$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/$(POC_RUST_PROFILE)/libgpui_kit_poc_b.a"
+        "POC_STATIC_LIB[sdk=iphoneos*]": "$(PROJECT_DIR)/../target/aarch64-apple-ios/$(POC_RUST_PROFILE)/libgpui_kit_poc_b.a"
+        OTHER_LDFLAGS:
+          - "-force_load"
+          - "$(POC_STATIC_LIB)"
+          - "-lc++"
+          - "-ObjC"
+      configs:
+        Debug:
+          POC_RUST_PROFILE: debug
+        Release:
+          POC_RUST_PROFILE: release

@@ -1,0 +1,33 @@
+[package]
+name = "gpui-kit-ios-poc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "gpui_kit_ios_poc"
+path = "src/main.rs"
+
+# Standalone: not part of any parent workspace.
+[workspace]
+
+[dependencies]
+# The kit pins gpui-pre =0.3.11. `component` and `assets` are the default features.
+gpui-kit = { version = "=0.9.0", features = ["syntect"] }
+
+# Apache-2.0 iOS backend. The crate compiles to an empty shell on non-iOS targets.
+[target.'cfg(target_os = "ios")'.dependencies]
+# `runtime_shaders` compiles Metal shaders at launch instead of at build time. It avoids the
+# Xcode Metal Toolchain component, which is not installed on this Mac. See README.md.
+gpui_ios = { package = "gpui-pre-ios", version = "=0.3.11", features = ["runtime_shaders"] }
+# Sends GPUI's own warnings to the demo's event log.
+log = "0.4"
+# Only for the native-overlay experiment in src/main.rs.
+objc2 = "0.6"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString"] }
+raw-window-handle = "0.6"
+
+# gpui-kit's inputs never report a document length, so gpui_ios refuses to show the keyboard.
+# One method, kept as a diff in ../patches. Run ../scripts/prepare-patches.sh first.
+[patch.crates-io]
+gpui-base = { path = "../patches/build/gpui-base-0.9.0" }
