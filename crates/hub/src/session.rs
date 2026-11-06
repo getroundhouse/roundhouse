@@ -8,11 +8,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{
     AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel, SessionEvent,
 };
-use protocol::model::{AgentKind, Seq, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -96,6 +96,7 @@ pub struct LiveSession {
     agent_session_id: String,
     model: Option<String>,
     permission_mode: Option<String>,
+    created_at_ms: i64,
     hub: Weak<Hub>,
     commands: mpsc::Sender<Command>,
     ingest: mpsc::Sender<Item>,
@@ -165,6 +166,7 @@ impl LiveSession {
             agent_session_id: stored.agent_session_id,
             model: stored.session.model.clone(),
             permission_mode: stored.session.permission_mode.clone(),
+            created_at_ms: stored.session.created_at_ms,
             hub: Arc::downgrade(hub),
             commands: commands_tx,
             ingest: ingest_tx,
@@ -264,7 +266,24 @@ impl LiveSession {
         state.status = next;
         publish(&mut state, LiveItem::Appended(seq));
         drop(state);
+        if new_status.is_some() {
+            hub.notify(HubNotice::Session(self.record_now(next, seq, appended.event.ts_ms)));
+        }
         Ok((appended.event, false))
+    }
+
+    fn record_now(&self, status: SessionStatus, last_seq: Seq, updated_at_ms: i64) -> Session {
+        Session {
+            id: self.id.clone(),
+            workspace_id: self.workspace_id.clone(),
+            agent: self.agent,
+            model: self.model.clone(),
+            permission_mode: self.permission_mode.clone(),
+            status,
+            last_seq,
+            created_at_ms: self.created_at_ms,
+            updated_at_ms,
+        }
     }
 
     /// Records something the hub itself knows, as opposed to agent output.

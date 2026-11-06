@@ -186,6 +186,7 @@ dependencies = [
  "flume",
  "libc",
  "protocol",
+ "serde_json",
  "thiserror",
 ]
 

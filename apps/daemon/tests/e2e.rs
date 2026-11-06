@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError, Subscription, SubscriptionItem};
-use protocol::client::{ClientRequest, ErrorCode};
+use protocol::client::{ClientRequest, ErrorCode, HubNotice};
 use protocol::event::{
     ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, ExitReason, SessionEvent, TurnOutcome,
 };
@@ -279,7 +279,7 @@ impl Follower {
             }
             SubscriptionItem::Tail(tail) => self.tail = tail,
             SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
-            SubscriptionItem::Disconnected => {}
+            SubscriptionItem::Notice(_) | SubscriptionItem::Disconnected => {}
         }
     }
 
@@ -512,6 +512,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                                     tail = snapshot;
                                 }
                                 SubscriptionItem::Event(event) => tail.on_event(&event.body),
+                                SubscriptionItem::Notice(_) => {}
                                 SubscriptionItem::Disconnected => panic!("lost the hub"),
                             }
                         }
@@ -589,7 +590,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             }
             HubFrame::Delta { delta, .. } => tail.apply(&delta),
             HubFrame::Tail { tail: snapshot, .. } => tail = snapshot,
-            HubFrame::Reply { .. } => {}
+            HubFrame::Reply { .. } | HubFrame::Notice { .. } => {}
         }
     }
     assert!(ended, "the client should have read through the agent's exit");
@@ -1374,6 +1375,46 @@ fn many_sessions_run_at_once_without_mixing_their_output() {
 }
 
 // The connection ----------------------------------------------------------------------------------
+
+fn next_notice(feed: &Subscription, what: &str) -> HubNotice {
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        match feed.items.recv_timeout(wait) {
+            Ok(SubscriptionItem::Notice(notice)) => return notice,
+            Ok(_) => {}
+            Err(_) => panic!("timed out waiting for {what}"),
+        }
+    }
+}
+
+#[test]
+fn the_feed_reports_what_a_sidebar_shows() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let feed = client.feed_subscribe().unwrap();
+
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    assert_eq!(next_notice(&feed, "the repo"), HubNotice::Repo(repo.clone()));
+    let workspace = client.workspace_create(&repo.id, Some("watched".into()), None).unwrap();
+    assert_eq!(next_notice(&feed, "the workspace"), HubNotice::Workspace(workspace.clone()));
+    let session =
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+    assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
+
+    // One notice per change of status, not one per event.
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    let HubNotice::Session(running) = next_notice(&feed, "running") else { panic!() };
+    assert_eq!((running.id.as_str(), running.status), (session.id.as_str(), SessionStatus::Running));
+    let HubNotice::Session(idle) = next_notice(&feed, "idle") else { panic!() };
+    assert_eq!(idle.status, SessionStatus::Idle);
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
+
+    let archived = client.workspace_archive(&workspace.id, true).unwrap();
+    assert_eq!(next_notice(&feed, "the archive"), HubNotice::Workspace(archived));
+    let restored = client.workspace_restore(&workspace.id).unwrap();
+    assert_eq!(next_notice(&feed, "the restore"), HubNotice::Workspace(restored));
+}
 
 fn mode(path: &Path) -> u32 {
     use std::os::unix::fs::PermissionsExt;

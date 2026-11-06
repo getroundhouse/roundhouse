@@ -411,6 +411,7 @@ fn follow(client: &Client, session_id: &str, from: Seq, until_idle: bool, json: 
                 }
                 true
             }
+            SubscriptionItem::Notice(_) => false,
             SubscriptionItem::Disconnected => {
                 std::io::stdout().flush().ok();
                 bail!("lost the hub after event {last_seq}. Resume with `attach --from {}`", last_seq + 1);

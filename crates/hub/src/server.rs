@@ -5,7 +5,9 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
+};
 use protocol::frame;
 use protocol::model::{Seq, SessionId};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -181,6 +183,18 @@ async fn handle(
             subscriptions.insert(subscription_id, task.abort_handle());
             C::Ok
         }
+        R::FeedSubscribe { subscription_id } => {
+            let mut subscriptions = connection.subscriptions.lock().unwrap();
+            if subscriptions.contains_key(&subscription_id) {
+                return Err(ApiError::new(
+                    ErrorCode::InvalidRequest,
+                    format!("subscription {subscription_id} already exists"),
+                ));
+            }
+            let task = tokio::spawn(pump_feed(hub.subscribe_feed(), subscription_id, connection.frames.clone()));
+            subscriptions.insert(subscription_id, task.abort_handle());
+            C::Ok
+        }
         R::SessionUnsubscribe { subscription_id } => {
             if let Some(subscription) = connection.subscriptions.lock().unwrap().remove(&subscription_id) {
                 subscription.abort();
@@ -200,6 +214,19 @@ async fn handle(
             C::Ok
         }
     })
+}
+
+async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<HubFrame>) {
+    loop {
+        let notice = match feed.recv().await {
+            Ok(notice) => notice,
+            Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
+            Err(broadcast::error::RecvError::Closed) => return,
+        };
+        if frames.send(HubFrame::Notice { subscription_id, notice }).await.is_err() {
+            return;
+        }
+    }
 }
 
 /// Feeds one subscription. The log is always the source of durable events: live items only say

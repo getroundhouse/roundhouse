@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientResponse, ErrorCode, HubStatus};
+use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus};
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::{
     AgentKind, GitDiff, GitStatus, Repo, Seq, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus,
@@ -26,7 +26,7 @@ use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use session::{Command, Item, LiveSession};
 use store::{Store, StoredSession, cancelled_approval, now_ms};
-use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
+use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
 use tracing::{error, info, warn};
 use worker_link::WorkerLink;
 
@@ -37,6 +37,8 @@ pub struct HubConfig {
 }
 
 const LOCAL_PROVIDER: &str = "local";
+/// Status changes are rare, so a client only overflows this if it has stopped reading.
+const FEED_CAPACITY: usize = 256;
 /// Agents get 3 s to stop and the worker flushes after that, so this is only reached if something
 /// is stuck.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
@@ -50,6 +52,7 @@ pub struct Hub {
     /// workspace, because a slow or stuck worker mustn't hold up the others.
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    feed: broadcast::Sender<HubNotice>,
     started_at_ms: i64,
     shutdown: Notify,
     shutting_down: AtomicBool,
@@ -93,6 +96,15 @@ impl Hub {
     /// A number no agent launched by this hub has used. Starts above the "no run" marker.
     pub(crate) fn next_run(&self) -> u64 {
         self.next_run.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub(crate) fn subscribe_feed(&self) -> broadcast::Receiver<HubNotice> {
+        self.feed.subscribe()
+    }
+
+    pub(crate) fn notify(&self, notice: HubNotice) {
+        // An error only means nobody is listening.
+        let _ = self.feed.send(notice);
     }
 
     fn worker_gate(&self, workspace_id: &str) -> Arc<AsyncMutex<()>> {
@@ -214,7 +226,9 @@ impl Hub {
             .map(|name| name.to_string_lossy().into_owned())
             .ok_or_else(|| ApiError::new(ErrorCode::InvalidRequest, format!("{path} has no directory name")))?;
         let repo = Repo { id: new_id(), name, path: root.to_string_lossy().into_owned(), created_at_ms: now_ms() };
-        self.blocking(move |store| store.add_repo(&repo)).await
+        let repo = self.blocking(move |store| store.add_repo(&repo)).await?;
+        self.notify(HubNotice::Repo(repo.clone()));
+        Ok(repo)
     }
 
     pub(crate) async fn repo_list(&self) -> Result<Vec<Repo>, ApiError> {
@@ -324,7 +338,9 @@ impl Hub {
             warn!(workspace = workspace.name, "{warning}");
         }
         let id = workspace.id.clone();
-        self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await
+        let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
+        self.notify(HubNotice::Workspace(ready.clone()));
+        Ok(ready)
     }
 
     async fn discard_workspace(&self, id: &str, provider: &dyn Provider) {
@@ -397,6 +413,7 @@ impl Hub {
             store.set_workspace_archived(&archived, true)
         })
         .await
+        .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))
     }
 
     async fn stop_workspace_agents(self: &Arc<Self>, workspace_id: &str) -> Result<(), ApiError> {
@@ -435,7 +452,9 @@ impl Hub {
         if !matches!(reply, WorkerResponse::Ok) {
             return Err(unexpected(reply));
         }
-        self.blocking(move |store| store.set_workspace_archived(&id, false)).await
+        self.blocking(move |store| store.set_workspace_archived(&id, false))
+            .await
+            .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))
     }
 
     async fn ready_worktree(self: &Arc<Self>, id: &str) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
@@ -499,6 +518,7 @@ impl Hub {
         };
         let session = stored.session.clone();
         self.blocking(move |store| store.insert_session(&stored)).await?;
+        self.notify(HubNotice::Session(session.clone()));
         Ok(session)
     }
 
@@ -696,6 +716,7 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
         workers: Mutex::new(HashMap::new()),
         worker_gates: Mutex::new(HashMap::new()),
         sessions: Mutex::new(HashMap::new()),
+        feed: broadcast::channel(FEED_CAPACITY).0,
         started_at_ms: now_ms(),
         shutdown: Notify::new(),
         shutting_down: AtomicBool::new(false),

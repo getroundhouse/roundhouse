@@ -3,7 +3,9 @@
 //! threads and async tasks can read. This keeps GPUI's executor out of it and leaves a path open
 //! for a native mobile client.
 //!
-//! Range loading, anchors and eviction arrive here with the desktop app in step 1.3.
+//! [`session_log`] holds what a client has of a session's history.
+
+pub mod session_log;
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -15,7 +17,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, HubFrame, HubStatus, ReplyOutcome};
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome,
+};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::frame;
 use protocol::model::{AgentKind, GitDiff, GitStatus, Repo, Seq, Session, Workspace};
@@ -44,6 +48,8 @@ pub enum SubscriptionItem {
     /// Replaces any streaming tail held so far.
     Tail(Tail),
     Delta(StreamDelta),
+    /// Only on a feed subscription.
+    Notice(HubNotice),
     Disconnected,
 }
 
@@ -268,6 +274,18 @@ impl Client {
         Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
     }
 
+    /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
+    pub fn feed_subscribe(&self) -> Result<Subscription> {
+        let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
+        let (items_tx, items) = flume::unbounded();
+        self.inner.subscriptions.lock().unwrap().insert(subscription_id, items_tx);
+        if let Err(e) = self.expect_ok(ClientRequest::FeedSubscribe { subscription_id }) {
+            self.inner.subscriptions.lock().unwrap().remove(&subscription_id);
+            return Err(e);
+        }
+        Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
+    }
+
     /// Returns the prompt's `seq`, and whether it had already been recorded.
     pub fn session_prompt(&self, id: &str, text: &str, client_msg_id: Option<String>) -> Result<(Seq, bool)> {
         let request = ClientRequest::SessionPrompt { id: id.to_string(), text: text.to_string(), client_msg_id };
@@ -342,6 +360,9 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
             HubFrame::Tail { subscription_id, tail } => deliver(&inner, subscription_id, SubscriptionItem::Tail(tail)),
             HubFrame::Delta { subscription_id, delta } => {
                 deliver(&inner, subscription_id, SubscriptionItem::Delta(delta))
+            }
+            HubFrame::Notice { subscription_id, notice } => {
+                deliver(&inner, subscription_id, SubscriptionItem::Notice(notice))
             }
         }
     }

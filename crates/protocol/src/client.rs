@@ -84,7 +84,13 @@ pub enum ClientRequest {
         from_seq: Seq,
         subscription_id: u64,
     },
+    /// Works for any kind of subscription.
     SessionUnsubscribe {
+        subscription_id: u64,
+    },
+    /// Sends a [`HubNotice`] whenever a record a sidebar shows changes. List first, then subscribe,
+    /// and list again on `Resync`.
+    FeedSubscribe {
         subscription_id: u64,
     },
     /// Resolves once the prompt is recorded. Sending the same `client_msg_id` twice records it once,
@@ -202,6 +208,23 @@ pub enum HubFrame {
         subscription_id: u64,
         delta: StreamDelta,
     },
+    Notice {
+        subscription_id: u64,
+        notice: HubNotice,
+    },
+}
+
+/// A record changed. Carries the whole record, so a client only ever replaces its copy.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "notice", rename_all = "snake_case")]
+pub enum HubNotice {
+    Repo(Repo),
+    Workspace(Workspace),
+    Session(Session),
+    /// This client fell behind and missed some. List everything again.
+    Resync,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

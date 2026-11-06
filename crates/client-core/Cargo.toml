@@ -10,3 +10,6 @@ protocol.workspace = true
 flume.workspace = true
 libc.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
