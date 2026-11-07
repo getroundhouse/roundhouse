@@ -34,7 +34,6 @@ exclude = ["mobile-poc"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89"
 publish = false
 
 [workspace.dependencies]
@@ -56,13 +55,32 @@ libc = "0.2"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+syntect = { version = "5", default-features = false }
 tempfile = "3"
 thiserror = "2"
 toml = "0.9"
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+two-face = { version = "0.4", default-features = false }
 uuid = { version = "1", features = ["v4"] }
+
+# docs/rust.md says what each of these is for. A crate sets `[lints] workspace = true` once it's clean.
+[workspace.lints.rust]
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+dbg_macro = "warn"
+mod_module_files = "warn"
+undocumented_unsafe_blocks = "warn"
 
 # GPUI is unusably slow unoptimized, and dependencies only build once.
 [profile.dev.package."*"]

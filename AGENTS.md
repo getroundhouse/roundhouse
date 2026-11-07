@@ -33,7 +33,7 @@ cargo run -p desktop --bin trestle-desktop   # The app
 cargo run -p desktop --example look -- <workspace> diff   # The app, opened on a view, for screenshots
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
-docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
+docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
