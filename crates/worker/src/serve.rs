@@ -119,12 +119,19 @@ where
     }
 
     info!("hub stream closed, stopping agents");
+    stop_everything(&state, &forwarders).await;
+    drop(state);
+    drop(frames);
+    let _ = writer_task.await;
+}
+
+async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<()>>) {
     {
         // Waits out a start in flight, so its agent is on the list below.
         let _no_more_starts = state.start_lock.lock().await;
         state.shutting_down.store(true, Ordering::SeqCst);
     }
-    stop_setup_script(&state);
+    stop_setup_script(state);
     let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
     for agent in agents {
@@ -133,9 +140,6 @@ where
     stops.join_all().await;
     let mut forwarders = std::mem::take(&mut *forwarders.lock().await);
     while forwarders.join_next().await.is_some() {}
-    drop(state);
-    drop(frames);
-    let _ = writer_task.await;
 }
 
 async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<WorkerFrame>) {
@@ -154,21 +158,14 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 async fn handle(
     state: &Arc<State>,
     forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>,
     request: WorkerRequest,
 ) -> Result<WorkerResponse, ApiError> {
     match request {
-        WorkerRequest::Hello { protocol_version } => {
-            if protocol_version != PROTOCOL_VERSION {
-                return Err(ApiError::new(
-                    ErrorCode::VersionMismatch,
-                    format!("hub speaks protocol {protocol_version}, this worker speaks {PROTOCOL_VERSION}"),
-                ));
-            }
-            Ok(WorkerResponse::Hello { protocol_version: PROTOCOL_VERSION })
-        }
+        WorkerRequest::Hello { protocol_version } => hello(protocol_version),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
                 &state.config.workspaces_root,
@@ -215,47 +212,72 @@ async fn handle(
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, text } => {
-            let delivered = match state.live_agent(&session_id) {
+            let agent = state.live_agent(&session_id);
+            Ok(delivery(match agent {
                 Some(agent) => agent.send_prompt(&text).await.is_ok(),
                 None => false,
-            };
-            Ok(if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning })
+            }))
         }
         WorkerRequest::AgentApproval { session_id, approval_id, decision } => {
-            let delivered = match state.live_agent(&session_id) {
+            let agent = state.live_agent(&session_id);
+            Ok(delivery(match agent {
                 Some(agent) => agent.resolve_approval(&approval_id, &decision).await.is_ok(),
                 None => false,
-            };
-            Ok(if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning })
+            }))
         }
         WorkerRequest::AgentCancel { session_id } => {
-            let delivered = match state.live_agent(&session_id) {
+            let agent = state.live_agent(&session_id);
+            Ok(delivery(match agent {
                 Some(agent) => agent.interrupt().await.is_ok(),
                 None => false,
-            };
-            Ok(if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning })
+            }))
         }
         WorkerRequest::AgentConfigure { session_id, model, permission_mode } => {
-            let Some(agent) = state.live_agent(&session_id) else {
-                return Ok(WorkerResponse::AgentNotRunning);
-            };
-            match agent.configure(model.as_deref(), permission_mode.as_deref()).await {
-                Ok(()) => Ok(WorkerResponse::Ok),
-                Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
-                Err(e) => Err(e.into()),
-            }
+            configure_agent(state, &session_id, model.as_deref(), permission_mode.as_deref()).await
         }
-        WorkerRequest::AgentStop { session_id } => {
-            // Includes one that's on its way out: this resolves once it has finished.
-            let agent = state.agents.lock().get(&session_id).map(|agent| agent.process.clone());
-            match agent {
-                Some(agent) => {
-                    agent.stop().await;
-                    Ok(WorkerResponse::Ok)
-                }
-                None => Ok(WorkerResponse::AgentNotRunning),
-            }
+        WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
+    }
+}
+
+fn hello(protocol_version: u32) -> Result<WorkerResponse, ApiError> {
+    if protocol_version != PROTOCOL_VERSION {
+        return Err(ApiError::new(
+            ErrorCode::VersionMismatch,
+            format!("hub speaks protocol {protocol_version}, this worker speaks {PROTOCOL_VERSION}"),
+        ));
+    }
+    Ok(WorkerResponse::Hello { protocol_version: PROTOCOL_VERSION })
+}
+
+fn delivery(delivered: bool) -> WorkerResponse {
+    if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning }
+}
+
+async fn configure_agent(
+    state: &State,
+    session_id: &str,
+    model: Option<&str>,
+    permission_mode: Option<&str>,
+) -> Result<WorkerResponse, ApiError> {
+    let Some(agent) = state.live_agent(session_id) else {
+        return Ok(WorkerResponse::AgentNotRunning);
+    };
+    match agent.configure(model, permission_mode).await {
+        Ok(()) => Ok(WorkerResponse::Ok),
+        Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
+        Err(e) => Err(e.into()),
+    }
+}
+
+async fn stop_agent(state: &State, session_id: &str) -> Result<WorkerResponse, ApiError> {
+    // Includes one that's on its way out: this resolves once it has finished.
+    let agent = state.agents.lock().get(session_id).map(|agent| agent.process.clone());
+    match agent {
+        Some(agent) => {
+            agent.stop().await;
+            Ok(WorkerResponse::Ok)
         }
+        None => Ok(WorkerResponse::AgentNotRunning),
     }
 }
 

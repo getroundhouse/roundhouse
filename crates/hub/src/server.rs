@@ -131,6 +131,21 @@ fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
     }
 }
 
+/// Holds the lock while `start` runs, so two requests can't both take one subscription ID.
+fn add_subscription(
+    connection: &Connection,
+    subscription_id: u64,
+    start: impl FnOnce() -> AbortHandle,
+) -> Result<(), ApiError> {
+    let mut subscriptions = connection.subscriptions.lock();
+    if subscriptions.contains_key(&subscription_id) {
+        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("subscription {subscription_id} already exists")));
+    }
+    subscriptions.insert(subscription_id, start());
+    Ok(())
+}
+
+#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 async fn handle(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
@@ -179,36 +194,18 @@ async fn handle(
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => {
             let session = hub.live_session(&id).await?;
-            let mut subscriptions = connection.subscriptions.lock();
-            if subscriptions.contains_key(&subscription_id) {
-                return Err(ApiError::new(
-                    ErrorCode::InvalidRequest,
-                    format!("subscription {subscription_id} already exists"),
-                ));
-            }
-            let live = session.subscribe();
-            let task = tokio::spawn(pump(
-                hub.clone(),
-                session,
-                id,
-                subscription_id,
-                from_seq,
-                live,
-                connection.frames.clone(),
-            ));
-            subscriptions.insert(subscription_id, task.abort_handle());
+            add_subscription(connection, subscription_id, || {
+                let live = session.subscribe();
+                let frames = connection.frames.clone();
+                tokio::spawn(pump(hub.clone(), session.clone(), id, subscription_id, from_seq, live, frames))
+                    .abort_handle()
+            })?;
             C::Ok
         }
         R::FeedSubscribe { subscription_id } => {
-            let mut subscriptions = connection.subscriptions.lock();
-            if subscriptions.contains_key(&subscription_id) {
-                return Err(ApiError::new(
-                    ErrorCode::InvalidRequest,
-                    format!("subscription {subscription_id} already exists"),
-                ));
-            }
-            let task = tokio::spawn(pump_feed(hub.subscribe_feed(), subscription_id, connection.frames.clone()));
-            subscriptions.insert(subscription_id, task.abort_handle());
+            add_subscription(connection, subscription_id, || {
+                tokio::spawn(pump_feed(hub.subscribe_feed(), subscription_id, connection.frames.clone())).abort_handle()
+            })?;
             C::Ok
         }
         R::SessionUnsubscribe { subscription_id } => {

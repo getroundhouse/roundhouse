@@ -871,19 +871,53 @@ fn private_file(path: &Path) -> Result<(), HubError> {
         .map_err(|e| HubError::io(format!("creating {}", path.display()), e))
 }
 
+/// One hub at a time per data directory. It holds what's returned for as long as it runs.
+fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
+    let lock_file = std::fs::File::create(&paths.lock).map_err(|e| HubError::io("opening the hub lock", e))?;
+    match lock_file.try_lock() {
+        Ok(()) => Ok(lock_file),
+        Err(std::fs::TryLockError::WouldBlock) => Err(HubError::AlreadyRunning(paths.socket.display().to_string())),
+        Err(std::fs::TryLockError::Error(e)) => Err(HubError::io("locking the hub lock", e)),
+    }
+}
+
+fn new_hub(store: Arc<Store>, provider: Arc<dyn Provider>) -> Hub {
+    Hub {
+        store,
+        providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
+        default_provider: LOCAL_PROVIDER.to_string(),
+        workers: Mutex::new(HashMap::new()),
+        worker_gates: Mutex::new(HashMap::new()),
+        ensuring_session: AsyncMutex::new(()),
+        sessions: Mutex::new(HashMap::new()),
+        setup_gates: Mutex::new(HashMap::new()),
+        feed: broadcast::channel(FEED_CAPACITY).0,
+        started_at_ms: now_ms(),
+        shutdown: Notify::new(),
+        shutting_down: AtomicBool::new(false),
+        name_salt: AtomicU64::new(now_ms().cast_unsigned()),
+        next_run: AtomicU64::new(1),
+        clients: AtomicU32::new(0),
+    }
+}
+
+/// Only this user can connect, which is what authenticates a local client. The caller must hold
+/// the lock, which means any socket already here is stale.
+fn bind_socket(path: &Path) -> Result<tokio::net::UnixListener, HubError> {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::remove_file(path);
+    let listener =
+        tokio::net::UnixListener::bind(path).map_err(|e| HubError::io(format!("binding {}", path.display()), e))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| HubError::io("restricting the socket", e))?;
+    Ok(listener)
+}
+
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let paths = config.paths;
     private_dir(&paths.data_dir)?;
-    let lock_file = std::fs::File::create(&paths.lock).map_err(|e| HubError::io("opening the hub lock", e))?;
-    if let Err(e) = lock_file.try_lock() {
-        match e {
-            std::fs::TryLockError::WouldBlock => {
-                return Err(HubError::AlreadyRunning(paths.socket.display().to_string()));
-            }
-            std::fs::TryLockError::Error(e) => return Err(HubError::io("locking the hub lock", e)),
-        }
-    }
+    let lock_file = take_lock(&paths)?;
 
     private_file(&paths.database)?;
     let store = Arc::new(Store::open(&paths.database).map_err(HubError::OpenDatabase)?);
@@ -900,34 +934,9 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
         let _ = provider.destroy(&workspace.instance_id).await;
     }
-    let hub = Arc::new(Hub {
-        store,
-        providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
-        default_provider: LOCAL_PROVIDER.to_string(),
-        workers: Mutex::new(HashMap::new()),
-        worker_gates: Mutex::new(HashMap::new()),
-        ensuring_session: AsyncMutex::new(()),
-        sessions: Mutex::new(HashMap::new()),
-        setup_gates: Mutex::new(HashMap::new()),
-        feed: broadcast::channel(FEED_CAPACITY).0,
-        started_at_ms: now_ms(),
-        shutdown: Notify::new(),
-        shutting_down: AtomicBool::new(false),
-        name_salt: AtomicU64::new(now_ms().cast_unsigned()),
-        next_run: AtomicU64::new(1),
-        clients: AtomicU32::new(0),
-    });
+    let hub = Arc::new(new_hub(store, provider));
 
-    // Holding the lock means any socket here is stale.
-    let _ = std::fs::remove_file(&paths.socket);
-    let listener = tokio::net::UnixListener::bind(&paths.socket)
-        .map_err(|e| HubError::io(format!("binding {}", paths.socket.display()), e))?;
-    // Only this user can connect, which is what authenticates a local client.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&paths.socket, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| HubError::io("restricting the socket", e))?;
-    }
+    let listener = bind_socket(&paths.socket)?;
     info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");
 
     let accept = {

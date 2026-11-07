@@ -7,7 +7,7 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, div, px,
 };
-use protocol::model::{Session, SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Repo, Session, SessionStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
 
@@ -64,52 +64,67 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
         )
 }
 
+fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Context<AppView>) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    let repo_id = repo.id.clone();
+    let creating = app.creating_in.as_ref() == Some(&repo.id);
+    let rows: Vec<_> =
+        visible.iter().filter(|w| w.repo_id == repo.id).map(|w| workspace_row(app, w, cx).into_any_element()).collect();
+    v_flex()
+        .w_full()
+        .gap_1()
+        .child(
+            h_flex()
+                .w_full()
+                .px_2()
+                .justify_between()
+                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(muted).child(repo.name.clone()))
+                .child(
+                    Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
+                        .ghost()
+                        .xsmall()
+                        .label("New")
+                        .loading(creating)
+                        .disabled(app.busy)
+                        .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
+                ),
+        )
+        .children(rows)
+        .when(creating, |d| d.child(div().px_2().text_xs().text_color(muted).child("Creating a workspace…")))
+        .into_any_element()
+}
+
+fn footer(show_archived: bool, cx: &mut Context<AppView>) -> impl IntoElement {
+    h_flex()
+        .flex_none()
+        .p_2()
+        .gap_3()
+        .border_t_1()
+        .border_color(cx.theme().border)
+        .child(
+            Button::new("add-repository")
+                .ghost()
+                .xsmall()
+                .label("Add repository")
+                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+        )
+        .child(
+            Button::new("toggle-archived")
+                .ghost()
+                .xsmall()
+                .label(if show_archived { "Hide archived" } else { "Show archived" })
+                .on_click(cx.listener(|t, _, _, cx| {
+                    t.show_archived = !t.show_archived;
+                    cx.notify();
+                })),
+        )
+}
+
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
-    let (background, border, muted) = (theme.sidebar, theme.border, theme.muted_foreground);
+    let (background, border) = (theme.sidebar, theme.border);
     let visible = app.visible_workspaces();
-    let groups: Vec<AnyElement> = app
-        .repos
-        .iter()
-        .map(|repo| {
-            let repo_id = repo.id.clone();
-            let creating = app.creating_in.as_ref() == Some(&repo.id);
-            let rows: Vec<_> = visible
-                .iter()
-                .filter(|w| w.repo_id == repo.id)
-                .map(|w| workspace_row(app, w, cx).into_any_element())
-                .collect();
-            v_flex()
-                .w_full()
-                .gap_1()
-                .child(
-                    h_flex()
-                        .w_full()
-                        .px_2()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(muted)
-                                .child(repo.name.clone()),
-                        )
-                        .child(
-                            Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
-                                .ghost()
-                                .xsmall()
-                                .label("New")
-                                .loading(creating)
-                                .disabled(app.busy)
-                                .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
-                        ),
-                )
-                .children(rows)
-                .when(creating, |d| d.child(div().px_2().text_xs().text_color(muted).child("Creating a workspace…")))
-                .into_any_element()
-        })
-        .collect();
-    let show_archived = app.show_archived;
+    let groups: Vec<AnyElement> = app.repos.iter().map(|repo| repo_group(app, repo, &visible, cx)).collect();
     v_flex()
         .flex_none()
         .w(px(WIDTH))
@@ -118,31 +133,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .border_r_1()
         .border_color(border)
         .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().p_2().pt_8().gap_4().children(groups))
-        .child(
-            h_flex()
-                .flex_none()
-                .p_2()
-                .gap_3()
-                .border_t_1()
-                .border_color(border)
-                .child(
-                    Button::new("add-repository")
-                        .ghost()
-                        .xsmall()
-                        .label("Add repository")
-                        .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-                )
-                .child(
-                    Button::new("toggle-archived")
-                        .ghost()
-                        .xsmall()
-                        .label(if show_archived { "Hide archived" } else { "Show archived" })
-                        .on_click(cx.listener(|t, _, _, cx| {
-                            t.show_archived = !t.show_archived;
-                            cx.notify();
-                        })),
-                ),
-        )
+        .child(footer(app.show_archived, cx))
 }
 
 #[cfg(test)]

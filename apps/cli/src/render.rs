@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::io::Write;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
+use protocol::model::Seq;
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
@@ -18,6 +19,20 @@ pub(crate) struct Printer {
 }
 
 impl Printer {
+    fn turn_ended(&mut self, seq: Seq, outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String]) {
+        let what = match outcome {
+            TurnOutcome::Success => "turn finished",
+            TurnOutcome::Cancelled => "turn cancelled",
+            TurnOutcome::Error => "turn failed",
+            TurnOutcome::Unknown => "turn ended",
+        };
+        let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
+        self.line(seq, &format!("{what} in {seconds:.1}s, ${cost:.4}"));
+        for error in errors {
+            self.line(seq, &format!("  {error}"));
+        }
+    }
+
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { text, .. } => self.line(event.seq, &format!("you: {text}")),
@@ -50,18 +65,7 @@ impl Printer {
                 }
             }
             EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-                let what = match outcome {
-                    TurnOutcome::Success => "turn finished",
-                    TurnOutcome::Cancelled => "turn cancelled",
-                    TurnOutcome::Error => "turn failed",
-                    TurnOutcome::Unknown => "turn ended",
-                };
-                let seconds = std::time::Duration::from_millis(duration_ms.unwrap_or(0)).as_secs_f64();
-                let cost = cost_usd.unwrap_or(0.0);
-                self.line(event.seq, &format!("{what} in {seconds:.1}s, ${cost:.4}"));
-                for error in errors {
-                    self.line(event.seq, &format!("  {error}"));
-                }
+                self.turn_ended(event.seq, *outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors);
             }
             EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
                 let summary = description.clone().unwrap_or_else(|| summarize_input(input));

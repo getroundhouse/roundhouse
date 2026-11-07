@@ -11,3 +11,6 @@ client-core.workspace = true
 gpui-kit.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
+
+[lints]
+workspace = true
