@@ -160,6 +160,7 @@ fn archiving_runs_the_archive_script_and_a_failure_blocks_unless_forced() {
     wait_for_setup(&client, &workspace.id);
 
     let err = client.workspace_archive(&workspace.id, false).unwrap_err();
+    assert!(matches!(&err, ClientError::Api(e) if e.code == ErrorCode::NeedsForce), "{err}");
     assert!(err.to_string().contains("archive script"), "{err}");
     assert!(marker.exists());
     assert!(PathBuf::from(workspace.path.clone().unwrap()).exists(), "a failed script leaves the workspace alone");

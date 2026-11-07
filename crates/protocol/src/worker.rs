@@ -22,7 +22,7 @@ pub enum WorkerRequest {
     Hello {
         protocol_version: u32,
     },
-    /// Creates the worktree and its branch. Fails with `Conflict` if either already exists.
+    /// Creates the worktree and its branch. Fails with `NameTaken` if either already exists.
     PrepareWorkspace {
         repo_name: String,
         repo_path: String,

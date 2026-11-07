@@ -91,7 +91,7 @@ impl AppView {
                         }
                         t.keep_selection_valid(cx);
                     }
-                    Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict && !force => {
+                    Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                         t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't archive: {e}"), cx),
