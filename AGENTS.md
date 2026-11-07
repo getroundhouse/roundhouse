@@ -9,7 +9,7 @@ The repo is the source of truth for how things work and why. GitHub tracks what'
 | Doc | Its one purpose |
 |---|---|
 | `README.md` | What this project is, why it exists, and how to try it |
-| `docs/architecture.md` | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format and providers |
+| `docs/architecture.md` | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format, what happens when a process dies, and providers |
 | `docs/terms.md` | What the project's words mean, and which to write |
 | `docs/rust.md` | How Rust is written here. Read it before writing Rust. Agreed, and not enforced yet |
 | `docs/decisions.md` | What's been decided, and why |

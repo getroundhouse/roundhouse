@@ -119,9 +119,7 @@ Each piece of state has one owner, and every other copy is a cache.
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
 - Clients read a range, then subscribe from an offset. Reconnecting means catching up from the last offset.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.
-- **The worker buffers events on disk until the hub acknowledges them.** A worker has to keep going while its hub is unreachable, such as when a Mac running the hub goes to sleep. Not built yet: it comes with milestone 2. Until then a worker stops its agents when it loses its hub, so nothing runs unrecorded, and the next prompt resumes the conversation.
-- **A worker that gets killed can't stop its agents, so it records them.** Each agent's PID and start time go in a file in the instance directory, and the local provider stops anything still recorded before the next worker starts. Otherwise an orphan and its replacement would both be working on one conversation and worktree.
-- **Each launch of an agent has a run ID,** and its events carry it. A late event from a replaced agent still goes in the log, but can't change the status of the session its replacement is running.
+- **A running agent decides its own model and approval mode.** A change goes to the agent first and is saved only once it agrees, and the agent reports every change of mode itself, so what's shown is never ahead of what's true.
 
 ### Wire format and event log
 
@@ -129,11 +127,24 @@ Settled in step 1.1. Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
 - **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, and unknown enum variants decode as `Unknown`, so additions don't need a version bump. Four enums don't do this yet, see #51.
+- **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
 - **Each event has a normalized body, plus the agent's raw line in a separate column.** Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
 - **Live deltas aren't stored.** The finished message arrives as a durable event and replaces them. A client attaching mid-message gets a snapshot of the streaming tail, then deltas, and `protocol::tail` holds the rules so the hub and clients can't disagree.
 - **Subscribers read from the log, and live updates only say that it moved.** A slow client can fall behind and catch up without losing anything, and it holds back only itself.
 - **A status change commits in the same transaction as its event,** so a client reading status after an event can't see an older value.
 - **Prompts carry an optional `client_msg_id`,** and the same ID is only recorded once, so a client can retry safely after a disconnect.
+
+## When a process dies
+
+Any process can die at any point, so nothing depends on a clean exit. Whatever survives works out what happened from the records.
+
+- **A hub is a separate process that outlives its clients,** so closing the app doesn't stop its agents. A client connects, or starts a hub if there's none, and a lock keeps each data directory to one hub.
+- **A prompt is recorded before anything else is tried,** and the client gets its reply at that point. Later failures go in the log, where every client can see them.
+- **A hub cleans up at startup.** Its workers exited with it, so it closes open approvals, marks active sessions `Interrupted`, fails setups that were cut off, and discards half-made workspaces.
+- **The worker buffers events on disk until the hub acknowledges them.** A worker has to keep going while its hub is unreachable, such as when a Mac running the hub goes to sleep. Not built yet: it comes with milestone 2. Until then a worker stops its agents when it loses its hub, so nothing runs unrecorded, and the next prompt resumes the conversation.
+- **When a worker goes, the hub stops its instance and tells its sessions,** which close their open approvals and record that the agent exited. The next prompt starts a new worker and agent.
+- **A worker that gets killed can't stop its agents, so it records them.** Each agent's PID and start time go in a file in the instance directory, and the local provider stops anything still recorded before the next worker starts. Otherwise an orphan and its replacement would both be working on one conversation and worktree.
+- **Each launch of an agent has a run ID,** and its events carry it. A late event from a replaced agent still goes in the log, but can't change the status of the session its replacement is running.
 
 ## Providers
 
