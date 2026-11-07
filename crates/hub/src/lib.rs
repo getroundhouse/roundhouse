@@ -9,11 +9,12 @@ mod worker_link;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Context;
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus};
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
@@ -113,12 +114,12 @@ impl Hub {
     }
 
     fn worker_gate(&self, workspace_id: &str) -> Arc<AsyncMutex<()>> {
-        self.worker_gates.lock().unwrap().entry(workspace_id.to_string()).or_default().clone()
+        self.worker_gates.lock().entry(workspace_id.to_string()).or_default().clone()
     }
 
     /// The running worker, if there is one.
     pub(crate) fn existing_worker(&self, workspace_id: &str) -> Option<Arc<WorkerLink>> {
-        self.workers.lock().unwrap().get(workspace_id).filter(|link| link.is_open()).cloned()
+        self.workers.lock().get(workspace_id).filter(|link| link.is_open()).cloned()
     }
 
     /// The workspace's worker, starting it if needed.
@@ -137,7 +138,7 @@ impl Hub {
         }
         let provider = self.provider(&workspace.provider)?;
         let link = WorkerLink::open(self.clone(), provider, workspace.id.clone(), workspace.instance_id).await?;
-        self.workers.lock().unwrap().insert(workspace.id, link.clone());
+        self.workers.lock().insert(workspace.id, link.clone());
         Ok(link)
     }
 
@@ -152,7 +153,7 @@ impl Hub {
         let gate = self.worker_gate(workspace_id);
         let _cleaning_up = gate.lock().await;
         {
-            let mut workers = self.workers.lock().unwrap();
+            let mut workers = self.workers.lock();
             if workers.get(workspace_id).is_some_and(|current| Arc::ptr_eq(current, link)) {
                 workers.remove(workspace_id);
             }
@@ -161,14 +162,8 @@ impl Hub {
             warn!(instance_id, "stopping a worker failed: {e:#}");
         }
         // Still under the gate, so these are queued before a replacement worker can start.
-        let sessions: Vec<_> = self
-            .sessions
-            .lock()
-            .unwrap()
-            .values()
-            .filter(|session| session.workspace_id == workspace_id)
-            .cloned()
-            .collect();
+        let sessions: Vec<_> =
+            self.sessions.lock().values().filter(|session| session.workspace_id == workspace_id).cloned().collect();
         for session in sessions {
             session.send_item(Item::WorkerLost(link.id)).await;
         }
@@ -183,7 +178,7 @@ impl Hub {
     }
 
     pub(crate) async fn live_session(self: &Arc<Self>, id: &str) -> Result<Arc<LiveSession>, ApiError> {
-        if let Some(session) = self.sessions.lock().unwrap().get(id) {
+        if let Some(session) = self.sessions.lock().get(id) {
             return Ok(session.clone());
         }
         let owned = id.to_string();
@@ -194,7 +189,7 @@ impl Hub {
                 Ok((stored, approvals))
             })
             .await?;
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock();
         let session = sessions.entry(id.to_string()).or_insert_with(|| LiveSession::start(self, stored, approvals));
         Ok(session.clone())
     }
@@ -209,7 +204,6 @@ impl Hub {
         let running_sessions = self
             .sessions
             .lock()
-            .unwrap()
             .values()
             .filter(|session| matches!(session.status(), SessionStatus::Running | SessionStatus::WaitingApproval))
             .count() as u32;
@@ -218,7 +212,7 @@ impl Hub {
             hub_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
             started_at_ms: self.started_at_ms,
-            workers: self.workers.lock().unwrap().len() as u32,
+            workers: self.workers.lock().len() as u32,
             running_sessions,
             clients: self.clients.load(Ordering::Relaxed),
         }
@@ -351,7 +345,7 @@ impl Hub {
     }
 
     async fn discard_workspace(&self, id: &str, provider: &dyn Provider) {
-        let link = self.workers.lock().unwrap().get(id).cloned();
+        let link = self.workers.lock().get(id).cloned();
         if let Some(link) = link {
             close_worker(&link, provider, id).await;
         }
@@ -511,7 +505,7 @@ impl Hub {
     /// Starts setup in the background, and returns the workspace as it now stands. Prompts wait for it.
     fn start_setup(self: &Arc<Self>, repo: Repo, workspace: Workspace) -> Workspace {
         let (gate_tx, _) = watch::channel(false);
-        self.setup_gates.lock().unwrap().insert(workspace.id.clone(), gate_tx.clone());
+        self.setup_gates.lock().insert(workspace.id.clone(), gate_tx.clone());
         let mut running = workspace.clone();
         running.setup = SetupStatus::Running;
         let hub = self.clone();
@@ -528,7 +522,7 @@ impl Hub {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
                 Err(e) => warn!(workspace = id, "recording setup: {e}"),
             }
-            hub.setup_gates.lock().unwrap().remove(&id);
+            hub.setup_gates.lock().remove(&id);
             gate_tx.send_replace(true);
         });
         running
@@ -561,7 +555,7 @@ impl Hub {
 
     /// Waits for setup, if it's running. Agents shouldn't start in a half-prepared worktree.
     pub(crate) async fn wait_for_setup(&self, workspace_id: &str) {
-        let gate = self.setup_gates.lock().unwrap().get(workspace_id).map(tokio::sync::watch::Sender::subscribe);
+        let gate = self.setup_gates.lock().get(workspace_id).map(tokio::sync::watch::Sender::subscribe);
         if let Some(mut gate) = gate {
             let _ = gate.wait_for(|done| *done).await;
         }
@@ -577,7 +571,7 @@ impl Hub {
 
     pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: String) -> Result<Workspace, ApiError> {
         let (workspace, _, _) = self.ready_worktree(&id).await?;
-        if self.setup_gates.lock().unwrap().contains_key(&id) {
+        if self.setup_gates.lock().contains_key(&id) {
             return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
         }
         let repo_id = workspace.repo_id.clone();
@@ -587,7 +581,7 @@ impl Hub {
 
     /// Stops the setup script, if one is running. The workspace stays usable.
     pub(crate) async fn cancel_setup(&self, workspace_id: &str) {
-        if self.setup_gates.lock().unwrap().contains_key(workspace_id)
+        if self.setup_gates.lock().contains_key(workspace_id)
             && let Some(link) = self.existing_worker(workspace_id)
         {
             let _ = link.call(WorkerRequest::CancelSetup).await;
@@ -775,7 +769,7 @@ impl Hub {
     async fn stop_all_workers(&self) {
         // Refuse new workers first, so a client still connected can't start one behind this.
         self.shutting_down.store(true, Ordering::SeqCst);
-        let links: Vec<_> = self.workers.lock().unwrap().values().cloned().collect();
+        let links: Vec<_> = self.workers.lock().values().cloned().collect();
         for link in &links {
             link.close();
         }
@@ -786,7 +780,7 @@ impl Hub {
                 warn!("a worker didn't stop in time");
             }
         }
-        let sessions: Vec<_> = self.sessions.lock().unwrap().values().cloned().collect();
+        let sessions: Vec<_> = self.sessions.lock().values().cloned().collect();
         for session in sessions {
             let (done, flushed) = oneshot::channel();
             session.send_item(Item::Flush(done)).await;

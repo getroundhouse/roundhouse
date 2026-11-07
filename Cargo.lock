@@ -116,6 +116,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "libc",
+ "parking_lot",
  "protocol",
  "serde_json",
  "tempfile",
@@ -1073,6 +1074,7 @@ version = "0.1.0"
 dependencies = [
  "flume 0.11.1",
  "libc",
+ "parking_lot",
  "protocol",
  "serde_json",
  "thiserror 2.0.21",
@@ -1473,6 +1475,7 @@ dependencies = [
  "flume 0.11.1",
  "hub",
  "libc",
+ "parking_lot",
  "protocol",
  "serde_json",
  "tempfile",
@@ -3568,6 +3571,7 @@ name = "hub"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "parking_lot",
  "protocol",
  "providers",
  "rusqlite",
@@ -9178,6 +9182,7 @@ dependencies = [
  "agents",
  "anyhow",
  "libc",
+ "parking_lot",
  "protocol",
  "serde_json",
  "tempfile",

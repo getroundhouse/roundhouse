@@ -12,10 +12,11 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome,
@@ -64,7 +65,7 @@ pub struct Subscription {
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        self.connection.subscriptions.lock().unwrap().remove(&self.id);
+        self.connection.subscriptions.lock().remove(&self.id);
         // Not waiting for the reply: this can run on any thread, and the reply doesn't matter.
         let _ = self.connection.send_only(ClientRequest::SessionUnsubscribe { subscription_id: self.id });
     }
@@ -85,7 +86,7 @@ impl Inner {
     fn send_only(&self, request: ClientRequest) -> Result<()> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
-        self.writer.lock().unwrap().write_all(&line)?;
+        self.writer.lock().write_all(&line)?;
         Ok(())
     }
 }
@@ -154,13 +155,13 @@ impl Client {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         let (reply_tx, reply_rx) = flume::bounded(1);
-        self.inner.pending.lock().unwrap().insert(id, reply_tx);
-        if *self.inner.disconnected.lock().unwrap() {
-            self.inner.pending.lock().unwrap().remove(&id);
+        self.inner.pending.lock().insert(id, reply_tx);
+        if *self.inner.disconnected.lock() {
+            self.inner.pending.lock().remove(&id);
             return Err(ClientError::Disconnected);
         }
-        if let Err(e) = self.inner.writer.lock().unwrap().write_all(&line) {
-            self.inner.pending.lock().unwrap().remove(&id);
+        if let Err(e) = self.inner.writer.lock().write_all(&line) {
+            self.inner.pending.lock().remove(&id);
             return Err(e.into());
         }
         reply_rx.recv().map_err(|_| ClientError::Disconnected)?
@@ -324,10 +325,10 @@ impl Client {
         // Registered before the request goes out, because events can arrive before the reply.
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (items_tx, items) = flume::unbounded();
-        self.inner.subscriptions.lock().unwrap().insert(subscription_id, items_tx);
+        self.inner.subscriptions.lock().insert(subscription_id, items_tx);
         let reply = self.expect_ok(ClientRequest::SessionSubscribe { id: id.to_string(), from_seq, subscription_id });
         if let Err(e) = reply {
-            self.inner.subscriptions.lock().unwrap().remove(&subscription_id);
+            self.inner.subscriptions.lock().remove(&subscription_id);
             return Err(e);
         }
         Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
@@ -337,9 +338,9 @@ impl Client {
     pub fn feed_subscribe(&self) -> Result<Subscription> {
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (items_tx, items) = flume::unbounded();
-        self.inner.subscriptions.lock().unwrap().insert(subscription_id, items_tx);
+        self.inner.subscriptions.lock().insert(subscription_id, items_tx);
         if let Err(e) = self.expect_ok(ClientRequest::FeedSubscribe { subscription_id }) {
-            self.inner.subscriptions.lock().unwrap().remove(&subscription_id);
+            self.inner.subscriptions.lock().remove(&subscription_id);
             return Err(e);
         }
         Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
@@ -423,7 +424,7 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
         };
         match parsed {
             HubFrame::Reply { id, outcome } => {
-                if let Some(reply) = inner.pending.lock().unwrap().remove(&id) {
+                if let Some(reply) = inner.pending.lock().remove(&id) {
                     let _ = reply.send(match outcome {
                         ReplyOutcome::Response(response) => Ok(response),
                         ReplyOutcome::Error(error) => Err(ClientError::Api(error)),
@@ -442,18 +443,18 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
             }
         }
     }
-    *inner.disconnected.lock().unwrap() = true;
-    let pending: Vec<_> = inner.pending.lock().unwrap().drain().collect();
+    *inner.disconnected.lock() = true;
+    let pending: Vec<_> = inner.pending.lock().drain().collect();
     for (_, reply) in pending {
         let _ = reply.send(Err(ClientError::Disconnected));
     }
-    for (_, subscription) in inner.subscriptions.lock().unwrap().drain() {
+    for (_, subscription) in inner.subscriptions.lock().drain() {
         let _ = subscription.send(SubscriptionItem::Disconnected);
     }
 }
 
 fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
-    if let Some(subscription) = inner.subscriptions.lock().unwrap().get(&subscription_id) {
+    if let Some(subscription) = inner.subscriptions.lock().get(&subscription_id) {
         let _ = subscription.send(item);
     }
 }

@@ -89,7 +89,14 @@ pub(crate) fn pick(taken: &[String], salt: u64) -> String {
         }
     }
     let base = NAMES[start];
-    (2..).map(|n| format!("{base}-{n}")).find(|name| !taken.contains(name)).expect("the range is unbounded")
+    let mut n = 2;
+    loop {
+        let name = format!("{base}-{n}");
+        if !taken.contains(&name) {
+            return name;
+        }
+        n += 1;
+    }
 }
 
 /// Goes into a path and a branch name, so it stays conservative.

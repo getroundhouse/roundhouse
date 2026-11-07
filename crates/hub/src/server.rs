@@ -1,9 +1,10 @@
 //! The client side of the hub: connections, requests and subscriptions.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
 
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
@@ -47,7 +48,7 @@ struct Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        for (_, subscription) in self.subscriptions.lock().unwrap().drain() {
+        for (_, subscription) in self.subscriptions.lock().drain() {
             subscription.abort();
         }
     }
@@ -175,7 +176,7 @@ async fn handle(
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => {
             let session = hub.live_session(&id).await?;
-            let mut subscriptions = connection.subscriptions.lock().unwrap();
+            let mut subscriptions = connection.subscriptions.lock();
             if subscriptions.contains_key(&subscription_id) {
                 return Err(ApiError::new(
                     ErrorCode::InvalidRequest,
@@ -196,7 +197,7 @@ async fn handle(
             C::Ok
         }
         R::FeedSubscribe { subscription_id } => {
-            let mut subscriptions = connection.subscriptions.lock().unwrap();
+            let mut subscriptions = connection.subscriptions.lock();
             if subscriptions.contains_key(&subscription_id) {
                 return Err(ApiError::new(
                     ErrorCode::InvalidRequest,
@@ -208,7 +209,7 @@ async fn handle(
             C::Ok
         }
         R::SessionUnsubscribe { subscription_id } => {
-            if let Some(subscription) = connection.subscriptions.lock().unwrap().remove(&subscription_id) {
+            if let Some(subscription) = connection.subscriptions.lock().remove(&subscription_id) {
                 subscription.abort();
             }
             C::Ok

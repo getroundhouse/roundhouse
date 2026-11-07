@@ -81,16 +81,15 @@ impl Tail {
             self.messages.retain(|m| m.message_id != delta.message_id);
             return;
         }
-        let message = if let Some(i) = self.messages.iter().position(|m| m.message_id == delta.message_id) {
-            &mut self.messages[i]
-        } else {
+        let position = self.messages.iter().position(|m| m.message_id == delta.message_id).unwrap_or_else(|| {
             self.messages.push(TailMessage {
                 message_id: delta.message_id.clone(),
                 parent_tool_use_id: delta.parent_tool_use_id.clone(),
                 blocks: Vec::new(),
             });
-            self.messages.last_mut().expect("just pushed")
-        };
+            self.messages.len() - 1
+        });
+        let message = &mut self.messages[position];
         match &delta.change {
             DeltaChange::BlockStart { index, kind, tool_name } => {
                 let block = block_mut(message, *index, *kind);
@@ -126,12 +125,11 @@ impl Tail {
 }
 
 fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut TailBlock {
-    if let Some(i) = message.blocks.iter().position(|b| b.index == index) {
-        &mut message.blocks[i]
-    } else {
+    let position = message.blocks.iter().position(|b| b.index == index).unwrap_or_else(|| {
         message.blocks.push(TailBlock { index, kind, tool_name: None, text: String::new() });
-        message.blocks.last_mut().expect("just pushed")
-    }
+        message.blocks.len() - 1
+    });
+    &mut message.blocks[position]
 }
 
 #[cfg(test)]

@@ -1,10 +1,11 @@
 //! The hub's end of one worker connection.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
@@ -87,11 +88,11 @@ impl WorkerLink {
         let id = self.next_call.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&WorkerCall { id, request })
             .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
-        let calls = self.calls.lock().unwrap().clone().ok_or_else(lost)?;
+        let calls = self.calls.lock().clone().ok_or_else(lost)?;
         let (reply_tx, reply_rx) = oneshot::channel();
-        self.pending.lock().unwrap().as_mut().ok_or_else(lost)?.insert(id, reply_tx);
+        self.pending.lock().as_mut().ok_or_else(lost)?.insert(id, reply_tx);
         if calls.send(line).await.is_err() {
-            if let Some(pending) = self.pending.lock().unwrap().as_mut() {
+            if let Some(pending) = self.pending.lock().as_mut() {
                 pending.remove(&id);
             }
             return Err(lost());
@@ -103,12 +104,12 @@ impl WorkerLink {
     }
 
     pub(crate) fn is_open(&self) -> bool {
-        !*self.closed.borrow() && self.calls.lock().unwrap().is_some()
+        !*self.closed.borrow() && self.calls.lock().is_some()
     }
 
     /// Closes the worker's stdin. It stops its agents, flushes, and exits.
     pub(crate) fn close(&self) {
-        self.calls.lock().unwrap().take();
+        self.calls.lock().take();
     }
 
     /// Resolves once the worker's output has been fully read.
@@ -162,7 +163,7 @@ async fn read_frames(
         };
         match parsed {
             WorkerFrame::Reply { id, outcome } => {
-                let reply = link.pending.lock().unwrap().as_mut().and_then(|pending| pending.remove(&id));
+                let reply = link.pending.lock().as_mut().and_then(|pending| pending.remove(&id));
                 if let Some(reply) = reply {
                     let _ = reply.send(match outcome {
                         WorkerOutcome::Response(response) => Ok(response),
@@ -181,7 +182,7 @@ async fn read_frames(
     debug!(instance_id, "worker connection ended");
     link.close();
     // Dropping these wakes each waiting call with an error.
-    drop(link.pending.lock().unwrap().take());
+    drop(link.pending.lock().take());
     hub.worker_gone(&workspace_id, &link, provider.as_ref(), &instance_id).await;
     // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
     // the value unset, and whoever waits later would wait forever.

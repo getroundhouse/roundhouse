@@ -3,9 +3,9 @@
 //! All SQL lives in this file, so it's the one thing a Postgres-backed hub would replace.
 
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use parking_lot::{Mutex, MutexGuard};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{
@@ -119,7 +119,7 @@ pub fn now_ms() -> i64 {
 }
 
 fn lock(conn: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
-    conn.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    conn.lock()
 }
 
 fn internal(e: impl std::fmt::Display) -> ApiError {

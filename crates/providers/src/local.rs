@@ -247,8 +247,9 @@ impl Provider for LocalProvider {
         }
         let mut child =
             command.spawn().with_context(|| format!("starting worker {}", self.config.worker_exe.display()))?;
-        let writer = child.stdin.take().expect("stdin was piped");
-        let reader = child.stdout.take().expect("stdout was piped");
+        let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
+            anyhow::bail!("worker {} started without its pipes", self.config.worker_exe.display());
+        };
         info!(pid = child.id(), instance_id, "started worker");
         let stream = WorkerStream { reader: Box::new(reader), writer: Box::new(writer) };
         running.insert(instance_id.to_string(), Running { child, stream: Some(stream) });

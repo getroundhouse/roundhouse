@@ -21,7 +21,8 @@ fn main() {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
-        let (handle, view) = desktop::open_main_window(HubSource::default_local(), cx).expect("open a window");
+        let (handle, view) =
+            desktop::open_main_window(HubSource::default_local().expect("find the hub"), cx).expect("open a window");
         let args = args.clone();
         cx.spawn(async move |cx| {
             let wanted = args.first().cloned();
