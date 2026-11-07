@@ -1,6 +1,6 @@
 [package]
 name = "policy"
-description = "Tests that enforce the repo's licensing and dependency rules."
+description = "Tests that enforce the repo's licensing, dependency, file length and lint rules."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -10,6 +10,7 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 serde_json.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true
