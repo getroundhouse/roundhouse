@@ -14,14 +14,18 @@ Running several agents at once works best when each one has its own workspace, a
 
 ## Try it
 
-It uses your own Claude login and settings. A debug build keeps its data in `~/Library/Application Support/trestle-dev`, and puts worktrees in `~/trestle-dev/workspaces`. Only a release build uses `trestle`, in both places.
+It uses your own Claude login and settings, keeps its data in `~/Library/Application Support/trestle`, and puts worktrees in `~/trestle/workspaces`.
 
 ```sh
-cargo build --workspace
-target/debug/trestle-desktop
+tools/install.sh
+"$HOME/Library/Application Support/trestle-builds/current/trestle-desktop"
 ```
 
-Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To comment, hover a line in the diff and click its add button. The `trestle` command-line client talks to the same hub.
+Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated, which #102 tracks.
+
+To work on Trestle rather than use it, `cargo run -p desktop --bin trestle-desktop` runs your changes with their own hub and data, in `.context/dev`.
+
+Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To comment, hover a line in the diff and click its add button. The `trestle` command-line client, in the same directory, talks to the same hub.
 
 | Key | Action |
 |---|---|

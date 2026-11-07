@@ -1,6 +1,6 @@
 # Manual checks
 
-What a person has to judge on the desktop app, because feel and OS integration can't be measured from inside it. Run the app with `cargo run -p desktop --bin trestle-desktop`, and score each row Pass, Weak or Fail.
+What a person has to judge on the desktop app, because feel and OS integration can't be measured from inside it. Run an installed build, as the README describes, because a debug build's own crates aren't optimized. Score each row Pass, Weak or Fail.
 
 Start with trackpad feel, then IME, then selection and copy. Trackpad feel and selection decide whether the kit's transcript stays, as `docs/ui.md` explains.
 
