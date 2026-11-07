@@ -48,6 +48,7 @@ What's been decided, and why. Questions still open are GitHub issues, labelled `
 | Answering questions | While the agent waits on a question, what's typed in the composer is the answer. The card says so | A plain Allow button would throw the question away |
 | Chat shortcuts | `Cmd-T` for a new chat, `Cmd-W` to close one, `Ctrl-Tab` and `Ctrl-Shift-Tab` to move between them | They're what tabs use elsewhere |
 | Development data | Debug builds default to `trestle-dev`, `.cargo/config.toml` gives each checkout its own hub for `cargo run` and `cargo test`, and nothing a worker starts inherits the `TRESTLE_*` variables | Trestle gets developed in Trestle, so an agent's builds mustn't reach the hub it's running under, or migrate its database, which an older build would then refuse |
+| Build version | An install stamps its commit through `TRESTLE_BUILD`, and any other build says `0.1.0-dev`. The app and `trestle hub status` show it, and say so when the app and hub differ | A bug report from the installed app has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds that nobody needs to identify |
 | Model picker | Offers aliases: `default`, `fable`, `opus`, `sonnet` and `haiku` | It follows the CLI's newest of each without a release here |
 
 ## Rust standards

@@ -61,6 +61,16 @@ fn the_feed_reports_what_a_sidebar_shows() {
     assert_eq!((seen.id.as_str(), seen.status), (restored.id.as_str(), WorkspaceStatus::Ready));
 }
 
+#[test]
+fn a_client_knows_which_build_its_hub_is() {
+    let stack = Stack::start();
+
+    let client = stack.client();
+
+    assert_eq!(client.hub_version(), protocol::BUILD_VERSION);
+    assert_eq!(client.hub_status().unwrap().hub_version, protocol::BUILD_VERSION);
+}
+
 fn mode(path: &Path) -> u32 {
     use std::os::unix::fs::PermissionsExt;
     std::fs::metadata(path).unwrap().permissions().mode() & 0o777

@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 use protocol::model::{Repo, Session, SessionStatus, Workspace, WorkspaceStatus};
 
-use crate::app::AppView;
+use crate::app::{AppView, BuildLabel};
 
 const WIDTH: f32 = 260.0;
 
@@ -94,30 +94,38 @@ fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Conte
         .into_any_element()
 }
 
-fn footer(show_archived: bool, cx: &mut Context<AppView>) -> impl IntoElement {
-    h_flex()
+fn footer(show_archived: bool, build: BuildLabel, cx: &mut Context<AppView>) -> impl IntoElement {
+    let theme = cx.theme();
+    let build_color = if build.differs { theme.warning } else { theme.muted_foreground };
+    let border = theme.border;
+    v_flex()
         .flex_none()
         .p_2()
-        .gap_3()
+        .gap_1()
         .border_t_1()
-        .border_color(cx.theme().border)
+        .border_color(border)
         .child(
-            Button::new("add-repository")
-                .ghost()
-                .xsmall()
-                .label("Add repository")
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+            h_flex()
+                .gap_3()
+                .child(
+                    Button::new("add-repository")
+                        .ghost()
+                        .xsmall()
+                        .label("Add repository")
+                        .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+                )
+                .child(
+                    Button::new("toggle-archived")
+                        .ghost()
+                        .xsmall()
+                        .label(if show_archived { "Hide archived" } else { "Show archived" })
+                        .on_click(cx.listener(|t, _, _, cx| {
+                            t.show_archived = !t.show_archived;
+                            cx.notify();
+                        })),
+                ),
         )
-        .child(
-            Button::new("toggle-archived")
-                .ghost()
-                .xsmall()
-                .label(if show_archived { "Hide archived" } else { "Show archived" })
-                .on_click(cx.listener(|t, _, _, cx| {
-                    t.show_archived = !t.show_archived;
-                    cx.notify();
-                })),
-        )
+        .child(div().px_2().text_xs().text_color(build_color).child(build.text))
 }
 
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -133,7 +141,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .border_r_1()
         .border_color(border)
         .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().p_2().pt_8().gap_4().children(groups))
-        .child(footer(app.show_archived, cx))
+        .child(footer(app.show_archived, app.build_label(), cx))
 }
 
 #[cfg(test)]

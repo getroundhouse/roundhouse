@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "trestled", version, about = "Runs as a hub or a worker")]
+#[command(name = "trestled", version = protocol::BUILD_VERSION, about = "Runs as a hub or a worker")]
 struct Args {
     #[command(subcommand)]
     role: Role,

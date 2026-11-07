@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use protocol::model::{ApprovalId, ClientMessageId, Seq};
 
 #[derive(Parser)]
-#[command(name = "trestle", version, about = "Run coding agents in parallel, each in its own worktree")]
+#[command(name = "trestle", version = protocol::BUILD_VERSION, about = "Run coding agents in parallel, each in its own worktree")]
 pub(crate) struct Args {
     #[command(subcommand)]
     pub(crate) command: Cmd,

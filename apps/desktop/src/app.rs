@@ -10,10 +10,12 @@ use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceSt
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
+mod build_label;
 mod hub_source;
 mod view;
 mod workspaces;
 
+pub use build_label::BuildLabel;
 pub use hub_source::HubSource;
 
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
@@ -93,6 +95,11 @@ impl AppView {
             Connection::Ready(client) => Some(client.clone()),
             _ => None,
         }
+    }
+
+    pub fn build_label(&self) -> BuildLabel {
+        let client = self.client();
+        BuildLabel::new(protocol::BUILD_VERSION, client.as_ref().map(Client::hub_version))
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {

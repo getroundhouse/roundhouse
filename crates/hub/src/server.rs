@@ -120,7 +120,7 @@ fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
         (
             ReplyOutcome::Response(ClientResponse::Hello {
                 protocol_version: PROTOCOL_VERSION,
-                hub_version: env!("CARGO_PKG_VERSION").to_string(),
+                hub_version: protocol::BUILD_VERSION.to_string(),
             }),
             true,
         )
