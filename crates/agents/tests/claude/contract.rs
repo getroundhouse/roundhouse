@@ -1,4 +1,4 @@
-//! Checks the adapter against real `claude` output. `fixtures/claude.jsonl` was captured from the
+//! Checks the adapter against real `claude` output. `../fixtures/claude.jsonl` was captured from the
 //! CLI with the adapter's own flags, by `tools/smoke/capture_claude_fixture.py`. Rerun that after a
 //! CLI upgrade: a failure here means the CLI changed in a way the adapter relies on.
 
@@ -9,7 +9,7 @@ use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, T
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
-const FIXTURE: &str = include_str!("fixtures/claude.jsonl");
+const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");
 
 fn parsed() -> Vec<Parsed> {
     FIXTURE.lines().map(parse_line).collect()

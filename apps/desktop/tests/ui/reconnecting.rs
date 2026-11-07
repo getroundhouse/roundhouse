@@ -1,0 +1,98 @@
+//! Losing the hub, and what's waiting when the app comes back.
+
+#![cfg(test)]
+
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::{Duration, Instant};
+
+use client_core::Client;
+use desktop::app::Connection;
+use gpui_kit::{ElementId, SharedString, TestAppContext};
+use protocol::model::SessionStatus;
+
+use crate::support::{Stack, TIMEOUT, Ui};
+
+#[gpui_kit::test]
+fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input("say:before");
+    ui.press("enter");
+    ui.wait_idle_with("the first turn", |text| text.contains("before"));
+
+    let pid = stack.client().hub_status().unwrap().pid;
+    let killed = Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap();
+    assert!(killed.success());
+
+    ui.wait("a new hub", |ui| {
+        matches!(ui.view().connection, Connection::Ready(_))
+            && stack.client().hub_status().is_ok_and(|status| status.pid != pid)
+            && ui.transcript().is_some()
+    });
+    ui.wait("the history", |ui| ui.assistant_text().contains("before"));
+    ui.input("say:after");
+    ui.press("enter");
+    ui.wait_idle_with("the next turn", |text| text.contains("after"));
+}
+
+#[gpui_kit::test]
+fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let repo = stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    // The repository disappears, so a new worktree can't be made from it.
+    std::fs::remove_dir_all(stack.repo()).unwrap();
+    let id = format!("new-in-{}", repo.id);
+    ui.click(SharedString::from(id));
+    ui.wait("the error", |ui| ui.view().error.is_some());
+    assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
+    assert!(!ui.view().busy, "the button works again");
+}
+
+#[gpui_kit::test]
+fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let workspace = client.workspace_create(&repo.id, None, None).unwrap();
+    let session =
+        client.session_create(&workspace.id, protocol::model::AgentKind::Claude, None, Some("manual".into())).unwrap();
+    client.session_prompt(&session.id, "tool:echo answered > answered.txt", None).unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while client.session_get(&session.id).unwrap().status != SessionStatus::WaitingApproval {
+        assert!(Instant::now() < deadline, "the agent never asked");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    // The app opens after the question was asked, so it has to learn about it from history.
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let seq = ui.next_open_approval();
+    ui.click(ElementId::NamedInteger("allow".into(), seq));
+    ui.wait("the tool to run", |ui| {
+        ui.session_status() == Some(SessionStatus::Idle)
+            && PathBuf::from(workspace.path.clone().unwrap()).join("answered.txt").exists()
+    });
+}
+
+#[gpui_kit::test]
+fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    assert!(ui.pane().is_none());
+    let pid = stack.client().hub_status().unwrap().pid;
+    assert!(Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap().success());
+    ui.wait("a new hub", |ui| {
+        matches!(ui.view().connection, Connection::Ready(_))
+            && Client::connect(&stack.hub.paths.socket, "test")
+                .is_ok_and(|c| c.hub_status().is_ok_and(|s| s.pid != pid))
+    });
+    // And it's really connected: something added elsewhere still shows up.
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+}
