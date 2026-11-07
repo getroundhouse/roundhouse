@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, ReplyOutcome};
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
+};
 use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::paths::Paths;
@@ -29,6 +31,13 @@ pub enum ClientError {
     Disconnected,
     #[error("unexpected reply from the hub: {0}")]
     Unexpected(String),
+}
+
+impl ClientError {
+    /// The hub is too old to know this request. Hide or disable whatever needed it.
+    pub fn is_unsupported(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unsupported)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -184,8 +193,12 @@ fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
-        let Ok(parsed) = frame::decode::<HubFrame>(&line) else {
-            continue;
+        let parsed = match frame::decode::<HubFrame>(&line) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                fail_unreadable_reply(inner, &line, &e);
+                continue;
+            }
         };
         match parsed {
             HubFrame::Reply { id, outcome } => {
@@ -215,6 +228,21 @@ fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
     }
     for (_, subscription) in inner.subscriptions.lock().drain() {
         let _ = subscription.send(SubscriptionItem::Disconnected);
+    }
+}
+
+/// A hub can be a different version, so a reply might not decode, and without this whoever made the
+/// call would wait forever. Anything else this can't read gets skipped.
+fn fail_unreadable_reply(inner: &Inner, line: &[u8], error: &serde_json::Error) {
+    #[derive(serde::Deserialize)]
+    struct AnyReply {
+        id: u64,
+    }
+    let Ok(AnyReply { id }) = frame::decode(line) else {
+        return;
+    };
+    if let Some(reply) = inner.pending.lock().remove(&id) {
+        let _ = reply.send(Err(ClientError::Unexpected(format!("a reply this client can't read: {error}"))));
     }
 }
 
@@ -290,5 +318,38 @@ mod tests {
         let daemon = daemon_beside(&dir.path().join("current/trestle")).unwrap();
 
         assert_eq!(daemon, version.join("trestled"));
+    }
+
+    /// Answers a hello, then answers the next request with a reply no build of this client can read.
+    fn start_hub_with_an_unreadable_reply(socket: &Path) {
+        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
+            requests.next();
+            let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "older".to_string() };
+            let outcome = ReplyOutcome::Response(hello);
+            stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
+            requests.next();
+            stream
+                .write_all(b"{\"frame\":\"reply\",\"id\":2,\"response\":{\"result\":\"from_a_newer_hub\"}}\n")
+                .unwrap();
+            // Stays connected, so that only the reply can end the call.
+            requests.next();
+        });
+    }
+
+    #[test]
+    fn a_reply_this_client_cannot_read_fails_the_call_rather_than_hanging() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("hub.sock");
+        start_hub_with_an_unreadable_reply(&socket);
+        let client = Client::connect(&socket, "test").unwrap();
+
+        let (finished, outcome) = flume::bounded(1);
+        std::thread::spawn(move || finished.send(client.hub_status()));
+        let outcome = outcome.recv_timeout(Duration::from_secs(10)).expect("the call hung");
+
+        assert!(matches!(outcome, Err(ClientError::Unexpected(_))), "{outcome:?}");
     }
 }

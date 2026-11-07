@@ -159,6 +159,10 @@ pub enum ClientRequest {
     SessionReopen {
         id: SessionId,
     },
+    /// Any request this build doesn't know, from a client newer than it. A hub answers with
+    /// [`ErrorCode::Unsupported`] and carries on.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -239,6 +243,9 @@ pub enum ErrorCode {
     /// A worker or provider failed.
     Worker,
     Internal,
+    /// This hub doesn't know the request, usually because it's older than the client. The client
+    /// hides or disables whatever needed it.
+    Unsupported,
     #[serde(other)]
     Unknown,
 }
@@ -340,5 +347,23 @@ mod tests {
         let error = Outer(std::io::Error::other("disk full"));
 
         assert_eq!(error_chain(&error), "opening the log: disk full");
+    }
+
+    #[test]
+    fn a_request_from_a_newer_client_still_decodes_with_its_id() {
+        let line = br#"{"id":7,"request":{"method":"from_a_newer_client","path":"a","count":2}}"#;
+
+        let frame: ClientFrame = crate::frame::decode(line).unwrap();
+
+        assert_eq!(frame, ClientFrame { id: 7, request: ClientRequest::Unknown });
+    }
+
+    #[test]
+    fn a_known_request_with_a_new_field_still_decodes() {
+        let line = br#"{"id":7,"request":{"method":"repo_add","path":"a","from_a_newer_client":true}}"#;
+
+        let frame: ClientFrame = crate::frame::decode(line).unwrap();
+
+        assert_eq!(frame.request, ClientRequest::RepoAdd { path: "a".to_string() });
     }
 }

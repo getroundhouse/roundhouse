@@ -48,6 +48,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
 | Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
+| Protocol version | The number a client and hub compare in their hello. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
 | Build version | Which build a binary is, for people to read. An install stamps the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |

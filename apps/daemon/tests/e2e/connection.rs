@@ -2,11 +2,13 @@
 
 #![cfg(test)]
 
+use std::io::{BufRead as _, BufReader, Write as _};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Instant;
 
 use client_core::{Client, ClientError, Subscription, SubscriptionItem};
-use protocol::client::{ClientRequest, ErrorCode, HubNotice};
+use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
 
@@ -69,6 +71,59 @@ fn a_client_knows_which_build_its_hub_is() {
 
     assert_eq!(client.hub_version(), protocol::BUILD_VERSION);
     assert_eq!(client.hub_status().unwrap().hub_version, protocol::BUILD_VERSION);
+}
+
+/// A connection that sends frames as written here, for what `Client` has no way to send.
+struct RawConnection {
+    socket: UnixStream,
+    replies: BufReader<UnixStream>,
+}
+
+impl RawConnection {
+    fn open(stack: &Stack) -> Self {
+        let socket = UnixStream::connect(stack.socket()).unwrap();
+        socket.set_read_timeout(Some(TIMEOUT)).unwrap();
+        let replies = BufReader::new(socket.try_clone().unwrap());
+        Self { socket, replies }
+    }
+
+    fn ask(&mut self, id: u64, request: &str) -> ReplyOutcome {
+        writeln!(self.socket, r#"{{"id":{id},"request":{request}}}"#).unwrap();
+        let mut line = String::new();
+        self.replies.read_line(&mut line).unwrap();
+        match protocol::frame::decode(line.as_bytes()).unwrap() {
+            HubFrame::Reply { id: answered, outcome } if answered == id => outcome,
+            other => panic!("not the reply to {id}: {other:?}"),
+        }
+    }
+}
+
+fn hello() -> String {
+    format!(r#"{{"method":"hello","client":"test","protocol_version":{}}}"#, protocol::PROTOCOL_VERSION)
+}
+
+#[test]
+fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello { .. })));
+
+    let refused = connection.ask(2, r#"{"method":"from_a_newer_client","path":"a"}"#);
+
+    assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported));
+    let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
+    assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
+}
+
+#[test]
+fn a_client_can_tell_when_its_hub_does_not_know_a_request() {
+    let stack = Stack::start();
+    let client = stack.client();
+
+    let refused = client.call(ClientRequest::Unknown).unwrap_err();
+
+    assert!(refused.is_unsupported());
+    client.hub_status().unwrap();
 }
 
 fn mode(path: &Path) -> u32 {

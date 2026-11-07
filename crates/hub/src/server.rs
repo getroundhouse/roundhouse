@@ -155,6 +155,10 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
+        R::Unknown => {
+            let message = format!("this hub, version {}, doesn't know that request", protocol::BUILD_VERSION);
+            return Err(ApiError::new(ErrorCode::Unsupported, message));
+        }
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_shutdown();
