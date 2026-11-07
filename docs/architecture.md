@@ -58,6 +58,7 @@ crates/
   hub/             Built. Workspaces, sessions, event log, platform API, SQLite storage
   worker/          Built: git, worktrees, running agents. Later: terminals, buffered outbox
   agents/          Built: Claude adapter, raw event capture. Later: Codex
+  process/         Built. Signalling a process group, and recording a PID with its start time
   providers/       Built: provider contract, local provider. Later: external adapter host
   client-core/     Built: connection, subscriptions, a window of a session's log. No UI
   transcript/      Built. A session's history and live output, on the kit's list and text views
@@ -89,6 +90,7 @@ apps/desktop ──> transcript, terminal-view ──> client-core ──> proto
 apps/cli ─────────────────────────────────────> client-core
 apps/daemon ──> hub ──> providers, protocol
 apps/daemon ──> worker ──> agents ──> protocol
+agents, providers, worker ──> process
 ```
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.

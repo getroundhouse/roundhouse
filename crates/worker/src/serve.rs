@@ -256,9 +256,8 @@ async fn handle(
 /// Signals the script's whole group, because stopping only the shell would leave what it started.
 fn stop_setup_script(state: &State) {
     if let Some(pid) = *state.setup_pid.lock() {
-        // SAFETY: kill(2) has no memory effects. The script was started as a group leader, and its
-        // entry is cleared as soon as it has been waited on.
-        unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
+        // Its entry is cleared as soon as it has been waited on, so this can't reach a reused PID.
+        process::signal_group(pid, process::Signal::Terminate);
     }
 }
 
@@ -294,7 +293,7 @@ async fn run_setup(
     let status = setup::run_script(&script, worktree, env, &log, move |pid| {
         *setup_pid.lock() = Some(pid);
         if let Some(path) = &for_start {
-            let _ = agents::claude::write_pid_file(path, pid);
+            let _ = process::ProcessRecord::write(path, pid);
         }
     })
     .await;

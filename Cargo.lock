@@ -115,8 +115,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
  "tempfile",
@@ -5738,6 +5738,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "process"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "tempfile",
+]
+
+[[package]]
 name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5804,6 +5812,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "libc",
+ "process",
  "serde",
  "tempfile",
  "tokio",
@@ -9181,8 +9190,8 @@ version = "0.1.0"
 dependencies = [
  "agents",
  "anyhow",
- "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
  "tempfile",

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
+use process::{ProcessRecord, Signal, signal_group};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, OnceCell};
@@ -140,16 +141,9 @@ fn parse_marked_path(output: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_string())
 }
 
-async fn process_start_time(pid: u32) -> Option<String> {
-    let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().await.ok()?;
-    let started = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!started.is_empty()).then_some(started)
-}
-
-fn signal_group(pid: u32, signal: i32) {
-    // SAFETY: kill(2) has no memory effects. The caller has just confirmed by start time that this is
-    // the process that was recorded, and it was started as a group leader.
-    unsafe { libc::kill(-(pid as i32), signal) };
+async fn still_running(agent: &ProcessRecord) -> bool {
+    let agent = agent.clone();
+    tokio::task::spawn_blocking(move || agent.is_running()).await.unwrap_or(false)
 }
 
 /// A worker records each agent it runs, and removes the record when that agent exits. Any record
@@ -162,21 +156,17 @@ async fn stop_orphaned_agents(instance_dir: &Path) {
     };
     for record in records.flatten() {
         let path = record.path();
-        let contents = std::fs::read_to_string(&path).unwrap_or_default();
-        let mut lines = contents.lines();
-        let pid = lines.next().and_then(|line| line.parse::<u32>().ok());
-        let recorded_start = lines.next().unwrap_or_default();
-        if let Some(pid) = pid.filter(|pid| *pid > 1)
-            && !recorded_start.is_empty()
-            && process_start_time(pid).await.as_deref() == Some(recorded_start)
+        if let Some(agent) = ProcessRecord::read(&path).filter(|agent| agent.pid > 1)
+            && still_running(&agent).await
         {
+            let pid = agent.pid;
             warn!(pid, "stopping an agent left behind by a worker that was killed");
-            signal_group(pid, libc::SIGTERM);
+            signal_group(pid, Signal::Terminate);
             let deadline = tokio::time::Instant::now() + ORPHAN_GRACE;
-            while process_start_time(pid).await.as_deref() == Some(recorded_start) {
+            while still_running(&agent).await {
                 if tokio::time::Instant::now() >= deadline {
                     warn!(pid, "it ignored SIGTERM, sending SIGKILL");
-                    signal_group(pid, libc::SIGKILL);
+                    signal_group(pid, Signal::Kill);
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -337,7 +327,7 @@ mod tests {
     async fn a_recorded_orphan_is_stopped() {
         let dir = tempfile::tempdir().unwrap();
         let mut child = orphan(dir.path());
-        let started = process_start_time(child.id()).await.unwrap();
+        let started = process::start_time(child.id()).unwrap();
         let path = record(dir.path(), child.id(), &started);
         // It's this test's own child, so it stays a zombie until reaped, and `ps` still lists it.
         // Reap it from another thread so the wait below sees it go.

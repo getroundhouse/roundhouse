@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::os::unix::process::ExitStatusExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use process::{ProcessRecord, Signal, signal_group};
 use protocol::event::{ApprovalDecision, EventBody, NoticeLevel};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -207,26 +208,15 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
         command.spawn().map_err(|e| anyhow::anyhow!("could not start {} in {}: {e}", bin.display(), spec.cwd))?;
     let pid = child.id().unwrap_or_default();
     if let Some(path) = &options.pid_file
-        && let Err(e) = write_pid_file(path, pid)
+        && let Err(e) = ProcessRecord::write(path, pid)
     {
-        warn!("could not record agent {pid} in {}: {e:#}", path.display());
+        warn!("could not record agent {pid} in {}: {e}", path.display());
     }
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
         anyhow::bail!("{} started without its pipes", bin.display());
     };
     Ok(Launched { child, pid, stdin, stdout, stderr })
-}
-
-/// The PID and its start time, because a PID alone could have been reused by the time anyone reads it.
-pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let output = std::process::Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output()?;
-    let started = String::from_utf8_lossy(&output.stdout);
-    std::fs::write(path, format!("{pid}\n{}\n", started.trim()))?;
-    Ok(())
 }
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -474,14 +464,6 @@ async fn write_line(shared: &Shared, value: &Value) -> anyhow::Result<()> {
     write_to(&mut *shared.stdin.lock().await, value).await
 }
 
-fn signal_group(pid: u32, signal: i32) {
-    if pid != 0 {
-        // SAFETY: kill(2) has no memory effects. The process was started as a group leader, and is
-        // only signalled until it's reaped.
-        unsafe { libc::kill(-(pid as i32), signal) };
-    }
-}
-
 #[async_trait]
 impl AgentProcess for ClaudeProcess {
     fn pid(&self) -> u32 {
@@ -508,7 +490,7 @@ impl AgentProcess for ClaudeProcess {
                 // Its stdin is broken, so it can't be told anything more. If it's somehow still
                 // running, it mustn't be working alongside the replacement that's coming.
                 self.shared.gone.store(true, Ordering::SeqCst);
-                signal_group(self.pid(), libc::SIGTERM);
+                signal_group(self.pid(), Signal::Terminate);
                 Err(e)
             }
             Ok(()) => Ok(()),
@@ -580,13 +562,13 @@ impl AgentProcess for ClaudeProcess {
         }
         // SIGTERM rather than closing stdin, because on EOF the CLI finishes the whole turn first.
         // It stops its tools itself on SIGTERM. They run in their own groups, out of our reach.
-        signal_group(self.pid(), libc::SIGTERM);
+        signal_group(self.pid(), Signal::Terminate);
         let wait = exited.wait_for(|done| *done);
         if tokio::time::timeout(STOP_GRACE, wait).await.is_ok() {
             return;
         }
         warn!("agent {} ignored SIGTERM, sending SIGKILL", self.pid());
-        signal_group(self.pid(), libc::SIGKILL);
+        signal_group(self.pid(), Signal::Kill);
         let _ = exited.wait_for(|done| *done).await;
     }
 }
