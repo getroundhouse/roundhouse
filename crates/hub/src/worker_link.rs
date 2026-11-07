@@ -15,8 +15,8 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, warn};
 
-use crate::Hub;
 use crate::error::{internal, provider_failed};
+use crate::hub::Hub;
 use crate::session::Item;
 
 static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);

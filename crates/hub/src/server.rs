@@ -17,7 +17,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
-use crate::Hub;
+use crate::hub::Hub;
 use crate::session::{LiveItem, LiveSession};
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
