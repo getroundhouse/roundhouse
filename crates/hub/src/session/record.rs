@@ -124,7 +124,7 @@ impl LiveSession {
         let Ok(hub) = self.hub() else { return };
         let (id, saved) = (self.id.clone(), title.clone());
         if let Err(e) = hub.blocking(move |store| store.set_session_title(&id, &saved)).await {
-            warn!(session = self.id, "could not save the session's title: {e}");
+            warn!(session = %self.id, "could not save the session's title: {e}");
         }
         self.state.lock().title = Some(title);
     }
@@ -136,7 +136,7 @@ impl LiveSession {
 
     pub(crate) async fn record_or_log(&self, body: EventBody) {
         if let Err(e) = self.record_own(body).await {
-            error!(session = self.id, "could not record an event: {e}");
+            error!(session = %self.id, "could not record an event: {e}");
         }
     }
 }

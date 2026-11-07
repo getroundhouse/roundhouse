@@ -1,6 +1,7 @@
 //! Comments left on a diff.
 
 use protocol::model::DiffComment;
+use protocol::model::WorkspaceId;
 use rusqlite::params;
 
 use super::{Store, StoreError, from_text, lock, text_of};
@@ -12,7 +13,7 @@ impl Store {
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
             params![
                 comment.id,
-                comment.workspace_id,
+                comment.workspace_id.as_str(),
                 comment.path,
                 text_of(&comment.side),
                 comment.line,
@@ -23,16 +24,16 @@ impl Store {
         Ok(())
     }
 
-    pub fn list_comments(&self, workspace_id: &str) -> Result<Vec<DiffComment>, StoreError> {
+    pub fn list_comments(&self, workspace_id: &WorkspaceId) -> Result<Vec<DiffComment>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
             "SELECT id, workspace_id, path, side, line, text, created_at_ms FROM diff_comments
                  WHERE workspace_id = ? ORDER BY created_at_ms, id",
         )?;
-        let rows = statement.query_map([workspace_id], |row| {
+        let rows = statement.query_map([workspace_id.as_str()], |row| {
             Ok(DiffComment {
                 id: row.get(0)?,
-                workspace_id: row.get(1)?,
+                workspace_id: row.get::<_, String>(1)?.into(),
                 path: row.get(2)?,
                 side: from_text(row.get(3)?)?,
                 line: row.get(4)?,

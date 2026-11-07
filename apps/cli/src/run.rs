@@ -84,7 +84,7 @@ fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
         }
         RepoCmd::List => {
             for repo in client.repo_list()? {
-                println!("{}  {}  {}", short(&repo.id), repo.name, repo.path);
+                println!("{}  {}  {}", short(repo.id.as_str()), repo.name, repo.path);
             }
         }
     }

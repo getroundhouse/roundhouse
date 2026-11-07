@@ -293,7 +293,7 @@ async fn pump(
 
 async fn send_log_through(
     hub: &Arc<Hub>,
-    id: &str,
+    id: &SessionId,
     subscription_id: u64,
     cursor: &mut Seq,
     through: Seq,
@@ -302,8 +302,8 @@ async fn send_log_through(
     while *cursor <= through {
         // Stopping at `through` matters. An event read early would overtake the live deltas that came
         // before it, and those would then land on a tail the event had already cleared.
-        let page = hub.read_page(id.to_string(), *cursor, through).await.map_err(|e| {
-            warn!(session = id, "reading the log for a subscriber failed: {e}");
+        let page = hub.read_page(id.clone(), *cursor, through).await.map_err(|e| {
+            warn!(session = %id, "reading the log for a subscriber failed: {e}");
         })?;
         if page.is_empty() {
             return Ok(());

@@ -55,7 +55,7 @@ async fn ingest_event(session: &Arc<LiveSession>, run: u64, body: EventBody, raw
         None
     };
     if let Err(e) = session.record(body, raw, None, current, run).await {
-        error!(session = session.id, "could not record agent output: {e}");
+        error!(session = %session.id, "could not record agent output: {e}");
     }
     if let Some(approval_id) = stale_approval {
         session.record_or_log(cancelled_approval(approval_id)).await;
@@ -73,7 +73,7 @@ async fn mark_opened(session: &Arc<LiveSession>) {
     let Ok(hub) = session.hub() else { return };
     let id = session.id.clone();
     if let Err(e) = hub.blocking(move |store| store.set_agent_opened(&id)).await {
-        error!(session = session.id, "could not record that the agent opened: {e}");
+        error!(session = %session.id, "could not record that the agent opened: {e}");
     }
 }
 
@@ -92,7 +92,7 @@ impl LiveSession {
         }
         let (id, saved) = (self.id.clone(), mode.clone());
         if let Err(e) = hub.blocking(move |store| store.set_session_options(&id, None, Some(&saved))).await {
-            error!(session = self.id, "could not record the agent's mode: {e}");
+            error!(session = %self.id, "could not record the agent's mode: {e}");
             return;
         }
         self.state.lock().permission_mode = Some(mode);

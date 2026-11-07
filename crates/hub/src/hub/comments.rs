@@ -1,7 +1,7 @@
 //! Comments left on a diff.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{DiffComment, DiffSide};
+use protocol::model::{DiffComment, DiffSide, WorkspaceId};
 
 use super::{Hub, new_id};
 use crate::store::now_ms;
@@ -9,7 +9,7 @@ use crate::store::now_ms;
 impl Hub {
     pub(crate) async fn comment_add(
         &self,
-        workspace_id: String,
+        workspace_id: WorkspaceId,
         path: String,
         side: DiffSide,
         line: u32,
@@ -28,7 +28,7 @@ impl Hub {
         Ok(comment)
     }
 
-    pub(crate) async fn comment_list(&self, workspace_id: String) -> Result<Vec<DiffComment>, ApiError> {
+    pub(crate) async fn comment_list(&self, workspace_id: WorkspaceId) -> Result<Vec<DiffComment>, ApiError> {
         self.blocking(move |store| store.list_comments(&workspace_id)).await
     }
 

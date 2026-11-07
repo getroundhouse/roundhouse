@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
-use protocol::model::{GitDiff, GitStatus, PullRequest, Repo, SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{
+    GitDiff, GitStatus, PullRequest, Repo, RepoId, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
+};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
 use tokio::sync::oneshot;
@@ -21,7 +23,7 @@ pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, 
     let base = workspace.base_ref.as_deref().unwrap_or("main");
     let mut env = vec![
         ("CONDUCTOR_WORKSPACE_NAME".to_string(), workspace.name.clone()),
-        ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.clone()),
+        ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.to_string()),
         ("CONDUCTOR_ROOT_PATH".to_string(), repo.path.clone()),
         ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.strip_prefix("origin/").unwrap_or(base).to_string()),
         ("CONDUCTOR_PORT".to_string(), workspace.port_base.to_string()),
@@ -36,7 +38,7 @@ pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, 
 impl Hub {
     pub(crate) async fn workspace_create(
         self: &Arc<Self>,
-        repo_id: String,
+        repo_id: RepoId,
         name: Option<String>,
         base_ref: Option<String>,
     ) -> Result<Workspace, ApiError> {
@@ -67,8 +69,8 @@ impl Hub {
         Err(last_error.unwrap_or_else(|| internal("no attempts were made")))
     }
 
-    async fn next_name(&self, repo_id: &str) -> Result<String, ApiError> {
-        let owned = repo_id.to_string();
+    async fn next_name(&self, repo_id: &RepoId) -> Result<String, ApiError> {
+        let owned = repo_id.clone();
         let taken = self.blocking(move |store| store.names_in_repo(&owned)).await?;
         let salt = self.name_salt.fetch_add(1, Ordering::Relaxed);
         Ok(crate::names::pick(&taken, salt))
@@ -80,7 +82,7 @@ impl Hub {
         name: String,
         base_ref: Option<String>,
     ) -> Result<Workspace, ApiError> {
-        let id = new_id();
+        let id = WorkspaceId::from(new_id());
         let provider = self.provider(&self.default_provider)?;
         let workspace = Workspace {
             id: id.clone(),
@@ -91,7 +93,7 @@ impl Hub {
             path: None,
             status: WorkspaceStatus::Creating,
             provider: self.default_provider.clone(),
-            instance_id: id.clone(),
+            instance_id: id.to_string(),
             created_at_ms: now_ms(),
             archived_at_ms: None,
             setup: SetupStatus::NotStarted,
@@ -141,17 +143,17 @@ impl Hub {
         Ok(self.start_setup(repo.clone(), ready))
     }
 
-    async fn discard_workspace(&self, id: &str, provider: &dyn Provider) {
+    async fn discard_workspace(&self, id: &WorkspaceId, provider: &dyn Provider) {
         let link = self.workers.lock().get(id).cloned();
         if let Some(link) = link {
-            close_worker(&link, provider, id).await;
+            close_worker(&link, provider, id.as_str()).await;
         }
-        if let Err(e) = provider.destroy(id).await {
-            warn!(id, "cleaning up a failed workspace: {}", error_chain(&e));
+        if let Err(e) = provider.destroy(id.as_str()).await {
+            warn!(%id, "cleaning up a failed workspace: {}", error_chain(&e));
         }
-        let owned = id.to_string();
+        let owned = id.clone();
         if let Err(e) = self.blocking(move |store| store.delete_workspace(&owned)).await {
-            error!(id, "removing a failed workspace: {e}");
+            error!(%id, "removing a failed workspace: {e}");
         }
     }
 
@@ -159,7 +161,11 @@ impl Hub {
         self.blocking(move |store| store.list_workspaces(include_archived)).await
     }
 
-    pub(crate) async fn workspace_archive(self: &Arc<Self>, id: String, force: bool) -> Result<Workspace, ApiError> {
+    pub(crate) async fn workspace_archive(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+        force: bool,
+    ) -> Result<Workspace, ApiError> {
         let workspace = self.workspace(&id).await?;
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
@@ -224,9 +230,9 @@ impl Hub {
         .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))
     }
 
-    async fn stop_workspace_agents(self: &Arc<Self>, workspace_id: &str) -> Result<(), ApiError> {
+    async fn stop_workspace_agents(self: &Arc<Self>, workspace_id: &WorkspaceId) -> Result<(), ApiError> {
         let sessions: Vec<_> = {
-            let owned = workspace_id.to_string();
+            let owned = workspace_id.clone();
             self.blocking(move |store| store.list_sessions(&owned)).await?
         };
         for session in sessions {
@@ -241,7 +247,7 @@ impl Hub {
         Ok(())
     }
 
-    pub(crate) async fn workspace_restore(self: &Arc<Self>, id: String) -> Result<Workspace, ApiError> {
+    pub(crate) async fn workspace_restore(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
         let workspace = self.workspace(&id).await?;
         if workspace.status != WorkspaceStatus::Archived {
             return Err(ApiError::new(ErrorCode::Conflict, format!("workspace {} isn't archived", workspace.name)));
@@ -266,7 +272,7 @@ impl Hub {
 
     pub(super) async fn ready_worktree(
         self: &Arc<Self>,
-        id: &str,
+        id: &WorkspaceId,
     ) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
         let workspace = self.workspace(id).await?;
         if workspace.status != WorkspaceStatus::Ready {
@@ -277,7 +283,7 @@ impl Hub {
         Ok((workspace, path, link))
     }
 
-    pub(crate) async fn workspace_status(self: &Arc<Self>, id: String) -> Result<GitStatus, ApiError> {
+    pub(crate) async fn workspace_status(self: &Arc<Self>, id: WorkspaceId) -> Result<GitStatus, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
         let reply = link.call(WorkerRequest::GitStatus { path }).await?;
         let WorkerResponse::GitStatus(status) = reply else {
@@ -286,7 +292,7 @@ impl Hub {
         Ok(status)
     }
 
-    pub(crate) async fn workspace_diff(self: &Arc<Self>, id: String) -> Result<GitDiff, ApiError> {
+    pub(crate) async fn workspace_diff(self: &Arc<Self>, id: WorkspaceId) -> Result<GitDiff, ApiError> {
         let (workspace, path, link) = self.ready_worktree(&id).await?;
         let reply = link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await?;
         let WorkerResponse::GitDiff(diff) = reply else {
@@ -295,7 +301,10 @@ impl Hub {
         Ok(diff)
     }
 
-    pub(crate) async fn workspace_pull_request(self: &Arc<Self>, id: String) -> Result<Option<PullRequest>, ApiError> {
+    pub(crate) async fn workspace_pull_request(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+    ) -> Result<Option<PullRequest>, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
         let reply = link.call(WorkerRequest::PullRequest { path }).await?;
         let WorkerResponse::PullRequest { pull_request } = reply else {

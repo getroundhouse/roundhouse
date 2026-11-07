@@ -181,7 +181,7 @@ impl LiveSession {
 
     pub(crate) async fn send_item(&self, item: Item) {
         if self.ingest.send(item).await.is_err() {
-            warn!(session = self.id, "dropped worker output for a stopped session");
+            warn!(session = %self.id, "dropped worker output for a stopped session");
         }
     }
 

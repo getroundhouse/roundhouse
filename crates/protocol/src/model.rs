@@ -2,9 +2,42 @@
 
 use serde::{Deserialize, Serialize};
 
-pub type RepoId = String;
-pub type WorkspaceId = String;
-pub type SessionId = String;
+/// Declares ID types: text that's only compared and passed along, with a type each so that one
+/// can't be passed as another. They're plain strings on the wire and in storage.
+macro_rules! ids {
+    ($($name:ident),+ $(,)?) => {$(
+        #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[serde(transparent)]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(id: String) -> Self {
+                Self(id)
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(id: &str) -> Self {
+                Self(id.to_string())
+            }
+        }
+    )+};
+}
+
+ids!(RepoId, WorkspaceId, SessionId);
+
 /// Position in a session's event log. The first event is 1, and there are no gaps.
 pub type Seq = u64;
 

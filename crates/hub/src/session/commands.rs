@@ -49,7 +49,7 @@ impl LiveSession {
             hub.blocking(move |store| store.get_repo(&repo_id)).await?
         };
         let mut env = crate::hub::workspace_env(&workspace, &repo);
-        env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.clone()));
+        env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.to_string()));
         let cwd =
             workspace.path.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the workspace has no worktree yet"))?;
         let _nothing_changes_meanwhile = self.configuring.lock().await;
@@ -163,7 +163,7 @@ impl LiveSession {
             if self.is_closed() {
                 return;
             }
-            warn!(session = self.id, "could not deliver a prompt: {e}");
+            warn!(session = %self.id, "could not deliver a prompt: {e}");
             self.cancel_approvals(None).await;
             self.record_or_log(EventBody::AgentExited {
                 reason: ExitReason::StartFailed,

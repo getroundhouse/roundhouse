@@ -1,6 +1,7 @@
 //! Sessions.
 
 use protocol::model::{AgentKind, Session, SessionStatus};
+use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::{Store, StoreError, StoredSession, from_text, lock, text_of};
@@ -10,8 +11,8 @@ const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, 
 fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     Ok(StoredSession {
         session: Session {
-            id: row.get(0)?,
-            workspace_id: row.get(1)?,
+            id: row.get::<_, String>(0)?.into(),
+            workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,
             model: row.get(3)?,
             permission_mode: row.get(4)?,
@@ -33,8 +34,8 @@ impl Store {
         lock(&self.writer).execute(
             &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
             params![
-                session.id,
-                session.workspace_id,
+                session.id.as_str(),
+                session.workspace_id.as_str(),
                 text_of(&session.agent),
                 session.model,
                 session.permission_mode,
@@ -51,19 +52,19 @@ impl Store {
         Ok(())
     }
 
-    pub fn get_session(&self, id: &str) -> Result<StoredSession, StoreError> {
+    pub fn get_session(&self, id: &SessionId) -> Result<StoredSession, StoreError> {
         lock(&self.reader)
-            .query_row(&format!("SELECT {SESSION_COLUMNS} FROM sessions WHERE id = ?"), [id], session_from_row)
+            .query_row(&format!("SELECT {SESSION_COLUMNS} FROM sessions WHERE id = ?"), [id.as_str()], session_from_row)
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
     }
 
-    pub fn list_sessions(&self, workspace_id: &str) -> Result<Vec<Session>, StoreError> {
+    pub fn list_sessions(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
             "SELECT {SESSION_COLUMNS} FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
         ))?;
-        let rows = statement.query_map([workspace_id], session_from_row)?;
+        let rows = statement.query_map([workspace_id.as_str()], session_from_row)?;
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(sessions.into_iter().map(|s| s.session).collect())
     }
@@ -71,41 +72,42 @@ impl Store {
     /// `None` leaves that setting as it is.
     pub fn set_session_options(
         &self,
-        id: &str,
+        id: &SessionId,
         model: Option<&str>,
         permission_mode: Option<&str>,
     ) -> Result<(), StoreError> {
         lock(&self.writer)
             .execute(
                 "UPDATE sessions SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode) WHERE id = ?",
-                params![model, permission_mode, id],
+                params![model, permission_mode, id.as_str()],
             )
             ?;
         Ok(())
     }
 
-    pub fn set_session_title(&self, id: &str, title: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE sessions SET title = ? WHERE id = ?", params![title, id])?;
+    pub fn set_session_title(&self, id: &SessionId, title: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE sessions SET title = ? WHERE id = ?", params![title, id.as_str()])?;
         Ok(())
     }
 
-    pub fn set_session_closed(&self, id: &str, closed_at_ms: Option<i64>) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id])?;
+    pub fn set_session_closed(&self, id: &SessionId, closed_at_ms: Option<i64>) -> Result<(), StoreError> {
+        lock(&self.writer)
+            .execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id.as_str()])?;
         Ok(())
     }
 
-    pub fn set_agent_opened(&self, id: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE sessions SET agent_opened = 1 WHERE id = ?", [id])?;
+    pub fn set_agent_opened(&self, id: &SessionId) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE sessions SET agent_opened = 1 WHERE id = ?", [id.as_str()])?;
         Ok(())
     }
 
     /// Sessions that were mid-turn when the hub last stopped.
-    pub fn active_session_ids(&self) -> Result<Vec<String>, StoreError> {
+    pub fn active_session_ids(&self) -> Result<Vec<SessionId>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached("SELECT id FROM sessions WHERE status IN (?, ?)")?;
         let rows = statement
             .query_map([text_of(&SessionStatus::Running), text_of(&SessionStatus::WaitingApproval)], |row| {
-                row.get(0)
+                row.get::<_, String>(0).map(SessionId::from)
             })?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }

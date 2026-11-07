@@ -24,7 +24,8 @@ impl Hub {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .ok_or_else(|| ApiError::new(ErrorCode::InvalidRequest, format!("{path} has no directory name")))?;
-        let repo = Repo { id: new_id(), name, path: root.to_string_lossy().into_owned(), created_at_ms: now_ms() };
+        let repo =
+            Repo { id: new_id().into(), name, path: root.to_string_lossy().into_owned(), created_at_ms: now_ms() };
         let repo = self.blocking(move |store| store.add_repo(&repo)).await?;
         self.notify(HubNotice::Repo(repo.clone()));
         Ok(repo)

@@ -40,7 +40,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
         let calls = [
             WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION },
             WorkerRequest::AgentStart(AgentSpec {
-                session_id: format!("s{attempt}"),
+                session_id: format!("s{attempt}").into(),
                 run: 1,
                 agent: AgentKind::Claude,
                 cwd: dir.path().to_string_lossy().into_owned(),

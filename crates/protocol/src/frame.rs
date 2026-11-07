@@ -21,7 +21,7 @@ pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
 mod tests {
     use super::*;
     use crate::event::{ContentBlock, EventBody};
-    use crate::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
+    use crate::model::{AgentKind, DiffSide, RepoId, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
     #[test]
     fn a_frame_is_exactly_one_line() {
@@ -30,6 +30,14 @@ mod tests {
         assert_eq!(line.iter().position(|b| *b == b'\n'), Some(line.len() - 1));
         assert_eq!(line.last(), Some(&b'\n'));
         assert_eq!(decode::<EventBody>(&line).unwrap(), body);
+    }
+
+    #[test]
+    fn ids_are_plain_strings_on_the_wire() {
+        assert_eq!(encode(&SessionId::from("abc")).unwrap(), b"\"abc\"\n");
+        assert_eq!(decode::<SessionId>(br#""abc""#).unwrap(), SessionId::from("abc"));
+        assert_eq!(decode::<WorkspaceId>(br#""abc""#).unwrap(), WorkspaceId::from("abc"));
+        assert_eq!(decode::<RepoId>(br#""abc""#).unwrap(), RepoId::from("abc"));
     }
 
     #[test]

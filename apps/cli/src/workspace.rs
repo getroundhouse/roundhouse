@@ -13,8 +13,8 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
             let repos = client.repo_list()?;
             let found = repos
                 .iter()
-                .find(|r| r.name == repo || r.id == repo)
-                .or_else(|| repos.iter().find(|r| r.id.starts_with(&repo)))
+                .find(|r| r.name == repo || r.id.as_str() == repo)
+                .or_else(|| repos.iter().find(|r| r.id.as_str().starts_with(&repo)))
                 .ok_or_else(|| anyhow!("no repository matches {repo}. Add one with `trestle repo add <path>`"))?;
             let workspace = client.workspace_create(&found.id, name, base)?;
             println!("{}", workspace.name);
@@ -26,7 +26,7 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
             for workspace in client.workspace_list(all)? {
                 println!(
                     "{}  {}  {:?}  {}",
-                    short(&workspace.id),
+                    short(workspace.id.as_str()),
                     workspace.name,
                     workspace.status,
                     workspace.path.unwrap_or_default()
@@ -65,9 +65,9 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
 
 pub(crate) fn find_workspace(client: &Client, query: &str) -> anyhow::Result<Workspace> {
     let workspaces = client.workspace_list(true)?;
-    let mut matches: Vec<_> = workspaces.iter().filter(|w| w.name == query || w.id == query).collect();
+    let mut matches: Vec<_> = workspaces.iter().filter(|w| w.name == query || w.id.as_str() == query).collect();
     if matches.is_empty() {
-        matches = workspaces.iter().filter(|w| w.id.starts_with(query)).collect();
+        matches = workspaces.iter().filter(|w| w.id.as_str().starts_with(query)).collect();
     }
     match matches.as_slice() {
         [one] => Ok((*one).clone()),

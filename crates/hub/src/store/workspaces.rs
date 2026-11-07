@@ -1,5 +1,6 @@
 //! Workspaces.
 
+use protocol::model::{RepoId, WorkspaceId};
 use protocol::model::{SetupStatus, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -13,8 +14,8 @@ const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, stat
 
 fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
-        id: row.get(0)?,
-        repo_id: row.get(1)?,
+        id: row.get::<_, String>(0)?.into(),
+        repo_id: row.get::<_, String>(1)?.into(),
         name: row.get(2)?,
         branch: row.get(3)?,
         base_ref: row.get(4)?,
@@ -38,8 +39,8 @@ impl Store {
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
-                workspace.id,
-                workspace.repo_id,
+                workspace.id.as_str(),
+                workspace.repo_id.as_str(),
                 workspace.name,
                 workspace.branch,
                 workspace.base_ref,
@@ -56,32 +57,40 @@ impl Store {
         Ok(inserted == 1)
     }
 
-    pub fn delete_workspace(&self, id: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("DELETE FROM workspaces WHERE id = ?", [id])?;
+    pub fn delete_workspace(&self, id: &WorkspaceId) -> Result<(), StoreError> {
+        lock(&self.writer).execute("DELETE FROM workspaces WHERE id = ?", [id.as_str()])?;
         Ok(())
     }
 
-    pub fn workspace_ready(&self, id: &str, path: &str, branch: &str, base_ref: &str) -> Result<Workspace, StoreError> {
+    pub fn workspace_ready(
+        &self,
+        id: &WorkspaceId,
+        path: &str,
+        branch: &str,
+        base_ref: &str,
+    ) -> Result<Workspace, StoreError> {
         lock(&self.writer).execute(
             "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ? WHERE id = ?",
-            params![path, branch, base_ref, text_of(&WorkspaceStatus::Ready), id],
+            params![path, branch, base_ref, text_of(&WorkspaceStatus::Ready), id.as_str()],
         )?;
         self.get_workspace(id)
     }
 
-    pub fn set_workspace_archived(&self, id: &str, archived: bool) -> Result<Workspace, StoreError> {
+    pub fn set_workspace_archived(&self, id: &WorkspaceId, archived: bool) -> Result<Workspace, StoreError> {
         let (status, archived_at) =
             if archived { (WorkspaceStatus::Archived, Some(now_ms())) } else { (WorkspaceStatus::Ready, None) };
         lock(&self.writer).execute(
             "UPDATE workspaces SET status = ?, archived_at_ms = ? WHERE id = ?",
-            params![text_of(&status), archived_at, id],
+            params![text_of(&status), archived_at, id.as_str()],
         )?;
         self.get_workspace(id)
     }
 
-    pub fn set_workspace_setup(&self, id: &str, setup: SetupStatus) -> Result<Workspace, StoreError> {
-        lock(&self.writer)
-            .execute("UPDATE workspaces SET setup = ? WHERE id = ?", params![serde_json::to_string(&setup)?, id])?;
+    pub fn set_workspace_setup(&self, id: &WorkspaceId, setup: SetupStatus) -> Result<Workspace, StoreError> {
+        lock(&self.writer).execute(
+            "UPDATE workspaces SET setup = ? WHERE id = ?",
+            params![serde_json::to_string(&setup)?, id.as_str()],
+        )?;
         self.get_workspace(id)
     }
 
@@ -103,14 +112,18 @@ impl Store {
         Ok(())
     }
 
-    pub fn set_workspace_branch(&self, id: &str, branch: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE workspaces SET branch = ? WHERE id = ?", params![branch, id])?;
+    pub fn set_workspace_branch(&self, id: &WorkspaceId, branch: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE workspaces SET branch = ? WHERE id = ?", params![branch, id.as_str()])?;
         Ok(())
     }
 
-    pub fn get_workspace(&self, id: &str) -> Result<Workspace, StoreError> {
+    pub fn get_workspace(&self, id: &WorkspaceId) -> Result<Workspace, StoreError> {
         lock(&self.reader)
-            .query_row(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?"), [id], workspace_from_row)
+            .query_row(
+                &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?"),
+                [id.as_str()],
+                workspace_from_row,
+            )
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind: "workspace", id: id.to_string() })
     }
@@ -124,10 +137,10 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    pub fn names_in_repo(&self, repo_id: &str) -> Result<Vec<String>, StoreError> {
+    pub fn names_in_repo(&self, repo_id: &RepoId) -> Result<Vec<String>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached("SELECT name FROM workspaces WHERE repo_id = ?")?;
-        let rows = statement.query_map([repo_id], |row| row.get(0))?;
+        let rows = statement.query_map([repo_id.as_str()], |row| row.get(0))?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 

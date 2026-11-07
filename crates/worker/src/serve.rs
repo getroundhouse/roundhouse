@@ -11,6 +11,7 @@ use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
+use protocol::model::SessionId;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -47,7 +48,7 @@ struct RunningAgent {
 
 struct State {
     config: Config,
-    agents: Mutex<HashMap<String, RunningAgent>>,
+    agents: Mutex<HashMap<SessionId, RunningAgent>>,
     /// Serializes starts, so two requests can't launch two processes for one conversation.
     start_lock: tokio::sync::Mutex<()>,
     /// Set under `start_lock` once the hub has gone, so a start still in flight can't add an agent
@@ -61,7 +62,7 @@ struct State {
 impl State {
     /// The session's agent, unless its process has gone. Its entry can outlast the process by a
     /// while, because its last output is still on the way to the hub.
-    fn live_agent(&self, session_id: &str) -> Option<Arc<dyn AgentProcess>> {
+    fn live_agent(&self, session_id: &SessionId) -> Option<Arc<dyn AgentProcess>> {
         let agents = self.agents.lock();
         agents.get(session_id).filter(|agent| !agent.process.is_gone()).map(|agent| agent.process.clone())
     }
