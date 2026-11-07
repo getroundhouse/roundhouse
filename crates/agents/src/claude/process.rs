@@ -1,7 +1,7 @@
 //! Runs one `claude` process and supervises it across its whole life.
 //!
 //! The flags, the input format and every behavior relied on here were checked against the real CLI
-//! (2.1.319). `FINDINGS.md` has the results.
+//! (2.1.319). `docs/claude-cli.md` has the results.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};

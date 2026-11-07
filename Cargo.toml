@@ -28,8 +28,8 @@ default-members = [
     "third_party/option-ext",
     "tools/policy",
 ]
-# The prototypes are standalone projects with their own lockfiles and pinned GPUI snapshots.
-exclude = ["bakeoff", "mobile-poc"]
+# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
+exclude = ["mobile-poc"]
 
 [workspace.package]
 version = "0.1.0"

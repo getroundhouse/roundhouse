@@ -1,5 +1,5 @@
 //! One session's transcript: its history by range and its live output, on the kit's `MessageScroller`
-//! and `TextView`. `FINDINGS.md` has why it's built on those. Everything GPUI about a transcript is in
+//! and `TextView`. `docs/ui.md` has why it's built on those. Everything GPUI about a transcript is in
 //! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
 mod log_block;

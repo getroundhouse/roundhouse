@@ -1,4 +1,4 @@
-//! Rules from `CLAUDE.md` and `PROJECT_STRUCTURE.md`, checked against the real dependency graph, so
+//! Rules from `AGENTS.md` and `docs/architecture.md`, checked against the real dependency graph, so
 //! a new dependency that breaks one fails the build rather than waiting to be noticed in review.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
