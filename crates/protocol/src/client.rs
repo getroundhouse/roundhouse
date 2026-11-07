@@ -24,6 +24,8 @@ pub enum ClientRequest {
         protocol_version: u32,
         client: String,
     },
+    /// Works without a hello, and so does `HubShutdown`, so a client of any version can see a hub and
+    /// stop it. Neither can change form, even in a real break.
     HubStatus,
     /// Stops the hub and its workers. Agents are stopped and resume on the next prompt.
     HubShutdown,
@@ -219,6 +221,10 @@ pub struct HubStatus {
     pub running_sessions: u32,
     /// Connected clients, including the one asking.
     pub clients: u32,
+    /// A client started it because it needed one, rather than someone choosing to run it. Only a hub
+    /// like this can be restarted from a client.
+    #[serde(default)]
+    pub on_demand: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -347,23 +353,5 @@ mod tests {
         let error = Outer(std::io::Error::other("disk full"));
 
         assert_eq!(error_chain(&error), "opening the log: disk full");
-    }
-
-    #[test]
-    fn a_request_from_a_newer_client_still_decodes_with_its_id() {
-        let line = br#"{"id":7,"request":{"method":"from_a_newer_client","path":"a","count":2}}"#;
-
-        let frame: ClientFrame = crate::frame::decode(line).unwrap();
-
-        assert_eq!(frame, ClientFrame { id: 7, request: ClientRequest::Unknown });
-    }
-
-    #[test]
-    fn a_known_request_with_a_new_field_still_decodes() {
-        let line = br#"{"id":7,"request":{"method":"repo_add","path":"a","from_a_newer_client":true}}"#;
-
-        let frame: ClientFrame = crate::frame::decode(line).unwrap();
-
-        assert_eq!(frame.request, ClientRequest::RepoAdd { path: "a".to_string() });
     }
 }

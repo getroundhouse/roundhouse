@@ -1,5 +1,6 @@
 //! The connection to a hub.
 
+mod admin;
 mod api;
 
 use std::collections::HashMap;
@@ -21,6 +22,8 @@ use protocol::frame;
 use protocol::paths::Paths;
 use protocol::tail::{StreamDelta, Tail};
 
+pub use admin::{HubAdmin, stop_hub};
+
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
     #[error(transparent)]
@@ -37,6 +40,11 @@ impl ClientError {
     /// The hub is too old to know this request. Hide or disable whatever needed it.
     pub fn is_unsupported(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unsupported)
+    }
+
+    /// There's a real break between this client and the hub, so only [`HubAdmin`] can reach it.
+    pub fn is_version_mismatch(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::VersionMismatch)
     }
 }
 
@@ -112,6 +120,18 @@ pub struct Client {
 impl Client {
     /// Connects and checks the protocol version.
     pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
+        let client = Client::open(socket)?;
+        let reply = client
+            .call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
+        let ClientResponse::Hello { hub_version, .. } = reply else {
+            return unexpected(&reply);
+        };
+        let _ = client.inner.hub_version.set(hub_version);
+        Ok(client)
+    }
+
+    /// A connection that hasn't said hello, which a hub only answers a little on. See [`HubAdmin`].
+    fn open(socket: &Path) -> Result<Client> {
         let stream = UnixStream::connect(socket)?;
         let reader = stream.try_clone()?;
         let closer = Arc::new(Closer(stream.try_clone()?));
@@ -127,14 +147,7 @@ impl Client {
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
-        let client = Client { inner, _closer: closer };
-        let reply = client
-            .call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
-        let ClientResponse::Hello { hub_version, .. } = reply else {
-            return unexpected(&reply);
-        };
-        let _ = client.inner.hub_version.set(hub_version);
-        Ok(client)
+        Ok(Client { inner, _closer: closer })
     }
 
     /// Which build the hub is, as it said when this connected.
@@ -282,7 +295,7 @@ fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     let log = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
     let mut command = Command::new(daemon);
     command
-        .arg("hub")
+        .args(["hub", "--on-demand"])
         // The hub this client will look for, whatever this process's environment says.
         .env(protocol::paths::ENV_HOME, &paths.data_dir)
         .env(protocol::paths::ENV_WORKSPACES, &paths.workspaces_root)

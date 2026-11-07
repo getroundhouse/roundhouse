@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use client_core::Client;
+use client_core::{Client, HubAdmin};
 use protocol::model::{AgentKind, WorkspaceStatus};
 
 use crate::support::{
@@ -54,6 +54,53 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     let mut hub = stack.hub.take().unwrap();
     terminate(hub.id());
     wait_until("the hub to stop on SIGTERM", || !matches!(hub.try_wait(), Ok(None)));
+}
+
+/// Replacing a hub depends on this. If stopping returned before the old hub let go of its lock, a new one
+/// could exit straight away, and nothing would start another.
+#[test]
+fn stopping_a_hub_returns_once_it_has_let_go_of_its_lock() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:first", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    drop(client);
+
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+
+    // Not left to starting a new hub, as a client that gets there too soon waits out the old one anyway.
+    let lock = std::fs::File::open(stack.path("home").join("hub.lock")).unwrap();
+    lock.try_lock().expect("the hub should have let go of its lock");
+    stack.hub.take().unwrap().wait().unwrap();
+}
+
+#[test]
+fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:first", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    drop(client);
+    let first = stack.hub_pid();
+    let paths = protocol::paths::resolve(|name| match name {
+        protocol::paths::ENV_HOME => Some(stack.path("home").to_str().unwrap().to_string()),
+        protocol::paths::ENV_WORKSPACES => Some(stack.path("workspaces").to_str().unwrap().to_string()),
+        _ => None,
+    })
+    .unwrap();
+
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+
+    let daemon = Path::new(env!("CARGO_BIN_EXE_trestled"));
+    let client = Client::connect_or_start(&paths, daemon, "test").unwrap();
+    let status = client.hub_status().unwrap();
+    // First, because nothing else would stop this hub if an assertion failed.
+    client.hub_shutdown().unwrap();
+    stack.hub.take().unwrap().wait().unwrap();
+    assert_ne!(status.pid, first);
+    assert!(status.on_demand, "a client started this one because it needed it");
 }
 
 /// Installing a new version moves the `current` link, and a running hub stays on the one it came from.

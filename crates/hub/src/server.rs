@@ -86,7 +86,7 @@ async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
                 break;
             }
         };
-        if !greeted {
+        if !greeted && !works_without_hello(&request.request) {
             let (outcome, version_ok) = hello(&request.request);
             let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
             if !version_ok {
@@ -111,6 +111,13 @@ async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
     hub.clients.fetch_sub(1, Ordering::Relaxed);
 }
 
+/// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and
+/// stopped. Anyone who can reach this socket is this user, as `bind_socket` makes sure. A connection from
+/// elsewhere, once there are any, shouldn't get this, because stopping a shared hub is for its admins.
+fn works_without_hello(request: &ClientRequest) -> bool {
+    matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown)
+}
+
 fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
     let ClientRequest::Hello { protocol_version, .. } = request else {
@@ -126,7 +133,8 @@ fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
         )
     } else {
         error(format!(
-            "this hub speaks protocol {PROTOCOL_VERSION}, and the client speaks {protocol_version}. Restart the hub with the same version"
+            "this hub is version {} on protocol {PROTOCOL_VERSION}, and this client speaks protocol {protocol_version}. Stopping the hub, which also stops its agents, lets one that matches start",
+            protocol::BUILD_VERSION
         ))
     }
 }

@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Instant;
 
-use client_core::{Client, ClientError, Subscription, SubscriptionItem};
+use client_core::{Client, ClientError, HubAdmin, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
@@ -113,6 +113,43 @@ fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
     assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported));
     let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
     assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
+}
+
+/// A client across a real break sends these as written, so a test can't build them from today's types.
+#[test]
+fn a_hub_shows_its_status_and_stops_without_a_hello() {
+    let mut stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+
+    let status = connection.ask(1, r#"{"method":"hub_status"}"#);
+
+    assert!(matches!(status, ReplyOutcome::Response(ClientResponse::HubStatus(s)) if s.pid == stack.hub_pid()));
+    let stopped = connection.ask(2, r#"{"method":"hub_shutdown"}"#);
+    assert_eq!(stopped, ReplyOutcome::Response(ClientResponse::Ok));
+    stack.hub.take().unwrap().wait().unwrap();
+}
+
+#[test]
+fn nothing_else_works_without_a_hello() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+
+    let refused = connection.ask(1, r#"{"method":"repo_list"}"#);
+
+    assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch));
+}
+
+#[test]
+fn a_refused_client_can_still_see_the_hub_on_a_new_connection() {
+    let stack = Stack::start();
+    let mut refused = RawConnection::open(&stack);
+    let hello = r#"{"method":"hello","client":"newer","protocol_version":9999}"#;
+    assert!(matches!(refused.ask(1, hello), ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch));
+
+    let status = HubAdmin::connect(&stack.socket()).unwrap().status().unwrap();
+
+    assert_eq!(status.pid, stack.hub_pid());
+    assert!(!status.on_demand, "this stack starts its hub by hand");
 }
 
 #[test]

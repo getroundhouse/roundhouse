@@ -46,6 +46,7 @@ pub(crate) struct Hub {
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, watch::Sender<bool>>>,
     feed: broadcast::Sender<HubNotice>,
+    on_demand: bool,
     started_at_ms: i64,
     pub(crate) shutdown: Notify,
     shutting_down: AtomicBool,
@@ -63,9 +64,10 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 }
 
 impl Hub {
-    pub(crate) fn new(store: Arc<Store>, provider: Arc<dyn Provider>) -> Self {
+    pub(crate) fn new(store: Arc<Store>, provider: Arc<dyn Provider>, on_demand: bool) -> Self {
         Self {
             store,
+            on_demand,
             providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
             default_provider: LOCAL_PROVIDER.to_string(),
             workers: Mutex::new(HashMap::new()),
@@ -221,6 +223,7 @@ impl Hub {
             workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
+            on_demand: self.on_demand,
         }
     }
 

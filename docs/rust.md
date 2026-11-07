@@ -88,6 +88,7 @@ The wire format is in `docs/architecture.md`. These rules keep it compatible:
 - **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. A client checks `is_unsupported()`, and hides or disables whatever needed it. There's no list of capabilities until something needs one.
 - **Other envelopes have no `Unknown`.** That covers `HubFrame`, `ClientResponse` and the like, since there's nothing sensible to do with one. A client only gets a new response by making a new request.
 - **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. Client and hub can't work together across one, so it should be rare.
+- **`hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** They're what lets a client see a hub and stop it across one. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it.
 - **The worker protocol follows the same rules once workers can differ in version.** Today a hub and its worker are one binary.
 - **Agent output is untrusted input.** `agents::claude::normalize` takes any line without panicking, and keeps the raw line. After a CLI upgrade, re-capture the fixtures with the script in `AGENTS.md`.
 

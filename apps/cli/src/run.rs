@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::Client;
+use client_core::{Client, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
@@ -91,9 +91,10 @@ fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Through [`HubAdmin`], so these work on a hub of any version.
 fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
-    let client = match Client::connect(&paths.socket, "cli") {
-        Ok(client) => client,
+    let hub = match HubAdmin::connect(&paths.socket) {
+        Ok(hub) => hub,
         Err(client_core::ClientError::Io(e))
             if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused) =>
         {
@@ -104,23 +105,27 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
     };
     match command {
         HubCmd::Status => {
-            let status = client.hub_status()?;
+            let status = hub.status()?;
             println!(
-                "pid {}  version {}  protocol {}  {} worker(s)  {} session(s) running  {} client(s)",
+                "pid {}  version {}  protocol {}  {} worker(s)  {} session(s) running  {} client(s)  {}",
                 status.pid,
                 status.hub_version,
                 status.protocol_version,
                 status.workers,
                 status.running_sessions,
-                status.clients
+                status.clients,
+                if status.on_demand { "started on demand" } else { "started by hand" }
             );
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }
+            if status.protocol_version != protocol::PROTOCOL_VERSION {
+                println!("this client speaks protocol {}, so it can only stop that hub", protocol::PROTOCOL_VERSION);
+            }
         }
         HubCmd::Stop => {
-            client.hub_shutdown()?;
-            println!("hub stopping");
+            hub.stop()?;
+            println!("hub stopped");
         }
     }
     Ok(())

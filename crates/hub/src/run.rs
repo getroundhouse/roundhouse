@@ -22,6 +22,8 @@ pub struct HubConfig {
     pub shell: Option<String>,
     /// This process's own `PATH`.
     pub path: Option<String>,
+    /// A client started this hub because it needed one.
+    pub on_demand: bool,
 }
 
 /// Anything left mid-turn or half-made by the last run. Its workers exited when it went away.
@@ -109,7 +111,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
         let _ = provider.destroy(&workspace.instance_id).await;
     }
-    let hub = Arc::new(Hub::new(store, provider));
+    let hub = Arc::new(Hub::new(store, provider, config.on_demand));
 
     let listener = bind_socket(&paths.socket)?;
     info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");
