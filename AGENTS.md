@@ -31,12 +31,13 @@ cargo test                        # The backend, with a fake agent. Needs no GPU
 cargo test --workspace            # Also the transcript and the desktop app's UI tests
 cargo run -p desktop --bin trestle-desktop   # The app
 cargo run -p desktop --example look -- <workspace> diff   # The app, opened on a view, for screenshots
+tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
 
-Trestle can be developed from inside Trestle, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `trestle-dev`. Set `TRESTLE_HOME` and `TRESTLE_WORKSPACES` to choose another.
+Trestle can be developed from inside Trestle, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `trestle-dev`, and only a release build uses the real data, which is what `tools/install.sh` installs. Set `TRESTLE_HOME` and `TRESTLE_WORKSPACES` to choose another.
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 

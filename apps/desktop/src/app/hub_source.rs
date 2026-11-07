@@ -18,7 +18,7 @@ impl HubSource {
     pub fn default_local() -> anyhow::Result<Self> {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
         let daemon = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map_or_else(
-            || std::env::current_exe().map_or_else(|_| "trestled".into(), |exe| exe.with_file_name("trestled")),
+            || std::env::current_exe().and_then(|exe| client_core::daemon_beside(&exe)).unwrap_or("trestled".into()),
             PathBuf::from,
         );
         Ok(Self { paths, daemon })

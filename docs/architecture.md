@@ -78,6 +78,7 @@ third_party/
 tools/
   policy/          Built. Tests that enforce the license and dependency rules below
   smoke/           Built. Runs the stack against the real Claude CLI, and regenerates its fixture
+  install.sh       Built. Installs this commit as a version of its own, outside `target/`
   perf/            Performance tests against the real app. Not built yet, see `docs/performance.md`
 ```
 

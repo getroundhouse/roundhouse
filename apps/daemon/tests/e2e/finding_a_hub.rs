@@ -8,7 +8,9 @@ use std::time::Duration;
 use client_core::Client;
 use protocol::model::{AgentKind, WorkspaceStatus};
 
-use crate::support::{Stack, commit_settings, terminate, wait_for_setup, wait_for_turn_end, wait_until};
+use crate::support::{
+    Stack, commit_settings, install_executable, terminate, wait_for_setup, wait_for_turn_end, wait_until,
+};
 
 /// The desktop app starts a hub from a background thread with every signal blocked, and that carries
 /// across exec. Blocking `SIGCHLD` alone is enough to make the first `git` hang.
@@ -52,6 +54,33 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     let mut hub = stack.hub.take().unwrap();
     terminate(hub.id());
     wait_until("the hub to stop on SIGTERM", || !matches!(hub.try_wait(), Ok(None)));
+}
+
+/// Installing a new version moves the `current` link, and a running hub stays on the one it came from.
+#[test]
+fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
+    use std::os::unix::fs::symlink;
+
+    let mut stack = Stack::start();
+    stack.kill_hub();
+    let (old, new, current) = (stack.path("old"), stack.path("new"), stack.path("current"));
+    std::fs::create_dir_all(&old).unwrap();
+    std::fs::create_dir_all(&new).unwrap();
+    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), &old.join("trestled"));
+    std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
+    install_executable(&stack.path("broken"), &new.join("trestled"));
+    symlink(&old, &current).unwrap();
+    stack.hub = Some(stack.command_at(&current.join("trestled")).spawn().unwrap());
+    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+
+    std::fs::remove_file(&current).unwrap();
+    symlink(&new, &current).unwrap();
+
+    // This is the first thing to need a worker, so it would start the broken one.
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:still here", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
 }
 
 /// The code in a workspace can be another build of Trestle, whose commands would otherwise reach this hub.

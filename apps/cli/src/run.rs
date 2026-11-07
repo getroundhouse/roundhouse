@@ -22,7 +22,7 @@ fn find_daemon() -> anyhow::Result<PathBuf> {
         return Ok(path.into());
     }
     let exe = std::env::current_exe().context("finding this binary")?;
-    Ok(exe.with_file_name("trestled"))
+    client_core::daemon_beside(&exe).context("finding the daemon next to this binary")
 }
 
 pub(crate) fn run(args: Args) -> anyhow::Result<()> {
