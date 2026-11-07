@@ -65,6 +65,13 @@ async fn git_ok(cwd: &Path, args: &[&str]) -> Result<String, ApiError> {
     }
 }
 
+/// For commands that print NUL-separated paths, such as `git ls-files -z`.
+pub(crate) async fn list_nul_separated(repo: &Path, args: &[String]) -> Result<Vec<String>, ApiError> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = git_ok(repo, &args).await?;
+    Ok(output.split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
+}
+
 async fn ref_exists(repo: &Path, name: &str) -> Result<bool, ApiError> {
     Ok(git(repo, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await?.success)
 }
