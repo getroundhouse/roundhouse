@@ -45,7 +45,7 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 ## Rules
 
 - **Keep project knowledge in repo docs.** Don't use agent memory, and don't leave decisions only in chat. When a decision or a fact changes, update the relevant doc as part of the same work. Decisions go in `docs/decisions.md`.
-- **Create a GitHub issue for every follow-up.** Anything still open or left to handle later gets an issue so it doesn't get dropped. Mention it in chat or a PR too if that helps, but those don't replace the issue, and neither does a doc.
+- **Create a GitHub issue for every follow-up.** Anything still open or left to handle later gets an issue so it doesn't get dropped. Mention it in chat or a PR too if that helps, but those don't replace the issue, and neither does a doc. A local agent review is the exception: it reports its findings to whoever asked for it and files no issues, and they decide what's worth tracking.
 - **Each doc has one clear purpose.** If something else needs writing down, it gets its own doc rather than a new section in one that's nearby.
 - **Commit only when the user asks.**
 - **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
