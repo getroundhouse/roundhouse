@@ -107,7 +107,7 @@ pub(crate) enum WorkspaceCmd {
     /// Remove the worktree and keep the branch and history.
     Archive {
         workspace: String,
-        /// Archive even with uncommitted changes, which are lost.
+        /// Archive even if that loses uncommitted changes or commits on no branch.
         #[arg(long)]
         force: bool,
     },

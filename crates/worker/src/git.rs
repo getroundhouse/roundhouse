@@ -182,26 +182,8 @@ pub async fn remove_workspace(repo_path: &str, path: &str, force: bool) -> Resul
         git_ok(&repo, &["worktree", "prune"]).await?;
         return Ok(());
     }
-    if !force {
-        let current = status(path).await?;
-        if !current.files.is_empty() {
-            return Err(ApiError::new(
-                ErrorCode::NeedsForce,
-                format!(
-                    "{} uncommitted change(s) in {path} would be lost. Commit them, or archive with force",
-                    current.files.len()
-                ),
-            ));
-        }
-        if current.branch.is_none() && !any_ref_holds_head(worktree).await? {
-            return Err(ApiError::new(
-                ErrorCode::NeedsForce,
-                format!(
-                    "{path} is on a detached HEAD with commits on no branch, which would be lost. \
-                     Put them on a branch, or archive with force"
-                ),
-            ));
-        }
+    if !force && let Some(loss) = status(path).await?.loss_if_removed() {
+        return Err(ApiError::new(ErrorCode::NeedsForce, loss));
     }
     let mut args = vec!["worktree", "remove"];
     if force {
@@ -221,8 +203,11 @@ pub async fn status(path: &str) -> Result<GitStatus, ApiError> {
     // Explicit, because `status.showUntrackedFiles=no` in someone's config would otherwise hide new
     // files from this, and from the check that keeps archiving from deleting them.
     let args = ["status", "--porcelain=v2", "--branch", "--untracked-files=normal", "-z"];
-    let output = git_ok(Path::new(path), &args).await?;
-    Ok(parse_status(&output))
+    let worktree = Path::new(path);
+    let output = git_ok(worktree, &args).await?;
+    let mut status = parse_status(&output);
+    status.unreferenced_commits = status.branch.is_none() && !any_ref_holds_head(worktree).await?;
+    Ok(status)
 }
 
 fn parse_status(output: &str) -> GitStatus {

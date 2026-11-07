@@ -162,6 +162,24 @@ pub struct GitStatus {
     pub ahead: u32,
     pub behind: u32,
     pub files: Vec<GitFile>,
+    /// On a detached HEAD, with commits that no branch or tag holds.
+    #[serde(default)]
+    pub unreferenced_commits: bool,
+}
+
+impl GitStatus {
+    /// What removing this worktree would lose, in words for a person. Commits on a branch aren't at
+    /// risk, because a branch outlives its worktree.
+    pub fn loss_if_removed(&self) -> Option<String> {
+        if !self.files.is_empty() {
+            let count = self.files.len();
+            return Some(format!("{count} uncommitted change(s) would be lost. Commit them, or archive with force"));
+        }
+        self.unreferenced_commits.then(|| {
+            "Commits on a detached HEAD, on no branch, would be lost. Put them on a branch, or archive with force"
+                .to_string()
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

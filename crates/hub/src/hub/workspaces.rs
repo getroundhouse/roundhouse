@@ -177,20 +177,13 @@ impl Hub {
         let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
         let link = self.ensure_worker(&id).await?;
 
-        // Check before stopping anything, so a refused archive leaves the agent running.
+        // Before anything changes, so refusing leaves the workspace as it was.
         let status = link.call(WorkerRequest::GitStatus { path: path.clone() }).await;
         if !force
             && let Ok(WorkerResponse::GitStatus(status)) = &status
-            && !status.files.is_empty()
+            && let Some(loss) = status.loss_if_removed()
         {
-            return Err(ApiError::new(
-                ErrorCode::NeedsForce,
-                format!(
-                    "{} uncommitted change(s) in {} would be lost. Commit them, or archive with force",
-                    status.files.len(),
-                    workspace.name
-                ),
-            ));
+            return Err(ApiError::new(ErrorCode::NeedsForce, loss));
         }
 
         // Interrupt setup first, so the script isn't running in a worktree that's about to go.
