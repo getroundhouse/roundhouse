@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
-use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{
     AgentKind, DiffComment, Repo, Seq, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
@@ -15,6 +14,10 @@ use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+
+mod error;
+
+pub use error::StoreError;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 const MIGRATIONS: &[&str] = &[
@@ -122,10 +125,6 @@ fn lock(conn: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
     conn.lock()
 }
 
-fn internal(e: impl std::fmt::Display) -> ApiError {
-    ApiError::new(ErrorCode::Internal, e.to_string())
-}
-
 /// Enum to its `snake_case` serde name, for storing in a text column.
 fn text_of<T: Serialize>(value: &T) -> String {
     match serde_json::to_value(value) {
@@ -197,7 +196,7 @@ fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
 }
 
 impl Store {
-    pub fn open(path: &Path) -> anyhow::Result<Self> {
+    pub fn open(path: &Path) -> Result<Self, StoreError> {
         let mut writer = open_connection(path)?;
         migrate(&mut writer)?;
         let reader = open_connection(path)?;
@@ -206,106 +205,92 @@ impl Store {
 
     // Repos ---------------------------------------------------------------------------------------
 
-    pub fn add_repo(&self, repo: &Repo) -> Result<Repo, ApiError> {
+    pub fn add_repo(&self, repo: &Repo) -> Result<Repo, StoreError> {
         let conn = lock(&self.writer);
         conn.execute(
             "INSERT INTO repos (id, name, path, created_at_ms) VALUES (?, ?, ?, ?) ON CONFLICT (path) DO NOTHING",
             params![repo.id, repo.name, repo.path, repo.created_at_ms],
-        )
-        .map_err(internal)?;
+        )?;
         // Adding a repository twice returns the first record.
         conn.query_row("SELECT id, name, path, created_at_ms FROM repos WHERE path = ?", [&repo.path], repo_from_row)
-            .map_err(internal)
+            .map_err(StoreError::from)
     }
 
-    pub fn list_repos(&self) -> Result<Vec<Repo>, ApiError> {
+    pub fn list_repos(&self) -> Result<Vec<Repo>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement =
-            conn.prepare_cached("SELECT id, name, path, created_at_ms FROM repos ORDER BY name").map_err(internal)?;
-        let rows = statement.query_map([], repo_from_row).map_err(internal)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+        let mut statement = conn.prepare_cached("SELECT id, name, path, created_at_ms FROM repos ORDER BY name")?;
+        let rows = statement.query_map([], repo_from_row)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    pub fn get_repo(&self, id: &str) -> Result<Repo, ApiError> {
+    pub fn get_repo(&self, id: &str) -> Result<Repo, StoreError> {
         lock(&self.reader)
             .query_row("SELECT id, name, path, created_at_ms FROM repos WHERE id = ?", [id], repo_from_row)
-            .optional()
-            .map_err(internal)?
-            .ok_or_else(|| ApiError::new(ErrorCode::NotFound, format!("no repository {id}")))
+            .optional()?
+            .ok_or_else(|| StoreError::NotFound { kind: "repository", id: id.to_string() })
     }
 
     // Workspaces ----------------------------------------------------------------------------------
 
     /// Returns false if the name is taken in this repository.
-    pub fn insert_workspace(&self, workspace: &Workspace) -> Result<bool, ApiError> {
-        let inserted = lock(&self.writer)
-            .execute(
-                &format!(
-                    "INSERT INTO workspaces ({WORKSPACE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    pub fn insert_workspace(&self, workspace: &Workspace) -> Result<bool, StoreError> {
+        let inserted = lock(&self.writer).execute(
+            &format!(
+                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
-                ),
-                params![
-                    workspace.id,
-                    workspace.repo_id,
-                    workspace.name,
-                    workspace.branch,
-                    workspace.base_ref,
-                    workspace.path,
-                    text_of(&workspace.status),
-                    workspace.provider,
-                    workspace.instance_id,
-                    workspace.created_at_ms,
-                    workspace.archived_at_ms,
-                    serde_json::to_string(&workspace.setup).map_err(internal)?,
-                    i64::from(workspace.port_base),
-                ],
-            )
-            .map_err(internal)?;
+            ),
+            params![
+                workspace.id,
+                workspace.repo_id,
+                workspace.name,
+                workspace.branch,
+                workspace.base_ref,
+                workspace.path,
+                text_of(&workspace.status),
+                workspace.provider,
+                workspace.instance_id,
+                workspace.created_at_ms,
+                workspace.archived_at_ms,
+                serde_json::to_string(&workspace.setup)?,
+                i64::from(workspace.port_base),
+            ],
+        )?;
         Ok(inserted == 1)
     }
 
-    pub fn delete_workspace(&self, id: &str) -> Result<(), ApiError> {
-        lock(&self.writer).execute("DELETE FROM workspaces WHERE id = ?", [id]).map_err(internal)?;
+    pub fn delete_workspace(&self, id: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("DELETE FROM workspaces WHERE id = ?", [id])?;
         Ok(())
     }
 
-    pub fn workspace_ready(&self, id: &str, path: &str, branch: &str, base_ref: &str) -> Result<Workspace, ApiError> {
-        lock(&self.writer)
-            .execute(
-                "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ? WHERE id = ?",
-                params![path, branch, base_ref, text_of(&WorkspaceStatus::Ready), id],
-            )
-            .map_err(internal)?;
+    pub fn workspace_ready(&self, id: &str, path: &str, branch: &str, base_ref: &str) -> Result<Workspace, StoreError> {
+        lock(&self.writer).execute(
+            "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ? WHERE id = ?",
+            params![path, branch, base_ref, text_of(&WorkspaceStatus::Ready), id],
+        )?;
         self.get_workspace(id)
     }
 
-    pub fn set_workspace_archived(&self, id: &str, archived: bool) -> Result<Workspace, ApiError> {
+    pub fn set_workspace_archived(&self, id: &str, archived: bool) -> Result<Workspace, StoreError> {
         let (status, archived_at) =
             if archived { (WorkspaceStatus::Archived, Some(now_ms())) } else { (WorkspaceStatus::Ready, None) };
-        lock(&self.writer)
-            .execute(
-                "UPDATE workspaces SET status = ?, archived_at_ms = ? WHERE id = ?",
-                params![text_of(&status), archived_at, id],
-            )
-            .map_err(internal)?;
+        lock(&self.writer).execute(
+            "UPDATE workspaces SET status = ?, archived_at_ms = ? WHERE id = ?",
+            params![text_of(&status), archived_at, id],
+        )?;
         self.get_workspace(id)
     }
 
-    pub fn set_workspace_setup(&self, id: &str, setup: SetupStatus) -> Result<Workspace, ApiError> {
+    pub fn set_workspace_setup(&self, id: &str, setup: SetupStatus) -> Result<Workspace, StoreError> {
         lock(&self.writer)
-            .execute(
-                "UPDATE workspaces SET setup = ? WHERE id = ?",
-                params![serde_json::to_string(&setup).map_err(internal)?, id],
-            )
-            .map_err(internal)?;
+            .execute("UPDATE workspaces SET setup = ? WHERE id = ?", params![serde_json::to_string(&setup)?, id])?;
         self.get_workspace(id)
     }
 
     /// The start of ten ports nothing else has. Never reused, so a restored workspace keeps its own.
-    pub fn next_port_base(&self) -> Result<u16, ApiError> {
-        let highest: i64 = lock(&self.reader)
-            .query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], |row| row.get(0))
-            .map_err(internal)?;
+    pub fn next_port_base(&self) -> Result<u16, StoreError> {
+        let highest: i64 =
+            lock(&self.reader).query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], |row| row.get(0))?;
         let next = if highest == 0 { FIRST_PORT_BASE } else { highest + PORTS_PER_WORKSPACE };
         // Past the top of the range, start again rather than fail. A clash is possible, but only
         // after thousands of workspaces, and it only matters if both are running a server.
@@ -313,104 +298,92 @@ impl Store {
     }
 
     /// A setup that was running when the hub stopped never finished, and its worker has gone.
-    pub fn fail_interrupted_setups(&self) -> Result<(), ApiError> {
-        let running = serde_json::to_string(&SetupStatus::Running).map_err(internal)?;
-        let failed = serde_json::to_string(&SetupStatus::Failed { code: None }).map_err(internal)?;
-        lock(&self.writer)
-            .execute("UPDATE workspaces SET setup = ? WHERE setup = ?", params![failed, running])
-            .map_err(internal)?;
+    pub fn fail_interrupted_setups(&self) -> Result<(), StoreError> {
+        let running = serde_json::to_string(&SetupStatus::Running)?;
+        let failed = serde_json::to_string(&SetupStatus::Failed { code: None })?;
+        lock(&self.writer).execute("UPDATE workspaces SET setup = ? WHERE setup = ?", params![failed, running])?;
         Ok(())
     }
 
-    pub fn set_workspace_branch(&self, id: &str, branch: &str) -> Result<(), ApiError> {
-        lock(&self.writer)
-            .execute("UPDATE workspaces SET branch = ? WHERE id = ?", params![branch, id])
-            .map_err(internal)?;
+    pub fn set_workspace_branch(&self, id: &str, branch: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE workspaces SET branch = ? WHERE id = ?", params![branch, id])?;
         Ok(())
     }
 
-    pub fn get_workspace(&self, id: &str) -> Result<Workspace, ApiError> {
+    pub fn get_workspace(&self, id: &str) -> Result<Workspace, StoreError> {
         lock(&self.reader)
             .query_row(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?"), [id], workspace_from_row)
-            .optional()
-            .map_err(internal)?
-            .ok_or_else(|| ApiError::new(ErrorCode::NotFound, format!("no workspace {id}")))
+            .optional()?
+            .ok_or_else(|| StoreError::NotFound { kind: "workspace", id: id.to_string() })
     }
 
-    pub fn list_workspaces(&self, include_archived: bool) -> Result<Vec<Workspace>, ApiError> {
+    pub fn list_workspaces(&self, include_archived: bool) -> Result<Vec<Workspace>, StoreError> {
         let conn = lock(&self.reader);
         let filter = if include_archived { "" } else { "WHERE status != 'archived'" };
         let mut statement = conn
-            .prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces {filter} ORDER BY created_at_ms"))
-            .map_err(internal)?;
-        let rows = statement.query_map([], workspace_from_row).map_err(internal)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+            .prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces {filter} ORDER BY created_at_ms"))?;
+        let rows = statement.query_map([], workspace_from_row)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    pub fn names_in_repo(&self, repo_id: &str) -> Result<Vec<String>, ApiError> {
+    pub fn names_in_repo(&self, repo_id: &str) -> Result<Vec<String>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached("SELECT name FROM workspaces WHERE repo_id = ?").map_err(internal)?;
-        let rows = statement.query_map([repo_id], |row| row.get(0)).map_err(internal)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+        let mut statement = conn.prepare_cached("SELECT name FROM workspaces WHERE repo_id = ?")?;
+        let rows = statement.query_map([repo_id], |row| row.get(0))?;
+        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
     /// A workspace left half-made by a crash has no usable worktree or sessions.
-    pub fn take_unfinished_workspaces(&self) -> Result<Vec<Workspace>, ApiError> {
+    pub fn take_unfinished_workspaces(&self) -> Result<Vec<Workspace>, StoreError> {
         let conn = lock(&self.writer);
-        let mut statement = conn
-            .prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE status = ?"))
-            .map_err(internal)?;
+        let mut statement =
+            conn.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE status = ?"))?;
         let creating = text_of(&WorkspaceStatus::Creating);
-        let rows = statement.query_map([&creating], workspace_from_row).map_err(internal)?;
-        let workspaces = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(internal)?;
-        conn.execute("DELETE FROM workspaces WHERE status = ?", [&creating]).map_err(internal)?;
+        let rows = statement.query_map([&creating], workspace_from_row)?;
+        let workspaces = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        conn.execute("DELETE FROM workspaces WHERE status = ?", [&creating])?;
         Ok(workspaces)
     }
 
     // Sessions ------------------------------------------------------------------------------------
 
-    pub fn insert_session(&self, stored: &StoredSession) -> Result<(), ApiError> {
+    pub fn insert_session(&self, stored: &StoredSession) -> Result<(), StoreError> {
         let session = &stored.session;
-        lock(&self.writer)
-            .execute(
-                &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
-                params![
-                    session.id,
-                    session.workspace_id,
-                    text_of(&session.agent),
-                    session.model,
-                    session.permission_mode,
-                    text_of(&session.status),
-                    session.last_seq as i64,
-                    session.created_at_ms,
-                    session.updated_at_ms,
-                    stored.agent_session_id,
-                    stored.agent_opened,
-                    session.title,
-                    session.closed_at_ms,
-                ],
-            )
-            .map_err(internal)?;
+        lock(&self.writer).execute(
+            &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+            params![
+                session.id,
+                session.workspace_id,
+                text_of(&session.agent),
+                session.model,
+                session.permission_mode,
+                text_of(&session.status),
+                session.last_seq as i64,
+                session.created_at_ms,
+                session.updated_at_ms,
+                stored.agent_session_id,
+                stored.agent_opened,
+                session.title,
+                session.closed_at_ms,
+            ],
+        )?;
         Ok(())
     }
 
-    pub fn get_session(&self, id: &str) -> Result<StoredSession, ApiError> {
+    pub fn get_session(&self, id: &str) -> Result<StoredSession, StoreError> {
         lock(&self.reader)
             .query_row(&format!("SELECT {SESSION_COLUMNS} FROM sessions WHERE id = ?"), [id], session_from_row)
-            .optional()
-            .map_err(internal)?
-            .ok_or_else(|| ApiError::new(ErrorCode::NotFound, format!("no session {id}")))
+            .optional()?
+            .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
     }
 
-    pub fn list_sessions(&self, workspace_id: &str) -> Result<Vec<Session>, ApiError> {
+    pub fn list_sessions(&self, workspace_id: &str) -> Result<Vec<Session>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn
-            .prepare_cached(&format!(
-                "SELECT {SESSION_COLUMNS} FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
-            ))
-            .map_err(internal)?;
-        let rows = statement.query_map([workspace_id], session_from_row).map_err(internal)?;
-        let sessions = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(internal)?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {SESSION_COLUMNS} FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
+        ))?;
+        let rows = statement.query_map([workspace_id], session_from_row)?;
+        let sessions = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(sessions.into_iter().map(|s| s.session).collect())
     }
 
@@ -420,92 +393,83 @@ impl Store {
         id: &str,
         model: Option<&str>,
         permission_mode: Option<&str>,
-    ) -> Result<(), ApiError> {
+    ) -> Result<(), StoreError> {
         lock(&self.writer)
             .execute(
                 "UPDATE sessions SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode) WHERE id = ?",
                 params![model, permission_mode, id],
             )
-            .map_err(internal)?;
+            ?;
         Ok(())
     }
 
-    pub fn set_session_title(&self, id: &str, title: &str) -> Result<(), ApiError> {
-        lock(&self.writer)
-            .execute("UPDATE sessions SET title = ? WHERE id = ?", params![title, id])
-            .map_err(internal)?;
+    pub fn set_session_title(&self, id: &str, title: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE sessions SET title = ? WHERE id = ?", params![title, id])?;
         Ok(())
     }
 
-    pub fn set_session_closed(&self, id: &str, closed_at_ms: Option<i64>) -> Result<(), ApiError> {
-        lock(&self.writer)
-            .execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id])
-            .map_err(internal)?;
+    pub fn set_session_closed(&self, id: &str, closed_at_ms: Option<i64>) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id])?;
         Ok(())
     }
 
-    pub fn set_agent_opened(&self, id: &str) -> Result<(), ApiError> {
-        lock(&self.writer).execute("UPDATE sessions SET agent_opened = 1 WHERE id = ?", [id]).map_err(internal)?;
+    pub fn set_agent_opened(&self, id: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE sessions SET agent_opened = 1 WHERE id = ?", [id])?;
         Ok(())
     }
 
     /// Sessions that were mid-turn when the hub last stopped.
-    pub fn active_session_ids(&self) -> Result<Vec<String>, ApiError> {
+    pub fn active_session_ids(&self) -> Result<Vec<String>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached("SELECT id FROM sessions WHERE status IN (?, ?)").map_err(internal)?;
+        let mut statement = conn.prepare_cached("SELECT id FROM sessions WHERE status IN (?, ?)")?;
         let rows = statement
-            .query_map([text_of(&SessionStatus::Running), text_of(&SessionStatus::WaitingApproval)], |row| row.get(0))
-            .map_err(internal)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+            .query_map([text_of(&SessionStatus::Running), text_of(&SessionStatus::WaitingApproval)], |row| {
+                row.get(0)
+            })?;
+        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
     // Comments ------------------------------------------------------------------------------------
 
-    pub fn add_comment(&self, comment: &DiffComment) -> Result<(), ApiError> {
-        lock(&self.writer)
-            .execute(
-                "INSERT INTO diff_comments (id, workspace_id, path, side, line, text, created_at_ms)
+    pub fn add_comment(&self, comment: &DiffComment) -> Result<(), StoreError> {
+        lock(&self.writer).execute(
+            "INSERT INTO diff_comments (id, workspace_id, path, side, line, text, created_at_ms)
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    comment.id,
-                    comment.workspace_id,
-                    comment.path,
-                    text_of(&comment.side),
-                    comment.line,
-                    comment.text,
-                    comment.created_at_ms,
-                ],
-            )
-            .map_err(internal)?;
+            params![
+                comment.id,
+                comment.workspace_id,
+                comment.path,
+                text_of(&comment.side),
+                comment.line,
+                comment.text,
+                comment.created_at_ms,
+            ],
+        )?;
         Ok(())
     }
 
-    pub fn list_comments(&self, workspace_id: &str) -> Result<Vec<DiffComment>, ApiError> {
+    pub fn list_comments(&self, workspace_id: &str) -> Result<Vec<DiffComment>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn
-            .prepare_cached(
-                "SELECT id, workspace_id, path, side, line, text, created_at_ms FROM diff_comments
+        let mut statement = conn.prepare_cached(
+            "SELECT id, workspace_id, path, side, line, text, created_at_ms FROM diff_comments
                  WHERE workspace_id = ? ORDER BY created_at_ms, id",
-            )
-            .map_err(internal)?;
-        let rows = statement
-            .query_map([workspace_id], |row| {
-                Ok(DiffComment {
-                    id: row.get(0)?,
-                    workspace_id: row.get(1)?,
-                    path: row.get(2)?,
-                    side: from_text(row.get(3)?)?,
-                    line: row.get(4)?,
-                    text: row.get(5)?,
-                    created_at_ms: row.get(6)?,
-                })
+        )?;
+        let rows = statement.query_map([workspace_id], |row| {
+            Ok(DiffComment {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                path: row.get(2)?,
+                side: from_text(row.get(3)?)?,
+                line: row.get(4)?,
+                text: row.get(5)?,
+                created_at_ms: row.get(6)?,
             })
-            .map_err(internal)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(internal)
+        })?;
+        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    pub fn delete_comment(&self, id: &str) -> Result<(), ApiError> {
-        lock(&self.writer).execute("DELETE FROM diff_comments WHERE id = ?", [id]).map_err(internal)?;
+    pub fn delete_comment(&self, id: &str) -> Result<(), StoreError> {
+        lock(&self.writer).execute("DELETE FROM diff_comments WHERE id = ?", [id])?;
         Ok(())
     }
 
@@ -520,9 +484,9 @@ impl Store {
         raw: Option<&str>,
         client_msg_id: Option<&str>,
         new_status: Option<SessionStatus>,
-    ) -> Result<Appended, ApiError> {
+    ) -> Result<Appended, StoreError> {
         let mut conn = lock(&self.writer);
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(internal)?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if let Some(client_msg_id) = client_msg_id {
             let existing = tx
                 .query_row(
@@ -530,36 +494,32 @@ impl Store {
                     params![session_id, client_msg_id],
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?)),
                 )
-                .optional()
-                .map_err(internal)?;
+                .optional()?;
             if let Some((seq, ts_ms, body)) = existing {
-                let body = serde_json::from_str(&body).map_err(internal)?;
+                let body = serde_json::from_str(&body)?;
                 let event =
                     SessionEvent { session_id: session_id.to_string(), seq: seq as Seq, ts_ms, body, raw: None };
                 return Ok(Appended { event, duplicate: true });
             }
         }
-        let last_seq: Option<i64> = tx
-            .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id], |row| row.get(0))
-            .optional()
-            .map_err(internal)?;
-        let last_seq =
-            last_seq.ok_or_else(|| ApiError::new(ErrorCode::NotFound, format!("no session {session_id}")))?;
+        let last_seq: Option<i64> =
+            tx.query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id], |row| row.get(0)).optional()?;
+        let last_seq = last_seq.ok_or_else(|| StoreError::NotFound { kind: "session", id: session_id.to_string() })?;
         let seq = last_seq + 1;
         let ts_ms = now_ms();
-        let encoded = serde_json::to_string(body).map_err(internal)?;
+        let encoded = serde_json::to_string(body)?;
         tx.execute(
             "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, body, raw) VALUES (?, ?, ?, ?, ?, ?, ?)",
             params![session_id, seq, ts_ms, body.kind(), client_msg_id, encoded, raw],
-        )
-        .map_err(internal)?;
-        tx.execute("UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?", params![seq, ts_ms, session_id])
-            .map_err(internal)?;
+        )?;
+        tx.execute(
+            "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
+            params![seq, ts_ms, session_id],
+        )?;
         if let Some(status) = new_status {
-            tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![text_of(&status), session_id])
-                .map_err(internal)?;
+            tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![text_of(&status), session_id])?;
         }
-        tx.commit().map_err(internal)?;
+        tx.commit()?;
         let event =
             SessionEvent { session_id: session_id.to_string(), seq: seq as Seq, ts_ms, body: body.clone(), raw: None };
         Ok(Appended { event, duplicate: false })
@@ -573,26 +533,24 @@ impl Store {
         limit: u32,
         max_bytes: u64,
         include_raw: bool,
-    ) -> Result<Vec<SessionEvent>, ApiError> {
+    ) -> Result<Vec<SessionEvent>, StoreError> {
         let conn = lock(&self.reader);
         let raw_column = if include_raw { "raw" } else { "NULL" };
-        let mut statement = conn
-            .prepare_cached(&format!(
-                "SELECT seq, ts_ms, body, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
-            ))
-            .map_err(internal)?;
-        let mut rows = statement.query(params![session_id, from_seq as i64, limit]).map_err(internal)?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT seq, ts_ms, body, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
+        ))?;
+        let mut rows = statement.query(params![session_id, from_seq as i64, limit])?;
         let mut events = Vec::new();
         let mut bytes = 0u64;
-        while let Some(row) = rows.next().map_err(internal)? {
-            let body: String = row.get(2).map_err(internal)?;
-            let raw: Option<String> = row.get(3).map_err(internal)?;
+        while let Some(row) = rows.next()? {
+            let body: String = row.get(2)?;
+            let raw: Option<String> = row.get(3)?;
             bytes += (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
             events.push(SessionEvent {
                 session_id: session_id.to_string(),
-                seq: row.get::<_, i64>(0).map_err(internal)? as Seq,
-                ts_ms: row.get(1).map_err(internal)?,
-                body: serde_json::from_str(&body).map_err(internal)?,
+                seq: row.get::<_, i64>(0)? as Seq,
+                ts_ms: row.get(1)?,
+                body: serde_json::from_str(&body)?,
                 raw,
             });
             if bytes >= max_bytes {
@@ -603,17 +561,17 @@ impl Store {
     }
 
     /// Approvals requested and never resolved.
-    pub fn open_approvals(&self, session_id: &str) -> Result<Vec<String>, ApiError> {
+    pub fn open_approvals(&self, session_id: &str) -> Result<Vec<String>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn
             .prepare_cached(
                 "SELECT body FROM events WHERE session_id = ? AND kind IN ('approval_requested', 'approval_resolved') ORDER BY seq",
             )
-            .map_err(internal)?;
-        let rows = statement.query_map([session_id], |row| row.get::<_, String>(0)).map_err(internal)?;
+            ?;
+        let rows = statement.query_map([session_id], |row| row.get::<_, String>(0))?;
         let mut open = Vec::new();
         for body in rows {
-            let body: EventBody = serde_json::from_str(&body.map_err(internal)?).map_err(internal)?;
+            let body: EventBody = serde_json::from_str(&body?)?;
             match body {
                 EventBody::ApprovalRequested { approval_id, .. } => open.push(approval_id),
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(|id| *id != approval_id),
@@ -624,13 +582,10 @@ impl Store {
     }
 }
 
-fn migrate(conn: &mut Connection) -> anyhow::Result<()> {
+fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     let version: usize = conn.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))? as usize;
     if version > MIGRATIONS.len() {
-        anyhow::bail!(
-            "the database was written by a newer version ({version} migrations, this build has {})",
-            MIGRATIONS.len()
-        );
+        return Err(StoreError::TooNew { found: version, known: MIGRATIONS.len() });
     }
     for (index, migration) in MIGRATIONS.iter().enumerate().skip(version) {
         let tx = conn.transaction()?;

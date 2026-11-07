@@ -15,8 +15,9 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, warn};
 
+use crate::Hub;
+use crate::error::{internal, provider_failed};
 use crate::session::Item;
-use crate::{Hub, provider_failed};
 
 static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -85,8 +86,7 @@ impl WorkerLink {
 
     pub(crate) async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
         let id = self.next_call.fetch_add(1, Ordering::Relaxed);
-        let line = frame::encode(&WorkerCall { id, request })
-            .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
+        let line = frame::encode(&WorkerCall { id, request }).map_err(|e| internal(e.to_string()))?;
         let calls = self.calls.lock().clone().ok_or_else(lost)?;
         let (reply_tx, reply_rx) = oneshot::channel();
         self.pending.lock().as_mut().ok_or_else(lost)?.insert(id, reply_tx);

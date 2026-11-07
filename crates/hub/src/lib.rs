@@ -1,6 +1,7 @@
 //! A hub owns state and serves the platform API. It doesn't do the work itself: workers do, and
 //! providers say where they run.
 
+mod error;
 mod names;
 mod server;
 mod session;
@@ -13,7 +14,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 
-use anyhow::Context;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus, error_chain};
@@ -24,10 +24,14 @@ use protocol::model::{
 };
 use protocol::paths::Paths;
 use protocol::worker::{WorkerRequest, WorkerResponse};
+use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
-use providers::{Provider, ProviderError};
 use session::{Command, Item, LiveSession};
-use store::{Store, StoredSession, cancelled_approval, now_ms};
+use store::{Store, StoreError, StoredSession, cancelled_approval, now_ms};
+
+use crate::error::{internal, provider_failed};
+
+pub use crate::error::HubError;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot, watch};
 use tracing::{error, info, warn};
 use worker_link::WorkerLink;
@@ -75,32 +79,23 @@ fn not_ready(workspace: &Workspace) -> ApiError {
     ApiError::new(ErrorCode::Conflict, format!("workspace {} is {:?}", workspace.name, workspace.status))
 }
 
-/// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's.
-pub(crate) fn provider_failed(error: &ProviderError) -> ApiError {
-    ApiError::new(ErrorCode::Worker, error_chain(error))
-}
-
 fn unexpected(reply: &WorkerResponse) -> ApiError {
     ApiError::new(ErrorCode::Worker, format!("unexpected reply from the worker: {reply:?}"))
 }
 
 impl Hub {
     fn provider(&self, name: &str) -> Result<Arc<dyn Provider>, ApiError> {
-        self.providers
-            .get(name)
-            .cloned()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, format!("no provider {name}")))
+        self.providers.get(name).cloned().ok_or_else(|| internal(format!("no provider {name}")))
     }
 
     async fn blocking<T, F>(&self, f: F) -> Result<T, ApiError>
     where
         T: Send + 'static,
-        F: FnOnce(&Store) -> Result<T, ApiError> + Send + 'static,
+        F: FnOnce(&Store) -> Result<T, StoreError> + Send + 'static,
     {
         let store = self.store.clone();
-        tokio::task::spawn_blocking(move || f(&store))
-            .await
-            .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?
+        let result = tokio::task::spawn_blocking(move || f(&store)).await.map_err(|e| internal(e.to_string()))?;
+        Ok(result?)
     }
 
     pub(crate) async fn workspace(&self, id: &str) -> Result<Workspace, ApiError> {
@@ -273,7 +268,7 @@ impl Hub {
                 Err(e) => return Err(e),
             }
         }
-        Err(last_error.unwrap_or_else(|| ApiError::new(ErrorCode::Internal, "no attempts were made")))
+        Err(last_error.unwrap_or_else(|| internal("no attempts were made")))
     }
 
     async fn next_name(&self, repo_id: &str) -> Result<String, ApiError> {
@@ -377,10 +372,7 @@ impl Hub {
             let repo_id = workspace.repo_id.clone();
             self.blocking(move |store| store.get_repo(&repo_id)).await?
         };
-        let path = workspace
-            .path
-            .clone()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "a ready workspace has no path"))?;
+        let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
         let link = self.ensure_worker(&id).await?;
 
         // Check before stopping anything, so a refused archive leaves the agent running.
@@ -448,7 +440,7 @@ impl Hub {
             }
             let (reply, done) = oneshot::channel();
             live.command(Command::Stop { reply }).await?;
-            done.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))??;
+            done.await.map_err(|_| internal("the session has stopped"))??;
         }
         Ok(())
     }
@@ -462,10 +454,7 @@ impl Hub {
             let repo_id = workspace.repo_id.clone();
             self.blocking(move |store| store.get_repo(&repo_id)).await?
         };
-        let path = workspace
-            .path
-            .clone()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "an archived workspace has no path"))?;
+        let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
         let link = self.ensure_worker(&id).await?;
         let setup_repo = repo.clone();
         let reply =
@@ -484,10 +473,7 @@ impl Hub {
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
         }
-        let path = workspace
-            .path
-            .clone()
-            .ok_or_else(|| ApiError::new(ErrorCode::Internal, "a ready workspace has no path"))?;
+        let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
         let link = self.ensure_worker(id).await?;
         Ok((workspace, path, link))
     }
@@ -728,7 +714,7 @@ impl Hub {
         let session = self.live_session(&id).await?;
         let (reply, recorded) = oneshot::channel();
         session.command(Command::Prompt { text, client_msg_id, reply }).await?;
-        recorded.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))?
+        recorded.await.map_err(|_| internal("the session has stopped"))?
     }
 
     pub(crate) async fn session_approve(
@@ -740,7 +726,7 @@ impl Hub {
         let session = self.live_session(&id).await?;
         let (reply, done) = oneshot::channel();
         session.command(Command::Approve { approval_id, decision, reply }).await?;
-        done.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))?
+        done.await.map_err(|_| internal("the session has stopped"))?
     }
 
     pub(crate) async fn session_configure(
@@ -768,7 +754,7 @@ impl Hub {
         self.cancel_setup(&session.workspace_id).await;
         let (reply, done) = oneshot::channel();
         session.command(Command::Cancel { reply }).await?;
-        done.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))?
+        done.await.map_err(|_| internal("the session has stopped"))?
     }
 
     /// Stops every worker and waits until what they said is recorded.
@@ -837,7 +823,7 @@ fn find_repo_root(path: &Path) -> Result<PathBuf, ApiError> {
 }
 
 /// Anything left mid-turn or half-made by the last run. Its workers exited when it went away.
-fn recover(store: &Store) -> Result<Vec<Workspace>, ApiError> {
+fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.fail_interrupted_setups()?;
     for id in store.active_session_ids()? {
         for approval_id in store.open_approvals(&id)? {
@@ -857,17 +843,17 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, ApiError> {
 /// Only sets the mode on directories it creates. `TRESTLE_HOME` can point anywhere, and changing the
 /// permissions of an existing directory could break something unrelated. The files that matter get
 /// their own restrictive modes.
-fn private_dir(path: &Path) -> anyhow::Result<()> {
+fn private_dir(path: &Path) -> Result<(), HubError> {
     use std::os::unix::fs::DirBuilderExt;
     std::fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(path)
-        .with_context(|| format!("creating {}", path.display()))
+        .map_err(|e| HubError::io(format!("creating {}", path.display()), e))
 }
 
 /// SQLite gives its -wal and -shm files the same mode as the database.
-fn private_file(path: &Path) -> anyhow::Result<()> {
+fn private_file(path: &Path) -> Result<(), HubError> {
     use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .create(true)
@@ -875,26 +861,26 @@ fn private_file(path: &Path) -> anyhow::Result<()> {
         .mode(0o600)
         .open(path)
         .map(drop)
-        .with_context(|| format!("creating {}", path.display()))
+        .map_err(|e| HubError::io(format!("creating {}", path.display()), e))
 }
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
-pub async fn run(config: HubConfig) -> anyhow::Result<()> {
+pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let paths = config.paths;
     private_dir(&paths.data_dir)?;
-    let lock_file = std::fs::File::create(&paths.lock).context("opening the hub lock")?;
+    let lock_file = std::fs::File::create(&paths.lock).map_err(|e| HubError::io("opening the hub lock", e))?;
     if let Err(e) = lock_file.try_lock() {
         match e {
             std::fs::TryLockError::WouldBlock => {
-                anyhow::bail!("another hub is already running on {}", paths.socket.display())
+                return Err(HubError::AlreadyRunning(paths.socket.display().to_string()));
             }
-            std::fs::TryLockError::Error(e) => return Err(e).context("locking the hub lock"),
+            std::fs::TryLockError::Error(e) => return Err(HubError::io("locking the hub lock", e)),
         }
     }
 
     private_file(&paths.database)?;
-    let store = Arc::new(Store::open(&paths.database).context("opening the database")?);
-    let unfinished = recover(&store).map_err(|e| anyhow::anyhow!("recovering from the last run: {e}"))?;
+    let store = Arc::new(Store::open(&paths.database).map_err(HubError::OpenDatabase)?);
+    let unfinished = recover(&store).map_err(HubError::Recover)?;
 
     let provider: Arc<dyn Provider> = Arc::new(LocalProvider::new(LocalConfig {
         worker_exe: config.worker_exe,
@@ -927,13 +913,13 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
 
     // Holding the lock means any socket here is stale.
     let _ = std::fs::remove_file(&paths.socket);
-    let listener =
-        tokio::net::UnixListener::bind(&paths.socket).with_context(|| format!("binding {}", paths.socket.display()))?;
+    let listener = tokio::net::UnixListener::bind(&paths.socket)
+        .map_err(|e| HubError::io(format!("binding {}", paths.socket.display()), e))?;
     // Only this user can connect, which is what authenticates a local client.
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&paths.socket, std::fs::Permissions::from_mode(0o600))
-            .context("restricting the socket")?;
+            .map_err(|e| HubError::io("restricting the socket", e))?;
     }
     info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");
 
@@ -941,7 +927,8 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
         let hub = hub.clone();
         tokio::spawn(server::accept_loop(hub, listener))
     };
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .map_err(|e| HubError::io("listening for SIGTERM", e))?;
     tokio::select! {
         () = hub.shutdown.notified() => info!("shutdown requested"),
         _ = tokio::signal::ctrl_c() => info!("interrupted"),

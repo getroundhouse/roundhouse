@@ -62,7 +62,8 @@ fn main() -> anyhow::Result<()> {
             let worker_exe = std::env::current_exe().context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path }))
+            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path }))?;
+            Ok(())
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {
             anyhow::ensure!(stdio, "--stdio is the only worker transport so far");

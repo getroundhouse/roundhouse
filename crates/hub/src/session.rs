@@ -20,6 +20,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{error, warn};
 
 use crate::Hub;
+use crate::error::internal;
 use crate::store::{self, StoredSession, cancelled_approval};
 use crate::worker_link::WorkerLink;
 
@@ -200,11 +201,11 @@ impl LiveSession {
     }
 
     fn hub(&self) -> Result<Arc<Hub>, ApiError> {
-        self.hub.upgrade().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the hub is shutting down"))
+        self.hub.upgrade().ok_or_else(|| internal("the hub is shutting down"))
     }
 
     pub(crate) async fn command(&self, command: Command) -> Result<(), ApiError> {
-        self.commands.send(command).await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))
+        self.commands.send(command).await.map_err(|_| internal("the session has stopped"))
     }
 
     pub(crate) async fn send_item(&self, item: Item) {
