@@ -1,0 +1,40 @@
+# Driving the Claude CLI
+
+How the worker runs the `claude` CLI, and how the CLI behaves.
+
+Step 1.1 settled this: the worker drives the CLI directly from Rust, without an SDK sidecar.
+
+**Why.** The Agent SDK spawns this same CLI and talks to it over the same stdio protocol, as its flag list and `sdk.d.ts` show (read from `@anthropic-ai/claude-agent-sdk` 0.3.319, which isn't vendored here). Prompts, streaming, approvals, interrupts and resuming all work directly, with no JavaScript runtime to ship. Features we might want later, such as `set_model`, `set_permission_mode`, `rewind_files` and hook callbacks, are control messages on the same stream. The SDK's in-process MCP tools have no direct equivalent, and nothing needs them so far.
+
+**The main risk.** The control protocol is described by the SDK's types rather than the CLI's documentation. `crates/agents/tests/claude_contract.rs` checks the adapter against captured real output, and rerunning `tools/smoke/capture_claude_fixture.py` after a CLI upgrade shows what changed.
+
+All of the following was observed on CLI 2.1.319 with Haiku, on 2026-11-06:
+
+| Behavior | What happens | What it means here |
+|---|---|---|
+| Launch | `-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, with one JSON message per line each way | The adapter's base flags |
+| Conversation IDs | `--session-id <uuid>` sets the ID and `--resume <uuid>` keeps it. The context carried over | The hub's session ID doubles as the agent's |
+| Wrong launch flag | `--session-id` on an existing ID exits with `is already in use`. `--resume` on a missing one exits with `No conversation found` | The adapter retries once with the other flag, and warns if the conversation was lost |
+| Permission mode | With no flag, the user's settings decide: `bypassPermissions` on this Mac, so nothing asked for approval until `--permission-mode manual` was passed, which `init` reports as `default` | The mode shown to the user has to come from `init`, not from what was requested |
+| Approvals | `control_request` with `can_use_tool`, answered by `control_response`. `allow` needs `updatedInput`, and `deny` takes a `message` the agent sees | Approvals are events in the log, and any client can answer |
+| Interrupt | A `control_request` with `interrupt` ends the turn with `terminal_reason: aborted_tools`, and stops a running tool. The process stays up and takes the next prompt | Cancelling doesn't lose the warm process |
+| Interrupt during an approval | The CLI sends `control_cancel_request` | Recorded as a cancelled approval |
+| Changing the model or mode live | `control_request` with `set_model` or `set_permission_mode`. The CLI answers each with a `control_response`: in under 0.3 s before the first turn, and in under 5 s in the middle of one, which is as closely as that was timed. A bad value gets `subtype: error` and a reason | The hub saves a change only once a running agent has agreed, so what's shown is never ahead of what's true |
+| Reporting the mode | `system/status` with `permissionMode` arrives in order for every change, including ones the CLI makes itself. `set_permission_mode` also takes `manual`, and reports it as `default` | `--permission-mode` lists `manual` and not `default`, so the adapter reports `manual`, the name a launch accepts |
+| Full access | Switching a running agent to `bypassPermissions` stopped it asking, and switching back made it ask again. Without `--allow-dangerously-skip-permissions` the CLI refuses the switch and says why, so the adapter always passes it. It makes the mode available without turning it on. How that flag behaves under a managed policy that disables this mode wasn't tried | Full access can be chosen mid-session |
+| Plan mode | The CLI writes the plan to `~/.claude/plans/` without asking, which is outside the worktree, then asks through `can_use_tool` for `ExitPlanMode` with `plan` and `planFilePath`. The input isn't streamed. Allowing it leaves plan mode, back to the mode before, including full access. Denying it ended the turn, and no change of mode was reported | The plan gets its own card, and the mode picker follows the CLI's report |
+| Plan mode's model | With Haiku chosen, messages in plan mode came from Sonnet, while `init` still said Haiku. It went back to Haiku after the plan was approved. Seen in the fixture captures | A plan can cost more than the picker suggests. Whether this happens with other models wasn't tried |
+| Questions | `AskUserQuestion` arrives as `can_use_tool` in every mode, full access included. Allowing it with `answers` in `updatedInput`, keyed by the question's text, delivers them. Allowing it without tells the agent "The user did not answer the questions" | A plain Allow button would silently throw the question away, so questions get their own card |
+| Prompt sent mid-turn | It folds into the running turn, and the turn ends with one `result` | Counting `result` events can't give session status |
+| Status | `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS=1` adds `session_state_changed` with `running`, `requires_action` and `idle`. The variable appears in the SDK's code but not its types | The adapter sets it. `result` still ends a turn if the variable stops working |
+| Stdin closed mid-turn | It finishes the whole turn, then exits 0. A 20 s tool took 19 s more | Closing stdin doesn't stop an agent quickly. It does mean an orphan eventually exits |
+| SIGTERM | It stops its running tool and exits with 143 in about 0.5 s. Tools run in their own process groups | `stop` uses SIGTERM, and signalling the group wouldn't reach tools |
+| Thinking | Blocks are empty without `--thinking-display summarized` | The adapter passes it |
+| Order of a block | Deltas, then the finished `assistant` event, then `content_block_stop`, with one `assistant` event per block | The streaming tail depends on this, and a contract test replays it |
+| Other control requests | The CLI can also send `hook_callback`, `mcp_message`, `elicitation` and `request_user_dialog`, according to the SDK's types | The adapter answers these with an error so a session can't hang. None were seen in these runs |
+| Environment | A parent Claude session's variables, such as `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, are inherited by anything it starts | The adapter removes those by name, and passes login settings such as `ANTHROPIC_API_KEY` through |
+| Resources | An idle `claude` process used about 305 MB, against 11 MB for the hub and 8 MB for a worker (debug builds) | See issue #20 |
+
+## Sources
+
+- [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)

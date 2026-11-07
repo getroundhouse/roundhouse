@@ -1,0 +1,86 @@
+# Terms
+
+What this project's words mean. Code, docs and the interface use each word only in the sense given here. A new term, or a new sense of one, goes here in the change that introduces it.
+
+Start with "Easily confused" and "Ending things", which cover the words most likely to go wrong.
+
+## Parts
+
+| Term | Meaning | In code |
+|---|---|---|
+| Trestle | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase only for a binary | `trestle`, `trestled`, `trestle-desktop` |
+| Hub | The server that clients connect to. It owns workspaces, sessions and their logs, and leaves the work itself to workers | `hub` |
+| Worker | The process that does a workspace's work: its agents, git and scripts. It reports to its hub. There's one per workspace | `worker` |
+| Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. So far only this machine is built, as the local provider, and it isn't special | `Provider`, `LocalProvider` |
+| Instance | Where a provider runs one workspace's worker | `instance_id` |
+| Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
+| Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
+| Adapter | The code that runs one kind of agent and turns its output into events | `agents::claude` |
+
+## Work
+
+| Term | Meaning | In code |
+|---|---|---|
+| Repository | A git repository added to a hub | `Repo` |
+| Workspace | The unit of delegation: a name, a branch and a worktree in one repository, with its sessions and diff comments | `Workspace` |
+| Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
+| Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
+| Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
+| Run | One launch of an agent. A session can have many, because an agent can exit and be started again | `AgentSpec.run` |
+| Turn | From a prompt until the agent finishes responding. A run can have many, and a prompt sent mid-turn folds into the running one | `TurnEnded` |
+| Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
+| Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
+| Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
+| Approval mode | How much an agent may do without asking, such as "Ask first", "Plan" or "Full access" | `permission_mode` |
+| Setup | What happens once a worktree exists: copying local files and running the repository's setup script | `SetupStatus`, `worker::setup` |
+| Diff comment | A comment on one line of a workspace's diff, which can be sent to the agent | `DiffComment` |
+
+## History and delivery
+
+| Term | Meaning | In code |
+|---|---|---|
+| Event | One entry in a session's log | `SessionEvent`, `EventBody` |
+| Log | A session's events, in order. It's the source of truth for what happened | The `events` table |
+| Seq | An event's position in its log. The first is 1, and there are no gaps | `Seq` |
+| Raw line | The agent's original output, stored beside the event made from it | `raw` |
+| Tail | Text the agent is still writing, which isn't in the log yet | `Tail` |
+| Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
+| Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
+| Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
+| Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
+| Subscription | A client following one session's log, from a given seq | `subscription_id` |
+| Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
+
+## Easily confused
+
+| Word | The senses | What to write |
+|---|---|---|
+| Session, chat, conversation | The same thing at three levels. A session is ours, a chat is what the interface shows, and a conversation is the agent's own record, which is what it resumes | "Session" in code and docs, "chat" in text people read, and "conversation" only for the agent's side, as in `agent_session_id` |
+| Workspace | Ours, or another tool's, such as a Cargo workspace | A bare "workspace" means ours. Always qualify the others |
+| Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
+| Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
+| Hub, daemon | `trestled` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
+| Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |
+| Approval mode, permission mode | The same setting. `permission_mode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `permission_mode` in code |
+| Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |
+| Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
+| Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built yet | Say which |
+| Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built yet | "Restore" alone means the workspace's |
+| Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
+
+## Ending things
+
+These sound alike, and do different things.
+
+| Word | Applies to | What it does | Afterwards |
+|---|---|---|---|
+| Cancel | A turn | Ends the current turn and any setup still running. The agent's process stays up. `session_cancel`, `AgentCancel` | It takes the next prompt |
+| Stop, in the interface | A turn | The Stop button and `Cmd-.` mean cancel, not a process stop | As for cancel |
+| Interrupt | A turn | What the agent CLI calls a cancel. Only the adapter says this, as in `AgentProcess::interrupt` | As for cancel |
+| Interrupted | A session | A status, not an action: the agent went away mid-turn without being asked. A cancel doesn't cause it | The next prompt resumes the conversation |
+| Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
+| Kill | An instance | Like stop, without the time. For a worker that isn't responding. `Provider::kill` | The next prompt starts a new one |
+| Close | A session | Stops its agent and hides it from the tabs. The history stays. `session_close` | It can be reopened with `session_reopen` |
+| Archive | A workspace | Removes the worktree and keeps the branch. Refuses if work would be lost, unless forced. `workspace_archive` | It can be restored |
+| Destroy | An instance | Removes it. `Provider::destroy` | It's gone |
+| Discard | A half-made workspace | Removes a workspace that failed while being created, or was left by a crash. `discard_workspace`, `take_unfinished_workspaces` | It's gone |
