@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -25,6 +25,7 @@ pub(crate) fn binaries() -> &'static PathBuf {
     DIR.get_or_init(|| {
         let output = Command::new(env!("CARGO"))
             .args(["build", "-p", "daemon", "--bin", "trestled", "--example", "fake_claude"])
+            .args(["--example", "other_version_hub"])
             .output()
             .unwrap();
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
@@ -56,6 +57,16 @@ pub(crate) struct Stack {
     pub(crate) hub: HubSource,
 }
 
+/// Goes away with the test, even a failed one, since nothing else would stop it.
+pub(crate) struct OtherVersionHub(pub(crate) Child);
+
+impl Drop for OtherVersionHub {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 impl Stack {
     pub(crate) fn new() -> Self {
         point_daemons_at_the_fake_agent();
@@ -79,6 +90,25 @@ impl Stack {
 
     pub(crate) fn repo(&self) -> PathBuf {
         self.dir.path().join("repo")
+    }
+
+    /// A hub that refuses every hello, so the app has to replace it.
+    pub(crate) fn start_other_version_hub(&self) -> OtherVersionHub {
+        let hub = Command::new(binaries().join("examples/other_version_hub"))
+            .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
+            .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)
+            // Keeping the test's output open would hang whatever reads it, if it were ever left running.
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let hub = OtherVersionHub(hub);
+        let deadline = Instant::now() + TIMEOUT;
+        while !Client::connect(&self.hub.paths.socket, "test").err().is_some_and(|e| e.is_version_mismatch()) {
+            assert!(Instant::now() < deadline, "timed out waiting for it to refuse a client");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        hub
     }
 
     /// A second client, for setting things up and checking them from outside the app.
@@ -123,14 +153,18 @@ pub(crate) struct Ui<'a> {
 
 impl<'a> Ui<'a> {
     pub(crate) fn open(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
+        let mut ui = Self::open_without_waiting(cx, stack);
+        ui.wait("the app to connect", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+        ui
+    }
+
+    pub(crate) fn open_without_waiting(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
         let hub = stack.hub.clone();
         let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, cx)).unwrap();
-        let mut ui = Self { cx, handle, view, seen_approval: 0 };
-        ui.wait("the app to connect", |ui| matches!(ui.view().connection, Connection::Ready(_)));
-        ui
+        Self { cx, handle, view, seen_approval: 0 }
     }
 
     pub(crate) fn view(&self) -> AppViewRef<'_> {

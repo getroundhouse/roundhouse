@@ -28,6 +28,8 @@ pub enum Connection {
     Connecting,
     Ready(Client),
     Failed(String),
+    /// A hub is running, and it's another version that can't talk to this app.
+    OtherVersion(String),
 }
 
 struct Snapshot {
@@ -97,6 +99,24 @@ impl AppView {
         }
     }
 
+    /// For a hub of another version, which can't be asked to stop. A new one starts once it has gone,
+    /// from this version.
+    pub fn restart_hub(&mut self, cx: &mut Context<Self>) {
+        self.connection = Connection::Connecting;
+        cx.notify();
+        let paths = self.hub.paths.clone();
+        self.feed_task = Some(cx.spawn(async move |this, cx| {
+            let stopped = cx.background_spawn(async move { client_core::stop_hub_by_signal(&paths) }).await;
+            let _ = this.update(cx, |t, cx| match stopped {
+                Ok(_) => t.connect(cx),
+                Err(e) => {
+                    t.connection = Connection::Failed(e.to_string());
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
     pub fn build_label(&self) -> BuildLabel {
         let client = self.client();
         BuildLabel::new(protocol::BUILD_VERSION, client.as_ref().map(Client::hub_version))
@@ -127,7 +147,11 @@ impl AppView {
                 Ok(connected) => connected,
                 Err(e) => {
                     let _ = this.update(cx, |t, cx| {
-                        t.connection = Connection::Failed(format!("{e}"));
+                        t.connection = if e.is_version_mismatch() {
+                            Connection::OtherVersion(e.to_string())
+                        } else {
+                            Connection::Failed(e.to_string())
+                        };
                         cx.notify();
                     });
                     return;

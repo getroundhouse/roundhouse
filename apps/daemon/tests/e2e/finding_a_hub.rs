@@ -56,6 +56,35 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     wait_until("the hub to stop on SIGTERM", || !matches!(hub.try_wait(), Ok(None)));
 }
 
+#[test]
+fn a_hub_of_another_version_can_be_stopped_and_replaced() {
+    let mut stack = Stack::start();
+    stack.kill_hub();
+    stack.hub = Some(stack.start_other_version_hub());
+    let (paths, other) = (stack.paths(), stack.hub_pid());
+    assert_eq!(client_core::running_hub_pid(&paths), Some(other));
+
+    assert_eq!(client_core::stop_hub_by_signal(&paths), Ok(other));
+
+    stack.hub.take().unwrap().wait().unwrap();
+    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_trestled")), "test").unwrap();
+    assert_ne!(client.hub_status().unwrap().pid, other);
+    client.hub_shutdown().unwrap();
+}
+
+#[test]
+fn a_real_hub_can_be_stopped_by_signal_and_leaves_no_record() {
+    let mut stack = Stack::start();
+    let paths = stack.paths();
+    let pid = stack.hub_pid();
+    assert_eq!(client_core::running_hub_pid(&paths), Some(pid));
+
+    assert_eq!(client_core::stop_hub_by_signal(&paths), Ok(pid));
+
+    assert!(stack.hub.take().unwrap().wait().unwrap().success());
+    assert!(!paths.pid.exists());
+}
+
 /// Installing a new version moves the `current` link, and a running hub stays on the one it came from.
 #[test]
 fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {

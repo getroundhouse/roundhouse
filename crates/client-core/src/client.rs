@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, ReplyOutcome};
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
+};
 use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::paths::Paths;
@@ -29,6 +31,13 @@ pub enum ClientError {
     Disconnected,
     #[error("unexpected reply from the hub: {0}")]
     Unexpected(String),
+}
+
+impl ClientError {
+    /// The hub is running, and can't talk to this client. See [`crate::stop_hub_by_signal`].
+    pub fn is_version_mismatch(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::VersionMismatch)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;

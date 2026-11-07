@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::Client;
+use client_core::{Client, ClientError};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
@@ -91,6 +91,21 @@ fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A hub of another version can't be asked anything, and can only be stopped, by signal.
+fn other_version_hub_command(paths: &Paths, command: &HubCmd, mismatch: &ClientError) -> anyhow::Result<()> {
+    match command {
+        HubCmd::Status => match client_core::running_hub_pid(paths) {
+            Some(pid) => println!("pid {pid}  {mismatch}"),
+            None => println!("{mismatch}"),
+        },
+        HubCmd::Stop => {
+            let pid = client_core::stop_hub_by_signal(paths).context("stopping the hub")?;
+            println!("hub {pid} stopped");
+        }
+    }
+    Ok(())
+}
+
 fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
     let client = match Client::connect(&paths.socket, "cli") {
         Ok(client) => client,
@@ -100,6 +115,7 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
             println!("no hub is running");
             return Ok(());
         }
+        Err(e) if e.is_version_mismatch() => return other_version_hub_command(paths, command, &e),
         Err(e) => return Err(e).context("connecting to the hub"),
     };
     match command {

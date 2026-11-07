@@ -1,4 +1,4 @@
-/// A signal sent to a process group.
+/// A signal sent to a process or its group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Signal {
     Interrupt,
@@ -25,6 +25,16 @@ pub fn signal_group(leader: u32, signal: Signal) {
     };
     // SAFETY: kill(2) takes any PID and signal, and has no memory effects.
     unsafe { libc::kill(-group, signal.number()) };
+}
+
+/// Signals one process, for one that wasn't started as a group leader, or that stops what it started
+/// by itself. It does nothing for PID 0 or 1, for the reasons above.
+pub fn signal_process(pid: u32, signal: Signal) {
+    let Some(pid) = i32::try_from(pid).ok().filter(|pid| *pid > 1) else {
+        return;
+    };
+    // SAFETY: kill(2) takes any PID and signal, and has no memory effects.
+    unsafe { libc::kill(pid, signal.number()) };
 }
 
 #[cfg(test)]
@@ -54,6 +64,15 @@ mod tests {
             assert!(std::time::Instant::now() < deadline, "the child of the group leader is still running");
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+    }
+
+    #[test]
+    fn a_signal_can_reach_one_process() {
+        let mut process = Command::new("sleep").arg("30").spawn().unwrap();
+
+        signal_process(process.id(), Signal::Kill);
+
+        assert_eq!(process.wait().unwrap().signal(), Some(libc::SIGKILL));
     }
 
     #[test]

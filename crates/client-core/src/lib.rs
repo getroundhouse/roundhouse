@@ -10,5 +10,7 @@
 pub mod session_log;
 
 mod client;
+mod hub_process;
 
 pub use client::{Client, ClientError, Result, Subscription, SubscriptionItem, daemon_beside};
+pub use hub_process::{StopHubError, running_hub_pid, stop_hub_by_signal};

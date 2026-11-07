@@ -22,6 +22,7 @@ worker.workspace = true
 
 [dev-dependencies]
 parking_lot.workspace = true
+process.workspace = true
 client-core.workspace = true
 flume.workspace = true
 libc.workspace = true

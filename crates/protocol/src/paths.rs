@@ -24,6 +24,8 @@ pub struct Paths {
     pub data_dir: PathBuf,
     pub socket: PathBuf,
     pub lock: PathBuf,
+    /// Which process holds the lock, for a client that can't ask it.
+    pub pid: PathBuf,
     pub database: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
@@ -62,6 +64,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
     Ok(Paths {
         socket,
         lock: data_dir.join("hub.lock"),
+        pid: data_dir.join("hub.pid"),
         database: data_dir.join("hub.db"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),

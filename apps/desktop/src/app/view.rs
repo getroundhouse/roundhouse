@@ -1,10 +1,11 @@
 //! How the app looks, and the shortcuts it answers.
 
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement,
-    Styled, Window, div,
+    Styled, Window, div, px,
 };
 
 use super::{AppView, Connection};
@@ -27,6 +28,7 @@ impl Render for AppView {
         let main: AnyElement = match &self.connection {
             Connection::Connecting => centered("Connecting…", muted),
             Connection::Failed(reason) => centered(&format!("Couldn't reach the hub. {reason}"), danger),
+            Connection::OtherVersion(reason) => other_version(reason.clone(), muted, cx),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => centered("Add a repository to get started.", muted),
@@ -118,6 +120,23 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         }))
         .child(div().flex_1().min_w_0().child(error))
         .child(div().flex_none().child("Dismiss"))
+}
+
+fn other_version(reason: String, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+    v_flex()
+        .size_full()
+        .items_center()
+        .justify_center()
+        .gap_3()
+        .child("The running hub is a different version from this app.")
+        .child(div().max_w(px(560.0)).text_sm().text_color(muted).child(reason))
+        .child(
+            Button::new("restart-hub")
+                .primary()
+                .label("Restart the hub")
+                .on_click(cx.listener(|t, _, _, cx| t.restart_hub(cx))),
+        )
+        .into_any_element()
 }
 
 fn centered(text: &str, color: Hsla) -> AnyElement {

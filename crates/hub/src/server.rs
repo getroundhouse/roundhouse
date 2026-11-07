@@ -126,7 +126,8 @@ fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
         )
     } else {
         error(format!(
-            "this hub speaks protocol {PROTOCOL_VERSION}, and the client speaks {protocol_version}. Restart the hub with the same version"
+            "this hub is version {} on protocol {PROTOCOL_VERSION}, and this client speaks protocol {protocol_version}. Stopping the hub, which also stops its agents, lets one that matches start",
+            protocol::BUILD_VERSION
         ))
     }
 }

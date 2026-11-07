@@ -58,7 +58,7 @@ crates/
   hub/             Built. Workspaces, sessions, event log, platform API, SQLite storage
   worker/          Built: git, worktrees, running agents. Later: terminals, buffered outbox
   agents/          Built: Claude adapter, raw event capture. Later: Codex
-  process/         Built. Signalling a process group, and recording a PID with its start time
+  process/         Built. Signalling a process or its group, and recording a PID with its start time
   providers/       Built: provider contract, local provider. Later: external adapter host
   client-core/     Built: connection, subscriptions, a window of a session's log. No UI
   transcript/      Built. A session's history and live output, on the kit's list and text views
@@ -91,7 +91,7 @@ apps/desktop ──> transcript, terminal-view ──> client-core ──> proto
 apps/cli ─────────────────────────────────────> client-core
 apps/daemon ──> hub ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
-agents, providers, worker ──> process
+agents, providers, worker, hub, client-core ──> process
 ```
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.
@@ -130,6 +130,7 @@ Settled in step 1.1. Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
 - **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, and unknown enum variants decode as `Unknown`, so additions don't need a version bump.
+- **A hub of another version can't be asked anything, so a client stops it by signal.** The hub records its PID and start time in `hub.pid`, and shuts down on `SIGTERM` as usual. That way no request has to stay compatible across versions for `trestle hub stop` or the app's `Restart the hub` to work.
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
 - **Each event has a normalized body, plus the agent's raw line in a separate column.** Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
 - **Live deltas aren't stored.** The finished message arrives as a durable event and replaces them. A client attaching mid-message gets a snapshot of the streaming tail, then deltas, and `protocol::tail` holds the rules so the hub and clients can't disagree.

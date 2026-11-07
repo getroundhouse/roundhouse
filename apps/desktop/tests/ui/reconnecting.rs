@@ -40,6 +40,19 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
 }
 
 #[gpui_kit::test]
+fn a_hub_of_another_version_is_explained_and_can_be_restarted(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let other = stack.start_other_version_hub();
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+    ui.wait("the app to see the other version", |ui| matches!(ui.view().connection, Connection::OtherVersion(_)));
+
+    ui.click("restart-hub");
+
+    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    assert_ne!(stack.client().hub_status().unwrap().pid, other.0.id());
+}
+
+#[gpui_kit::test]
 fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let repo = stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();

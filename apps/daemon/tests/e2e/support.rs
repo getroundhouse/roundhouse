@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
@@ -25,17 +26,24 @@ pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
 /// without saying so. Building here means tests always use the current one.
 pub(crate) fn fake_agent() -> &'static Path {
     static FAKE: OnceLock<PathBuf> = OnceLock::new();
-    FAKE.get_or_init(|| {
-        let bin_dir = Path::new(env!("CARGO_BIN_EXE_trestled")).parent().unwrap();
-        let mut build = Command::new(env!("CARGO"));
-        build.args(["build", "-p", "daemon", "--example", "fake_claude"]);
-        if bin_dir.file_name().is_some_and(|name| name == "release") {
-            build.arg("--release");
-        }
-        let output = build.output().unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        bin_dir.join("examples/fake_claude")
-    })
+    FAKE.get_or_init(|| build_example("fake_claude"))
+}
+
+fn other_version_hub() -> &'static Path {
+    static HUB: OnceLock<PathBuf> = OnceLock::new();
+    HUB.get_or_init(|| build_example("other_version_hub"))
+}
+
+fn build_example(name: &str) -> PathBuf {
+    let bin_dir = Path::new(env!("CARGO_BIN_EXE_trestled")).parent().unwrap();
+    let mut build = Command::new(env!("CARGO"));
+    build.args(["build", "-p", "daemon", "--example", name]);
+    if bin_dir.file_name().is_some_and(|name| name == "release") {
+        build.arg("--release");
+    }
+    let output = build.output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    bin_dir.join("examples").join(name)
 }
 
 pub(crate) struct Stack {
@@ -99,6 +107,32 @@ impl Stack {
 
     pub(crate) fn client(&self) -> Client {
         Client::connect(&self.socket(), "test").unwrap()
+    }
+
+    pub(crate) fn paths(&self) -> Paths {
+        let (home, workspaces) = (self.path("home"), self.path("workspaces"));
+        protocol::paths::resolve(|name| match name {
+            protocol::paths::ENV_HOME => Some(home.to_str().unwrap().to_string()),
+            protocol::paths::ENV_WORKSPACES => Some(workspaces.to_str().unwrap().to_string()),
+            _ => None,
+        })
+        .unwrap()
+    }
+
+    /// One that refuses every hello, in place of this stack's hub, which has to have stopped.
+    pub(crate) fn start_other_version_hub(&self) -> Child {
+        let hub = Command::new(other_version_hub())
+            .env("TRESTLE_HOME", self.path("home"))
+            .env("TRESTLE_WORKSPACES", self.path("workspaces"))
+            // Keeping the test's output open would hang whatever reads it, if a failed test left this running.
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        wait_until("it to refuse a client", || {
+            Client::connect(&self.socket(), "test").err().is_some_and(|e| e.is_version_mismatch())
+        });
+        hub
     }
 
     pub(crate) fn hub_pid(&self) -> u32 {

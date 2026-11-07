@@ -93,6 +93,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let paths = config.paths;
     private_dir(&paths.data_dir)?;
     let lock_file = take_lock(&paths)?;
+    // For a client of another version, which can only stop this hub by signal. It checks the start time,
+    // so a record left behind by a crash can't reach whatever has this PID by then.
+    if let Err(e) = process::ProcessRecord::write(&paths.pid, std::process::id()) {
+        warn!("recording this hub's process failed: {e}");
+    }
 
     private_file(&paths.database)?;
     let store = Arc::new(Store::open(&paths.database).map_err(HubError::OpenDatabase)?);
@@ -128,6 +133,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     accept.abort();
     let _ = std::fs::remove_file(&paths.socket);
     hub.stop_all_workers().await;
+    let _ = std::fs::remove_file(&paths.pid);
     drop(lock_file);
     info!("hub stopped");
     Ok(())
