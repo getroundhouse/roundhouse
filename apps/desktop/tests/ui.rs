@@ -713,6 +713,26 @@ fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let repo = ui.first_repo_id();
+
+    let view = ui.view.clone();
+    ui.cx.update_entity(&view, |v, cx| v.new_workspace(repo.clone(), cx));
+    assert_eq!(ui.view().creating_in.as_ref(), Some(&repo));
+    ui.wait("the workspace", |ui| ui.transcript().is_some() && ui.view().creating_in.is_none());
+
+    // It can't get stuck showing that if creating one fails.
+    std::fs::remove_dir_all(stack.repo()).unwrap();
+    ui.cx.update_entity(&view, |v, cx| v.new_workspace(repo.clone(), cx));
+    assert_eq!(ui.view().creating_in.as_ref(), Some(&repo));
+    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().creating_in.is_none());
+}
+
+#[gpui_kit::test]
 fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let client = stack.client();

@@ -74,6 +74,8 @@ pub struct AppView {
     pub show_archived: bool,
     /// Workspaces being created or archived, so their buttons can't be pressed twice.
     pub busy: bool,
+    /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
+    pub creating_in: Option<RepoId>,
     focus: FocusHandle,
     window: AnyWindowHandle,
     _feed: Option<Task<()>>,
@@ -94,6 +96,7 @@ impl AppView {
             error: None,
             show_archived: false,
             busy: false,
+            creating_in: None,
             focus,
             window: window.window_handle(),
             _feed: None,
@@ -296,6 +299,7 @@ impl AppView {
             return;
         }
         self.busy = true;
+        self.creating_in = Some(repo_id.clone());
         cx.notify();
         cx.spawn(async move |this, cx| {
             let created = cx
@@ -308,6 +312,7 @@ impl AppView {
                 .await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
+                t.creating_in = None;
                 match created {
                     Ok((workspace, session)) => {
                         let id = workspace.id.clone();

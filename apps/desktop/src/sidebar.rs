@@ -1,7 +1,7 @@
 //! Workspaces grouped by repository, each with its status.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use protocol::model::{Session, SessionStatus, Workspace, WorkspaceStatus};
@@ -70,6 +70,7 @@ pub fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
         .iter()
         .map(|repo| {
             let repo_id = repo.id.clone();
+            let creating = app.creating_in.as_ref() == Some(&repo.id);
             let rows: Vec<_> = visible
                 .iter()
                 .filter(|w| w.repo_id == repo.id)
@@ -95,10 +96,13 @@ pub fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
                                 .ghost()
                                 .xsmall()
                                 .label("New")
+                                .loading(creating)
+                                .disabled(app.busy)
                                 .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
                         ),
                 )
                 .children(rows)
+                .when(creating, |d| d.child(div().px_2().text_xs().text_color(muted).child("Creating a workspace…")))
                 .into_any_element()
         })
         .collect();

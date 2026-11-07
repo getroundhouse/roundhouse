@@ -11,14 +11,15 @@ name = "agenthubd"
 path = "src/main.rs"
 
 [dependencies]
-protocol.workspace = true
-hub.workspace = true
-worker.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+hub.workspace = true
+libc.workspace = true
+protocol.workspace = true
 tokio.workspace = true
-tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing.workspace = true
+worker.workspace = true
 
 [dev-dependencies]
 client-core.workspace = true
