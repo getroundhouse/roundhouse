@@ -2,6 +2,8 @@
 //! and `TextView`. `docs/ui.md` has why it's built on those. Everything GPUI about a transcript is in
 //! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 mod log_block;
 mod questions;
 mod rows;
@@ -110,10 +112,11 @@ impl Transcript {
 
     /// The event at a row, if it's loaded.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        match self.model.borrow().log.row(row) {
-            client_core::session_log::Row::Event(event) => Some(event.clone()),
-            _ => None,
-        }
+        let model = self.model.borrow();
+        let client_core::session_log::Row::Event(event) = model.log.row(row) else {
+            return None;
+        };
+        Some(event.clone())
     }
 
     /// Rows in the list, not counting the streaming tail.
@@ -258,11 +261,11 @@ impl Transcript {
         if text.is_empty() {
             return false;
         }
-        let open = self.open_approvals().into_iter().find_map(|event| match event.body {
-            EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-                Some((event.seq, approval_id, questions::parse(&input)))
-            }
-            _ => None,
+        let open = self.open_approvals().into_iter().find_map(|event| {
+            let EventBody::ApprovalRequested { approval_id, tool_name, input, .. } = event.body else {
+                return None;
+            };
+            (tool_name == questions::TOOL_NAME).then(|| (event.seq, approval_id, questions::parse(&input)))
         });
         let Some((seq, approval_id, asked)) = open else { return false };
         let done = {

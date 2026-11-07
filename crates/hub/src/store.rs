@@ -575,7 +575,18 @@ impl Store {
             match body {
                 EventBody::ApprovalRequested { approval_id, .. } => open.push(approval_id),
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(|id| *id != approval_id),
-                _ => {}
+                EventBody::UserPrompt { .. }
+                | EventBody::AgentStarted { .. }
+                | EventBody::AgentInit { .. }
+                | EventBody::AgentState { .. }
+                | EventBody::Assistant { .. }
+                | EventBody::AgentUser { .. }
+                | EventBody::TurnEnded { .. }
+                | EventBody::AgentExited { .. }
+                | EventBody::Notice { .. }
+                | EventBody::AgentMode { .. }
+                | EventBody::AgentOther { .. }
+                | EventBody::Unknown => {}
             }
         }
         Ok(open)

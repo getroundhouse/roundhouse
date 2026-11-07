@@ -1,6 +1,8 @@
 //! A provider gives a hub somewhere to run workers. Running on the same machine is one provider,
 //! and nothing in the hub treats it as special.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 mod error;
 pub mod local;
 

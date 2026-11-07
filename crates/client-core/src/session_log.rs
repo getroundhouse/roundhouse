@@ -89,7 +89,18 @@ impl SessionLog {
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(
                     |e| !matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
                 ),
-                _ => {}
+                EventBody::UserPrompt { .. }
+                | EventBody::AgentStarted { .. }
+                | EventBody::AgentInit { .. }
+                | EventBody::AgentState { .. }
+                | EventBody::Assistant { .. }
+                | EventBody::AgentUser { .. }
+                | EventBody::TurnEnded { .. }
+                | EventBody::AgentExited { .. }
+                | EventBody::Notice { .. }
+                | EventBody::AgentMode { .. }
+                | EventBody::AgentOther { .. }
+                | EventBody::Unknown => {}
             }
         }
         open

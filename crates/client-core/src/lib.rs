@@ -5,6 +5,8 @@
 //!
 //! [`session_log`] holds what a client has of a session's history.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 pub mod session_log;
 
 use std::collections::HashMap;
@@ -168,10 +170,11 @@ impl Client {
     }
 
     pub fn hub_status(&self) -> Result<HubStatus> {
-        match self.call(ClientRequest::HubStatus)? {
-            ClientResponse::HubStatus(status) => Ok(status),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::HubStatus)?;
+        let ClientResponse::HubStatus(status) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(status)
     }
 
     pub fn hub_shutdown(&self) -> Result<()> {
@@ -183,17 +186,19 @@ impl Client {
     }
 
     pub fn repo_add(&self, path: &str) -> Result<Repo> {
-        match self.call(ClientRequest::RepoAdd { path: path.to_string() })? {
-            ClientResponse::Repo(repo) => Ok(repo),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::RepoAdd { path: path.to_string() })?;
+        let ClientResponse::Repo(repo) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(repo)
     }
 
     pub fn repo_list(&self) -> Result<Vec<Repo>> {
-        match self.call(ClientRequest::RepoList)? {
-            ClientResponse::Repos { repos } => Ok(repos),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::RepoList)?;
+        let ClientResponse::Repos { repos } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(repos)
     }
 
     pub fn workspace_create(&self, repo_id: &str, name: Option<String>, base_ref: Option<String>) -> Result<Workspace> {
@@ -201,10 +206,11 @@ impl Client {
     }
 
     pub fn workspace_list(&self, include_archived: bool) -> Result<Vec<Workspace>> {
-        match self.call(ClientRequest::WorkspaceList { include_archived })? {
-            ClientResponse::Workspaces { workspaces } => Ok(workspaces),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::WorkspaceList { include_archived })?;
+        let ClientResponse::Workspaces { workspaces } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(workspaces)
     }
 
     pub fn workspace_archive(&self, id: &str, force: bool) -> Result<Workspace> {
@@ -216,24 +222,27 @@ impl Client {
     }
 
     pub fn workspace_status(&self, id: &str) -> Result<GitStatus> {
-        match self.call(ClientRequest::WorkspaceStatus { id: id.to_string() })? {
-            ClientResponse::GitStatus(status) => Ok(status),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::WorkspaceStatus { id: id.to_string() })?;
+        let ClientResponse::GitStatus(status) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(status)
     }
 
     pub fn workspace_diff(&self, id: &str) -> Result<GitDiff> {
-        match self.call(ClientRequest::WorkspaceDiff { id: id.to_string() })? {
-            ClientResponse::GitDiff(diff) => Ok(diff),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::WorkspaceDiff { id: id.to_string() })?;
+        let ClientResponse::GitDiff(diff) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(diff)
     }
 
     pub fn workspace_setup_log(&self, id: &str) -> Result<String> {
-        match self.call(ClientRequest::WorkspaceSetupLog { id: id.to_string() })? {
-            ClientResponse::SetupLog { text } => Ok(text),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::WorkspaceSetupLog { id: id.to_string() })?;
+        let ClientResponse::SetupLog { text } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(text)
     }
 
     pub fn workspace_rerun_setup(&self, id: &str) -> Result<Workspace> {
@@ -241,10 +250,11 @@ impl Client {
     }
 
     pub fn workspace_pull_request(&self, id: &str) -> Result<Option<PullRequest>> {
-        match self.call(ClientRequest::WorkspacePullRequest { id: id.to_string() })? {
-            ClientResponse::PullRequest { pull_request } => Ok(pull_request),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::WorkspacePullRequest { id: id.to_string() })?;
+        let ClientResponse::PullRequest { pull_request } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(pull_request)
     }
 
     pub fn comment_add(
@@ -262,17 +272,19 @@ impl Client {
             line,
             text: text.to_string(),
         };
-        match self.call(request)? {
-            ClientResponse::Comment(comment) => Ok(comment),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::Comment(comment) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(comment)
     }
 
     pub fn comment_list(&self, workspace_id: &str) -> Result<Vec<DiffComment>> {
-        match self.call(ClientRequest::CommentList { workspace_id: workspace_id.to_string() })? {
-            ClientResponse::Comments { comments } => Ok(comments),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::CommentList { workspace_id: workspace_id.to_string() })?;
+        let ClientResponse::Comments { comments } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(comments)
     }
 
     pub fn comment_delete(&self, id: &str) -> Result<()> {
@@ -292,10 +304,11 @@ impl Client {
     }
 
     pub fn session_list(&self, workspace_id: &str) -> Result<Vec<Session>> {
-        match self.call(ClientRequest::SessionList { workspace_id: workspace_id.to_string() })? {
-            ClientResponse::Sessions { sessions } => Ok(sessions),
-            other => unexpected(&other),
-        }
+        let reply = self.call(ClientRequest::SessionList { workspace_id: workspace_id.to_string() })?;
+        let ClientResponse::Sessions { sessions } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(sessions)
     }
 
     pub fn session_ensure(&self, workspace_id: &str, agent: AgentKind) -> Result<Session> {
@@ -315,10 +328,11 @@ impl Client {
         include_raw: bool,
     ) -> Result<(Vec<SessionEvent>, Seq)> {
         let request = ClientRequest::SessionRead { id: id.to_string(), from_seq, limit, max_bytes: None, include_raw };
-        match self.call(request)? {
-            ClientResponse::Events { events, last_seq } => Ok((events, last_seq)),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::Events { events, last_seq } = reply else {
+            return unexpected(&reply);
+        };
+        Ok((events, last_seq))
     }
 
     pub fn session_subscribe(&self, id: &str, from_seq: Seq) -> Result<Subscription> {
@@ -349,10 +363,11 @@ impl Client {
     /// Returns the prompt's `seq`, and whether it had already been recorded.
     pub fn session_prompt(&self, id: &str, text: &str, client_msg_id: Option<String>) -> Result<(Seq, bool)> {
         let request = ClientRequest::SessionPrompt { id: id.to_string(), text: text.to_string(), client_msg_id };
-        match self.call(request)? {
-            ClientResponse::PromptRecorded { seq, duplicate } => Ok((seq, duplicate)),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
+            return unexpected(&reply);
+        };
+        Ok((seq, duplicate))
     }
 
     pub fn session_approve(&self, id: &str, approval_id: &str, decision: ApprovalDecision) -> Result<()> {
@@ -385,24 +400,27 @@ impl Client {
     }
 
     fn expect_ok(&self, request: ClientRequest) -> Result<()> {
-        match self.call(request)? {
-            ClientResponse::Ok => Ok(()),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::Ok = reply else {
+            return unexpected(&reply);
+        };
+        Ok(())
     }
 
     fn expect_workspace(&self, request: ClientRequest) -> Result<Workspace> {
-        match self.call(request)? {
-            ClientResponse::Workspace(workspace) => Ok(workspace),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::Workspace(workspace) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(workspace)
     }
 
     fn expect_session(&self, request: ClientRequest) -> Result<Session> {
-        match self.call(request)? {
-            ClientResponse::Session(session) => Ok(session),
-            other => unexpected(&other),
-        }
+        let reply = self.call(request)?;
+        let ClientResponse::Session(session) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(session)
     }
 }
 
@@ -471,7 +489,7 @@ fn hub_is_missing(error: &ClientError) -> bool {
                 | std::io::ErrorKind::ConnectionReset
                 | std::io::ErrorKind::BrokenPipe
         ),
-        _ => false,
+        ClientError::Api(_) | ClientError::Unexpected(_) => false,
     }
 }
 

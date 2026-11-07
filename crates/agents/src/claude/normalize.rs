@@ -358,9 +358,12 @@ mod tests {
 
     #[test]
     fn surrogate_repair_only_touches_what_is_broken() {
-        let text = |line: &str| match parse_line(line) {
-            Parsed::Event(EventBody::Assistant { blocks, .. }) => blocks,
-            other => panic!("{other:?}"),
+        let text = |line: &str| {
+            let parsed = parse_line(line);
+            let Parsed::Event(EventBody::Assistant { blocks, .. }) = parsed else {
+                panic!("{parsed:?}");
+            };
+            blocks
         };
         let wrap = |inner: &str| {
             format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{inner}"}}]}}}}"#)

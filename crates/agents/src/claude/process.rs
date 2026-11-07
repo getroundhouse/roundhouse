@@ -378,7 +378,18 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
                     EventBody::ApprovalResolved { approval_id, .. } => {
                         shared.pending_inputs.lock().remove(approval_id);
                     }
-                    _ => {}
+                    EventBody::UserPrompt { .. }
+                    | EventBody::AgentStarted { .. }
+                    | EventBody::AgentInit { .. }
+                    | EventBody::AgentState { .. }
+                    | EventBody::Assistant { .. }
+                    | EventBody::AgentUser { .. }
+                    | EventBody::TurnEnded { .. }
+                    | EventBody::AgentExited { .. }
+                    | EventBody::Notice { .. }
+                    | EventBody::AgentMode { .. }
+                    | EventBody::AgentOther { .. }
+                    | EventBody::Unknown => {}
                 }
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 let item = AgentOutput::Event { body, raw: Some(line) };

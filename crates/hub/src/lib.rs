@@ -1,6 +1,8 @@
 //! A hub owns state and serves the platform API. It doesn't do the work itself: workers do, and
 //! providers say where they run.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 mod error;
 mod names;
 mod server;
@@ -480,18 +482,20 @@ impl Hub {
 
     pub(crate) async fn workspace_status(self: &Arc<Self>, id: String) -> Result<GitStatus, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
-        match link.call(WorkerRequest::GitStatus { path }).await? {
-            WorkerResponse::GitStatus(status) => Ok(status),
-            other => Err(unexpected(&other)),
-        }
+        let reply = link.call(WorkerRequest::GitStatus { path }).await?;
+        let WorkerResponse::GitStatus(status) = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(status)
     }
 
     pub(crate) async fn workspace_diff(self: &Arc<Self>, id: String) -> Result<GitDiff, ApiError> {
         let (workspace, path, link) = self.ready_worktree(&id).await?;
-        match link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await? {
-            WorkerResponse::GitDiff(diff) => Ok(diff),
-            other => Err(unexpected(&other)),
-        }
+        let reply = link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await?;
+        let WorkerResponse::GitDiff(diff) = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(diff)
     }
 
     /// Starts setup in the background, and returns the workspace as it now stands. Prompts wait for it.
@@ -555,10 +559,11 @@ impl Hub {
 
     pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: String) -> Result<String, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
-        match link.call(WorkerRequest::SetupLog { path }).await? {
-            WorkerResponse::SetupLog { text } => Ok(text),
-            other => Err(unexpected(&other)),
-        }
+        let reply = link.call(WorkerRequest::SetupLog { path }).await?;
+        let WorkerResponse::SetupLog { text } = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(text)
     }
 
     pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: String) -> Result<Workspace, ApiError> {
@@ -582,10 +587,11 @@ impl Hub {
 
     pub(crate) async fn workspace_pull_request(self: &Arc<Self>, id: String) -> Result<Option<PullRequest>, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
-        match link.call(WorkerRequest::PullRequest { path }).await? {
-            WorkerResponse::PullRequest { pull_request } => Ok(pull_request),
-            other => Err(unexpected(&other)),
-        }
+        let reply = link.call(WorkerRequest::PullRequest { path }).await?;
+        let WorkerResponse::PullRequest { pull_request } = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(pull_request)
     }
 
     pub(crate) async fn comment_add(

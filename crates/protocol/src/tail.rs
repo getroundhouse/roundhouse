@@ -115,7 +115,18 @@ impl Tail {
                 self.messages.retain(|m| m.message_id != *id);
             }
             EventBody::TurnEnded { .. } | EventBody::AgentExited { .. } => self.messages.clear(),
-            _ => {}
+            EventBody::Assistant { message_id: None, .. }
+            | EventBody::UserPrompt { .. }
+            | EventBody::AgentStarted { .. }
+            | EventBody::AgentInit { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::AgentUser { .. }
+            | EventBody::ApprovalRequested { .. }
+            | EventBody::ApprovalResolved { .. }
+            | EventBody::Notice { .. }
+            | EventBody::AgentMode { .. }
+            | EventBody::AgentOther { .. }
+            | EventBody::Unknown => {}
         }
     }
 

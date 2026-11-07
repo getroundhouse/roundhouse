@@ -1,6 +1,8 @@
 //! Agent adapters. Each one runs an agent as a child process and turns its output into normalized
 //! events, while keeping every raw line so those events can be rebuilt later.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 pub mod claude;
 mod error;
 

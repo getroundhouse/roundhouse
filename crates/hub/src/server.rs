@@ -113,18 +113,21 @@ async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
 
 fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    match request {
-        ClientRequest::Hello { protocol_version, .. } if *protocol_version == PROTOCOL_VERSION => (
+    let ClientRequest::Hello { protocol_version, .. } = request else {
+        return error("the first request on a connection must be hello".to_string());
+    };
+    if *protocol_version == PROTOCOL_VERSION {
+        (
             ReplyOutcome::Response(ClientResponse::Hello {
                 protocol_version: PROTOCOL_VERSION,
                 hub_version: env!("CARGO_PKG_VERSION").to_string(),
             }),
             true,
-        ),
-        ClientRequest::Hello { protocol_version, .. } => error(format!(
+        )
+    } else {
+        error(format!(
             "this hub speaks protocol {PROTOCOL_VERSION}, and the client speaks {protocol_version}. Restart the hub with the same version"
-        )),
-        _ => error("the first request on a connection must be hello".to_string()),
+        ))
     }
 }
 
