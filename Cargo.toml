@@ -1,0 +1,73 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/protocol",
+    "crates/agents",
+    "crates/providers",
+    "crates/worker",
+    "crates/hub",
+    "crates/client-core",
+    "apps/daemon",
+    "apps/cli",
+    "apps/desktop",
+    "crates/transcript",
+    "third_party/option-ext",
+    "tools/policy",
+]
+# Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
+# `--workspace` for the window too.
+default-members = [
+    "crates/protocol",
+    "crates/agents",
+    "crates/providers",
+    "crates/worker",
+    "crates/hub",
+    "crates/client-core",
+    "apps/daemon",
+    "apps/cli",
+    "third_party/option-ext",
+    "tools/policy",
+]
+# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
+exclude = ["mobile-poc"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[workspace.dependencies]
+protocol = { path = "crates/protocol" }
+agents = { path = "crates/agents" }
+providers = { path = "crates/providers" }
+worker = { path = "crates/worker" }
+hub = { path = "crates/hub" }
+client-core = { path = "crates/client-core" }
+transcript = { path = "crates/transcript" }
+
+anyhow = "1"
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
+flume = "0.11"
+# Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate.
+gpui-kit = { version = "=0.9.0", features = ["syntect"] }
+libc = "0.2"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
+toml = "0.9"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+
+# GPUI is unusably slow unoptimized, and dependencies only build once.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Keeps an MPL-2.0 crate out of what ships. See third_party/option-ext/src/lib.rs.
+[patch.crates-io]
+option-ext = { path = "third_party/option-ext" }

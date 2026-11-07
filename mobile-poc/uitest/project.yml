@@ -1,0 +1,36 @@
+# Test driver only. It injects real touches and keyboard taps into the installed proof-of-concept
+# app through XCUITest, on a headless simulator. The app itself is not built here.
+name: PocDriver
+options:
+  bundleIdPrefix: dev.gpuikit.driver
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: YES
+    SWIFT_VERSION: "5.0"
+targets:
+  HostApp:
+    type: application
+    platform: iOS
+    sources: [HostApp]
+    settings:
+      base:
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  DriveTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [DriveTests]
+    dependencies:
+      - target: HostApp
+schemes:
+  PocDriver:
+    build:
+      targets:
+        HostApp: all
+        DriveTests: [test]
+    test:
+      targets: [DriveTests]

@@ -1,0 +1,31 @@
+[package]
+name = "desktop"
+description = "The desktop app."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "trestle-desktop"
+path = "src/main.rs"
+
+[lib]
+name = "desktop"
+path = "src/lib.rs"
+
+[dependencies]
+protocol.workspace = true
+client-core.workspace = true
+transcript.workspace = true
+gpui-kit.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+# The kit's highlighter is private, so diffs use the same two crates directly. Oniguruma took
+# highlighting a large diff from 12.2 s of CPU to 2.6 s.
+syntect = { version = "5", default-features = false, features = ["default-fancy", "regex-onig"] }
+two-face = { version = "0.4", default-features = false, features = ["syntect-onig"] }
+
+[dev-dependencies]
+gpui-kit = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true

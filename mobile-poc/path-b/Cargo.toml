@@ -1,0 +1,22 @@
+[package]
+name = "gpui-kit-poc-b"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "gpui_kit_poc_b"
+crate-type = ["staticlib"]
+
+# Standalone: not part of any parent workspace.
+[workspace]
+
+[dependencies]
+# Same kit as desktop and path A. It needs gpui-pre =0.3.11, so the fork is bumped to match.
+gpui-kit = { version = "=0.9.0", features = ["syntect"] }
+
+# Longbridge's fork, pinned at 7548ebc plus ../patches/gpui-mobile-0.3.11.patch. We elect its
+# Apache-2.0 option. `camera` and `video_player` are not optional: src/ios/platform_view.rs uses
+# them without a feature gate, so the crate does not compile without them.
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui-mobile = { package = "gpui-pre-mobile", path = "../patches/build/gpui-mobile", default-features = false, features = ["camera", "video_player"] }
