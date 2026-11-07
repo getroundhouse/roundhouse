@@ -61,7 +61,6 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
         timeout(Duration::from_secs(10), running)
             .await
             .unwrap_or_else(|_| panic!("attempt {attempt}: the worker didn't exit"))
-            .unwrap()
             .unwrap();
     }
 }

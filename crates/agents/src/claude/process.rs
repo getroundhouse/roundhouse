@@ -24,7 +24,7 @@ use tokio::task::JoinHandle;
 use tracing::warn;
 
 use super::normalize::{Parsed, parse_line};
-use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup, ENV_CLAUDE_BIN};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
@@ -116,10 +116,8 @@ pub fn spawn(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
-) -> anyhow::Result<Arc<dyn AgentProcess>> {
-    let bin = resolve_binary(&options.binary).ok_or_else(|| {
-        anyhow::anyhow!("could not find the `claude` CLI. Install it, or set {ENV_CLAUDE_BIN} to its path")
-    })?;
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
     spawn_at(bin, spec, output, options)
 }
 
@@ -129,7 +127,7 @@ pub fn spawn_at(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
-) -> anyhow::Result<Arc<dyn AgentProcess>> {
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
     let launched = launch(&bin, &spec, spec.resume, &options)?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
@@ -182,7 +180,7 @@ struct Launched {
     stderr: ChildStderr,
 }
 
-fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions) -> anyhow::Result<Launched> {
+fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions) -> Result<Launched, AgentError> {
     let mut command = Command::new(bin);
     command
         .args(build_args(spec, resume))
@@ -200,8 +198,11 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
         command.env_remove(name);
     }
     command.envs(spec.env.iter().map(|(k, v)| (k, v)));
-    let mut child =
-        command.spawn().map_err(|e| anyhow::anyhow!("could not start {} in {}: {e}", bin.display(), spec.cwd))?;
+    let mut child = command.spawn().map_err(|source| AgentError::Start {
+        bin: bin.display().to_string(),
+        cwd: spec.cwd.clone(),
+        source,
+    })?;
     let pid = child.id().unwrap_or_default();
     if let Some(path) = &options.pid_file
         && let Err(e) = ProcessRecord::write(path, pid)
@@ -210,7 +211,7 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
     }
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
-        anyhow::bail!("{} started without its pipes", bin.display());
+        return Err(AgentError::NoPipes { bin: bin.display().to_string() });
     };
     Ok(Launched { child, pid, stdin, stdout, stderr })
 }
@@ -423,17 +424,17 @@ fn user_message(text: &str) -> Value {
     })
 }
 
-async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> anyhow::Result<()> {
+async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
     let mut line = serde_json::to_vec(value)?;
     line.push(b'\n');
-    let stdin = stdin.as_mut().ok_or_else(|| anyhow::anyhow!("the agent has exited"))?;
+    let stdin = stdin.as_mut().ok_or(AgentError::Exited)?;
     stdin.write_all(&line).await?;
     stdin.flush().await?;
     Ok(())
 }
 
 /// Sends a control request and waits for the CLI's answer.
-async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
+async fn control(shared: &Shared, request: Value) -> Result<(), AgentError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (answered, answer) = oneshot::channel();
     shared.pending_controls.lock().insert(request_id.clone(), answered);
@@ -447,16 +448,16 @@ async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
     };
     match result {
         Ok(Ok(Ok(()))) => Ok(()),
-        Ok(Ok(Err(refusal))) => Err(anyhow::anyhow!(refusal)),
-        Ok(Err(_)) => Err(anyhow::anyhow!("the agent has exited")),
+        Ok(Ok(Err(refusal))) => Err(AgentError::Refused(refusal)),
+        Ok(Err(_)) => Err(AgentError::Exited),
         Err(_) => {
             shared.pending_controls.lock().remove(&request_id);
-            Err(anyhow::anyhow!("the agent didn't answer"))
+            Err(AgentError::NoAnswer)
         }
     }
 }
 
-async fn write_line(shared: &Shared, value: &Value) -> anyhow::Result<()> {
+async fn write_line(shared: &Shared, value: &Value) -> Result<(), AgentError> {
     write_to(&mut *shared.stdin.lock().await, value).await
 }
 
@@ -470,7 +471,7 @@ impl AgentProcess for ClaudeProcess {
         self.shared.gone.load(Ordering::SeqCst)
     }
 
-    async fn send_prompt(&self, text: &str) -> anyhow::Result<()> {
+    async fn send_prompt(&self, text: &str) -> Result<(), AgentError> {
         let mut stdin = self.shared.stdin.lock().await;
         let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
         if !confirmed {
@@ -493,7 +494,7 @@ impl AgentProcess for ClaudeProcess {
         }
     }
 
-    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> anyhow::Result<()> {
+    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> Result<(), AgentError> {
         let original_input = self.shared.pending_inputs.lock().remove(approval_id);
         let response = match decision {
             ApprovalDecision::Allow { updated_input, updated_permissions } => {
@@ -526,7 +527,7 @@ impl AgentProcess for ClaudeProcess {
         .await
     }
 
-    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> anyhow::Result<()> {
+    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> Result<(), AgentError> {
         if let Some(model) = model {
             control(&self.shared, json!({"subtype": "set_model", "model": model})).await?;
         }
@@ -536,7 +537,7 @@ impl AgentProcess for ClaudeProcess {
         Ok(())
     }
 
-    async fn interrupt(&self) -> anyhow::Result<()> {
+    async fn interrupt(&self) -> Result<(), AgentError> {
         write_line(
             &self.shared,
             &json!({

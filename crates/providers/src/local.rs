@@ -7,7 +7,6 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use process::{ProcessRecord, Signal, signal_group};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -15,7 +14,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, OnceCell};
 use tracing::{debug, info, warn};
 
-use crate::{Capabilities, Provider, WorkerStream};
+use crate::{Capabilities, Provider, ProviderError, WorkerStream};
 
 /// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
 const STOP_GRACE: Duration = Duration::from_secs(10);
@@ -63,7 +62,7 @@ impl LocalProvider {
         self.config.instances_dir.join(instance_id)
     }
 
-    async fn end(&self, instance_id: &str, grace: Duration) -> anyhow::Result<()> {
+    async fn end(&self, instance_id: &str, grace: Duration) -> Result<(), ProviderError> {
         let entry = self.running.lock().await.remove(instance_id);
         if let Some(mut entry) = entry {
             // Never connected, or the stream was given up: dropping it closes stdin either way.
@@ -200,25 +199,25 @@ impl Provider for LocalProvider {
         Capabilities { filesystem_survives_stop: true, snapshots: false }
     }
 
-    async fn create(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn create(&self, instance_id: &str) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
-        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))
+        std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))
     }
 
-    async fn start(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn start(&self, instance_id: &str) -> Result<(), ProviderError> {
         let mut running = self.running.lock().await;
         if running.contains_key(instance_id) {
-            return Err(anyhow!("instance {instance_id} is already running"));
+            return Err(ProviderError::AlreadyRunning(instance_id.to_string()));
         }
         let dir = self.instance_dir(instance_id);
-        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+        std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))?;
         // For when the hub was killed along with its worker, so `stop` never ran.
         stop_orphaned_agents(&dir).await;
         let log = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(dir.join("worker.log"))
-            .context("opening the worker log")?;
+            .map_err(|e| ProviderError::io("opening the worker log", e))?;
 
         let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
         let own = self.config.path.clone();
@@ -237,10 +236,11 @@ impl Provider for LocalProvider {
         if let Some(path) = merge_paths(login.as_deref(), own.as_deref()) {
             command.env("PATH", path);
         }
-        let mut child =
-            command.spawn().with_context(|| format!("starting worker {}", self.config.worker_exe.display()))?;
+        let mut child = command
+            .spawn()
+            .map_err(|e| ProviderError::io(format!("starting worker {}", self.config.worker_exe.display()), e))?;
         let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
-            anyhow::bail!("worker {} started without its pipes", self.config.worker_exe.display());
+            return Err(ProviderError::NoPipes(self.config.worker_exe.display().to_string()));
         };
         info!(pid = child.id(), instance_id, "started worker");
         let stream = WorkerStream { reader: Box::new(reader), writer: Box::new(writer) };
@@ -249,26 +249,26 @@ impl Provider for LocalProvider {
     }
 
     /// The caller closes the worker's stdin first, which is what asks it to stop. This reaps it.
-    async fn stop(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn stop(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.end(instance_id, STOP_GRACE).await
     }
 
-    async fn kill(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn kill(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.end(instance_id, Duration::ZERO).await
     }
 
-    async fn connect(&self, instance_id: &str) -> anyhow::Result<WorkerStream> {
+    async fn connect(&self, instance_id: &str) -> Result<WorkerStream, ProviderError> {
         let mut running = self.running.lock().await;
-        let entry = running.get_mut(instance_id).ok_or_else(|| anyhow!("instance {instance_id} isn't running"))?;
-        entry.stream.take().ok_or_else(|| anyhow!("instance {instance_id} already has a connection"))
+        let entry = running.get_mut(instance_id).ok_or_else(|| ProviderError::NotRunning(instance_id.to_string()))?;
+        entry.stream.take().ok_or_else(|| ProviderError::AlreadyConnected(instance_id.to_string()))
     }
 
-    async fn destroy(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn destroy(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.stop(instance_id).await?;
         let dir = self.instance_dir(instance_id);
         match std::fs::remove_dir_all(&dir) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                Err(e).with_context(|| format!("removing {}", dir.display()))
+                Err(ProviderError::io(format!("removing {}", dir.display()), e))
             }
             _ => Ok(()),
         }

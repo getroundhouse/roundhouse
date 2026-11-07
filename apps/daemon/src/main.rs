@@ -78,7 +78,8 @@ fn main() -> anyhow::Result<()> {
                         .filter(|bin| !bin.is_empty())
                         .map(PathBuf::from),
                 },
-            ))
+            ));
+            Ok(())
         }
     }
 }

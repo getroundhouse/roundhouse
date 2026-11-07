@@ -16,7 +16,7 @@ use std::time::Duration;
 use anyhow::Context;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus};
+use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice, HubStatus, error_chain};
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::{
     AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, Seq, Session, SessionStatus, SetupStatus,
@@ -24,8 +24,8 @@ use protocol::model::{
 };
 use protocol::paths::Paths;
 use protocol::worker::{WorkerRequest, WorkerResponse};
-use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
+use providers::{Provider, ProviderError};
 use session::{Command, Item, LiveSession};
 use store::{Store, StoredSession, cancelled_approval, now_ms};
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot, watch};
@@ -73,6 +73,11 @@ pub struct Hub {
 
 fn not_ready(workspace: &Workspace) -> ApiError {
     ApiError::new(ErrorCode::Conflict, format!("workspace {} is {:?}", workspace.name, workspace.status))
+}
+
+/// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's.
+pub(crate) fn provider_failed(error: &ProviderError) -> ApiError {
+    ApiError::new(ErrorCode::Worker, error_chain(error))
 }
 
 fn unexpected(reply: &WorkerResponse) -> ApiError {
@@ -163,7 +168,7 @@ impl Hub {
             }
         }
         if let Err(e) = provider.stop(instance_id).await {
-            warn!(instance_id, "stopping a worker failed: {e:#}");
+            warn!(instance_id, "stopping a worker failed: {}", error_chain(&e));
         }
         // Still under the gate, so these are queued before a replacement worker can start.
         let sessions: Vec<_> =
@@ -322,10 +327,7 @@ impl Hub {
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
-        provider
-            .create(&workspace.instance_id)
-            .await
-            .map_err(|e| ApiError::new(ErrorCode::Worker, format!("{e:#}")))?;
+        provider.create(&workspace.instance_id).await.map_err(|e| provider_failed(&e))?;
         let link = self.ensure_worker(&workspace.id).await?;
         let reply = link
             .call(WorkerRequest::PrepareWorkspace {
@@ -354,7 +356,7 @@ impl Hub {
             close_worker(&link, provider, id).await;
         }
         if let Err(e) = provider.destroy(id).await {
-            warn!(id, "cleaning up a failed workspace: {e:#}");
+            warn!(id, "cleaning up a failed workspace: {}", error_chain(&e));
         }
         let owned = id.to_string();
         if let Err(e) = self.blocking(move |store| store.delete_workspace(&owned)).await {
@@ -799,7 +801,7 @@ async fn close_worker(link: &WorkerLink, provider: &dyn Provider, instance_id: &
     if tokio::time::timeout(SHUTDOWN_GRACE, link.wait_closed()).await.is_err() {
         warn!(instance_id, "a worker didn't stop in time");
         if let Err(e) = provider.stop(instance_id).await {
-            warn!(instance_id, "stopping a stuck worker failed: {e:#}");
+            warn!(instance_id, "stopping a stuck worker failed: {}", error_chain(&e));
         }
     }
 }

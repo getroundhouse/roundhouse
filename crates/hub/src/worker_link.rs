@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use providers::{Provider, WorkerStream};
@@ -15,8 +15,8 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, warn};
 
-use crate::Hub;
 use crate::session::Item;
+use crate::{Hub, provider_failed};
 
 static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -49,13 +49,12 @@ impl WorkerLink {
         workspace_id: String,
         instance_id: String,
     ) -> Result<Arc<WorkerLink>, ApiError> {
-        let provider_error = |e: anyhow::Error| ApiError::new(ErrorCode::Worker, format!("{e:#}"));
-        provider.start(&instance_id).await.map_err(provider_error)?;
+        provider.start(&instance_id).await.map_err(|e| provider_failed(&e))?;
         let stream = match provider.connect(&instance_id).await {
             Ok(stream) => stream,
             Err(e) => {
                 let _ = provider.kill(&instance_id).await;
-                return Err(provider_error(e));
+                return Err(provider_failed(&e));
             }
         };
         let (calls_tx, calls_rx) = mpsc::channel::<Vec<u8>>(256);
@@ -79,7 +78,7 @@ impl WorkerLink {
         };
         link.close();
         if let Err(e) = provider.kill(&instance_id).await {
-            warn!(instance_id, "stopping a worker that failed to start: {e:#}");
+            warn!(instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
         }
         Err(failure)
     }

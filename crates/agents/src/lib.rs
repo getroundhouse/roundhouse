@@ -2,6 +2,9 @@
 //! events, while keeping every raw line so those events can be rebuilt later.
 
 pub mod claude;
+mod error;
+
+pub use error::AgentError;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -59,12 +62,12 @@ pub trait AgentProcess: Send + Sync {
     /// its last output may still be on the way.
     fn is_gone(&self) -> bool;
     /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true.
-    async fn send_prompt(&self, text: &str) -> anyhow::Result<()>;
-    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> anyhow::Result<()>;
-    async fn interrupt(&self) -> anyhow::Result<()>;
+    async fn send_prompt(&self, text: &str) -> Result<(), AgentError>;
+    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> Result<(), AgentError>;
+    async fn interrupt(&self) -> Result<(), AgentError>;
     /// Changes the model or approval mode of the running process, and resolves once it has agreed.
     /// `None` leaves that setting alone. An error with [`AgentProcess::is_gone`] false is a refusal.
-    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> anyhow::Result<()>;
+    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> Result<(), AgentError>;
     /// Asks the process to stop, and forces it if it doesn't. Resolves once it has exited.
     async fn stop(&self);
 }
@@ -73,7 +76,7 @@ pub fn spawn(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
-) -> anyhow::Result<Arc<dyn AgentProcess>> {
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options),
     }
