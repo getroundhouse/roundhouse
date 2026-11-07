@@ -6,7 +6,7 @@ Step 1.1 settled this: the worker drives the CLI directly from Rust, without an 
 
 **Why.** The Agent SDK spawns this same CLI and talks to it over the same stdio protocol, as its flag list and `sdk.d.ts` show (read from `@anthropic-ai/claude-agent-sdk` 0.3.319, which isn't vendored here). Prompts, streaming, approvals, interrupts and resuming all work directly, with no JavaScript runtime to ship. Features we might want later, such as `set_model`, `set_permission_mode`, `rewind_files` and hook callbacks, are control messages on the same stream. The SDK's in-process MCP tools have no direct equivalent, and nothing needs them so far.
 
-**The main risk.** The control protocol is described by the SDK's types rather than the CLI's documentation. `crates/agents/tests/claude_contract.rs` checks the adapter against captured real output, and rerunning `tools/smoke/capture_claude_fixture.py` after a CLI upgrade shows what changed.
+**The main risk.** The control protocol is described by the SDK's types rather than the CLI's documentation. `crates/agents/tests/claude/contract.rs` checks the adapter against captured real output, and rerunning `tools/smoke/capture_claude_fixture.py` after a CLI upgrade shows what changed.
 
 All of the following was observed on CLI 2.1.319 with Haiku, on 2026-11-06:
 

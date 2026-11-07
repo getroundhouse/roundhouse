@@ -7,7 +7,7 @@ How the product has been checked, and what that found. How to write tests is in 
 | Layer | What it covers | Result on 2026-11-06 |
 |---|---|---|
 | Unit and contract tests | The store, git against real repositories, status transitions, and real captured CLI output | Passing. The whole workspace on a Mac, including the end-to-end and UI ones |
-| End-to-end tests, `apps/daemon/tests/e2e.rs` | Real hub and worker processes, git and socket, with `examples/fake_claude.rs` as the agent | Passing, in 3 of 3 runs on an idle Mac and 2 of 2 with 16 cores busy |
+| End-to-end tests, `apps/daemon/tests/e2e/` | Real hub and worker processes, git and socket, with `examples/fake_claude/` as the agent | Passing, in 3 of 3 runs on an idle Mac and 2 of 2 with 16 cores busy |
 | Real CLI, `tools/smoke/real-claude.sh` | Step 1.1's done-when, approvals, cancelling, a hub killed mid-turn, a Finder-style launch, archive and restore, and since then changing the model and mode, plans, closing and reopening chats, and questions | 74 of 74 checks passing, for about $0.42. A few cents of that is Haiku, and the rest is the session with a plan and one reply on Sonnet |
 | Linux, in Docker | The backend builds without GPUI, and the whole suite passes on aarch64 Linux with the fake agent | Passing, in repeated runs. The real CLI wasn't run on Linux, and neither was the desktop app, which is macOS only for now |
 | Licenses, `tools/policy` | Every dependency's declared license is checked against an allowlist | Passing, with no exceptions |
