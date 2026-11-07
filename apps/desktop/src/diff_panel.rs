@@ -1,5 +1,7 @@
 //! The diff against the workspace's base, on the kit's `Diff`, with review comments the hub keeps.
 
+use std::fmt::Write as _;
+
 use client_core::Client;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::diff::{
@@ -43,7 +45,7 @@ pub fn comments_prompt(comments: &[DiffComment]) -> String {
             DiffSide::Old => " (a removed line)",
             DiffSide::New => "",
         };
-        prompt.push_str(&format!("\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text));
+        let _ = write!(prompt, "\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text);
     }
     prompt
 }

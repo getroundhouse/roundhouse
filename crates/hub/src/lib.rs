@@ -71,7 +71,7 @@ fn not_ready(workspace: &Workspace) -> ApiError {
     ApiError::new(ErrorCode::Conflict, format!("workspace {} is {:?}", workspace.name, workspace.status))
 }
 
-fn unexpected(reply: WorkerResponse) -> ApiError {
+fn unexpected(reply: &WorkerResponse) -> ApiError {
     ApiError::new(ErrorCode::Worker, format!("unexpected reply from the worker: {reply:?}"))
 }
 
@@ -200,7 +200,7 @@ impl Hub {
         self.shutdown.notify_one();
     }
 
-    pub(crate) async fn status(&self) -> HubStatus {
+    pub(crate) fn status(&self) -> HubStatus {
         let running_sessions = self
             .sessions
             .lock()
@@ -333,7 +333,7 @@ impl Hub {
             })
             .await?;
         let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings } = reply else {
-            return Err(unexpected(reply));
+            return Err(unexpected(&reply));
         };
         for warning in &warnings {
             warn!(workspace = workspace.name, "{warning}");
@@ -410,7 +410,7 @@ impl Hub {
         // Checks again unless forced, because the agent may have written files before it stopped.
         let reply = link.call(WorkerRequest::RemoveWorkspace { repo_path: repo.path, path, force }).await?;
         if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(reply));
+            return Err(unexpected(&reply));
         }
         let provider = self.provider(&workspace.provider)?;
         close_worker(&link, provider.as_ref(), &workspace.instance_id).await;
@@ -465,7 +465,7 @@ impl Hub {
         let reply =
             link.call(WorkerRequest::RestoreWorkspace { repo_path: repo.path, path, branch: workspace.branch }).await?;
         if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(reply));
+            return Err(unexpected(&reply));
         }
         let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
         self.notify(HubNotice::Workspace(restored.clone()));
@@ -490,7 +490,7 @@ impl Hub {
         let (_, path, link) = self.ready_worktree(&id).await?;
         match link.call(WorkerRequest::GitStatus { path }).await? {
             WorkerResponse::GitStatus(status) => Ok(status),
-            other => Err(unexpected(other)),
+            other => Err(unexpected(&other)),
         }
     }
 
@@ -498,7 +498,7 @@ impl Hub {
         let (workspace, path, link) = self.ready_worktree(&id).await?;
         match link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await? {
             WorkerResponse::GitDiff(diff) => Ok(diff),
-            other => Err(unexpected(other)),
+            other => Err(unexpected(&other)),
         }
     }
 
@@ -565,7 +565,7 @@ impl Hub {
         let (_, path, link) = self.ready_worktree(&id).await?;
         match link.call(WorkerRequest::SetupLog { path }).await? {
             WorkerResponse::SetupLog { text } => Ok(text),
-            other => Err(unexpected(other)),
+            other => Err(unexpected(&other)),
         }
     }
 
@@ -592,7 +592,7 @@ impl Hub {
         let (_, path, link) = self.ready_worktree(&id).await?;
         match link.call(WorkerRequest::PullRequest { path }).await? {
             WorkerResponse::PullRequest { pull_request } => Ok(pull_request),
-            other => Err(unexpected(other)),
+            other => Err(unexpected(&other)),
         }
     }
 

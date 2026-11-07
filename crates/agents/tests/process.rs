@@ -1,5 +1,7 @@
 //! The adapter's process handling, with small scripts standing in for the CLI.
 
+#![cfg(test)]
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 

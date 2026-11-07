@@ -8,6 +8,8 @@
 //! Selects the named workspace. With `diff`, opens its diff, and a further argument adds a comment on the
 //! first changed line.
 
+#![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
+
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
@@ -69,10 +71,10 @@ fn main() {
     });
 }
 
-fn first_added_line(patch: &str) -> Option<(String, u32)> {
+fn first_added_line(diff: &str) -> Option<(String, u32)> {
     let mut path = None;
     let mut line = 0u32;
-    for text in patch.lines() {
+    for text in diff.lines() {
         if let Some(p) = text.strip_prefix("+++ b/") {
             path = Some(p.to_string());
         } else if let Some(rest) = text.strip_prefix("@@ ") {

@@ -312,8 +312,9 @@ mod tests {
 
     #[tokio::test]
     async fn reading_the_path_does_not_wait_for_a_stream_something_else_is_holding_open() {
-        let (mut writer, reader) = tokio::io::duplex(1024);
         use tokio::io::AsyncWriteExt;
+
+        let (mut writer, reader) = tokio::io::duplex(1024);
         writer.write_all(format!("noise {PATH_MARKER}/a:/b{PATH_MARKER}").as_bytes()).await.unwrap();
         // `writer` stays open, as it would with a background process started by an rc file.
         let out = tokio::time::timeout(Duration::from_secs(1), read_until_second_marker(reader)).await.unwrap();

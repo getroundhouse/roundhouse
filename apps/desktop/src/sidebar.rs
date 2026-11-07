@@ -19,7 +19,7 @@ pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
         SessionStatus::WaitingApproval => 3,
         SessionStatus::Running => 2,
         SessionStatus::Interrupted => 1,
-        _ => 0,
+        SessionStatus::Idle => 0,
     };
     sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
 }

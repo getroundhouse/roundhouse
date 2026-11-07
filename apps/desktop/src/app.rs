@@ -83,7 +83,8 @@ pub struct AppView {
     pub creating_in: Option<RepoId>,
     focus: FocusHandle,
     window: AnyWindowHandle,
-    _feed: Option<Task<()>>,
+    /// Held so the task stops when the view goes away.
+    feed_task: Option<Task<()>>,
 }
 
 impl AppView {
@@ -104,7 +105,7 @@ impl AppView {
             creating_in: None,
             focus,
             window: window.window_handle(),
-            _feed: None,
+            feed_task: None,
         };
         this.connect(cx);
         this
@@ -128,7 +129,7 @@ impl AppView {
         self.panes.clear();
         cx.notify();
         let hub = self.hub.clone();
-        self._feed = Some(cx.spawn(async move |this, cx| {
+        self.feed_task = Some(cx.spawn(async move |this, cx| {
             let connected = cx
                 .background_spawn(async move {
                     let client = hub.connect()?;
@@ -382,7 +383,7 @@ impl AppView {
                         t.keep_selection_valid(cx);
                     }
                     Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict && !force => {
-                        t.confirm_forced_archive(id.clone(), e.message, cx);
+                        t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't archive: {e}"), cx),
                 }
@@ -392,13 +393,13 @@ impl AppView {
         .detach();
     }
 
-    fn confirm_forced_archive(&mut self, id: WorkspaceId, reason: String, cx: &mut Context<Self>) {
+    fn confirm_forced_archive(&mut self, id: WorkspaceId, reason: &str, cx: &mut Context<Self>) {
         let handle = self.window;
         let answer = handle.update(cx, |_, window, cx| {
             window.prompt(
                 PromptLevel::Warning,
                 "Archive anyway?",
-                Some(&reason),
+                Some(reason),
                 &["Keep working", "Archive anyway"],
                 cx,
             )

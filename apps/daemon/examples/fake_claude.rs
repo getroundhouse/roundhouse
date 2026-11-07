@@ -20,6 +20,13 @@
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
 
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::needless_pass_by_value,
+    reason = "a test program, so it unwraps and takes its values however is shortest"
+)]
+
 use std::collections::VecDeque;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -383,7 +390,10 @@ fn run_command(
     }
     if let Some(seconds) = command.strip_prefix("holdpipe:") {
         // Never waited on, because the point is that it outlives this process.
-        #[expect(clippy::zombie_processes)]
+        #[expect(
+            clippy::zombie_processes,
+            reason = "never waited on, because the point is that it outlives this process"
+        )]
         std::process::Command::new("sleep")
             .arg(seconds)
             .stdin(std::process::Stdio::null())

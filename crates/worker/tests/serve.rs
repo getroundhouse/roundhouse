@@ -1,5 +1,7 @@
 //! The worker's main loop, driven directly over an in-memory stream.
 
+#![cfg(test)]
+
 use std::time::Duration;
 
 use protocol::PROTOCOL_VERSION;

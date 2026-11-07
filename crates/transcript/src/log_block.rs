@@ -137,8 +137,8 @@ mod tests {
 
     #[test]
     fn a_very_long_line_is_cut_on_a_character_boundary() {
-        let long = "é".repeat(MAX_LINE_BYTES);
-        let log = LogText::new(&long);
+        let text = "é".repeat(MAX_LINE_BYTES);
+        let log = LogText::new(&text);
         let line = log.line(0);
         assert!(line.len() <= MAX_LINE_BYTES);
         assert!(line.ends_with('é'));

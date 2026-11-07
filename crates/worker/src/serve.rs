@@ -236,7 +236,7 @@ async fn handle(
             match agent.configure(model.as_deref(), permission_mode.as_deref()).await {
                 Ok(()) => Ok(WorkerResponse::Ok),
                 Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
-                Err(e) => Err(agent_error(e)),
+                Err(e) => Err(agent_error(&e)),
             }
         }
         WorkerRequest::AgentStop { session_id } => {
@@ -334,7 +334,7 @@ async fn run_archive_script(
     ))
 }
 
-fn agent_error(e: anyhow::Error) -> ApiError {
+fn agent_error(e: &anyhow::Error) -> ApiError {
     ApiError::new(ErrorCode::Worker, format!("{e:#}"))
 }
 
@@ -358,7 +358,7 @@ async fn start_agent(
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
     };
-    let process = agents::spawn(spec, tx, options).map_err(agent_error)?;
+    let process = agents::spawn(spec, tx, options).map_err(|e| agent_error(&e))?;
     let pid = process.pid();
     info!(pid, session_id, run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.

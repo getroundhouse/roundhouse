@@ -94,7 +94,7 @@ impl Tail {
             DeltaChange::BlockStart { index, kind, tool_name } => {
                 let block = block_mut(message, *index, *kind);
                 block.kind = *kind;
-                block.tool_name = tool_name.clone();
+                block.tool_name.clone_from(tool_name);
             }
             DeltaChange::Text { index, text } => block_mut(message, *index, BlockKind::Text).text.push_str(text),
             DeltaChange::Thinking { index, text } => {

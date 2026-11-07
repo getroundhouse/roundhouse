@@ -2,6 +2,8 @@
 //! and real git worktrees. Only the agent is fake, and no window appears on screen. See
 //! `apps/daemon/examples/fake_claude.rs` for what prompts can script.
 
+#![cfg(test)]
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;

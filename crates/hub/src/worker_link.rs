@@ -138,13 +138,13 @@ async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut reader = BufReader::new(reader);
-    let mut line = Vec::new();
+    let mut bytes = Vec::new();
     loop {
-        line.clear();
-        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
+        bytes.clear();
+        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut bytes).await;
         match read {
             Ok(0) => break,
-            Ok(_) if line.len() > frame::MAX_FRAME_BYTES => {
+            Ok(_) if bytes.len() > frame::MAX_FRAME_BYTES => {
                 warn!("a worker sent an oversized frame");
                 break;
             }
@@ -154,7 +154,7 @@ async fn read_frames(
                 break;
             }
         }
-        let parsed: WorkerFrame = match frame::decode(&line) {
+        let parsed: WorkerFrame = match frame::decode(&bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
                 warn!("ignoring a worker frame that didn't parse: {e}");

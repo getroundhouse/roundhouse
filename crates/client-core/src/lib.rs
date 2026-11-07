@@ -124,7 +124,7 @@ impl Client {
         let for_reader = inner.clone();
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
-            .spawn(move || read_frames(for_reader, reader))?;
+            .spawn(move || read_frames(&for_reader, reader))?;
         let client = Client { inner, _closer: closer };
         client.call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
         Ok(client)
@@ -170,7 +170,7 @@ impl Client {
     pub fn hub_status(&self) -> Result<HubStatus> {
         match self.call(ClientRequest::HubStatus)? {
             ClientResponse::HubStatus(status) => Ok(status),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -185,14 +185,14 @@ impl Client {
     pub fn repo_add(&self, path: &str) -> Result<Repo> {
         match self.call(ClientRequest::RepoAdd { path: path.to_string() })? {
             ClientResponse::Repo(repo) => Ok(repo),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     pub fn repo_list(&self) -> Result<Vec<Repo>> {
         match self.call(ClientRequest::RepoList)? {
             ClientResponse::Repos { repos } => Ok(repos),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -203,7 +203,7 @@ impl Client {
     pub fn workspace_list(&self, include_archived: bool) -> Result<Vec<Workspace>> {
         match self.call(ClientRequest::WorkspaceList { include_archived })? {
             ClientResponse::Workspaces { workspaces } => Ok(workspaces),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -218,21 +218,21 @@ impl Client {
     pub fn workspace_status(&self, id: &str) -> Result<GitStatus> {
         match self.call(ClientRequest::WorkspaceStatus { id: id.to_string() })? {
             ClientResponse::GitStatus(status) => Ok(status),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     pub fn workspace_diff(&self, id: &str) -> Result<GitDiff> {
         match self.call(ClientRequest::WorkspaceDiff { id: id.to_string() })? {
             ClientResponse::GitDiff(diff) => Ok(diff),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     pub fn workspace_setup_log(&self, id: &str) -> Result<String> {
         match self.call(ClientRequest::WorkspaceSetupLog { id: id.to_string() })? {
             ClientResponse::SetupLog { text } => Ok(text),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -243,7 +243,7 @@ impl Client {
     pub fn workspace_pull_request(&self, id: &str) -> Result<Option<PullRequest>> {
         match self.call(ClientRequest::WorkspacePullRequest { id: id.to_string() })? {
             ClientResponse::PullRequest { pull_request } => Ok(pull_request),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -264,14 +264,14 @@ impl Client {
         };
         match self.call(request)? {
             ClientResponse::Comment(comment) => Ok(comment),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     pub fn comment_list(&self, workspace_id: &str) -> Result<Vec<DiffComment>> {
         match self.call(ClientRequest::CommentList { workspace_id: workspace_id.to_string() })? {
             ClientResponse::Comments { comments } => Ok(comments),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -294,7 +294,7 @@ impl Client {
     pub fn session_list(&self, workspace_id: &str) -> Result<Vec<Session>> {
         match self.call(ClientRequest::SessionList { workspace_id: workspace_id.to_string() })? {
             ClientResponse::Sessions { sessions } => Ok(sessions),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -317,7 +317,7 @@ impl Client {
         let request = ClientRequest::SessionRead { id: id.to_string(), from_seq, limit, max_bytes: None, include_raw };
         match self.call(request)? {
             ClientResponse::Events { events, last_seq } => Ok((events, last_seq)),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -351,7 +351,7 @@ impl Client {
         let request = ClientRequest::SessionPrompt { id: id.to_string(), text: text.to_string(), client_msg_id };
         match self.call(request)? {
             ClientResponse::PromptRecorded { seq, duplicate } => Ok((seq, duplicate)),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
@@ -387,30 +387,30 @@ impl Client {
     fn expect_ok(&self, request: ClientRequest) -> Result<()> {
         match self.call(request)? {
             ClientResponse::Ok => Ok(()),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     fn expect_workspace(&self, request: ClientRequest) -> Result<Workspace> {
         match self.call(request)? {
             ClientResponse::Workspace(workspace) => Ok(workspace),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 
     fn expect_session(&self, request: ClientRequest) -> Result<Session> {
         match self.call(request)? {
             ClientResponse::Session(session) => Ok(session),
-            other => unexpected(other),
+            other => unexpected(&other),
         }
     }
 }
 
-fn unexpected<T>(response: ClientResponse) -> Result<T> {
+fn unexpected<T>(response: &ClientResponse) -> Result<T> {
     Err(ClientError::Unexpected(format!("{response:?}")))
 }
 
-fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
+fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
@@ -432,14 +432,14 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
                 }
             }
             HubFrame::Event { subscription_id, event } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Event(event));
+                deliver(inner, subscription_id, SubscriptionItem::Event(event));
             }
-            HubFrame::Tail { subscription_id, tail } => deliver(&inner, subscription_id, SubscriptionItem::Tail(tail)),
+            HubFrame::Tail { subscription_id, tail } => deliver(inner, subscription_id, SubscriptionItem::Tail(tail)),
             HubFrame::Delta { subscription_id, delta } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Delta(delta));
+                deliver(inner, subscription_id, SubscriptionItem::Delta(delta));
             }
             HubFrame::Notice { subscription_id, notice } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Notice(notice));
+                deliver(inner, subscription_id, SubscriptionItem::Notice(notice));
             }
         }
     }

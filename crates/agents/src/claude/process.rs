@@ -4,6 +4,7 @@
 //! (2.1.319). `docs/claude-cli.md` has the results.
 
 use std::collections::{HashMap, VecDeque};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -228,7 +229,7 @@ pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[expect(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
 async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
@@ -304,7 +305,6 @@ async fn supervise(
     for item in held {
         let _ = output.send(item).await;
     }
-    use std::os::unix::process::ExitStatusExt;
     let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;

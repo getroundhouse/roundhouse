@@ -13,7 +13,7 @@ use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
 
 pub(crate) static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
-#[expect(deprecated)] // two-face will rename this variant in 0.5.
+#[expect(deprecated, reason = "two-face will rename this variant in 0.5")]
 pub(crate) static THEME: LazyLock<Theme> =
     LazyLock::new(|| two_face::theme::extra().get(two_face::theme::EmbeddedThemeName::VisualStudioDarkPlus).clone());
 

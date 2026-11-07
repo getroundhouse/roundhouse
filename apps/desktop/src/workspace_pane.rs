@@ -87,7 +87,7 @@ pub struct WorkspacePane {
     /// Keeps the open log current while setup runs.
     setup_log_refresh: Option<Task<()>>,
     window: AnyWindowHandle,
-    _subscriptions: Vec<Subscription>,
+    subscriptions: Vec<Subscription>,
 }
 
 impl EventEmitter<PaneEvent> for WorkspacePane {}
@@ -126,7 +126,7 @@ impl WorkspacePane {
             setup_log: None,
             setup_log_refresh: None,
             window: window.window_handle(),
-            _subscriptions: vec![on_enter],
+            subscriptions: vec![on_enter],
         };
         // The chat last worked in.
         let latest = this.open_sessions().max_by_key(|s| (s.updated_at_ms, s.created_at_ms)).map(|s| s.id.clone());
@@ -547,7 +547,7 @@ impl WorkspacePane {
                             }
                         }
                     });
-                    t._subscriptions.push(events);
+                    t.subscriptions.push(events);
                     t.diff = Some(diff);
                     cx.notify();
                 });
@@ -671,7 +671,7 @@ impl WorkspacePane {
                 menu
             }
         };
-        let modes = {
+        let approval_modes = {
             let current = mode.clone();
             move |mut menu: gpui_kit::component::menu::PopupMenu, _: &mut Window, _: &mut Context<_>| {
                 for id in MODES {
@@ -707,7 +707,7 @@ impl WorkspacePane {
                     .dropdown_caret(true)
                     .when(full_access, |b| b.text_color(warning))
                     .label(mode_text)
-                    .dropdown_menu_with_anchor(Anchor::BottomLeft, modes),
+                    .dropdown_menu_with_anchor(Anchor::BottomLeft, approval_modes),
             )
     }
 

@@ -125,13 +125,13 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_le
                 SessionStatus::Running
             }
         }
-        EventBody::AgentState { state: AgentRunState::RequiresAction } => SessionStatus::WaitingApproval,
-        EventBody::AgentState { state: AgentRunState::Idle } => SessionStatus::Idle,
-        EventBody::ApprovalRequested { .. } => SessionStatus::WaitingApproval,
+        EventBody::AgentState { state: AgentRunState::RequiresAction } | EventBody::ApprovalRequested { .. } => {
+            SessionStatus::WaitingApproval
+        }
+        EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => SessionStatus::Idle,
         EventBody::ApprovalResolved { .. } if current == SessionStatus::WaitingApproval && approvals_left == 0 => {
             SessionStatus::Running
         }
-        EventBody::TurnEnded { .. } => SessionStatus::Idle,
         EventBody::AgentExited { .. } if matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval) => {
             SessionStatus::Interrupted
         }

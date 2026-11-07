@@ -261,7 +261,10 @@ fn output(id: ElementId, text: &str, is_error: bool, cx: &App) -> AnyElement {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is a separate input to the card, and a struct would only bundle them for this call"
+)]
 fn disclosure(
     id: ElementId,
     label: &str,
@@ -292,7 +295,10 @@ fn disclosure(
     )
 }
 
-#[expect(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is a separate input to the card, and a struct would only bundle them for this call"
+)]
 fn approval_card(
     seq: Seq,
     approval_id: &str,

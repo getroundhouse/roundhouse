@@ -100,6 +100,7 @@ pub(crate) fn pick(taken: &[String], salt: u64) -> String {
 }
 
 /// Goes into a path and a branch name, so it stays conservative.
+#[expect(clippy::case_sensitive_file_extension_comparisons, reason = "git refuses a ref ending in exactly `.lock`")]
 pub(crate) fn is_valid(name: &str) -> bool {
     let mut chars = name.chars();
     let first_ok = chars.next().is_some_and(|c| c.is_ascii_alphanumeric());
