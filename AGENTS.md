@@ -19,7 +19,7 @@ The repo is the source of truth for how things work and why. GitHub tracks what'
 | `docs/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/ui.md` | Why GPUI and gpui-kit, and the evidence behind that |
 | `docs/testing.md` | What's been tested, and what that found |
-| `docs/performance.md` | Performance bars, test sizes, and what's known about speed |
+| `docs/performance.md` | The desktop app's speed: the bars, how to measure against them, and what's known about hitting them. Read it before running a timing test |
 | `docs/manual-checks.md` | What a person has to judge by hand |
 | `mobile-poc/PLAN.md` | Mobile proof of concept plan and decision rules |
 | `mobile-poc/README.md` | Mobile proof of concept results so far |
@@ -51,9 +51,3 @@ In `use gpui_kit::*` files, test modules must import names explicitly: the glob 
 - **Keep shipped code free of copyleft.** Apache-2.0, MIT and similar only. Zed's GPL-3.0 crates are out, and only GPUI's Apache-2.0 crates are in.
 - **Conductor is an inspiration, not a spec.** This is a new product, so design and describe things on their own terms, and don't call it a clone or a replacement. Don't copy Conductor's code or assets, or use its name. Reading its settings and variables is a compatibility feature, nothing more.
 - **Keep client data and credentials out of the repo.** Fixtures are synthetic, and docs use aggregate numbers only.
-
-## Performance testing
-
-- A covered window looks exactly like a freeze, because macOS stops GPUI's frame source. Don't trust frame data without a window visibility log.
-- Run timing tests one app at a time on an otherwise idle Mac. Test windows take focus, and the user's typing can land in them.
-- The bars are in `docs/performance.md`. Flags that exist only for tests must not carry into the product.

@@ -1,6 +1,6 @@
 # Performance
 
-What the desktop app has to hit, and what's known about getting there.
+What the desktop app has to hit, how to measure it, and what's known about getting there.
 
 **Nothing measures the real app yet.** These bars were written for prototypes that have since been deleted, along with the harness that ran them. The next step is new tests against the app itself, in #50, and speed targets, in #64.
 
@@ -42,4 +42,7 @@ Bars are decided through `l`, and `xl` is only reported. The shape comes from th
 
 ## Measuring
 
-The rules for running timing tests are under "Performance testing" in `AGENTS.md`. Only one M4 Max at 120 Hz has been tested so far, and flags that exist only for tests have to stay out of the product.
+- A covered window looks exactly like a freeze, because macOS stops GPUI's frame source. Don't trust frame data without a window visibility log.
+- Run timing tests one app at a time on an otherwise idle Mac. Test windows take focus, and the user's typing can land in them.
+- Flags that exist only for tests must stay out of the product.
+- Only one M4 Max at 120 Hz has been tested so far.
