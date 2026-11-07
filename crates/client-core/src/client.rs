@@ -7,8 +7,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -70,6 +70,8 @@ struct Inner {
     next_id: AtomicU64,
     /// Set once the reader has finished, so a later call can't wait forever.
     disconnected: Mutex<bool>,
+    /// Set by the hello, before anyone else has this connection.
+    hub_version: OnceLock<String>,
 }
 
 impl Inner {
@@ -110,14 +112,25 @@ impl Client {
             subscriptions: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             disconnected: Mutex::new(false),
+            hub_version: OnceLock::new(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
         let client = Client { inner, _closer: closer };
-        client.call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
+        let reply = client
+            .call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
+        let ClientResponse::Hello { hub_version, .. } = reply else {
+            return unexpected(&reply);
+        };
+        let _ = client.inner.hub_version.set(hub_version);
         Ok(client)
+    }
+
+    /// Which build the hub is, as it said when this connected.
+    pub fn hub_version(&self) -> &str {
+        self.inner.hub_version.get().map_or("", String::as_str)
     }
 
     /// Connects, starting a hub first if none is running. The hub is a separate process that

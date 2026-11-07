@@ -114,6 +114,9 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
                 status.running_sessions,
                 status.clients
             );
+            if status.hub_version != protocol::BUILD_VERSION {
+                println!("this client is version {}", protocol::BUILD_VERSION);
+            }
         }
         HubCmd::Stop => {
             client.hub_shutdown()?;

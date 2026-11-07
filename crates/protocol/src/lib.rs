@@ -18,3 +18,10 @@ pub mod tail;
 pub mod worker;
 
 pub const PROTOCOL_VERSION: u32 = 2;
+
+/// Which build this is, for telling people. An install stamps the commit it came from with
+/// `TRESTLE_BUILD`, and anything else says `-dev`.
+pub const BUILD_VERSION: &str = match option_env!("TRESTLE_BUILD") {
+    Some(version) => version,
+    None => concat!(env!("CARGO_PKG_VERSION"), "-dev"),
+};
