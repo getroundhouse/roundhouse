@@ -1,0 +1,64 @@
+//! What has to stay readable between versions. These spell the wire form out, rather than building it from
+//! today's types, because changing a type would change the test along with it.
+
+#![cfg(test)]
+
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
+};
+use protocol::frame;
+
+/// Spelled out, because these have to stay readable by a client of any version, even across a real
+/// break. If this fails, a client can no longer see or stop a hub it can't otherwise talk to.
+#[test]
+fn what_works_across_a_protocol_break_keeps_its_form() {
+    let status = ClientFrame { id: 1, request: ClientRequest::HubStatus };
+    assert_eq!(frame::encode(&status).unwrap(), b"{\"id\":1,\"request\":{\"method\":\"hub_status\"}}\n");
+    let stop = ClientFrame { id: 2, request: ClientRequest::HubShutdown };
+    assert_eq!(frame::encode(&stop).unwrap(), b"{\"id\":2,\"request\":{\"method\":\"hub_shutdown\"}}\n");
+
+    let reply: HubFrame = frame::decode(
+        br#"{"frame":"reply","id":1,"response":{"result":"hub_status","pid":7,"hub_version":"a","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true}}"#,
+    )
+    .unwrap();
+    let HubFrame::Reply { outcome: ReplyOutcome::Response(ClientResponse::HubStatus(status)), .. } = reply else {
+        panic!("{reply:?}");
+    };
+    assert_eq!((status.pid, status.running_sessions, status.on_demand), (7, 2, true));
+
+    let reply: HubFrame = frame::decode(br#"{"frame":"reply","id":2,"response":{"result":"ok"}}"#).unwrap();
+    assert_eq!(reply, HubFrame::Reply { id: 2, outcome: ReplyOutcome::Response(ClientResponse::Ok) });
+
+    let reply: HubFrame =
+        frame::decode(br#"{"frame":"reply","id":3,"error":{"code":"version_mismatch","message":"no"}}"#).unwrap();
+    let refused = ApiError::new(ErrorCode::VersionMismatch, "no");
+    assert_eq!(reply, HubFrame::Reply { id: 3, outcome: ReplyOutcome::Error(refused) });
+}
+
+#[test]
+fn a_status_from_a_hub_older_than_on_demand_reads_as_not_on_demand() {
+    let status: HubStatus = frame::decode(
+        br#"{"pid":7,"hub_version":"a","protocol_version":3,"started_at_ms":1,"workers":0,"running_sessions":0,"clients":1}"#,
+    )
+    .unwrap();
+
+    assert!(!status.on_demand);
+}
+
+#[test]
+fn a_request_from_a_newer_client_still_decodes_with_its_id() {
+    let line = br#"{"id":7,"request":{"method":"from_a_newer_client","path":"a","count":2}}"#;
+
+    let frame: ClientFrame = frame::decode(line).unwrap();
+
+    assert_eq!(frame, ClientFrame { id: 7, request: ClientRequest::Unknown });
+}
+
+#[test]
+fn a_known_request_with_a_new_field_still_decodes() {
+    let line = br#"{"id":7,"request":{"method":"repo_add","path":"a","from_a_newer_client":true}}"#;
+
+    let frame: ClientFrame = frame::decode(line).unwrap();
+
+    assert_eq!(frame.request, ClientRequest::RepoAdd { path: "a".to_string() });
+}

@@ -130,6 +130,7 @@ Settled in step 1.1. Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
 - **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, unknown enum variants decode as `Unknown`, and a hub answers a request it doesn't know with an error rather than closing the connection, so additions don't need a version bump. A bump means a real break.
+- **`hub_status` and `hub_shutdown` work without a hello, and their forms can't change,** so a client of any version can see a hub and stop it. That's how `trestle hub status`, `trestle hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A connection from elsewhere, once there are any, shouldn't get this.
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
 - **Each event has a normalized body, plus the agent's raw line in a separate column.** Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
 - **Live deltas aren't stored.** The finished message arrives as a durable event and replaces them. A client attaching mid-message gets a snapshot of the streaming tail, then deltas, and `protocol::tail` holds the rules so the hub and clients can't disagree.
@@ -151,7 +152,7 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 
 ## Managing a hub
 
-Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. This is the agreed direction. So far, a client starts a hub if there's none, and a hub refuses a request it doesn't know. Nothing else here is built, so a hub stays on its version until someone stops it.
+Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. This is the agreed direction. So far, a client starts a hub if there's none, a hub refuses a request it doesn't know, and the app can restart a local on-demand hub across a real break. Nothing updates a hub by itself yet, so otherwise it stays on its version until someone stops it.
 
 | | Local hub started on demand | A hub you run yourself, here or on a server | Hosted, if one is ever run |
 |---|---|---|---|
@@ -162,7 +163,7 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **A hub knows nothing about what manages it.** It offers its status and stops cleanly on `SIGTERM`, which is what systemd and Docker use. There's no desktop mode, and it doesn't exit when the app closes.
 - **A client never needs one exact hub version.** A hub politely refuses a request it doesn't know, and the client hides or disables just that feature. A protocol bump means a real break, and should be rare. This stays as simple as it can, and gets revisited if it turns out complicated.
 - **A client only replaces a hub that says it's replaceable.** A hub started on demand reports that in its status, and one you started yourself gets left alone, even on the same Mac. Only the desktop app replaces a hub, and only an older one, so two versions can't keep replacing each other's.
-- **Only a local on-demand hub can be restarted from a client,** and only the rare real break needs that to be visible. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs.
+- **Only a local on-demand hub that's older than the client can be restarted from it,** and only the rare real break needs that to be visible. A client's own hub might not be able to open what a newer one has written. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs.
 - **The app ships a default hub, and that's the only link between them.** The hub doesn't depend on the app.
 
 For someone with the desktop app, an update should look like this:

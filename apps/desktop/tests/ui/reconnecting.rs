@@ -40,6 +40,78 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
 }
 
 #[gpui_kit::test]
+fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let other = stack.start_stand_in_hub(&["--running", "2"]);
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+
+    ui.wait(
+        "the app to see the hub",
+        |ui| matches!(&ui.view().connection, Connection::AcrossABreak(status) if status.running_sessions == 2),
+    );
+    ui.click("restart-hub");
+
+    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    let status = stack.client().hub_status().unwrap();
+    assert_ne!(status.pid, other.0.id());
+    assert!(status.on_demand);
+}
+
+#[gpui_kit::test]
+fn a_hub_started_by_hand_is_explained_and_left_alone(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut other = stack.start_stand_in_hub(&["--not-on-demand"]);
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+
+    assert!(!ui.has("restart-hub"));
+    assert!(other.0.try_wait().unwrap().is_none());
+    // Whoever runs it stops it, and the app can then start one of its own.
+    client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
+    ui.click("try-hub-again");
+    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+}
+
+#[gpui_kit::test]
+fn a_hub_newer_than_the_app_is_not_offered_for_restart(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let _newer = stack.start_stand_in_hub(&["--newer"]);
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+
+    assert!(!ui.has("restart-hub"));
+    assert!(ui.has("try-hub-again"));
+}
+
+#[gpui_kit::test]
+fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let _other = stack.start_stand_in_hub(&[]);
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+    client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
+
+    ui.click("restart-hub");
+
+    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+}
+
+#[gpui_kit::test]
+fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/trestled".into());
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+    ui.wait("the failure", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    let _hub = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+
+    ui.click("try-hub-again");
+
+    ui.wait("the connection", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+}
+
+#[gpui_kit::test]
 fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let repo = stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();

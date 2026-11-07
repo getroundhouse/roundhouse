@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use client_core::{Client, ClientError, SubscriptionItem};
+use client_core::{Client, ClientError, HubAdmin, SubscriptionItem};
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Result, Task, Window};
-use protocol::client::HubNotice;
+use protocol::client::{HubNotice, HubStatus};
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
@@ -28,6 +28,8 @@ pub enum Connection {
     Connecting,
     Ready(Client),
     Failed(String),
+    /// A hub is running, and there's a real protocol break between it and this app.
+    AcrossABreak(HubStatus),
 }
 
 struct Snapshot {
@@ -97,6 +99,24 @@ impl AppView {
         }
     }
 
+    /// For a hub across a real break, so one that matches this app can start. This also stops its agents,
+    /// which the app says first.
+    pub fn restart_hub(&mut self, cx: &mut Context<Self>) {
+        self.connection = Connection::Connecting;
+        cx.notify();
+        let socket = self.hub.paths.socket.clone();
+        self.feed_task = Some(cx.spawn(async move |this, cx| {
+            let stopped = cx.background_spawn(async move { client_core::stop_hub(&socket) }).await;
+            let _ = this.update(cx, |t, cx| match stopped {
+                Ok(()) => t.connect(cx),
+                Err(e) => {
+                    t.connection = Connection::Failed(e.to_string());
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
     pub fn build_label(&self) -> BuildLabel {
         let client = self.client();
         BuildLabel::new(protocol::BUILD_VERSION, client.as_ref().map(Client::hub_version))
@@ -113,6 +133,7 @@ impl AppView {
         self.panes.clear();
         cx.notify();
         let hub = self.hub.clone();
+        let socket = hub.paths.socket.clone();
         self.feed_task = Some(cx.spawn(async move |this, cx| {
             let connected = cx
                 .background_spawn(async move {
@@ -126,8 +147,16 @@ impl AppView {
             let (client, feed, snapshot) = match connected {
                 Ok(connected) => connected,
                 Err(e) => {
+                    let status = if e.is_version_mismatch() {
+                        cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
+                    } else {
+                        None
+                    };
                     let _ = this.update(cx, |t, cx| {
-                        t.connection = Connection::Failed(format!("{e}"));
+                        t.connection = match status {
+                            Some(status) => Connection::AcrossABreak(status),
+                            None => Connection::Failed(format!("{e}")),
+                        };
                         cx.notify();
                     });
                     return;

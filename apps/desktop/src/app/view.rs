@@ -1,11 +1,13 @@
 //! How the app looks, and the shortcuts it answers.
 
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement,
-    Styled, Window, div,
+    Styled, Window, div, px,
 };
+use protocol::client::HubStatus;
 
 use super::{AppView, Connection};
 use crate::workspace_pane::WorkspacePane;
@@ -26,7 +28,8 @@ impl Render for AppView {
             (theme.background, theme.foreground, theme.muted_foreground, theme.danger);
         let main: AnyElement = match &self.connection {
             Connection::Connecting => centered("Connecting…", muted),
-            Connection::Failed(reason) => centered(&format!("Couldn't reach the hub. {reason}"), danger),
+            Connection::Failed(reason) => failed(reason, danger, cx),
+            Connection::AcrossABreak(status) => across_a_break(status, muted, cx),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => centered("Add a repository to get started.", muted),
@@ -118,6 +121,69 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         }))
         .child(div().flex_1().min_w_0().child(error))
         .child(div().flex_none().child("Dismiss"))
+}
+
+/// What restarting would cost, since this is the one screen that can stop agents with one click.
+fn restart_note(running: u32) -> String {
+    match running {
+        0 => "Restarting it starts one that matches. No agents are running on it.".to_string(),
+        1 => "Restarting it starts one that matches, and stops the agent running on it.".to_string(),
+        running => format!("Restarting it starts one that matches, and stops the {running} agents running on it."),
+    }
+}
+
+/// Only a hub a client started, and only an older one. This app's own hub might not be able to open what a newer
+/// one has written, so restarting that would stop its agents and leave nothing running.
+fn can_restart(status: &HubStatus) -> bool {
+    status.on_demand && status.protocol_version < protocol::PROTOCOL_VERSION
+}
+
+fn try_again(cx: &mut Context<AppView>) -> Button {
+    Button::new("try-hub-again").label("Try again").on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
+}
+
+fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+    v_flex()
+        .size_full()
+        .items_center()
+        .justify_center()
+        .gap_3()
+        .child(
+            div().max_w(px(560.0)).text_center().text_color(danger).child(format!("Couldn't reach the hub. {reason}")),
+        )
+        .child(try_again(cx))
+        .into_any_element()
+}
+
+fn across_a_break(status: &HubStatus, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+    let versions = format!("The hub is version {}, and this app is {}.", status.hub_version, protocol::BUILD_VERSION);
+    let next = if can_restart(status) {
+        restart_note(status.running_sessions)
+    } else if status.on_demand {
+        "It's newer than this app, so the app needs updating.".to_string()
+    } else {
+        "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"trestle hub stop\"."
+            .to_string()
+    };
+    let note = |text: String| div().max_w(px(560.0)).text_center().text_sm().text_color(muted).child(text);
+    let action = if can_restart(status) {
+        Button::new("restart-hub")
+            .primary()
+            .label("Restart the hub")
+            .on_click(cx.listener(|t, _, _, cx| t.restart_hub(cx)))
+    } else {
+        try_again(cx)
+    };
+    v_flex()
+        .size_full()
+        .items_center()
+        .justify_center()
+        .gap_3()
+        .child("This app can't talk to the running hub.")
+        .child(note(versions))
+        .child(note(next))
+        .child(action)
+        .into_any_element()
 }
 
 fn centered(text: &str, color: Hsla) -> AnyElement {

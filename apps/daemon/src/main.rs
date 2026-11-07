@@ -17,7 +17,11 @@ struct Args {
 #[derive(Subcommand)]
 enum Role {
     /// Owns state and serves clients on a local socket.
-    Hub,
+    Hub {
+        /// Say that a client started this because it needed one, so a client may restart it.
+        #[arg(long)]
+        on_demand: bool,
+    },
     /// Runs agents and git for a workspace. Started by a hub's provider.
     Worker {
         /// Speak the worker protocol on stdin and stdout.
@@ -70,7 +74,7 @@ fn main() -> anyhow::Result<()> {
     }
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
     match args.role {
-        Role::Hub => {
+        Role::Hub { on_demand } => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
             // Follows symlinks, so moving an install's `current` link can't change what later workers run.
             let worker_exe = std::env::current_exe()
@@ -78,7 +82,7 @@ fn main() -> anyhow::Result<()> {
                 .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path }))?;
+            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))?;
             Ok(())
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {
