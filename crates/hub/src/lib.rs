@@ -212,14 +212,14 @@ impl Hub {
             .lock()
             .values()
             .filter(|session| matches!(session.status(), SessionStatus::Running | SessionStatus::WaitingApproval))
-            .count() as u32;
+            .count();
         HubStatus {
             pid: std::process::id(),
             hub_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
             started_at_ms: self.started_at_ms,
-            workers: self.workers.lock().len() as u32,
-            running_sessions,
+            workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
+            running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
         }
     }
@@ -704,7 +704,8 @@ impl Hub {
         from_seq: Seq,
         through: Seq,
     ) -> Result<Vec<SessionEvent>, ApiError> {
-        let limit = (through - from_seq + 1).min(u64::from(server::PUMP_PAGE_EVENTS)) as u32;
+        let limit =
+            u32::try_from(through - from_seq + 1).map_or(server::PUMP_PAGE_EVENTS, |n| n.min(server::PUMP_PAGE_EVENTS));
         self.blocking(move |store| store.read_events(&id, from_seq, limit, server::DEFAULT_READ_BYTES, false)).await
     }
 
@@ -912,7 +913,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         started_at_ms: now_ms(),
         shutdown: Notify::new(),
         shutting_down: AtomicBool::new(false),
-        name_salt: AtomicU64::new(now_ms() as u64),
+        name_salt: AtomicU64::new(now_ms().cast_unsigned()),
         next_run: AtomicU64::new(1),
         clients: AtomicU32::new(0),
     });

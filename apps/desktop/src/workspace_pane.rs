@@ -256,7 +256,7 @@ impl WorkspacePane {
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
         let Some(current) = open.iter().position(|id| Some(id) == self.active.as_ref()) else { return };
-        let next = (current as isize + step).rem_euclid(open.len() as isize) as usize;
+        let next = crate::app::wrapped_step(current, step, open.len());
         self.activate(open[next].clone(), cx);
     }
 

@@ -56,7 +56,7 @@ impl Printer {
                     TurnOutcome::Error => "turn failed",
                     TurnOutcome::Unknown => "turn ended",
                 };
-                let seconds = duration_ms.unwrap_or(0) as f64 / 1000.0;
+                let seconds = std::time::Duration::from_millis(duration_ms.unwrap_or(0)).as_secs_f64();
                 let cost = cost_usd.unwrap_or(0.0);
                 self.line(event.seq, &format!("{what} in {seconds:.1}s, ${cost:.4}"));
                 for error in errors {

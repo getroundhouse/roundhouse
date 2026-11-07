@@ -19,10 +19,30 @@ pub(crate) struct LogText {
     pub lines: Arc<Vec<u32>>,
 }
 
+#[expect(clippy::cast_precision_loss, reason = "a position on screen, which only drifts past 16 million lines")]
+fn line_top(line: usize) -> Pixels {
+    px(line as f32 * LINE_HEIGHT)
+}
+
+/// The line at a position measured in lines.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "dropping the fraction is the point, and `as` turns anything negative into 0"
+)]
+fn line_at(lines: f32) -> usize {
+    lines as usize
+}
+
 impl LogText {
     pub(crate) fn new(text: &str) -> Self {
         let mut lines = vec![0u32];
-        lines.extend(text.bytes().enumerate().filter(|(_, b)| *b == b'\n').map(|(i, _)| i as u32 + 1));
+        lines.extend(
+            text.bytes()
+                .enumerate()
+                .filter(|(_, b)| *b == b'\n')
+                .map(|(i, _)| u32::try_from(i + 1).unwrap_or(u32::MAX)),
+        );
         Self { text: SharedString::from(text.to_string()), lines: Arc::new(lines) }
     }
 
@@ -69,7 +89,7 @@ impl Element for LogBlock {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, ()) {
-        let height = px(self.log.lines.len() as f32 * LINE_HEIGHT);
+        let height = line_top(self.log.lines.len());
         let style = Style { size: Size { width: relative(1.).into(), height: height.into() }, ..Default::default() };
         (window.request_layout(style, None, cx), ())
     }
@@ -98,8 +118,8 @@ impl Element for LogBlock {
         let clip = window.content_mask().bounds;
         let top = (clip.top() - bounds.top()).max(px(0.));
         let bottom = (clip.bottom() - bounds.top()).max(px(0.));
-        let first = (f32::from(top) / LINE_HEIGHT) as usize;
-        let last = ((f32::from(bottom) / LINE_HEIGHT).ceil() as usize).min(self.log.lines.len());
+        let first = line_at(f32::from(top) / LINE_HEIGHT);
+        let last = line_at((f32::from(bottom) / LINE_HEIGHT).ceil()).min(self.log.lines.len());
         let font = font(self.font.clone());
         for line in first..last {
             let text: SharedString = self.log.line(line).replace('\t', "    ").into();
@@ -115,7 +135,7 @@ impl Element for LogBlock {
                 strikethrough: None,
             };
             let shaped = window.text_system().shape_line(text, px(12.), &[run], None);
-            let origin = point(bounds.left(), bounds.top() + px(line as f32 * LINE_HEIGHT));
+            let origin = point(bounds.left(), bounds.top() + line_top(line));
             let _ = shaped.paint(origin, px(LINE_HEIGHT), TextAlign::Left, None, window, cx);
         }
     }

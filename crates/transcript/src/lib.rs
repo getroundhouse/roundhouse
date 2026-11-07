@@ -20,7 +20,7 @@ use gpui_kit::{
     Styled, Task, Window, px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{Seq, Session};
+use protocol::model::{Seq, Session, seq_index};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -183,7 +183,12 @@ impl Transcript {
                     let mut events = Vec::new();
                     let mut from = range.start;
                     while from < range.end {
-                        let (page, _) = client.session_read(&id, from, (range.end - from) as u32, false)?;
+                        let (page, _) = client.session_read(
+                            &id,
+                            from,
+                            u32::try_from(range.end - from).unwrap_or(u32::MAX),
+                            false,
+                        )?;
                         let Some(last) = page.last().map(|e| e.seq) else { break };
                         events.extend(page);
                         from = last + 1;
@@ -243,7 +248,7 @@ impl Transcript {
             let picks = m.picks.entry(approval_id).or_default().entry(question.text.clone()).or_default();
             questions::toggle_pick(picks, label, question.multiple);
         }
-        let row = seq as usize - 1;
+        let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
         cx.notify();
     }
@@ -278,7 +283,7 @@ impl Transcript {
         if done {
             self.send_answers(approval_id, cx);
         } else {
-            let row = seq as usize - 1;
+            let row = seq_index(seq) - 1;
             self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
             cx.notify();
         }
@@ -292,7 +297,7 @@ impl Transcript {
                 m.expanded.insert((seq, block));
             }
         }
-        let row = seq as usize - 1;
+        let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| {
             list.remeasure_items(row..row + 1, cx);
         });

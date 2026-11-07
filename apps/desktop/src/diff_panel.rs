@@ -136,7 +136,7 @@ impl DiffPanel {
                         .into_iter()
                         .map(|span| {
                             let style = HighlightStyle { color: Some(span.style.color), ..Default::default() };
-                            (span.range.start as usize..span.range.end as usize, style)
+                            (span.range, style)
                         })
                         .collect()
                 })
@@ -171,7 +171,13 @@ impl DiffPanel {
         cx.spawn(async move |this, cx| {
             let added = cx
                 .background_spawn(async move {
-                    client.comment_add(&id, position.path(), our_side(position.side()), position.line() as u32, &text)
+                    client.comment_add(
+                        &id,
+                        position.path(),
+                        our_side(position.side()),
+                        u32::try_from(position.line()).unwrap_or(u32::MAX),
+                        &text,
+                    )
                 })
                 .await;
             let _ = this.update(cx, |t, cx| {

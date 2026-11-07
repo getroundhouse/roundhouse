@@ -273,7 +273,7 @@ fn stream_event(value: &Value) -> Parsed {
     let Some(message_id) = message_id else {
         return Parsed::Drop;
     };
-    let index = event.get("index").and_then(Value::as_u64).map(|i| i as u32);
+    let index = event.get("index").and_then(Value::as_u64).and_then(|i| u32::try_from(i).ok());
     let change = match (str_of(event, "type"), index) {
         (Some("content_block_start"), Some(index)) => {
             let block = event.get("content_block").unwrap_or(&Value::Null);

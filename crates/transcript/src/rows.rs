@@ -46,9 +46,9 @@ pub(crate) fn render_row(
             let (open, picks) = if let EventBody::ApprovalRequested { approval_id, .. } = &body {
                 (m.log.open_approvals().iter().any(
                     |e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
-                ), (m.picks.get(approval_id).cloned()).unwrap_or_default())
+                ), m.picks.get(approval_id).cloned().unwrap_or_default())
             } else {
-                (false, Default::default())
+                (false, BTreeMap::default())
             };
             let expanded: Vec<usize> = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
             drop(m);
@@ -130,7 +130,7 @@ fn render_event(
             row().children(rendered).into_any_element()
         }
         EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-            let seconds = duration_ms.unwrap_or(0) as f64 / 1000.0;
+            let seconds = std::time::Duration::from_millis(duration_ms.unwrap_or(0)).as_secs_f64();
             let cost = cost_usd.unwrap_or(0.0);
             match outcome {
                 TurnOutcome::Cancelled => muted_line("Stopped", cx),

@@ -92,8 +92,8 @@ const MIGRATIONS: &[&str] = &[
 ",
 ];
 
-const FIRST_PORT_BASE: i64 = 55_000;
-const PORTS_PER_WORKSPACE: i64 = 10;
+const FIRST_PORT_BASE: u16 = 55_000;
+const PORTS_PER_WORKSPACE: u16 = 10;
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.
@@ -118,7 +118,7 @@ pub struct Appended {
 }
 
 pub fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 fn lock(conn: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
@@ -158,7 +158,7 @@ fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         created_at_ms: row.get(9)?,
         archived_at_ms: row.get(10)?,
         setup: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or(SetupStatus::Unknown),
-        port_base: row.get::<_, i64>(12)? as u16,
+        port_base: row.get(12)?,
     })
 }
 
@@ -173,7 +173,7 @@ fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             model: row.get(3)?,
             permission_mode: row.get(4)?,
             status: from_text(row.get(5)?)?,
-            last_seq: row.get::<_, i64>(6)? as Seq,
+            last_seq: row.get::<_, i64>(6)?.cast_unsigned(),
             created_at_ms: row.get(7)?,
             updated_at_ms: row.get(8)?,
             title: row.get(11)?,
@@ -289,12 +289,12 @@ impl Store {
 
     /// The start of ten ports nothing else has. Never reused, so a restored workspace keeps its own.
     pub fn next_port_base(&self) -> Result<u16, StoreError> {
-        let highest: i64 =
+        let highest: u16 =
             lock(&self.reader).query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], |row| row.get(0))?;
         let next = if highest == 0 { FIRST_PORT_BASE } else { highest + PORTS_PER_WORKSPACE };
         // Past the top of the range, start again rather than fail. A clash is possible, but only
         // after thousands of workspaces, and it only matters if both are running a server.
-        Ok(if next + PORTS_PER_WORKSPACE > 65_000 { FIRST_PORT_BASE as u16 } else { next as u16 })
+        Ok(if next + PORTS_PER_WORKSPACE > 65_000 { FIRST_PORT_BASE } else { next })
     }
 
     /// A setup that was running when the hub stopped never finished, and its worker has gone.
@@ -358,7 +358,7 @@ impl Store {
                 session.model,
                 session.permission_mode,
                 text_of(&session.status),
-                session.last_seq as i64,
+                session.last_seq.cast_signed(),
                 session.created_at_ms,
                 session.updated_at_ms,
                 stored.agent_session_id,
@@ -497,8 +497,13 @@ impl Store {
                 .optional()?;
             if let Some((seq, ts_ms, body)) = existing {
                 let body = serde_json::from_str(&body)?;
-                let event =
-                    SessionEvent { session_id: session_id.to_string(), seq: seq as Seq, ts_ms, body, raw: None };
+                let event = SessionEvent {
+                    session_id: session_id.to_string(),
+                    seq: seq.cast_unsigned(),
+                    ts_ms,
+                    body,
+                    raw: None,
+                };
                 return Ok(Appended { event, duplicate: true });
             }
         }
@@ -520,8 +525,13 @@ impl Store {
             tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![text_of(&status), session_id])?;
         }
         tx.commit()?;
-        let event =
-            SessionEvent { session_id: session_id.to_string(), seq: seq as Seq, ts_ms, body: body.clone(), raw: None };
+        let event = SessionEvent {
+            session_id: session_id.to_string(),
+            seq: seq.cast_unsigned(),
+            ts_ms,
+            body: body.clone(),
+            raw: None,
+        };
         Ok(Appended { event, duplicate: false })
     }
 
@@ -539,7 +549,7 @@ impl Store {
         let mut statement = conn.prepare_cached(&format!(
             "SELECT seq, ts_ms, body, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
         ))?;
-        let mut rows = statement.query(params![session_id, from_seq as i64, limit])?;
+        let mut rows = statement.query(params![session_id, from_seq.cast_signed(), limit])?;
         let mut events = Vec::new();
         let mut bytes = 0u64;
         while let Some(row) = rows.next()? {
@@ -548,7 +558,7 @@ impl Store {
             bytes += (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
             events.push(SessionEvent {
                 session_id: session_id.to_string(),
-                seq: row.get::<_, i64>(0)? as Seq,
+                seq: row.get::<_, i64>(0)?.cast_unsigned(),
                 ts_ms: row.get(1)?,
                 body: serde_json::from_str(&body)?,
                 raw,
@@ -594,14 +604,16 @@ impl Store {
 }
 
 fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
-    let version: usize = conn.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))? as usize;
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    // Negative isn't something this code ever writes, so it counts as newer.
+    let version = usize::try_from(version).unwrap_or(usize::MAX);
     if version > MIGRATIONS.len() {
         return Err(StoreError::TooNew { found: version, known: MIGRATIONS.len() });
     }
-    for (index, migration) in MIGRATIONS.iter().enumerate().skip(version) {
+    for (reached, migration) in (1_i64..).zip(MIGRATIONS).skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(migration)?;
-        tx.pragma_update(None, "user_version", (index + 1) as i64)?;
+        tx.pragma_update(None, "user_version", reached)?;
         tx.commit()?;
     }
     Ok(())
