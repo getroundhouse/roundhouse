@@ -2,6 +2,8 @@
 //! CLI with the adapter's own flags, by `tools/smoke/capture_claude_fixture.py`. Rerun that after a
 //! CLI upgrade: a failure here means the CLI changed in a way the adapter relies on.
 
+#![cfg(test)]
+
 use agents::claude::{Parsed, parse_line};
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
 use protocol::tail::{BlockKind, Tail};

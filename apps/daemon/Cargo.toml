@@ -21,6 +21,7 @@ tracing.workspace = true
 worker.workspace = true
 
 [dev-dependencies]
+parking_lot.workspace = true
 client-core.workspace = true
 flume.workspace = true
 libc.workspace = true

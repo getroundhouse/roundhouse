@@ -1,10 +1,11 @@
 //! The hub's end of one worker connection.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
@@ -24,7 +25,7 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Reply = oneshot::Sender<Result<WorkerResponse, ApiError>>;
 
-pub struct WorkerLink {
+pub(crate) struct WorkerLink {
     /// Distinguishes this connection from an earlier one to the same workspace.
     pub id: u64,
     next_call: AtomicU64,
@@ -42,7 +43,7 @@ fn lost() -> ApiError {
 impl WorkerLink {
     /// Starts the instance's worker and says hello. On failure nothing is left running, so the next
     /// attempt starts clean.
-    pub async fn open(
+    pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
         workspace_id: String,
@@ -83,15 +84,15 @@ impl WorkerLink {
         Err(failure)
     }
 
-    pub async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
+    pub(crate) async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
         let id = self.next_call.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&WorkerCall { id, request })
             .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
-        let calls = self.calls.lock().unwrap().clone().ok_or_else(lost)?;
+        let calls = self.calls.lock().clone().ok_or_else(lost)?;
         let (reply_tx, reply_rx) = oneshot::channel();
-        self.pending.lock().unwrap().as_mut().ok_or_else(lost)?.insert(id, reply_tx);
+        self.pending.lock().as_mut().ok_or_else(lost)?.insert(id, reply_tx);
         if calls.send(line).await.is_err() {
-            if let Some(pending) = self.pending.lock().unwrap().as_mut() {
+            if let Some(pending) = self.pending.lock().as_mut() {
                 pending.remove(&id);
             }
             return Err(lost());
@@ -102,17 +103,17 @@ impl WorkerLink {
         reply_rx.await.map_err(|_| lost())?
     }
 
-    pub fn is_open(&self) -> bool {
-        !*self.closed.borrow() && self.calls.lock().unwrap().is_some()
+    pub(crate) fn is_open(&self) -> bool {
+        !*self.closed.borrow() && self.calls.lock().is_some()
     }
 
     /// Closes the worker's stdin. It stops its agents, flushes, and exits.
-    pub fn close(&self) {
-        self.calls.lock().unwrap().take();
+    pub(crate) fn close(&self) {
+        self.calls.lock().take();
     }
 
     /// Resolves once the worker's output has been fully read.
-    pub async fn wait_closed(&self) {
+    pub(crate) async fn wait_closed(&self) {
         let mut closed = self.closed.subscribe();
         let _ = closed.wait_for(|done| *done).await;
     }
@@ -137,13 +138,13 @@ async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut reader = BufReader::new(reader);
-    let mut line = Vec::new();
+    let mut bytes = Vec::new();
     loop {
-        line.clear();
-        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
+        bytes.clear();
+        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut bytes).await;
         match read {
             Ok(0) => break,
-            Ok(_) if line.len() > frame::MAX_FRAME_BYTES => {
+            Ok(_) if bytes.len() > frame::MAX_FRAME_BYTES => {
                 warn!("a worker sent an oversized frame");
                 break;
             }
@@ -153,7 +154,7 @@ async fn read_frames(
                 break;
             }
         }
-        let parsed: WorkerFrame = match frame::decode(&line) {
+        let parsed: WorkerFrame = match frame::decode(&bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
                 warn!("ignoring a worker frame that didn't parse: {e}");
@@ -162,7 +163,7 @@ async fn read_frames(
         };
         match parsed {
             WorkerFrame::Reply { id, outcome } => {
-                let reply = link.pending.lock().unwrap().as_mut().and_then(|pending| pending.remove(&id));
+                let reply = link.pending.lock().as_mut().and_then(|pending| pending.remove(&id));
                 if let Some(reply) = reply {
                     let _ = reply.send(match outcome {
                         WorkerOutcome::Response(response) => Ok(response),
@@ -181,7 +182,7 @@ async fn read_frames(
     debug!(instance_id, "worker connection ended");
     link.close();
     // Dropping these wakes each waiting call with an error.
-    drop(link.pending.lock().unwrap().take());
+    drop(link.pending.lock().take());
     hub.worker_gone(&workspace_id, &link, provider.as_ref(), &instance_id).await;
     // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
     // the value unset, and whoever waits later would wait forever.

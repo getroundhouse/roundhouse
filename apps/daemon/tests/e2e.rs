@@ -1,6 +1,8 @@
 //! The whole stack with real processes: a real hub binary, real workers, real git worktrees and a
 //! real socket. Only the agent is fake. See `examples/fake_claude.rs`.
 
+#![cfg(test)]
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
@@ -291,7 +293,7 @@ impl Follower {
             let wait = deadline.saturating_duration_since(Instant::now());
             match subscription.items.recv_timeout(wait) {
                 Ok(item) => self.apply(item),
-                Err(_) => panic!("timed out waiting for {what}"),
+                Err(e) => panic!("timed out waiting for {what}: {e}"),
             }
         }
     }
@@ -405,7 +407,7 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     };
     let watcher = stack.client();
     wait_until("the hub to see the client leave", || watcher.hub_status().unwrap().clients == 1);
-    assert!(watcher.session_get(&session_id).unwrap().status == SessionStatus::Running);
+    assert_eq!(watcher.session_get(&session_id).unwrap().status, SessionStatus::Running);
     assert!(is_alive(agent_pid), "the agent must outlive its client");
 
     let client = stack.client();
@@ -487,7 +489,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let expected: String = (0..CHUNKS).map(|i| format!("{i} ")).collect();
+    let expected: String = (0..CHUNKS).map(|i| i.to_string() + " ").collect();
 
     // Attach and detach over and over while deltas pour in. A chunk could land both in a client's
     // snapshot and in the live stream after it, or in neither. Whenever it's checked, a client's
@@ -1140,8 +1142,8 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     let mut stack = Stack::start();
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
-    let (stuck, _) = stack.workspace(&client);
-    let (also_stuck, _) = stack.workspace(&client);
+    let (hung, _) = stack.workspace(&client);
+    let (also_hung, _) = stack.workspace(&client);
     let (fine, _) = stack.workspace(&client);
     kill_workers(&stack, &client);
     client.workspace_status(&fine.id).unwrap();
@@ -1149,7 +1151,7 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     // The next workers to start never say hello.
     replace_with_script(&exe, "exec sleep 1000");
     let started = Instant::now();
-    let blocked: Vec<_> = [stuck.id.clone(), also_stuck.id.clone()]
+    let blocked: Vec<_> = [hung.id.clone(), also_hung.id.clone()]
         .into_iter()
         .map(|id| {
             let socket = stack.socket();
@@ -1185,7 +1187,7 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     assert!(started.elapsed() < Duration::from_secs(15), "took {:?}", started.elapsed());
 
     restore_real_worker(&exe);
-    client.workspace_status(&stuck.id).unwrap();
+    client.workspace_status(&hung.id).unwrap();
 }
 
 // Launch flags disagreeing with the CLI's records ---------------------------------------------------
@@ -1843,6 +1845,7 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     let script = pid_running(&needle).unwrap();
     // SAFETY: kill(2) has no memory effects. This is the script's parent, the worker, by the chain below.
     let group_leader = parent_of(script);
+    // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.
     unsafe { libc::kill(parent_of(group_leader) as i32, libc::SIGKILL) };
     wait_until("the script to be stopped", || pid_running(&needle).is_none());
 }
@@ -1962,7 +1965,7 @@ fn next_notice(feed: &Subscription, what: &str) -> HubNotice {
         match feed.items.recv_timeout(wait) {
             Ok(SubscriptionItem::Notice(notice)) => return notice,
             Ok(_) => {}
-            Err(_) => panic!("timed out waiting for {what}"),
+            Err(e) => panic!("timed out waiting for {what}: {e}"),
         }
     }
 }
@@ -2079,8 +2082,9 @@ fn dropping_a_subscription_stops_its_stream_but_not_the_connection() {
 
 #[test]
 fn a_client_with_the_wrong_protocol_version_is_told_so() {
-    let stack = Stack::start();
     use std::io::{BufRead, BufReader, Write};
+
+    let stack = Stack::start();
     let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
     let hello = protocol::client::ClientFrame {
         id: 1,

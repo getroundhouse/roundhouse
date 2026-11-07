@@ -17,23 +17,31 @@
 //!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
 //!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
 //!
-//! Conversations persist as files in $FAKE_CLAUDE_STATE. `--resume` fails if there isn't one and
+//! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
+
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::needless_pass_by_value,
+    reason = "a test program, so it unwraps and takes its values however is shortest"
+)]
 
 use std::collections::VecDeque;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 type Out = Arc<Mutex<std::io::Stdout>>;
 
 /// Ignores write errors: an orphan keeps working after whoever read its output has gone.
 fn emit(out: &Out, value: Value) {
-    let mut out = out.lock().unwrap();
+    let mut out = out.lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
 }
@@ -48,16 +56,16 @@ static LIVE_MODE: Mutex<Option<String>> = Mutex::new(None);
 static LIVE_MODEL: Mutex<Option<String>> = Mutex::new(None);
 
 fn current_mode() -> String {
-    LIVE_MODE.lock().unwrap().clone().unwrap_or_else(|| "default".to_string())
+    LIVE_MODE.lock().clone().unwrap_or_else(|| "default".to_string())
 }
 
 fn current_model() -> String {
-    LIVE_MODEL.lock().unwrap().clone().unwrap_or_else(|| "fake-model".to_string())
+    LIVE_MODEL.lock().clone().unwrap_or_else(|| "fake-model".to_string())
 }
 
 /// Reported the way the real CLI does: in order, and for changes it makes itself.
 fn set_mode(out: &Out, mode: &str) {
-    *LIVE_MODE.lock().unwrap() = Some(mode.to_string());
+    *LIVE_MODE.lock() = Some(mode.to_string());
     emit(out, json!({"type":"system","subtype":"status","status":null,"permissionMode":mode}));
 }
 
@@ -112,8 +120,8 @@ fn main() {
         eprintln!("error: option '--permission-mode <mode>' argument 'default' is invalid.");
         std::process::exit(1);
     }
-    *LIVE_MODE.lock().unwrap() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
-    *LIVE_MODEL.lock().unwrap() = flag(&args, "--model");
+    *LIVE_MODE.lock() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
+    *LIVE_MODEL.lock() = flag(&args, "--model");
     let config = Config { conversation: state.join(&session_id), session_id };
 
     let (input_tx, input_rx) = mpsc::channel();
@@ -129,7 +137,7 @@ fn main() {
             None if eof => return,
             None => match input_rx.recv() {
                 Ok(Input::Prompt(text)) => text,
-                Ok(Input::Interrupt) | Ok(Input::Approval(_)) => continue,
+                Ok(Input::Interrupt | Input::Approval(_)) => continue,
                 Ok(Input::Eof) | Err(_) => return,
             },
         };
@@ -165,7 +173,7 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
                     if model == "not-a-model" {
                         answer_control(&out, &value["request_id"], Err(format!("Model '{model}' not found")));
                     } else {
-                        *LIVE_MODEL.lock().unwrap() = Some(model.to_string());
+                        *LIVE_MODEL.lock() = Some(model.to_string());
                         answer_control(&out, &value["request_id"], Ok(json!({"model":model})));
                     }
                     continue;
@@ -382,7 +390,10 @@ fn run_command(
     }
     if let Some(seconds) = command.strip_prefix("holdpipe:") {
         // Never waited on, because the point is that it outlives this process.
-        #[allow(clippy::zombie_processes)]
+        #[expect(
+            clippy::zombie_processes,
+            reason = "never waited on, because the point is that it outlives this process"
+        )]
         std::process::Command::new("sleep")
             .arg(seconds)
             .stdin(std::process::Stdio::null())

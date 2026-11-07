@@ -26,7 +26,7 @@ mod tests {
     fn a_frame_is_exactly_one_line() {
         let body = EventBody::UserPrompt { text: "line one\nline two".into(), client_msg_id: None };
         let line = encode(&body).unwrap();
-        assert_eq!(line.iter().filter(|b| **b == b'\n').count(), 1);
+        assert_eq!(line.iter().position(|b| *b == b'\n'), Some(line.len() - 1));
         assert_eq!(line.last(), Some(&b'\n'));
         assert_eq!(decode::<EventBody>(&line).unwrap(), body);
     }

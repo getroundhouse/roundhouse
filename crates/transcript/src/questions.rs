@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{AnyElement, App, ElementId, IntoElement, ParentElement, Styled, WeakEntity, div};
 use protocol::event::ApprovalDecision;
 use protocol::model::Seq;
 use serde_json::Value;
@@ -78,7 +78,7 @@ pub(crate) fn first_unanswered<'a>(
     asked: &'a [Question],
     picks: &BTreeMap<String, Vec<String>>,
 ) -> Option<&'a Question> {
-    asked.iter().find(|question| !picks.get(&question.text).is_some_and(|labels| !labels.is_empty()))
+    asked.iter().find(|question| picks.get(&question.text).is_none_or(std::vec::Vec::is_empty))
 }
 
 pub(crate) fn card(

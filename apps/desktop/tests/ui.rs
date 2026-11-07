@@ -2,6 +2,8 @@
 //! and real git worktrees. Only the agent is fake, and no window appears on screen. See
 //! `apps/daemon/examples/fake_claude.rs` for what prompts can script.
 
+#![cfg(test)]
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -119,6 +121,8 @@ struct Ui<'a> {
     cx: &'a mut TestAppContext,
     handle: AnyWindowHandle,
     view: Entity<AppView>,
+    /// The approval [`Ui::next_open_approval`] last returned.
+    seen_approval: u64,
 }
 
 impl<'a> Ui<'a> {
@@ -128,16 +132,33 @@ impl<'a> Ui<'a> {
         cx.update(gpui_kit::init);
         let hub = stack.hub.clone();
         let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, cx)).unwrap();
-        let mut ui = Self { cx, handle, view };
+        let mut ui = Self { cx, handle, view, seen_approval: 0 };
         ui.wait("the app to connect", |ui| matches!(ui.view().connection, Connection::Ready(_)));
         ui
     }
 
     fn view(&self) -> AppViewRef<'_> {
-        AppViewRef(self.cx.read_entity(&self.view, |view, _| view as *const AppView), std::marker::PhantomData)
+        AppViewRef(
+            self.cx.read_entity(&self.view, |view, _| std::ptr::from_ref::<AppView>(view)),
+            std::marker::PhantomData,
+        )
     }
 
     /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket.
+    /// The newest open approval, once the transcript has it. A session's status comes over the hub's
+    /// feed, and the transcript's events over their own subscription, so either can arrive first, and
+    /// the transcript can still be showing the previous approval.
+    fn next_open_approval(&mut self) -> u64 {
+        let seen = self.seen_approval;
+        let newest = |ui: &Self| {
+            let approvals = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()));
+            approvals.into_iter().flatten().map(|event| event.seq).filter(|seq| *seq > seen).max()
+        };
+        self.wait("the transcript to show the approval", |ui| newest(ui).is_some());
+        self.seen_approval = newest(self).unwrap();
+        self.seen_approval
+    }
+
     fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
         let deadline = Instant::now() + TIMEOUT;
         loop {
@@ -324,12 +345,9 @@ fn the_core_loop(cx: &mut TestAppContext) {
     // Work with the agent, approving a tool on the way.
     ui.input("say:starting; tool:echo changed >> a.txt; say:finished");
     ui.press("enter");
-    ui.wait("the agent to ask for approval", |ui| {
-        ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| !t.open_approvals().is_empty()))
-    });
-    assert_eq!(ui.session_status(), Some(SessionStatus::WaitingApproval));
+    let approval_seq = ui.next_open_approval();
+    ui.wait("the session to wait for an answer", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\n", "not until it's approved");
-    let approval_seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
     ui.click(ElementId::NamedInteger("allow".into(), approval_seq));
     ui.wait_idle_with("the turn to finish", |text| text.contains("finished"));
     assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\nchanged\n");
@@ -684,10 +702,7 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
     // The app opens after the question was asked, so it has to learn about it from history.
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
-    ui.wait("the waiting approval", |ui| {
-        ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| !t.open_approvals().is_empty()))
-    });
-    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    let seq = ui.next_open_approval();
     ui.click(ElementId::NamedInteger("allow".into(), seq));
     ui.wait("the tool to run", |ui| {
         ui.session_status() == Some(SessionStatus::Idle)
@@ -903,7 +918,7 @@ fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
     ui.input("tool:echo one > one.txt");
     ui.press("enter");
     ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    let seq = ui.next_open_approval();
     ui.click(ElementId::NamedInteger("allow".into(), seq));
     ui.wait("the first tool", |ui| ui.session_status() == Some(SessionStatus::Idle) && path.join("one.txt").exists());
 
@@ -956,7 +971,7 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.input("plan:First attempt");
     ui.press("enter");
     ui.wait("the plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    let seq = ui.next_open_approval();
     ui.click(ElementId::NamedInteger("keep-planning".into(), seq));
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     assert_eq!(ui.chat_mode().as_deref(), Some("plan"), "still planning");
@@ -964,7 +979,7 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.input("plan:Second attempt");
     ui.press("enter");
     ui.wait("the next plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    let seq = ui.next_open_approval();
     ui.click(ElementId::NamedInteger("approve-plan".into(), seq));
     ui.wait("plan mode to end, by the agent's own report", |ui| {
         ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode().as_deref() == Some("manual")
@@ -990,7 +1005,7 @@ fn open_question(ui: &mut Ui, prompt: &str) -> u64 {
     ui.input(prompt);
     ui.press("enter");
     ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap()
+    ui.next_open_approval()
 }
 
 #[gpui_kit::test]

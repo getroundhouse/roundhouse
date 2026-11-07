@@ -13,7 +13,10 @@ use std::rc::Rc;
 use client_core::session_log::{PAGE_EVENTS, SessionLog};
 use client_core::{Client, SubscriptionItem};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
-use gpui_kit::*;
+use gpui_kit::{
+    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, Result, SharedString, StyleRefinement,
+    Styled, Task, Window, px,
+};
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{Seq, Session};
 
@@ -301,7 +304,7 @@ impl Transcript {
         let client_msg_id = uuid::Uuid::new_v4().to_string();
         self.model.borrow_mut().log.add_pending(client_msg_id.clone(), text.clone());
         self.sync_rows(cx);
-        self.scroller.update(cx, |list, cx| list.scroll_to_end(cx));
+        self.scroller.update(cx, MessageScrollerState::scroll_to_end);
         cx.notify();
 
         let (client, id, msg_id) = (self.client.clone(), self.session_id.clone(), client_msg_id.clone());

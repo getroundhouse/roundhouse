@@ -1,5 +1,7 @@
 //! The diff against the workspace's base, on the kit's `Diff`, with review comments the hub keeps.
 
+use std::fmt::Write as _;
+
 use client_core::Client;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::diff::{
@@ -8,7 +10,10 @@ use gpui_kit::component::diff::{
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{
+    AnyElement, AppContext, Context, ElementId, Entity, EventEmitter, HighlightStyle, InteractiveElement, IntoElement,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, div,
+};
 use protocol::model::{DiffComment, DiffSide, WorkspaceId};
 
 #[derive(Clone, Debug)]
@@ -40,7 +45,7 @@ pub fn comments_prompt(comments: &[DiffComment]) -> String {
             DiffSide::Old => " (a removed line)",
             DiffSide::New => "",
         };
-        prompt.push_str(&format!("\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text));
+        let _ = write!(prompt, "\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text);
     }
     prompt
 }
@@ -122,22 +127,21 @@ impl DiffPanel {
     }
 
     fn show_files(&mut self, files: Vec<DiffFile>, cx: &mut Context<Self>) {
-        match &self.state {
-            Some(state) => state.update(cx, |s, cx| s.set_files(files, cx)),
-            None => {
-                let state = cx.new(|cx| {
-                    DiffState::new(files, cx).with_mode(DiffMode::Unified).with_syntax_highlighter(|language, text| {
-                        crate::highlight::highlight(language, text)
-                            .into_iter()
-                            .map(|span| {
-                                let style = HighlightStyle { color: Some(span.style.color), ..Default::default() };
-                                (span.range.start as usize..span.range.end as usize, style)
-                            })
-                            .collect()
-                    })
-                });
-                self.state = Some(state);
-            }
+        if let Some(state) = &self.state {
+            state.update(cx, |s, cx| s.set_files(files, cx));
+        } else {
+            let state = cx.new(|cx| {
+                DiffState::new(files, cx).with_mode(DiffMode::Unified).with_syntax_highlighter(|language, text| {
+                    crate::highlight::highlight(language, text)
+                        .into_iter()
+                        .map(|span| {
+                            let style = HighlightStyle { color: Some(span.style.color), ..Default::default() };
+                            (span.range.start as usize..span.range.end as usize, style)
+                        })
+                        .collect()
+                })
+            });
+            self.state = Some(state);
         }
     }
 
@@ -283,7 +287,7 @@ impl Render for DiffPanel {
                                         },
                                     ))
                                     .child(Button::new("cancel-comment").label("Cancel").on_click(move |_, _, cx| {
-                                        let _ = cancel.update(cx, |t, cx| t.cancel_draft(cx));
+                                        let _ = cancel.update(cx, DiffPanel::cancel_draft);
                                     })),
                             )
                             .into_any_element();

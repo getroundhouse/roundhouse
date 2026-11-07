@@ -8,9 +8,12 @@
 //! Selects the named workspace. With `diff`, opens its diff, and a further argument adds a comment on the
 //! first changed line.
 
+#![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
+
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::SharedString;
 use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
@@ -20,7 +23,8 @@ fn main() {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
-        let (handle, view) = desktop::open_main_window(HubSource::default_local(), cx).expect("open a window");
+        let (handle, view) =
+            desktop::open_main_window(HubSource::default_local().expect("find the hub"), cx).expect("open a window");
         let args = args.clone();
         cx.spawn(async move |cx| {
             let wanted = args.first().cloned();
@@ -61,16 +65,16 @@ fn main() {
                     client.comment_add(&id, &path, protocol::model::DiffSide::New, line, text).unwrap();
                 }
             }
-            pane.update(cx, |p, cx| p.toggle_diff(cx));
+            pane.update(cx, WorkspacePane::toggle_diff);
         })
         .detach();
     });
 }
 
-fn first_added_line(patch: &str) -> Option<(String, u32)> {
+fn first_added_line(diff: &str) -> Option<(String, u32)> {
     let mut path = None;
     let mut line = 0u32;
-    for text in patch.lines() {
+    for text in diff.lines() {
         if let Some(p) = text.strip_prefix("+++ b/") {
             path = Some(p.to_string());
         } else if let Some(rest) = text.strip_prefix("@@ ") {

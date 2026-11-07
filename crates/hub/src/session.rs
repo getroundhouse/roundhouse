@@ -6,8 +6,9 @@
 //! the output being read, and the reply behind it would never arrive.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 
+use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{
     AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel, SessionEvent,
@@ -25,7 +26,7 @@ use crate::worker_link::WorkerLink;
 const LIVE_CAPACITY: usize = 4096;
 
 /// What arrives from a worker.
-pub enum Item {
+pub(crate) enum Item {
     Event {
         run: u64,
         body: EventBody,
@@ -38,7 +39,7 @@ pub enum Item {
     Flush(oneshot::Sender<()>),
 }
 
-pub enum Command {
+pub(crate) enum Command {
     Prompt { text: String, client_msg_id: Option<String>, reply: oneshot::Sender<Result<(Seq, bool), ApiError>> },
     Approve { approval_id: String, decision: ApprovalDecision, reply: oneshot::Sender<Result<(), ApiError>> },
     Cancel { reply: oneshot::Sender<Result<(), ApiError>> },
@@ -46,7 +47,7 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug)]
-pub enum LiveItem {
+pub(crate) enum LiveItem {
     /// The log now reaches this `seq`.
     Appended(Seq),
     Delta(StreamDelta),
@@ -55,12 +56,12 @@ pub enum LiveItem {
 /// `version` puts every change in one order, whichever task made it, so a subscriber can tell what
 /// a snapshot already includes.
 #[derive(Clone, Debug)]
-pub struct Live {
+pub(crate) struct Live {
     pub version: u64,
     pub item: LiveItem,
 }
 
-pub struct Snapshot {
+pub(crate) struct Snapshot {
     pub last_seq: Seq,
     pub tail: Tail,
     pub version: u64,
@@ -93,7 +94,7 @@ struct LiveState {
     live: Option<broadcast::Sender<Live>>,
 }
 
-pub struct LiveSession {
+pub(crate) struct LiveSession {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     agent: AgentKind,
@@ -114,7 +115,7 @@ pub struct LiveSession {
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
 /// its own, so `AgentState` is what says when the agent is really idle. `TurnEnded` also goes to
 /// idle, in case a future CLI stops sending it, and any state event after that corrects it.
-pub fn next_status(current: SessionStatus, body: &EventBody, approvals_left: usize) -> SessionStatus {
+pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_left: usize) -> SessionStatus {
     match body {
         EventBody::UserPrompt { .. } => SessionStatus::Running,
         EventBody::AgentState { state: AgentRunState::Running } => {
@@ -124,13 +125,13 @@ pub fn next_status(current: SessionStatus, body: &EventBody, approvals_left: usi
                 SessionStatus::Running
             }
         }
-        EventBody::AgentState { state: AgentRunState::RequiresAction } => SessionStatus::WaitingApproval,
-        EventBody::AgentState { state: AgentRunState::Idle } => SessionStatus::Idle,
-        EventBody::ApprovalRequested { .. } => SessionStatus::WaitingApproval,
+        EventBody::AgentState { state: AgentRunState::RequiresAction } | EventBody::ApprovalRequested { .. } => {
+            SessionStatus::WaitingApproval
+        }
+        EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => SessionStatus::Idle,
         EventBody::ApprovalResolved { .. } if current == SessionStatus::WaitingApproval && approvals_left == 0 => {
             SessionStatus::Running
         }
-        EventBody::TurnEnded { .. } => SessionStatus::Idle,
         EventBody::AgentExited { .. } if matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval) => {
             SessionStatus::Interrupted
         }
@@ -163,7 +164,7 @@ fn publish(state: &mut LiveState, item: LiveItem) {
 }
 
 impl LiveSession {
-    pub fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<String>) -> Arc<Self> {
+    pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<String>) -> Arc<Self> {
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {
@@ -202,32 +203,32 @@ impl LiveSession {
         self.hub.upgrade().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the hub is shutting down"))
     }
 
-    pub async fn command(&self, command: Command) -> Result<(), ApiError> {
+    pub(crate) async fn command(&self, command: Command) -> Result<(), ApiError> {
         self.commands.send(command).await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))
     }
 
-    pub async fn send_item(&self, item: Item) {
+    pub(crate) async fn send_item(&self, item: Item) {
         if self.ingest.send(item).await.is_err() {
             warn!(session = self.id, "dropped worker output for a stopped session");
         }
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<Live> {
-        let mut state = self.state.lock().unwrap();
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<Live> {
+        let mut state = self.state.lock();
         state.live.get_or_insert_with(|| broadcast::channel(LIVE_CAPACITY).0).subscribe()
     }
 
-    pub fn snapshot(&self) -> Snapshot {
-        let state = self.state.lock().unwrap();
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        let state = self.state.lock();
         Snapshot { last_seq: state.last_seq, tail: state.tail.clone(), version: state.version }
     }
 
-    pub fn status(&self) -> SessionStatus {
-        self.state.lock().unwrap().status
+    pub(crate) fn status(&self) -> SessionStatus {
+        self.state.lock().status
     }
 
-    pub fn agent_running(&self) -> bool {
-        self.state.lock().unwrap().agent.is_some()
+    pub(crate) fn agent_running(&self) -> bool {
+        self.state.lock().agent.is_some()
     }
 
     /// Commits to the log first, so nothing is seen that isn't durable, then updates live state.
@@ -245,7 +246,7 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let (next, new_status) = {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock();
             if speaks_for_session {
                 let next = next_status(state.status, &body, approvals_after(&state.pending_approvals, &body));
                 (next, (next != state.status).then_some(next))
@@ -262,7 +263,7 @@ impl LiveSession {
             return Ok((appended.event, true));
         }
         let seq = appended.event.seq;
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.last_seq = seq;
         state.tail.on_event(&body);
         match &body {
@@ -284,7 +285,7 @@ impl LiveSession {
     }
 
     fn record_now(&self, status: SessionStatus, last_seq: Seq, updated_at_ms: i64) -> Session {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
         Session {
             id: self.id.clone(),
             workspace_id: self.workspace_id.clone(),
@@ -303,7 +304,7 @@ impl LiveSession {
     /// What this session is right now, for anything that changed outside the log.
     fn announce(&self, hub: &Hub) -> Session {
         let (status, last_seq) = {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock();
             (state.status, state.last_seq)
         };
         let session = self.record_now(status, last_seq, store::now_ms());
@@ -312,7 +313,11 @@ impl LiveSession {
     }
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
-    pub async fn configure(&self, model: Option<String>, permission_mode: Option<String>) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(
+        &self,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    ) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
@@ -327,7 +332,7 @@ impl LiveSession {
         hub.blocking(move |store| store.set_session_options(&id, saved_model.as_deref(), saved_mode.as_deref()))
             .await?;
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock();
             state.model = model.or(state.model.take());
             state.permission_mode = permission_mode.or(state.permission_mode.take());
         }
@@ -337,7 +342,7 @@ impl LiveSession {
     /// The agent changed mode, or confirmed a change. The next launch has to start in this one.
     async fn note_mode(&self, mode: String) {
         let Ok(hub) = self.hub() else { return };
-        if self.state.lock().unwrap().permission_mode.as_deref() == Some(mode.as_str()) {
+        if self.state.lock().permission_mode.as_deref() == Some(mode.as_str()) {
             return;
         }
         let (id, saved) = (self.id.clone(), mode.clone());
@@ -345,11 +350,11 @@ impl LiveSession {
             error!(session = self.id, "could not record the agent's mode: {e}");
             return;
         }
-        self.state.lock().unwrap().permission_mode = Some(mode);
+        self.state.lock().permission_mode = Some(mode);
         self.announce(&hub);
     }
 
-    pub async fn close(&self) -> Result<Session, ApiError> {
+    pub(crate) async fn close(&self) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let closed_at = store::now_ms();
         let id = self.id.clone();
@@ -357,29 +362,29 @@ impl LiveSession {
             // An agent being started right now either finishes first, and is stopped below, or sees this.
             let _no_start_meanwhile = self.configuring.lock().await;
             hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
-            self.state.lock().unwrap().closed_at_ms = Some(closed_at);
+            self.state.lock().closed_at_ms = Some(closed_at);
         }
         // Past anything in the queue, so a prompt waiting on setup can't outlive this.
         self.handle_stop().await?;
         Ok(self.announce(&hub))
     }
 
-    pub async fn reopen(&self) -> Result<Session, ApiError> {
+    pub(crate) async fn reopen(&self) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let id = self.id.clone();
         hub.blocking(move |store| store.set_session_closed(&id, None)).await?;
-        self.state.lock().unwrap().closed_at_ms = None;
+        self.state.lock().closed_at_ms = None;
         Ok(self.announce(&hub))
     }
 
     fn is_closed(&self) -> bool {
-        self.state.lock().unwrap().closed_at_ms.is_some()
+        self.state.lock().closed_at_ms.is_some()
     }
 
     /// The first prompt names the session.
     async fn name_from(&self, prompt: &str) {
         let Some(title) = title_from_prompt(prompt) else { return };
-        if self.state.lock().unwrap().title.is_some() {
+        if self.state.lock().title.is_some() {
             return;
         }
         let Ok(hub) = self.hub() else { return };
@@ -387,7 +392,7 @@ impl LiveSession {
         if let Err(e) = hub.blocking(move |store| store.set_session_title(&id, &saved)).await {
             warn!(session = self.id, "could not save the session's title: {e}");
         }
-        self.state.lock().unwrap().title = Some(title);
+        self.state.lock().title = Some(title);
     }
 
     /// Records something the hub itself knows, as opposed to agent output.
@@ -396,7 +401,7 @@ impl LiveSession {
     }
 
     fn apply_delta(&self, delta: StreamDelta) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.tail.apply(&delta);
         publish(&mut state, LiveItem::Delta(delta));
     }
@@ -404,7 +409,7 @@ impl LiveSession {
     /// Closes open approvals that nobody can answer now: those from `run`, or all if it's `None`.
     async fn cancel_approvals(&self, run: Option<u64>) {
         let open: Vec<String> = {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock();
             let from_this_run = |asked_by: u64| run.is_none_or(|run| asked_by == run || asked_by == NO_RUN);
             state.pending_approvals.iter().filter(|(_, by)| from_this_run(**by)).map(|(id, _)| id.clone()).collect()
         };
@@ -422,7 +427,7 @@ impl LiveSession {
     /// Reports that the agent is gone, unless a newer one has already replaced it.
     async fn agent_lost(&self, link: u64, reason: ExitReason) {
         let was_running = {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock();
             let matches = state.agent.is_some_and(|agent| agent.link == link);
             if matches {
                 state.agent = None;
@@ -439,7 +444,7 @@ impl LiveSession {
     async fn ensure_agent(&self) -> Result<Arc<WorkerLink>, ApiError> {
         let hub = self.hub()?;
         let link = hub.ensure_worker(&self.workspace_id).await?;
-        let known = self.state.lock().unwrap().agent;
+        let known = self.state.lock().agent;
         if known.is_some_and(|agent| agent.link == link.id) {
             return Ok(link);
         }
@@ -461,7 +466,7 @@ impl LiveSession {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
         let (resume, model, permission_mode) = {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock();
             (state.agent_opened, state.model.clone(), state.permission_mode.clone())
         };
         let spec = AgentSpec {
@@ -477,7 +482,7 @@ impl LiveSession {
         };
         match link.call(WorkerRequest::AgentStart(spec)).await? {
             WorkerResponse::AgentStarted { pid, run, already_running } => {
-                self.state.lock().unwrap().agent = Some(AgentRun { link: link.id, run });
+                self.state.lock().agent = Some(AgentRun { link: link.id, run });
                 if !already_running {
                     // Whatever is still open was asked by a process that no longer exists.
                     self.cancel_approvals(None).await;
@@ -496,7 +501,7 @@ impl LiveSession {
             let request = WorkerRequest::AgentPrompt { session_id: self.id.clone(), text: text.clone() };
             match link.call(request).await? {
                 WorkerResponse::AgentNotRunning => {
-                    let mut state = self.state.lock().unwrap();
+                    let mut state = self.state.lock();
                     if state.agent.is_some_and(|agent| agent.link == link.id) {
                         state.agent = None;
                     }
@@ -582,7 +587,7 @@ impl LiveSession {
 
     async fn handle_approve(&self, approval_id: String, decision: ApprovalDecision) -> Result<(), ApiError> {
         {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock();
             let Some(asked_by) = state.pending_approvals.get(&approval_id) else {
                 return Err(ApiError::new(
                     ErrorCode::Conflict,
@@ -665,13 +670,13 @@ async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Receiver<Item>) 
 }
 
 async fn ingest_event(session: &Arc<LiveSession>, run: u64, body: EventBody, raw: Option<String>) {
-    let current = session.state.lock().unwrap().agent.is_some_and(|agent| agent.run == run);
+    let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
     match &body {
         EventBody::AgentInit { .. } => mark_opened(session).await,
         EventBody::AgentMode { permission_mode } if current => session.note_mode(permission_mode.clone()).await,
         EventBody::AgentExited { .. } => {
             if current {
-                session.state.lock().unwrap().agent = None;
+                session.state.lock().agent = None;
             }
             session.cancel_approvals(Some(run)).await;
         }
@@ -703,7 +708,7 @@ fn title_from_prompt(prompt: &str) -> Option<String> {
 
 async fn mark_opened(session: &Arc<LiveSession>) {
     let first_time = {
-        let mut state = session.state.lock().unwrap();
+        let mut state = session.state.lock();
         !std::mem::replace(&mut state.agent_opened, true)
     };
     if !first_time {

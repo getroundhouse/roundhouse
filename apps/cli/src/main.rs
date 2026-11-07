@@ -432,7 +432,7 @@ fn follow(client: &Client, session_id: &str, from: Seq, until_idle: bool, json: 
         let session = client.session_get(session_id)?;
         Ok(session.last_seq <= seen && matches!(session.status, SessionStatus::Idle | SessionStatus::Interrupted))
     };
-    for item in subscription.items.iter() {
+    for item in &subscription.items {
         let check = match item {
             SubscriptionItem::Event(event) => {
                 last_seq = event.seq;

@@ -92,9 +92,10 @@ async fn read_login_path() -> Option<String> {
     let stdout = child.stdout.take()?;
     let out = tokio::time::timeout(LOGIN_SHELL_TIMEOUT, read_until_second_marker(stdout)).await.ok().flatten();
     let path = out.as_deref().and_then(parse_marked_path);
-    match &path {
-        Some(_) => debug!("read PATH from login shell {shell}"),
-        None => warn!("could not read PATH from login shell {shell}"),
+    if path.is_some() {
+        debug!("read PATH from login shell {shell}");
+    } else {
+        warn!("could not read PATH from login shell {shell}");
     }
     path
 }
@@ -199,7 +200,7 @@ fn merge_paths(login: Option<&str>, own: Option<&str>) -> Option<String> {
 
 #[async_trait]
 impl Provider for LocalProvider {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "local"
     }
 
@@ -246,8 +247,9 @@ impl Provider for LocalProvider {
         }
         let mut child =
             command.spawn().with_context(|| format!("starting worker {}", self.config.worker_exe.display()))?;
-        let writer = child.stdin.take().expect("stdin was piped");
-        let reader = child.stdout.take().expect("stdout was piped");
+        let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
+            anyhow::bail!("worker {} started without its pipes", self.config.worker_exe.display());
+        };
         info!(pid = child.id(), instance_id, "started worker");
         let stream = WorkerStream { reader: Box::new(reader), writer: Box::new(writer) };
         running.insert(instance_id.to_string(), Running { child, stream: Some(stream) });
@@ -310,8 +312,9 @@ mod tests {
 
     #[tokio::test]
     async fn reading_the_path_does_not_wait_for_a_stream_something_else_is_holding_open() {
-        let (mut writer, reader) = tokio::io::duplex(1024);
         use tokio::io::AsyncWriteExt;
+
+        let (mut writer, reader) = tokio::io::duplex(1024);
         writer.write_all(format!("noise {PATH_MARKER}/a:/b{PATH_MARKER}").as_bytes()).await.unwrap();
         // `writer` stays open, as it would with a background process started by an rc file.
         let out = tokio::time::timeout(Duration::from_secs(1), read_until_second_marker(reader)).await.unwrap();

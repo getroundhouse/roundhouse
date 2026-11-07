@@ -152,8 +152,8 @@ The rule from `AGENTS.md` comes first: tests that can't fail prove nothing, so w
 
 - **A few unit tests sit beside their code.** When they grow, they move to a sibling `tests.rs`, declared with `#[cfg(test)] mod tests;`.
 - **A crate keeps one integration test binary,** `tests/<name>/main.rs` with its modules beside it, since each file directly in `tests/` links separately.
-- **Shared fixtures go in a module declared `#[cfg(test)]`.** Clippy only lets code unwrap under `#[test]` or `#[cfg(test)]`, so a bare helper in `tests/` gets flagged.
-- **The test programs in `examples/` are test code,** such as `fake_claude` and `look`. They can unwrap, with one `#![expect(clippy::unwrap_used, reason = "…")]` at the top.
+- **Integration test files start with `#![cfg(test)]`.** Clippy only lets code unwrap under `#[test]` or `#[cfg(test)]`, so without it a helper in `tests/` gets flagged. A fixture shared beyond one file goes in a module declared `#[cfg(test)]`.
+- **The test programs in `examples/` are test code,** such as `fake_claude` and `look`. They can unwrap, with one `#![expect(…, reason = "…")]` at the top.
 - **What only tests read or set goes behind the crate's `testing` feature,** which the crate turns on for its own tests by naming itself in `[dev-dependencies]`, so the product never builds it.
 - **Laws, invariants and round trips are property tests** with fixed seeds that shrink a failure to its smallest case. `protocol::tail` and `client-core::session_log` are the first candidates. An example beside a law pins only what the law doesn't.
 - **Errors are asserted by code or variant, not by message.** The exception is text the user sees, which is what a UI test is about.

@@ -8,7 +8,10 @@ pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
 use gpui_kit::component::{Theme, ThemeMode};
-use gpui_kit::*;
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
+    actions, px, size,
+};
 
 actions!(
     trestle,
@@ -64,7 +67,7 @@ pub fn run() {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
-        if let Err(e) = open_main_window(app::HubSource::default_local(), cx) {
+        if let Err(e) = app::HubSource::default_local().and_then(|hub| open_main_window(hub, cx)) {
             eprintln!("couldn't open a window: {e:#}");
             cx.quit();
         }

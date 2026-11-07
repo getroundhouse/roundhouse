@@ -256,8 +256,8 @@ fn parse_status(output: &str) -> GitStatus {
 }
 
 /// Everything the branch changes against its base, including uncommitted and untracked files.
-pub async fn diff(path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
-    let worktree = Path::new(path);
+pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
+    let worktree = Path::new(worktree_path);
     let base = match base_ref {
         Some(base) => {
             let merge_base = git(worktree, &["merge-base", base, "HEAD"]).await?;

@@ -81,29 +81,27 @@ impl Tail {
             self.messages.retain(|m| m.message_id != delta.message_id);
             return;
         }
-        let message = match self.messages.iter().position(|m| m.message_id == delta.message_id) {
-            Some(i) => &mut self.messages[i],
-            None => {
-                self.messages.push(TailMessage {
-                    message_id: delta.message_id.clone(),
-                    parent_tool_use_id: delta.parent_tool_use_id.clone(),
-                    blocks: Vec::new(),
-                });
-                self.messages.last_mut().expect("just pushed")
-            }
-        };
+        let position = self.messages.iter().position(|m| m.message_id == delta.message_id).unwrap_or_else(|| {
+            self.messages.push(TailMessage {
+                message_id: delta.message_id.clone(),
+                parent_tool_use_id: delta.parent_tool_use_id.clone(),
+                blocks: Vec::new(),
+            });
+            self.messages.len() - 1
+        });
+        let message = &mut self.messages[position];
         match &delta.change {
             DeltaChange::BlockStart { index, kind, tool_name } => {
                 let block = block_mut(message, *index, *kind);
                 block.kind = *kind;
-                block.tool_name = tool_name.clone();
+                block.tool_name.clone_from(tool_name);
             }
             DeltaChange::Text { index, text } => block_mut(message, *index, BlockKind::Text).text.push_str(text),
             DeltaChange::Thinking { index, text } => {
-                block_mut(message, *index, BlockKind::Thinking).text.push_str(text)
+                block_mut(message, *index, BlockKind::Thinking).text.push_str(text);
             }
             DeltaChange::ToolInput { index, json } => {
-                block_mut(message, *index, BlockKind::ToolUse).text.push_str(json)
+                block_mut(message, *index, BlockKind::ToolUse).text.push_str(json);
             }
             DeltaChange::MessageStop | DeltaChange::Unknown => {}
         }
@@ -127,13 +125,11 @@ impl Tail {
 }
 
 fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut TailBlock {
-    match message.blocks.iter().position(|b| b.index == index) {
-        Some(i) => &mut message.blocks[i],
-        None => {
-            message.blocks.push(TailBlock { index, kind, tool_name: None, text: String::new() });
-            message.blocks.last_mut().expect("just pushed")
-        }
-    }
+    let position = message.blocks.iter().position(|b| b.index == index).unwrap_or_else(|| {
+        message.blocks.push(TailBlock { index, kind, tool_name: None, text: String::new() });
+        message.blocks.len() - 1
+    });
+    &mut message.blocks[position]
 }
 
 #[cfg(test)]

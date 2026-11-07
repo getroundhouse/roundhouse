@@ -1,6 +1,8 @@
 //! Rules from `AGENTS.md` and `docs/architecture.md`, checked against the real dependency graph, so
 //! a new dependency that breaks one fails the build rather than waiting to be noticed in review.
 
+#![cfg(test)]
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::process::Command;
 

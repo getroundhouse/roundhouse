@@ -4,13 +4,15 @@
 //! (2.1.319). `docs/claude-cli.md` has the results.
 
 use std::collections::{HashMap, VecDeque};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use protocol::event::{ApprovalDecision, EventBody, NoticeLevel};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -26,7 +28,7 @@ use crate::{AgentOptions, AgentOutput, AgentProcess};
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 /// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
-pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
+pub(super) const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
 
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
@@ -107,7 +109,7 @@ struct Shared {
     exited: tokio::sync::watch::Sender<bool>,
 }
 
-pub struct ClaudeProcess {
+pub(super) struct ClaudeProcess {
     shared: Arc<Shared>,
 }
 
@@ -172,7 +174,7 @@ fn resolve_binary() -> Option<PathBuf> {
 
 fn is_executable(path: &std::path::Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 struct Launched {
@@ -209,9 +211,10 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
     {
         warn!("could not record agent {pid} in {}: {e:#}", path.display());
     }
-    let stdin = child.stdin.take().expect("stdin was piped");
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr = child.stderr.take().expect("stderr was piped");
+    let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
+    else {
+        anyhow::bail!("{} started without its pipes", bin.display());
+    };
     Ok(Launched { child, pid, stdin, stdout, stderr })
 }
 
@@ -226,7 +229,7 @@ pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
 async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
@@ -260,8 +263,8 @@ async fn supervise(
         let Some(failure) = flip else { break (status, stderr_tail) };
         retried = true;
         let resume = matches!(failure, LaunchFailure::AlreadyExists);
-        shared.held_output.lock().unwrap().clear();
-        shared.pending_controls.lock().unwrap().clear();
+        shared.held_output.lock().clear();
+        shared.pending_controls.lock().clear();
         if matches!(failure, LaunchFailure::NoConversation) {
             let notice = EventBody::Notice {
                 level: NoticeLevel::Warning,
@@ -284,7 +287,7 @@ async fn supervise(
         stderr = launched.stderr;
         let mut stdin = shared.stdin.lock().await;
         *stdin = Some(launched.stdin);
-        let prompts = shared.unconfirmed_prompts.lock().unwrap().clone();
+        let prompts = shared.unconfirmed_prompts.lock().clone();
         for prompt in prompts {
             if let Err(e) = write_to(&mut stdin, &user_message(&prompt)).await {
                 warn!("could not replay a prompt after relaunching: {e:#}");
@@ -294,16 +297,15 @@ async fn supervise(
 
     shared.gone.store(true, Ordering::SeqCst);
     *shared.stdin.lock().await = None;
-    shared.pending_controls.lock().unwrap().clear();
+    shared.pending_controls.lock().clear();
     if let Some(path) = &options.pid_file {
         let _ = std::fs::remove_file(path);
     }
-    let held: Vec<_> = shared.held_output.lock().unwrap().drain(..).collect();
+    let held: Vec<_> = shared.held_output.lock().drain(..).collect();
     for item in held {
         let _ = output.send(item).await;
     }
-    use std::os::unix::process::ExitStatusExt;
-    let (code, signal) = status.map(|s| (s.code(), s.signal())).unwrap_or((None, None));
+    let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
@@ -330,12 +332,11 @@ fn classify_launch_failure(stderr: &[String]) -> Option<LaunchFailure> {
 }
 
 async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
-    match tokio::time::timeout(DRAIN_GRACE, &mut task).await {
-        Ok(result) => result.ok(),
-        Err(_) => {
-            task.abort();
-            None
-        }
+    if let Ok(result) = tokio::time::timeout(DRAIN_GRACE, &mut task).await {
+        result.ok()
+    } else {
+        task.abort();
+        None
     }
 }
 
@@ -363,7 +364,7 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
         let item = match parse_line(&line) {
             Parsed::Drop => continue,
             Parsed::ControlReply { request_id, error } => {
-                if let Some(waiting) = shared.pending_controls.lock().unwrap().remove(&request_id) {
+                if let Some(waiting) = shared.pending_controls.lock().remove(&request_id) {
                     let _ = waiting.send(error.map_or(Ok(()), Err));
                 }
                 continue;
@@ -385,18 +386,18 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
             Parsed::Event(body) => {
                 match &body {
                     EventBody::ApprovalRequested { approval_id, input, .. } => {
-                        shared.pending_inputs.lock().unwrap().insert(approval_id.clone(), input.clone());
+                        shared.pending_inputs.lock().insert(approval_id.clone(), input.clone());
                     }
                     EventBody::ApprovalResolved { approval_id, .. } => {
-                        shared.pending_inputs.lock().unwrap().remove(approval_id);
+                        shared.pending_inputs.lock().remove(approval_id);
                     }
                     _ => {}
                 }
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 let item = AgentOutput::Event { body, raw: Some(line) };
                 if opened && !shared.confirmed.swap(true, Ordering::SeqCst) {
-                    shared.unconfirmed_prompts.lock().unwrap().clear();
-                    let held: Vec<_> = shared.held_output.lock().unwrap().drain(..).collect();
+                    shared.unconfirmed_prompts.lock().clear();
+                    let held: Vec<_> = shared.held_output.lock().drain(..).collect();
                     for item in held {
                         if output.send(item).await.is_err() {
                             return;
@@ -407,7 +408,7 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
             }
         };
         if !shared.confirmed.load(Ordering::SeqCst) {
-            shared.held_output.lock().unwrap().push(item);
+            shared.held_output.lock().push(item);
         } else if output.send(item).await.is_err() {
             return;
         }
@@ -449,12 +450,12 @@ async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> anyhow::Resu
 async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (answered, answer) = oneshot::channel();
-    shared.pending_controls.lock().unwrap().insert(request_id.clone(), answered);
+    shared.pending_controls.lock().insert(request_id.clone(), answered);
     let line = json!({"type": "control_request", "request_id": request_id, "request": request});
     let result = match write_line(shared, &line).await {
         Ok(()) => tokio::time::timeout(CONTROL_REPLY_TIMEOUT, answer).await,
         Err(e) => {
-            shared.pending_controls.lock().unwrap().remove(&request_id);
+            shared.pending_controls.lock().remove(&request_id);
             return Err(e);
         }
     };
@@ -463,7 +464,7 @@ async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
         Ok(Ok(Err(refusal))) => Err(anyhow::anyhow!(refusal)),
         Ok(Err(_)) => Err(anyhow::anyhow!("the agent has exited")),
         Err(_) => {
-            shared.pending_controls.lock().unwrap().remove(&request_id);
+            shared.pending_controls.lock().remove(&request_id);
             Err(anyhow::anyhow!("the agent didn't answer"))
         }
     }
@@ -495,7 +496,7 @@ impl AgentProcess for ClaudeProcess {
         let mut stdin = self.shared.stdin.lock().await;
         let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
         if !confirmed {
-            self.shared.unconfirmed_prompts.lock().unwrap().push(text.to_string());
+            self.shared.unconfirmed_prompts.lock().push(text.to_string());
         }
         match write_to(&mut stdin, &user_message(text)).await {
             // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
@@ -515,7 +516,7 @@ impl AgentProcess for ClaudeProcess {
     }
 
     async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> anyhow::Result<()> {
-        let original_input = self.shared.pending_inputs.lock().unwrap().remove(approval_id);
+        let original_input = self.shared.pending_inputs.lock().remove(approval_id);
         let response = match decision {
             ApprovalDecision::Allow { updated_input, updated_permissions } => {
                 let mut body = json!({

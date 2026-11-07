@@ -12,13 +12,13 @@ use syntect::highlighting::{FontStyle, Theme};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
 
-pub static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
-#[allow(deprecated)] // two-face will rename this variant in 0.5.
-pub static THEME: LazyLock<Theme> =
+pub(crate) static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
+#[expect(deprecated, reason = "two-face will rename this variant in 0.5")]
+pub(crate) static THEME: LazyLock<Theme> =
     LazyLock::new(|| two_face::theme::extra().get(two_face::theme::EmbeddedThemeName::VisualStudioDarkPlus).clone());
 
 /// Deserializing the syntax set takes tens of milliseconds, so do it off the main thread at launch.
-pub fn preload() {
+pub(crate) fn preload() {
     LazyLock::force(&SYNTAXES);
     LazyLock::force(&THEME);
     let _ = highlight("rust", "fn main() {}\n");
@@ -29,19 +29,19 @@ pub fn preload() {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct HlStyle {
+pub(crate) struct HlStyle {
     pub color: Hsla,
     pub bold: bool,
     pub italic: bool,
 }
 
 #[derive(Clone, Debug)]
-pub struct HlSpan {
+pub(crate) struct HlSpan {
     pub range: Range<u32>,
     pub style: HlStyle,
 }
 
-pub fn find_syntax(lang: &str) -> Option<&'static SyntaxReference> {
+pub(crate) fn find_syntax(lang: &str) -> Option<&'static SyntaxReference> {
     let token = match lang {
         "ts" | "tsx" | "typescript" => "ts",
         "js" | "javascript" | "jsx" => "js",
@@ -55,7 +55,7 @@ pub fn find_syntax(lang: &str) -> Option<&'static SyntaxReference> {
 
 fn to_style(style: syntect::highlighting::Style) -> HlStyle {
     let c = style.foreground;
-    let rgba = Rgba { r: c.r as f32 / 255.0, g: c.g as f32 / 255.0, b: c.b as f32 / 255.0, a: 1.0 };
+    let rgba = Rgba { r: f32::from(c.r) / 255.0, g: f32::from(c.g) / 255.0, b: f32::from(c.b) / 255.0, a: 1.0 };
     HlStyle {
         color: rgba.into(),
         bold: style.font_style.contains(FontStyle::BOLD),
@@ -64,7 +64,7 @@ fn to_style(style: syntect::highlighting::Style) -> HlStyle {
 }
 
 /// Spans for a whole code block, byte ranges into `code`. Empty when the language is unknown.
-pub fn highlight(lang: &str, code: &str) -> Vec<HlSpan> {
+pub(crate) fn highlight(lang: &str, code: &str) -> Vec<HlSpan> {
     let Some(syntax) = find_syntax(lang) else {
         return Vec::new();
     };

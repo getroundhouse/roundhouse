@@ -115,7 +115,7 @@ pub async fn copy_local_files(
     for relative in matched.into_iter().filter(|file| ignored.contains(file)) {
         let (from, to) = (repo.join(&relative), worktree.join(&relative));
         // A symlink could point anywhere, and a stale copy of its target isn't what anyone asked for.
-        if !std::fs::symlink_metadata(&from).map(|m| m.is_file()).unwrap_or(false) || to.exists() {
+        if !std::fs::symlink_metadata(&from).is_ok_and(|m| m.is_file()) || to.exists() {
             continue;
         }
         let result =
@@ -178,7 +178,7 @@ pub fn setup_log_path(state_dir: Option<&Path>, worktree: &Path) -> PathBuf {
 pub fn read_log_tail(log: &Path, max_bytes: u64) -> String {
     use std::io::{Read as _, Seek as _, SeekFrom};
     let Ok(mut file) = std::fs::File::open(log) else { return String::new() };
-    let length = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let length = file.metadata().map_or(0, |m| m.len());
     if length > max_bytes {
         let _ = file.seek(SeekFrom::Start(length - max_bytes));
     }

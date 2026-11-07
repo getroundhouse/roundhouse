@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 
 use agents::{AgentOptions, AgentOutput, AgentProcess};
+use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
@@ -49,7 +50,7 @@ impl State {
     /// The session's agent, unless its process has gone. Its entry can outlast the process by a
     /// while, because its last output is still on the way to the hub.
     fn live_agent(&self, session_id: &str) -> Option<Arc<dyn AgentProcess>> {
-        let agents = self.agents.lock().unwrap();
+        let agents = self.agents.lock();
         agents.get(session_id).filter(|agent| !agent.process.is_gone()).map(|agent| agent.process.clone())
     }
 }
@@ -117,7 +118,7 @@ where
         state.shutting_down.store(true, Ordering::SeqCst);
     }
     stop_setup_script(&state);
-    let agents: Vec<_> = state.agents.lock().unwrap().values().map(|agent| agent.process.clone()).collect();
+    let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
     for agent in agents {
         stops.spawn(async move { agent.stop().await });
@@ -235,12 +236,12 @@ async fn handle(
             match agent.configure(model.as_deref(), permission_mode.as_deref()).await {
                 Ok(()) => Ok(WorkerResponse::Ok),
                 Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
-                Err(e) => Err(agent_error(e)),
+                Err(e) => Err(agent_error(&e)),
             }
         }
         WorkerRequest::AgentStop { session_id } => {
             // Includes one that's on its way out: this resolves once it has finished.
-            let agent = state.agents.lock().unwrap().get(&session_id).map(|agent| agent.process.clone());
+            let agent = state.agents.lock().get(&session_id).map(|agent| agent.process.clone());
             match agent {
                 Some(agent) => {
                     agent.stop().await;
@@ -254,7 +255,7 @@ async fn handle(
 
 /// Signals the script's whole group, because stopping only the shell would leave what it started.
 fn stop_setup_script(state: &State) {
-    if let Some(pid) = *state.setup_pid.lock().unwrap() {
+    if let Some(pid) = *state.setup_pid.lock() {
         // SAFETY: kill(2) has no memory effects. The script was started as a group leader, and its
         // entry is cleared as soon as it has been waited on.
         unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
@@ -291,13 +292,13 @@ async fn run_setup(
     let record = state.config.state_dir.as_ref().map(|dir| dir.join("agents/setup.pid"));
     let (setup_pid, for_start) = (state.setup_pid.clone(), record.clone());
     let status = setup::run_script(&script, worktree, env, &log, move |pid| {
-        *setup_pid.lock().unwrap() = Some(pid);
+        *setup_pid.lock() = Some(pid);
         if let Some(path) = &for_start {
             let _ = agents::claude::write_pid_file(path, pid);
         }
     })
     .await;
-    *state.setup_pid.lock().unwrap() = None;
+    *state.setup_pid.lock() = None;
     if let Some(path) = &record {
         let _ = std::fs::remove_file(path);
     }
@@ -333,7 +334,7 @@ async fn run_archive_script(
     ))
 }
 
-fn agent_error(e: anyhow::Error) -> ApiError {
+fn agent_error(e: &anyhow::Error) -> ApiError {
     ApiError::new(ErrorCode::Worker, format!("{e:#}"))
 }
 
@@ -348,7 +349,7 @@ async fn start_agent(
     }
     let session_id = spec.session_id.clone();
     let run = spec.run;
-    if let Some(agent) = state.agents.lock().unwrap().get(&session_id).filter(|a| !a.process.is_gone()) {
+    if let Some(agent) = state.agents.lock().get(&session_id).filter(|a| !a.process.is_gone()) {
         return Ok(WorkerResponse::AgentStarted { pid: agent.process.pid(), run: agent.run, already_running: true });
     }
     let (tx, rx) = mpsc::channel(1024);
@@ -357,11 +358,11 @@ async fn start_agent(
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
     };
-    let process = agents::spawn(spec, tx, options).map_err(agent_error)?;
+    let process = agents::spawn(spec, tx, options).map_err(|e| agent_error(&e))?;
     let pid = process.pid();
     info!(pid, session_id, run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
-    state.agents.lock().unwrap().insert(session_id.clone(), RunningAgent { process, run });
+    state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
 }
@@ -375,7 +376,7 @@ async fn forward_output(state: Arc<State>, session_id: String, run: u64, mut out
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), delta },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
-                    let mut agents = state.agents.lock().unwrap();
+                    let mut agents = state.agents.lock();
                     if agents.get(&session_id).is_some_and(|agent| agent.run == run) {
                         agents.remove(&session_id);
                     }
