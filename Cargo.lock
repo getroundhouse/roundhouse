@@ -1075,6 +1075,7 @@ dependencies = [
  "flume 0.11.1",
  "libc",
  "parking_lot",
+ "proptest",
  "protocol",
  "serde_json",
  "thiserror 2.0.21",
@@ -5802,6 +5803,7 @@ dependencies = [
 name = "protocol"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
 ]

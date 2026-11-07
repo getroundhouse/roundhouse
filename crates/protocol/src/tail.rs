@@ -144,6 +144,9 @@ fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut Tai
 }
 
 #[cfg(test)]
+mod laws;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

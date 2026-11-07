@@ -1094,11 +1094,14 @@ fn replace_with_script(exe: &Path, body: &str) {
 }
 
 /// Kills every worker of this hub, and waits until the hub has noticed.
+fn children_of(parent: u32) -> Vec<u32> {
+    let out = Command::new("pgrep").args(["-P", &parent.to_string()]).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).split_whitespace().map(|pid| pid.parse().unwrap()).collect()
+}
+
 fn kill_workers(stack: &Stack, client: &Client) {
-    let out = Command::new("pgrep").args(["-P", &stack.hub_pid().to_string()]).output().unwrap();
-    for pid in String::from_utf8_lossy(&out.stdout).split_whitespace() {
-        // SAFETY: kill(2) has no memory effects. These are the hub's own children.
-        unsafe { libc::kill(pid.parse().unwrap(), libc::SIGKILL) };
+    for pid in children_of(stack.hub_pid()) {
+        signal(pid, libc::SIGKILL);
     }
     wait_until("the hub to notice", || client.hub_status().unwrap().workers == 0);
 }
@@ -1161,7 +1164,9 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
             })
         })
         .collect();
-    std::thread::sleep(Duration::from_millis(300));
+    wait_until("both of them to be starting a worker, beside the one that's fine", || {
+        children_of(stack.hub_pid()).len() == 3
+    });
 
     let socket = stack.socket();
     assert!(
@@ -1690,7 +1695,8 @@ fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     wait_until("setup to finish", || {
         client.workspace_list(false).unwrap()[0].setup != protocol::model::SetupStatus::Running
     });
-    std::thread::sleep(Duration::from_millis(500));
+    // Commands run one at a time, so once this is refused, the first prompt has been dealt with.
+    assert!(client.session_prompt(&session.id, "say:too late", None).is_err());
     assert!(!PathBuf::from(workspace.path.unwrap()).join("never.txt").exists());
     assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
 }

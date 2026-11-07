@@ -211,6 +211,9 @@ impl SessionLog {
 }
 
 #[cfg(test)]
+mod laws;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use protocol::event::{ApprovalOutcome, NoticeLevel};
@@ -231,7 +234,7 @@ mod tests {
         SessionEvent { session_id: "s".into(), seq, ts_ms: 0, body, raw: None }
     }
 
-    fn page(range: Range<Seq>) -> Vec<SessionEvent> {
+    pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {
         range.map(notice).collect()
     }
 
