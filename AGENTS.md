@@ -38,11 +38,16 @@ docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 
+Run the full checks in `docs/rust.md` once per PR, just before pushing. PRs are squash-merged, so only each PR's final state reaches `main`. Between commits, `cargo check` and the tests for what changed are enough.
+
+For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix.
+
 ## Rules
 
 - **Keep project knowledge in repo docs.** Don't use agent memory, and don't leave decisions only in chat. When a decision or a fact changes, update the relevant doc as part of the same work. Decisions go in `docs/decisions.md`. What's still open or left to do goes in a GitHub issue, not a doc.
 - **Each doc has one clear purpose.** If something else needs writing down, it gets its own doc rather than a new section in one that's nearby.
 - **Commit only when the user asks.**
+- **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
 - **Report only what you've verified.** Say what's unverified. "Running" only means an agent hasn't exited, so check processes and file timestamps before describing what it's doing.
 - **Check primary sources for licenses.** Read `Cargo.toml` and the license terms, not GitHub's label, which reported `gpui-mobile` as AGPL when it's tri-licensed with Apache-2.0.
 - **Keep shipped code free of copyleft.** Apache-2.0, MIT and similar only. Zed's GPL-3.0 crates are out, and only GPUI's Apache-2.0 crates are in.
