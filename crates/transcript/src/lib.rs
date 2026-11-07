@@ -3,10 +3,11 @@
 //! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
 mod log_block;
+mod questions;
 mod rows;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use client_core::session_log::{PAGE_EVENTS, SessionLog};
@@ -31,6 +32,9 @@ pub(crate) struct Model {
     pub log: SessionLog,
     /// Blocks the user has opened, by the event's `seq` and the block's position in it.
     pub expanded: HashSet<(Seq, usize)>,
+    /// What's been chosen so far on questions with more than one thing to choose, by the approval's
+    /// ID and then the question's text.
+    pub picks: HashMap<String, BTreeMap<String, Vec<String>>>,
     /// The row a page was last wanted for, which decides what stays loaded.
     pub focus: usize,
     pub fetch_scheduled: bool,
@@ -55,6 +59,7 @@ impl Transcript {
         let model = Rc::new(RefCell::new(Model {
             log,
             expanded: HashSet::new(),
+            picks: HashMap::new(),
             focus: rows.saturating_sub(1),
             fetch_scheduled: false,
         }));
@@ -212,6 +217,68 @@ impl Transcript {
     }
 
     /// Opens or closes a thinking or tool block.
+    /// Records a choice on a question card, and answers once nothing else is needed.
+    pub(crate) fn pick_answer(
+        &mut self,
+        seq: Seq,
+        approval_id: String,
+        question: &questions::Question,
+        label: String,
+        only_question: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if only_question && !question.multiple {
+            let answers = std::iter::once((question.text.clone(), label)).collect();
+            self.answer_approval(approval_id, ApprovalDecision::Answer { answers }, cx);
+            return;
+        }
+        {
+            let mut m = self.model.borrow_mut();
+            let picks = m.picks.entry(approval_id).or_default().entry(question.text.clone()).or_default();
+            questions::toggle_pick(picks, label, question.multiple);
+        }
+        let row = seq as usize - 1;
+        self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
+        cx.notify();
+    }
+
+    /// Sends what's been chosen on a card with more than one thing to choose.
+    pub(crate) fn send_answers(&mut self, approval_id: String, cx: &mut Context<Self>) {
+        let picks = self.model.borrow_mut().picks.remove(&approval_id).unwrap_or_default();
+        self.answer_approval(approval_id, ApprovalDecision::Answer { answers: questions::answers_from(&picks) }, cx);
+    }
+
+    /// Takes text typed in the composer as the answer to an open question, if there is one: the first
+    /// question on it without an answer yet. Returns false if there's nothing to answer.
+    pub fn answer_with_text(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        let text = text.trim();
+        if text.is_empty() {
+            return false;
+        }
+        let open = self.open_approvals().into_iter().find_map(|event| match event.body {
+            EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
+                Some((event.seq, approval_id, questions::parse(&input)))
+            }
+            _ => None,
+        });
+        let Some((seq, approval_id, asked)) = open else { return false };
+        let done = {
+            let mut m = self.model.borrow_mut();
+            let picks = m.picks.entry(approval_id.clone()).or_default();
+            let Some(unanswered) = questions::first_unanswered(&asked, picks) else { return false };
+            picks.insert(unanswered.text.clone(), vec![text.to_string()]);
+            questions::first_unanswered(&asked, picks).is_none()
+        };
+        if done {
+            self.send_answers(approval_id, cx);
+        } else {
+            let row = seq as usize - 1;
+            self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
+            cx.notify();
+        }
+        true
+    }
+
     pub(crate) fn toggle(&mut self, seq: Seq, block: usize, cx: &mut Context<Self>) {
         {
             let mut m = self.model.borrow_mut();
@@ -287,5 +354,16 @@ impl Render for Transcript {
         // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
         .with_row_style(StyleRefinement::default().pb(px(0.)))
         .with_jump_button_label("Jump to latest")
+    }
+}
+
+/// What the user calls an approval mode.
+pub fn mode_label(mode: &str) -> &str {
+    match mode {
+        "manual" | "default" => "Ask first",
+        "plan" => "Plan",
+        "acceptEdits" => "Accept edits",
+        "bypassPermissions" => "Full access",
+        other => other,
     }
 }

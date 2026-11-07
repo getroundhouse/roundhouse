@@ -12,7 +12,20 @@ use gpui_kit::*;
 
 actions!(
     agenthub,
-    [Quit, NewWorkspace, AddRepository, ToggleDiff, CreatePullRequest, StopAgent, NextWorkspace, PreviousWorkspace]
+    [
+        Quit,
+        NewWorkspace,
+        AddRepository,
+        ToggleDiff,
+        CreatePullRequest,
+        StopAgent,
+        NextWorkspace,
+        PreviousWorkspace,
+        NewChat,
+        CloseChat,
+        NextChat,
+        PreviousChat
+    ]
 );
 
 /// Opens the main window on an app that's already running, and returns its view.
@@ -25,6 +38,10 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
         KeyBinding::new("cmd-.", StopAgent, None),
         KeyBinding::new("cmd-]", NextWorkspace, None),
         KeyBinding::new("cmd-[", PreviousWorkspace, None),
+        KeyBinding::new("cmd-t", NewChat, None),
+        KeyBinding::new("cmd-w", CloseChat, None),
+        KeyBinding::new("ctrl-tab", NextChat, None),
+        KeyBinding::new("ctrl-shift-tab", PreviousChat, None),
     ]);
     cx.on_action(|_: &Quit, cx| cx.quit());
     std::thread::spawn(highlight::preload);

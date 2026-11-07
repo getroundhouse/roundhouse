@@ -1379,6 +1379,275 @@ fn a_workspace_reports_its_pull_request_from_gh() {
     assert_eq!((pr.number, pr.state.as_str(), pr.url.as_str()), (7, "OPEN", "https://example.com/7"));
 }
 
+// Model and approval mode --------------------------------------------------------------------------
+
+#[test]
+fn a_change_reaches_the_running_agent_and_the_next_launch() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace_with_mode(&client, Some("manual"));
+    client.session_prompt(&session.id, "tool:echo first > first.txt", None).unwrap();
+    let approval = wait_for_approval(&client, &session.id);
+    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
+    client.session_approve(&session.id, &approval, allow).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    let changed = client.session_configure(&session.id, Some("opus".into()), Some("bypassPermissions".into())).unwrap();
+    assert_eq!(changed.permission_mode.as_deref(), Some("bypassPermissions"));
+    assert_eq!(changed.model.as_deref(), Some("opus"));
+
+    // The same process, and it no longer asks.
+    client.session_prompt(&session.id, "tool:echo second > second.txt", None).unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    let path = PathBuf::from(workspace.path.clone().unwrap());
+    assert!(path.join("second.txt").exists());
+    assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count(), 1);
+    assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::ApprovalRequested { .. })).count(), 1);
+    let last_init = events.iter().rev().find_map(|e| match &e.body {
+        EventBody::AgentInit { model, permission_mode, .. } => Some((model.clone(), permission_mode.clone())),
+        _ => None,
+    });
+    assert_eq!(last_init, Some((Some("opus".to_string()), Some("bypassPermissions".to_string()))));
+
+    // A new process starts with what was chosen, from the hub's own record.
+    drop(client);
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    assert_eq!(client.session_get(&session.id).unwrap().permission_mode.as_deref(), Some("bypassPermissions"));
+    client.session_prompt(&session.id, "tool:echo third > third.txt", None).unwrap();
+    wait_until("the third file", || path.join("third.txt").exists());
+    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    assert!(args.contains("--permission-mode bypassPermissions") && args.contains("--model opus"), "{args}");
+}
+
+#[test]
+fn a_change_with_no_agent_running_just_saves_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace_with_mode(&client, None);
+    let changed = client.session_configure(&session.id, None, Some("plan".into())).unwrap();
+    assert_eq!(changed.permission_mode.as_deref(), Some("plan"));
+    assert_eq!(changed.model, None, "None leaves a setting as it is");
+    let changed = client.session_configure(&session.id, Some("haiku".into()), None).unwrap();
+    assert_eq!(changed.permission_mode.as_deref(), Some("plan"), "None leaves a setting as it is");
+    let saved = client.session_get(&session.id).unwrap();
+    assert_eq!((saved.model.as_deref(), saved.permission_mode.as_deref()), (Some("haiku"), Some("plan")));
+}
+
+#[test]
+fn a_change_the_agent_refuses_changes_nothing() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:ready", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    let refused = client.session_configure(&session.id, Some("not-a-model".into()), None).unwrap_err();
+    assert!(refused.to_string().contains("not found"), "{refused}");
+    client.session_configure(&session.id, None, Some("nonsense".into())).unwrap_err();
+    let after = client.session_get(&session.id).unwrap();
+    assert_eq!((after.model, after.permission_mode.as_deref()), (None, Some("bypassPermissions")));
+
+    client.session_prompt(&session.id, "say:still fine", None).unwrap();
+    assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 2)).contains("still fine"));
+}
+
+#[test]
+fn approving_a_plan_leaves_plan_mode_and_the_next_launch_agrees() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace_with_mode(&client, Some("plan"));
+    client.session_prompt(&session.id, "plan:Do the thing", None).unwrap();
+    let approval = wait_for_approval(&client, &session.id);
+    let asked = read_all(&client, &session.id).into_iter().find_map(|e| match e.body {
+        EventBody::ApprovalRequested { tool_name, input, .. } => Some((tool_name, input)),
+        _ => None,
+    });
+    let (tool_name, input) = asked.unwrap();
+    assert_eq!((tool_name.as_str(), input["plan"].as_str()), ("ExitPlanMode", Some("Do the thing")));
+    assert_eq!(client.session_get(&session.id).unwrap().permission_mode.as_deref(), Some("plan"));
+
+    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
+    client.session_approve(&session.id, &approval, allow).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    assert_eq!(client.session_get(&session.id).unwrap().permission_mode.as_deref(), Some("manual"));
+
+    // The CLI calls this mode `default` while running and only takes `manual` on launch.
+    drop(client);
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    client.session_prompt(&session.id, "say:back", None).unwrap();
+    assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 2)).contains("back"));
+    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    assert!(args.contains("--permission-mode manual"), "{args}");
+}
+
+#[test]
+fn a_mode_chosen_during_setup_applies_to_the_prompt_waiting_on_it() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"sleep 2\"\n");
+    let client = stack.client();
+    let (workspace, session) = stack.workspace_with_mode(&client, Some("manual"));
+    client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
+
+    let started = Instant::now();
+    client.session_configure(&session.id, None, Some("bypassPermissions".into())).unwrap();
+    assert!(started.elapsed() < Duration::from_secs(1), "waited for setup: {:?}", started.elapsed());
+    assert_eq!(client.workspace_list(false).unwrap()[0].setup, protocol::model::SetupStatus::Running);
+
+    let path = PathBuf::from(workspace.path.unwrap());
+    wait_until("the tool to run without asking", || path.join("done.txt").exists());
+    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
+}
+
+// Finding a hub --------------------------------------------------------------------------------------
+
+#[test]
+fn a_hub_that_drops_the_connection_before_reading_it_is_replaced() {
+    replaces_a_hub_that_drops_the_connection(false);
+}
+
+#[test]
+fn a_hub_that_drops_the_connection_after_reading_it_is_replaced() {
+    replaces_a_hub_that_drops_the_connection(true);
+}
+
+/// The client finds out differently depending on how far it got: a failed write, or no reply.
+fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
+    let mut stack = Stack::start();
+    stack.kill_hub();
+    let socket = stack.socket();
+    let _ = std::fs::remove_file(&socket);
+    let dying = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let path = socket.clone();
+    let hub_going_away = std::thread::spawn(move || {
+        let (connection, _) = dying.accept().unwrap();
+        if reads_hello_first {
+            let mut hello = String::new();
+            std::io::BufRead::read_line(&mut std::io::BufReader::new(&connection), &mut hello).unwrap();
+        }
+        // In this order, so the socket has gone before the client finds out and starts a real hub.
+        drop(dying);
+        std::fs::remove_file(path).unwrap();
+        drop(connection);
+    });
+
+    let home = stack.path("home");
+    let workspaces = stack.path("workspaces");
+    let paths = protocol::paths::resolve(|name| match name {
+        protocol::paths::ENV_HOME => Some(home.to_str().unwrap().to_string()),
+        protocol::paths::ENV_WORKSPACES => Some(workspaces.to_str().unwrap().to_string()),
+        _ => None,
+    })
+    .unwrap();
+    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_agenthubd")), "test").unwrap();
+    hub_going_away.join().unwrap();
+    assert!(client.hub_status().is_ok());
+    client.hub_shutdown().unwrap();
+}
+
+// Questions from the agent --------------------------------------------------------------------------
+
+#[test]
+fn an_answer_gets_back_to_the_agent_in_every_mode() {
+    let stack = Stack::start();
+    let client = stack.client();
+    // It asks even with full access, because only a person can answer it.
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "ask:Red or blue?=Red/Blue", None).unwrap();
+    let approval = wait_for_approval(&client, &session.id);
+
+    let answers = std::iter::once(("Red or blue?".to_string(), "Blue".to_string())).collect();
+    client.session_approve(&session.id, &approval, ApprovalDecision::Answer { answers }).unwrap();
+
+    let events = wait_for_turn_end(&client, &session.id, 1);
+    let told = events.iter().any(|e| match &e.body {
+        EventBody::AgentUser { blocks, .. } => blocks
+            .iter()
+            .any(|b| matches!(b, ContentBlock::ToolResult { text, .. } if text.contains(r#""Red or blue?"=Blue"#))),
+        _ => false,
+    });
+    assert!(told, "{events:?}");
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
+}
+
+// Several chats in one workspace --------------------------------------------------------------------
+
+#[test]
+fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, first) = stack.workspace(&client);
+    let second =
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+    client.session_prompt(&first.id, "slow:15:from the first", None).unwrap();
+    client.session_prompt(&second.id, "slow:15:from the second", None).unwrap();
+    let first_events = wait_for_turn_end(&client, &first.id, 1);
+    let second_events = wait_for_turn_end(&client, &second.id, 1);
+    assert!(assistant_text(&first_events).contains("first") && !assistant_text(&first_events).contains("second"));
+    assert!(assistant_text(&second_events).contains("second") && !assistant_text(&second_events).contains("first"));
+    assert_ne!(started_pid(&first_events), started_pid(&second_events));
+    let when = |events: &[SessionEvent], wanted: fn(&EventBody) -> bool| {
+        events.iter().find(|e| wanted(&e.body)).unwrap().ts_ms
+    };
+    let started: fn(&EventBody) -> bool = |body| matches!(body, EventBody::AgentStarted { .. });
+    let ended: fn(&EventBody) -> bool = |body| matches!(body, EventBody::TurnEnded { .. });
+    assert!(when(&first_events, started) < when(&second_events, ended), "one waited for the other");
+    assert!(when(&second_events, started) < when(&first_events, ended), "one waited for the other");
+
+    // The first prompt names a chat, and later ones don't rename it.
+    client.session_prompt(&first.id, "say:again", None).unwrap();
+    wait_for_turn_end(&client, &first.id, 2);
+    assert_eq!(client.session_get(&first.id).unwrap().title.as_deref(), Some("slow:15:from the first"));
+}
+
+#[test]
+fn closing_a_chat_stops_only_its_agent_and_reopening_continues_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, closing) = stack.workspace(&client);
+    let staying =
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+    client.session_prompt(&closing.id, "say:remember me", None).unwrap();
+    client.session_prompt(&staying.id, "say:here", None).unwrap();
+    let closing_pid = started_pid(&wait_for_turn_end(&client, &closing.id, 1)).unwrap();
+    let staying_pid = started_pid(&wait_for_turn_end(&client, &staying.id, 1)).unwrap();
+
+    let closed = client.session_close(&closing.id).unwrap();
+    assert!(closed.closed_at_ms.is_some());
+    wait_until("its agent to exit", || !is_alive(closing_pid));
+    assert!(is_alive(staying_pid), "the other chat's agent went too");
+
+    let refused = client.session_prompt(&closing.id, "say:hello?", None).unwrap_err();
+    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    let listed = client.session_list(&workspace.id).unwrap();
+    assert_eq!(listed.iter().find(|s| s.id == closing.id).unwrap().closed_at_ms, closed.closed_at_ms);
+
+    assert_eq!(client.session_reopen(&closing.id).unwrap().closed_at_ms, None);
+    client.session_prompt(&closing.id, "recall", None).unwrap();
+    let events = wait_for_turn_end(&client, &closing.id, 2);
+    assert!(assistant_text(&events).contains("remember me"), "{}", assistant_text(&events));
+}
+
+#[test]
+fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"sleep 1\"\n");
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "tool:echo no > never.txt", None).unwrap();
+    client.session_close(&session.id).unwrap();
+    wait_until("setup to finish", || {
+        client.workspace_list(false).unwrap()[0].setup != protocol::model::SetupStatus::Running
+    });
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!PathBuf::from(workspace.path.unwrap()).join("never.txt").exists());
+    assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
+}
+
 // Setup ----------------------------------------------------------------------------------------------
 
 /// Commits Conductor-style settings to the test repository.

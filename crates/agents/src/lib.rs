@@ -46,6 +46,9 @@ pub trait AgentProcess: Send + Sync {
     async fn send_prompt(&self, text: &str) -> anyhow::Result<()>;
     async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> anyhow::Result<()>;
     async fn interrupt(&self) -> anyhow::Result<()>;
+    /// Changes the model or approval mode of the running process, and resolves once it has agreed.
+    /// `None` leaves that setting alone. An error with [`AgentProcess::is_gone`] false is a refusal.
+    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> anyhow::Result<()>;
     /// Asks the process to stop, and forces it if it doesn't. Resolves once it has exited.
     async fn stop(&self);
 }

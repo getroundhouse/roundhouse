@@ -4,13 +4,24 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use protocol::model::{SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Session, SessionStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
 
 const WIDTH: f32 = 260.0;
 
-fn status_color(status: Option<SessionStatus>, cx: &App) -> Hsla {
+/// The open chat that most needs attention speaks for the workspace.
+pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
+    let urgency = |status: &SessionStatus| match status {
+        SessionStatus::WaitingApproval => 3,
+        SessionStatus::Running => 2,
+        SessionStatus::Interrupted => 1,
+        _ => 0,
+    };
+    sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
+}
+
+pub(crate) fn status_color(status: Option<SessionStatus>, cx: &App) -> Hsla {
     let theme = cx.theme();
     match status {
         Some(SessionStatus::Running) => theme.primary,
@@ -22,7 +33,7 @@ fn status_color(status: Option<SessionStatus>, cx: &App) -> Hsla {
 
 fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
     let selected = app.selected.as_ref() == Some(&workspace.id);
-    let status = app.sessions.get(&workspace.id).and_then(|s| s.last()).map(|s| s.status);
+    let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
     let archived = workspace.status == WorkspaceStatus::Archived;
     let id = workspace.id.clone();
     let muted = cx.theme().muted_foreground;
@@ -125,4 +136,42 @@ pub fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
                         })),
                 ),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workspace_status;
+    use protocol::model::{AgentKind, Session, SessionStatus};
+
+    fn session(status: SessionStatus, closed: bool) -> Session {
+        Session {
+            id: "s".into(),
+            workspace_id: "w".into(),
+            agent: AgentKind::Claude,
+            model: None,
+            permission_mode: None,
+            status,
+            last_seq: 0,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            title: None,
+            closed_at_ms: closed.then_some(1),
+        }
+    }
+
+    #[test]
+    fn the_chat_needing_attention_speaks_for_the_workspace_wherever_it_is() {
+        use SessionStatus::*;
+        let chats = [session(WaitingApproval, false), session(Running, false), session(Idle, false)];
+        assert_eq!(workspace_status(&chats), Some(WaitingApproval));
+        let chats = [session(Idle, false), session(Running, false), session(Interrupted, false)];
+        assert_eq!(workspace_status(&chats), Some(Running));
+    }
+
+    #[test]
+    fn a_closed_chat_doesnt_count() {
+        use SessionStatus::*;
+        assert_eq!(workspace_status(&[session(Running, true), session(Idle, false)]), Some(Idle));
+        assert_eq!(workspace_status(&[session(Running, true)]), None);
+    }
 }

@@ -52,6 +52,8 @@ pub struct Hub {
     /// Held while a workspace's worker starts or is cleaned up, so an instance never has two. One per
     /// workspace, because a slow or stuck worker mustn't hold up the others.
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
+    /// Held while finding or making a workspace's first session.
+    ensuring_session: AsyncMutex<()>,
     sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, watch::Sender<bool>>>,
@@ -650,6 +652,8 @@ impl Hub {
                 last_seq: 0,
                 created_at_ms: now,
                 updated_at_ms: now,
+                title: None,
+                closed_at_ms: None,
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
             // agent never reported one.
@@ -660,6 +664,19 @@ impl Hub {
         self.blocking(move |store| store.insert_session(&stored)).await?;
         self.notify(HubNotice::Session(session.clone()));
         Ok(session)
+    }
+
+    pub(crate) async fn session_ensure(
+        self: &Arc<Self>,
+        workspace_id: String,
+        agent: AgentKind,
+    ) -> Result<Session, ApiError> {
+        let _one_at_a_time = self.ensuring_session.lock().await;
+        let sessions = self.session_list(workspace_id.clone()).await?;
+        match sessions.into_iter().rfind(|s| s.closed_at_ms.is_none()) {
+            Some(open) => Ok(open),
+            None => self.session_create(workspace_id, agent, None, None).await,
+        }
     }
 
     pub(crate) async fn session_list(&self, workspace_id: String) -> Result<Vec<Session>, ApiError> {
@@ -724,6 +741,25 @@ impl Hub {
         let (reply, done) = oneshot::channel();
         session.command(Command::Approve { approval_id, decision, reply }).await?;
         done.await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))?
+    }
+
+    pub(crate) async fn session_configure(
+        self: &Arc<Self>,
+        id: String,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    ) -> Result<Session, ApiError> {
+        // Not through the session's queue, because a prompt waiting on setup holds that. The choice
+        // has to apply when that prompt finally starts the agent.
+        self.live_session(&id).await?.configure(model, permission_mode).await
+    }
+
+    pub(crate) async fn session_close(self: &Arc<Self>, id: String) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.close().await
+    }
+
+    pub(crate) async fn session_reopen(self: &Arc<Self>, id: String) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.reopen().await
     }
 
     pub(crate) async fn session_cancel(self: &Arc<Self>, id: String) -> Result<(), ApiError> {
@@ -875,6 +911,7 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
         default_provider: LOCAL_PROVIDER.to_string(),
         workers: Mutex::new(HashMap::new()),
         worker_gates: Mutex::new(HashMap::new()),
+        ensuring_session: AsyncMutex::new(()),
         sessions: Mutex::new(HashMap::new()),
         setup_gates: Mutex::new(HashMap::new()),
         feed: broadcast::channel(FEED_CAPACITY).0,

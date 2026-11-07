@@ -13,7 +13,10 @@ use protocol::model::{AgentKind, Repo, RepoId, Session, Workspace, WorkspaceId, 
 use protocol::paths::Paths;
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
-use crate::{AddRepository, CreatePullRequest, NewWorkspace, NextWorkspace, PreviousWorkspace, StopAgent, ToggleDiff};
+use crate::{
+    AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
+    PreviousWorkspace, StopAgent, ToggleDiff,
+};
 
 /// Where to find the hub, and how to start one if none is running.
 #[derive(Clone, Debug)]
@@ -162,6 +165,10 @@ impl AppView {
         self.repos = snapshot.repos;
         self.workspaces = snapshot.workspaces;
         self.sessions = snapshot.sessions;
+        for (id, pane) in &self.panes {
+            let sessions = self.sessions.get(id).cloned().unwrap_or_default();
+            pane.update(cx, |p, cx| p.set_sessions(sessions, cx));
+        }
         let still_there =
             self.selected.as_ref().is_some_and(|id| self.visible_workspaces().iter().any(|w| &w.id == id));
         if !still_there {
@@ -267,8 +274,8 @@ impl AppView {
             if workspace.status != WorkspaceStatus::Ready {
                 return;
             }
-            let session = self.sessions.get(&id).and_then(|s| s.last().cloned());
-            let pane = cx.new(|cx| WorkspacePane::new(client, workspace, session, window, cx));
+            let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
+            let pane = cx.new(|cx| WorkspacePane::new(client, workspace, sessions, window, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Disconnected => t.connect(cx),
@@ -295,7 +302,7 @@ impl AppView {
                 .background_spawn(async move {
                     let workspace = client.workspace_create(&repo_id, None, None)?;
                     // Leaves the model and approval mode to the user's own Claude settings.
-                    let session = client.session_create(&workspace.id, AgentKind::Claude, None, None)?;
+                    let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
                     Ok::<_, ClientError>((workspace, session))
                 })
                 .await;
@@ -439,7 +446,12 @@ impl AppView {
 }
 
 impl Render for AppView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Shortcuts only reach this view through whatever has focus, and focus can end up nowhere, as
+        // when what had it goes away. Every shortcut would then do nothing until something is clicked.
+        if window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+        }
         let theme = cx.theme();
         let (background, foreground, muted, danger) =
             (theme.background, theme.foreground, theme.muted_foreground, theme.danger);
@@ -474,6 +486,30 @@ impl Render for AppView {
             .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
                 if let Some(pane) = t.selected_pane() {
                     pane.update(cx, |p, cx| p.create_pull_request(cx));
+                }
+            }))
+            .on_action(cx.listener(|t, _: &NewChat, _, cx| {
+                if let Some(pane) = t.selected_pane() {
+                    pane.update(cx, |p, cx| p.new_chat(cx));
+                }
+            }))
+            .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
+                if let Some(pane) = t.selected_pane() {
+                    pane.update(cx, |p, cx| {
+                        if let Some(id) = p.active.clone() {
+                            p.close_chat(id, window, cx);
+                        }
+                    });
+                }
+            }))
+            .on_action(cx.listener(|t, _: &NextChat, _, cx| {
+                if let Some(pane) = t.selected_pane() {
+                    pane.update(cx, |p, cx| p.step_chat(1, cx));
+                }
+            }))
+            .on_action(cx.listener(|t, _: &PreviousChat, _, cx| {
+                if let Some(pane) = t.selected_pane() {
+                    pane.update(cx, |p, cx| p.step_chat(-1, cx));
                 }
             }))
             .on_action(cx.listener(|t, _: &StopAgent, _, cx| {

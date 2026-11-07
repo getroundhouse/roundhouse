@@ -18,6 +18,8 @@ pub enum Parsed {
     UnsupportedControl { request_id: String, subtype: String },
     /// Carries nothing worth storing.
     Drop,
+    /// The CLI's answer to a control request of ours.
+    ControlReply { request_id: String, error: Option<String> },
 }
 
 pub fn parse_line(line: &str) -> Parsed {
@@ -44,7 +46,7 @@ pub fn parse_line(line: &str) -> Parsed {
             None => other(kind),
         },
         // Replies to the adapter's own requests, such as an interrupt.
-        "control_response" => Parsed::Drop,
+        "control_response" => control_reply(&value),
         _ => other(kind),
     }
 }
@@ -100,6 +102,24 @@ fn string_of(value: &Value, key: &str) -> Option<String> {
     str_of(value, key).map(str::to_string)
 }
 
+/// The name to launch with. The running CLI calls this mode `default`, and `--permission-mode` only
+/// takes `manual`.
+fn launch_name(mode: &str) -> &str {
+    if mode == "default" { "manual" } else { mode }
+}
+
+fn control_reply(value: &Value) -> Parsed {
+    let response = value.get("response").unwrap_or(&Value::Null);
+    match str_of(response, "request_id") {
+        Some(request_id) => Parsed::ControlReply {
+            request_id: request_id.to_string(),
+            error: (str_of(response, "subtype") == Some("error"))
+                .then(|| str_of(response, "error").unwrap_or("the agent refused").to_string()),
+        },
+        None => Parsed::Drop,
+    }
+}
+
 fn system(value: &Value) -> Parsed {
     let subtype = str_of(value, "subtype").unwrap_or("unknown");
     match subtype {
@@ -118,6 +138,10 @@ fn system(value: &Value) -> Parsed {
                 _ => AgentRunState::Unknown,
             },
         }),
+        "status" => match str_of(value, "permissionMode") {
+            Some(mode) => Parsed::Event(EventBody::AgentMode { permission_mode: launch_name(mode).to_string() }),
+            None => other("system/status"),
+        },
         // A running token count for a spinner. Several arrive per second while thinking.
         "thinking_tokens" => Parsed::Drop,
         other_subtype => other(&format!("system/{other_subtype}")),
@@ -279,6 +303,36 @@ fn stream_event(value: &Value) -> Parsed {
         _ => return Parsed::Drop,
     };
     Parsed::Delta(StreamDelta { message_id, parent_tool_use_id: string_of(value, "parent_tool_use_id"), change })
+}
+
+#[cfg(test)]
+mod mode_tests {
+    use super::*;
+
+    #[test]
+    fn a_mode_change_is_reported_by_the_name_a_launch_accepts() {
+        let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"plan"}"#;
+        assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: "plan".into() }));
+        let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"default"}"#;
+        assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: "manual".into() }));
+    }
+
+    #[test]
+    fn a_status_about_something_else_isnt_a_mode_change() {
+        let line = r#"{"type":"system","subtype":"status","status":"compacting"}"#;
+        assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentOther { kind: "system/status".into() }));
+    }
+
+    #[test]
+    fn the_clis_answers_to_control_requests_are_matched_up() {
+        let line = r#"{"type":"control_response","response":{"subtype":"success","request_id":"r","response":{"mode":"plan"}}}"#;
+        assert_eq!(parse_line(line), Parsed::ControlReply { request_id: "r".into(), error: None });
+        let line = r#"{"type":"control_response","response":{"subtype":"error","request_id":"r","error":"Model 'x' not found"}}"#;
+        assert_eq!(
+            parse_line(line),
+            Parsed::ControlReply { request_id: "r".into(), error: Some("Model 'x' not found".into()) }
+        );
+    }
 }
 
 #[cfg(test)]

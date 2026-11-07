@@ -16,13 +16,15 @@ use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tracing::warn;
 
 use super::normalize::{Parsed, parse_line};
 use crate::{AgentOptions, AgentOutput, AgentProcess};
 
+/// A CLI that's still starting runs the user's hooks first, which can take a while.
+const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 /// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
 pub const ENV_CLAUDE_BIN: &str = "AGENTHUB_CLAUDE_BIN";
 
@@ -63,12 +65,16 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
         // Sends approvals to us as control requests. Without it, anything needing approval is denied.
         "--permission-prompt-tool",
         "stdio",
+        // Lets full access be chosen later. It doesn't turn it on.
+        "--allow-dangerously-skip-permissions",
     ]
     .map(String::from)
     .to_vec();
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
     args.push(spec.agent_session_id.clone());
-    if let Some(model) = &spec.model {
+    // `default` is what the picker offers for the account's own default, and only the running CLI
+    // has a name for it.
+    if let Some(model) = spec.model.as_ref().filter(|model| *model != "default") {
         args.extend(["--model".to_string(), model.clone()]);
     }
     if let Some(mode) = &spec.permission_mode {
@@ -89,6 +95,9 @@ struct Shared {
     unconfirmed_prompts: Mutex<Vec<String>>,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
     pending_inputs: Mutex<HashMap<String, Value>>,
+    /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
+    /// tells whoever's waiting.
+    pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<(), String>>>>,
     stop_requested: AtomicBool,
     /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
     /// still being drained and delivered.
@@ -128,6 +137,7 @@ pub fn spawn_at(
         held_output: Mutex::new(Vec::new()),
         unconfirmed_prompts: Mutex::new(Vec::new()),
         pending_inputs: Mutex::new(HashMap::new()),
+        pending_controls: Mutex::new(HashMap::new()),
         stop_requested: AtomicBool::new(false),
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
@@ -251,6 +261,7 @@ async fn supervise(
         retried = true;
         let resume = matches!(failure, LaunchFailure::AlreadyExists);
         shared.held_output.lock().unwrap().clear();
+        shared.pending_controls.lock().unwrap().clear();
         if matches!(failure, LaunchFailure::NoConversation) {
             let notice = EventBody::Notice {
                 level: NoticeLevel::Warning,
@@ -283,6 +294,7 @@ async fn supervise(
 
     shared.gone.store(true, Ordering::SeqCst);
     *shared.stdin.lock().await = None;
+    shared.pending_controls.lock().unwrap().clear();
     if let Some(path) = &options.pid_file {
         let _ = std::fs::remove_file(path);
     }
@@ -350,6 +362,12 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
         }
         let item = match parse_line(&line) {
             Parsed::Drop => continue,
+            Parsed::ControlReply { request_id, error } => {
+                if let Some(waiting) = shared.pending_controls.lock().unwrap().remove(&request_id) {
+                    let _ = waiting.send(error.map_or(Ok(()), Err));
+                }
+                continue;
+            }
             Parsed::Delta(delta) => AgentOutput::Delta(delta),
             Parsed::UnsupportedControl { request_id, subtype } => {
                 warn!("answering unsupported control request {subtype} with an error");
@@ -427,6 +445,30 @@ async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> anyhow::Resu
     Ok(())
 }
 
+/// Sends a control request and waits for the CLI's answer.
+async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let (answered, answer) = oneshot::channel();
+    shared.pending_controls.lock().unwrap().insert(request_id.clone(), answered);
+    let line = json!({"type": "control_request", "request_id": request_id, "request": request});
+    let result = match write_line(shared, &line).await {
+        Ok(()) => tokio::time::timeout(CONTROL_REPLY_TIMEOUT, answer).await,
+        Err(e) => {
+            shared.pending_controls.lock().unwrap().remove(&request_id);
+            return Err(e);
+        }
+    };
+    match result {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(refusal))) => Err(anyhow::anyhow!(refusal)),
+        Ok(Err(_)) => Err(anyhow::anyhow!("the agent has exited")),
+        Err(_) => {
+            shared.pending_controls.lock().unwrap().remove(&request_id);
+            Err(anyhow::anyhow!("the agent didn't answer"))
+        }
+    }
+}
+
 async fn write_line(shared: &Shared, value: &Value) -> anyhow::Result<()> {
     write_to(&mut *shared.stdin.lock().await, value).await
 }
@@ -488,6 +530,13 @@ impl AgentProcess for ClaudeProcess {
             ApprovalDecision::Deny { message, interrupt } => {
                 json!({"behavior": "deny", "message": message, "interrupt": interrupt})
             }
+            // The CLI takes these as part of the tool's input. Allowing without them tells the agent
+            // that the user didn't answer.
+            ApprovalDecision::Answer { answers } => {
+                let mut input = original_input.unwrap_or_else(|| json!({}));
+                input["answers"] = json!(answers);
+                json!({"behavior": "allow", "updatedInput": input})
+            }
         };
         write_line(
             &self.shared,
@@ -496,6 +545,16 @@ impl AgentProcess for ClaudeProcess {
             }}),
         )
         .await
+    }
+
+    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> anyhow::Result<()> {
+        if let Some(model) = model {
+            control(&self.shared, json!({"subtype": "set_model", "model": model})).await?;
+        }
+        if let Some(mode) = permission_mode {
+            control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
+        }
+        Ok(())
     }
 
     async fn interrupt(&self) -> anyhow::Result<()> {
@@ -570,6 +629,24 @@ mod tests {
         let args = build_args(&spec(Some("haiku"), Some("manual")), false);
         assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("manual"));
         assert_eq!(flag_value(&args, "--model").as_deref(), Some("haiku"));
+    }
+
+    #[test]
+    fn full_access_is_available_but_never_on_by_itself() {
+        let args = build_args(&spec(None, None), false);
+        assert!(args.iter().any(|a| a == "--allow-dangerously-skip-permissions"));
+        assert!(!args.iter().any(|a| a == "--dangerously-skip-permissions"));
+        assert_eq!(flag_value(&args, "--permission-mode"), None);
+    }
+
+    #[test]
+    fn the_default_model_has_no_flag() {
+        let mut default = spec(None, None);
+        default.model = Some("default".to_string());
+        assert_eq!(flag_value(&build_args(&default, false), "--model"), None);
+        let mut chosen = spec(None, None);
+        chosen.model = Some("opus".to_string());
+        assert_eq!(flag_value(&build_args(&chosen, false), "--model").as_deref(), Some("opus"));
     }
 
     #[test]

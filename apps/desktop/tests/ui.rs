@@ -178,7 +178,7 @@ impl<'a> Ui<'a> {
     }
 
     fn transcript(&self) -> Option<Entity<Transcript>> {
-        self.pane().and_then(|pane| self.cx.read_entity(&pane, |p, _| p.transcript.clone()))
+        self.pane().and_then(|pane| self.cx.read_entity(&pane, |p, _| p.transcript()))
     }
 
     fn events(&self) -> Vec<SessionEvent> {
@@ -202,11 +202,55 @@ impl<'a> Ui<'a> {
 
     fn session_status(&self) -> Option<SessionStatus> {
         let pane = self.pane()?;
-        self.cx.read_entity(&pane, |p, _| p.session.as_ref().map(|s| s.status))
+        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.status))
     }
 
     fn wait_idle_with(&mut self, what: &str, mut text: impl FnMut(&str) -> bool) {
         self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
+    }
+
+    fn active_chat(&self) -> String {
+        let pane = self.pane().unwrap();
+        self.cx.read_entity(&pane, |p, _| p.active.clone().unwrap())
+    }
+
+    fn open_chats(&self) -> Vec<String> {
+        let pane = self.pane().unwrap();
+        self.cx.read_entity(&pane, |p, _| {
+            p.sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone()).collect()
+        })
+    }
+
+    fn composer_text(&self) -> String {
+        let pane = self.pane().unwrap();
+        self.cx.read_entity(&pane, |p, cx| p.composer.read(cx).text().to_string())
+    }
+
+    /// Presses the new chat button and waits until that chat is showing.
+    fn new_chat(&mut self) -> String {
+        let before = self.open_chats().len();
+        self.click("new-chat");
+        self.wait("the new chat", |ui| ui.open_chats().len() > before && ui.transcript().is_some());
+        let newest = self.open_chats().last().unwrap().clone();
+        self.wait("the new chat to show", |ui| ui.active_chat() == newest);
+        newest
+    }
+
+    fn show_chat(&mut self, id: &str) {
+        self.click(SharedString::from(format!("chat-{id}")));
+        let id = id.to_string();
+        self.wait("the chat to show", |ui| ui.active_chat() == id);
+    }
+
+    /// Opens a picker and clicks the item at this position, the way someone would.
+    fn pick(&mut self, picker: &str, position: usize) {
+        self.click(SharedString::from(picker.to_string()));
+        self.click(ElementId::Integer(position as u64));
+    }
+
+    fn chat_mode(&self) -> Option<String> {
+        let pane = self.pane()?;
+        self.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.permission_mode.clone()))
     }
 
     fn first_repo_id(&self) -> String {
@@ -666,6 +710,336 @@ fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
     // And it's really connected: something added elsewhere still shows up.
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+}
+
+#[gpui_kit::test]
+fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    // The first workspace is selected as soon as it exists, which is before its chat does.
+    let workspace = ui.new_workspace();
+    for _ in 0..30 {
+        ui.frame();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(ui.open_chats().len(), 1);
+    assert_eq!(client.session_list(&workspace).unwrap().len(), 1);
+}
+
+#[gpui_kit::test]
+fn chats_keep_their_own_transcript_and_draft(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let first = ui.active_chat();
+    ui.input("say:from the first chat");
+    ui.press("enter");
+    ui.wait_idle_with("the first answer", |text| text.contains("from the first"));
+
+    let second = ui.new_chat();
+    assert_ne!(first, second);
+    assert_eq!(ui.composer_text(), "");
+    assert_eq!(ui.assistant_text(), "", "a new chat starts empty");
+    ui.input("say:from the second chat");
+    ui.press("enter");
+    ui.wait_idle_with("the second answer", |text| text.contains("from the second"));
+    assert!(!ui.assistant_text().contains("from the first"));
+
+    // Half-typed text stays with its chat, and comes back with it.
+    ui.input("half typed");
+    ui.show_chat(&first);
+    ui.frame();
+    assert_eq!(ui.composer_text(), "", "the draft belongs to the other chat");
+    assert!(ui.assistant_text().contains("from the first") && !ui.assistant_text().contains("from the second"));
+    ui.show_chat(&second);
+    ui.frame();
+    assert_eq!(ui.composer_text(), "half typed");
+    ui.input(" more");
+    assert_eq!(ui.composer_text(), "half typed more", "the composer has focus after switching");
+
+    // The first prompt names the chat, everywhere.
+    let titles: Vec<_> = client.session_list(&ui.view().selected.clone().unwrap()).unwrap();
+    assert_eq!(titles[0].title.as_deref(), Some("say:from the first chat"));
+    ui.wait("the title to reach the app", |ui| {
+        let pane = ui.pane().unwrap();
+        ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.title.clone()))
+            == Some("say:from the second chat".to_string())
+    });
+}
+
+#[gpui_kit::test]
+fn the_keyboard_opens_moves_between_and_closes_chats(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let first = ui.active_chat();
+    ui.press("cmd-t");
+    ui.wait("a second chat", |ui| ui.open_chats().len() == 2);
+    let second = ui.open_chats()[1].clone();
+    ui.wait("it to show", |ui| ui.active_chat() == second);
+    ui.press("ctrl-tab");
+    ui.wait("the first chat, wrapping around", |ui| ui.active_chat() == first);
+    ui.press("ctrl-shift-tab");
+    ui.wait("the second chat, wrapping back", |ui| ui.active_chat() == second);
+    ui.press("cmd-w");
+    ui.wait("the second chat to close", |ui| ui.open_chats() == [first.clone()]);
+    ui.wait("the first chat to show", |ui| ui.active_chat() == first);
+
+    // Wherever focus was, switching chats puts it back in the composer, ready to type.
+    ui.press("cmd-t");
+    ui.wait("another chat", |ui| ui.open_chats().len() == 2);
+    let third = ui.open_chats()[1].clone();
+    ui.wait("it to show", |ui| ui.active_chat() == third);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
+    ui.press("ctrl-tab");
+    ui.wait("the first chat", |ui| ui.active_chat() == first);
+    ui.frame();
+    ui.input("ready");
+    assert_eq!(ui.composer_text(), "ready");
+}
+
+#[gpui_kit::test]
+fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let workspace = ui.view().selected.clone().unwrap();
+    let first = ui.active_chat();
+    ui.input("say:keep this");
+    ui.press("enter");
+    ui.wait_idle_with("the answer", |text| text.contains("keep this"));
+
+    // Closing the only chat leaves a new, empty one rather than nothing.
+    ui.click(SharedString::from(format!("close-chat-{first}")));
+    ui.wait("a replacement", |ui| ui.open_chats().len() == 1 && ui.open_chats()[0] != first);
+    let replacement = ui.open_chats()[0].clone();
+    ui.wait("it to show", |ui| ui.active_chat() == replacement && ui.transcript().is_some());
+    assert_eq!(ui.assistant_text(), "");
+    assert!(client.session_get(&first).unwrap().closed_at_ms.is_some());
+
+    // The history is still there, and the agent picks up where it left off.
+    ui.pick("closed-chats", 0);
+    ui.wait("it to come back", |ui| ui.active_chat() == first && ui.assistant_text().contains("keep this"));
+    assert_eq!(ui.open_chats().len(), 2);
+    ui.input("recall");
+    ui.press("enter");
+    ui.wait_idle_with("the agent to remember", |text| text.contains("I have seen: say:keep this"));
+    assert_eq!(client.session_list(&workspace).unwrap().len(), 2);
+}
+
+#[gpui_kit::test]
+fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let first = ui.active_chat();
+    let working = ui.new_chat();
+    ui.input("slow:200:still going");
+    ui.press("enter");
+    ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
+
+    let close = format!("close-chat-{working}");
+    ui.click(SharedString::from(close.clone()));
+    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    ui.cx.simulate_prompt_answer("Cancel");
+    ui.frame();
+    assert_eq!(ui.open_chats().len(), 2, "cancelling leaves it alone");
+    assert_eq!(ui.session_status(), Some(SessionStatus::Running));
+
+    ui.click(SharedString::from(close));
+    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    ui.cx.simulate_prompt_answer("Close chat");
+    ui.wait("it to close", |ui| ui.open_chats() == [first.clone()]);
+    ui.wait("the other chat to show", |ui| ui.active_chat() == first);
+}
+
+#[gpui_kit::test]
+fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let workspace = ui.new_workspace();
+    let chat = ui.active_chat();
+    let path = ui.worktree(&workspace);
+
+    // Ask first, chosen before anything has run, means the first launch asks.
+    ui.pick("mode-picker", 0);
+    ui.wait("the mode to change", |ui| ui.chat_mode().as_deref() == Some("manual"));
+    ui.input("tool:echo one > one.txt");
+    ui.press("enter");
+    ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
+    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    ui.click(ElementId::NamedInteger("allow".into(), seq));
+    ui.wait("the first tool", |ui| ui.session_status() == Some(SessionStatus::Idle) && path.join("one.txt").exists());
+
+    // Full access and another model, on the agent that's already running.
+    ui.pick("mode-picker", 3);
+    ui.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
+    ui.pick("model-picker", 2);
+    ui.wait("the model", |_| client.session_get(&chat).unwrap().model.as_deref() == Some("opus"));
+    ui.input("tool:echo two > two.txt");
+    ui.press("enter");
+    ui.wait("the second tool, without asking", |ui| {
+        ui.session_status() == Some(SessionStatus::Idle) && path.join("two.txt").exists()
+    });
+    let started = ui.events().iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(started, 1, "the running agent was changed, not replaced");
+
+    // A new chat doesn't quietly get full access.
+    ui.new_chat();
+    assert_eq!(ui.chat_mode(), None);
+    let pane = ui.pane().unwrap();
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.model.clone())).as_deref(), Some("opus"));
+}
+
+#[gpui_kit::test]
+fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input("say:running");
+    ui.press("enter");
+    ui.wait_idle_with("the agent to be up", |text| text.contains("running"));
+    let pane = ui.pane().unwrap();
+    ui.cx.update_entity(&pane, |p, cx| p.configure(Some("not-a-model".to_string()), None, cx));
+    ui.wait("the refusal", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("not found")));
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.model.clone())), None);
+}
+
+#[gpui_kit::test]
+fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.pick("mode-picker", 1);
+    ui.wait("plan mode", |ui| ui.chat_mode().as_deref() == Some("plan"));
+
+    ui.input("plan:First attempt");
+    ui.press("enter");
+    ui.wait("the plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
+    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    ui.click(ElementId::NamedInteger("keep-planning".into(), seq));
+    ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
+    assert_eq!(ui.chat_mode().as_deref(), Some("plan"), "still planning");
+
+    ui.input("plan:Second attempt");
+    ui.press("enter");
+    ui.wait("the next plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
+    let seq = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap();
+    ui.click(ElementId::NamedInteger("approve-plan".into(), seq));
+    ui.wait("plan mode to end, by the agent's own report", |ui| {
+        ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode().as_deref() == Some("manual")
+    });
+}
+
+/// The result of the agent's question, from what it was told.
+fn told_to_agent(ui: &Ui) -> String {
+    let mut told = String::new();
+    for event in ui.events() {
+        if let EventBody::AgentUser { blocks, .. } = &event.body {
+            for block in blocks {
+                if let protocol::event::ContentBlock::ToolResult { text, .. } = block {
+                    told.push_str(text);
+                }
+            }
+        }
+    }
+    told
+}
+
+fn open_question(ui: &mut Ui, prompt: &str) -> u64 {
+    ui.input(prompt);
+    ui.press("enter");
+    ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
+    ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()[0].seq)).unwrap()
+}
+
+#[gpui_kit::test]
+fn a_question_is_answered_by_clicking_or_typing_or_skipped(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+
+    // One question with one answer needs only the click.
+    let seq = open_question(&mut ui, "ask:Red or blue?=Red/Blue");
+    assert!(
+        ui.cx
+            .update_window(ui.handle, |_, w, _| w.try_find(SharedString::from(format!("send-answers-{seq}"))).is_none())
+            .unwrap()
+    );
+    ui.click(SharedString::from(format!("answer-{seq}-0-1")));
+    ui.wait("the answer", |ui| told_to_agent(ui).contains(r#""Red or blue?"=Blue"#));
+    ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
+
+    // Text typed while it's waiting answers it, rather than going to the agent as a new message.
+    let seq = open_question(&mut ui, "ask:Which day?=Monday/Tuesday");
+    ui.input("Friday, if that works");
+    ui.press("enter");
+    ui.wait("the typed answer", |ui| told_to_agent(ui).contains(r#""Which day?"=Friday, if that works"#));
+    ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
+    assert_eq!(ui.composer_text(), "");
+    let prompts = ui.events().iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).count();
+    assert_eq!(prompts, 2, "the answer wasn't sent as a prompt too (seq {seq})");
+
+    // Skipping lets the agent know, and once it's over, typing is a new message again.
+    let seq = open_question(&mut ui, "ask:Tea or coffee?=Tea/Coffee");
+    ui.click(SharedString::from(format!("skip-question-{seq}")));
+    ui.wait("the skip", |ui| told_to_agent(ui).contains("chose not to answer"));
+    ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
+    ui.input("say:a new message");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("a new message"));
+}
+
+#[gpui_kit::test]
+fn several_questions_wait_until_they_are_all_answered(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+
+    let seq = open_question(&mut ui, "ask:*Which colors?=Red/Green/Blue|How many?=One/Two");
+    let send = format!("send-answers-{seq}");
+
+    // Several can be chosen for the first, and choosing one again takes it back.
+    ui.click(SharedString::from(format!("answer-{seq}-0-0")));
+    ui.click(SharedString::from(format!("answer-{seq}-0-1")));
+    ui.click(SharedString::from(format!("answer-{seq}-0-2")));
+    ui.click(SharedString::from(format!("answer-{seq}-0-1")));
+    // Not answered yet, so pressing send does nothing.
+    ui.click(SharedString::from(send.clone()));
+    ui.frame();
+    assert_eq!(ui.session_status(), Some(SessionStatus::WaitingApproval));
+    assert_eq!(told_to_agent(&ui), "");
+
+    // One answer allowed for the second, so a later choice replaces an earlier one.
+    ui.click(SharedString::from(format!("answer-{seq}-1-0")));
+    ui.click(SharedString::from(format!("answer-{seq}-1-1")));
+    ui.click(SharedString::from(send));
+    ui.wait("the answers", |ui| told_to_agent(ui).contains(r#""How many?"=Two"#));
+    assert!(told_to_agent(&ui).contains(r#""Which colors?"=Red, Blue"#), "{}", told_to_agent(&ui));
 }
 
 #[gpui_kit::test]

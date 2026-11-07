@@ -78,6 +78,9 @@ impl Printer {
                 }
             }
             EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
+            EventBody::AgentMode { permission_mode } => {
+                self.line(event.seq, &format!("approval mode: {permission_mode}"))
+            }
             EventBody::AgentState { .. } | EventBody::AgentOther { .. } | EventBody::Unknown => {}
         }
     }

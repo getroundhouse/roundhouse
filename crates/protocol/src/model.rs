@@ -97,6 +97,11 @@ pub struct Session {
     pub last_seq: Seq,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    /// The start of the first prompt. `None` until there's been one.
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub closed_at_ms: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]

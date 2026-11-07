@@ -75,6 +75,8 @@ enum Cmd {
         #[arg(long)]
         deny: Option<String>,
     },
+    /// Answer a question the agent asked.
+    Answer { session: String, approval_id: String, question: String, answer: String },
     /// Stop the agent's current turn. The session stays usable.
     Cancel { session: String },
 }
@@ -146,6 +148,21 @@ enum SessionCmd {
     List {
         workspace: String,
     },
+    /// Change the model or approval mode, on the running agent too if there is one.
+    Set {
+        session: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        permission_mode: Option<String>,
+    },
+    /// Stop a session's agent and hide it. The history stays.
+    Close {
+        session: String,
+    },
+    Reopen {
+        session: String,
+    },
 }
 
 fn main() {
@@ -197,8 +214,34 @@ fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Session(SessionCmd::List { workspace }) => {
             let workspace = find_workspace(&client, &workspace)?;
             for session in client.session_list(&workspace.id)? {
-                println!("{}  {:?}  {} events", short(&session.id), session.status, session.last_seq);
+                let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
+                println!(
+                    "{}  {:?}{closed}  {} events  model={} mode={}  {}",
+                    short(&session.id),
+                    session.status,
+                    session.last_seq,
+                    session.model.as_deref().unwrap_or("-"),
+                    session.permission_mode.as_deref().unwrap_or("-"),
+                    session.title.as_deref().unwrap_or(""),
+                );
             }
+        }
+        Cmd::Session(SessionCmd::Set { session, model, permission_mode }) => {
+            let session = find_session(&client, &session)?;
+            let session = client.session_configure(&session.id, model, permission_mode)?;
+            println!(
+                "model={} mode={}",
+                session.model.as_deref().unwrap_or("-"),
+                session.permission_mode.as_deref().unwrap_or("-")
+            );
+        }
+        Cmd::Session(SessionCmd::Close { session }) => {
+            let session = find_session(&client, &session)?;
+            client.session_close(&session.id)?;
+        }
+        Cmd::Session(SessionCmd::Reopen { session }) => {
+            let session = find_session(&client, &session)?;
+            client.session_reopen(&session.id)?;
         }
         Cmd::Send { session, prompt, no_follow, client_msg_id } => {
             let session = find_session(&client, &session)?;
@@ -234,6 +277,11 @@ fn run(args: Args) -> anyhow::Result<()> {
                 Some(message) => ApprovalDecision::Deny { message, interrupt: false },
                 None => ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
             };
+            client.session_approve(&session.id, &approval_id, decision)?;
+        }
+        Cmd::Answer { session, approval_id, question, answer } => {
+            let session = find_session(&client, &session)?;
+            let decision = ApprovalDecision::Answer { answers: std::iter::once((question, answer)).collect() };
             client.session_approve(&session.id, &approval_id, decision)?;
         }
         Cmd::Cancel { session } => {
@@ -359,10 +407,10 @@ fn find_session(client: &Client, query: &str) -> anyhow::Result<Session> {
     for workspace in &workspaces {
         let sessions = client.session_list(&workspace.id)?;
         if workspace.name == query {
-            if let Some(newest) = sessions.last() {
+            if let Some(newest) = sessions.iter().rfind(|s| s.closed_at_ms.is_none()) {
                 return Ok(newest.clone());
             }
-            bail!("workspace {query} has no sessions. Start one with `agenthub session new {query}`");
+            bail!("workspace {query} has no open sessions. Start one with `agenthub session new {query}`");
         }
         by_prefix.extend(sessions.into_iter().filter(|s| s.id.starts_with(query)));
     }

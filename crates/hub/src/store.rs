@@ -83,6 +83,10 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE workspaces ADD COLUMN setup TEXT NOT NULL DEFAULT '{"state":"not_started"}';
     ALTER TABLE workspaces ADD COLUMN port_base INTEGER NOT NULL DEFAULT 0;
 "#,
+    r#"
+    ALTER TABLE sessions ADD COLUMN title TEXT;
+    ALTER TABLE sessions ADD COLUMN closed_at_ms INTEGER;
+"#,
 ];
 
 const FIRST_PORT_BASE: i64 = 55_000;
@@ -159,7 +163,7 @@ fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     })
 }
 
-const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened";
+const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms";
 
 fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     Ok(StoredSession {
@@ -173,6 +177,8 @@ fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             last_seq: row.get::<_, i64>(6)? as Seq,
             created_at_ms: row.get(7)?,
             updated_at_ms: row.get(8)?,
+            title: row.get(11)?,
+            closed_at_ms: row.get(12)?,
         },
         agent_session_id: row.get(9)?,
         agent_opened: row.get(10)?,
@@ -367,7 +373,7 @@ impl Store {
         let session = &stored.session;
         lock(&self.writer)
             .execute(
-                &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+                &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
                 params![
                     session.id,
                     session.workspace_id,
@@ -380,6 +386,8 @@ impl Store {
                     session.updated_at_ms,
                     stored.agent_session_id,
                     stored.agent_opened,
+                    session.title,
+                    session.closed_at_ms,
                 ],
             )
             .map_err(internal)?;
@@ -404,6 +412,36 @@ impl Store {
         let rows = statement.query_map([workspace_id], session_from_row).map_err(internal)?;
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(internal)?;
         Ok(sessions.into_iter().map(|s| s.session).collect())
+    }
+
+    /// `None` leaves that setting as it is.
+    pub fn set_session_options(
+        &self,
+        id: &str,
+        model: Option<&str>,
+        permission_mode: Option<&str>,
+    ) -> Result<(), ApiError> {
+        lock(&self.writer)
+            .execute(
+                "UPDATE sessions SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode) WHERE id = ?",
+                params![model, permission_mode, id],
+            )
+            .map_err(internal)?;
+        Ok(())
+    }
+
+    pub fn set_session_title(&self, id: &str, title: &str) -> Result<(), ApiError> {
+        lock(&self.writer)
+            .execute("UPDATE sessions SET title = ? WHERE id = ?", params![title, id])
+            .map_err(internal)?;
+        Ok(())
+    }
+
+    pub fn set_session_closed(&self, id: &str, closed_at_ms: Option<i64>) -> Result<(), ApiError> {
+        lock(&self.writer)
+            .execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id])
+            .map_err(internal)?;
+        Ok(())
     }
 
     pub fn set_agent_opened(&self, id: &str) -> Result<(), ApiError> {
@@ -644,6 +682,8 @@ mod tests {
                     agent: AgentKind::Claude,
                     model: None,
                     permission_mode: None,
+                    title: None,
+                    closed_at_ms: None,
                     status: SessionStatus::Idle,
                     last_seq: 0,
                     created_at_ms: now,

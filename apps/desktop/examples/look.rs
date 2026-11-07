@@ -3,6 +3,7 @@
 //!
 //!     cargo run -p desktop --example look -- some-workspace
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"
+//!     cargo run -p desktop --example look -- some-workspace click:mode-picker
 //!
 //! Selects the named workspace. With `diff`, opens its diff, and a further argument adds a comment on the
 //! first changed line.
@@ -10,14 +11,16 @@
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
+use gpui_kit::SharedString;
 use gpui_kit::assets::Assets;
+use gpui_kit::test::TestWindowExt as _;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
-        let (_, view) = desktop::open_main_window(HubSource::default_local(), cx).expect("open a window");
+        let (handle, view) = desktop::open_main_window(HubSource::default_local(), cx).expect("open a window");
         let args = args.clone();
         cx.spawn(async move |cx| {
             let wanted = args.first().cloned();
@@ -38,6 +41,12 @@ fn main() {
                 if ready {
                     break;
                 }
+            }
+            // Opens a menu or presses a button, by its ID, for looking at what that shows.
+            if let Some(target) = args.get(1).and_then(|arg| arg.strip_prefix("click:")) {
+                let target = SharedString::from(target.to_string());
+                let _ = handle.update(cx, |_, window, cx| window.click(target, cx));
+                return;
             }
             if args.get(1).map(String::as_str) != Some("diff") {
                 return;

@@ -14,6 +14,8 @@
 //!   recall          Say every prompt this conversation has seen, to prove a resume worked.
 //!   crash:CODE      Exit immediately with CODE.
 //!   env:NAME        Say the value of an environment variable.
+//!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
+//!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
 //!
 //! Conversations persist as files in $FAKE_CLAUDE_STATE. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
@@ -38,8 +40,33 @@ fn emit(out: &Out, value: Value) {
 
 struct Config {
     session_id: String,
-    permission_mode: String,
     conversation: PathBuf,
+}
+
+/// What a control request changed. Starts as what the flags said.
+static LIVE_MODE: Mutex<Option<String>> = Mutex::new(None);
+static LIVE_MODEL: Mutex<Option<String>> = Mutex::new(None);
+
+fn current_mode() -> String {
+    LIVE_MODE.lock().unwrap().clone().unwrap_or_else(|| "default".to_string())
+}
+
+fn current_model() -> String {
+    LIVE_MODEL.lock().unwrap().clone().unwrap_or_else(|| "fake-model".to_string())
+}
+
+/// Reported the way the real CLI does: in order, and for changes it makes itself.
+fn set_mode(out: &Out, mode: &str) {
+    *LIVE_MODE.lock().unwrap() = Some(mode.to_string());
+    emit(out, json!({"type":"system","subtype":"status","status":null,"permissionMode":mode}));
+}
+
+fn answer_control(out: &Out, request_id: &Value, result: Result<Value, String>) {
+    let response = match result {
+        Ok(response) => json!({"subtype":"success","request_id":request_id,"response":response}),
+        Err(error) => json!({"subtype":"error","request_id":request_id,"error":error}),
+    };
+    emit(out, json!({"type":"control_response","response":response}));
 }
 
 enum Input {
@@ -79,14 +106,19 @@ fn main() {
         id
     };
     std::fs::write(state.join("last-args"), args.join(" ")).unwrap();
-    let config = Config {
-        conversation: state.join(&session_id),
-        permission_mode: flag(&args, "--permission-mode").unwrap_or_else(|| "default".to_string()),
-        session_id,
-    };
+    // The real CLI's flag doesn't list `default`, although that's what it calls the mode once running.
+    let launch_mode = flag(&args, "--permission-mode");
+    if launch_mode.as_deref() == Some("default") {
+        eprintln!("error: option '--permission-mode <mode>' argument 'default' is invalid.");
+        std::process::exit(1);
+    }
+    *LIVE_MODE.lock().unwrap() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
+    *LIVE_MODEL.lock().unwrap() = flag(&args, "--model");
+    let config = Config { conversation: state.join(&session_id), session_id };
 
     let (input_tx, input_rx) = mpsc::channel();
-    std::thread::spawn(move || read_stdin(input_tx));
+    let control_out = out.clone();
+    std::thread::spawn(move || read_stdin(input_tx, control_out));
 
     // The real CLI finishes its turn on EOF, then exits. Prompts sent mid-turn fold into that turn.
     let mut queued: VecDeque<String> = VecDeque::new();
@@ -105,7 +137,7 @@ fn main() {
     }
 }
 
-fn read_stdin(input: mpsc::Sender<Input>) {
+fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
@@ -114,10 +146,32 @@ fn read_stdin(input: mpsc::Sender<Input>) {
                 Input::Prompt(value["message"]["content"][0]["text"].as_str().unwrap_or_default().to_string())
             }
             Some("control_response") => Input::Approval(value["response"].clone()),
-            Some("control_request") => {
-                assert_eq!(value["request"]["subtype"], "interrupt");
-                Input::Interrupt
-            }
+            Some("control_request") => match value["request"]["subtype"].as_str() {
+                Some("interrupt") => Input::Interrupt,
+                Some("set_permission_mode") => {
+                    let mode = value["request"]["mode"].as_str().unwrap_or_default();
+                    // The real CLI takes `manual` here too, and calls it `default`.
+                    let mode = if mode == "manual" { "default" } else { mode };
+                    if ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"].contains(&mode) {
+                        answer_control(&out, &value["request_id"], Ok(json!({"mode":mode})));
+                        set_mode(&out, mode);
+                    } else {
+                        answer_control(&out, &value["request_id"], Err("Cannot set permission mode".to_string()));
+                    }
+                    continue;
+                }
+                Some("set_model") => {
+                    let model = value["request"]["model"].as_str().unwrap_or_default();
+                    if model == "not-a-model" {
+                        answer_control(&out, &value["request_id"], Err(format!("Model '{model}' not found")));
+                    } else {
+                        *LIVE_MODEL.lock().unwrap() = Some(model.to_string());
+                        answer_control(&out, &value["request_id"], Ok(json!({"model":model})));
+                    }
+                    continue;
+                }
+                other => panic!("unexpected control request {other:?}"),
+            },
             _ => continue,
         };
         if input.send(item).is_err() {
@@ -211,6 +265,14 @@ impl Turn<'_> {
         false
     }
 
+    /// A tool that's its own card in the app, so it goes by its real name.
+    fn named_tool_use(&mut self, name: &str) -> String {
+        let id = self.message_id();
+        let tool_use_id = format!("toolu_{id}");
+        self.finish_message(&id, json!({"type":"tool_use","id":tool_use_id,"name":name,"input":{}}));
+        tool_use_id
+    }
+
     fn tool_use(&mut self, command: &str) -> String {
         let id = self.message_id();
         let tool_use_id = format!("toolu_{id}");
@@ -248,8 +310,8 @@ fn run_turn(
     state_event(config, out, "running");
     emit(
         out,
-        json!({"type":"system","subtype":"init","session_id":config.session_id,"model":"fake-model",
-        "cwd":std::env::current_dir().unwrap(),"permissionMode":config.permission_mode,"claude_code_version":"fake"}),
+        json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
+        "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
     );
 
     let mut turn = Turn { config, out, next_message: 0 };
@@ -363,11 +425,123 @@ fn run_command(
     if let Some(code) = command.strip_prefix("crash:") {
         std::process::exit(code.parse().unwrap());
     }
+    if let Some(plan) = command.strip_prefix("plan:") {
+        return present_plan(turn, plan, rx, queued, eof);
+    }
+    if let Some(questions) = command.strip_prefix("ask:") {
+        return ask_questions(turn, questions, rx, queued, eof);
+    }
     if let Some(name) = command.strip_prefix("env:") {
         let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
         return turn.say(vec![text], Duration::ZERO, rx, queued, eof);
     }
     false
+}
+
+/// The result reads like the real CLI's, which goes by whether it was given answers.
+fn ask_questions(
+    turn: &mut Turn,
+    spec: &str,
+    rx: &Receiver<Input>,
+    queued: &mut VecDeque<String>,
+    eof: &mut bool,
+) -> bool {
+    let questions: Vec<Value> = spec
+        .split('|')
+        .map(|one| {
+            let (text, options) = one.split_once('=').unwrap();
+            let (multi, text) = text.strip_prefix('*').map_or((false, text), |rest| (true, rest));
+            let options: Vec<Value> =
+                options.split('/').map(|o| json!({"label":o,"description":format!("Choose {o}")})).collect();
+            json!({"question":text,"header":"Question","options":options,"multiSelect":multi})
+        })
+        .collect();
+    let tool_use_id = turn.named_tool_use("AskUserQuestion");
+    let request_id = format!("req_{tool_use_id}");
+    emit(
+        turn.out,
+        json!({"type":"control_request","request_id":request_id,"request":{"subtype":"can_use_tool",
+        "tool_name":"AskUserQuestion","input":{"questions":questions},"tool_use_id":tool_use_id,
+        "permission_suggestions":[]}}),
+    );
+    state_event(turn.config, turn.out, "requires_action");
+    loop {
+        match rx.recv() {
+            Ok(Input::Approval(response)) => {
+                state_event(turn.config, turn.out, "running");
+                if response["response"]["behavior"] == "deny" {
+                    let message = response["response"]["message"].as_str().unwrap_or("denied");
+                    turn.tool_result(&tool_use_id, message, true);
+                    return false;
+                }
+                let answers = response["response"]["updatedInput"]["answers"].as_object();
+                let text = match answers {
+                    Some(answers) if !answers.is_empty() => {
+                        let said: Vec<String> =
+                            answers.iter().map(|(q, a)| format!("\"{q}\"={}", a.as_str().unwrap())).collect();
+                        format!("Your questions have been answered: {}.", said.join(", "))
+                    }
+                    _ => "The user did not answer the questions.".to_string(),
+                };
+                turn.tool_result(&tool_use_id, &text, false);
+                return false;
+            }
+            Ok(Input::Interrupt) => {
+                emit(turn.out, json!({"type":"control_cancel_request","request_id":request_id}));
+                turn.tool_result(&tool_use_id, "cancelled", true);
+                return true;
+            }
+            Ok(Input::Prompt(text)) => queued.push_back(text),
+            Ok(Input::Eof) | Err(_) => {
+                *eof = true;
+                return true;
+            }
+        }
+    }
+}
+
+/// Approving a plan leaves plan mode, and the CLI says so itself.
+fn present_plan(
+    turn: &mut Turn,
+    plan: &str,
+    rx: &Receiver<Input>,
+    queued: &mut VecDeque<String>,
+    eof: &mut bool,
+) -> bool {
+    let tool_use_id = turn.named_tool_use("ExitPlanMode");
+    let request_id = format!("req_{tool_use_id}");
+    emit(
+        turn.out,
+        json!({"type":"control_request","request_id":request_id,"request":{"subtype":"can_use_tool",
+        "tool_name":"ExitPlanMode","input":{"plan":plan,"planFilePath":"/tmp/fake-plan.md"},
+        "tool_use_id":tool_use_id,"permission_suggestions":[]}}),
+    );
+    state_event(turn.config, turn.out, "requires_action");
+    loop {
+        match rx.recv() {
+            Ok(Input::Approval(response)) => {
+                state_event(turn.config, turn.out, "running");
+                if response["response"]["behavior"] == "deny" {
+                    let message = response["response"]["message"].as_str().unwrap_or("denied");
+                    turn.tool_result(&tool_use_id, message, true);
+                    return false;
+                }
+                set_mode(turn.out, "default");
+                turn.tool_result(&tool_use_id, "User has approved your plan.", false);
+                return false;
+            }
+            Ok(Input::Interrupt) => {
+                emit(turn.out, json!({"type":"control_cancel_request","request_id":request_id}));
+                turn.tool_result(&tool_use_id, "cancelled", true);
+                return true;
+            }
+            Ok(Input::Prompt(text)) => queued.push_back(text),
+            Ok(Input::Eof) | Err(_) => {
+                *eof = true;
+                return true;
+            }
+        }
+    }
 }
 
 fn run_tool(
@@ -378,7 +552,7 @@ fn run_tool(
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use(command);
-    if turn.config.permission_mode != "bypassPermissions" {
+    if current_mode() != "bypassPermissions" {
         let request_id = format!("req_{tool_use_id}");
         emit(
             turn.out,

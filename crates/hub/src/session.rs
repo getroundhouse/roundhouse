@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{error, warn};
 
 use crate::Hub;
-use crate::store::{StoredSession, cancelled_approval};
+use crate::store::{self, StoredSession, cancelled_approval};
 use crate::worker_link::WorkerLink;
 
 const LIVE_CAPACITY: usize = 4096;
@@ -84,6 +84,10 @@ struct LiveState {
     /// been replaced: they go in the log, but don't speak for the session's current state.
     agent: Option<AgentRun>,
     agent_opened: bool,
+    model: Option<String>,
+    permission_mode: Option<String>,
+    title: Option<String>,
+    closed_at_ms: Option<i64>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
     live: Option<broadcast::Sender<Live>>,
@@ -94,8 +98,6 @@ pub struct LiveSession {
     pub workspace_id: WorkspaceId,
     agent: AgentKind,
     agent_session_id: String,
-    model: Option<String>,
-    permission_mode: Option<String>,
     created_at_ms: i64,
     /// So a failed setup is mentioned once, rather than on every prompt.
     warned_about_setup: std::sync::atomic::AtomicBool,
@@ -104,6 +106,9 @@ pub struct LiveSession {
     ingest: mpsc::Sender<Item>,
     state: Mutex<LiveState>,
     recording: tokio::sync::Mutex<()>,
+    /// Held while the model and mode are being changed, and while an agent is being started with them,
+    /// so a change can't fall between the two and reach neither.
+    configuring: tokio::sync::Mutex<()>,
 }
 
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
@@ -166,8 +171,6 @@ impl LiveSession {
             workspace_id: stored.session.workspace_id.clone(),
             agent: stored.session.agent,
             agent_session_id: stored.agent_session_id,
-            model: stored.session.model.clone(),
-            permission_mode: stored.session.permission_mode.clone(),
             created_at_ms: stored.session.created_at_ms,
             warned_about_setup: std::sync::atomic::AtomicBool::new(false),
             hub: Arc::downgrade(hub),
@@ -181,9 +184,14 @@ impl LiveSession {
                 pending_approvals: open_approvals.into_iter().map(|id| (id, 0)).collect(),
                 agent: None,
                 agent_opened: stored.agent_opened,
+                model: stored.session.model.clone(),
+                permission_mode: stored.session.permission_mode.clone(),
+                title: stored.session.title.clone(),
+                closed_at_ms: stored.session.closed_at_ms,
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
+            configuring: tokio::sync::Mutex::new(()),
         });
         tokio::spawn(run_commands(session.clone(), commands_rx));
         tokio::spawn(run_ingest(session.clone(), ingest_rx));
@@ -276,17 +284,110 @@ impl LiveSession {
     }
 
     fn record_now(&self, status: SessionStatus, last_seq: Seq, updated_at_ms: i64) -> Session {
+        let state = self.state.lock().unwrap();
         Session {
             id: self.id.clone(),
             workspace_id: self.workspace_id.clone(),
             agent: self.agent,
-            model: self.model.clone(),
-            permission_mode: self.permission_mode.clone(),
+            model: state.model.clone(),
+            permission_mode: state.permission_mode.clone(),
             status,
             last_seq,
             created_at_ms: self.created_at_ms,
             updated_at_ms,
+            title: state.title.clone(),
+            closed_at_ms: state.closed_at_ms,
         }
+    }
+
+    /// What this session is right now, for anything that changed outside the log.
+    fn announce(&self, hub: &Hub) -> Session {
+        let (status, last_seq) = {
+            let state = self.state.lock().unwrap();
+            (state.status, state.last_seq)
+        };
+        let session = self.record_now(status, last_seq, store::now_ms());
+        hub.notify(HubNotice::Session(session.clone()));
+        session
+    }
+
+    /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
+    pub async fn configure(&self, model: Option<String>, permission_mode: Option<String>) -> Result<Session, ApiError> {
+        let hub = self.hub()?;
+        let _one_at_a_time = self.configuring.lock().await;
+        if let Some(link) = hub.existing_worker(&self.workspace_id) {
+            let request = WorkerRequest::AgentConfigure {
+                session_id: self.id.clone(),
+                model: model.clone(),
+                permission_mode: permission_mode.clone(),
+            };
+            link.call(request).await?;
+        }
+        let (id, saved_model, saved_mode) = (self.id.clone(), model.clone(), permission_mode.clone());
+        hub.blocking(move |store| store.set_session_options(&id, saved_model.as_deref(), saved_mode.as_deref()))
+            .await?;
+        {
+            let mut state = self.state.lock().unwrap();
+            state.model = model.or(state.model.take());
+            state.permission_mode = permission_mode.or(state.permission_mode.take());
+        }
+        Ok(self.announce(&hub))
+    }
+
+    /// The agent changed mode, or confirmed a change. The next launch has to start in this one.
+    async fn note_mode(&self, mode: String) {
+        let Ok(hub) = self.hub() else { return };
+        if self.state.lock().unwrap().permission_mode.as_deref() == Some(mode.as_str()) {
+            return;
+        }
+        let (id, saved) = (self.id.clone(), mode.clone());
+        if let Err(e) = hub.blocking(move |store| store.set_session_options(&id, None, Some(&saved))).await {
+            error!(session = self.id, "could not record the agent's mode: {e}");
+            return;
+        }
+        self.state.lock().unwrap().permission_mode = Some(mode);
+        self.announce(&hub);
+    }
+
+    pub async fn close(&self) -> Result<Session, ApiError> {
+        let hub = self.hub()?;
+        let closed_at = store::now_ms();
+        let id = self.id.clone();
+        {
+            // An agent being started right now either finishes first, and is stopped below, or sees this.
+            let _no_start_meanwhile = self.configuring.lock().await;
+            hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
+            self.state.lock().unwrap().closed_at_ms = Some(closed_at);
+        }
+        // Past anything in the queue, so a prompt waiting on setup can't outlive this.
+        self.handle_stop().await?;
+        Ok(self.announce(&hub))
+    }
+
+    pub async fn reopen(&self) -> Result<Session, ApiError> {
+        let hub = self.hub()?;
+        let id = self.id.clone();
+        hub.blocking(move |store| store.set_session_closed(&id, None)).await?;
+        self.state.lock().unwrap().closed_at_ms = None;
+        Ok(self.announce(&hub))
+    }
+
+    fn is_closed(&self) -> bool {
+        self.state.lock().unwrap().closed_at_ms.is_some()
+    }
+
+    /// The first prompt names the session.
+    async fn name_from(&self, prompt: &str) {
+        let Some(title) = title_from_prompt(prompt) else { return };
+        if self.state.lock().unwrap().title.is_some() {
+            return;
+        }
+        let Ok(hub) = self.hub() else { return };
+        let (id, saved) = (self.id.clone(), title.clone());
+        if let Err(e) = hub.blocking(move |store| store.set_session_title(&id, &saved)).await {
+            warn!(session = self.id, "could not save the session's title: {e}");
+        }
+        self.state.lock().unwrap().title = Some(title);
     }
 
     /// Records something the hub itself knows, as opposed to agent output.
@@ -355,7 +456,14 @@ impl LiveSession {
         env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.clone()));
         let cwd =
             workspace.path.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the workspace has no worktree yet"))?;
-        let resume = self.state.lock().unwrap().agent_opened;
+        let _nothing_changes_meanwhile = self.configuring.lock().await;
+        if self.is_closed() {
+            return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
+        }
+        let (resume, model, permission_mode) = {
+            let state = self.state.lock().unwrap();
+            (state.agent_opened, state.model.clone(), state.permission_mode.clone())
+        };
         let spec = AgentSpec {
             session_id: self.id.clone(),
             run: hub.next_run(),
@@ -363,8 +471,8 @@ impl LiveSession {
             cwd,
             agent_session_id: self.agent_session_id.clone(),
             resume,
-            model: self.model.clone(),
-            permission_mode: self.permission_mode.clone(),
+            model,
+            permission_mode,
             env,
         };
         match link.call(WorkerRequest::AgentStart(spec)).await? {
@@ -412,6 +520,10 @@ impl LiveSession {
                 return;
             }
         };
+        if self.is_closed() {
+            let _ = reply.send(Err(ApiError::new(ErrorCode::Conflict, "this chat is closed")));
+            return;
+        }
         match hub.workspace(&self.workspace_id).await {
             Ok(workspace) if workspace.status == WorkspaceStatus::Ready => {}
             Ok(_) => {
@@ -423,6 +535,7 @@ impl LiveSession {
                 return;
             }
         }
+        self.name_from(&text).await;
         let body = EventBody::UserPrompt { text: text.clone(), client_msg_id: client_msg_id.clone() };
         let (event, duplicate) = match self.record(body, None, client_msg_id, true, NO_RUN).await {
             Ok(recorded) => recorded,
@@ -438,6 +551,9 @@ impl LiveSession {
             return;
         }
         hub.wait_for_setup(&self.workspace_id).await;
+        if self.is_closed() {
+            return;
+        }
         if let Ok(workspace) = hub.workspace(&self.workspace_id).await
             && let SetupStatus::Failed { .. } = workspace.setup
             && !self.warned_about_setup.swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -449,6 +565,9 @@ impl LiveSession {
             .await;
         }
         if let Err(e) = self.forward_prompt(text).await {
+            if self.is_closed() {
+                return;
+            }
             warn!(session = self.id, "could not deliver a prompt: {e}");
             self.cancel_approvals(None).await;
             self.record_or_log(EventBody::AgentExited {
@@ -475,7 +594,7 @@ impl LiveSession {
             }
         }
         let outcome = match decision {
-            ApprovalDecision::Allow { .. } => ApprovalOutcome::Allowed,
+            ApprovalDecision::Allow { .. } | ApprovalDecision::Answer { .. } => ApprovalOutcome::Allowed,
             ApprovalDecision::Deny { .. } => ApprovalOutcome::Denied,
         };
         self.record_own(EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome }).await?;
@@ -549,6 +668,7 @@ async fn ingest_event(session: &Arc<LiveSession>, run: u64, body: EventBody, raw
     let current = session.state.lock().unwrap().agent.is_some_and(|agent| agent.run == run);
     match &body {
         EventBody::AgentInit { .. } => mark_opened(session).await,
+        EventBody::AgentMode { permission_mode } if current => session.note_mode(permission_mode.clone()).await,
         EventBody::AgentExited { .. } => {
             if current {
                 session.state.lock().unwrap().agent = None;
@@ -567,6 +687,18 @@ async fn ingest_event(session: &Arc<LiveSession>, run: u64, body: EventBody, raw
     if let Some(approval_id) = stale_approval {
         session.record_or_log(cancelled_approval(approval_id)).await;
     }
+}
+
+/// The first line of a prompt, cut at a word if it's long.
+fn title_from_prompt(prompt: &str) -> Option<String> {
+    const MOST: usize = 48;
+    let line = prompt.lines().map(str::trim).find(|line| !line.is_empty())?;
+    if line.chars().count() <= MOST {
+        return Some(line.to_string());
+    }
+    let cut: String = line.chars().take(MOST).collect();
+    let shortened = cut.rsplit_once(' ').map_or(cut.as_str(), |(start, _)| start);
+    Some(format!("{}…", shortened.trim_end()))
 }
 
 async fn mark_opened(session: &Arc<LiveSession>) {
@@ -613,6 +745,16 @@ mod tests {
     }
 
     use SessionStatus::*;
+
+    #[test]
+    fn a_title_is_the_first_line_cut_at_a_word() {
+        assert_eq!(title_from_prompt("\n  Fix the login bug\nand then the rest").as_deref(), Some("Fix the login bug"));
+        assert_eq!(title_from_prompt("   \n "), None);
+        let long = "word ".repeat(30);
+        let title = title_from_prompt(&long).unwrap();
+        assert!(title.ends_with("word…"), "{title}");
+        assert!(title.chars().count() <= 49, "{title}");
+    }
 
     #[test]
     fn a_prompt_starts_running_from_any_state() {

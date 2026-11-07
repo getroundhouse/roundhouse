@@ -228,6 +228,16 @@ async fn handle(
             };
             Ok(if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning })
         }
+        WorkerRequest::AgentConfigure { session_id, model, permission_mode } => {
+            let Some(agent) = state.live_agent(&session_id) else {
+                return Ok(WorkerResponse::AgentNotRunning);
+            };
+            match agent.configure(model.as_deref(), permission_mode.as_deref()).await {
+                Ok(()) => Ok(WorkerResponse::Ok),
+                Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
+                Err(e) => Err(agent_error(e)),
+            }
+        }
         WorkerRequest::AgentStop { session_id } => {
             // Includes one that's on its way out: this resolves once it has finished.
             let agent = state.agents.lock().unwrap().get(&session_id).map(|agent| agent.process.clone());

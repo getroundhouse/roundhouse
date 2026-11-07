@@ -4,7 +4,8 @@
 //! The wire format is newline-delimited JSON over any byte stream: a Unix socket between client
 //! and hub, stdio between hub and worker. Both sides say hello first and compare
 //! [`PROTOCOL_VERSION`]. Fields and enum variants can be added without a version bump, because
-//! unknown fields are ignored and unknown variants decode as `Unknown`.
+//! unknown fields are ignored and unknown variants decode as `Unknown`. A new request does need one,
+//! because a peer has nothing sensible to do with a request it can't read.
 
 pub mod client;
 pub mod event;
@@ -14,4 +15,4 @@ pub mod paths;
 pub mod tail;
 pub mod worker;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;

@@ -167,6 +167,7 @@ async fn handle(
         R::SessionCreate { workspace_id, agent, model, permission_mode } => {
             C::Session(hub.session_create(workspace_id, agent, model, permission_mode).await?)
         }
+        R::SessionEnsure { workspace_id, agent } => C::Session(hub.session_ensure(workspace_id, agent).await?),
         R::SessionList { workspace_id } => C::Sessions { sessions: hub.session_list(workspace_id).await? },
         R::SessionGet { id } => C::Session(hub.session_get(id).await?),
         R::SessionRead { id, from_seq, limit, max_bytes, include_raw } => {
@@ -220,6 +221,11 @@ async fn handle(
             hub.session_approve(id, approval_id, decision).await?;
             C::Ok
         }
+        R::SessionConfigure { id, model, permission_mode } => {
+            C::Session(hub.session_configure(id, model, permission_mode).await?)
+        }
+        R::SessionClose { id } => C::Session(hub.session_close(id).await?),
+        R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
         R::SessionCancel { id } => {
             hub.session_cancel(id).await?;
             C::Ok

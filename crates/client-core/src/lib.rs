@@ -134,8 +134,7 @@ impl Client {
     pub fn connect_or_start(paths: &Paths, daemon: &Path, client_name: &str) -> Result<Client> {
         match Client::connect(&paths.socket, client_name) {
             Ok(client) => return Ok(client),
-            Err(ClientError::Io(e))
-                if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused) => {}
+            Err(e) if hub_is_missing(&e) => {}
             Err(e) => return Err(e),
         }
         start_hub(paths, daemon)?;
@@ -143,7 +142,7 @@ impl Client {
         loop {
             match Client::connect(&paths.socket, client_name) {
                 Ok(client) => return Ok(client),
-                Err(ClientError::Io(_)) if Instant::now() < deadline => {
+                Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(25));
                 }
                 Err(e) => return Err(e),
@@ -175,7 +174,11 @@ impl Client {
     }
 
     pub fn hub_shutdown(&self) -> Result<()> {
-        self.expect_ok(ClientRequest::HubShutdown)
+        match self.expect_ok(ClientRequest::HubShutdown) {
+            // The hub did what was asked before its reply got out.
+            Err(e) if hub_is_missing(&e) => Ok(()),
+            other => other,
+        }
     }
 
     pub fn repo_add(&self, path: &str) -> Result<Repo> {
@@ -294,6 +297,10 @@ impl Client {
         }
     }
 
+    pub fn session_ensure(&self, workspace_id: &str, agent: AgentKind) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionEnsure { workspace_id: workspace_id.to_string(), agent })
+    }
+
     pub fn session_get(&self, id: &str) -> Result<Session> {
         self.expect_session(ClientRequest::SessionGet { id: id.to_string() })
     }
@@ -353,6 +360,23 @@ impl Client {
             approval_id: approval_id.to_string(),
             decision,
         })
+    }
+
+    pub fn session_configure(
+        &self,
+        id: &str,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    ) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionConfigure { id: id.to_string(), model, permission_mode })
+    }
+
+    pub fn session_close(&self, id: &str) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionClose { id: id.to_string() })
+    }
+
+    pub fn session_reopen(&self, id: &str) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionReopen { id: id.to_string() })
     }
 
     pub fn session_cancel(&self, id: &str) -> Result<()> {
@@ -431,6 +455,22 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
 fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
     if let Some(subscription) = inner.subscriptions.lock().unwrap().get(&subscription_id) {
         let _ = subscription.send(item);
+    }
+}
+
+/// Nothing's there, or what was there went away as we connected: a hub that's exiting can accept a
+/// connection and then drop it, and so can one that loses the race with another starting at once.
+fn hub_is_missing(error: &ClientError) -> bool {
+    match error {
+        ClientError::Disconnected => true,
+        ClientError::Io(e) => matches!(
+            e.kind(),
+            std::io::ErrorKind::NotFound
+                | std::io::ErrorKind::ConnectionRefused
+                | std::io::ErrorKind::ConnectionReset
+                | std::io::ErrorKind::BrokenPipe
+        ),
+        _ => false,
     }
 }
 

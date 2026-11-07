@@ -89,6 +89,12 @@ pub enum ClientRequest {
         model: Option<String>,
         permission_mode: Option<String>,
     },
+    /// The workspace's newest open session, or a new one if it has none. Clients opening a workspace
+    /// at the same moment end up in the same session, rather than one each.
+    SessionEnsure {
+        workspace_id: WorkspaceId,
+        agent: AgentKind,
+    },
     SessionList {
         workspace_id: WorkspaceId,
     },
@@ -137,6 +143,20 @@ pub enum ClientRequest {
         decision: ApprovalDecision,
     },
     SessionCancel {
+        id: SessionId,
+    },
+    /// Changes the model or approval mode, on the running agent too if there is one. `None` leaves
+    /// that setting as it is. Fails, changing nothing, if the agent refuses.
+    SessionConfigure {
+        id: SessionId,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    },
+    /// Stops its agent and hides it from the tabs. The history stays, and it can be reopened.
+    SessionClose {
+        id: SessionId,
+    },
+    SessionReopen {
         id: SessionId,
     },
 }

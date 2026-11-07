@@ -81,6 +81,11 @@ pub enum WorkerRequest {
     AgentCancel {
         session_id: SessionId,
     },
+    AgentConfigure {
+        session_id: SessionId,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    },
     /// Resolves once the process has exited.
     AgentStop {
         session_id: SessionId,

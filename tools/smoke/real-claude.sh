@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The whole stack against the real `claude` CLI: step 1.1's "done when", plus the behaviors the fake
-# agent can only imitate. Makes about 15 small Haiku calls on your own login, so run it by hand
+# agent can only imitate. Makes about 25 small Haiku calls, and one to Sonnet, on your own login, so run it by hand
 # rather than in CI. Uses a throwaway home, repository and worktrees under /tmp.
 #
 #   cargo build --workspace && tools/smoke/real-claude.sh
@@ -50,6 +50,13 @@ session_status() { cli session list "$1" | tail -1 | awk '{print $2}'; }
 wait_idle() { # workspace
   local deadline=$((SECONDS + 90))
   while [ $SECONDS -lt $deadline ]; do [ "$(session_status "$1")" = "Idle" ] && return 0; sleep 0.3; done
+  return 1
+}
+# For when a workspace holds more than one chat, and "the last one listed" won't do.
+session_status_of() { cli session list timing | grep "^${1:0:8}" | awk '{print $2}'; }
+wait_until_idle_session() { # session
+  local deadline=$((SECONDS + 90))
+  while [ $SECONDS -lt $deadline ]; do [ "$(session_status_of "$1")" = "Idle" ] && return 0; sleep 0.3; done
   return 1
 }
 wait_gone() { # pid
@@ -140,6 +147,73 @@ cli approve "$ASID" "$APPROVAL" --deny "Not this time"
 check "a denied tool doesn't run" 'wait_idle timing && [ ! -f "$WT2/denied.txt" ]'
 check "the agent is told why" '[ "$(q "$ASID" "any(b.get(\"is_error\") and \"Not this time\" in b.get(\"text\", \"\") for e in events if e[\"body\"][\"type\"] == \"agent_user\" for b in e[\"body\"][\"blocks\"])")" = True ]'
 
+section "Changing the model and approval mode"
+MSID=$(cli session new timing --model "$MODEL" --permission-mode manual)
+mode_of() { cli session list timing | grep "^${MSID:0:8}" | sed 's/.*mode=\([^ ]*\).*/\1/'; }
+OUT=$(cli send "$MSID" "Reply with the single word READY." 2>&1)
+check "a new chat runs beside the other one" 'echo "$OUT" | grep -q READY'
+check "the first prompt names it" 'cli session list timing | grep "^${MSID:0:8}" | grep -q "Reply with the single word READY."'
+MAGENT=$(q "$MSID" "pid()")
+cli session set "$MSID" --permission-mode bypassPermissions >/dev/null
+OUT=$(cli send "$MSID" "Use the Bash tool to run exactly: echo open > full-access.txt   Then reply with the single word DONE." 2>&1)
+check "full access applies to the running agent" '[ -f "$WT2/full-access.txt" ]'
+check "it didn't ask" '[ "$(q "$MSID" "kinds.count(\"approval_requested\")")" = 0 ]'
+check "and it's the same process" '[ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
+cli session set "$MSID" --permission-mode manual >/dev/null
+cli send "$MSID" "Use the Bash tool to run exactly: echo asked > asked.txt   Then reply with the single word DONE." --no-follow >/dev/null
+wait_for "ask first applies too" "$MSID" "'approval_requested' in kinds"
+APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+cli approve "$MSID" "$APPROVAL"
+check "it runs once approved" 'wait_until_idle_session "$MSID" && [ -f "$WT2/asked.txt" ]'
+OUT=$(cli session set "$MSID" --model not-a-real-model 2>&1)
+check "a model the CLI doesn't know is refused, with its reason" 'echo "$OUT" | grep -q "not found"'
+check "and nothing changed" 'cli session list timing | grep "^${MSID:0:8}" | grep -q "model=$MODEL"'
+check "the agent survives a refusal" 'alive "$MAGENT"'
+cli session set "$MSID" --permission-mode bypassPermissions >/dev/null
+cli session set "$MSID" --permission-mode plan >/dev/null
+check "plan mode is reported back" '[ "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" = plan ]'
+cli send "$MSID" "Make a one line plan to create a file planned.txt containing hello, then call ExitPlanMode. Do not ask questions." --no-follow >/dev/null
+wait_for "the plan comes back for approval" "$MSID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+check "nothing has been done yet" '[ ! -f "$WT2/planned.txt" ]'
+APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+cli approve "$MSID" "$APPROVAL"
+wait_for "approving it leaves plan mode, by the CLI's own report" "$MSID" "[e['body']['permission_mode'] for e in events if e['body']['type'] == 'agent_mode'][-1] != 'plan'"
+AFTER_PLAN=$(mode_of)
+echo "        (after a plan chosen from full access, the mode is: $AFTER_PLAN)"
+check "the hub's record follows it" '[ "$AFTER_PLAN" = "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" ]'
+wait_until_idle_session "$MSID"
+cli session set "$MSID" --model sonnet >/dev/null
+OUT=$(cli send "$MSID" "Reply with the single word SWITCHED." 2>&1)
+check "another model takes over on the running agent" '[ "$(q "$MSID" "\"sonnet\" in str([e[\"body\"][\"model\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][-1])")" = True ] && [ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
+cli session set "$MSID" --model "$MODEL" >/dev/null
+cli send "$MSID" "$(slow_tool 44 midturn midturn.txt)" --no-follow >/dev/null
+wait_for "a long tool is running" "$MSID" "'44' in str(events[-5:])"
+BEFORE=$SECONDS
+cli session set "$MSID" --permission-mode acceptEdits >/dev/null
+check "a change mid-turn is answered right away" '[ $((SECONDS - BEFORE)) -lt 5 ]'
+cli cancel "$MSID" >/dev/null 2>&1
+wait_until_idle_session "$MSID"
+
+section "Closing and reopening a chat"
+cli session close "$MSID"
+check "closing stops its agent" 'wait_gone "$MAGENT"'
+check "and not the other chat's" '[ "$(session_status_of "$ASID")" != "" ] && cli session list timing | grep -q closed'
+check "a closed chat takes no prompts" '! cli send "$MSID" "hello?" --no-follow >/dev/null 2>&1'
+cli session reopen "$MSID"
+OUT=$(cli send "$MSID" "What word did I ask you to reply with first in this conversation? Reply with only that word." 2>&1)
+check "reopening picks up the conversation" 'echo "$OUT" | grep -q READY'
+cli session close "$MSID"
+
+section "Questions"
+QSID=$(cli session new timing --model "$MODEL" --permission-mode bypassPermissions)
+cli send "$QSID" "Use the AskUserQuestion tool to ask me whether I prefer red or blue (one question, two options, with the labels Red and Blue). Then tell me which I chose in one short sentence." --no-follow >/dev/null
+wait_for "a question reaches us, even with full access" "$QSID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'AskUserQuestion' for e in events)" 120
+Q=$(q "$QSID" "[e['body']['input']['questions'][0]['question'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+APPROVAL=$(q "$QSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+cli answer "$QSID" "$APPROVAL" "$Q" Blue
+wait_for "the agent gets the answer" "$QSID" "'blue' in text().lower()" 120
+cli session close "$QSID"
+
 section "Cancelling"
 cli send "$SID" "$(slow_tool 41 cancelled cancelled.txt)" --no-follow >/dev/null
 wait_for "a long tool is running" "$SID" "'41' in str(events[-5:]) and any(b['type'] == 'tool_use' for e in events[-4:] if e['body']['type'] == 'assistant' for b in e['body']['blocks'])"
@@ -201,6 +275,8 @@ check "and the conversation with it" 'echo "$OUT" | grep -q survived.txt'
 section "Cost of this run"
 q "$SID" "'  session 1: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"
 q "$ASID" "'  session 2: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"
+q "$MSID" "'  session 3, with one Sonnet reply and a plan: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"
+q "$QSID" "'  session 4: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"
 
 echo
 echo "$passes passed, $failures failed"

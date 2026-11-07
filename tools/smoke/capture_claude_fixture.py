@@ -22,9 +22,9 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "crates/agents/tests/fixtures/claude.jsonl"
 FLAGS = """-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages
---thinking-display summarized --permission-prompt-tool stdio --permission-mode manual --model haiku --effort high""".split()
+--thinking-display summarized --permission-prompt-tool stdio --allow-dangerously-skip-permissions --permission-mode manual --model haiku --effort high""".split()
 # Keeps the fixture small. Order is preserved, so the protocol's sequencing is still real.
-MAX_PER_KIND = {"thinking_tokens": 2, "status": 1, "hook_started": 0, "hook_response": 0}
+MAX_PER_KIND = {"thinking_tokens": 2, "status": 3, "hook_started": 0, "hook_response": 0}
 
 
 def user(text):
@@ -96,8 +96,52 @@ def capture(cwd):
     cli.send({"type": "control_request", "request_id": "interrupt-1", "request": {"subtype": "interrupt", "cancel_queued": True}})
     cli.wait_for(is_result)
     time.sleep(0.5)
+
+    # A change it accepts, one it refuses, and leaving plan mode, which it reports by itself.
+    cli.send({"type": "control_request", "request_id": "mode-1", "request": {"subtype": "set_permission_mode", "mode": "plan"}})
+    cli.wait_for(lambda v: v.get("type") == "control_response" and v["response"].get("request_id") == "mode-1")
+    cli.send({"type": "control_request", "request_id": "model-1", "request": {"subtype": "set_model", "model": "not-a-model"}})
+    cli.wait_for(lambda v: v.get("type") == "control_response" and v["response"].get("request_id") == "model-1")
+    cli.send(user("Make a one line plan to create a file planned.txt containing hello, then call ExitPlanMode. Do not ask questions."))
+    request = cli.wait_for(lambda v: is_approval(v) and v["request"].get("tool_name") == "ExitPlanMode")
+    respond(cli, request, {"behavior": "allow", "updatedInput": request["request"]["input"]})
+    # It goes on to carry out the plan, and that isn't needed here.
+    if is_approval(cli.wait_for(lambda v: is_approval(v) or is_result(v))):
+        cli.send({"type": "control_request", "request_id": "interrupt-2", "request": {"subtype": "interrupt", "cancel_queued": True}})
+        cli.wait_for(is_result)
+    time.sleep(0.3)
+
+    # A question, answered the way the app answers one.
+    cli.send(user("Use the AskUserQuestion tool to ask me whether I prefer red or blue (one question, two options). Then say which I chose."))
+    request = cli.wait_for(is_approval)
+    question = request["request"]["input"]["questions"][0]
+    answers = {question["question"]: question["options"][1]["label"]}
+    respond(cli, request, {"behavior": "allow", "updatedInput": {**request["request"]["input"], "answers": answers}})
+    cli.wait_for(is_result)
+    time.sleep(0.3)
     cli.proc.kill()
     return cli.lines
+
+
+def scrub(text, cwd):
+    text = text.replace(os.path.realpath(cwd), "/tmp/fixture").replace(str(cwd), "/tmp/fixture")
+    return text.replace(str(pathlib.Path.home()), "/home/user")
+
+
+def scrub_streamed_text(lines, cwd):
+    """Streaming can split a path anywhere, so each block is scrubbed whole and cut up again the same way."""
+    blocks = {}
+    for value in lines:
+        if value.get("type") == "stream_event" and value["event"].get("type") == "content_block_delta":
+            delta = value["event"]["delta"]
+            for field in ("partial_json", "text", "thinking"):
+                if field in delta:
+                    key = (value.get("api_message_id"), value["event"].get("index"), field)
+                    blocks.setdefault(key, []).append(delta)
+    for (_, _, field), deltas in blocks.items():
+        text = scrub("".join(delta[field] for delta in deltas), cwd)
+        for i, delta in enumerate(deltas):
+            delta[field] = text[i * len(text) // len(deltas):(i + 1) * len(text) // len(deltas)]
 
 
 def sanitize(value, cwd):
@@ -111,21 +155,33 @@ def sanitize(value, cwd):
     if value.get("type") == "rate_limit_event":
         value["rate_limit_info"] = {"status": "allowed", "rateLimitType": "seven_day"}
     text = json.dumps(value)
-    text = text.replace(os.path.realpath(cwd), "/tmp/fixture").replace(str(cwd), "/tmp/fixture")
-    text = text.replace(str(pathlib.Path.home()), "/home/user")
+    text = scrub(text, cwd)
     # Opaque and long. They're never read, so a stub keeps the file small.
     text = re.sub(r'"signature": "[^"]{16,}"', '"signature": "stub"', text)
     return json.loads(text)
 
 
+def refuse_anything_personal(lines):
+    """The last check before this goes in the repo, including across chunks of streamed text."""
+    name = pathlib.Path.home().name.lower()
+    streamed = "".join(v["event"]["delta"].get("partial_json", "") + v["event"]["delta"].get("text", "")
+                       for v in lines if v.get("type") == "stream_event" and "delta" in v["event"])
+    if name in streamed.lower() or any(name in json.dumps(v).lower() for v in lines):
+        sys.exit(f"the capture still mentions {name!r}, so nothing was written")
+
+
 def kind_of(value):
-    return value.get("subtype") if value.get("type") == "system" else None
+    if value.get("type") != "system":
+        return None
+    # Mode changes are few, and what the status lines are kept for.
+    return "mode" if value.get("subtype") == "status" and "permissionMode" in value else value.get("subtype")
 
 
 def main():
     with tempfile.TemporaryDirectory(dir="/tmp") as cwd:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=cwd, check=True)
         lines = capture(cwd)
+        scrub_streamed_text(lines, cwd)
         kept, counts = [], {}
         for value in lines:
             kind = kind_of(value)
@@ -137,6 +193,7 @@ def main():
         projects = pathlib.Path.home() / ".claude/projects"
         for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):
             shutil.rmtree(leftover, ignore_errors=True)
+    refuse_anything_personal(kept)
     version = next(v["claude_code_version"] for v in kept if kind_of(v) == "init")
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text("".join(json.dumps(value) + "\n" for value in kept))

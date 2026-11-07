@@ -4,6 +4,8 @@
 //! agent's raw output line, and the hub stores it beside the event, so that this view can be
 //! rebuilt if the normalization turns out to be wrong.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -96,6 +98,11 @@ pub enum EventBody {
         message: String,
     },
     /// An agent event with no normalized form. The stored raw line has the details.
+    /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a
+    /// plan leaves plan mode.
+    AgentMode {
+        permission_mode: String,
+    },
     AgentOther {
         kind: String,
     },
@@ -118,6 +125,7 @@ impl EventBody {
             EventBody::ApprovalResolved { .. } => "approval_resolved",
             EventBody::AgentExited { .. } => "agent_exited",
             EventBody::Notice { .. } => "notice",
+            EventBody::AgentMode { .. } => "agent_mode",
             EventBody::AgentOther { .. } => "agent_other",
             EventBody::Unknown => "unknown",
         }
@@ -201,6 +209,9 @@ pub enum ApprovalDecision {
         #[serde(default)]
         interrupt: bool,
     },
+    /// The agent asked the user something, and this is what they said, by the question's text. Several
+    /// choices for one question are joined with a comma and a space.
+    Answer { answers: BTreeMap<String, String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,8 +1,10 @@
 //! What each row of the log looks like.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use crate::questions;
 use client_core::session_log::Row;
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::text::TextView;
@@ -44,9 +46,14 @@ pub(crate) fn render_row(
                 ),
                 _ => false,
             };
+            let picks = match &body {
+                EventBody::ApprovalRequested { approval_id, .. } => m.picks.get(approval_id).cloned(),
+                _ => None,
+            }
+            .unwrap_or_default();
             let expanded: Vec<usize> = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
             drop(m);
-            render_event(seq, &body, &expanded, open, this, cx)
+            render_event(seq, &body, &expanded, open, &picks, this, cx)
         }
         Row::Pending(prompt) => {
             let text = prompt.text.clone();
@@ -101,10 +108,14 @@ fn render_event(
     body: &EventBody,
     expanded: &[usize],
     approval_open: bool,
+    picks: &BTreeMap<String, Vec<String>>,
     this: &WeakEntity<Transcript>,
     cx: &App,
 ) -> AnyElement {
     match body {
+        EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
+            questions::card(seq, approval_id, input, approval_open, picks, this, cx)
+        }
         EventBody::UserPrompt { text, .. } => {
             prompt_bubble(ElementId::NamedInteger("prompt".into(), seq), text.clone(), false, cx)
         }
@@ -137,6 +148,9 @@ fn render_event(
         }
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled", cx),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied", cx),
+        EventBody::AgentMode { permission_mode } => {
+            muted_line(format!("Approval mode is now {}", crate::mode_label(permission_mode)), cx)
+        }
         EventBody::AgentExited { reason, stderr_tail, .. } => match reason {
             ExitReason::Requested => empty(),
             ExitReason::HubRestart => {
@@ -192,6 +206,8 @@ fn render_block(
                 })
                 .into_any_element()
         }
+        // These show as cards when they ask, with everything in them.
+        ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
         ContentBlock::ToolUse { name, input, .. } => h_flex()
             .gap_2()
             .text_xs()
@@ -294,6 +310,46 @@ fn approval_card(
         }
     };
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
+    if tool_name == "ExitPlanMode" {
+        let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
+        let keep_planning = ApprovalDecision::Deny {
+            message: "The user wants to keep planning. Ask them what to change.".to_string(),
+            interrupt: false,
+        };
+        return row()
+            .child(
+                v_flex()
+                    .w_full()
+                    .p_3()
+                    .gap_2()
+                    .rounded_lg()
+                    .border_1()
+                    .border_color(if open { theme.warning } else { theme.border })
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Plan"))
+                    .child(
+                        TextView::markdown(ElementId::NamedInteger("plan".into(), seq), SharedString::from(plan))
+                            .selectable(true),
+                    )
+                    .when(open, |d| {
+                        d.child(
+                            h_flex()
+                                .gap_2()
+                                .child(
+                                    Button::new(ElementId::NamedInteger("approve-plan".into(), seq))
+                                        .primary()
+                                        .label("Approve plan")
+                                        .on_click(answer(allow)),
+                                )
+                                .child(
+                                    Button::new(ElementId::NamedInteger("keep-planning".into(), seq))
+                                        .label("Keep planning")
+                                        .on_click(answer(keep_planning)),
+                                ),
+                        )
+                    }),
+            )
+            .into_any_element();
+    }
     let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
     row()
         .child(
