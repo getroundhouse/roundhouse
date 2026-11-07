@@ -7,7 +7,7 @@ How Rust is written in this repo. `docs/architecture.md` owns which crate may de
 Two ideas sit behind the rules:
 
 - **Make the failure impossible.** A type, an exhaustive match or a missing dependency beats a guard and a review comment.
-- **Each recurring problem gets one mechanism.** `docs/foundations.md` lists them. If one doesn't fit a new case, change it rather than adding a second way.
+- **Each recurring problem gets one mechanism.** If one doesn't fit a new case, change it rather than adding a second way.
 
 ## Toolchain and workspace
 
