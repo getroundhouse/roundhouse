@@ -19,14 +19,18 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
     let cli = dir.path().join("fake-cli");
     std::fs::write(&cli, "#!/bin/sh\nexec sleep 100\n").unwrap();
     std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
-    // SAFETY: this binary has one test, and nothing else reads the environment yet.
-    unsafe { std::env::set_var("TRESTLE_CLAUDE_BIN", &cli) };
 
     for attempt in 0..8 {
         let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
         let (worker_read, worker_write) = tokio::io::split(worker_end);
         let (mut hub_read, mut hub_write) = tokio::io::split(hub_end);
-        let config = Config { workspaces_root: dir.path().to_path_buf(), state_dir: None };
+        let config = Config {
+            workspaces_root: dir.path().to_path_buf(),
+            state_dir: None,
+            home: None,
+            path: None,
+            claude_bin: Some(cli.clone()),
+        };
         let running = tokio::spawn(serve(worker_read, worker_write, config));
         tokio::spawn(async move {
             let mut sink = Vec::new();
@@ -57,7 +61,6 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
         timeout(Duration::from_secs(10), running)
             .await
             .unwrap_or_else(|_| panic!("attempt {attempt}: the worker didn't exit"))
-            .unwrap()
             .unwrap();
     }
 }

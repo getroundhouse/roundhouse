@@ -7,14 +7,14 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, anyhow};
 use async_trait::async_trait;
+use process::{ProcessRecord, Signal, signal_group};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, OnceCell};
 use tracing::{debug, info, warn};
 
-use crate::{Capabilities, Provider, WorkerStream};
+use crate::{Capabilities, Provider, ProviderError, WorkerStream};
 
 /// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
 const STOP_GRACE: Duration = Duration::from_secs(10);
@@ -29,6 +29,10 @@ pub struct LocalConfig {
     /// One directory per instance, holding its worker's log.
     pub instances_dir: PathBuf,
     pub workspaces_root: PathBuf,
+    /// The user's shell, which has the real `PATH`. Found from the user's account if this is `None`.
+    pub shell: Option<String>,
+    /// This process's own `PATH`, which workers get as well as the login shell's.
+    pub path: Option<String>,
 }
 
 struct Running {
@@ -47,8 +51,9 @@ impl LocalProvider {
         let login_path = Arc::new(OnceCell::new());
         // Read it up front, so the first workspace doesn't pay for a slow shell startup.
         let early = login_path.clone();
+        let shell = config.shell.clone();
         tokio::spawn(async move {
-            early.get_or_init(read_login_path).await;
+            early.get_or_init(|| read_login_path(shell)).await;
         });
         Self { config, running: Mutex::new(HashMap::new()), login_path }
     }
@@ -57,7 +62,7 @@ impl LocalProvider {
         self.config.instances_dir.join(instance_id)
     }
 
-    async fn end(&self, instance_id: &str, grace: Duration) -> anyhow::Result<()> {
+    async fn end(&self, instance_id: &str, grace: Duration) -> Result<(), ProviderError> {
         let entry = self.running.lock().await.remove(instance_id);
         if let Some(mut entry) = entry {
             // Never connected, or the stream was given up: dropping it closes stdin either way.
@@ -76,8 +81,8 @@ impl LocalProvider {
 
 /// An app started from Finder gets a minimal `PATH`, without Homebrew or anything from the user's
 /// shell setup. The agent's tools need the real one, so ask the login shell for it.
-async fn read_login_path() -> Option<String> {
-    let shell = login_shell()?;
+async fn read_login_path(shell: Option<String>) -> Option<String> {
+    let shell = shell.or_else(account_shell)?;
     // rc files can print anything, so the value is marked. `printenv` works in every shell, which
     // matters for fish, where `$PATH` expands to a list.
     let script = format!("printf '{PATH_MARKER}'; printenv PATH; printf '{PATH_MARKER}'");
@@ -118,10 +123,7 @@ async fn read_until_second_marker<R: AsyncRead + Unpin>(mut reader: R) -> Option
     }
 }
 
-fn login_shell() -> Option<String> {
-    if let Some(shell) = std::env::var("SHELL").ok().filter(|s| !s.is_empty()) {
-        return Some(shell);
-    }
+fn account_shell() -> Option<String> {
     // SAFETY: getpwuid returns a pointer to static storage or null. The string is copied before
     // anything else can overwrite it, and this runs on one thread at a time in this process.
     unsafe {
@@ -140,16 +142,9 @@ fn parse_marked_path(output: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_string())
 }
 
-async fn process_start_time(pid: u32) -> Option<String> {
-    let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().await.ok()?;
-    let started = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!started.is_empty()).then_some(started)
-}
-
-fn signal_group(pid: u32, signal: i32) {
-    // SAFETY: kill(2) has no memory effects. The caller has just confirmed by start time that this is
-    // the process that was recorded, and it was started as a group leader.
-    unsafe { libc::kill(-(pid as i32), signal) };
+async fn still_running(agent: &ProcessRecord) -> bool {
+    let agent = agent.clone();
+    tokio::task::spawn_blocking(move || agent.is_running()).await.unwrap_or(false)
 }
 
 /// A worker records each agent it runs, and removes the record when that agent exits. Any record
@@ -162,21 +157,17 @@ async fn stop_orphaned_agents(instance_dir: &Path) {
     };
     for record in records.flatten() {
         let path = record.path();
-        let contents = std::fs::read_to_string(&path).unwrap_or_default();
-        let mut lines = contents.lines();
-        let pid = lines.next().and_then(|line| line.parse::<u32>().ok());
-        let recorded_start = lines.next().unwrap_or_default();
-        if let Some(pid) = pid.filter(|pid| *pid > 1)
-            && !recorded_start.is_empty()
-            && process_start_time(pid).await.as_deref() == Some(recorded_start)
+        if let Some(agent) = ProcessRecord::read(&path).filter(|agent| agent.pid > 1)
+            && still_running(&agent).await
         {
+            let pid = agent.pid;
             warn!(pid, "stopping an agent left behind by a worker that was killed");
-            signal_group(pid, libc::SIGTERM);
+            signal_group(pid, Signal::Terminate);
             let deadline = tokio::time::Instant::now() + ORPHAN_GRACE;
-            while process_start_time(pid).await.as_deref() == Some(recorded_start) {
+            while still_running(&agent).await {
                 if tokio::time::Instant::now() >= deadline {
                     warn!(pid, "it ignored SIGTERM, sending SIGKILL");
-                    signal_group(pid, libc::SIGKILL);
+                    signal_group(pid, Signal::Kill);
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -208,28 +199,28 @@ impl Provider for LocalProvider {
         Capabilities { filesystem_survives_stop: true, snapshots: false }
     }
 
-    async fn create(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn create(&self, instance_id: &str) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
-        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))
+        std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))
     }
 
-    async fn start(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn start(&self, instance_id: &str) -> Result<(), ProviderError> {
         let mut running = self.running.lock().await;
         if running.contains_key(instance_id) {
-            return Err(anyhow!("instance {instance_id} is already running"));
+            return Err(ProviderError::AlreadyRunning(instance_id.to_string()));
         }
         let dir = self.instance_dir(instance_id);
-        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+        std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))?;
         // For when the hub was killed along with its worker, so `stop` never ran.
         stop_orphaned_agents(&dir).await;
         let log = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(dir.join("worker.log"))
-            .context("opening the worker log")?;
+            .map_err(|e| ProviderError::io("opening the worker log", e))?;
 
-        let login = self.login_path.get_or_init(read_login_path).await;
-        let own = std::env::var("PATH").ok();
+        let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
+        let own = self.config.path.clone();
         let mut command = Command::new(&self.config.worker_exe);
         command
             .args(["worker", "--stdio", "--workspaces-root"])
@@ -245,10 +236,11 @@ impl Provider for LocalProvider {
         if let Some(path) = merge_paths(login.as_deref(), own.as_deref()) {
             command.env("PATH", path);
         }
-        let mut child =
-            command.spawn().with_context(|| format!("starting worker {}", self.config.worker_exe.display()))?;
+        let mut child = command
+            .spawn()
+            .map_err(|e| ProviderError::io(format!("starting worker {}", self.config.worker_exe.display()), e))?;
         let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
-            anyhow::bail!("worker {} started without its pipes", self.config.worker_exe.display());
+            return Err(ProviderError::NoPipes(self.config.worker_exe.display().to_string()));
         };
         info!(pid = child.id(), instance_id, "started worker");
         let stream = WorkerStream { reader: Box::new(reader), writer: Box::new(writer) };
@@ -257,26 +249,26 @@ impl Provider for LocalProvider {
     }
 
     /// The caller closes the worker's stdin first, which is what asks it to stop. This reaps it.
-    async fn stop(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn stop(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.end(instance_id, STOP_GRACE).await
     }
 
-    async fn kill(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn kill(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.end(instance_id, Duration::ZERO).await
     }
 
-    async fn connect(&self, instance_id: &str) -> anyhow::Result<WorkerStream> {
+    async fn connect(&self, instance_id: &str) -> Result<WorkerStream, ProviderError> {
         let mut running = self.running.lock().await;
-        let entry = running.get_mut(instance_id).ok_or_else(|| anyhow!("instance {instance_id} isn't running"))?;
-        entry.stream.take().ok_or_else(|| anyhow!("instance {instance_id} already has a connection"))
+        let entry = running.get_mut(instance_id).ok_or_else(|| ProviderError::NotRunning(instance_id.to_string()))?;
+        entry.stream.take().ok_or_else(|| ProviderError::AlreadyConnected(instance_id.to_string()))
     }
 
-    async fn destroy(&self, instance_id: &str) -> anyhow::Result<()> {
+    async fn destroy(&self, instance_id: &str) -> Result<(), ProviderError> {
         self.stop(instance_id).await?;
         let dir = self.instance_dir(instance_id);
         match std::fs::remove_dir_all(&dir) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                Err(e).with_context(|| format!("removing {}", dir.display()))
+                Err(ProviderError::io(format!("removing {}", dir.display()), e))
             }
             _ => Ok(()),
         }
@@ -306,7 +298,7 @@ mod tests {
     #[tokio::test]
     async fn the_login_shell_really_reports_a_path() {
         // Runs the real shell, so this also covers rc files that print to stdout.
-        let path = read_login_path().await;
+        let path = read_login_path(None).await;
         assert!(path.as_deref().is_some_and(|p| p.contains('/')), "got {path:?}");
     }
 
@@ -337,7 +329,7 @@ mod tests {
     async fn a_recorded_orphan_is_stopped() {
         let dir = tempfile::tempdir().unwrap();
         let mut child = orphan(dir.path());
-        let started = process_start_time(child.id()).await.unwrap();
+        let started = process::start_time(child.id()).unwrap();
         let path = record(dir.path(), child.id(), &started);
         // It's this test's own child, so it stays a zombie until reaped, and `ps` still lists it.
         // Reap it from another thread so the wait below sees it go.
@@ -366,6 +358,8 @@ mod tests {
             worker_exe: "/nonexistent".into(),
             instances_dir: dir.path().join("instances"),
             workspaces_root: dir.path().join("workspaces"),
+            shell: None,
+            path: None,
         });
         provider.stop("nope").await.unwrap();
         provider.destroy("nope").await.unwrap();

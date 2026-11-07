@@ -22,6 +22,12 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// `cargo test --test e2e` doesn't build examples, so a plain path could run an out-of-date fake
 /// without saying so. Building here means tests always use the current one.
+/// Returns what `kill` did. Signal 0 only checks that the process exists.
+fn signal(pid: u32, signal: i32) -> i32 {
+    // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.
+    unsafe { libc::kill(i32::try_from(pid).unwrap(), signal) }
+}
+
 fn fake_agent() -> &'static Path {
     static FAKE: OnceLock<PathBuf> = OnceLock::new();
     FAKE.get_or_init(|| {
@@ -141,14 +147,13 @@ impl Drop for Stack {
 }
 
 fn terminate(pid: u32) {
-    // SAFETY: kill(2) has no memory effects.
-    unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    signal(pid, libc::SIGTERM);
 }
 
 fn is_alive(pid: u32) -> bool {
-    // SAFETY: signal 0 only checks that the process exists. A zombie still counts, which is why
+    // A zombie still counts as existing, which is why
     // tests also look at its state below.
-    if unsafe { libc::kill(pid as i32, 0) } != 0 {
+    if signal(pid, 0) != 0 {
         return false;
     }
     let state = Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]).output().unwrap();
@@ -888,8 +893,7 @@ fn an_agent_dying_during_an_approval_closes_it() {
             _ => None,
         })
         .unwrap();
-    // SAFETY: kill(2) has no memory effects. This is the agent's PID from the log.
-    unsafe { libc::kill(agent_pid as i32, libc::SIGKILL) };
+    signal(agent_pid, libc::SIGKILL);
 
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);
     let events = read_all(&client, &session.id);
@@ -966,8 +970,7 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
     });
     let worker_pid = parent_of(agent_pid);
     drop(client);
-    // SAFETY: kill(2) has no memory effects. This is the worker's PID, read just above.
-    unsafe { libc::kill(worker_pid as i32, libc::SIGKILL) };
+    signal(worker_pid, libc::SIGKILL);
     stack.kill_hub();
     assert!(is_alive(agent_pid), "the fake keeps hanging after its stdin closes, like a real long tool");
 
@@ -1014,8 +1017,7 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     assert!(is_alive(second));
 
     // The hub still knows about the new agent, so losing its worker is noticed and it gets stopped.
-    // SAFETY: kill(2) has no memory effects. This is the agent's parent, the worker.
-    unsafe { libc::kill(parent_of(second) as i32, libc::SIGKILL) };
+    signal(parent_of(second), libc::SIGKILL);
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);
     wait_until("the new agent to stop too", || !is_alive(second));
 }
@@ -1056,8 +1058,7 @@ fn a_prompt_sent_as_the_agent_dies_is_delivered_to_a_new_one() {
     client.session_prompt(&session.id, "hang:60000", None).unwrap();
     wait_until("the tool to start", || read_all(&client, &session.id).len() > seen + 2);
     let agent_pid = latest_started_pid(&read_all(&client, &session.id)).unwrap();
-    // SAFETY: kill(2) has no memory effects. This is the agent's parent, the worker.
-    unsafe { libc::kill(parent_of(agent_pid) as i32, libc::SIGKILL) };
+    signal(parent_of(agent_pid), libc::SIGKILL);
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);
 }
 
@@ -1093,11 +1094,14 @@ fn replace_with_script(exe: &Path, body: &str) {
 }
 
 /// Kills every worker of this hub, and waits until the hub has noticed.
+fn children_of(parent: u32) -> Vec<u32> {
+    let out = Command::new("pgrep").args(["-P", &parent.to_string()]).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).split_whitespace().map(|pid| pid.parse().unwrap()).collect()
+}
+
 fn kill_workers(stack: &Stack, client: &Client) {
-    let out = Command::new("pgrep").args(["-P", &stack.hub_pid().to_string()]).output().unwrap();
-    for pid in String::from_utf8_lossy(&out.stdout).split_whitespace() {
-        // SAFETY: kill(2) has no memory effects. These are the hub's own children.
-        unsafe { libc::kill(pid.parse().unwrap(), libc::SIGKILL) };
+    for pid in children_of(stack.hub_pid()) {
+        signal(pid, libc::SIGKILL);
     }
     wait_until("the hub to notice", || client.hub_status().unwrap().workers == 0);
 }
@@ -1160,7 +1164,9 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
             })
         })
         .collect();
-    std::thread::sleep(Duration::from_millis(300));
+    wait_until("both of them to be starting a worker, beside the one that's fine", || {
+        children_of(stack.hub_pid()).len() == 3
+    });
 
     let socket = stack.socket();
     assert!(
@@ -1689,7 +1695,8 @@ fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     wait_until("setup to finish", || {
         client.workspace_list(false).unwrap()[0].setup != protocol::model::SetupStatus::Running
     });
-    std::thread::sleep(Duration::from_millis(500));
+    // Commands run one at a time, so once this is refused, the first prompt has been dealt with.
+    assert!(client.session_prompt(&session.id, "say:too late", None).is_err());
     assert!(!PathBuf::from(workspace.path.unwrap()).join("never.txt").exists());
     assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
 }
@@ -1845,8 +1852,7 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     let script = pid_running(&needle).unwrap();
     // SAFETY: kill(2) has no memory effects. This is the script's parent, the worker, by the chain below.
     let group_leader = parent_of(script);
-    // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.
-    unsafe { libc::kill(parent_of(group_leader) as i32, libc::SIGKILL) };
+    signal(parent_of(group_leader), libc::SIGKILL);
     wait_until("the script to be stopped", || pid_running(&needle).is_none());
 }
 

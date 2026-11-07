@@ -81,7 +81,7 @@ const NAMES: &[&str] = &[
 
 /// A name not in `taken`. `salt` varies the starting point, and a suffix keeps it going forever.
 pub(crate) fn pick(taken: &[String], salt: u64) -> String {
-    let start = salt as usize % NAMES.len();
+    let start = usize::try_from(salt % NAMES.len() as u64).unwrap_or(0);
     for offset in 0..NAMES.len() {
         let name = NAMES[(start + offset) % NAMES.len()];
         if !taken.iter().any(|t| t == name) {

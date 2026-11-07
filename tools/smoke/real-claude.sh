@@ -8,7 +8,8 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN="${BIN:-$ROOT/target/debug}"
-WORK="$(mktemp -d /tmp/ahsmoke-XXXXXX)"
+# Cleanup deletes by this name, so an empty one would match every conversation the CLI has.
+WORK="$(mktemp -d /tmp/ahsmoke-XXXXXX)" || exit 1
 export TRESTLE_HOME="$WORK/home"
 export TRESTLE_WORKSPACES="$WORK/workspaces"
 REPO="$WORK/myrepo"

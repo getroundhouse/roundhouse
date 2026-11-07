@@ -239,6 +239,19 @@ pub enum ErrorCode {
     Unknown,
 }
 
+/// An error and everything that caused it, on one line. [`ApiError`] only holds text, so this is what
+/// keeps the cause when a lower error crosses a process.
+pub fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
+}
+
 impl ApiError {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self { code, message: message.into() }
@@ -300,3 +313,28 @@ impl std::fmt::Display for ApiError {
 }
 
 impl std::error::Error for ApiError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_error_chain_names_every_cause_in_order() {
+        #[derive(Debug)]
+        struct Outer(std::io::Error);
+        impl std::fmt::Display for Outer {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("opening the log")
+            }
+        }
+        impl std::error::Error for Outer {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+
+        let error = Outer(std::io::Error::other("disk full"));
+
+        assert_eq!(error_chain(&error), "opening the log: disk full");
+    }
+}

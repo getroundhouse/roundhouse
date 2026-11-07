@@ -20,6 +20,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{error, warn};
 
 use crate::Hub;
+use crate::error::internal;
 use crate::store::{self, StoredSession, cancelled_approval};
 use crate::worker_link::WorkerLink;
 
@@ -135,7 +136,17 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_le
         EventBody::AgentExited { .. } if matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval) => {
             SessionStatus::Interrupted
         }
-        _ => current,
+        EventBody::AgentState { state: AgentRunState::Unknown }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentInit { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::ApprovalResolved { .. }
+        | EventBody::AgentExited { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::Unknown => current,
     }
 }
 
@@ -147,7 +158,20 @@ fn approvals_after(pending: &HashMap<String, u64>, body: &EventBody) -> usize {
     match body {
         EventBody::ApprovalRequested { approval_id, .. } if !pending.contains_key(approval_id) => pending.len() + 1,
         EventBody::ApprovalResolved { approval_id, .. } if pending.contains_key(approval_id) => pending.len() - 1,
-        _ => pending.len(),
+        EventBody::UserPrompt { .. }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentInit { .. }
+        | EventBody::AgentState { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::TurnEnded { .. }
+        | EventBody::ApprovalRequested { .. }
+        | EventBody::ApprovalResolved { .. }
+        | EventBody::AgentExited { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::Unknown => pending.len(),
     }
 }
 
@@ -200,11 +224,11 @@ impl LiveSession {
     }
 
     fn hub(&self) -> Result<Arc<Hub>, ApiError> {
-        self.hub.upgrade().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the hub is shutting down"))
+        self.hub.upgrade().ok_or_else(|| internal("the hub is shutting down"))
     }
 
     pub(crate) async fn command(&self, command: Command) -> Result<(), ApiError> {
-        self.commands.send(command).await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))
+        self.commands.send(command).await.map_err(|_| internal("the session has stopped"))
     }
 
     pub(crate) async fn send_item(&self, item: Item) {
@@ -273,7 +297,18 @@ impl LiveSession {
             EventBody::ApprovalResolved { approval_id, .. } => {
                 state.pending_approvals.remove(approval_id);
             }
-            _ => {}
+            EventBody::UserPrompt { .. }
+            | EventBody::AgentStarted { .. }
+            | EventBody::AgentInit { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::Assistant { .. }
+            | EventBody::AgentUser { .. }
+            | EventBody::TurnEnded { .. }
+            | EventBody::AgentExited { .. }
+            | EventBody::Notice { .. }
+            | EventBody::AgentMode { .. }
+            | EventBody::AgentOther { .. }
+            | EventBody::Unknown => {}
         }
         state.status = next;
         publish(&mut state, LiveItem::Appended(seq));
@@ -480,18 +515,17 @@ impl LiveSession {
             permission_mode,
             env,
         };
-        match link.call(WorkerRequest::AgentStart(spec)).await? {
-            WorkerResponse::AgentStarted { pid, run, already_running } => {
-                self.state.lock().agent = Some(AgentRun { link: link.id, run });
-                if !already_running {
-                    // Whatever is still open was asked by a process that no longer exists.
-                    self.cancel_approvals(None).await;
-                    self.record_or_log(EventBody::AgentStarted { pid, resumed: resume }).await;
-                }
-                Ok(link)
-            }
-            other => Err(ApiError::new(ErrorCode::Worker, format!("unexpected reply: {other:?}"))),
+        let reply = link.call(WorkerRequest::AgentStart(spec)).await?;
+        let WorkerResponse::AgentStarted { pid, run, already_running } = reply else {
+            return Err(ApiError::new(ErrorCode::Worker, format!("unexpected reply: {reply:?}")));
+        };
+        self.state.lock().agent = Some(AgentRun { link: link.id, run });
+        if !already_running {
+            // Whatever is still open was asked by a process that no longer exists.
+            self.cancel_approvals(None).await;
+            self.record_or_log(EventBody::AgentStarted { pid, resumed: resume }).await;
         }
+        Ok(link)
     }
 
     async fn forward_prompt(&self, text: String) -> Result<(), ApiError> {
@@ -499,14 +533,12 @@ impl LiveSession {
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
             let request = WorkerRequest::AgentPrompt { session_id: self.id.clone(), text: text.clone() };
-            match link.call(request).await? {
-                WorkerResponse::AgentNotRunning => {
-                    let mut state = self.state.lock();
-                    if state.agent.is_some_and(|agent| agent.link == link.id) {
-                        state.agent = None;
-                    }
-                }
-                _ => return Ok(()),
+            let WorkerResponse::AgentNotRunning = link.call(request).await? else {
+                return Ok(());
+            };
+            let mut state = self.state.lock();
+            if state.agent.is_some_and(|agent| agent.link == link.id) {
+                state.agent = None;
             }
         }
         Err(ApiError::new(ErrorCode::Worker, "the agent keeps exiting before it can take the prompt"))
@@ -608,17 +640,15 @@ impl LiveSession {
             .existing_worker(&self.workspace_id)
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
         let request = WorkerRequest::AgentApproval { session_id: self.id.clone(), approval_id, decision };
-        match link.call(request).await? {
-            WorkerResponse::AgentNotRunning => {
-                self.record_or_log(EventBody::Notice {
-                    level: NoticeLevel::Warning,
-                    message: "The agent had already exited when this approval was answered.".to_string(),
-                })
-                .await;
-                Err(ApiError::new(ErrorCode::Conflict, "the agent has exited"))
-            }
-            _ => Ok(()),
-        }
+        let WorkerResponse::AgentNotRunning = link.call(request).await? else {
+            return Ok(());
+        };
+        self.record_or_log(EventBody::Notice {
+            level: NoticeLevel::Warning,
+            message: "The agent had already exited when this approval was answered.".to_string(),
+        })
+        .await;
+        Err(ApiError::new(ErrorCode::Conflict, "the agent has exited"))
     }
 
     /// Only touches a worker that's already up. There's nothing to cancel without one.
@@ -680,11 +710,25 @@ async fn ingest_event(session: &Arc<LiveSession>, run: u64, body: EventBody, raw
             }
             session.cancel_approvals(Some(run)).await;
         }
-        _ => {}
+        EventBody::UserPrompt { .. }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentState { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::TurnEnded { .. }
+        | EventBody::ApprovalRequested { .. }
+        | EventBody::ApprovalResolved { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::Unknown => {}
     }
-    let stale_approval = match &body {
-        EventBody::ApprovalRequested { approval_id, .. } if !current => Some(approval_id.clone()),
-        _ => None,
+    let stale_approval = if let EventBody::ApprovalRequested { approval_id, .. } = &body
+        && !current
+    {
+        Some(approval_id.clone())
+    } else {
+        None
     };
     if let Err(e) = session.record(body, raw, None, current, run).await {
         error!(session = session.id, "could not record agent output: {e}");

@@ -17,7 +17,7 @@ use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{SessionStatus, SetupStatus, WorkspaceStatus};
+use protocol::model::{SessionStatus, SetupStatus, WorkspaceStatus, seq_index};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -589,7 +589,7 @@ fn long_history_loads_a_page_at_a_time_as_it_is_scrolled_to(cx: &mut TestAppCont
         assert!(Instant::now() < deadline, "the agent never finished");
         std::thread::sleep(Duration::from_millis(20));
     }
-    let total = client.session_get(&session.id).unwrap().last_seq as usize;
+    let total = seq_index(client.session_get(&session.id).unwrap().last_seq);
     assert!(total > 700);
 
     let mut ui = Ui::open(cx, &stack);

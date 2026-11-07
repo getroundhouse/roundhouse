@@ -177,7 +177,7 @@ fn protocol_stays_free_of_io_and_ui() {
 #[test]
 fn nothing_outside_the_ui_depends_on_gpui() {
     let metadata = metadata();
-    for package in ["protocol", "hub", "worker", "agents", "providers", "client-core", "daemon", "cli"] {
+    for package in ["process", "protocol", "hub", "worker", "agents", "providers", "client-core", "daemon", "cli"] {
         let gpui: Vec<_> = runtime_closure(&metadata, package)
             .into_iter()
             .filter(|name| name.starts_with("gpui") || name == "zed")

@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::Seq;
+use protocol::model::{Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
 pub const PAGE_EVENTS: u64 = 250;
@@ -54,7 +54,7 @@ impl SessionLog {
     }
 
     pub fn row_count(&self) -> usize {
-        self.last_seq as usize + self.pending.len()
+        seq_index(self.last_seq) + self.pending.len()
     }
 
     pub fn last_seq(&self) -> Seq {
@@ -69,7 +69,7 @@ impl SessionLog {
                 None => Row::Unloaded,
             };
         }
-        match self.pending.get(index - self.last_seq as usize) {
+        match self.pending.get(index - seq_index(self.last_seq)) {
             Some(prompt) => Row::Pending(prompt),
             None => Row::Unloaded,
         }
@@ -89,7 +89,18 @@ impl SessionLog {
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(
                     |e| !matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
                 ),
-                _ => {}
+                EventBody::UserPrompt { .. }
+                | EventBody::AgentStarted { .. }
+                | EventBody::AgentInit { .. }
+                | EventBody::AgentState { .. }
+                | EventBody::Assistant { .. }
+                | EventBody::AgentUser { .. }
+                | EventBody::TurnEnded { .. }
+                | EventBody::AgentExited { .. }
+                | EventBody::Notice { .. }
+                | EventBody::AgentMode { .. }
+                | EventBody::AgentOther { .. }
+                | EventBody::Unknown => {}
             }
         }
         open
@@ -100,7 +111,7 @@ impl SessionLog {
         if self.last_seq == 0 {
             return Vec::new();
         }
-        let focus = focus.min(self.last_seq as usize - 1) as Seq + 1;
+        let focus = focus.min(seq_index(self.last_seq) - 1) as Seq + 1;
         let center = page_of(focus);
         let last = page_of(self.last_seq);
         let mut wanted = vec![center];
@@ -130,7 +141,7 @@ impl SessionLog {
             self.events.insert(event.seq, event);
         }
         self.evict(focus);
-        (range.start - 1) as usize..(range.end - 1).min(self.last_seq) as usize
+        seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last_seq))
     }
 
     /// A fetch failed, so the page can be asked for again.
@@ -200,6 +211,9 @@ impl SessionLog {
 }
 
 #[cfg(test)]
+mod laws;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use protocol::event::{ApprovalOutcome, NoticeLevel};
@@ -220,7 +234,7 @@ mod tests {
         SessionEvent { session_id: "s".into(), seq, ts_ms: 0, body, raw: None }
     }
 
-    fn page(range: Range<Seq>) -> Vec<SessionEvent> {
+    pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {
         range.map(notice).collect()
     }
 
@@ -260,10 +274,10 @@ mod tests {
     #[test]
     fn it_never_holds_a_whole_long_session() {
         let mut log = SessionLog::new(15_000);
-        for start in (1..15_000).step_by(PAGE_EVENTS as usize) {
-            let focus = start as usize - 1;
+        for start in (1..15_000).step_by(seq_index(PAGE_EVENTS)) {
+            let focus = seq_index(start) - 1;
             log.install_page(start, page(start..start + PAGE_EVENTS), focus);
-            assert!(log.loaded_events() <= MAX_LOADED_EVENTS + PAGE_EVENTS as usize);
+            assert!(log.loaded_events() <= MAX_LOADED_EVENTS + seq_index(PAGE_EVENTS));
         }
         // What's near the view and the tail stayed, and what was dropped can be fetched again.
         assert!(matches!(log.row(14_999), Row::Event(_)));

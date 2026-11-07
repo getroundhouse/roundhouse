@@ -113,13 +113,13 @@ dependencies = [
 name = "agents"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
- "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "uuid",
@@ -1075,6 +1075,7 @@ dependencies = [
  "flume 0.11.1",
  "libc",
  "parking_lot",
+ "proptest",
  "protocol",
  "serde_json",
  "thiserror 2.0.21",
@@ -3570,7 +3571,6 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 name = "hub"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "parking_lot",
  "protocol",
  "providers",
@@ -3578,8 +3578,10 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -5738,6 +5740,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "process"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "tempfile",
+]
+
+[[package]]
 name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5793,6 +5803,7 @@ dependencies = [
 name = "protocol"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
 ]
@@ -5801,11 +5812,12 @@ dependencies = [
 name = "providers"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "libc",
+ "process",
  "serde",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
 ]
@@ -9180,9 +9192,8 @@ name = "worker"
 version = "0.1.0"
 dependencies = [
  "agents",
- "anyhow",
- "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
  "tempfile",

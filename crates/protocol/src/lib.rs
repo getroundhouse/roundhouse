@@ -7,6 +7,8 @@
 //! unknown fields are ignored and unknown variants decode as `Unknown`. A new request does need one,
 //! because a peer has nothing sensible to do with a request it can't read.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 pub mod client;
 pub mod event;
 pub mod frame;

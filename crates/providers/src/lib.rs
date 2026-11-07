@@ -1,7 +1,12 @@
 //! A provider gives a hub somewhere to run workers. Running on the same machine is one provider,
 //! and nothing in the hub treats it as special.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
+mod error;
 pub mod local;
+
+pub use error::ProviderError;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -28,15 +33,15 @@ pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
     /// Makes the instance and puts the worker binary in it.
-    async fn create(&self, instance_id: &str) -> anyhow::Result<()>;
-    async fn start(&self, instance_id: &str) -> anyhow::Result<()>;
+    async fn create(&self, instance_id: &str) -> Result<(), ProviderError>;
+    async fn start(&self, instance_id: &str) -> Result<(), ProviderError>;
     /// Safe to call on an instance that isn't running. Also ends anything the worker left behind,
     /// so nothing from this run can still be working when the next one starts.
-    async fn stop(&self, instance_id: &str) -> anyhow::Result<()>;
+    async fn stop(&self, instance_id: &str) -> Result<(), ProviderError>;
     /// Like `stop`, without giving the worker time to finish. For one that isn't responding.
-    async fn kill(&self, instance_id: &str) -> anyhow::Result<()>;
+    async fn kill(&self, instance_id: &str) -> Result<(), ProviderError>;
     /// Can be called once per `start`.
-    async fn connect(&self, instance_id: &str) -> anyhow::Result<WorkerStream>;
+    async fn connect(&self, instance_id: &str) -> Result<WorkerStream, ProviderError>;
     /// Safe to call on an instance that doesn't exist.
-    async fn destroy(&self, instance_id: &str) -> anyhow::Result<()>;
+    async fn destroy(&self, instance_id: &str) -> Result<(), ProviderError>;
 }

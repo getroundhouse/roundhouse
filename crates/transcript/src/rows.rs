@@ -43,17 +43,13 @@ pub(crate) fn render_row(
     match m.log.row(ix) {
         Row::Event(event) => {
             let (seq, body) = (event.seq, event.body.clone());
-            let open = match &body {
-                EventBody::ApprovalRequested { approval_id, .. } => m.log.open_approvals().iter().any(
+            let (open, picks) = if let EventBody::ApprovalRequested { approval_id, .. } = &body {
+                (m.log.open_approvals().iter().any(
                     |e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
-                ),
-                _ => false,
+                ), m.picks.get(approval_id).cloned().unwrap_or_default())
+            } else {
+                (false, BTreeMap::default())
             };
-            let picks = match &body {
-                EventBody::ApprovalRequested { approval_id, .. } => m.picks.get(approval_id).cloned(),
-                _ => None,
-            }
-            .unwrap_or_default();
             let expanded: Vec<usize> = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
             drop(m);
             render_event(seq, &body, &expanded, open, &picks, this, cx)
@@ -134,7 +130,7 @@ fn render_event(
             row().children(rendered).into_any_element()
         }
         EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-            let seconds = duration_ms.unwrap_or(0) as f64 / 1000.0;
+            let seconds = std::time::Duration::from_millis(duration_ms.unwrap_or(0)).as_secs_f64();
             let cost = cost_usd.unwrap_or(0.0);
             match outcome {
                 TurnOutcome::Cancelled => muted_line("Stopped", cx),
@@ -142,8 +138,10 @@ fn render_event(
                     let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
                     colored_line(detail, cx.theme().danger, cx)
                 }
-                _ if cost >= 0.01 => muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"), cx),
-                _ => muted_line(format!("Finished in {seconds:.1}s"), cx),
+                TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
+                    muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"), cx)
+                }
+                TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s"), cx),
             }
         }
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
@@ -168,7 +166,7 @@ fn render_event(
             let color = match level {
                 NoticeLevel::Error => cx.theme().danger,
                 NoticeLevel::Warning => cx.theme().warning,
-                _ => cx.theme().muted_foreground,
+                NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
             };
             colored_line(message.clone(), color, cx)
         }

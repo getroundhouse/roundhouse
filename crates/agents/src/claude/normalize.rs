@@ -273,7 +273,7 @@ fn stream_event(value: &Value) -> Parsed {
     let Some(message_id) = message_id else {
         return Parsed::Drop;
     };
-    let index = event.get("index").and_then(Value::as_u64).map(|i| i as u32);
+    let index = event.get("index").and_then(Value::as_u64).and_then(|i| u32::try_from(i).ok());
     let change = match (str_of(event, "type"), index) {
         (Some("content_block_start"), Some(index)) => {
             let block = event.get("content_block").unwrap_or(&Value::Null);
@@ -358,9 +358,12 @@ mod tests {
 
     #[test]
     fn surrogate_repair_only_touches_what_is_broken() {
-        let text = |line: &str| match parse_line(line) {
-            Parsed::Event(EventBody::Assistant { blocks, .. }) => blocks,
-            other => panic!("{other:?}"),
+        let text = |line: &str| {
+            let parsed = parse_line(line);
+            let Parsed::Event(EventBody::Assistant { blocks, .. }) = parsed else {
+                panic!("{parsed:?}");
+            };
+            blocks
         };
         let wrap = |inner: &str| {
             format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{inner}"}}]}}}}"#)

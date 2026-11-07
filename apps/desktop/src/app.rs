@@ -22,6 +22,12 @@ use crate::{
     PreviousWorkspace, StopAgent, ToggleDiff,
 };
 
+/// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
+/// and `by` no bigger than the list.
+pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
+    (at + len).wrapping_add_signed(by) % len
+}
+
 /// Where to find the hub, and how to start one if none is running.
 #[derive(Clone, Debug)]
 pub struct HubSource {
@@ -257,8 +263,8 @@ impl AppView {
         if visible.is_empty() {
             return;
         }
-        let at = self.selected.as_ref().and_then(|id| visible.iter().position(|v| v == id)).unwrap_or(0) as isize;
-        let next = (at + by).rem_euclid(visible.len() as isize) as usize;
+        let at = self.selected.as_ref().and_then(|id| visible.iter().position(|v| v == id)).unwrap_or(0);
+        let next = wrapped_step(at, by, visible.len());
         self.select(visible[next].clone(), cx);
     }
 
@@ -568,4 +574,17 @@ fn centered(text: &str, color: Hsla) -> AnyElement {
         .text_color(color)
         .child(text.to_string())
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stepping_wraps_around_both_ends() {
+        assert_eq!(wrapped_step(0, -1, 3), 2);
+        assert_eq!(wrapped_step(2, 1, 3), 0);
+        assert_eq!(wrapped_step(1, 1, 3), 2);
+        assert_eq!(wrapped_step(0, 1, 1), 0);
+    }
 }

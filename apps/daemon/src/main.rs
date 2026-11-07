@@ -60,15 +60,27 @@ fn main() -> anyhow::Result<()> {
         Role::Hub => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
             let worker_exe = std::env::current_exe().context("finding this binary to run workers")?;
-            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe }))
+            let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
+            let path = std::env::var("PATH").ok();
+            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path }))?;
+            Ok(())
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {
             anyhow::ensure!(stdio, "--stdio is the only worker transport so far");
             runtime.block_on(worker::serve(
                 tokio::io::stdin(),
                 tokio::io::stdout(),
-                worker::Config { workspaces_root, state_dir },
-            ))
+                worker::Config {
+                    workspaces_root,
+                    state_dir,
+                    home: std::env::var_os("HOME").map(PathBuf::from),
+                    path: std::env::var_os("PATH"),
+                    claude_bin: std::env::var_os(worker::ENV_CLAUDE_BIN)
+                        .filter(|bin| !bin.is_empty())
+                        .map(PathBuf::from),
+                },
+            ));
+            Ok(())
         }
     }
 }

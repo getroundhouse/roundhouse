@@ -37,7 +37,7 @@ pub(crate) struct HlStyle {
 
 #[derive(Clone, Debug)]
 pub(crate) struct HlSpan {
-    pub range: Range<u32>,
+    pub range: Range<usize>,
     pub style: HlStyle,
 }
 
@@ -88,13 +88,13 @@ fn push_span(out: &mut Vec<HlSpan>, offset: usize, len: usize, style: HlStyle) {
         return;
     }
     if let Some(last) = out.last_mut()
-        && last.range.end as usize == offset
+        && last.range.end == offset
         && last.style.color == style.color
         && last.style.bold == style.bold
         && last.style.italic == style.italic
     {
-        last.range.end = (offset + len) as u32;
+        last.range.end = offset + len;
         return;
     }
-    out.push(HlSpan { range: offset as u32..(offset + len) as u32, style });
+    out.push(HlSpan { range: offset..offset + len, style });
 }

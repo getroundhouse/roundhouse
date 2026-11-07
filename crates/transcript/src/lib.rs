@@ -2,6 +2,8 @@
 //! and `TextView`. `docs/ui.md` has why it's built on those. Everything GPUI about a transcript is in
 //! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
+#![warn(clippy::wildcard_enum_match_arm)]
+
 mod log_block;
 mod questions;
 mod rows;
@@ -18,7 +20,7 @@ use gpui_kit::{
     Styled, Task, Window, px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{Seq, Session};
+use protocol::model::{Seq, Session, seq_index};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -110,10 +112,11 @@ impl Transcript {
 
     /// The event at a row, if it's loaded.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        match self.model.borrow().log.row(row) {
-            client_core::session_log::Row::Event(event) => Some(event.clone()),
-            _ => None,
-        }
+        let model = self.model.borrow();
+        let client_core::session_log::Row::Event(event) = model.log.row(row) else {
+            return None;
+        };
+        Some(event.clone())
     }
 
     /// Rows in the list, not counting the streaming tail.
@@ -180,7 +183,12 @@ impl Transcript {
                     let mut events = Vec::new();
                     let mut from = range.start;
                     while from < range.end {
-                        let (page, _) = client.session_read(&id, from, (range.end - from) as u32, false)?;
+                        let (page, _) = client.session_read(
+                            &id,
+                            from,
+                            u32::try_from(range.end - from).unwrap_or(u32::MAX),
+                            false,
+                        )?;
                         let Some(last) = page.last().map(|e| e.seq) else { break };
                         events.extend(page);
                         from = last + 1;
@@ -240,7 +248,7 @@ impl Transcript {
             let picks = m.picks.entry(approval_id).or_default().entry(question.text.clone()).or_default();
             questions::toggle_pick(picks, label, question.multiple);
         }
-        let row = seq as usize - 1;
+        let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
         cx.notify();
     }
@@ -258,11 +266,11 @@ impl Transcript {
         if text.is_empty() {
             return false;
         }
-        let open = self.open_approvals().into_iter().find_map(|event| match event.body {
-            EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-                Some((event.seq, approval_id, questions::parse(&input)))
-            }
-            _ => None,
+        let open = self.open_approvals().into_iter().find_map(|event| {
+            let EventBody::ApprovalRequested { approval_id, tool_name, input, .. } = event.body else {
+                return None;
+            };
+            (tool_name == questions::TOOL_NAME).then(|| (event.seq, approval_id, questions::parse(&input)))
         });
         let Some((seq, approval_id, asked)) = open else { return false };
         let done = {
@@ -275,7 +283,7 @@ impl Transcript {
         if done {
             self.send_answers(approval_id, cx);
         } else {
-            let row = seq as usize - 1;
+            let row = seq_index(seq) - 1;
             self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
             cx.notify();
         }
@@ -289,7 +297,7 @@ impl Transcript {
                 m.expanded.insert((seq, block));
             }
         }
-        let row = seq as usize - 1;
+        let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| {
             list.remeasure_items(row..row + 1, cx);
         });

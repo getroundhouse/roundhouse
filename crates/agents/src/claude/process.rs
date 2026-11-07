@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::os::unix::process::ExitStatusExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use process::{ProcessRecord, Signal, signal_group};
 use protocol::event::{ApprovalDecision, EventBody, NoticeLevel};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -23,12 +24,10 @@ use tokio::task::JoinHandle;
 use tracing::warn;
 
 use super::normalize::{Parsed, parse_line};
-use crate::{AgentOptions, AgentOutput, AgentProcess};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
-/// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
-pub(super) const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
 
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
@@ -117,10 +116,8 @@ pub fn spawn(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
-) -> anyhow::Result<Arc<dyn AgentProcess>> {
-    let bin = resolve_binary().ok_or_else(|| {
-        anyhow::anyhow!("could not find the `claude` CLI. Install it, or set {ENV_CLAUDE_BIN} to its path")
-    })?;
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
     spawn_at(bin, spec, output, options)
 }
 
@@ -130,7 +127,7 @@ pub fn spawn_at(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
-) -> anyhow::Result<Arc<dyn AgentProcess>> {
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
     let launched = launch(&bin, &spec, spec.resume, &options)?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
@@ -159,17 +156,15 @@ pub fn spawn_at(
 
 /// `PATH` first, then the places the installers use. A hub started from Finder may have neither
 /// `~/.local/bin` nor Homebrew on its `PATH`, and it may not be able to read the login shell's.
-fn resolve_binary() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os(ENV_CLAUDE_BIN).filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(path));
+fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
+    if let Some(path) = &lookup.explicit {
+        return Some(path.clone());
     }
-    let on_path = std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).map(|dir| dir.join("claude")).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let installed = home.iter().flat_map(|home| [home.join(".local/bin/claude"), home.join(".claude/local/claude")]);
+    let on_path = lookup.path.iter().flat_map(std::env::split_paths).map(|dir| dir.join("claude"));
+    let installed =
+        lookup.home.iter().flat_map(|home| [home.join(".local/bin/claude"), home.join(".claude/local/claude")]);
     let system = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].map(PathBuf::from);
-    on_path.into_iter().chain(installed).chain(system).find(|path| is_executable(path))
+    on_path.chain(installed).chain(system).find(|path| is_executable(path))
 }
 
 fn is_executable(path: &std::path::Path) -> bool {
@@ -185,7 +180,7 @@ struct Launched {
     stderr: ChildStderr,
 }
 
-fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions) -> anyhow::Result<Launched> {
+fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions) -> Result<Launched, AgentError> {
     let mut command = Command::new(bin);
     command
         .args(build_args(spec, resume))
@@ -203,30 +198,22 @@ fn launch(bin: &PathBuf, spec: &AgentSpec, resume: bool, options: &AgentOptions)
         command.env_remove(name);
     }
     command.envs(spec.env.iter().map(|(k, v)| (k, v)));
-    let mut child =
-        command.spawn().map_err(|e| anyhow::anyhow!("could not start {} in {}: {e}", bin.display(), spec.cwd))?;
+    let mut child = command.spawn().map_err(|source| AgentError::Start {
+        bin: bin.display().to_string(),
+        cwd: spec.cwd.clone(),
+        source,
+    })?;
     let pid = child.id().unwrap_or_default();
     if let Some(path) = &options.pid_file
-        && let Err(e) = write_pid_file(path, pid)
+        && let Err(e) = ProcessRecord::write(path, pid)
     {
-        warn!("could not record agent {pid} in {}: {e:#}", path.display());
+        warn!("could not record agent {pid} in {}: {e}", path.display());
     }
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
-        anyhow::bail!("{} started without its pipes", bin.display());
+        return Err(AgentError::NoPipes { bin: bin.display().to_string() });
     };
     Ok(Launched { child, pid, stdin, stdout, stderr })
-}
-
-/// The PID and its start time, because a PID alone could have been reused by the time anyone reads it.
-pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let output = std::process::Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output()?;
-    let started = String::from_utf8_lossy(&output.stdout);
-    std::fs::write(path, format!("{pid}\n{}\n", started.trim()))?;
-    Ok(())
 }
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -391,7 +378,18 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
                     EventBody::ApprovalResolved { approval_id, .. } => {
                         shared.pending_inputs.lock().remove(approval_id);
                     }
-                    _ => {}
+                    EventBody::UserPrompt { .. }
+                    | EventBody::AgentStarted { .. }
+                    | EventBody::AgentInit { .. }
+                    | EventBody::AgentState { .. }
+                    | EventBody::Assistant { .. }
+                    | EventBody::AgentUser { .. }
+                    | EventBody::TurnEnded { .. }
+                    | EventBody::AgentExited { .. }
+                    | EventBody::Notice { .. }
+                    | EventBody::AgentMode { .. }
+                    | EventBody::AgentOther { .. }
+                    | EventBody::Unknown => {}
                 }
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 let item = AgentOutput::Event { body, raw: Some(line) };
@@ -437,17 +435,17 @@ fn user_message(text: &str) -> Value {
     })
 }
 
-async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> anyhow::Result<()> {
+async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
     let mut line = serde_json::to_vec(value)?;
     line.push(b'\n');
-    let stdin = stdin.as_mut().ok_or_else(|| anyhow::anyhow!("the agent has exited"))?;
+    let stdin = stdin.as_mut().ok_or(AgentError::Exited)?;
     stdin.write_all(&line).await?;
     stdin.flush().await?;
     Ok(())
 }
 
 /// Sends a control request and waits for the CLI's answer.
-async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
+async fn control(shared: &Shared, request: Value) -> Result<(), AgentError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (answered, answer) = oneshot::channel();
     shared.pending_controls.lock().insert(request_id.clone(), answered);
@@ -461,25 +459,17 @@ async fn control(shared: &Shared, request: Value) -> anyhow::Result<()> {
     };
     match result {
         Ok(Ok(Ok(()))) => Ok(()),
-        Ok(Ok(Err(refusal))) => Err(anyhow::anyhow!(refusal)),
-        Ok(Err(_)) => Err(anyhow::anyhow!("the agent has exited")),
+        Ok(Ok(Err(refusal))) => Err(AgentError::Refused(refusal)),
+        Ok(Err(_)) => Err(AgentError::Exited),
         Err(_) => {
             shared.pending_controls.lock().remove(&request_id);
-            Err(anyhow::anyhow!("the agent didn't answer"))
+            Err(AgentError::NoAnswer)
         }
     }
 }
 
-async fn write_line(shared: &Shared, value: &Value) -> anyhow::Result<()> {
+async fn write_line(shared: &Shared, value: &Value) -> Result<(), AgentError> {
     write_to(&mut *shared.stdin.lock().await, value).await
-}
-
-fn signal_group(pid: u32, signal: i32) {
-    if pid != 0 {
-        // SAFETY: kill(2) has no memory effects. The process was started as a group leader, and is
-        // only signalled until it's reaped.
-        unsafe { libc::kill(-(pid as i32), signal) };
-    }
 }
 
 #[async_trait]
@@ -492,7 +482,7 @@ impl AgentProcess for ClaudeProcess {
         self.shared.gone.load(Ordering::SeqCst)
     }
 
-    async fn send_prompt(&self, text: &str) -> anyhow::Result<()> {
+    async fn send_prompt(&self, text: &str) -> Result<(), AgentError> {
         let mut stdin = self.shared.stdin.lock().await;
         let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
         if !confirmed {
@@ -508,14 +498,14 @@ impl AgentProcess for ClaudeProcess {
                 // Its stdin is broken, so it can't be told anything more. If it's somehow still
                 // running, it mustn't be working alongside the replacement that's coming.
                 self.shared.gone.store(true, Ordering::SeqCst);
-                signal_group(self.pid(), libc::SIGTERM);
+                signal_group(self.pid(), Signal::Terminate);
                 Err(e)
             }
             Ok(()) => Ok(()),
         }
     }
 
-    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> anyhow::Result<()> {
+    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> Result<(), AgentError> {
         let original_input = self.shared.pending_inputs.lock().remove(approval_id);
         let response = match decision {
             ApprovalDecision::Allow { updated_input, updated_permissions } => {
@@ -548,7 +538,7 @@ impl AgentProcess for ClaudeProcess {
         .await
     }
 
-    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> anyhow::Result<()> {
+    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> Result<(), AgentError> {
         if let Some(model) = model {
             control(&self.shared, json!({"subtype": "set_model", "model": model})).await?;
         }
@@ -558,7 +548,7 @@ impl AgentProcess for ClaudeProcess {
         Ok(())
     }
 
-    async fn interrupt(&self) -> anyhow::Result<()> {
+    async fn interrupt(&self) -> Result<(), AgentError> {
         write_line(
             &self.shared,
             &json!({
@@ -580,21 +570,65 @@ impl AgentProcess for ClaudeProcess {
         }
         // SIGTERM rather than closing stdin, because on EOF the CLI finishes the whole turn first.
         // It stops its tools itself on SIGTERM. They run in their own groups, out of our reach.
-        signal_group(self.pid(), libc::SIGTERM);
+        signal_group(self.pid(), Signal::Terminate);
         let wait = exited.wait_for(|done| *done);
         if tokio::time::timeout(STOP_GRACE, wait).await.is_ok() {
             return;
         }
         warn!("agent {} ignored SIGTERM, sending SIGKILL", self.pid());
-        signal_group(self.pid(), libc::SIGKILL);
+        signal_group(self.pid(), Signal::Kill);
         let _ = exited.wait_for(|done| *done).await;
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
     use super::*;
     use protocol::model::AgentKind;
+
+    fn executable(path: &std::path::Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[test]
+    fn a_named_binary_is_used_without_looking_anywhere_else() {
+        let lookup = BinaryLookup { explicit: Some("/nonexistent/claude".into()), path: None, home: None };
+
+        assert_eq!(resolve_binary(&lookup), Some(PathBuf::from("/nonexistent/claude")));
+    }
+
+    #[test]
+    fn the_path_is_searched_before_the_places_installers_use() {
+        let dir = tempfile::tempdir().unwrap();
+        let on_path = dir.path().join("bin/claude");
+        let installed = dir.path().join("home/.local/bin/claude");
+        executable(&installed);
+        let home = Some(dir.path().join("home"));
+        let path = Some(dir.path().join("bin").into_os_string());
+
+        let lookup = BinaryLookup { explicit: None, path: path.clone(), home: home.clone() };
+        assert_eq!(resolve_binary(&lookup), Some(installed), "nothing on the path yet");
+
+        executable(&on_path);
+        let lookup = BinaryLookup { explicit: None, path, home };
+        assert_eq!(resolve_binary(&lookup), Some(on_path));
+    }
+
+    #[test]
+    fn a_file_that_cant_be_run_is_not_the_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let not_runnable = dir.path().join("claude");
+        std::fs::write(&not_runnable, "").unwrap();
+        let path = Some(dir.path().as_os_str().to_owned());
+
+        let lookup = BinaryLookup { explicit: None, path, home: None };
+
+        assert_ne!(resolve_binary(&lookup), Some(not_runnable));
+    }
 
     fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
         AgentSpec {

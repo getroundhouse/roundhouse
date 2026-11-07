@@ -1,11 +1,12 @@
 //! The worker's main loop: one stream in from the hub, one stream out.
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use agents::{AgentOptions, AgentOutput, AgentProcess};
+use agents::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
@@ -26,6 +27,12 @@ pub struct Config {
     pub workspaces_root: PathBuf,
     /// Where to record running agents, so they can be found if this process is killed.
     pub state_dir: Option<PathBuf>,
+    /// Holds the user's own settings, and the places agent CLIs install to.
+    pub home: Option<PathBuf>,
+    /// Where to search for agent CLIs.
+    pub path: Option<OsString>,
+    /// An agent CLI to use without searching.
+    pub claude_bin: Option<PathBuf>,
 }
 
 struct RunningAgent {
@@ -58,7 +65,7 @@ impl State {
 /// Runs until the hub closes the stream, then stops every agent and flushes what they said. Losing
 /// the hub ends the worker on purpose, so agents never run with nobody recording them. Milestone 2
 /// changes this, with an outbox that lets remote workers keep going.
-pub async fn serve<R, W>(reader: R, writer: W, config: Config) -> anyhow::Result<()>
+pub async fn serve<R, W>(reader: R, writer: W, config: Config)
 where
     R: AsyncRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
@@ -129,7 +136,6 @@ where
     drop(state);
     drop(frames);
     let _ = writer_task.await;
-    Ok(())
 }
 
 async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<WorkerFrame>) {
@@ -236,7 +242,7 @@ async fn handle(
             match agent.configure(model.as_deref(), permission_mode.as_deref()).await {
                 Ok(()) => Ok(WorkerResponse::Ok),
                 Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
-                Err(e) => Err(agent_error(&e)),
+                Err(e) => Err(e.into()),
             }
         }
         WorkerRequest::AgentStop { session_id } => {
@@ -256,14 +262,9 @@ async fn handle(
 /// Signals the script's whole group, because stopping only the shell would leave what it started.
 fn stop_setup_script(state: &State) {
     if let Some(pid) = *state.setup_pid.lock() {
-        // SAFETY: kill(2) has no memory effects. The script was started as a group leader, and its
-        // entry is cleared as soon as it has been waited on.
-        unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
+        // Its entry is cleared as soon as it has been waited on, so this can't reach a reused PID.
+        process::signal_group(pid, process::Signal::Terminate);
     }
-}
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 async fn run_setup(
@@ -276,7 +277,7 @@ async fn run_setup(
     let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
     let _ = std::fs::remove_file(&log);
     let mut warnings = Vec::new();
-    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut warnings);
+    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut warnings);
     let copied = setup::copy_local_files(repo, worktree, &settings, &mut warnings).await;
     for file in &copied {
         setup::append_log(&log, &format!("Copied {file}"));
@@ -294,7 +295,7 @@ async fn run_setup(
     let status = setup::run_script(&script, worktree, env, &log, move |pid| {
         *setup_pid.lock() = Some(pid);
         if let Some(path) = &for_start {
-            let _ = agents::claude::write_pid_file(path, pid);
+            let _ = process::ProcessRecord::write(path, pid);
         }
     })
     .await;
@@ -320,7 +321,7 @@ async fn run_archive_script(
     if !worktree.exists() {
         return Ok(WorkerResponse::Ok);
     }
-    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut Vec::new());
+    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut Vec::new());
     let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
     let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
     setup::append_log(&log, "Running the archive script");
@@ -332,10 +333,6 @@ async fn run_archive_script(
         ErrorCode::Conflict,
         format!("the archive script failed with {:?}. Fix it, or archive with force", status.code()),
     ))
-}
-
-fn agent_error(e: &anyhow::Error) -> ApiError {
-    ApiError::new(ErrorCode::Worker, format!("{e:#}"))
 }
 
 async fn start_agent(
@@ -354,11 +351,16 @@ async fn start_agent(
     }
     let (tx, rx) = mpsc::channel(1024);
     let options = AgentOptions {
+        binary: BinaryLookup {
+            explicit: state.config.claude_bin.clone(),
+            path: state.config.path.clone(),
+            home: state.config.home.clone(),
+        },
         // Named by run, because a replaced agent removes its own file as it finishes, which can be
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
     };
-    let process = agents::spawn(spec, tx, options).map_err(|e| agent_error(&e))?;
+    let process = agents::spawn(spec, tx, options)?;
     let pid = process.pid();
     info!(pid, session_id, run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.

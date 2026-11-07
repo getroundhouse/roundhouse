@@ -10,6 +10,8 @@ use protocol::client::{ApiError, ErrorCode};
 use tokio::process::Command;
 use tracing::warn;
 
+use crate::git;
+
 /// What Conductor copies with nothing configured.
 const DEFAULT_INCLUDE: &str = ".env*";
 
@@ -66,22 +68,6 @@ fn include_patterns(repo: &Path, settings: &Settings) -> Vec<String> {
     text.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('#')).map(str::to_string).collect()
 }
 
-async fn list_nul_separated(repo: &Path, args: &[String]) -> Result<Vec<String>, ApiError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| ApiError::new(ErrorCode::Worker, format!("could not run git: {e}")))?;
-    if !output.status.success() {
-        return Err(ApiError::new(ErrorCode::Worker, String::from_utf8_lossy(&output.stderr).trim().to_string()));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
-}
-
 /// Copies gitignored files matching the patterns from the main checkout into the worktree, so they
 /// don't have to be recreated by hand. Git does the matching, so patterns mean what they do in
 /// `.gitignore`. Only ignored files qualify: anything else is either tracked, and already there, or
@@ -103,7 +89,7 @@ pub async fn copy_local_files(
         matching.push(format!("--exclude={pattern}"));
     }
     let (ignored, matched) =
-        match tokio::try_join!(list_nul_separated(repo, &standard), list_nul_separated(repo, &matching)) {
+        match tokio::try_join!(git::list_nul_separated(repo, &standard), git::list_nul_separated(repo, &matching)) {
             Ok(lists) => lists,
             Err(e) => {
                 warnings.push(format!("couldn't list files to copy: {}", e.message));
