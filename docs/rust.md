@@ -84,8 +84,10 @@ The wire format is in `docs/architecture.md`. These rules keep it compatible:
 
 - **Each shape has one form.** It's the serde form in `protocol`, on the wire and in the hub's SQLite columns, so changing a type also changes how old rows read.
 - **A new field is `Option` or `#[serde(default)]`,** so a message from an older peer still decodes. The same goes for old rows.
-- **Every enum read as data has `#[serde(other)] Unknown`:** statuses, kinds, events and blocks. Without it, one new value fails the whole frame, and `client-core` silently drops frames it can't decode, including replies. Code that receives `Unknown` skips it or shows something neutral. It never panics.
-- **Envelopes and requests have no `Unknown`.** That covers `ClientRequest`, `HubFrame` and the like, since there's nothing sensible to do with one. Today a hub closes a connection that sends a request it can't decode, so adding a request needs a version bump unless the hub learns to refuse it politely.
+- **Every enum read as data has `#[serde(other)] Unknown`:** statuses, kinds, events and blocks. Without it, one new value fails the whole frame, which `client-core` drops, failing the call if it was a reply. Code that receives `Unknown` skips it or shows something neutral. It never panics.
+- **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. A client checks `is_unsupported()`, and hides or disables whatever needed it. There's no list of capabilities until something needs one.
+- **Other envelopes have no `Unknown`.** That covers `HubFrame`, `ClientResponse` and the like, since there's nothing sensible to do with one. A client only gets a new response by making a new request.
+- **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. Client and hub can't work together across one, so it should be rare.
 - **The worker protocol follows the same rules once workers can differ in version.** Today a hub and its worker are one binary.
 - **Agent output is untrusted input.** `agents::claude::normalize` takes any line without panicking, and keeps the raw line. After a CLI upgrade, re-capture the fixtures with the script in `AGENTS.md`.
 
