@@ -4,25 +4,28 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use crate::questions;
 use client_core::session_log::Row;
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+    AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, WeakEntity, div, px,
 };
-use protocol::event::{
-    ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome,
-};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome};
 use protocol::model::Seq;
-use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
 use crate::log_block::{LogBlock, LogText};
-use crate::{Model, Transcript};
+use crate::questions;
+use crate::transcript::{Model, Transcript};
+
+mod approval;
+mod tail;
+
+use approval::approval_card;
+use tail::{first_line, render_tail};
 
 const MONO: &str = "Menlo";
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
@@ -298,118 +301,6 @@ fn disclosure(
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(SharedString::from(label.to_string())))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into())),
     )
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each is a separate input to the card, and a struct would only bundle them for this call"
-)]
-fn approval_card(
-    seq: Seq,
-    approval_id: &str,
-    tool_name: &str,
-    input: &Value,
-    description: Option<&str>,
-    open: bool,
-    this: &WeakEntity<Transcript>,
-    cx: &App,
-) -> AnyElement {
-    use gpui_kit::component::button::{Button, ButtonVariants as _};
-    let theme = cx.theme();
-    let summary = description.map_or_else(|| summarize_input(input).to_string(), str::to_string);
-    let answer = |decision: ApprovalDecision| {
-        let (this, approval_id) = (this.clone(), approval_id.to_string());
-        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            let _ = this.update(cx, |t, cx| t.answer_approval(approval_id.clone(), decision.clone(), cx));
-        }
-    };
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
-        Button::new(ElementId::NamedInteger(name.into(), seq)).label(label).on_click(answer(decision))
-    };
-    let (title, content, buttons): (String, AnyElement, Div) = if tool_name == "ExitPlanMode" {
-        let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
-        let keep_planning = ApprovalDecision::Deny {
-            message: "The user wants to keep planning. Ask them what to change.".to_string(),
-            interrupt: false,
-        };
-        (
-            "Plan".to_string(),
-            TextView::markdown(ElementId::NamedInteger("plan".into(), seq), SharedString::from(plan))
-                .selectable(true)
-                .into_any_element(),
-            h_flex()
-                .gap_2()
-                .child(answer_button("approve-plan", "Approve plan", allow).primary())
-                .child(answer_button("keep-planning", "Keep planning", keep_planning)),
-        )
-    } else {
-        let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
-        (
-            format!("{tool_name} needs approval"),
-            div().text_xs().font_family(MONO).text_color(theme.muted_foreground).child(summary).into_any_element(),
-            h_flex()
-                .gap_2()
-                .child(answer_button("allow", "Allow", allow).primary())
-                .child(answer_button("deny", "Deny", deny)),
-        )
-    };
-    row()
-        .child(
-            v_flex()
-                .w_full()
-                .p_3()
-                .gap_2()
-                .rounded_lg()
-                .border_1()
-                .border_color(if open { theme.warning } else { theme.border })
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
-                .child(content)
-                .when(open, |d| d.child(buttons)),
-        )
-        .into_any_element()
-}
-
-/// Text the agent is still writing. Tool input is hidden until it's complete, because it's partial JSON.
-fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
-    if tail.is_empty() {
-        return empty();
-    }
-    let mut out = row();
-    for message in &tail.messages {
-        for block in &message.blocks {
-            let key = ((message.message_id.len() as u64) << 8) | u64::from(block.index);
-            out = match block.kind {
-                BlockKind::Text => {
-                    let id = ElementId::NamedInteger("tail".into(), key);
-                    out.child(TextView::markdown(id, SharedString::from(block.text.clone())).selectable(true))
-                }
-                BlockKind::Thinking => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("Thinking… {}", last_line(&block.text))),
-                ),
-                BlockKind::ToolUse => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("{}…", block.tool_name.as_deref().unwrap_or("Tool"))),
-                ),
-                BlockKind::Unknown => out,
-            };
-        }
-    }
-    out.into_any_element()
-}
-
-fn first_line(text: &str) -> String {
-    text.lines().next().unwrap_or("").chars().take(160).collect()
-}
-
-fn last_line(text: &str) -> String {
-    let line = text.lines().last().unwrap_or("");
-    line.chars().rev().take(120).collect::<Vec<_>>().into_iter().rev().collect()
 }
 
 /// One line saying what a tool is doing. Shows the field that matters for common tools.

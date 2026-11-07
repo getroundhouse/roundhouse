@@ -2,53 +2,24 @@
 //! kept current by its feed, and is the only place that connects and reconnects.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use client_core::{Client, ClientError, SubscriptionItem};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    AnyElement, AnyWindowHandle, AppContext, Context, Div, Entity, FocusHandle, Hsla, InteractiveElement, IntoElement,
-    ParentElement, PathPromptOptions, PromptLevel, Render, Result, StatefulInteractiveElement, Styled, Task, Window,
-    div,
-};
-use protocol::client::{ErrorCode, HubNotice};
-use protocol::model::{AgentKind, Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
-use protocol::paths::Paths;
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Result, Task, Window};
+use protocol::client::HubNotice;
+use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
-use crate::{
-    AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
-    PreviousWorkspace, StopAgent, ToggleDiff,
-};
+
+mod hub_source;
+mod view;
+mod workspaces;
+
+pub use hub_source::HubSource;
 
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
 /// and `by` no bigger than the list.
 pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
     (at + len).wrapping_add_signed(by) % len
-}
-
-/// Where to find the hub, and how to start one if none is running.
-#[derive(Clone, Debug)]
-pub struct HubSource {
-    pub paths: Paths,
-    pub daemon: PathBuf,
-}
-
-impl HubSource {
-    /// The default hub for this user, with the daemon next to this binary.
-    pub fn default_local() -> anyhow::Result<Self> {
-        let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-        let daemon = std::env::var_os("TRESTLE_DAEMON_BIN").map_or_else(
-            || std::env::current_exe().map_or_else(|_| "trestled".into(), |exe| exe.with_file_name("trestled")),
-            PathBuf::from,
-        );
-        Ok(Self { paths, daemon })
-    }
-
-    fn connect(&self) -> Result<Client, ClientError> {
-        Client::connect_or_start(&self.paths, &self.daemon, "desktop")
-    }
 }
 
 pub enum Connection {
@@ -305,152 +276,6 @@ impl AppView {
         cx.notify();
     }
 
-    pub fn new_workspace(&mut self, repo_id: RepoId, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        if self.busy {
-            return;
-        }
-        self.busy = true;
-        self.creating_in = Some(repo_id.clone());
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let created = cx
-                .background_spawn(async move {
-                    let workspace = client.workspace_create(&repo_id, None, None)?;
-                    // Leaves the model and approval mode to the user's own Claude settings.
-                    let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
-                    Ok::<_, ClientError>((workspace, session))
-                })
-                .await;
-            let _ = this.update(cx, |t, cx| {
-                t.busy = false;
-                t.creating_in = None;
-                match created {
-                    Ok((workspace, session)) => {
-                        let id = workspace.id.clone();
-                        if !t.workspaces.iter().any(|w| w.id == id) {
-                            t.workspaces.push(workspace);
-                        }
-                        let list = t.sessions.entry(id.clone()).or_default();
-                        if !list.iter().any(|s| s.id == session.id) {
-                            list.push(session);
-                        }
-                        t.select(id, cx);
-                    }
-                    Err(e) => t.show_error(format!("couldn't create the workspace: {e}"), cx),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    pub fn add_repository(&mut self, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        let picked = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("Add".into()),
-        });
-        cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = picked.await else { return };
-            let Some(path) = paths.into_iter().next() else { return };
-            let added = cx.background_spawn(async move { client.repo_add(&path.to_string_lossy()) }).await;
-            let _ = this.update(cx, |t, cx| match added {
-                Ok(repo) => {
-                    if !t.repos.iter().any(|r| r.id == repo.id) {
-                        t.repos.push(repo);
-                    }
-                    cx.notify();
-                }
-                Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
-            });
-        })
-        .detach();
-    }
-
-    /// Archives, and asks before losing uncommitted work.
-    pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let target = id.clone();
-            let result = cx.background_spawn(async move { client.workspace_archive(&target, force) }).await;
-            let _ = this.update(cx, |t, cx| {
-                t.busy = false;
-                match result {
-                    Ok(workspace) => {
-                        t.panes.remove(&workspace.id);
-                        if let Some(existing) = t.workspaces.iter_mut().find(|w| w.id == workspace.id) {
-                            *existing = workspace;
-                        }
-                        t.keep_selection_valid(cx);
-                    }
-                    Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict && !force => {
-                        t.confirm_forced_archive(id.clone(), &e.message, cx);
-                    }
-                    Err(e) => t.show_error(format!("couldn't archive: {e}"), cx),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    fn confirm_forced_archive(&mut self, id: WorkspaceId, reason: &str, cx: &mut Context<Self>) {
-        let handle = self.window;
-        let answer = handle.update(cx, |_, window, cx| {
-            window.prompt(
-                PromptLevel::Warning,
-                "Archive anyway?",
-                Some(reason),
-                &["Keep working", "Archive anyway"],
-                cx,
-            )
-        });
-        let Ok(answer) = answer else { return };
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update(cx, |t, cx| t.archive(id, true, cx));
-            }
-        })
-        .detach();
-    }
-
-    pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
-        cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move {
-                    let workspace = client.workspace_restore(&id)?;
-                    let sessions = client.session_list(&workspace.id)?;
-                    Ok::<_, ClientError>((workspace, sessions))
-                })
-                .await;
-            let _ = this.update(cx, |t, cx| {
-                t.busy = false;
-                match result {
-                    Ok((workspace, sessions)) => {
-                        let id = workspace.id.clone();
-                        t.sessions.insert(id.clone(), sessions);
-                        match t.workspaces.iter_mut().find(|w| w.id == id) {
-                            Some(existing) => *existing = workspace,
-                            None => t.workspaces.push(workspace),
-                        }
-                        t.select(id, cx);
-                    }
-                    Err(e) => t.show_error(format!("couldn't restore: {e}"), cx),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
     fn selected_pane(&self) -> Option<Entity<WorkspacePane>> {
         self.selected.as_ref().and_then(|id| self.panes.get(id).cloned())
     }
@@ -460,123 +285,6 @@ impl AppView {
         let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
         selected.map(|w| w.repo_id.clone()).or_else(|| self.repos.first().map(|r| r.id.clone()))
     }
-}
-
-impl Render for AppView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Shortcuts only reach this view through whatever has focus, and focus can end up nowhere, as
-        // when what had it goes away. Every shortcut would then do nothing until something is clicked.
-        if window.focused(cx).is_none() {
-            window.focus(&self.focus, cx);
-        }
-        let theme = cx.theme();
-        let (background, foreground, muted, danger) =
-            (theme.background, theme.foreground, theme.muted_foreground, theme.danger);
-        let main: AnyElement = match &self.connection {
-            Connection::Connecting => centered("Connecting…", muted),
-            Connection::Failed(reason) => centered(&format!("Couldn't reach the hub. {reason}"), danger),
-            Connection::Ready(_) => match self.selected_pane() {
-                Some(pane) => pane.into_any_element(),
-                None if self.repos.is_empty() => centered("Add a repository to get started.", muted),
-                None => centered("Create a workspace to get started.", muted),
-            },
-        };
-        with_actions(h_flex(), cx)
-            .id("app")
-            .track_focus(&self.focus)
-            .size_full()
-            .bg(background)
-            .text_color(foreground)
-            .child(crate::sidebar::render(self, cx))
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
-                    .child(div().flex_1().min_h_0().child(main)),
-            )
-    }
-}
-
-fn with_actions(root: Div, cx: &mut Context<AppView>) -> Div {
-    root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
-        if let Some(repo) = t.current_repo() {
-            t.new_workspace(repo, cx);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
-    .on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
-    .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
-    .on_action(cx.listener(|t, _: &ToggleDiff, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::toggle_diff);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::create_pull_request);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &NewChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::new_chat);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| {
-                if let Some(id) = p.active.clone() {
-                    p.close_chat(id, window, cx);
-                }
-            });
-        }
-    }))
-    .on_action(cx.listener(|t, _: &NextChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| p.step_chat(1, cx));
-        }
-    }))
-    .on_action(cx.listener(|t, _: &PreviousChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| p.step_chat(-1, cx));
-        }
-    }))
-    .on_action(cx.listener(|t, _: &StopAgent, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::stop_agent);
-        }
-    }))
-}
-
-fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
-    h_flex()
-        .id("error-bar")
-        .flex_none()
-        .px_3()
-        .py_2()
-        .gap_2()
-        .bg(danger.opacity(0.15))
-        .text_sm()
-        .text_color(danger)
-        .cursor_pointer()
-        .on_click(cx.listener(|t, _, _, cx| {
-            t.error = None;
-            cx.notify();
-        }))
-        .child(div().flex_1().min_w_0().child(error))
-        .child(div().flex_none().child("Dismiss"))
-}
-
-fn centered(text: &str, color: Hsla) -> AnyElement {
-    div()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(color)
-        .child(text.to_string())
-        .into_any_element()
 }
 
 #[cfg(test)]
