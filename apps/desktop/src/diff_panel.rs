@@ -26,7 +26,7 @@ pub enum DiffEvent {
 fn kit_side(side: DiffSide) -> KitSide {
     match side {
         DiffSide::Old => KitSide::Original,
-        DiffSide::New => KitSide::Modified,
+        DiffSide::New | DiffSide::Unknown => KitSide::Modified,
     }
 }
 
@@ -44,7 +44,7 @@ pub fn comments_prompt(comments: &[DiffComment]) -> String {
     for comment in comments {
         let side = match comment.side {
             DiffSide::Old => " (a removed line)",
-            DiffSide::New => "",
+            DiffSide::New | DiffSide::Unknown => "",
         };
         let _ = write!(prompt, "\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text);
     }

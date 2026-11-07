@@ -18,6 +18,9 @@ impl Hub {
         if text.trim().is_empty() {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "a comment can't be empty"));
         }
+        if side == DiffSide::Unknown {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that side of a diff"));
+        }
         self.workspace(&workspace_id).await?;
         let comment = DiffComment { id: new_id(), workspace_id, path, side, line, text, created_at_ms: now_ms() };
         let stored = comment.clone();

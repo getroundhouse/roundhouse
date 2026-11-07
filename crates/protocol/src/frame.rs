@@ -21,6 +21,7 @@ pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
 mod tests {
     use super::*;
     use crate::event::{ContentBlock, EventBody};
+    use crate::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
 
     #[test]
     fn a_frame_is_exactly_one_line() {
@@ -40,5 +41,9 @@ mod tests {
         let body: EventBody =
             decode(br#"{"type":"user_prompt","text":"hi","client_msg_id":null,"later":true}"#).unwrap();
         assert_eq!(body, EventBody::UserPrompt { text: "hi".into(), client_msg_id: None });
+        assert_eq!(decode::<WorkspaceStatus>(br#""from_the_future""#).unwrap(), WorkspaceStatus::Unknown);
+        assert_eq!(decode::<SessionStatus>(br#""from_the_future""#).unwrap(), SessionStatus::Unknown);
+        assert_eq!(decode::<AgentKind>(br#""from_the_future""#).unwrap(), AgentKind::Unknown);
+        assert_eq!(decode::<DiffSide>(br#""from_the_future""#).unwrap(), DiffSide::Unknown);
     }
 }

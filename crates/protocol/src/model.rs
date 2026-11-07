@@ -31,6 +31,8 @@ pub enum WorkspaceStatus {
     Creating,
     Ready,
     Archived,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -73,12 +75,15 @@ pub enum SetupStatus {
 #[serde(rename_all = "snake_case")]
 pub enum AgentKind {
     Claude,
+    #[serde(other)]
+    Unknown,
 }
 
 impl AgentKind {
     pub fn as_str(self) -> &'static str {
         match self {
             AgentKind::Claude => "claude",
+            AgentKind::Unknown => "unknown",
         }
     }
 }
@@ -92,6 +97,8 @@ pub enum SessionStatus {
     WaitingApproval,
     /// The agent went away mid-turn. The next prompt resumes the conversation.
     Interrupted,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -147,6 +154,8 @@ pub struct GitDiff {
 pub enum DiffSide {
     Old,
     New,
+    #[serde(other)]
+    Unknown,
 }
 
 /// A review comment on a changed line, waiting to be sent to the agent.

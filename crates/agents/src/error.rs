@@ -6,6 +6,8 @@ use crate::ENV_CLAUDE_BIN;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AgentError {
+    #[error("this worker doesn't know that kind of agent")]
+    UnknownKind,
     #[error("could not find the `claude` CLI. Install it, or set {ENV_CLAUDE_BIN} to its path")]
     NotInstalled,
     #[error("could not start {bin} in {cwd}")]

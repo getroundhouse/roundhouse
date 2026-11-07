@@ -20,6 +20,9 @@ impl Hub {
         model: Option<String>,
         permission_mode: Option<String>,
     ) -> Result<Session, ApiError> {
+        if agent == AgentKind::Unknown {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that kind of agent"));
+        }
         let workspace = self.workspace(&workspace_id).await?;
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
