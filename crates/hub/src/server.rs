@@ -98,10 +98,12 @@ async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
         let hub = hub.clone();
         let connection = connection.clone();
         tokio::spawn(async move {
+            hub.requests.fetch_add(1, Ordering::Relaxed);
             let outcome = match handle(&hub, &connection, request.request).await {
                 Ok(response) => ReplyOutcome::Response(response),
                 Err(error) => ReplyOutcome::Error(error),
             };
+            hub.requests.fetch_sub(1, Ordering::Relaxed);
             let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
         });
     }

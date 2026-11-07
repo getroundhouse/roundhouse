@@ -58,6 +58,32 @@ fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppC
 }
 
 #[gpui_kit::test]
+fn an_older_hub_with_nothing_running_is_replaced_when_the_app_connects(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1"]);
+
+    let _ui = Ui::open(cx, &stack);
+
+    let status = stack.client().hub_status().unwrap();
+    assert_ne!(status.pid, older.0.id());
+    assert!(status.on_demand, "the app started this one because it needed it");
+}
+
+/// The stand-in can't serve the app, which is how this shows the app used it rather than replacing it.
+#[gpui_kit::test]
+fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
+    let mut ui = Ui::open_without_waiting(cx, &stack);
+
+    ui.wait("the app to try that hub", |ui| !matches!(ui.view().connection, Connection::Connecting));
+
+    assert!(older.0.try_wait().unwrap().is_none());
+}
+
+#[gpui_kit::test]
 fn a_hub_started_by_hand_is_explained_and_left_alone(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut other = stack.start_stand_in_hub(&["--not-on-demand"]);

@@ -124,11 +124,17 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
 }
 
 /// What restarting would cost, since this is the one screen that can stop agents with one click.
-fn restart_note(running: u32) -> String {
-    match running {
-        0 => "Restarting it starts one that matches. No agents are running on it.".to_string(),
-        1 => "Restarting it starts one that matches, and stops the agent running on it.".to_string(),
-        running => format!("Restarting it starts one that matches, and stops the {running} agents running on it."),
+fn restart_note(agents: u32, setups: u32) -> String {
+    let count = |n: u32, what: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {what}")),
+        n => Some(format!("{n} {what}s")),
+    };
+    let start = "Restarting it starts one that matches";
+    match (count(agents, "agent"), count(setups, "setup script")) {
+        (None, None) => format!("{start}. Nothing is running on it."),
+        (Some(both), None) | (None, Some(both)) => format!("{start}, and stops the {both} running on it."),
+        (Some(agents), Some(setups)) => format!("{start}, and stops the {agents} and {setups} running on it."),
     }
 }
 
@@ -158,7 +164,7 @@ fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
 fn across_a_break(status: &HubStatus, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
     let versions = format!("The hub is version {}, and this app is {}.", status.hub_version, protocol::BUILD_VERSION);
     let next = if can_restart(status) {
-        restart_note(status.running_sessions)
+        restart_note(status.running_sessions, status.running_setups)
     } else if status.on_demand {
         "It's newer than this app, so the app needs updating.".to_string()
     } else {
@@ -195,4 +201,18 @@ fn centered(text: &str, color: Hsla) -> AnyElement {
         .text_color(color)
         .child(text.to_string())
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_restart_note_says_what_would_stop() {
+        assert!(restart_note(0, 0).ends_with("Nothing is running on it."));
+        assert!(restart_note(1, 0).ends_with("stops the 1 agent running on it."));
+        assert!(restart_note(2, 0).ends_with("stops the 2 agents running on it."));
+        assert!(restart_note(0, 2).ends_with("stops the 2 setup scripts running on it."));
+        assert!(restart_note(2, 1).ends_with("stops the 2 agents and 1 setup script running on it."));
+    }
 }

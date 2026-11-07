@@ -25,3 +25,13 @@ pub const BUILD_VERSION: &str = match option_env!("TRESTLE_BUILD") {
     Some(version) => version,
     None => concat!(env!("CARGO_PKG_VERSION"), "-dev"),
 };
+
+/// Puts builds in order, which a commit hash can't, so the app can tell a hub is older than it. An install stamps
+/// when its commit was made with `TRESTLE_BUILD_NUMBER`, and anything else has none, so it's never replaced.
+pub const BUILD_NUMBER: Option<u64> = match option_env!("TRESTLE_BUILD_NUMBER") {
+    Some(number) => match u64::from_str_radix(number, 10) {
+        Ok(number) => Some(number),
+        Err(_) => panic!("TRESTLE_BUILD_NUMBER has to be a number"),
+    },
+    None => None,
+};
