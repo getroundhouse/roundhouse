@@ -3,7 +3,6 @@ name = "daemon"
 description = "Runs as a hub or a worker."
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 publish.workspace = true
 
 [[bin]]
