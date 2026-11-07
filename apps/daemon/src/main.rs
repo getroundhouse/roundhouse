@@ -46,15 +46,28 @@ fn unblock_signals() {
     }
 }
 
+/// Everything a worker starts runs the code in a workspace, which can be another build of Trestle, and these
+/// would point it at this hub. That includes git hooks, so it has to cover every command rather than a few.
+fn forget_hub_variables() {
+    for name in protocol::paths::HUB_ONLY_ENV {
+        // SAFETY: this runs on the main thread before any other exists, so nothing can be reading the environment.
+        unsafe { std::env::remove_var(name) };
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     unblock_signals();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("TRESTLE_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(EnvFilter::try_from_env(protocol::paths::ENV_LOG).unwrap_or_else(|_| EnvFilter::new("info")))
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();
     let args = Args::parse();
+    let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
+    if matches!(args.role, Role::Worker { .. }) {
+        forget_hub_variables();
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
     match args.role {
         Role::Hub => {
@@ -75,9 +88,7 @@ fn main() -> anyhow::Result<()> {
                     state_dir,
                     home: std::env::var_os("HOME").map(PathBuf::from),
                     path: std::env::var_os("PATH"),
-                    claude_bin: std::env::var_os(worker::ENV_CLAUDE_BIN)
-                        .filter(|bin| !bin.is_empty())
-                        .map(PathBuf::from),
+                    claude_bin,
                 },
             ));
             Ok(())

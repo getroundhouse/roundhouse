@@ -2,9 +2,22 @@
 
 use std::path::PathBuf;
 
-pub const DIR_NAME: &str = "trestle";
+/// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
+/// installed app's hub, or migrate its database.
+pub const DIR_NAME: &str = dir_name(cfg!(debug_assertions));
 pub const ENV_HOME: &str = "TRESTLE_HOME";
 pub const ENV_WORKSPACES: &str = "TRESTLE_WORKSPACES";
+pub const ENV_DAEMON_BIN: &str = "TRESTLE_DAEMON_BIN";
+pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
+pub const ENV_LOG: &str = "TRESTLE_LOG";
+
+/// Which hub this is and what it runs. Nothing a worker starts in a workspace gets these, because the
+/// code there can be another build of Trestle, and its commands would otherwise reach this hub.
+pub const HUB_ONLY_ENV: [&str; 5] = [ENV_HOME, ENV_WORKSPACES, ENV_DAEMON_BIN, ENV_CLAUDE_BIN, ENV_LOG];
+
+const fn dir_name(debug_build: bool) -> &'static str {
+    if debug_build { "trestle-dev" } else { "trestle" }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Paths {
@@ -75,7 +88,14 @@ mod tests {
     #[test]
     fn workspaces_default_to_a_visible_folder_in_home() {
         let paths = resolve(env_of(&[("HOME", "/h")])).unwrap();
-        assert_eq!(paths.workspaces_root, PathBuf::from("/h/trestle/workspaces"));
+        assert_eq!(paths.workspaces_root, PathBuf::from(format!("/h/{DIR_NAME}/workspaces")));
+    }
+
+    #[test]
+    fn only_a_release_build_defaults_to_the_real_data() {
+        assert_eq!(dir_name(false), "trestle");
+        assert_eq!(dir_name(true), "trestle-dev");
+        assert_eq!(DIR_NAME, dir_name(cfg!(debug_assertions)));
     }
 
     #[test]
