@@ -15,7 +15,7 @@ use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
-use protocol::model::{SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{InstanceId, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -154,7 +154,7 @@ impl Hub {
         workspace_id: &WorkspaceId,
         link: &Arc<WorkerLink>,
         provider: &dyn Provider,
-        instance_id: &str,
+        instance_id: &InstanceId,
     ) {
         let gate = self.worker_gate(workspace_id);
         let _cleaning_up = gate.lock().await;
@@ -165,7 +165,7 @@ impl Hub {
             }
         }
         if let Err(e) = provider.stop(instance_id).await {
-            warn!(instance_id, "stopping a worker failed: {}", error_chain(&e));
+            warn!(%instance_id, "stopping a worker failed: {}", error_chain(&e));
         }
         // Still under the gate, so these are queued before a replacement worker can start.
         let sessions: Vec<_> =
@@ -249,12 +249,12 @@ impl Hub {
 }
 
 /// Asks a worker to stop and waits for its output to end. If it's stuck, the provider ends it.
-async fn close_worker(link: &WorkerLink, provider: &dyn Provider, instance_id: &str) {
+async fn close_worker(link: &WorkerLink, provider: &dyn Provider, instance_id: &InstanceId) {
     link.close();
     if tokio::time::timeout(SHUTDOWN_GRACE, link.wait_closed()).await.is_err() {
-        warn!(instance_id, "a worker didn't stop in time");
+        warn!(%instance_id, "a worker didn't stop in time");
         if let Err(e) = provider.stop(instance_id).await {
-            warn!(instance_id, "stopping a stuck worker failed: {}", error_chain(&e));
+            warn!(%instance_id, "stopping a stuck worker failed: {}", error_chain(&e));
         }
     }
 }

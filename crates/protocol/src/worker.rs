@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
-use crate::model::{AgentKind, GitDiff, GitStatus, PullRequest, SessionId};
+use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, SessionId};
 use crate::tail::StreamDelta;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -75,7 +75,7 @@ pub enum WorkerRequest {
     },
     AgentApproval {
         session_id: SessionId,
-        approval_id: String,
+        approval_id: ApprovalId,
         decision: ApprovalDecision,
     },
     AgentCancel {
@@ -101,7 +101,7 @@ pub struct AgentSpec {
     pub agent: AgentKind,
     pub cwd: String,
     /// The agent's own ID for this conversation, which survives restarts.
-    pub agent_session_id: String,
+    pub agent_session_id: AgentSessionId,
     /// Continue that conversation rather than starting it.
     pub resume: bool,
     pub model: Option<String>,

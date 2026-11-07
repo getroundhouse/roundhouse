@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use protocol::event::ApprovalDecision;
+use protocol::model::ApprovalId;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -52,7 +53,7 @@ struct Shared {
     held_output: Mutex<Vec<AgentOutput>>,
     unconfirmed_prompts: Mutex<Vec<String>>,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
-    pending_inputs: Mutex<HashMap<String, Value>>,
+    pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
     /// tells whoever's waiting.
     pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<(), String>>>>,
@@ -190,7 +191,7 @@ impl AgentProcess for ClaudeProcess {
         }
     }
 
-    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> Result<(), AgentError> {
+    async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {
         let original_input = self.shared.pending_inputs.lock().remove(approval_id);
         let response = match decision {
             ApprovalDecision::Allow { updated_input, updated_permissions } => {

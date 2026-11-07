@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, RepoId, Seq, Session, SessionId,
-    Workspace, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo,
+    RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, unexpected};
@@ -135,8 +135,8 @@ impl Client {
         Ok(comments)
     }
 
-    pub fn comment_delete(&self, id: &str) -> Result<()> {
-        self.expect_ok(ClientRequest::CommentDelete { id: id.to_string() })
+    pub fn comment_delete(&self, id: &CommentId) -> Result<()> {
+        self.expect_ok(ClientRequest::CommentDelete { id: id.clone() })
     }
 
     pub fn session_create(
@@ -209,7 +209,12 @@ impl Client {
     }
 
     /// Returns the prompt's `seq`, and whether it had already been recorded.
-    pub fn session_prompt(&self, id: &SessionId, text: &str, client_msg_id: Option<String>) -> Result<(Seq, bool)> {
+    pub fn session_prompt(
+        &self,
+        id: &SessionId,
+        text: &str,
+        client_msg_id: Option<ClientMessageId>,
+    ) -> Result<(Seq, bool)> {
         let request = ClientRequest::SessionPrompt { id: id.clone(), text: text.to_string(), client_msg_id };
         let reply = self.call(request)?;
         let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
@@ -218,8 +223,8 @@ impl Client {
         Ok((seq, duplicate))
     }
 
-    pub fn session_approve(&self, id: &SessionId, approval_id: &str, decision: ApprovalDecision) -> Result<()> {
-        self.expect_ok(ClientRequest::SessionApprove { id: id.clone(), approval_id: approval_id.to_string(), decision })
+    pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {
+        self.expect_ok(ClientRequest::SessionApprove { id: id.clone(), approval_id: approval_id.clone(), decision })
     }
 
     pub fn session_configure(

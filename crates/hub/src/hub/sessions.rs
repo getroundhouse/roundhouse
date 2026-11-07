@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
-use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, ApprovalId, ClientMessageId, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus,
+};
 use tokio::sync::oneshot;
 
 use super::{Hub, new_id, not_ready};
@@ -45,7 +47,7 @@ impl Hub {
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
             // agent never reported one.
-            agent_session_id: id,
+            agent_session_id: id.into(),
             agent_opened: false,
         };
         let session = stored.session.clone();
@@ -110,7 +112,7 @@ impl Hub {
         self: &Arc<Self>,
         id: SessionId,
         text: String,
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
     ) -> Result<(Seq, bool), ApiError> {
         if text.trim().is_empty() {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "a prompt can't be empty"));
@@ -124,7 +126,7 @@ impl Hub {
     pub(crate) async fn session_approve(
         self: &Arc<Self>,
         id: SessionId,
-        approval_id: String,
+        approval_id: ApprovalId,
         decision: ApprovalDecision,
     ) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;

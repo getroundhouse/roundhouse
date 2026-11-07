@@ -93,7 +93,7 @@ impl Hub {
             path: None,
             status: WorkspaceStatus::Creating,
             provider: self.default_provider.clone(),
-            instance_id: id.to_string(),
+            instance_id: id.as_str().into(),
             created_at_ms: now_ms(),
             archived_at_ms: None,
             setup: SetupStatus::NotStarted,
@@ -107,7 +107,7 @@ impl Hub {
         match result {
             Ok(ready) => Ok(ready),
             Err(e) => {
-                self.discard_workspace(&id, provider.as_ref()).await;
+                self.discard_workspace(&workspace, provider.as_ref()).await;
                 Err(e)
             }
         }
@@ -143,12 +143,13 @@ impl Hub {
         Ok(self.start_setup(repo.clone(), ready))
     }
 
-    async fn discard_workspace(&self, id: &WorkspaceId, provider: &dyn Provider) {
+    async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
+        let id = &workspace.id;
         let link = self.workers.lock().get(id).cloned();
         if let Some(link) = link {
-            close_worker(&link, provider, id.as_str()).await;
+            close_worker(&link, provider, &workspace.instance_id).await;
         }
-        if let Err(e) = provider.destroy(id.as_str()).await {
+        if let Err(e) = provider.destroy(&workspace.instance_id).await {
             warn!(%id, "cleaning up a failed workspace: {}", error_chain(&e));
         }
         let owned = id.clone();

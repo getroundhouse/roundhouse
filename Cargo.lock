@@ -5815,6 +5815,7 @@ dependencies = [
  "async-trait",
  "libc",
  "process",
+ "protocol",
  "serde",
  "tempfile",
  "thiserror 2.0.21",

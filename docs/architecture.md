@@ -88,7 +88,7 @@ The binaries are `trestle`, `trestled` and `trestle-desktop`. `crates/protocol/s
 ```
 apps/desktop ──> transcript, terminal-view ──> client-core ──> protocol
 apps/cli ─────────────────────────────────────> client-core
-apps/daemon ──> hub ──> providers, protocol
+apps/daemon ──> hub ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
 agents, providers, worker ──> process
 ```

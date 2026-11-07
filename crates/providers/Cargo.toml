@@ -6,6 +6,7 @@ publish.workspace = true
 
 [dependencies]
 process.workspace = true
+protocol.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 libc.workspace = true

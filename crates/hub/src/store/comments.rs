@@ -1,5 +1,6 @@
 //! Comments left on a diff.
 
+use protocol::model::CommentId;
 use protocol::model::DiffComment;
 use protocol::model::WorkspaceId;
 use rusqlite::params;
@@ -12,7 +13,7 @@ impl Store {
             "INSERT INTO diff_comments (id, workspace_id, path, side, line, text, created_at_ms)
                  VALUES (?, ?, ?, ?, ?, ?, ?)",
             params![
-                comment.id,
+                comment.id.as_str(),
                 comment.workspace_id.as_str(),
                 comment.path,
                 text_of(&comment.side),
@@ -32,7 +33,7 @@ impl Store {
         )?;
         let rows = statement.query_map([workspace_id.as_str()], |row| {
             Ok(DiffComment {
-                id: row.get(0)?,
+                id: row.get::<_, String>(0)?.into(),
                 workspace_id: row.get::<_, String>(1)?.into(),
                 path: row.get(2)?,
                 side: from_text(row.get(3)?)?,
@@ -44,8 +45,8 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    pub fn delete_comment(&self, id: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("DELETE FROM diff_comments WHERE id = ?", [id])?;
+    pub fn delete_comment(&self, id: &CommentId) -> Result<(), StoreError> {
+        lock(&self.writer).execute("DELETE FROM diff_comments WHERE id = ?", [id.as_str()])?;
         Ok(())
     }
 }

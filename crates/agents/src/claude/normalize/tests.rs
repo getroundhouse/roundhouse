@@ -1,5 +1,6 @@
-use super::*;
 use serde_json::json;
+
+use super::*;
 
 #[test]
 fn output_that_is_not_json_is_kept_rather_than_failing() {
@@ -13,7 +14,7 @@ fn a_lone_surrogate_does_not_hide_an_approval() {
     let Parsed::Event(EventBody::ApprovalRequested { approval_id, input, .. }) = parse_line(line) else {
         panic!("{:?}", parse_line(line));
     };
-    assert_eq!(approval_id, "r1");
+    assert_eq!(approval_id, "r1".into());
     assert_eq!(input["command"], "echo \u{fffd}");
 }
 

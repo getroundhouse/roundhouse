@@ -4,9 +4,11 @@ use std::collections::HashSet;
 use std::io::Write;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
-use protocol::model::Seq;
+use protocol::model::{MessageId, Seq};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
+
+use crate::run::short;
 
 /// How much of a tool's result to show. The full text stays in the log.
 const RESULT_PREVIEW_LINES: usize = 6;
@@ -14,7 +16,7 @@ const RESULT_PREVIEW_LINES: usize = 6;
 #[derive(Default)]
 pub(crate) struct Printer {
     /// Messages whose text has already been printed from the streaming tail.
-    streamed: HashSet<String>,
+    streamed: HashSet<MessageId>,
     mid_line: bool,
 }
 
@@ -73,7 +75,7 @@ impl Printer {
                 self.line(event.seq, &format!("  trestle approve {} {approval_id}", event.session_id));
             }
             EventBody::ApprovalResolved { approval_id, outcome } => {
-                self.line(event.seq, &format!("approval {} {outcome:?}", &approval_id[..approval_id.len().min(8)]));
+                self.line(event.seq, &format!("approval {} {outcome:?}", short(approval_id.as_str())));
             }
             EventBody::AgentExited { reason, code, signal, stderr_tail } => {
                 self.line(event.seq, &format!("agent exited: {reason:?}, code {code:?}, signal {signal:?}"));

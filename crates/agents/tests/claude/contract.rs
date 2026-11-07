@@ -6,6 +6,7 @@
 
 use agents::claude::{Parsed, parse_line};
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
+use protocol::model::ApprovalId;
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
@@ -46,7 +47,7 @@ fn init_reports_what_the_hub_shows_and_relies_on() {
     let EventBody::AgentInit { agent_session_id, model, cwd, permission_mode, agent_version } = init else {
         unreachable!()
     };
-    assert!(agent_session_id.is_some_and(|id| !id.is_empty()));
+    assert!(agent_session_id.is_some_and(|id| !id.as_str().is_empty()));
     assert!(model.is_some_and(|m| m.contains("haiku")));
     assert_eq!(cwd.as_deref(), Some("/tmp/fixture"));
     // The CLI's flag is "manual", and it reports the same mode as "default".
@@ -68,8 +69,8 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
     let bash: Vec<_> = approvals.iter().filter(|(_, tool, ..)| tool == "Bash").collect();
     assert_eq!(bash.len(), 3);
     for (id, _, tool_use_id, input, description, suggestions) in bash {
-        assert!(!id.is_empty());
-        assert!(tool_use_id.as_ref().is_some_and(|t| t.starts_with("toolu_")));
+        assert!(!id.as_str().is_empty());
+        assert!(tool_use_id.as_ref().is_some_and(|t| t.as_str().starts_with("toolu_")));
         assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
         assert!(description.is_some());
         assert!(suggestions.is_array());
@@ -79,7 +80,7 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
 #[test]
 fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
     let events = events();
-    let asked: Vec<&String> = events
+    let asked: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
             EventBody::ApprovalRequested { approval_id, tool_name, .. } if tool_name != "AskUserQuestion" => {
@@ -88,7 +89,7 @@ fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
             _ => None,
         })
         .collect();
-    let cancelled: Vec<&String> = events
+    let cancelled: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
             EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled } => Some(approval_id),

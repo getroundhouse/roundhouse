@@ -70,7 +70,8 @@ At a limit, split by responsibility, not into halves or numbered parts. A flat `
 
 ## Types
 
-- **IDs are newtypes, not strings.** `SessionId(String)` is `#[serde(transparent)]`, so the wire and stored forms don't change. They're declared together in `protocol::model` by one macro. `protocol` can't depend on rusqlite, so `hub::store` converts them at its edge.
+- **When in doubt, add a type.** More typing is almost always better. A value that means something specific gets its own type, even when nothing is confusing it yet.
+- **IDs are newtypes, not strings,** including IDs that belong to someone else, such as an agent's or a provider's. `SessionId(String)` is `#[serde(transparent)]`, so the wire and stored forms don't change. They're declared together in `protocol::model` by one macro. `protocol` can't depend on rusqlite, so `hub::store` converts them at its edge.
 - **Closed sets are enums,** not strings or booleans, and matched exhaustively, so a new variant makes the compiler list every place to review. Use `let … else` when you want one variant and everything else is the same failure, such as a reply to one request. The lint allows it, and a new variant has nothing to change there.
 - **Invariants hold from construction.** A fallible constructor or parser returns a typed error, and no public field can bypass it. A record with no invariants, which is most of `protocol`, keeps public fields.
 - **Units go in the name or the type:** `created_at_ms`, `Duration`. Timeouts are named constants, with a comment on why that value.

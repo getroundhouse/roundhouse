@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use process::{ProcessRecord, Signal, signal_group};
+use protocol::model::InstanceId;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, OnceCell};
@@ -42,7 +43,7 @@ struct Running {
 
 pub struct LocalProvider {
     config: LocalConfig,
-    running: Mutex<HashMap<String, Running>>,
+    running: Mutex<HashMap<InstanceId, Running>>,
     login_path: Arc<OnceCell<Option<String>>>,
 }
 
@@ -58,18 +59,18 @@ impl LocalProvider {
         Self { config, running: Mutex::new(HashMap::new()), login_path }
     }
 
-    fn instance_dir(&self, instance_id: &str) -> PathBuf {
-        self.config.instances_dir.join(instance_id)
+    fn instance_dir(&self, instance_id: &InstanceId) -> PathBuf {
+        self.config.instances_dir.join(instance_id.as_str())
     }
 
-    async fn end(&self, instance_id: &str, grace: Duration) -> Result<(), ProviderError> {
+    async fn end(&self, instance_id: &InstanceId, grace: Duration) -> Result<(), ProviderError> {
         let entry = self.running.lock().await.remove(instance_id);
         if let Some(mut entry) = entry {
             // Never connected, or the stream was given up: dropping it closes stdin either way.
             drop(entry.stream.take());
             if tokio::time::timeout(grace, entry.child.wait()).await.is_err() {
                 if !grace.is_zero() {
-                    warn!(instance_id, "worker did not stop in time, killing it");
+                    warn!(%instance_id, "worker did not stop in time, killing it");
                 }
                 let _ = entry.child.kill().await;
             }
@@ -199,15 +200,15 @@ impl Provider for LocalProvider {
         Capabilities { filesystem_survives_stop: true, snapshots: false }
     }
 
-    async fn create(&self, instance_id: &str) -> Result<(), ProviderError> {
+    async fn create(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
         std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))
     }
 
-    async fn start(&self, instance_id: &str) -> Result<(), ProviderError> {
+    async fn start(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         let mut running = self.running.lock().await;
         if running.contains_key(instance_id) {
-            return Err(ProviderError::AlreadyRunning(instance_id.to_string()));
+            return Err(ProviderError::AlreadyRunning(instance_id.clone()));
         }
         let dir = self.instance_dir(instance_id);
         std::fs::create_dir_all(&dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))?;
@@ -242,28 +243,28 @@ impl Provider for LocalProvider {
         let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
             return Err(ProviderError::NoPipes(self.config.worker_exe.display().to_string()));
         };
-        info!(pid = child.id(), instance_id, "started worker");
+        info!(pid = child.id(), %instance_id, "started worker");
         let stream = WorkerStream { reader: Box::new(reader), writer: Box::new(writer) };
-        running.insert(instance_id.to_string(), Running { child, stream: Some(stream) });
+        running.insert(instance_id.clone(), Running { child, stream: Some(stream) });
         Ok(())
     }
 
     /// The caller closes the worker's stdin first, which is what asks it to stop. This reaps it.
-    async fn stop(&self, instance_id: &str) -> Result<(), ProviderError> {
+    async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.end(instance_id, STOP_GRACE).await
     }
 
-    async fn kill(&self, instance_id: &str) -> Result<(), ProviderError> {
+    async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.end(instance_id, Duration::ZERO).await
     }
 
-    async fn connect(&self, instance_id: &str) -> Result<WorkerStream, ProviderError> {
+    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerStream, ProviderError> {
         let mut running = self.running.lock().await;
-        let entry = running.get_mut(instance_id).ok_or_else(|| ProviderError::NotRunning(instance_id.to_string()))?;
-        entry.stream.take().ok_or_else(|| ProviderError::AlreadyConnected(instance_id.to_string()))
+        let entry = running.get_mut(instance_id).ok_or_else(|| ProviderError::NotRunning(instance_id.clone()))?;
+        entry.stream.take().ok_or_else(|| ProviderError::AlreadyConnected(instance_id.clone()))
     }
 
-    async fn destroy(&self, instance_id: &str) -> Result<(), ProviderError> {
+    async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.stop(instance_id).await?;
         let dir = self.instance_dir(instance_id);
         match std::fs::remove_dir_all(&dir) {
@@ -361,8 +362,8 @@ mod tests {
             shell: None,
             path: None,
         });
-        provider.stop("nope").await.unwrap();
-        provider.destroy("nope").await.unwrap();
-        assert!(provider.connect("nope").await.is_err());
+        provider.stop(&"nope".into()).await.unwrap();
+        provider.destroy(&"nope".into()).await.unwrap();
+        assert!(provider.connect(&"nope".into()).await.is_err());
     }
 }

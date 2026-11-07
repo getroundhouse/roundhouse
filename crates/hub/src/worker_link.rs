@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
-use protocol::model::WorkspaceId;
+use protocol::model::{InstanceId, WorkspaceId};
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use providers::{Provider, WorkerStream};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -49,7 +49,7 @@ impl WorkerLink {
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
         workspace_id: WorkspaceId,
-        instance_id: String,
+        instance_id: InstanceId,
     ) -> Result<Arc<WorkerLink>, ApiError> {
         provider.start(&instance_id).await.map_err(|e| provider_failed(&e))?;
         let stream = match provider.connect(&instance_id).await {
@@ -80,7 +80,7 @@ impl WorkerLink {
         };
         link.close();
         if let Err(e) = provider.kill(&instance_id).await {
-            warn!(instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
+            warn!(%instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
         }
         Err(failure)
     }
@@ -134,7 +134,7 @@ async fn read_frames(
     provider: Arc<dyn Provider>,
     link: Arc<WorkerLink>,
     workspace_id: WorkspaceId,
-    instance_id: String,
+    instance_id: InstanceId,
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut reader = BufReader::new(reader);
@@ -179,7 +179,7 @@ async fn read_frames(
             }
         }
     }
-    debug!(instance_id, "worker connection ended");
+    debug!(%instance_id, "worker connection ended");
     link.close();
     // Dropping these wakes each waiting call with an error.
     drop(link.pending.lock().take());

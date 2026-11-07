@@ -47,7 +47,7 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
     .map(String::from)
     .to_vec();
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
-    args.push(spec.agent_session_id.clone());
+    args.push(spec.agent_session_id.to_string());
     // `default` is what the picker offers for the account's own default, and only the running CLI
     // has a name for it.
     if let Some(model) = spec.model.as_ref().filter(|model| *model != "default") {

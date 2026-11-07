@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
-use protocol::model::{Seq, SetupStatus, WorkspaceStatus};
+use protocol::model::{ApprovalId, ClientMessageId, Seq, SetupStatus, WorkspaceStatus};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -105,7 +105,7 @@ impl LiveSession {
         &self,
         hub: &Hub,
         text: &str,
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
     ) -> Result<(Seq, bool), ApiError> {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
@@ -122,7 +122,7 @@ impl LiveSession {
     async fn handle_prompt(
         &self,
         text: String,
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     ) {
         let hub = match self.hub() {
@@ -175,7 +175,7 @@ impl LiveSession {
         }
     }
 
-    async fn handle_approve(&self, approval_id: String, decision: ApprovalDecision) -> Result<(), ApiError> {
+    async fn handle_approve(&self, approval_id: ApprovalId, decision: ApprovalDecision) -> Result<(), ApiError> {
         {
             let state = self.state.lock();
             let Some(asked_by) = state.pending_approvals.get(&approval_id) else {

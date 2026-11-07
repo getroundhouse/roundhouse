@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::{ApprovalDecision, SessionEvent};
 use crate::model::{
-    AgentKind, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo, RepoId, Seq, Session, SessionId,
-    Workspace, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo,
+    RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -80,7 +80,7 @@ pub enum ClientRequest {
         workspace_id: WorkspaceId,
     },
     CommentDelete {
-        id: String,
+        id: CommentId,
     },
 
     SessionCreate {
@@ -135,11 +135,11 @@ pub enum ClientRequest {
     SessionPrompt {
         id: SessionId,
         text: String,
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
     },
     SessionApprove {
         id: SessionId,
-        approval_id: String,
+        approval_id: ApprovalId,
         decision: ApprovalDecision,
     },
     SessionCancel {
