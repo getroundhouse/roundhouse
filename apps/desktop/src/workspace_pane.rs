@@ -8,7 +8,11 @@ use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{
+    Anchor, AnyElement, AnyWindowHandle, AppContext, Context, ElementId, Entity, EventEmitter, FontWeight,
+    InteractiveElement, IntoElement, ParentElement, PromptLevel, Render, Result, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
+};
 use protocol::model::{AgentKind, PullRequest, Session, SessionId, SessionStatus, SetupStatus, Workspace, WorkspaceId};
 use transcript::{Transcript, TranscriptEvent, mode_label};
 
@@ -241,7 +245,7 @@ impl WorkspacePane {
             TranscriptEvent::TurnEnded => {
                 this.refresh_pull_request(cx);
                 if let Some(diff) = &this.diff {
-                    diff.update(cx, |d, cx| d.refresh(cx));
+                    diff.update(cx, DiffPanel::refresh);
                 }
             }
         });
@@ -467,12 +471,11 @@ impl WorkspacePane {
             .and_then(|active| self.sessions.iter().position(|s| &s.id == active))
             .map_or(0, |at| self.sessions[..at].iter().filter(|s| s.closed_at_ms.is_none()).count());
         self.active = None;
-        match neighbor(&open, position) {
-            Some(id) => self.activate(id, cx),
-            None => {
-                self.show_draft(cx);
-                self.ensure_chat(cx);
-            }
+        if let Some(id) = neighbor(&open, position) {
+            self.activate(id, cx);
+        } else {
+            self.show_draft(cx);
+            self.ensure_chat(cx);
         }
     }
 
@@ -492,7 +495,7 @@ impl WorkspacePane {
 
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {
         if let Some(transcript) = self.transcript() {
-            transcript.update(cx, |t, cx| t.cancel(cx));
+            transcript.update(cx, Transcript::cancel);
         }
     }
 
@@ -520,7 +523,7 @@ impl WorkspacePane {
         self.diff_open = !self.diff_open;
         if self.diff_open {
             match &self.diff {
-                Some(diff) => diff.update(cx, |d, cx| d.refresh(cx)),
+                Some(diff) => diff.update(cx, DiffPanel::refresh),
                 None => self.make_diff_panel(cx),
             }
         }
@@ -782,7 +785,7 @@ impl Render for WorkspacePane {
                         .min_w_0()
                         .h_full()
                         .child(tabs)
-                        .child(div().flex_1().min_h_0().w_full().when_some(transcript, |d, t| d.child(t)))
+                        .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
                         .when_some(log, |d, text| {
                             d.child(
                                 div()

@@ -11,14 +11,14 @@ use serde_json::Value;
 const RESULT_PREVIEW_LINES: usize = 6;
 
 #[derive(Default)]
-pub struct Printer {
+pub(crate) struct Printer {
     /// Messages whose text has already been printed from the streaming tail.
     streamed: HashSet<String>,
     mid_line: bool,
 }
 
 impl Printer {
-    pub fn event(&mut self, event: &SessionEvent) {
+    pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { text, .. } => self.line(event.seq, &format!("you: {text}")),
             EventBody::AgentStarted { pid, resumed } => {
@@ -79,7 +79,7 @@ impl Printer {
             }
             EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
             EventBody::AgentMode { permission_mode } => {
-                self.line(event.seq, &format!("approval mode: {permission_mode}"))
+                self.line(event.seq, &format!("approval mode: {permission_mode}"));
             }
             EventBody::AgentState { .. } | EventBody::AgentOther { .. } | EventBody::Unknown => {}
         }
@@ -110,7 +110,7 @@ impl Printer {
     }
 
     /// Text is printed as it arrives, and everything else waits for the finished block.
-    pub fn delta(&mut self, delta: &StreamDelta) {
+    pub(crate) fn delta(&mut self, delta: &StreamDelta) {
         if let DeltaChange::Text { text, .. } = &delta.change {
             self.streamed.insert(delta.message_id.clone());
             self.mid_line = true;
@@ -119,7 +119,7 @@ impl Printer {
         }
     }
 
-    pub fn tail(&mut self, tail: &Tail) {
+    pub(crate) fn tail(&mut self, tail: &Tail) {
         for message in &tail.messages {
             for block in &message.blocks {
                 if block.kind == protocol::tail::BlockKind::Text && !block.text.is_empty() {

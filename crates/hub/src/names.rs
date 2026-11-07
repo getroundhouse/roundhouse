@@ -80,7 +80,7 @@ const NAMES: &[&str] = &[
 ];
 
 /// A name not in `taken`. `salt` varies the starting point, and a suffix keeps it going forever.
-pub fn pick(taken: &[String], salt: u64) -> String {
+pub(crate) fn pick(taken: &[String], salt: u64) -> String {
     let start = salt as usize % NAMES.len();
     for offset in 0..NAMES.len() {
         let name = NAMES[(start + offset) % NAMES.len()];
@@ -93,7 +93,7 @@ pub fn pick(taken: &[String], salt: u64) -> String {
 }
 
 /// Goes into a path and a branch name, so it stays conservative.
-pub fn is_valid(name: &str) -> bool {
+pub(crate) fn is_valid(name: &str) -> bool {
     let mut chars = name.chars();
     let first_ok = chars.next().is_some_and(|c| c.is_ascii_alphanumeric());
     first_ok
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn keeps_working_after_every_name_is_used() {
-        let mut taken: Vec<String> = NAMES.iter().map(|n| n.to_string()).collect();
+        let mut taken: Vec<String> = NAMES.iter().map(ToString::to_string).collect();
         assert_eq!(pick(&taken, 0), format!("{}-2", NAMES[0]));
         taken.push(format!("{}-2", NAMES[0]));
         assert_eq!(pick(&taken, 0), format!("{}-3", NAMES[0]));

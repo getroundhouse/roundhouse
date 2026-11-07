@@ -7,7 +7,11 @@ use std::path::PathBuf;
 use client_core::{Client, ClientError, SubscriptionItem};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{
+    AnyElement, AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Hsla, InteractiveElement, IntoElement,
+    ParentElement, PathPromptOptions, PromptLevel, Render, Result, StatefulInteractiveElement, Styled, Task, Window,
+    div,
+};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::model::{AgentKind, Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::paths::Paths;
@@ -29,9 +33,10 @@ impl HubSource {
     /// The default hub for this user, with the daemon next to this binary.
     pub fn default_local() -> Self {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).expect("HOME is set");
-        let daemon = std::env::var_os("TRESTLE_DAEMON_BIN").map(PathBuf::from).unwrap_or_else(|| {
-            std::env::current_exe().map(|exe| exe.with_file_name("trestled")).unwrap_or_else(|_| "trestled".into())
-        });
+        let daemon = std::env::var_os("TRESTLE_DAEMON_BIN").map_or_else(
+            || std::env::current_exe().map_or_else(|_| "trestled".into(), |exe| exe.with_file_name("trestled")),
+            PathBuf::from,
+        );
         Self { paths, daemon }
     }
 
@@ -155,7 +160,7 @@ impl AppView {
                         }
                     }
                     SubscriptionItem::Disconnected => {
-                        let _ = this.update(cx, |t, cx| t.connect(cx));
+                        let _ = this.update(cx, AppView::connect);
                         return;
                     }
                     _ => {}
@@ -485,17 +490,17 @@ impl Render for AppView {
             .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
             .on_action(cx.listener(|t, _: &ToggleDiff, _, cx| {
                 if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.toggle_diff(cx));
+                    pane.update(cx, WorkspacePane::toggle_diff);
                 }
             }))
             .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
                 if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.create_pull_request(cx));
+                    pane.update(cx, WorkspacePane::create_pull_request);
                 }
             }))
             .on_action(cx.listener(|t, _: &NewChat, _, cx| {
                 if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.new_chat(cx));
+                    pane.update(cx, WorkspacePane::new_chat);
                 }
             }))
             .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
@@ -519,7 +524,7 @@ impl Render for AppView {
             }))
             .on_action(cx.listener(|t, _: &StopAgent, _, cx| {
                 if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.stop_agent(cx));
+                    pane.update(cx, WorkspacePane::stop_agent);
                 }
             }))
             .child(crate::sidebar::render(self, cx))

@@ -24,7 +24,7 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
 type Reply = oneshot::Sender<Result<WorkerResponse, ApiError>>;
 
-pub struct WorkerLink {
+pub(crate) struct WorkerLink {
     /// Distinguishes this connection from an earlier one to the same workspace.
     pub id: u64,
     next_call: AtomicU64,
@@ -42,7 +42,7 @@ fn lost() -> ApiError {
 impl WorkerLink {
     /// Starts the instance's worker and says hello. On failure nothing is left running, so the next
     /// attempt starts clean.
-    pub async fn open(
+    pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
         workspace_id: String,
@@ -83,7 +83,7 @@ impl WorkerLink {
         Err(failure)
     }
 
-    pub async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
+    pub(crate) async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
         let id = self.next_call.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&WorkerCall { id, request })
             .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?;
@@ -102,17 +102,17 @@ impl WorkerLink {
         reply_rx.await.map_err(|_| lost())?
     }
 
-    pub fn is_open(&self) -> bool {
+    pub(crate) fn is_open(&self) -> bool {
         !*self.closed.borrow() && self.calls.lock().unwrap().is_some()
     }
 
     /// Closes the worker's stdin. It stops its agents, flushes, and exits.
-    pub fn close(&self) {
+    pub(crate) fn close(&self) {
         self.calls.lock().unwrap().take();
     }
 
     /// Resolves once the worker's output has been fully read.
-    pub async fn wait_closed(&self) {
+    pub(crate) async fn wait_closed(&self) {
         let mut closed = self.closed.subscribe();
         let _ = closed.wait_for(|done| *done).await;
     }

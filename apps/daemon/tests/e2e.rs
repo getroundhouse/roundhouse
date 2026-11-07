@@ -405,7 +405,7 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     };
     let watcher = stack.client();
     wait_until("the hub to see the client leave", || watcher.hub_status().unwrap().clients == 1);
-    assert!(watcher.session_get(&session_id).unwrap().status == SessionStatus::Running);
+    assert_eq!(watcher.session_get(&session_id).unwrap().status, SessionStatus::Running);
     assert!(is_alive(agent_pid), "the agent must outlive its client");
 
     let client = stack.client();

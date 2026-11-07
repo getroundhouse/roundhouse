@@ -19,14 +19,14 @@ use tracing::{debug, warn};
 use crate::Hub;
 use crate::session::{LiveItem, LiveSession};
 
-pub const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
-pub const MAX_READ_EVENTS: u32 = 2000;
-pub const PUMP_PAGE_EVENTS: u32 = 256;
+pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
+pub(crate) const MAX_READ_EVENTS: u32 = 2000;
+pub(crate) const PUMP_PAGE_EVENTS: u32 = 256;
 
 /// Bounded, so a client that stops reading holds back only its own subscriptions.
 const CONNECTION_QUEUE: usize = 1024;
 
-pub async fn accept_loop(hub: Arc<Hub>, listener: UnixListener) {
+pub(crate) async fn accept_loop(hub: Arc<Hub>, listener: UnixListener) {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {

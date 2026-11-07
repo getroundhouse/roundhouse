@@ -38,8 +38,6 @@ docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 
-In `use gpui_kit::*` files, test modules must import names explicitly: the glob brings in GPUI's `test` attribute, and `#[test]` then recurses.
-
 ## Rules
 
 - **Keep project knowledge in repo docs.** Don't use agent memory, and don't leave decisions only in chat. When a decision or a fact changes, update the relevant doc as part of the same work. Decisions go in `docs/decisions.md`. What's still open or left to do goes in a GitHub issue, not a doc.

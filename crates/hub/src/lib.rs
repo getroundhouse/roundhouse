@@ -237,7 +237,7 @@ impl Hub {
     }
 
     pub(crate) async fn repo_list(&self) -> Result<Vec<Repo>, ApiError> {
-        self.blocking(|store| store.list_repos()).await
+        self.blocking(Store::list_repos).await
     }
 
     pub(crate) async fn workspace_create(
@@ -301,7 +301,7 @@ impl Hub {
             created_at_ms: now_ms(),
             archived_at_ms: None,
             setup: SetupStatus::NotStarted,
-            port_base: self.blocking(|store| store.next_port_base()).await?,
+            port_base: self.blocking(Store::next_port_base).await?,
         };
         let record = workspace.clone();
         if !self.blocking(move |store| store.insert_workspace(&record)).await? {
@@ -561,7 +561,7 @@ impl Hub {
 
     /// Waits for setup, if it's running. Agents shouldn't start in a half-prepared worktree.
     pub(crate) async fn wait_for_setup(&self, workspace_id: &str) {
-        let gate = self.setup_gates.lock().unwrap().get(workspace_id).map(|gate| gate.subscribe());
+        let gate = self.setup_gates.lock().unwrap().get(workspace_id).map(tokio::sync::watch::Sender::subscribe);
         if let Some(mut gate) = gate {
             let _ = gate.wait_for(|done| *done).await;
         }
@@ -941,7 +941,7 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
     };
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     tokio::select! {
-        _ = hub.shutdown.notified() => info!("shutdown requested"),
+        () = hub.shutdown.notified() => info!("shutdown requested"),
         _ = tokio::signal::ctrl_c() => info!("interrupted"),
         _ = terminate.recv() => info!("terminated"),
     }

@@ -26,7 +26,7 @@ use crate::{AgentOptions, AgentOutput, AgentProcess};
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 /// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
-pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
+pub(super) const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
 
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
@@ -107,7 +107,7 @@ struct Shared {
     exited: tokio::sync::watch::Sender<bool>,
 }
 
-pub struct ClaudeProcess {
+pub(super) struct ClaudeProcess {
     shared: Arc<Shared>,
 }
 
@@ -172,7 +172,7 @@ fn resolve_binary() -> Option<PathBuf> {
 
 fn is_executable(path: &std::path::Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 struct Launched {
@@ -226,7 +226,7 @@ pub fn write_pid_file(path: &Path, pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
@@ -303,7 +303,7 @@ async fn supervise(
         let _ = output.send(item).await;
     }
     use std::os::unix::process::ExitStatusExt;
-    let (code, signal) = status.map(|s| (s.code(), s.signal())).unwrap_or((None, None));
+    let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
@@ -330,12 +330,11 @@ fn classify_launch_failure(stderr: &[String]) -> Option<LaunchFailure> {
 }
 
 async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
-    match tokio::time::timeout(DRAIN_GRACE, &mut task).await {
-        Ok(result) => result.ok(),
-        Err(_) => {
-            task.abort();
-            None
-        }
+    if let Ok(result) = tokio::time::timeout(DRAIN_GRACE, &mut task).await {
+        result.ok()
+    } else {
+        task.abort();
+        None
     }
 }
 

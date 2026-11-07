@@ -3,21 +3,24 @@
 
 use std::sync::Arc;
 
-use gpui_kit::*;
+use gpui_kit::{
+    App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels,
+    SharedString, Size, Style, TextAlign, TextRun, Window, font, point, px, relative,
+};
 
-pub const LINE_HEIGHT: f32 = 17.0;
+pub(crate) const LINE_HEIGHT: f32 = 17.0;
 /// Keeps one very long line from costing more than the screen can show.
 const MAX_LINE_BYTES: usize = 2000;
 
 #[derive(Clone)]
-pub struct LogText {
+pub(crate) struct LogText {
     pub text: SharedString,
     /// The byte offset each line starts at.
     pub lines: Arc<Vec<u32>>,
 }
 
 impl LogText {
-    pub fn new(text: &str) -> Self {
+    pub(crate) fn new(text: &str) -> Self {
         let mut lines = vec![0u32];
         lines.extend(text.bytes().enumerate().filter(|(_, b)| *b == b'\n').map(|(i, _)| i as u32 + 1));
         Self { text: SharedString::from(text.to_string()), lines: Arc::new(lines) }
@@ -25,7 +28,7 @@ impl LogText {
 
     fn line(&self, index: usize) -> &str {
         let start = self.lines[index] as usize;
-        let end = self.lines.get(index + 1).map(|next| *next as usize - 1).unwrap_or(self.text.len());
+        let end = self.lines.get(index + 1).map_or(self.text.len(), |next| *next as usize - 1);
         let mut end = end.min(start + MAX_LINE_BYTES);
         while !self.text.is_char_boundary(end) {
             end -= 1;
@@ -34,7 +37,7 @@ impl LogText {
     }
 }
 
-pub struct LogBlock {
+pub(crate) struct LogBlock {
     pub log: LogText,
     pub color: Hsla,
     pub font: SharedString,
@@ -76,7 +79,7 @@ impl Element for LogBlock {
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
-        _: &mut (),
+        (): &mut (),
         _: &mut Window,
         _: &mut App,
     ) {
@@ -87,8 +90,8 @@ impl Element for LogBlock {
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        _: &mut (),
-        _: &mut (),
+        (): &mut (),
+        (): &mut (),
         window: &mut Window,
         cx: &mut App,
     ) {

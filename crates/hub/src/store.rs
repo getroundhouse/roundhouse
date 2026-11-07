@@ -18,7 +18,7 @@ use serde_json::Value;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 const MIGRATIONS: &[&str] = &[
-    r#"
+    r"
     CREATE TABLE repos (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -66,8 +66,8 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE UNIQUE INDEX events_client_msg ON events (session_id, client_msg_id) WHERE client_msg_id IS NOT NULL;
     CREATE INDEX events_by_kind ON events (session_id, kind);
-"#,
-    r#"
+",
+    r"
     CREATE TABLE diff_comments (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -78,15 +78,15 @@ const MIGRATIONS: &[&str] = &[
         created_at_ms INTEGER NOT NULL
     );
     CREATE INDEX diff_comments_by_workspace ON diff_comments (workspace_id, created_at_ms);
-"#,
+",
     r#"
     ALTER TABLE workspaces ADD COLUMN setup TEXT NOT NULL DEFAULT '{"state":"not_started"}';
     ALTER TABLE workspaces ADD COLUMN port_base INTEGER NOT NULL DEFAULT 0;
 "#,
-    r#"
+    r"
     ALTER TABLE sessions ADD COLUMN title TEXT;
     ALTER TABLE sessions ADD COLUMN closed_at_ms INTEGER;
-"#,
+",
 ];
 
 const FIRST_PORT_BASE: i64 = 55_000;
@@ -115,11 +115,11 @@ pub struct Appended {
 }
 
 pub fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
 fn lock(conn: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
-    conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    conn.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn internal(e: impl std::fmt::Display) -> ApiError {

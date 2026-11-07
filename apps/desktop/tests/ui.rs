@@ -134,7 +134,10 @@ impl<'a> Ui<'a> {
     }
 
     fn view(&self) -> AppViewRef<'_> {
-        AppViewRef(self.cx.read_entity(&self.view, |view, _| view as *const AppView), std::marker::PhantomData)
+        AppViewRef(
+            self.cx.read_entity(&self.view, |view, _| std::ptr::from_ref::<AppView>(view)),
+            std::marker::PhantomData,
+        )
     }
 
     /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket.

@@ -22,17 +22,16 @@ pub const MAX_SOCKET_PATH_BYTES: usize = 103;
 
 pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
     let home = env("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
-    let data_dir = match env(ENV_HOME).filter(|v| !v.is_empty()) {
-        Some(dir) => PathBuf::from(dir),
-        None => {
-            let home = home.clone().ok_or("HOME is not set")?;
-            if cfg!(target_os = "macos") {
-                home.join("Library/Application Support").join(DIR_NAME)
-            } else {
-                match env("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
-                    Some(dir) => PathBuf::from(dir).join(DIR_NAME),
-                    None => home.join(".local/share").join(DIR_NAME),
-                }
+    let data_dir = if let Some(dir) = env(ENV_HOME).filter(|v| !v.is_empty()) {
+        PathBuf::from(dir)
+    } else {
+        let home = home.clone().ok_or("HOME is not set")?;
+        if cfg!(target_os = "macos") {
+            home.join("Library/Application Support").join(DIR_NAME)
+        } else {
+            match env("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
+                Some(dir) => PathBuf::from(dir).join(DIR_NAME),
+                None => home.join(".local/share").join(DIR_NAME),
             }
         }
     };

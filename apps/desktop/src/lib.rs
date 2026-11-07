@@ -8,7 +8,10 @@ pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
 use gpui_kit::component::{Theme, ThemeMode};
-use gpui_kit::*;
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
+    actions, px, size,
+};
 
 actions!(
     trestle,

@@ -92,9 +92,10 @@ async fn read_login_path() -> Option<String> {
     let stdout = child.stdout.take()?;
     let out = tokio::time::timeout(LOGIN_SHELL_TIMEOUT, read_until_second_marker(stdout)).await.ok().flatten();
     let path = out.as_deref().and_then(parse_marked_path);
-    match &path {
-        Some(_) => debug!("read PATH from login shell {shell}"),
-        None => warn!("could not read PATH from login shell {shell}"),
+    if path.is_some() {
+        debug!("read PATH from login shell {shell}");
+    } else {
+        warn!("could not read PATH from login shell {shell}");
     }
     path
 }
@@ -199,7 +200,7 @@ fn merge_paths(login: Option<&str>, own: Option<&str>) -> Option<String> {
 
 #[async_trait]
 impl Provider for LocalProvider {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "local"
     }
 

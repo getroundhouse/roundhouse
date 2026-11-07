@@ -11,6 +11,7 @@
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::SharedString;
 use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
@@ -61,7 +62,7 @@ fn main() {
                     client.comment_add(&id, &path, protocol::model::DiffSide::New, line, text).unwrap();
                 }
             }
-            pane.update(cx, |p, cx| p.toggle_diff(cx));
+            pane.update(cx, WorkspacePane::toggle_diff);
         })
         .detach();
     });

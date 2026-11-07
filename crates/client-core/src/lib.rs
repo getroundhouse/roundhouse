@@ -431,14 +431,14 @@ fn read_frames(inner: Arc<Inner>, stream: UnixStream) {
                 }
             }
             HubFrame::Event { subscription_id, event } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Event(event))
+                deliver(&inner, subscription_id, SubscriptionItem::Event(event));
             }
             HubFrame::Tail { subscription_id, tail } => deliver(&inner, subscription_id, SubscriptionItem::Tail(tail)),
             HubFrame::Delta { subscription_id, delta } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Delta(delta))
+                deliver(&inner, subscription_id, SubscriptionItem::Delta(delta));
             }
             HubFrame::Notice { subscription_id, notice } => {
-                deliver(&inner, subscription_id, SubscriptionItem::Notice(notice))
+                deliver(&inner, subscription_id, SubscriptionItem::Notice(notice));
             }
         }
     }

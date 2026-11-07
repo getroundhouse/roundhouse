@@ -25,7 +25,7 @@ use crate::worker_link::WorkerLink;
 const LIVE_CAPACITY: usize = 4096;
 
 /// What arrives from a worker.
-pub enum Item {
+pub(crate) enum Item {
     Event {
         run: u64,
         body: EventBody,
@@ -38,7 +38,7 @@ pub enum Item {
     Flush(oneshot::Sender<()>),
 }
 
-pub enum Command {
+pub(crate) enum Command {
     Prompt { text: String, client_msg_id: Option<String>, reply: oneshot::Sender<Result<(Seq, bool), ApiError>> },
     Approve { approval_id: String, decision: ApprovalDecision, reply: oneshot::Sender<Result<(), ApiError>> },
     Cancel { reply: oneshot::Sender<Result<(), ApiError>> },
@@ -46,7 +46,7 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug)]
-pub enum LiveItem {
+pub(crate) enum LiveItem {
     /// The log now reaches this `seq`.
     Appended(Seq),
     Delta(StreamDelta),
@@ -55,12 +55,12 @@ pub enum LiveItem {
 /// `version` puts every change in one order, whichever task made it, so a subscriber can tell what
 /// a snapshot already includes.
 #[derive(Clone, Debug)]
-pub struct Live {
+pub(crate) struct Live {
     pub version: u64,
     pub item: LiveItem,
 }
 
-pub struct Snapshot {
+pub(crate) struct Snapshot {
     pub last_seq: Seq,
     pub tail: Tail,
     pub version: u64,
@@ -93,7 +93,7 @@ struct LiveState {
     live: Option<broadcast::Sender<Live>>,
 }
 
-pub struct LiveSession {
+pub(crate) struct LiveSession {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     agent: AgentKind,
@@ -114,7 +114,7 @@ pub struct LiveSession {
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
 /// its own, so `AgentState` is what says when the agent is really idle. `TurnEnded` also goes to
 /// idle, in case a future CLI stops sending it, and any state event after that corrects it.
-pub fn next_status(current: SessionStatus, body: &EventBody, approvals_left: usize) -> SessionStatus {
+pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_left: usize) -> SessionStatus {
     match body {
         EventBody::UserPrompt { .. } => SessionStatus::Running,
         EventBody::AgentState { state: AgentRunState::Running } => {
@@ -163,7 +163,7 @@ fn publish(state: &mut LiveState, item: LiveItem) {
 }
 
 impl LiveSession {
-    pub fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<String>) -> Arc<Self> {
+    pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<String>) -> Arc<Self> {
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {
@@ -202,31 +202,31 @@ impl LiveSession {
         self.hub.upgrade().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the hub is shutting down"))
     }
 
-    pub async fn command(&self, command: Command) -> Result<(), ApiError> {
+    pub(crate) async fn command(&self, command: Command) -> Result<(), ApiError> {
         self.commands.send(command).await.map_err(|_| ApiError::new(ErrorCode::Internal, "the session has stopped"))
     }
 
-    pub async fn send_item(&self, item: Item) {
+    pub(crate) async fn send_item(&self, item: Item) {
         if self.ingest.send(item).await.is_err() {
             warn!(session = self.id, "dropped worker output for a stopped session");
         }
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<Live> {
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<Live> {
         let mut state = self.state.lock().unwrap();
         state.live.get_or_insert_with(|| broadcast::channel(LIVE_CAPACITY).0).subscribe()
     }
 
-    pub fn snapshot(&self) -> Snapshot {
+    pub(crate) fn snapshot(&self) -> Snapshot {
         let state = self.state.lock().unwrap();
         Snapshot { last_seq: state.last_seq, tail: state.tail.clone(), version: state.version }
     }
 
-    pub fn status(&self) -> SessionStatus {
+    pub(crate) fn status(&self) -> SessionStatus {
         self.state.lock().unwrap().status
     }
 
-    pub fn agent_running(&self) -> bool {
+    pub(crate) fn agent_running(&self) -> bool {
         self.state.lock().unwrap().agent.is_some()
     }
 
@@ -312,7 +312,11 @@ impl LiveSession {
     }
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
-    pub async fn configure(&self, model: Option<String>, permission_mode: Option<String>) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(
+        &self,
+        model: Option<String>,
+        permission_mode: Option<String>,
+    ) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
@@ -349,7 +353,7 @@ impl LiveSession {
         self.announce(&hub);
     }
 
-    pub async fn close(&self) -> Result<Session, ApiError> {
+    pub(crate) async fn close(&self) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let closed_at = store::now_ms();
         let id = self.id.clone();
@@ -364,7 +368,7 @@ impl LiveSession {
         Ok(self.announce(&hub))
     }
 
-    pub async fn reopen(&self) -> Result<Session, ApiError> {
+    pub(crate) async fn reopen(&self) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let id = self.id.clone();
         hub.blocking(move |store| store.set_session_closed(&id, None)).await?;

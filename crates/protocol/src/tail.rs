@@ -81,16 +81,15 @@ impl Tail {
             self.messages.retain(|m| m.message_id != delta.message_id);
             return;
         }
-        let message = match self.messages.iter().position(|m| m.message_id == delta.message_id) {
-            Some(i) => &mut self.messages[i],
-            None => {
-                self.messages.push(TailMessage {
-                    message_id: delta.message_id.clone(),
-                    parent_tool_use_id: delta.parent_tool_use_id.clone(),
-                    blocks: Vec::new(),
-                });
-                self.messages.last_mut().expect("just pushed")
-            }
+        let message = if let Some(i) = self.messages.iter().position(|m| m.message_id == delta.message_id) {
+            &mut self.messages[i]
+        } else {
+            self.messages.push(TailMessage {
+                message_id: delta.message_id.clone(),
+                parent_tool_use_id: delta.parent_tool_use_id.clone(),
+                blocks: Vec::new(),
+            });
+            self.messages.last_mut().expect("just pushed")
         };
         match &delta.change {
             DeltaChange::BlockStart { index, kind, tool_name } => {
@@ -100,10 +99,10 @@ impl Tail {
             }
             DeltaChange::Text { index, text } => block_mut(message, *index, BlockKind::Text).text.push_str(text),
             DeltaChange::Thinking { index, text } => {
-                block_mut(message, *index, BlockKind::Thinking).text.push_str(text)
+                block_mut(message, *index, BlockKind::Thinking).text.push_str(text);
             }
             DeltaChange::ToolInput { index, json } => {
-                block_mut(message, *index, BlockKind::ToolUse).text.push_str(json)
+                block_mut(message, *index, BlockKind::ToolUse).text.push_str(json);
             }
             DeltaChange::MessageStop | DeltaChange::Unknown => {}
         }
@@ -127,12 +126,11 @@ impl Tail {
 }
 
 fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut TailBlock {
-    match message.blocks.iter().position(|b| b.index == index) {
-        Some(i) => &mut message.blocks[i],
-        None => {
-            message.blocks.push(TailBlock { index, kind, tool_name: None, text: String::new() });
-            message.blocks.last_mut().expect("just pushed")
-        }
+    if let Some(i) = message.blocks.iter().position(|b| b.index == index) {
+        &mut message.blocks[i]
+    } else {
+        message.blocks.push(TailBlock { index, kind, tool_name: None, text: String::new() });
+        message.blocks.last_mut().expect("just pushed")
     }
 }
 

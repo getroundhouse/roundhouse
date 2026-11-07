@@ -10,7 +10,10 @@ use gpui_kit::base::SelectableText;
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{
+    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+};
 use protocol::event::{
     ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome,
 };
@@ -66,7 +69,7 @@ pub(crate) fn render_row(
                 m.fetch_scheduled = true;
                 let this = this.clone();
                 cx.defer(move |cx| {
-                    let _ = this.update(cx, |t, cx| t.fetch_wanted(cx));
+                    let _ = this.update(cx, Transcript::fetch_wanted);
                 });
             }
             // A guess at the height. The list keeps its anchor when the real one arrives.
@@ -258,7 +261,7 @@ fn output(id: ElementId, text: &str, is_error: bool, cx: &App) -> AnyElement {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn disclosure(
     id: ElementId,
     label: &str,
@@ -289,7 +292,7 @@ fn disclosure(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn approval_card(
     seq: Seq,
     approval_id: &str,
@@ -302,7 +305,7 @@ fn approval_card(
 ) -> AnyElement {
     use gpui_kit::component::button::{Button, ButtonVariants as _};
     let theme = cx.theme();
-    let summary = description.map(str::to_string).unwrap_or_else(|| summarize_input(input).to_string());
+    let summary = description.map_or_else(|| summarize_input(input).to_string(), str::to_string);
     let answer = |decision: ApprovalDecision| {
         let (this, approval_id) = (this.clone(), approval_id.to_string());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {

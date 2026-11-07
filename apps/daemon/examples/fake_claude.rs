@@ -17,7 +17,7 @@
 //!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
 //!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
 //!
-//! Conversations persist as files in $FAKE_CLAUDE_STATE. `--resume` fails if there isn't one and
+//! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
 
 use std::collections::VecDeque;
@@ -129,7 +129,7 @@ fn main() {
             None if eof => return,
             None => match input_rx.recv() {
                 Ok(Input::Prompt(text)) => text,
-                Ok(Input::Interrupt) | Ok(Input::Approval(_)) => continue,
+                Ok(Input::Interrupt | Input::Approval(_)) => continue,
                 Ok(Input::Eof) | Err(_) => return,
             },
         };
@@ -382,7 +382,7 @@ fn run_command(
     }
     if let Some(seconds) = command.strip_prefix("holdpipe:") {
         // Never waited on, because the point is that it outlives this process.
-        #[allow(clippy::zombie_processes)]
+        #[expect(clippy::zombie_processes)]
         std::process::Command::new("sleep")
             .arg(seconds)
             .stdin(std::process::Stdio::null())

@@ -3,7 +3,10 @@
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
+use gpui_kit::{
+    AnyElement, App, Context, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, div, px,
+};
 use protocol::model::{Session, SessionStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
@@ -61,7 +64,7 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
         )
 }
 
-pub fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (background, border, muted) = (theme.sidebar, theme.border, theme.muted_foreground);
     let visible = app.visible_workspaces();
