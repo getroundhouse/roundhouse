@@ -30,6 +30,10 @@ pub struct LocalConfig {
     /// One directory per instance, holding its worker's log.
     pub instances_dir: PathBuf,
     pub workspaces_root: PathBuf,
+    /// The user's shell, which has the real `PATH`. Found from the user's account if this is `None`.
+    pub shell: Option<String>,
+    /// This process's own `PATH`, which workers get as well as the login shell's.
+    pub path: Option<String>,
 }
 
 struct Running {
@@ -48,8 +52,9 @@ impl LocalProvider {
         let login_path = Arc::new(OnceCell::new());
         // Read it up front, so the first workspace doesn't pay for a slow shell startup.
         let early = login_path.clone();
+        let shell = config.shell.clone();
         tokio::spawn(async move {
-            early.get_or_init(read_login_path).await;
+            early.get_or_init(|| read_login_path(shell)).await;
         });
         Self { config, running: Mutex::new(HashMap::new()), login_path }
     }
@@ -77,8 +82,8 @@ impl LocalProvider {
 
 /// An app started from Finder gets a minimal `PATH`, without Homebrew or anything from the user's
 /// shell setup. The agent's tools need the real one, so ask the login shell for it.
-async fn read_login_path() -> Option<String> {
-    let shell = login_shell()?;
+async fn read_login_path(shell: Option<String>) -> Option<String> {
+    let shell = shell.or_else(account_shell)?;
     // rc files can print anything, so the value is marked. `printenv` works in every shell, which
     // matters for fish, where `$PATH` expands to a list.
     let script = format!("printf '{PATH_MARKER}'; printenv PATH; printf '{PATH_MARKER}'");
@@ -119,10 +124,7 @@ async fn read_until_second_marker<R: AsyncRead + Unpin>(mut reader: R) -> Option
     }
 }
 
-fn login_shell() -> Option<String> {
-    if let Some(shell) = std::env::var("SHELL").ok().filter(|s| !s.is_empty()) {
-        return Some(shell);
-    }
+fn account_shell() -> Option<String> {
     // SAFETY: getpwuid returns a pointer to static storage or null. The string is copied before
     // anything else can overwrite it, and this runs on one thread at a time in this process.
     unsafe {
@@ -218,8 +220,8 @@ impl Provider for LocalProvider {
             .open(dir.join("worker.log"))
             .context("opening the worker log")?;
 
-        let login = self.login_path.get_or_init(read_login_path).await;
-        let own = std::env::var("PATH").ok();
+        let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
+        let own = self.config.path.clone();
         let mut command = Command::new(&self.config.worker_exe);
         command
             .args(["worker", "--stdio", "--workspaces-root"])
@@ -296,7 +298,7 @@ mod tests {
     #[tokio::test]
     async fn the_login_shell_really_reports_a_path() {
         // Runs the real shell, so this also covers rc files that print to stdout.
-        let path = read_login_path().await;
+        let path = read_login_path(None).await;
         assert!(path.as_deref().is_some_and(|p| p.contains('/')), "got {path:?}");
     }
 
@@ -356,6 +358,8 @@ mod tests {
             worker_exe: "/nonexistent".into(),
             instances_dir: dir.path().join("instances"),
             workspaces_root: dir.path().join("workspaces"),
+            shell: None,
+            path: None,
         });
         provider.stop("nope").await.unwrap();
         provider.destroy("nope").await.unwrap();

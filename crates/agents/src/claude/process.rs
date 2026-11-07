@@ -24,12 +24,10 @@ use tokio::task::JoinHandle;
 use tracing::warn;
 
 use super::normalize::{Parsed, parse_line};
-use crate::{AgentOptions, AgentOutput, AgentProcess};
+use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup, ENV_CLAUDE_BIN};
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
-/// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
-pub(super) const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
 
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
@@ -119,7 +117,7 @@ pub fn spawn(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> anyhow::Result<Arc<dyn AgentProcess>> {
-    let bin = resolve_binary().ok_or_else(|| {
+    let bin = resolve_binary(&options.binary).ok_or_else(|| {
         anyhow::anyhow!("could not find the `claude` CLI. Install it, or set {ENV_CLAUDE_BIN} to its path")
     })?;
     spawn_at(bin, spec, output, options)
@@ -160,17 +158,15 @@ pub fn spawn_at(
 
 /// `PATH` first, then the places the installers use. A hub started from Finder may have neither
 /// `~/.local/bin` nor Homebrew on its `PATH`, and it may not be able to read the login shell's.
-fn resolve_binary() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os(ENV_CLAUDE_BIN).filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(path));
+fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
+    if let Some(path) = &lookup.explicit {
+        return Some(path.clone());
     }
-    let on_path = std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).map(|dir| dir.join("claude")).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let installed = home.iter().flat_map(|home| [home.join(".local/bin/claude"), home.join(".claude/local/claude")]);
+    let on_path = lookup.path.iter().flat_map(std::env::split_paths).map(|dir| dir.join("claude"));
+    let installed =
+        lookup.home.iter().flat_map(|home| [home.join(".local/bin/claude"), home.join(".claude/local/claude")]);
     let system = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].map(PathBuf::from);
-    on_path.into_iter().chain(installed).chain(system).find(|path| is_executable(path))
+    on_path.chain(installed).chain(system).find(|path| is_executable(path))
 }
 
 fn is_executable(path: &std::path::Path) -> bool {
@@ -575,8 +571,52 @@ impl AgentProcess for ClaudeProcess {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
     use super::*;
     use protocol::model::AgentKind;
+
+    fn executable(path: &std::path::Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[test]
+    fn a_named_binary_is_used_without_looking_anywhere_else() {
+        let lookup = BinaryLookup { explicit: Some("/nonexistent/claude".into()), path: None, home: None };
+
+        assert_eq!(resolve_binary(&lookup), Some(PathBuf::from("/nonexistent/claude")));
+    }
+
+    #[test]
+    fn the_path_is_searched_before_the_places_installers_use() {
+        let dir = tempfile::tempdir().unwrap();
+        let on_path = dir.path().join("bin/claude");
+        let installed = dir.path().join("home/.local/bin/claude");
+        executable(&installed);
+        let home = Some(dir.path().join("home"));
+        let path = Some(dir.path().join("bin").into_os_string());
+
+        let lookup = BinaryLookup { explicit: None, path: path.clone(), home: home.clone() };
+        assert_eq!(resolve_binary(&lookup), Some(installed), "nothing on the path yet");
+
+        executable(&on_path);
+        let lookup = BinaryLookup { explicit: None, path, home };
+        assert_eq!(resolve_binary(&lookup), Some(on_path));
+    }
+
+    #[test]
+    fn a_file_that_cant_be_run_is_not_the_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let not_runnable = dir.path().join("claude");
+        std::fs::write(&not_runnable, "").unwrap();
+        let path = Some(dir.path().as_os_str().to_owned());
+
+        let lookup = BinaryLookup { explicit: None, path, home: None };
+
+        assert_ne!(resolve_binary(&lookup), Some(not_runnable));
+    }
 
     fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
         AgentSpec {

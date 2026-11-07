@@ -3,6 +3,7 @@
 
 pub mod claude;
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -29,8 +30,23 @@ pub enum AgentOutput {
     },
 }
 
+/// Names the Claude CLI directly, for tests and unusual installs.
+pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
+
+/// Where to look for an agent's CLI. `main` reads these from the environment.
+#[derive(Clone, Debug, Default)]
+pub struct BinaryLookup {
+    /// Used as given, without looking anywhere else.
+    pub explicit: Option<PathBuf>,
+    /// The `PATH` to search, as the OS holds it.
+    pub path: Option<OsString>,
+    /// For the places the installers use under it.
+    pub home: Option<PathBuf>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AgentOptions {
+    pub binary: BinaryLookup,
     /// Records the running process, so something can stop it if this worker is killed. See
     /// `providers::local`. Removed when the process exits.
     pub pid_file: Option<PathBuf>,

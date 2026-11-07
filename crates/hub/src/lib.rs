@@ -36,6 +36,10 @@ pub struct HubConfig {
     pub paths: Paths,
     /// The binary that runs `worker --stdio`.
     pub worker_exe: PathBuf,
+    /// The user's shell, for finding the real `PATH`.
+    pub shell: Option<String>,
+    /// This process's own `PATH`.
+    pub path: Option<String>,
 }
 
 const LOCAL_PROVIDER: &str = "local";
@@ -894,6 +898,8 @@ pub async fn run(config: HubConfig) -> anyhow::Result<()> {
         worker_exe: config.worker_exe,
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
+        shell: config.shell,
+        path: config.path,
     }));
     for workspace in unfinished {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");

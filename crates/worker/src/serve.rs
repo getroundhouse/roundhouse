@@ -1,11 +1,12 @@
 //! The worker's main loop: one stream in from the hub, one stream out.
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use agents::{AgentOptions, AgentOutput, AgentProcess};
+use agents::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
@@ -26,6 +27,12 @@ pub struct Config {
     pub workspaces_root: PathBuf,
     /// Where to record running agents, so they can be found if this process is killed.
     pub state_dir: Option<PathBuf>,
+    /// Holds the user's own settings, and the places agent CLIs install to.
+    pub home: Option<PathBuf>,
+    /// Where to search for agent CLIs.
+    pub path: Option<OsString>,
+    /// An agent CLI to use without searching.
+    pub claude_bin: Option<PathBuf>,
 }
 
 struct RunningAgent {
@@ -261,10 +268,6 @@ fn stop_setup_script(state: &State) {
     }
 }
 
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
 async fn run_setup(
     state: &Arc<State>,
     repo: &str,
@@ -275,7 +278,7 @@ async fn run_setup(
     let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
     let _ = std::fs::remove_file(&log);
     let mut warnings = Vec::new();
-    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut warnings);
+    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut warnings);
     let copied = setup::copy_local_files(repo, worktree, &settings, &mut warnings).await;
     for file in &copied {
         setup::append_log(&log, &format!("Copied {file}"));
@@ -319,7 +322,7 @@ async fn run_archive_script(
     if !worktree.exists() {
         return Ok(WorkerResponse::Ok);
     }
-    let settings = setup::load_settings(repo, worktree, home_dir().as_deref(), &mut Vec::new());
+    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut Vec::new());
     let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
     let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
     setup::append_log(&log, "Running the archive script");
@@ -353,6 +356,11 @@ async fn start_agent(
     }
     let (tx, rx) = mpsc::channel(1024);
     let options = AgentOptions {
+        binary: BinaryLookup {
+            explicit: state.config.claude_bin.clone(),
+            path: state.config.path.clone(),
+            home: state.config.home.clone(),
+        },
         // Named by run, because a replaced agent removes its own file as it finishes, which can be
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),

@@ -95,7 +95,7 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let (tx, mut rx) = mpsc::channel(16);
     let pid_file = dir.path().join("agents/s.pid");
-    let options = AgentOptions { pid_file: Some(pid_file.clone()) };
+    let options = AgentOptions { pid_file: Some(pid_file.clone()), ..AgentOptions::default() };
     let agent = spawn_at(script(dir.path(), "exec sleep 100"), spec(dir.path()), tx, options).unwrap();
 
     let recorded = std::fs::read_to_string(&pid_file).unwrap();

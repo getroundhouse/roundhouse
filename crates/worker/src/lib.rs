@@ -4,4 +4,5 @@ pub mod git;
 mod serve;
 pub mod setup;
 
+pub use agents::ENV_CLAUDE_BIN;
 pub use serve::{Config, serve};
