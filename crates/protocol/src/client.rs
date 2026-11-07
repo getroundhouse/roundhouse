@@ -225,6 +225,16 @@ pub struct HubStatus {
     /// like this can be restarted from a client.
     #[serde(default)]
     pub on_demand: bool,
+    /// Which build it is, if it's one that has an order. See [`crate::BUILD_NUMBER`].
+    #[serde(default)]
+    pub build_number: Option<u64>,
+    /// Workspaces whose setup script is running.
+    #[serde(default)]
+    pub running_setups: u32,
+    /// Requests it's still working on, including the one asking. These carry on after their client has gone,
+    /// such as creating or archiving a workspace.
+    #[serde(default)]
+    pub requests: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

@@ -1,5 +1,6 @@
 //! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real
-//! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. It holds the
+//! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. With
+//! `--speaks-this-protocol` it takes a hello, as an older build would, and refuses anything else. It holds the
 //! same lock as a real hub.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
@@ -25,6 +26,12 @@ struct Args {
     /// Be on the far side of the break from this build, rather than the near side.
     #[arg(long)]
     newer: bool,
+    /// Take a hello, rather than being across a real break.
+    #[arg(long)]
+    speaks_this_protocol: bool,
+    /// Which build it says it is.
+    #[arg(long)]
+    build: Option<u64>,
 }
 
 fn reply(stream: &mut UnixStream, id: u64, outcome: ReplyOutcome) {
@@ -36,11 +43,20 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
         let Ok(line) = line else { return };
         let request: ClientFrame = protocol::frame::decode(line.as_bytes()).unwrap();
         match request.request {
+            ClientRequest::Hello { .. } if args.speaks_this_protocol => {
+                let hello = ClientResponse::Hello {
+                    protocol_version: protocol::PROTOCOL_VERSION,
+                    hub_version: "stand-in".to_string(),
+                };
+                reply(&mut stream, request.id, ReplyOutcome::Response(hello));
+            }
             ClientRequest::HubStatus => {
                 let status = HubStatus {
                     pid: std::process::id(),
                     hub_version: "from-before-the-break".to_string(),
-                    protocol_version: if args.newer {
+                    protocol_version: if args.speaks_this_protocol {
+                        protocol::PROTOCOL_VERSION
+                    } else if args.newer {
                         protocol::PROTOCOL_VERSION + 1
                     } else {
                         protocol::PROTOCOL_VERSION - 1
@@ -50,6 +66,9 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
                     running_sessions: args.running,
                     clients: 1,
                     on_demand: !args.not_on_demand,
+                    build_number: args.build,
+                    running_setups: 0,
+                    requests: 1,
                 };
                 reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::HubStatus(status)));
             }

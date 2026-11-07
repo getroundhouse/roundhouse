@@ -53,6 +53,7 @@ pub(crate) struct Hub {
     name_salt: AtomicU64,
     next_run: AtomicU64,
     pub(crate) clients: AtomicU32,
+    pub(crate) requests: AtomicU32,
 }
 
 fn not_ready(workspace: &Workspace) -> ApiError {
@@ -82,6 +83,7 @@ impl Hub {
             name_salt: AtomicU64::new(now_ms().cast_unsigned()),
             next_run: AtomicU64::new(1),
             clients: AtomicU32::new(0),
+            requests: AtomicU32::new(0),
         }
     }
 
@@ -224,6 +226,9 @@ impl Hub {
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
             on_demand: self.on_demand,
+            build_number: protocol::BUILD_NUMBER,
+            running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
+            requests: self.requests.load(Ordering::Relaxed),
         }
     }
 

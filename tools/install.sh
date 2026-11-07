@@ -34,7 +34,7 @@ report_hub() {
   status="$("$INSTALL_ROOT/current/trestle" hub status 2>&1 || true)"
   running="$(echo "$status" | awk '$1 == "pid" { print $4; exit }')"
   if [ -n "$running" ] && [ "$running" != "$version" ]; then
-    echo "The running hub is still $running. Stopping it stops its agents, and a new one starts when the app needs it:"
+    echo "The running hub is still $running. The app replaces an older one when it starts with nothing running. To stop it and its agents now:"
     echo "  \"$INSTALL_ROOT/current/trestle\" hub stop"
   elif [ -z "$running" ] && ! echo "$status" | grep -q "no hub"; then
     echo "$status"
@@ -52,16 +52,20 @@ make_current() {
 }
 
 install_this_commit() {
-  local allow_dirty=$1 version bin
+  local allow_dirty=$1 version number bin
   cd "$ROOT"
   version="$(git rev-parse --short=12 HEAD)"
+  # When the commit was made, so installing an older one can't replace a newer hub, whose database it might not
+  # be able to open.
+  number="$(git log -1 --format=%ct)"
   if [ -n "$(git status --porcelain)" ]; then
     [ "$allow_dirty" = yes ] || die "this checkout has uncommitted changes. Commit them, or use --allow-dirty"
     # Timestamped, because the same commit can be installed with different changes.
     version="$version-dirty-$(date +%Y%m%d%H%M%S)"
+    number="$(date +%s)"
   fi
   if [ ! -d "$INSTALL_ROOT/$version" ]; then
-    TRESTLE_BUILD="$version" cargo build --release --locked -p desktop -p daemon -p cli --bins
+    TRESTLE_BUILD="$version" TRESTLE_BUILD_NUMBER="$number" cargo build --release --locked -p desktop -p daemon -p cli --bins
     mkdir -p "$INSTALL_ROOT"
     # Not local, because the trap outlives this function if anything fails.
     tmp="$(mktemp -d "$INSTALL_ROOT/.installing.XXXXXX")"

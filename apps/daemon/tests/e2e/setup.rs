@@ -84,6 +84,42 @@ fn a_failed_setup_warns_once_and_leaves_the_workspace_usable() {
     assert_eq!(warnings, 1);
 }
 
+/// The app won't replace a hub that says this, since restarting would cut the script off.
+#[test]
+fn a_hub_reports_a_setup_for_as_long_as_it_runs() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"touch started.txt; sleep 60\"\n");
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    let worktree = PathBuf::from(workspace.path.clone().unwrap());
+    wait_until("the script to start", || worktree.join("started.txt").exists());
+
+    assert_eq!(client.hub_status().unwrap().running_setups, 1);
+
+    client.session_cancel(&session.id).unwrap();
+    wait_until("the hub to stop reporting it", || client.hub_status().unwrap().running_setups == 0);
+}
+
+/// Archiving carries on after its client has gone, so the app won't replace a hub that says this.
+#[test]
+fn a_hub_reports_a_request_for_as_long_as_it_works_on_it() {
+    let stack = Stack::start();
+    let marker = stack.path("archive-started");
+    commit_settings(&stack, &format!("[scripts]\narchive = \"touch {}; sleep 2\"\n", marker.display()));
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    assert_eq!(client.hub_status().unwrap().requests, 1, "only this request");
+
+    let archiving = stack.client();
+    let id = workspace.id.clone();
+    let archive = std::thread::spawn(move || archiving.workspace_archive(&id, true));
+    wait_until("the archive script to start", || marker.exists());
+
+    assert_eq!(client.hub_status().unwrap().requests, 2);
+    archive.join().unwrap().unwrap();
+    assert_eq!(client.hub_status().unwrap().requests, 1);
+}
+
 #[test]
 fn stopping_interrupts_a_running_setup_and_it_can_be_run_again() {
     let stack = Stack::start();

@@ -93,7 +93,7 @@ impl Stack {
             other => std::env::var(other).ok(),
         })
         .unwrap();
-        let hub = HubSource { paths, daemon: binaries().join("trestled") };
+        let hub = HubSource { paths, daemon: binaries().join("trestled"), build_number: None };
         Self { dir, hub }
     }
 
@@ -101,7 +101,7 @@ impl Stack {
         self.dir.path().join("repo")
     }
 
-    /// A hub across a real break from this build, as `examples/stand_in_hub` describes.
+    /// A hub of another build, as `examples/stand_in_hub` describes.
     pub(crate) fn start_stand_in_hub(&self, args: &[&str]) -> StandInHub {
         let hub = Command::new(binaries().join("examples/stand_in_hub"))
             .args(args)
@@ -114,8 +114,8 @@ impl Stack {
             .unwrap();
         let hub = StandInHub(hub);
         let deadline = Instant::now() + TIMEOUT;
-        while !Client::connect(&self.hub.paths.socket, "test").err().is_some_and(|e| e.is_version_mismatch()) {
-            assert!(Instant::now() < deadline, "timed out waiting for it to refuse a client");
+        while client_core::HubAdmin::connect(&self.hub.paths.socket).is_err() {
+            assert!(Instant::now() < deadline, "timed out waiting for it to listen");
             std::thread::sleep(Duration::from_millis(10));
         }
         hub

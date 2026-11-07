@@ -152,7 +152,7 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 
 ## Managing a hub
 
-Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. This is the agreed direction. So far, a client starts a hub if there's none, a hub refuses a request it doesn't know, and the app can restart a local on-demand hub across a real break. Nothing updates a hub by itself yet, so otherwise it stays on its version until someone stops it.
+Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. This is the agreed direction. Most of it is built for a local hub. Two parts aren't: replacing a hub while the app stays open waits on keeping drafts (#42), so for now it happens when the app connects, and hiding a feature an older hub lacks has nothing to hide yet.
 
 | | Local hub started on demand | A hub you run yourself, here or on a server | Hosted, if one is ever run |
 |---|---|---|---|
@@ -169,7 +169,7 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 For someone with the desktop app, an update should look like this:
 
 1. The app updates and relaunches. Everything shows as before, and running agents keep going on the old hub.
-2. If nothing is running, the app replaces the hub right away. Otherwise it waits until nothing is, or until the next launch.
+2. If nothing is running and no other client is connected, the app replaces the hub right away. Otherwise it waits until the next launch.
 3. Only a real protocol break shows a screen, with how many agents are running and a way to restart the hub.
 
 Workers that outlive their hub would remove the wait, as "When a process dies" describes.
