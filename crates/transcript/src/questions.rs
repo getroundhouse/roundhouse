@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, ElementId, IntoElement, ParentElement, Styled, WeakEntity, div};
+use gpui_kit::{AnyElement, App, ElementId, Hsla, IntoElement, ParentElement, Styled, WeakEntity, div};
 use protocol::event::ApprovalDecision;
 use protocol::model::Seq;
 use serde_json::Value;
@@ -81,6 +81,114 @@ pub(crate) fn first_unanswered<'a>(
     asked.iter().find(|question| picks.get(&question.text).is_none_or(std::vec::Vec::is_empty))
 }
 
+/// Which card this is, and what its buttons act on.
+struct CardContext<'a> {
+    seq: Seq,
+    approval_id: &'a str,
+    open: bool,
+    only_question: bool,
+    this: &'a WeakEntity<Transcript>,
+}
+
+fn option_button(
+    card: &CardContext<'_>,
+    q: usize,
+    o: usize,
+    question: &Question,
+    option: &QuestionOption,
+    selected: bool,
+    muted: Hsla,
+) -> AnyElement {
+    let (seq, only_question) = (card.seq, card.only_question);
+    let (this, approval_id, question, label) =
+        (card.this.clone(), card.approval_id.to_string(), question.clone(), option.label.clone());
+    Button::new(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
+        .small()
+        // It's two lines, which is more than a small button's fixed height.
+        .h_auto()
+        .selected(selected)
+        .on_click(move |_, _, cx| {
+            let _ = this.update(cx, |t, cx| {
+                t.pick_answer(seq, approval_id.clone(), &question, label.clone(), only_question, cx);
+            });
+        })
+        .child(
+            v_flex()
+                .items_start()
+                .py_1()
+                .child(option.label.clone())
+                .when_some(option.description.clone(), |d, description| {
+                    d.child(div().text_xs().text_color(muted).child(description))
+                }),
+        )
+        .into_any_element()
+}
+
+fn question_view(
+    card: &CardContext<'_>,
+    q: usize,
+    question: &Question,
+    chosen: Option<&Vec<String>>,
+    muted: Hsla,
+) -> AnyElement {
+    let typed = chosen
+        .into_iter()
+        .flatten()
+        .filter(|pick| !question.options.iter().any(|option| option.label == **pick))
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let options: Vec<AnyElement> = question
+        .options
+        .iter()
+        .enumerate()
+        .map(|(o, option)| {
+            let selected = chosen.is_some_and(|labels| labels.contains(&option.label));
+            option_button(card, q, o, question, option, selected, muted)
+        })
+        .collect();
+    v_flex()
+        .w_full()
+        .gap_1()
+        .when_some(question.header.clone(), |d, header| d.child(div().text_xs().text_color(muted).child(header)))
+        .child(div().text_sm().child(question.text.clone()))
+        .when(card.open && !options.is_empty(), |d| d.child(h_flex().flex_wrap().gap_2().children(options)))
+        .when(card.open && !typed.is_empty(), |d| {
+            d.child(div().text_xs().text_color(muted).child(format!("Your answer: {typed}")))
+        })
+        .into_any_element()
+}
+
+fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, muted: Hsla) -> impl IntoElement {
+    let seq = card.seq;
+    let (to_send, to_skip) = (card.approval_id.to_string(), card.approval_id.to_string());
+    let (send, skip) = (card.this.clone(), card.this.clone());
+    h_flex()
+        .w_full()
+        .gap_2()
+        .child(div().flex_1().min_w_0().text_xs().text_color(muted).child("Or type your own answer below."))
+        .child(
+            Button::new(ElementId::Name(format!("skip-question-{seq}").into())).small().ghost().label("Skip").on_click(
+                move |_, _, cx| {
+                    let decision = ApprovalDecision::Deny { message: SKIPPED.to_string(), interrupt: false };
+                    let _ = skip.update(cx, |t, cx| t.answer_approval(to_skip.clone(), decision, cx));
+                },
+            ),
+        )
+        .when(needs_send, |d| {
+            d.child(
+                Button::new(ElementId::Name(format!("send-answers-{seq}").into()))
+                    .small()
+                    .primary()
+                    .disabled(!ready)
+                    .label("Send answers")
+                    .on_click(move |_, _, cx| {
+                        let _ = send.update(cx, |t, cx| t.send_answers(to_send.clone(), cx));
+                    }),
+            )
+        })
+}
+
 pub(crate) fn card(
     seq: Seq,
     approval_id: &str,
@@ -96,109 +204,27 @@ pub(crate) fn card(
     let only_question = asked.len() == 1;
     let needs_send = !only_question || asked.iter().any(|q| q.multiple);
     let ready = first_unanswered(&asked, picks).is_none();
+    let context = CardContext { seq, approval_id, open, only_question, this };
     let rendered: Vec<AnyElement> = asked
         .iter()
         .enumerate()
-        .map(|(q, question)| {
-            let chosen = picks.get(&question.text);
-            let typed = chosen
-                .into_iter()
-                .flatten()
-                .filter(|pick| !question.options.iter().any(|option| option.label == **pick))
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ");
-            let options: Vec<AnyElement> = question
-                .options
-                .iter()
-                .enumerate()
-                .map(|(o, option)| {
-                    let selected = chosen.is_some_and(|labels| labels.contains(&option.label));
-                    let (this, approval_id, question, label) =
-                        (this.clone(), approval_id.to_string(), question.clone(), option.label.clone());
-                    Button::new(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
-                        .small()
-                        // It's two lines, which is more than a small button's fixed height.
-                        .h_auto()
-                        .selected(selected)
-                        .on_click(move |_, _, cx| {
-                            let _ = this.update(cx, |t, cx| {
-                                t.pick_answer(seq, approval_id.clone(), &question, label.clone(), only_question, cx);
-                            });
-                        })
-                        .child(
-                            v_flex()
-                                .items_start()
-                                .py_1()
-                                .child(option.label.clone())
-                                .when_some(option.description.clone(), |d, description| {
-                                    d.child(div().text_xs().text_color(muted).child(description))
-                                }),
-                        )
-                        .into_any_element()
-                })
-                .collect();
-            v_flex()
-                .w_full()
-                .gap_1()
-                .when_some(question.header.clone(), |d, header| {
-                    d.child(div().text_xs().text_color(muted).child(header))
-                })
-                .child(div().text_sm().child(question.text.clone()))
-                .when(open && !options.is_empty(), |d| d.child(h_flex().flex_wrap().gap_2().children(options)))
-                .when(open && !typed.is_empty(), |d| {
-                    d.child(div().text_xs().text_color(muted).child(format!("Your answer: {typed}")))
-                })
-                .into_any_element()
-        })
+        .map(|(q, question)| question_view(&context, q, question, picks.get(&question.text), muted))
         .collect();
-    let (to_send, to_skip) = (approval_id.to_string(), approval_id.to_string());
-    let (send, skip) = (this.clone(), this.clone());
     div()
         .w_full()
         .px_4()
         .py_1()
-        .child(v_flex().w_full().p_3().gap_3().rounded_lg().border_1().border_color(border).children(rendered).when(
-            open,
-            |d| {
-                d.child(
-                    h_flex()
-                        .w_full()
-                        .gap_2()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_xs()
-                                .text_color(muted)
-                                .child("Or type your own answer below."),
-                        )
-                        .child(
-                            Button::new(ElementId::Name(format!("skip-question-{seq}").into()))
-                                .small()
-                                .ghost()
-                                .label("Skip")
-                                .on_click(move |_, _, cx| {
-                                    let decision =
-                                        ApprovalDecision::Deny { message: SKIPPED.to_string(), interrupt: false };
-                                    let _ = skip.update(cx, |t, cx| t.answer_approval(to_skip.clone(), decision, cx));
-                                }),
-                        )
-                        .when(needs_send, |d| {
-                            d.child(
-                                Button::new(ElementId::Name(format!("send-answers-{seq}").into()))
-                                    .small()
-                                    .primary()
-                                    .disabled(!ready)
-                                    .label("Send answers")
-                                    .on_click(move |_, _, cx| {
-                                        let _ = send.update(cx, |t, cx| t.send_answers(to_send.clone(), cx));
-                                    }),
-                            )
-                        }),
-                )
-            },
-        ))
+        .child(
+            v_flex()
+                .w_full()
+                .p_3()
+                .gap_3()
+                .rounded_lg()
+                .border_1()
+                .border_color(border)
+                .children(rendered)
+                .when(open, |d| d.child(card_actions(&context, needs_send, ready, muted))),
+        )
         .into_any_element()
 }
 

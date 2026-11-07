@@ -8,7 +8,7 @@ use client_core::{Client, ClientError, SubscriptionItem};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Hsla, InteractiveElement, IntoElement,
+    AnyElement, AnyWindowHandle, AppContext, Context, Div, Entity, FocusHandle, Hsla, InteractiveElement, IntoElement,
     ParentElement, PathPromptOptions, PromptLevel, Render, Result, StatefulInteractiveElement, Styled, Task, Window,
     div,
 };
@@ -481,88 +481,91 @@ impl Render for AppView {
                 None => centered("Create a workspace to get started.", muted),
             },
         };
-        h_flex()
+        with_actions(h_flex(), cx)
             .id("app")
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
             .text_color(foreground)
-            .on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
-                if let Some(repo) = t.current_repo() {
-                    t.new_workspace(repo, cx);
-                }
-            }))
-            .on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
-            .on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
-            .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
-            .on_action(cx.listener(|t, _: &ToggleDiff, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, WorkspacePane::toggle_diff);
-                }
-            }))
-            .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, WorkspacePane::create_pull_request);
-                }
-            }))
-            .on_action(cx.listener(|t, _: &NewChat, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, WorkspacePane::new_chat);
-                }
-            }))
-            .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| {
-                        if let Some(id) = p.active.clone() {
-                            p.close_chat(id, window, cx);
-                        }
-                    });
-                }
-            }))
-            .on_action(cx.listener(|t, _: &NextChat, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.step_chat(1, cx));
-                }
-            }))
-            .on_action(cx.listener(|t, _: &PreviousChat, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, |p, cx| p.step_chat(-1, cx));
-                }
-            }))
-            .on_action(cx.listener(|t, _: &StopAgent, _, cx| {
-                if let Some(pane) = t.selected_pane() {
-                    pane.update(cx, WorkspacePane::stop_agent);
-                }
-            }))
             .child(crate::sidebar::render(self, cx))
             .child(
                 v_flex()
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .when_some(self.error.clone(), |d, error| {
-                        d.child(
-                            h_flex()
-                                .id("error-bar")
-                                .flex_none()
-                                .px_3()
-                                .py_2()
-                                .gap_2()
-                                .bg(danger.opacity(0.15))
-                                .text_sm()
-                                .text_color(danger)
-                                .cursor_pointer()
-                                .on_click(cx.listener(|t, _, _, cx| {
-                                    t.error = None;
-                                    cx.notify();
-                                }))
-                                .child(div().flex_1().min_w_0().child(error))
-                                .child(div().flex_none().child("Dismiss")),
-                        )
-                    })
+                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
                     .child(div().flex_1().min_h_0().child(main)),
             )
     }
+}
+
+fn with_actions(root: Div, cx: &mut Context<AppView>) -> Div {
+    root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
+        if let Some(repo) = t.current_repo() {
+            t.new_workspace(repo, cx);
+        }
+    }))
+    .on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
+    .on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
+    .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
+    .on_action(cx.listener(|t, _: &ToggleDiff, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, WorkspacePane::toggle_diff);
+        }
+    }))
+    .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, WorkspacePane::create_pull_request);
+        }
+    }))
+    .on_action(cx.listener(|t, _: &NewChat, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, WorkspacePane::new_chat);
+        }
+    }))
+    .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, |p, cx| {
+                if let Some(id) = p.active.clone() {
+                    p.close_chat(id, window, cx);
+                }
+            });
+        }
+    }))
+    .on_action(cx.listener(|t, _: &NextChat, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, |p, cx| p.step_chat(1, cx));
+        }
+    }))
+    .on_action(cx.listener(|t, _: &PreviousChat, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, |p, cx| p.step_chat(-1, cx));
+        }
+    }))
+    .on_action(cx.listener(|t, _: &StopAgent, _, cx| {
+        if let Some(pane) = t.selected_pane() {
+            pane.update(cx, WorkspacePane::stop_agent);
+        }
+    }))
+}
+
+fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+    h_flex()
+        .id("error-bar")
+        .flex_none()
+        .px_3()
+        .py_2()
+        .gap_2()
+        .bg(danger.opacity(0.15))
+        .text_sm()
+        .text_color(danger)
+        .cursor_pointer()
+        .on_click(cx.listener(|t, _, _, cx| {
+            t.error = None;
+            cx.notify();
+        }))
+        .child(div().flex_1().min_w_0().child(error))
+        .child(div().flex_none().child("Dismiss"))
 }
 
 fn centered(text: &str, color: Hsla) -> AnyElement {

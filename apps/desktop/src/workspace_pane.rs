@@ -9,7 +9,7 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, AnyWindowHandle, AppContext, Context, ElementId, Entity, EventEmitter, FontWeight,
+    Anchor, AnyElement, AnyWindowHandle, App, AppContext, Context, ElementId, Entity, EventEmitter, FontWeight,
     InteractiveElement, IntoElement, ParentElement, PromptLevel, Render, Result, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
 };
@@ -555,56 +555,59 @@ impl WorkspacePane {
         });
     }
 
+    fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let selected = self.active.as_ref() == Some(&session.id);
+        let dot = crate::sidebar::status_color(Some(session.status), cx);
+        let (to_show, to_close) = (session.id.clone(), session.id.clone());
+        h_flex()
+            .flex_none()
+            .max_w(px(220.))
+            .child(
+                Button::new(ElementId::Name(format!("chat-{}", session.id).into()))
+                    .ghost()
+                    .xsmall()
+                    .flex_1()
+                    .min_w_0()
+                    .selected(selected)
+                    .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .gap_2()
+                            .when(!selected, |d| d.text_color(muted))
+                            .child(div().flex_none().size_2().rounded_full().bg(dot))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .child(title),
+                            ),
+                    ),
+            )
+            .child(
+                Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Close)
+                    .tooltip("Close chat")
+                    .on_click(cx.listener(move |t, _, window, cx| t.close_chat(to_close.clone(), window, cx))),
+            )
+            .into_any_element()
+    }
+
     /// One tab for each open chat, then a way to start another, and any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (border, muted) = (theme.border, theme.muted_foreground);
+        let border = theme.border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
         let tabs: Vec<AnyElement> = numbered
             .iter()
             .filter(|(_, s)| s.closed_at_ms.is_none())
-            .map(|(index, session)| {
-                let selected = self.active.as_ref() == Some(&session.id);
-                let dot = crate::sidebar::status_color(Some(session.status), cx);
-                let (to_show, to_close) = (session.id.clone(), session.id.clone());
-                h_flex()
-                    .flex_none()
-                    .max_w(px(220.))
-                    .child(
-                        Button::new(ElementId::Name(format!("chat-{}", session.id).into()))
-                            .ghost()
-                            .xsmall()
-                            .flex_1()
-                            .min_w_0()
-                            .selected(selected)
-                            .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
-                            .child(
-                                h_flex()
-                                    .w_full()
-                                    .gap_2()
-                                    .when(!selected, |d| d.text_color(muted))
-                                    .child(div().flex_none().size_2().rounded_full().bg(dot))
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(chat_title(session, index + 1)),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
-                            .ghost()
-                            .xsmall()
-                            .icon(IconName::Close)
-                            .tooltip("Close chat")
-                            .on_click(cx.listener(move |t, _, window, cx| t.close_chat(to_close.clone(), window, cx))),
-                    )
-                    .into_any_element()
-            })
+            .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx))
             .collect();
         let closed: Vec<(SessionId, String)> = numbered
             .iter()
@@ -762,15 +765,61 @@ impl WorkspacePane {
     }
 }
 
+impl WorkspacePane {
+    fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let working = self.session().is_some_and(is_working);
+        h_flex()
+            .flex_none()
+            .w_full()
+            .items_end()
+            .px_3()
+            .pt_3()
+            .pb_1()
+            .gap_2()
+            .border_t_1()
+            .border_color(cx.theme().border)
+            .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer)))
+            .child(if working {
+                Button::new("stop")
+                    .label("Stop")
+                    .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
+                    .into_any_element()
+            } else {
+                Button::new("send")
+                    .primary()
+                    .label("Send")
+                    .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
+                    .into_any_element()
+            })
+    }
+}
+
+fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
+    div()
+        .id("setup-log-text")
+        .flex_none()
+        .w_full()
+        .max_h(px(220.))
+        .overflow_y_scroll()
+        .px_3()
+        .py_2()
+        .border_t_1()
+        .border_color(cx.theme().border)
+        .font_family("Menlo")
+        .text_size(px(12.))
+        .text_color(cx.theme().muted_foreground)
+        .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
+}
+
 impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let working = self.session().is_some_and(is_working);
         let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
         let setup_line = self.setup_line(cx);
         let header = self.header(cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let pickers = self.pickers(cx).into_any_element();
+        let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
         let diff = if self.diff_open { self.diff.clone() } else { None };
@@ -786,59 +835,14 @@ impl Render for WorkspacePane {
                         .h_full()
                         .child(tabs)
                         .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
-                        .when_some(log, |d, text| {
-                            d.child(
-                                div()
-                                    .id("setup-log-text")
-                                    .flex_none()
-                                    .w_full()
-                                    .max_h(px(220.))
-                                    .overflow_y_scroll()
-                                    .px_3()
-                                    .py_2()
-                                    .border_t_1()
-                                    .border_color(border)
-                                    .font_family("Menlo")
-                                    .text_size(px(12.))
-                                    .text_color(muted)
-                                    .child(SharedString::from(if text.is_empty() {
-                                        "Nothing yet.".to_string()
-                                    } else {
-                                        text
-                                    })),
-                            )
-                        })
+                        .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
                         .children(setup_line)
                         .when(interrupted, |d| {
                             d.child(div().flex_none().w_full().px_3().py_1().text_xs().text_color(muted).child(
                                 "The agent stopped before it finished. Send a message to pick up where it left off.",
                             ))
                         })
-                        .child(
-                            h_flex()
-                                .flex_none()
-                                .w_full()
-                                .items_end()
-                                .px_3()
-                                .pt_3()
-                                .pb_1()
-                                .gap_2()
-                                .border_t_1()
-                                .border_color(border)
-                                .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer)))
-                                .child(if working {
-                                    Button::new("stop")
-                                        .label("Stop")
-                                        .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
-                                        .into_any_element()
-                                } else {
-                                    Button::new("send")
-                                        .primary()
-                                        .label("Send")
-                                        .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
-                                        .into_any_element()
-                                }),
-                        )
+                        .child(composer)
                         .child(pickers),
                 )
                 .when_some(diff, |d, diff| {

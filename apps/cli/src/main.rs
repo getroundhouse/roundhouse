@@ -195,54 +195,9 @@ fn run(args: Args) -> anyhow::Result<()> {
     let client = connect(&paths)?;
     match args.command {
         Cmd::Hub(_) => unreachable!("handled above"),
-        Cmd::Repo(RepoCmd::Add { path }) => {
-            let absolute = std::path::absolute(&path).with_context(|| format!("resolving {path}"))?;
-            let repo = client.repo_add(&absolute.to_string_lossy())?;
-            println!("{}  {}", repo.name, repo.path);
-        }
-        Cmd::Repo(RepoCmd::List) => {
-            for repo in client.repo_list()? {
-                println!("{}  {}  {}", short(&repo.id), repo.name, repo.path);
-            }
-        }
+        Cmd::Repo(command) => repo_command(&client, command)?,
         Cmd::Workspace(command) => workspace_command(&client, command)?,
-        Cmd::Session(SessionCmd::New { workspace, model, permission_mode }) => {
-            let workspace = find_workspace(&client, &workspace)?;
-            let session = client.session_create(&workspace.id, AgentKind::Claude, model, permission_mode)?;
-            println!("{}", session.id);
-        }
-        Cmd::Session(SessionCmd::List { workspace }) => {
-            let workspace = find_workspace(&client, &workspace)?;
-            for session in client.session_list(&workspace.id)? {
-                let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
-                println!(
-                    "{}  {:?}{closed}  {} events  model={} mode={}  {}",
-                    short(&session.id),
-                    session.status,
-                    session.last_seq,
-                    session.model.as_deref().unwrap_or("-"),
-                    session.permission_mode.as_deref().unwrap_or("-"),
-                    session.title.as_deref().unwrap_or(""),
-                );
-            }
-        }
-        Cmd::Session(SessionCmd::Set { session, model, permission_mode }) => {
-            let session = find_session(&client, &session)?;
-            let session = client.session_configure(&session.id, model, permission_mode)?;
-            println!(
-                "model={} mode={}",
-                session.model.as_deref().unwrap_or("-"),
-                session.permission_mode.as_deref().unwrap_or("-")
-            );
-        }
-        Cmd::Session(SessionCmd::Close { session }) => {
-            let session = find_session(&client, &session)?;
-            client.session_close(&session.id)?;
-        }
-        Cmd::Session(SessionCmd::Reopen { session }) => {
-            let session = find_session(&client, &session)?;
-            client.session_reopen(&session.id)?;
-        }
+        Cmd::Session(command) => session_command(&client, command)?,
         Cmd::Send { session, prompt, no_follow, client_msg_id } => {
             let session = find_session(&client, &session)?;
             // Generated here rather than left to the hub, so a retry of this exact send is safe.
@@ -259,18 +214,7 @@ fn run(args: Args) -> anyhow::Result<()> {
             let session = find_session(&client, &session)?;
             follow(&client, &session.id, from, until_idle, json)?;
         }
-        Cmd::Log { session, from, limit, raw } => {
-            let session = find_session(&client, &session)?;
-            let (events, _) = client.session_read(&session.id, from, limit, raw)?;
-            let mut printer = render::Printer::default();
-            for event in events {
-                if raw {
-                    println!("{}", serde_json::to_string(&event)?);
-                } else {
-                    printer.event(&event);
-                }
-            }
-        }
+        Cmd::Log { session, from, limit, raw } => print_log(&client, &session, from, limit, raw)?,
         Cmd::Approve { session, approval_id, deny } => {
             let session = find_session(&client, &session)?;
             let decision = match deny {
@@ -287,6 +231,79 @@ fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Cancel { session } => {
             let session = find_session(&client, &session)?;
             client.session_cancel(&session.id)?;
+        }
+    }
+    Ok(())
+}
+
+fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
+    match command {
+        RepoCmd::Add { path } => {
+            let absolute = std::path::absolute(&path).with_context(|| format!("resolving {path}"))?;
+            let repo = client.repo_add(&absolute.to_string_lossy())?;
+            println!("{}  {}", repo.name, repo.path);
+        }
+        RepoCmd::List => {
+            for repo in client.repo_list()? {
+                println!("{}  {}  {}", short(&repo.id), repo.name, repo.path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn session_command(client: &Client, command: SessionCmd) -> anyhow::Result<()> {
+    match command {
+        SessionCmd::New { workspace, model, permission_mode } => {
+            let workspace = find_workspace(client, &workspace)?;
+            let session = client.session_create(&workspace.id, AgentKind::Claude, model, permission_mode)?;
+            println!("{}", session.id);
+        }
+        SessionCmd::List { workspace } => {
+            let workspace = find_workspace(client, &workspace)?;
+            for session in client.session_list(&workspace.id)? {
+                let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
+                println!(
+                    "{}  {:?}{closed}  {} events  model={} mode={}  {}",
+                    short(&session.id),
+                    session.status,
+                    session.last_seq,
+                    session.model.as_deref().unwrap_or("-"),
+                    session.permission_mode.as_deref().unwrap_or("-"),
+                    session.title.as_deref().unwrap_or(""),
+                );
+            }
+        }
+        SessionCmd::Set { session, model, permission_mode } => {
+            let session = find_session(client, &session)?;
+            let session = client.session_configure(&session.id, model, permission_mode)?;
+            println!(
+                "model={} mode={}",
+                session.model.as_deref().unwrap_or("-"),
+                session.permission_mode.as_deref().unwrap_or("-")
+            );
+        }
+        SessionCmd::Close { session } => {
+            let session = find_session(client, &session)?;
+            client.session_close(&session.id)?;
+        }
+        SessionCmd::Reopen { session } => {
+            let session = find_session(client, &session)?;
+            client.session_reopen(&session.id)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_log(client: &Client, session: &str, from: Seq, limit: u32, raw: bool) -> anyhow::Result<()> {
+    let session = find_session(client, session)?;
+    let (events, _) = client.session_read(&session.id, from, limit, raw)?;
+    let mut printer = render::Printer::default();
+    for event in events {
+        if raw {
+            println!("{}", serde_json::to_string(&event)?);
+        } else {
+            printer.event(&event);
         }
     }
     Ok(())

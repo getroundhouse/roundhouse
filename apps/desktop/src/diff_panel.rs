@@ -11,8 +11,9 @@ use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext, Context, ElementId, Entity, EventEmitter, HighlightStyle, InteractiveElement, IntoElement,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, div,
+    AnyElement, App, AppContext, Context, Div, ElementId, Entity, EventEmitter, HighlightStyle, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Subscription,
+    WeakEntity, Window, div,
 };
 use protocol::model::{DiffComment, DiffSide, WorkspaceId};
 
@@ -247,85 +248,103 @@ impl DiffPanel {
     }
 }
 
-impl Render for DiffPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (border, muted, secondary) = (theme.border, theme.muted_foreground, theme.secondary);
-        let this = cx.weak_entity();
-        let count = self.comments.len();
+impl DiffPanel {
+    fn diff_view(&self, state: &Entity<DiffState>, cx: &mut Context<Self>) -> AnyElement {
+        let (on_add, for_annotations) = (cx.weak_entity(), cx.weak_entity());
         let comments = self.comments.clone();
         let draft_input = self.draft_input.clone();
-        let content: AnyElement = if self.empty {
+        Diff::new(state)
+            .line_number(true)
+            .syntax_highlight(true)
+            .annotations(self.annotations())
+            .on_add_annotation(move |range, window, cx| {
+                let position = DiffLinePosition::new(range.path().clone(), range.end_side(), range.end());
+                let _ = on_add.update(cx, |t, cx| t.start_comment(position, window, cx));
+            })
+            .render_annotation(move |annotation, _, cx| {
+                let id = annotation.id().clone();
+                if id == ElementId::Name("draft".into()) {
+                    return draft_card(&draft_input, for_annotations.clone(), cx);
+                }
+                let text = comments.iter().find(|c| ElementId::Name(c.id.clone().into()) == id);
+                let Some(comment) = text.cloned() else { return div().into_any_element() };
+                comment_card(comment, for_annotations.clone(), cx)
+            })
+            .into_any_element()
+    }
+
+    fn comments_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let count = self.comments.len();
+        h_flex()
+            .flex_none()
+            .w_full()
+            .px_3()
+            .py_2()
+            .gap_2()
+            .justify_between()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(div().text_sm().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
+            .child(
+                Button::new("send-comments")
+                    .primary()
+                    .label("Send to agent")
+                    .on_click(cx.listener(|t, _, _, cx| t.send_comments(cx))),
+            )
+    }
+}
+
+fn annotation_frame(cx: &App) -> Div {
+    v_flex().m_2().p_2().gap_2().rounded_md().bg(cx.theme().secondary).text_sm()
+}
+
+fn draft_card(input: &Entity<TextareaState>, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
+    let (cancel, save) = (panel.clone(), panel);
+    annotation_frame(cx)
+        .child(Textarea::new(input))
+        .child(
+            h_flex()
+                .gap_2()
+                .child(Button::new("save-comment").primary().label("Comment").on_click(move |_, window, cx| {
+                    let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
+                }))
+                .child(Button::new("cancel-comment").label("Cancel").on_click(move |_, _, cx| {
+                    let _ = cancel.update(cx, DiffPanel::cancel_draft);
+                })),
+        )
+        .into_any_element()
+}
+
+fn comment_card(comment: DiffComment, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
+    annotation_frame(cx)
+        .child(comment.text.clone())
+        .child(
             div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(muted)
-                .child("No changes yet")
-                .into_any_element()
-        } else if let Some(state) = &self.state {
-            let on_add = this.clone();
-            let for_annotations = this.clone();
-            Diff::new(state)
-                .line_number(true)
-                .syntax_highlight(true)
-                .annotations(self.annotations())
-                .on_add_annotation(move |range, window, cx| {
-                    let position = DiffLinePosition::new(range.path().clone(), range.end_side(), range.end());
-                    let _ = on_add.update(cx, |t, cx| t.start_comment(position, window, cx));
+                .id(ElementId::Name(format!("delete-{}", comment.id).into()))
+                .text_xs()
+                .cursor_pointer()
+                .text_color(cx.theme().muted_foreground)
+                .on_click(move |_, _, cx| {
+                    let _ = panel.update(cx, |t, cx| t.delete_comment(comment.id.clone(), cx));
                 })
-                .render_annotation(move |annotation, _, cx| {
-                    let theme = cx.theme();
-                    let (secondary, muted) = (theme.secondary, theme.muted_foreground);
-                    let id = annotation.id().clone();
-                    let frame = v_flex().m_2().p_2().gap_2().rounded_md().bg(secondary).text_sm();
-                    if id == ElementId::Name("draft".into()) {
-                        let (cancel, save) = (for_annotations.clone(), for_annotations.clone());
-                        return frame
-                            .child(Textarea::new(&draft_input))
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .child(Button::new("save-comment").primary().label("Comment").on_click(
-                                        move |_, window, cx| {
-                                            let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
-                                        },
-                                    ))
-                                    .child(Button::new("cancel-comment").label("Cancel").on_click(move |_, _, cx| {
-                                        let _ = cancel.update(cx, DiffPanel::cancel_draft);
-                                    })),
-                            )
-                            .into_any_element();
-                    }
-                    let text = comments.iter().find(|c| ElementId::Name(c.id.clone().into()) == id);
-                    let Some(comment) = text.cloned() else { return div().into_any_element() };
-                    let delete = for_annotations.clone();
-                    frame
-                        .child(comment.text.clone())
-                        .child(
-                            div()
-                                .id(ElementId::Name(format!("delete-{}", comment.id).into()))
-                                .text_xs()
-                                .cursor_pointer()
-                                .text_color(muted)
-                                .on_click(move |_, _, cx| {
-                                    let _ = delete.update(cx, |t, cx| t.delete_comment(comment.id.clone(), cx));
-                                })
-                                .child("Delete"),
-                        )
-                        .into_any_element()
-                })
-                .into_any_element()
+                .child("Delete"),
+        )
+        .into_any_element()
+}
+
+fn placeholder(text: &'static str, color: Hsla) -> AnyElement {
+    div().size_full().flex().items_center().justify_center().text_color(color).child(text).into_any_element()
+}
+
+impl Render for DiffPanel {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let (muted, secondary) = (cx.theme().muted_foreground, cx.theme().secondary);
+        let content = if self.empty {
+            placeholder("No changes yet", muted)
+        } else if let Some(state) = self.state.clone() {
+            self.diff_view(&state, cx)
         } else {
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(muted)
-                .child("Loading…")
-                .into_any_element()
+            placeholder("Loading…", muted)
         };
         v_flex()
             .size_full()
@@ -334,26 +353,7 @@ impl Render for DiffPanel {
                     div().flex_none().px_3().py_1().text_xs().bg(secondary).child("Some untracked files aren't shown"),
                 )
             })
-            .when(count > 0, |d| {
-                d.child(
-                    h_flex()
-                        .flex_none()
-                        .w_full()
-                        .px_3()
-                        .py_2()
-                        .gap_2()
-                        .justify_between()
-                        .border_b_1()
-                        .border_color(border)
-                        .child(div().text_sm().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
-                        .child(
-                            Button::new("send-comments")
-                                .primary()
-                                .label("Send to agent")
-                                .on_click(cx.listener(|t, _, _, cx| t.send_comments(cx))),
-                        ),
-                )
-            })
+            .when(!self.comments.is_empty(), |d| d.child(self.comments_bar(cx)))
             .child(div().flex_1().min_h_0().w_full().child(content))
     }
 }

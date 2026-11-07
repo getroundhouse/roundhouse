@@ -368,6 +368,21 @@ fn run_turn(
 }
 
 /// Returns true if the turn was interrupted.
+fn hang(turn: &mut Turn, total_ms: u64, rx: &Receiver<Input>, queued: &mut VecDeque<String>, eof: &mut bool) -> bool {
+    let tool_use_id = turn.tool_use("hang");
+    let mut waited = 0;
+    while waited < total_ms {
+        if pause(rx, Duration::from_millis(50), queued, eof) {
+            turn.tool_result(&tool_use_id, "stopped", true);
+            return true;
+        }
+        waited += 50;
+    }
+    turn.tool_result(&tool_use_id, "finished hanging", false);
+    false
+}
+
+/// Returns true if the turn was interrupted.
 fn run_command(
     turn: &mut Turn,
     command: &str,
@@ -415,18 +430,7 @@ fn run_command(
         return run_tool(turn, command, rx, queued, eof);
     }
     if let Some(ms) = command.strip_prefix("hang:") {
-        let tool_use_id = turn.tool_use("hang");
-        let total: u64 = ms.parse().unwrap();
-        let mut waited = 0;
-        while waited < total {
-            if pause(rx, Duration::from_millis(50), queued, eof) {
-                turn.tool_result(&tool_use_id, "stopped", true);
-                return true;
-            }
-            waited += 50;
-        }
-        turn.tool_result(&tool_use_id, "finished hanging", false);
-        return false;
+        return hang(turn, ms.parse().unwrap(), rx, queued, eof);
     }
     if command == "recall" {
         let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();

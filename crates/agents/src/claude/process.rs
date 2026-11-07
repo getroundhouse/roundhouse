@@ -6,7 +6,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
@@ -282,6 +282,17 @@ async fn supervise(
         }
     };
 
+    finish(&shared, &options, &output, status, stderr_tail).await;
+}
+
+/// Closes up after the last process has exited, then reports what it held back and how it ended.
+async fn finish(
+    shared: &Shared,
+    options: &AgentOptions,
+    output: &mpsc::Sender<AgentOutput>,
+    status: std::io::Result<ExitStatus>,
+    stderr_tail: Vec<String>,
+) {
     shared.gone.store(true, Ordering::SeqCst);
     *shared.stdin.lock().await = None;
     shared.pending_controls.lock().clear();
@@ -358,39 +369,14 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
             }
             Parsed::Delta(delta) => AgentOutput::Delta(delta),
             Parsed::UnsupportedControl { request_id, subtype } => {
-                warn!("answering unsupported control request {subtype} with an error");
-                let reply = json!({"type":"control_response","response":{
-                    "subtype":"error","request_id":request_id,"error":format!("{subtype} is not supported by this host"),
-                }});
-                if let Err(e) = write_line(&shared, &reply).await {
-                    warn!("could not answer a control request: {e:#}");
-                }
+                refuse_control(&shared, &request_id, &subtype).await;
                 AgentOutput::Event {
                     body: EventBody::AgentOther { kind: format!("control_request/{subtype}") },
                     raw: Some(line),
                 }
             }
             Parsed::Event(body) => {
-                match &body {
-                    EventBody::ApprovalRequested { approval_id, input, .. } => {
-                        shared.pending_inputs.lock().insert(approval_id.clone(), input.clone());
-                    }
-                    EventBody::ApprovalResolved { approval_id, .. } => {
-                        shared.pending_inputs.lock().remove(approval_id);
-                    }
-                    EventBody::UserPrompt { .. }
-                    | EventBody::AgentStarted { .. }
-                    | EventBody::AgentInit { .. }
-                    | EventBody::AgentState { .. }
-                    | EventBody::Assistant { .. }
-                    | EventBody::AgentUser { .. }
-                    | EventBody::TurnEnded { .. }
-                    | EventBody::AgentExited { .. }
-                    | EventBody::Notice { .. }
-                    | EventBody::AgentMode { .. }
-                    | EventBody::AgentOther { .. }
-                    | EventBody::Unknown => {}
-                }
+                track_approval(&shared, &body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 let item = AgentOutput::Event { body, raw: Some(line) };
                 if opened && !shared.confirmed.swap(true, Ordering::SeqCst) {
@@ -410,6 +396,40 @@ async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sen
         } else if output.send(item).await.is_err() {
             return;
         }
+    }
+}
+
+async fn refuse_control(shared: &Shared, request_id: &str, subtype: &str) {
+    warn!("answering unsupported control request {subtype} with an error");
+    let reply = json!({"type":"control_response","response":{
+        "subtype":"error","request_id":request_id,"error":format!("{subtype} is not supported by this host"),
+    }});
+    if let Err(e) = write_line(shared, &reply).await {
+        warn!("could not answer a control request: {e:#}");
+    }
+}
+
+/// Keeps each open approval's input, which is what answering it sends back.
+fn track_approval(shared: &Shared, body: &EventBody) {
+    match body {
+        EventBody::ApprovalRequested { approval_id, input, .. } => {
+            shared.pending_inputs.lock().insert(approval_id.clone(), input.clone());
+        }
+        EventBody::ApprovalResolved { approval_id, .. } => {
+            shared.pending_inputs.lock().remove(approval_id);
+        }
+        EventBody::UserPrompt { .. }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentInit { .. }
+        | EventBody::AgentState { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::TurnEnded { .. }
+        | EventBody::AgentExited { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::Unknown => {}
     }
 }
 

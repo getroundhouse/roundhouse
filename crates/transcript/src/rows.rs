@@ -102,6 +102,34 @@ fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement {
     row().child(div().text_xs().text_color(cx.theme().muted_foreground).child(text.into())).into_any_element()
 }
 
+fn turn_ended(outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String], cx: &App) -> AnyElement {
+    let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
+    match outcome {
+        TurnOutcome::Cancelled => muted_line("Stopped", cx),
+        TurnOutcome::Error => {
+            let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
+            colored_line(detail, cx.theme().danger, cx)
+        }
+        TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
+            muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"), cx)
+        }
+        TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s"), cx),
+    }
+}
+
+fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElement {
+    match reason {
+        ExitReason::Requested => empty(),
+        ExitReason::HubRestart => {
+            muted_line("The app restarted while the agent was working. Send a message to continue.", cx)
+        }
+        ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
+            let detail = stderr_tail.last().cloned().unwrap_or_default();
+            colored_line(format!("The agent stopped unexpectedly. {detail}"), cx.theme().danger, cx)
+        }
+    }
+}
+
 fn render_event(
     seq: Seq,
     body: &EventBody,
@@ -130,19 +158,7 @@ fn render_event(
             row().children(rendered).into_any_element()
         }
         EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-            let seconds = std::time::Duration::from_millis(duration_ms.unwrap_or(0)).as_secs_f64();
-            let cost = cost_usd.unwrap_or(0.0);
-            match outcome {
-                TurnOutcome::Cancelled => muted_line("Stopped", cx),
-                TurnOutcome::Error => {
-                    let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
-                    colored_line(detail, cx.theme().danger, cx)
-                }
-                TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
-                    muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"), cx)
-                }
-                TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s"), cx),
-            }
+            turn_ended(*outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors, cx)
         }
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
@@ -152,16 +168,7 @@ fn render_event(
         EventBody::AgentMode { permission_mode } => {
             muted_line(format!("Approval mode is now {}", crate::mode_label(permission_mode)), cx)
         }
-        EventBody::AgentExited { reason, stderr_tail, .. } => match reason {
-            ExitReason::Requested => empty(),
-            ExitReason::HubRestart => {
-                muted_line("The app restarted while the agent was working. Send a message to continue.", cx)
-            }
-            ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
-                let detail = stderr_tail.last().cloned().unwrap_or_default();
-                colored_line(format!("The agent stopped unexpectedly. {detail}"), cx.theme().danger, cx)
-            }
-        },
+        EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(*reason, stderr_tail, cx),
         EventBody::Notice { level, message } => {
             let color = match level {
                 NoticeLevel::Error => cx.theme().danger,
@@ -317,47 +324,36 @@ fn approval_card(
         }
     };
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    if tool_name == "ExitPlanMode" {
+    let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
+        Button::new(ElementId::NamedInteger(name.into(), seq)).label(label).on_click(answer(decision))
+    };
+    let (title, content, buttons): (String, AnyElement, Div) = if tool_name == "ExitPlanMode" {
         let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
         let keep_planning = ApprovalDecision::Deny {
             message: "The user wants to keep planning. Ask them what to change.".to_string(),
             interrupt: false,
         };
-        return row()
-            .child(
-                v_flex()
-                    .w_full()
-                    .p_3()
-                    .gap_2()
-                    .rounded_lg()
-                    .border_1()
-                    .border_color(if open { theme.warning } else { theme.border })
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Plan"))
-                    .child(
-                        TextView::markdown(ElementId::NamedInteger("plan".into(), seq), SharedString::from(plan))
-                            .selectable(true),
-                    )
-                    .when(open, |d| {
-                        d.child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Button::new(ElementId::NamedInteger("approve-plan".into(), seq))
-                                        .primary()
-                                        .label("Approve plan")
-                                        .on_click(answer(allow)),
-                                )
-                                .child(
-                                    Button::new(ElementId::NamedInteger("keep-planning".into(), seq))
-                                        .label("Keep planning")
-                                        .on_click(answer(keep_planning)),
-                                ),
-                        )
-                    }),
-            )
-            .into_any_element();
-    }
-    let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
+        (
+            "Plan".to_string(),
+            TextView::markdown(ElementId::NamedInteger("plan".into(), seq), SharedString::from(plan))
+                .selectable(true)
+                .into_any_element(),
+            h_flex()
+                .gap_2()
+                .child(answer_button("approve-plan", "Approve plan", allow).primary())
+                .child(answer_button("keep-planning", "Keep planning", keep_planning)),
+        )
+    } else {
+        let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
+        (
+            format!("{tool_name} needs approval"),
+            div().text_xs().font_family(MONO).text_color(theme.muted_foreground).child(summary).into_any_element(),
+            h_flex()
+                .gap_2()
+                .child(answer_button("allow", "Allow", allow).primary())
+                .child(answer_button("deny", "Deny", deny)),
+        )
+    };
     row()
         .child(
             v_flex()
@@ -367,25 +363,9 @@ fn approval_card(
                 .rounded_lg()
                 .border_1()
                 .border_color(if open { theme.warning } else { theme.border })
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(format!("{tool_name} needs approval")))
-                .child(div().text_xs().font_family(MONO).text_color(theme.muted_foreground).child(summary))
-                .when(open, |d| {
-                    d.child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Button::new(ElementId::NamedInteger("allow".into(), seq))
-                                    .primary()
-                                    .label("Allow")
-                                    .on_click(answer(allow)),
-                            )
-                            .child(
-                                Button::new(ElementId::NamedInteger("deny".into(), seq))
-                                    .label("Deny")
-                                    .on_click(answer(deny)),
-                            ),
-                    )
-                }),
+                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
+                .child(content)
+                .when(open, |d| d.child(buttons)),
         )
         .into_any_element()
 }

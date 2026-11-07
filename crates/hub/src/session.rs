@@ -544,6 +544,25 @@ impl LiveSession {
         Err(ApiError::new(ErrorCode::Worker, "the agent keeps exiting before it can take the prompt"))
     }
 
+    /// Returns the prompt's place in the log, and whether it had already been recorded.
+    async fn record_prompt(
+        &self,
+        hub: &Hub,
+        text: &str,
+        client_msg_id: Option<String>,
+    ) -> Result<(Seq, bool), ApiError> {
+        if self.is_closed() {
+            return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
+        }
+        if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
+            return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
+        }
+        self.name_from(text).await;
+        let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: client_msg_id.clone() };
+        let (event, duplicate) = self.record(body, None, client_msg_id, true, NO_RUN).await?;
+        Ok((event.seq, duplicate))
+    }
+
     async fn handle_prompt(
         &self,
         text: String,
@@ -557,24 +576,7 @@ impl LiveSession {
                 return;
             }
         };
-        if self.is_closed() {
-            let _ = reply.send(Err(ApiError::new(ErrorCode::Conflict, "this chat is closed")));
-            return;
-        }
-        match hub.workspace(&self.workspace_id).await {
-            Ok(workspace) if workspace.status == WorkspaceStatus::Ready => {}
-            Ok(_) => {
-                let _ = reply.send(Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready")));
-                return;
-            }
-            Err(e) => {
-                let _ = reply.send(Err(e));
-                return;
-            }
-        }
-        self.name_from(&text).await;
-        let body = EventBody::UserPrompt { text: text.clone(), client_msg_id: client_msg_id.clone() };
-        let (event, duplicate) = match self.record(body, None, client_msg_id, true, NO_RUN).await {
+        let (seq, duplicate) = match self.record_prompt(&hub, &text, client_msg_id).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 let _ = reply.send(Err(e));
@@ -583,7 +585,7 @@ impl LiveSession {
         };
         // Recorded, so the prompt is real and the client can stop retrying. From here, failures are
         // reported in the log, where every client can see them.
-        let _ = reply.send(Ok((event.seq, duplicate)));
+        let _ = reply.send(Ok((seq, duplicate)));
         if duplicate {
             return;
         }
