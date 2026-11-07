@@ -5,7 +5,7 @@ mod api;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -240,6 +240,12 @@ fn hub_is_missing(error: &ClientError) -> bool {
     }
 }
 
+/// The daemon that ships next to `exe`. Follows symlinks first, so a hub started through an install's
+/// `current` link stays on that version, whichever one the link names later.
+pub fn daemon_beside(exe: &Path) -> std::io::Result<PathBuf> {
+    Ok(exe.canonicalize()?.with_file_name("trestled"))
+}
+
 fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
     use std::os::unix::process::CommandExt;
@@ -267,4 +273,22 @@ fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     }
     command.spawn().map_err(|e| std::io::Error::new(e.kind(), format!("starting {}: {e}", daemon.display())))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_daemon_beside_a_linked_binary_is_in_the_version_the_link_named() {
+        let dir = tempfile::tempdir().unwrap();
+        let version = dir.path().canonicalize().unwrap().join("abc123");
+        std::fs::create_dir(&version).unwrap();
+        std::fs::write(version.join("trestle"), "").unwrap();
+        std::os::unix::fs::symlink(&version, dir.path().join("current")).unwrap();
+
+        let daemon = daemon_beside(&dir.path().join("current/trestle")).unwrap();
+
+        assert_eq!(daemon, version.join("trestled"));
+    }
 }

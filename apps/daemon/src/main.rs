@@ -59,7 +59,10 @@ fn main() -> anyhow::Result<()> {
     match args.role {
         Role::Hub => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-            let worker_exe = std::env::current_exe().context("finding this binary to run workers")?;
+            // Follows symlinks, so moving an install's `current` link can't change what later workers run.
+            let worker_exe = std::env::current_exe()
+                .and_then(std::fs::canonicalize)
+                .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
             runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path }))?;
