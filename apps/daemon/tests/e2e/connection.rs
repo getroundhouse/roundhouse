@@ -8,7 +8,7 @@ use std::time::Instant;
 use client_core::{Client, ClientError, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ErrorCode, HubNotice};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
     Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_setup, wait_for_turn_end, wait_until,
@@ -182,4 +182,19 @@ fn losing_the_hub_ends_a_subscription_with_a_clear_signal() {
         }
     }
     assert!(matches!(client.hub_status().unwrap_err(), ClientError::Disconnected | ClientError::Io(_)));
+}
+
+#[test]
+fn a_kind_of_agent_or_side_of_a_diff_this_hub_doesnt_know_is_refused_and_not_saved() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+
+    let refused = client.session_create(&workspace.id, AgentKind::Unknown, None, None).unwrap_err();
+    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
+    assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
+
+    let refused = client.comment_add(&workspace.id, "a.txt", DiffSide::Unknown, 1, "Why?").unwrap_err();
+    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
+    assert!(client.comment_list(&workspace.id).unwrap().is_empty());
 }

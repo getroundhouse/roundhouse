@@ -128,7 +128,7 @@ Each piece of state has one owner, and every other copy is a cache.
 Settled in step 1.1. Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
-- **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, and unknown enum variants decode as `Unknown`, so additions don't need a version bump. Four enums don't do this yet, see #51.
+- **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, and unknown enum variants decode as `Unknown`, so additions don't need a version bump.
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
 - **Each event has a normalized body, plus the agent's raw line in a separate column.** Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
 - **Live deltas aren't stored.** The finished message arrives as a durable event and replaces them. A client attaching mid-message gets a snapshot of the streaming tail, then deltas, and `protocol::tail` holds the rules so the hub and clients can't disagree.

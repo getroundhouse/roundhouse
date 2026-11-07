@@ -81,5 +81,6 @@ pub fn spawn(
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options),
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
