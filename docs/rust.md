@@ -2,7 +2,7 @@
 
 How Rust is written in this repo. `docs/architecture.md` owns which crate may depend on which, and this doc owns what goes inside a crate. It covers the Cargo workspace. `mobile-poc/` is a standalone prototype and is exempt.
 
-**Status: agreed with the user on 2026-11-06, and mostly adopted.** The lints are on for every crate, and every file is within the limit, though no test checks that yet. The [Adopt the Rust standards](https://github.com/zlangbert/trestle/milestone/7) milestone closes what's left.
+**Status: agreed with the user on 2026-11-06, and mostly adopted.** The lints are on for every crate, and tests hold both those and the file limit in place. The [Adopt the Rust standards](https://github.com/zlangbert/trestle/milestone/7) milestone closes what's left.
 
 Two ideas sit behind the rules:
 
