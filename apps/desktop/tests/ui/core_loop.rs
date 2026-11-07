@@ -202,3 +202,19 @@ fn theme_is_dark(cx: &mut TestAppContext) {
     let ui = Ui::open(cx, &stack);
     assert!(ui.cx.update(|cx| Theme::global(cx).mode.is_dark()));
 }
+
+#[gpui_kit::test]
+fn an_archive_that_force_cant_help_shows_the_error_rather_than_offering_force(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let id = ui.new_workspace();
+
+    // Archived from elsewhere, so what the app asks for can no longer work.
+    stack.client().workspace_archive(&id, false).unwrap();
+    ui.cx.update_entity(&ui.view.clone(), |v, cx| v.archive(id.clone(), false, cx));
+    ui.wait("the error", |ui| ui.view().error.is_some());
+    assert!(ui.view().error.clone().unwrap().contains("couldn't archive"));
+    assert!(!ui.cx.has_pending_prompt());
+}

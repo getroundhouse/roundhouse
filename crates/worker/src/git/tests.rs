@@ -85,10 +85,10 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     let root = dir.path().join("ws");
     prepare(&root, &repo, "alder", None).await.unwrap();
     // Same path and branch.
-    assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::Conflict);
+    assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
     // Same branch, different path.
     let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", "alder", None).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::Conflict);
+    assert_eq!(err.code, ErrorCode::NameTaken);
     let err = prepare(&root, &repo, "cedar", Some("--upload-pack=evil")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
@@ -107,7 +107,7 @@ async fn archiving_refuses_uncommitted_work_unless_forced_and_keeps_the_branch()
 
     std::fs::write(path.join("new.txt"), "work\n").unwrap();
     let err = remove_workspace(repo_str, &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::Conflict);
+    assert_eq!(err.code, ErrorCode::NeedsForce);
     assert!(path.join("new.txt").exists(), "a refused archive must not touch files");
 
     remove_workspace(repo_str, &prepared.path, true).await.unwrap();
@@ -135,7 +135,7 @@ async fn untracked_work_is_protected_even_if_git_is_set_to_hide_it() {
 
     assert_eq!(status(&prepared.path).await.unwrap().files.len(), 1, "status must show it too");
     let err = remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::Conflict);
+    assert_eq!(err.code, ErrorCode::NeedsForce);
     assert!(path.join("agent-output.txt").exists());
 }
 
@@ -151,7 +151,7 @@ async fn commits_only_reachable_from_a_detached_head_are_protected() {
     run(path, &["commit", "-qm", "on no branch"]);
 
     let err = remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::Conflict, "{}", err.message);
+    assert_eq!(err.code, ErrorCode::NeedsForce, "{}", err.message);
     assert!(path.join("work.txt").exists());
     remove_workspace(repo.to_str().unwrap(), &prepared.path, true).await.unwrap();
 }

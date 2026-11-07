@@ -116,10 +116,10 @@ pub async fn prepare_workspace(
     let repo = PathBuf::from(repo_path);
     let path = root.join(repo_name).join(workspace_name);
     if path.exists() {
-        return Err(ApiError::new(ErrorCode::Conflict, format!("{} already exists", path.display())));
+        return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
     }
     if ref_exists(&repo, &format!("refs/heads/{branch}")).await? {
-        return Err(ApiError::new(ErrorCode::Conflict, format!("branch {branch} already exists")));
+        return Err(ApiError::new(ErrorCode::NameTaken, format!("branch {branch} already exists")));
     }
     if !git(&repo, &["check-ref-format", "--branch", branch]).await?.success {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
@@ -186,7 +186,7 @@ pub async fn remove_workspace(repo_path: &str, path: &str, force: bool) -> Resul
         let current = status(path).await?;
         if !current.files.is_empty() {
             return Err(ApiError::new(
-                ErrorCode::Conflict,
+                ErrorCode::NeedsForce,
                 format!(
                     "{} uncommitted change(s) in {path} would be lost. Commit them, or archive with force",
                     current.files.len()
@@ -195,7 +195,7 @@ pub async fn remove_workspace(repo_path: &str, path: &str, force: bool) -> Resul
         }
         if current.branch.is_none() && !any_ref_holds_head(worktree).await? {
             return Err(ApiError::new(
-                ErrorCode::Conflict,
+                ErrorCode::NeedsForce,
                 format!(
                     "{path} is on a detached HEAD with commits on no branch, which would be lost. \
                      Put them on a branch, or archive with force"

@@ -23,7 +23,7 @@ fn archiving_protects_uncommitted_work_keeps_the_branch_and_restoring_brings_it_
     wait_for_turn_end(&client, &session.id, 1);
 
     let err = client.workspace_archive(&workspace.id, false).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NeedsForce));
     assert!(worktree.join("work.txt").exists());
     client.session_prompt(&session.id, "say:the agent was left running by the refused archive", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
@@ -38,6 +38,10 @@ fn archiving_protects_uncommitted_work_keeps_the_branch_and_restoring_brings_it_
     assert_eq!(client.workspace_list(false).unwrap().len(), 0);
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
     assert!(!git(&stack.repo(), &["branch", "--list", &workspace.branch]).is_empty());
+
+    // Archiving it again can't work, and force wouldn't change that.
+    let err = client.workspace_archive(&workspace.id, false).unwrap_err();
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
 
     // An archived workspace takes no prompts, and its history stays readable.
     let err = client.session_prompt(&session.id, "say:no", None).unwrap_err();
@@ -171,12 +175,12 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
 
     let first = client.workspace_create(&repo.id, Some("mine".into()), None).unwrap();
     let err = client.workspace_create(&repo.id, Some("mine".into()), None).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
 
     // A branch that exists outside the hub also blocks a chosen name, and leaves nothing behind.
     git(&stack.repo(), &["branch", "taken"]);
     let err = client.workspace_create(&repo.id, Some("taken".into()), None).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
     assert_eq!(client.workspace_list(true).unwrap()[0].id, first.id);
 

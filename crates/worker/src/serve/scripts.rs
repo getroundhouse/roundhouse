@@ -80,7 +80,7 @@ pub(crate) async fn run_archive_script(
         return Ok(WorkerResponse::Ok);
     }
     Err(ApiError::new(
-        ErrorCode::Conflict,
+        ErrorCode::NeedsForce,
         format!("the archive script failed with {:?}. Fix it, or archive with force", status.code()),
     ))
 }

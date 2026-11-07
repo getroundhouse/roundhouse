@@ -60,7 +60,7 @@ impl Hub {
             };
             match self.try_create(&repo, chosen, base_ref.clone()).await {
                 Ok(workspace) => return Ok(workspace),
-                Err(e) if e.code == ErrorCode::Conflict => last_error = Some(e),
+                Err(e) if e.code == ErrorCode::NameTaken => last_error = Some(e),
                 Err(e) => return Err(e),
             }
         }
@@ -99,7 +99,7 @@ impl Hub {
         };
         let record = workspace.clone();
         if !self.blocking(move |store| store.insert_workspace(&record)).await? {
-            return Err(ApiError::new(ErrorCode::Conflict, format!("{name} is already taken in {}", repo.name)));
+            return Err(ApiError::new(ErrorCode::NameTaken, format!("{name} is already taken in {}", repo.name)));
         }
         let result = self.prepare_new_workspace(repo, &workspace, base_ref, provider.as_ref()).await;
         match result {
@@ -178,7 +178,7 @@ impl Hub {
             && !status.files.is_empty()
         {
             return Err(ApiError::new(
-                ErrorCode::Conflict,
+                ErrorCode::NeedsForce,
                 format!(
                     "{} uncommitted change(s) in {} would be lost. Commit them, or archive with force",
                     status.files.len(),
