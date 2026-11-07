@@ -14,7 +14,7 @@ Running several agents at once works best when each one has its own workspace, a
 
 ## Try it
 
-It uses your own Claude login and settings, keeps its data in `~/Library/Application Support/trestle`, and puts worktrees in `~/trestle/workspaces`.
+It uses your own Claude login and settings. A debug build keeps its data in `~/Library/Application Support/trestle-dev`, and puts worktrees in `~/trestle-dev/workspaces`. Only a release build uses `trestle`, in both places.
 
 ```sh
 cargo build --workspace

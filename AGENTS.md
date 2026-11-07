@@ -36,6 +36,8 @@ tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its ou
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
 
+Trestle can be developed from inside Trestle, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `trestle-dev`. Set `TRESTLE_HOME` and `TRESTLE_WORKSPACES` to choose another.
+
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 
 Run the full checks in `docs/rust.md` once per PR, just before pushing. PRs are squash-merged, so only each PR's final state reaches `main`. Between commits, `cargo check` and the tests for what changed are enough.

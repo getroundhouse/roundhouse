@@ -36,7 +36,7 @@ pub enum AgentOutput {
 }
 
 /// Names the Claude CLI directly, for tests and unusual installs.
-pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
+pub use protocol::paths::ENV_CLAUDE_BIN;
 
 /// Where to look for an agent's CLI. `main` reads these from the environment.
 #[derive(Clone, Debug, Default)]

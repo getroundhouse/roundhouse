@@ -104,7 +104,7 @@ pub(super) fn launch(
         // Its own process group, so a signal to the hub's terminal doesn't reach it directly.
         .process_group(0)
         .kill_on_drop(true);
-    for name in SCRUBBED_ENV {
+    for name in SCRUBBED_ENV.iter().chain(&protocol::paths::HUB_ONLY_ENV) {
         command.env_remove(name);
     }
     command.envs(spec.env.iter().map(|(k, v)| (k, v)));

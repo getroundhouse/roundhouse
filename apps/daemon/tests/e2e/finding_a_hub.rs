@@ -8,7 +8,7 @@ use std::time::Duration;
 use client_core::Client;
 use protocol::model::{AgentKind, WorkspaceStatus};
 
-use crate::support::{Stack, terminate, wait_for_turn_end, wait_until};
+use crate::support::{Stack, commit_settings, terminate, wait_for_setup, wait_for_turn_end, wait_until};
 
 /// The desktop app starts a hub from a background thread with every signal blocked, and that carries
 /// across exec. Blocking `SIGCHLD` alone is enough to make the first `git` hang.
@@ -52,6 +52,27 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     let mut hub = stack.hub.take().unwrap();
     terminate(hub.id());
     wait_until("the hub to stop on SIGTERM", || !matches!(hub.try_wait(), Ok(None)));
+}
+
+/// The code in a workspace can be another build of Trestle, whose commands would otherwise reach this hub.
+#[test]
+fn nothing_in_a_workspace_inherits_which_hub_this_is() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"env > setup-env.txt\"\n");
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    wait_for_setup(&client, &workspace.id);
+
+    client.session_prompt(&session.id, "tool:env > agent-env.txt", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    let worktree = PathBuf::from(workspace.path.unwrap());
+    for file in ["setup-env.txt", "agent-env.txt"] {
+        let env = std::fs::read_to_string(worktree.join(file)).unwrap();
+        assert!(env.lines().any(|line| line.starts_with("PATH=")), "{file} isn't an environment: {env}");
+        let leaked: Vec<_> = env.lines().filter(|line| line.starts_with("TRESTLE_")).collect();
+        assert!(leaked.is_empty(), "{file}: {leaked:?}");
+    }
 }
 
 #[test]

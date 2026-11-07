@@ -18,7 +18,7 @@ fn connect(paths: &Paths) -> anyhow::Result<Client> {
 
 /// The daemon ships next to this binary.
 fn find_daemon() -> anyhow::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("TRESTLE_DAEMON_BIN") {
+    if let Some(path) = std::env::var_os(protocol::paths::ENV_DAEMON_BIN) {
         return Ok(path.into());
     }
     let exe = std::env::current_exe().context("finding this binary")?;

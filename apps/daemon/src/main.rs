@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     unblock_signals();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("TRESTLE_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(EnvFilter::try_from_env(protocol::paths::ENV_LOG).unwrap_or_else(|_| EnvFilter::new("info")))
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();

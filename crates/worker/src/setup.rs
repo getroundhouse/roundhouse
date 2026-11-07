@@ -126,7 +126,11 @@ pub async fn run_script(
     let failed = |e: std::io::Error| ApiError::new(ErrorCode::Worker, format!("couldn't run the script: {e}"));
     let out = std::fs::OpenOptions::new().create(true).append(true).open(log).map_err(failed)?;
     let err = out.try_clone().map_err(failed)?;
-    let mut child = Command::new("bash")
+    let mut command = Command::new("bash");
+    for name in protocol::paths::HUB_ONLY_ENV {
+        command.env_remove(name);
+    }
+    let mut child = command
         .args(["-c", script])
         .current_dir(worktree)
         .envs(env.iter().map(|(k, v)| (k, v)))

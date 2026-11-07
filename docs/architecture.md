@@ -81,7 +81,7 @@ tools/
   perf/            Performance tests against the real app. Not built yet, see `docs/performance.md`
 ```
 
-The binaries are `trestle`, `trestled` and `trestle-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it.
+The binaries are `trestle`, `trestled` and `trestle-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `trestle-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
 
 ## Dependency rules
 

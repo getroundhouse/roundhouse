@@ -47,6 +47,7 @@ What's been decided, and why. Questions still open are GitHub issues, labelled `
 | Sidebar dot | It speaks for the open chat that most needs attention | A chat waiting on approval is visible from anywhere |
 | Answering questions | While the agent waits on a question, what's typed in the composer is the answer. The card says so | A plain Allow button would throw the question away |
 | Chat shortcuts | `Cmd-T` for a new chat, `Cmd-W` to close one, `Ctrl-Tab` and `Ctrl-Shift-Tab` to move between them | They're what tabs use elsewhere |
+| Development data | Debug builds default to `trestle-dev`, `.cargo/config.toml` gives each checkout its own hub for `cargo run` and `cargo test`, and nothing a worker starts inherits the `TRESTLE_*` variables | Trestle gets developed in Trestle, so an agent's builds mustn't reach the hub it's running under, or migrate its database, which an older build would then refuse |
 | Model picker | Offers aliases: `default`, `fable`, `opus`, `sonnet` and `haiku` | It follows the CLI's newest of each without a release here |
 
 ## Rust standards
