@@ -55,35 +55,35 @@ fn sequence_numbers_start_at_one_with_no_gaps() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for expected in 1..=5 {
-        assert_eq!(store.append("s", &notice("x"), None, None, None).unwrap().event.seq, expected);
+        assert_eq!(store.append(&"s".into(), &notice("x"), None, None, None).unwrap().event.seq, expected);
     }
-    let events = store.read_events("s", 1, 100, u64::MAX, false).unwrap();
+    let events = store.read_events(&"s".into(), 1, 100, u64::MAX, false).unwrap();
     assert_eq!(events.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
-    assert_eq!(store.get_session("s").unwrap().session.last_seq, 5);
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, 5);
 }
 
 #[test]
 fn a_status_change_commits_with_its_event() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.append("s", &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
-    assert_eq!(store.get_session("s").unwrap().session.status, SessionStatus::Running);
-    store.append("s", &notice("x"), None, None, None).unwrap();
-    assert_eq!(store.get_session("s").unwrap().session.status, SessionStatus::Running);
+    store.append(&"s".into(), &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
+    store.append(&"s".into(), &notice("x"), None, None, None).unwrap();
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
 }
 
 #[test]
 fn a_repeated_client_msg_id_returns_the_original_and_adds_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let first = store.append("s", &notice("a"), None, Some("msg-1"), None).unwrap();
+    let first = store.append(&"s".into(), &notice("a"), None, Some("msg-1"), None).unwrap();
     assert!(!first.duplicate);
-    store.append("s", &notice("b"), None, None, None).unwrap();
-    let again = store.append("s", &notice("c"), None, Some("msg-1"), None).unwrap();
+    store.append(&"s".into(), &notice("b"), None, None, None).unwrap();
+    let again = store.append(&"s".into(), &notice("c"), None, Some("msg-1"), None).unwrap();
     assert!(again.duplicate);
     assert_eq!(again.event.seq, first.event.seq);
     assert_eq!(again.event.body, notice("a"));
-    assert_eq!(store.get_session("s").unwrap().session.last_seq, 2);
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, 2);
 }
 
 #[test]
@@ -91,23 +91,26 @@ fn reads_page_by_count_and_by_size_and_always_make_progress() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for _ in 0..10 {
-        store.append("s", &notice(&"x".repeat(1000)), None, None, None).unwrap();
+        store.append(&"s".into(), &notice(&"x".repeat(1000)), None, None, None).unwrap();
     }
-    assert_eq!(store.read_events("s", 1, 3, u64::MAX, false).unwrap().len(), 3);
-    assert_eq!(store.read_events("s", 9, 100, u64::MAX, false).unwrap().len(), 2);
-    assert_eq!(store.read_events("s", 11, 100, u64::MAX, false).unwrap().len(), 0);
+    assert_eq!(store.read_events(&"s".into(), 1, 3, u64::MAX, false).unwrap().len(), 3);
+    assert_eq!(store.read_events(&"s".into(), 9, 100, u64::MAX, false).unwrap().len(), 2);
+    assert_eq!(store.read_events(&"s".into(), 11, 100, u64::MAX, false).unwrap().len(), 0);
     // Stops at the size limit, but a single event larger than the limit still comes back.
-    assert_eq!(store.read_events("s", 1, 100, 2500, false).unwrap().len(), 3);
-    assert_eq!(store.read_events("s", 1, 100, 1, false).unwrap().len(), 1);
+    assert_eq!(store.read_events(&"s".into(), 1, 100, 2500, false).unwrap().len(), 3);
+    assert_eq!(store.read_events(&"s".into(), 1, 100, 1, false).unwrap().len(), 1);
 }
 
 #[test]
 fn raw_lines_are_kept_and_only_returned_when_asked_for() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.append("s", &notice("x"), Some("{\"original\":true}"), None, None).unwrap();
-    assert_eq!(store.read_events("s", 1, 1, u64::MAX, false).unwrap()[0].raw, None);
-    assert_eq!(store.read_events("s", 1, 1, u64::MAX, true).unwrap()[0].raw.as_deref(), Some("{\"original\":true}"));
+    store.append(&"s".into(), &notice("x"), Some("{\"original\":true}"), None, None).unwrap();
+    assert_eq!(store.read_events(&"s".into(), 1, 1, u64::MAX, false).unwrap()[0].raw, None);
+    assert_eq!(
+        store.read_events(&"s".into(), 1, 1, u64::MAX, true).unwrap()[0].raw.as_deref(),
+        Some("{\"original\":true}")
+    );
 }
 
 #[test]
@@ -122,18 +125,18 @@ fn open_approvals_are_those_requested_and_not_resolved() {
         description: None,
         suggestions: Value::Null,
     };
-    store.append("s", &requested("a"), None, None, None).unwrap();
-    store.append("s", &requested("b"), None, None, None).unwrap();
-    store.append("s", &cancelled_approval("a".into()), None, None, None).unwrap();
-    assert_eq!(store.open_approvals("s").unwrap(), vec!["b".to_string()]);
+    store.append(&"s".into(), &requested("a"), None, None, None).unwrap();
+    store.append(&"s".into(), &requested("b"), None, None, None).unwrap();
+    store.append(&"s".into(), &cancelled_approval("a".into()), None, None, None).unwrap();
+    assert_eq!(store.open_approvals(&"s".into()).unwrap(), vec!["b".to_string()]);
 }
 
 #[test]
 fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
-    store_with_session(dir.path()).append("s", &notice("kept"), None, None, None).unwrap();
+    store_with_session(dir.path()).append(&"s".into(), &notice("kept"), None, None, None).unwrap();
     let store = Store::open(&dir.path().join("hub.db")).unwrap();
-    assert_eq!(store.read_events("s", 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
+    assert_eq!(store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
 }
 
 #[test]
@@ -159,10 +162,10 @@ fn comments_belong_to_a_workspace_and_can_be_removed() {
         created_at_ms: 1,
     };
     store.add_comment(&comment).unwrap();
-    assert_eq!(store.list_comments("w").unwrap(), vec![comment]);
-    assert_eq!(store.list_comments("other").unwrap(), vec![]);
+    assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![comment]);
+    assert_eq!(store.list_comments(&"other".into()).unwrap(), vec![]);
     store.delete_comment("c1").unwrap();
-    assert_eq!(store.list_comments("w").unwrap(), vec![]);
+    assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![]);
 }
 
 #[test]
@@ -170,7 +173,7 @@ fn each_workspace_gets_its_own_ports() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     assert_eq!(store.next_port_base().unwrap(), 55_010);
-    let mut next = store.get_workspace("w").unwrap();
+    let mut next = store.get_workspace(&"w".into()).unwrap();
     next.id = "w2".into();
     next.name = "birch".into();
     next.port_base = 55_010;
@@ -182,12 +185,12 @@ fn each_workspace_gets_its_own_ports() {
 fn a_setup_cut_off_by_a_restart_counts_as_failed() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_workspace_setup("w", SetupStatus::Running).unwrap();
+    store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap();
     store.fail_interrupted_setups().unwrap();
-    assert_eq!(store.get_workspace("w").unwrap().setup, SetupStatus::Failed { code: None });
-    store.set_workspace_setup("w", SetupStatus::Succeeded).unwrap();
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().setup, SetupStatus::Failed { code: None });
+    store.set_workspace_setup(&"w".into(), SetupStatus::Succeeded).unwrap();
     store.fail_interrupted_setups().unwrap();
-    assert_eq!(store.get_workspace("w").unwrap().setup, SetupStatus::Succeeded);
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().setup, SetupStatus::Succeeded);
 }
 
 #[test]
@@ -197,14 +200,14 @@ fn adding_a_repo_twice_returns_the_same_record() {
     let again = store
         .add_repo(&Repo { id: "other".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: 0 })
         .unwrap();
-    assert_eq!(again.id, "r");
+    assert_eq!(again.id, "r".into());
 }
 
 #[test]
 fn workspace_names_are_unique_per_repo() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let mut duplicate = store.get_workspace("w").unwrap();
+    let mut duplicate = store.get_workspace(&"w".into()).unwrap();
     duplicate.id = "w2".into();
     assert!(!store.insert_workspace(&duplicate).unwrap());
 }

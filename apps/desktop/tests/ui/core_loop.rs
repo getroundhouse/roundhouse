@@ -6,7 +6,7 @@ use gpui_kit::component::Theme;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{SessionStatus, WorkspaceStatus};
+use protocol::model::{SessionStatus, WorkspaceId, WorkspaceStatus};
 
 use crate::support::{Stack, Ui, git};
 
@@ -22,7 +22,7 @@ fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppCont
     assert_eq!(ui.view().repos[0].name, "repo");
 }
 
-fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &str) {
+fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     // Review the diff.
     ui.click("toggle-diff");
     let pane = ui.pane().unwrap();

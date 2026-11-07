@@ -8,11 +8,11 @@ use client_core::session_log::{PAGE_EVENTS, SessionLog};
 use client_core::{Client, SubscriptionItem};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
 use gpui_kit::{
-    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, Result, SharedString, StyleRefinement,
-    Styled, Task, Window, px,
+    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, Result, StyleRefinement, Styled, Task,
+    Window, px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{Seq, Session, seq_index};
+use protocol::model::{Seq, Session, SessionId, seq_index};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -39,7 +39,7 @@ pub(crate) struct Model {
 
 pub struct Transcript {
     client: Client,
-    session_id: SharedString,
+    session_id: SessionId,
     pub(crate) model: Rc<RefCell<Model>>,
     scroller: Entity<MessageScrollerState>,
     _items: Task<()>,
@@ -82,10 +82,10 @@ impl Transcript {
             }
         });
 
-        Self { client, session_id: session.id.clone().into(), model, scroller, _items: items }
+        Self { client, session_id: session.id.clone(), model, scroller, _items: items }
     }
 
-    pub fn session_id(&self) -> &str {
+    pub fn session_id(&self) -> &SessionId {
         &self.session_id
     }
 
@@ -356,9 +356,11 @@ impl Render for Transcript {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.clone();
         let this = cx.weak_entity();
-        MessageScroller::new(ElementId::Name(self.session_id.clone()), self.scroller.clone(), move |ix, _, cx| {
-            crate::rows::render_row(&model, &this, ix, cx)
-        })
+        MessageScroller::new(
+            ElementId::Name(self.session_id.to_string().into()),
+            self.scroller.clone(),
+            move |ix, _, cx| crate::rows::render_row(&model, &this, ix, cx),
+        )
         // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
         .with_row_style(StyleRefinement::default().pb(px(0.)))
         .with_jump_button_label("Jump to latest")

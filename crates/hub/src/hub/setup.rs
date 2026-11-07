@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{Repo, SetupStatus, Workspace};
+use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceId};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::watch;
 use tracing::warn;
@@ -24,13 +24,13 @@ impl Hub {
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
-                Err(e) => warn!(workspace = id, "recording setup: {e}"),
+                Err(e) => warn!(workspace = %id, "recording setup: {e}"),
             }
             let outcome = hub.run_setup(&repo, &workspace).await;
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
-                Err(e) => warn!(workspace = id, "recording setup: {e}"),
+                Err(e) => warn!(workspace = %id, "recording setup: {e}"),
             }
             hub.setup_gates.lock().remove(&id);
             gate_tx.send_replace(true);
@@ -64,14 +64,14 @@ impl Hub {
     }
 
     /// Waits for setup, if it's running. Agents shouldn't start in a half-prepared worktree.
-    pub(crate) async fn wait_for_setup(&self, workspace_id: &str) {
+    pub(crate) async fn wait_for_setup(&self, workspace_id: &WorkspaceId) {
         let gate = self.setup_gates.lock().get(workspace_id).map(tokio::sync::watch::Sender::subscribe);
         if let Some(mut gate) = gate {
             let _ = gate.wait_for(|done| *done).await;
         }
     }
 
-    pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: String) -> Result<String, ApiError> {
+    pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: WorkspaceId) -> Result<String, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
         let reply = link.call(WorkerRequest::SetupLog { path }).await?;
         let WorkerResponse::SetupLog { text } = reply else {
@@ -80,7 +80,7 @@ impl Hub {
         Ok(text)
     }
 
-    pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: String) -> Result<Workspace, ApiError> {
+    pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
         let (workspace, _, _) = self.ready_worktree(&id).await?;
         if self.setup_gates.lock().contains_key(&id) {
             return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
@@ -91,7 +91,7 @@ impl Hub {
     }
 
     /// Stops the setup script, if one is running. The workspace stays usable.
-    pub(crate) async fn cancel_setup(&self, workspace_id: &str) {
+    pub(crate) async fn cancel_setup(&self, workspace_id: &WorkspaceId) {
         if self.setup_gates.lock().contains_key(workspace_id)
             && let Some(link) = self.existing_worker(workspace_id)
         {

@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
+use protocol::model::SessionId;
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -40,14 +41,14 @@ pub(crate) async fn start_agent(
     };
     let process = agents::spawn(spec, tx, options)?;
     let pid = process.pid();
-    info!(pid, session_id, run, "started agent");
+    info!(pid, %session_id, run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
 }
 
-async fn forward_output(state: Arc<State>, session_id: String, run: u64, mut output: mpsc::Receiver<AgentOutput>) {
+async fn forward_output(state: Arc<State>, session_id: SessionId, run: u64, mut output: mpsc::Receiver<AgentOutput>) {
     while let Some(item) = output.recv().await {
         let frame = match item {
             AgentOutput::Event { body, raw } => {
@@ -74,7 +75,7 @@ async fn forward_output(state: Arc<State>, session_id: String, run: u64, mut out
 
 pub(crate) async fn configure_agent(
     state: &State,
-    session_id: &str,
+    session_id: &SessionId,
     model: Option<&str>,
     permission_mode: Option<&str>,
 ) -> Result<WorkerResponse, ApiError> {
@@ -88,7 +89,7 @@ pub(crate) async fn configure_agent(
     }
 }
 
-pub(crate) async fn stop_agent(state: &State, session_id: &str) -> Result<WorkerResponse, ApiError> {
+pub(crate) async fn stop_agent(state: &State, session_id: &SessionId) -> Result<WorkerResponse, ApiError> {
     // Includes one that's on its way out: this resolves once it has finished.
     let agent = state.agents.lock().get(session_id).map(|agent| agent.process.clone());
     match agent {

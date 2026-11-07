@@ -1,3 +1,5 @@
+use protocol::model::SessionId;
+
 use super::chats::{inherited_mode, neighbor};
 use super::view::{MODELS, model_label};
 
@@ -11,9 +13,9 @@ fn a_new_chat_doesnt_inherit_plan_or_full_access() {
 
 #[test]
 fn closing_a_chat_moves_to_the_next_or_else_the_last() {
-    let open: Vec<String> = vec!["a".into(), "c".into()];
-    assert_eq!(neighbor(&open, 1).as_deref(), Some("c"));
-    assert_eq!(neighbor(&open, 2).as_deref(), Some("c"));
+    let open: Vec<SessionId> = vec!["a".into(), "c".into()];
+    assert_eq!(neighbor(&open, 1), Some("c".into()));
+    assert_eq!(neighbor(&open, 2), Some("c".into()));
     assert_eq!(neighbor(&[], 0), None);
 }
 

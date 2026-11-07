@@ -13,7 +13,7 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::SessionStatus;
+use protocol::model::{RepoId, SessionId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -226,12 +226,12 @@ impl<'a> Ui<'a> {
         self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
     }
 
-    pub(crate) fn active_chat(&self) -> String {
+    pub(crate) fn active_chat(&self) -> SessionId {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, _| p.active.clone().unwrap())
     }
 
-    pub(crate) fn open_chats(&self) -> Vec<String> {
+    pub(crate) fn open_chats(&self) -> Vec<SessionId> {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, _| {
             p.sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone()).collect()
@@ -244,7 +244,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Presses the new chat button and waits until that chat is showing.
-    pub(crate) fn new_chat(&mut self) -> String {
+    pub(crate) fn new_chat(&mut self) -> SessionId {
         let before = self.open_chats().len();
         self.click("new-chat");
         self.wait("the new chat", |ui| ui.open_chats().len() > before && ui.transcript().is_some());
@@ -253,10 +253,9 @@ impl<'a> Ui<'a> {
         newest
     }
 
-    pub(crate) fn show_chat(&mut self, id: &str) {
+    pub(crate) fn show_chat(&mut self, id: &SessionId) {
         self.click(SharedString::from(format!("chat-{id}")));
-        let id = id.to_string();
-        self.wait("the chat to show", |ui| ui.active_chat() == id);
+        self.wait("the chat to show", |ui| ui.active_chat() == *id);
     }
 
     /// Opens a picker and clicks the item at this position, the way someone would.
@@ -270,12 +269,12 @@ impl<'a> Ui<'a> {
         self.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.permission_mode.clone()))
     }
 
-    pub(crate) fn first_repo_id(&self) -> String {
+    pub(crate) fn first_repo_id(&self) -> RepoId {
         self.view().repos[0].id.clone()
     }
 
     /// Clicks New for the first repository, and waits until the new workspace is on screen.
-    pub(crate) fn new_workspace(&mut self) -> String {
+    pub(crate) fn new_workspace(&mut self) -> WorkspaceId {
         let before = self.view().workspaces.len();
         let id = format!("new-in-{}", self.first_repo_id());
         self.click(SharedString::from(id));
@@ -285,9 +284,9 @@ impl<'a> Ui<'a> {
         self.view().selected.clone().unwrap()
     }
 
-    pub(crate) fn worktree(&self, id: &str) -> PathBuf {
+    pub(crate) fn worktree(&self, id: &WorkspaceId) -> PathBuf {
         let view = self.view();
-        let workspace = view.workspaces.iter().find(|w| w.id == id).unwrap();
+        let workspace = view.workspaces.iter().find(|w| &w.id == id).unwrap();
         PathBuf::from(workspace.path.clone().unwrap())
     }
 }

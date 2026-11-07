@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Client, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, Seq, Session, SessionStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -25,7 +25,7 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
                 let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
                 println!(
                     "{}  {:?}{closed}  {} events  model={} mode={}  {}",
-                    short(&session.id),
+                    short(session.id.as_str()),
                     session.status,
                     session.last_seq,
                     session.model.as_deref().unwrap_or("-"),
@@ -71,7 +71,7 @@ pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, r
 
 /// A session ID or prefix, or a workspace name for that workspace's newest session.
 pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Session> {
-    if let Ok(session) = client.session_get(query) {
+    if let Ok(session) = client.session_get(&query.into()) {
         return Ok(session);
     }
     let workspaces = client.workspace_list(true)?;
@@ -84,7 +84,7 @@ pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Sessi
             }
             bail!("workspace {query} has no open sessions. Start one with `trestle session new {query}`");
         }
-        by_prefix.extend(sessions.into_iter().filter(|s| s.id.starts_with(query)));
+        by_prefix.extend(sessions.into_iter().filter(|s| s.id.as_str().starts_with(query)));
     }
     match by_prefix.len() {
         0 => bail!("no session matches {query}"),
@@ -95,7 +95,13 @@ pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Sessi
 
 /// Prints a session from `from` on, and keeps following until told otherwise. Exits if the hub goes
 /// away. Running it again with `--from` picks up where it stopped.
-pub(crate) fn follow(client: &Client, session_id: &str, from: Seq, until_idle: bool, json: bool) -> anyhow::Result<()> {
+pub(crate) fn follow(
+    client: &Client,
+    session_id: &SessionId,
+    from: Seq,
+    until_idle: bool,
+    json: bool,
+) -> anyhow::Result<()> {
     let subscription = client.session_subscribe(session_id, from)?;
     let mut printer = render::Printer::default();
     let mut last_seq = from.saturating_sub(1);

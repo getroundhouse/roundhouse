@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{AgentKind, Session, SessionStatus, Workspace};
+use protocol::model::{AgentKind, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
@@ -178,7 +178,7 @@ pub(crate) fn wait_until(what: &str, mut condition: impl FnMut() -> bool) {
     }
 }
 
-pub(crate) fn read_all(client: &Client, session_id: &str) -> Vec<SessionEvent> {
+pub(crate) fn read_all(client: &Client, session_id: &SessionId) -> Vec<SessionEvent> {
     let mut events = Vec::new();
     let mut from = 1;
     loop {
@@ -192,12 +192,12 @@ pub(crate) fn read_all(client: &Client, session_id: &str) -> Vec<SessionEvent> {
     }
 }
 
-pub(crate) fn wait_for_status(client: &Client, session_id: &str, status: SessionStatus) {
+pub(crate) fn wait_for_status(client: &Client, session_id: &SessionId, status: SessionStatus) {
     wait_until(&format!("session to be {status:?}"), || client.session_get(session_id).unwrap().status == status);
 }
 
 /// Waits until the agent has finished the turn, and everything it said is in the log.
-pub(crate) fn wait_for_turn_end(client: &Client, session_id: &str, count: usize) -> Vec<SessionEvent> {
+pub(crate) fn wait_for_turn_end(client: &Client, session_id: &SessionId, count: usize) -> Vec<SessionEvent> {
     let mut events = Vec::new();
     wait_until(&format!("{count} turn(s) to end"), || {
         events = read_all(client, session_id);
@@ -258,7 +258,7 @@ pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<String> {
     open
 }
 
-pub(crate) fn wait_for_approval(client: &Client, session_id: &str) -> String {
+pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> String {
     let mut found = None;
     wait_until("an approval request", || {
         found = pending_approval(&read_all(client, session_id));
@@ -317,10 +317,10 @@ pub(crate) fn commit_settings(stack: &Stack, toml: &str) {
     git(&stack.repo(), &["commit", "-qm", "settings"]);
 }
 
-pub(crate) fn wait_for_setup(client: &Client, id: &str) -> protocol::model::SetupStatus {
+pub(crate) fn wait_for_setup(client: &Client, id: &WorkspaceId) -> protocol::model::SetupStatus {
     let mut status = protocol::model::SetupStatus::Running;
     wait_until("setup to finish", || {
-        status = client.workspace_list(true).unwrap().into_iter().find(|w| w.id == id).unwrap().setup;
+        status = client.workspace_list(true).unwrap().into_iter().find(|w| &w.id == id).unwrap().setup;
         !matches!(status, protocol::model::SetupStatus::Running | protocol::model::SetupStatus::NotStarted)
     });
     status

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
-use protocol::model::{AgentKind, Seq, Session, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
 use tokio::sync::oneshot;
 
 use super::{Hub, new_id, not_ready};
@@ -15,7 +15,7 @@ use crate::store::{StoredSession, now_ms};
 impl Hub {
     pub(crate) async fn session_create(
         self: &Arc<Self>,
-        workspace_id: String,
+        workspace_id: WorkspaceId,
         agent: AgentKind,
         model: Option<String>,
         permission_mode: Option<String>,
@@ -31,7 +31,7 @@ impl Hub {
         let now = now_ms();
         let stored = StoredSession {
             session: Session {
-                id: id.clone(),
+                id: id.clone().into(),
                 workspace_id,
                 agent,
                 model,
@@ -56,7 +56,7 @@ impl Hub {
 
     pub(crate) async fn session_ensure(
         self: &Arc<Self>,
-        workspace_id: String,
+        workspace_id: WorkspaceId,
         agent: AgentKind,
     ) -> Result<Session, ApiError> {
         let _one_at_a_time = self.ensuring_session.lock().await;
@@ -67,17 +67,17 @@ impl Hub {
         }
     }
 
-    pub(crate) async fn session_list(&self, workspace_id: String) -> Result<Vec<Session>, ApiError> {
+    pub(crate) async fn session_list(&self, workspace_id: WorkspaceId) -> Result<Vec<Session>, ApiError> {
         self.blocking(move |store| store.list_sessions(&workspace_id)).await
     }
 
-    pub(crate) async fn session_get(&self, id: String) -> Result<Session, ApiError> {
+    pub(crate) async fn session_get(&self, id: SessionId) -> Result<Session, ApiError> {
         self.blocking(move |store| store.get_session(&id).map(|stored| stored.session)).await
     }
 
     pub(crate) async fn session_read(
         &self,
-        id: String,
+        id: SessionId,
         from_seq: Seq,
         limit: u32,
         max_bytes: Option<u64>,
@@ -96,7 +96,7 @@ impl Hub {
     /// Reads for a subscriber, never past `through`.
     pub(crate) async fn read_page(
         &self,
-        id: String,
+        id: SessionId,
         from_seq: Seq,
         through: Seq,
     ) -> Result<Vec<SessionEvent>, ApiError> {
@@ -108,7 +108,7 @@ impl Hub {
 
     pub(crate) async fn session_prompt(
         self: &Arc<Self>,
-        id: String,
+        id: SessionId,
         text: String,
         client_msg_id: Option<String>,
     ) -> Result<(Seq, bool), ApiError> {
@@ -123,7 +123,7 @@ impl Hub {
 
     pub(crate) async fn session_approve(
         self: &Arc<Self>,
-        id: String,
+        id: SessionId,
         approval_id: String,
         decision: ApprovalDecision,
     ) -> Result<(), ApiError> {
@@ -135,7 +135,7 @@ impl Hub {
 
     pub(crate) async fn session_configure(
         self: &Arc<Self>,
-        id: String,
+        id: SessionId,
         model: Option<String>,
         permission_mode: Option<String>,
     ) -> Result<Session, ApiError> {
@@ -144,15 +144,15 @@ impl Hub {
         self.live_session(&id).await?.configure(model, permission_mode).await
     }
 
-    pub(crate) async fn session_close(self: &Arc<Self>, id: String) -> Result<Session, ApiError> {
+    pub(crate) async fn session_close(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
         self.live_session(&id).await?.close().await
     }
 
-    pub(crate) async fn session_reopen(self: &Arc<Self>, id: String) -> Result<Session, ApiError> {
+    pub(crate) async fn session_reopen(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
         self.live_session(&id).await?.reopen().await
     }
 
-    pub(crate) async fn session_cancel(self: &Arc<Self>, id: String) -> Result<(), ApiError> {
+    pub(crate) async fn session_cancel(self: &Arc<Self>, id: SessionId) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
         // A prompt waiting on setup holds this session's commands, so stopping has to reach setup directly.
         self.cancel_setup(&session.workspace_id).await;

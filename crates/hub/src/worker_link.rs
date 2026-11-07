@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
+use protocol::model::WorkspaceId;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use providers::{Provider, WorkerStream};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -47,7 +48,7 @@ impl WorkerLink {
     pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
-        workspace_id: String,
+        workspace_id: WorkspaceId,
         instance_id: String,
     ) -> Result<Arc<WorkerLink>, ApiError> {
         provider.start(&instance_id).await.map_err(|e| provider_failed(&e))?;
@@ -132,7 +133,7 @@ async fn read_frames(
     hub: Arc<Hub>,
     provider: Arc<dyn Provider>,
     link: Arc<WorkerLink>,
-    workspace_id: String,
+    workspace_id: WorkspaceId,
     instance_id: String,
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {

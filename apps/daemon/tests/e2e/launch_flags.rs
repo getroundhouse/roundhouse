@@ -16,7 +16,7 @@ fn a_deleted_conversation_starts_fresh_with_a_warning() {
     drop(client);
     stack.kill_hub();
     // The hub thinks this conversation exists, because it saw it open.
-    std::fs::remove_file(stack.agent_state().join(&session.id)).unwrap();
+    std::fs::remove_file(stack.agent_state().join(session.id.as_str())).unwrap();
 
     stack.start_hub();
     let client = stack.client();
@@ -37,7 +37,7 @@ fn a_conversation_the_hub_did_not_know_had_opened_is_continued() {
     stack.kill_hub();
     // As if a launch saved the conversation, then crashed before the hub heard about it.
     std::fs::create_dir_all(stack.agent_state()).unwrap();
-    std::fs::write(stack.agent_state().join(&session.id), "say:from before the crash\n").unwrap();
+    std::fs::write(stack.agent_state().join(session.id.as_str()), "say:from before the crash\n").unwrap();
 
     stack.start_hub();
     let client = stack.client();

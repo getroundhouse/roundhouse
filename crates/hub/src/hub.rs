@@ -15,7 +15,7 @@ use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
-use protocol::model::{SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ pub(crate) struct Hub {
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     /// Held while finding or making a workspace's first session.
     ensuring_session: AsyncMutex<()>,
-    sessions: Mutex<HashMap<String, Arc<LiveSession>>>,
+    sessions: Mutex<HashMap<SessionId, Arc<LiveSession>>>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, watch::Sender<bool>>>,
     feed: broadcast::Sender<HubNotice>,
@@ -97,8 +97,8 @@ impl Hub {
         Ok(result?)
     }
 
-    pub(crate) async fn workspace(&self, id: &str) -> Result<Workspace, ApiError> {
-        let id = id.to_string();
+    pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
+        let id = id.clone();
         self.blocking(move |store| store.get_workspace(&id)).await
     }
 
@@ -116,17 +116,20 @@ impl Hub {
         let _ = self.feed.send(notice);
     }
 
-    fn worker_gate(&self, workspace_id: &str) -> Arc<AsyncMutex<()>> {
-        self.worker_gates.lock().entry(workspace_id.to_string()).or_default().clone()
+    fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<()>> {
+        self.worker_gates.lock().entry(workspace_id.clone()).or_default().clone()
     }
 
     /// The running worker, if there is one.
-    pub(crate) fn existing_worker(&self, workspace_id: &str) -> Option<Arc<WorkerLink>> {
+    pub(crate) fn existing_worker(&self, workspace_id: &WorkspaceId) -> Option<Arc<WorkerLink>> {
         self.workers.lock().get(workspace_id).filter(|link| link.is_open()).cloned()
     }
 
     /// The workspace's worker, starting it if needed.
-    pub(crate) async fn ensure_worker(self: &Arc<Self>, workspace_id: &str) -> Result<Arc<WorkerLink>, ApiError> {
+    pub(crate) async fn ensure_worker(
+        self: &Arc<Self>,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Arc<WorkerLink>, ApiError> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub is shutting down"));
         }
@@ -148,7 +151,7 @@ impl Hub {
     /// Called when a worker's stream ends, after everything it sent has been queued.
     pub(crate) async fn worker_gone(
         &self,
-        workspace_id: &str,
+        workspace_id: &WorkspaceId,
         link: &Arc<WorkerLink>,
         provider: &dyn Provider,
         instance_id: &str,
@@ -166,25 +169,25 @@ impl Hub {
         }
         // Still under the gate, so these are queued before a replacement worker can start.
         let sessions: Vec<_> =
-            self.sessions.lock().values().filter(|session| session.workspace_id == workspace_id).cloned().collect();
+            self.sessions.lock().values().filter(|session| &session.workspace_id == workspace_id).cloned().collect();
         for session in sessions {
             session.send_item(Item::WorkerLost(link.id)).await;
         }
     }
 
     /// Output for a session goes through here on its way to the log.
-    pub(crate) async fn route(self: &Arc<Self>, session_id: &str, item: Item) {
+    pub(crate) async fn route(self: &Arc<Self>, session_id: &SessionId, item: Item) {
         match self.live_session(session_id).await {
             Ok(session) => session.send_item(item).await,
-            Err(e) => warn!(session_id, "dropping output for an unknown session: {e}"),
+            Err(e) => warn!(%session_id, "dropping output for an unknown session: {e}"),
         }
     }
 
-    pub(crate) async fn live_session(self: &Arc<Self>, id: &str) -> Result<Arc<LiveSession>, ApiError> {
+    pub(crate) async fn live_session(self: &Arc<Self>, id: &SessionId) -> Result<Arc<LiveSession>, ApiError> {
         if let Some(session) = self.sessions.lock().get(id) {
             return Ok(session.clone());
         }
-        let owned = id.to_string();
+        let owned = id.clone();
         let (stored, approvals) = self
             .blocking(move |store| {
                 let stored = store.get_session(&owned)?;
@@ -193,7 +196,7 @@ impl Hub {
             })
             .await?;
         let mut sessions = self.sessions.lock();
-        let session = sessions.entry(id.to_string()).or_insert_with(|| LiveSession::start(self, stored, approvals));
+        let session = sessions.entry(id.clone()).or_insert_with(|| LiveSession::start(self, stored, approvals));
         Ok(session.clone())
     }
 
