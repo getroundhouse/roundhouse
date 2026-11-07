@@ -22,6 +22,17 @@ fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppCont
     assert_eq!(ui.view().repos[0].name, "repo");
 }
 
+#[gpui_kit::test]
+fn says_which_build_is_running(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+
+    let ui = Ui::open(cx, &stack);
+
+    let label = ui.view().build_label();
+    assert_eq!(label.text, protocol::BUILD_VERSION);
+    assert!(!label.differs);
+}
+
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     // Review the diff.
     ui.click("toggle-diff");

@@ -215,7 +215,7 @@ impl Hub {
             .count();
         HubStatus {
             pid: std::process::id(),
-            hub_version: env!("CARGO_PKG_VERSION").to_string(),
+            hub_version: protocol::BUILD_VERSION.to_string(),
             protocol_version: PROTOCOL_VERSION,
             started_at_ms: self.started_at_ms,
             workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
