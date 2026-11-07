@@ -26,7 +26,7 @@ use crate::{AgentOptions, AgentOutput, AgentProcess};
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 /// Overrides how the binary is found. Used by tests, and by anyone pinning a version.
-pub const ENV_CLAUDE_BIN: &str = "AGENTHUB_CLAUDE_BIN";
+pub const ENV_CLAUDE_BIN: &str = "TRESTLE_CLAUDE_BIN";
 
 const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI

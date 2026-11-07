@@ -18,7 +18,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
     std::fs::write(&cli, "#!/bin/sh\nexec sleep 100\n").unwrap();
     std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
     // SAFETY: this binary has one test, and nothing else reads the environment yet.
-    unsafe { std::env::set_var("AGENTHUB_CLAUDE_BIN", &cli) };
+    unsafe { std::env::set_var("TRESTLE_CLAUDE_BIN", &cli) };
 
     for attempt in 0..8 {
         let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);

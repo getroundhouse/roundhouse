@@ -66,7 +66,7 @@ impl Printer {
             EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
                 let summary = description.clone().unwrap_or_else(|| summarize_input(input));
                 self.line(event.seq, &format!("APPROVAL NEEDED: {tool_name}: {summary}"));
-                self.line(event.seq, &format!("  agenthub approve {} {approval_id}", event.session_id));
+                self.line(event.seq, &format!("  trestle approve {} {approval_id}", event.session_id));
             }
             EventBody::ApprovalResolved { approval_id, outcome } => {
                 self.line(event.seq, &format!("approval {} {outcome:?}", &approval_id[..approval_id.len().min(8)]));

@@ -29,8 +29,8 @@ impl HubSource {
     /// The default hub for this user, with the daemon next to this binary.
     pub fn default_local() -> Self {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).expect("HOME is set");
-        let daemon = std::env::var_os("AGENTHUB_DAEMON_BIN").map(PathBuf::from).unwrap_or_else(|| {
-            std::env::current_exe().map(|exe| exe.with_file_name("agenthubd")).unwrap_or_else(|_| "agenthubd".into())
+        let daemon = std::env::var_os("TRESTLE_DAEMON_BIN").map(PathBuf::from).unwrap_or_else(|| {
+            std::env::current_exe().map(|exe| exe.with_file_name("trestled")).unwrap_or_else(|_| "trestled".into())
         });
         Self { paths, daemon }
     }

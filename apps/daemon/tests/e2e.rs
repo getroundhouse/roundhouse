@@ -23,7 +23,7 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 fn fake_agent() -> &'static Path {
     static FAKE: OnceLock<PathBuf> = OnceLock::new();
     FAKE.get_or_init(|| {
-        let bin_dir = Path::new(env!("CARGO_BIN_EXE_agenthubd")).parent().unwrap();
+        let bin_dir = Path::new(env!("CARGO_BIN_EXE_trestled")).parent().unwrap();
         let mut build = Command::new(env!("CARGO"));
         build.args(["build", "-p", "daemon", "--example", "fake_claude"]);
         if bin_dir.file_name().is_some_and(|name| name == "release") {
@@ -71,16 +71,16 @@ impl Stack {
     }
 
     fn command(&self) -> Command {
-        self.command_at(Path::new(env!("CARGO_BIN_EXE_agenthubd")))
+        self.command_at(Path::new(env!("CARGO_BIN_EXE_trestled")))
     }
 
     fn command_at(&self, exe: &Path) -> Command {
         let mut command = Command::new(exe);
         command
             .arg("hub")
-            .env("AGENTHUB_HOME", self.path("home"))
-            .env("AGENTHUB_WORKSPACES", self.path("workspaces"))
-            .env("AGENTHUB_CLAUDE_BIN", fake_agent())
+            .env("TRESTLE_HOME", self.path("home"))
+            .env("TRESTLE_WORKSPACES", self.path("workspaces"))
+            .env("TRESTLE_CLAUDE_BIN", fake_agent())
             .env("FAKE_CLAUDE_STATE", self.agent_state())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
@@ -932,7 +932,7 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
     let mut stack = Stack::start();
     stack.kill_hub();
     let mut command = stack.command();
-    command.env("AGENTHUB_CLAUDE_BIN", "/nonexistent/claude");
+    command.env("TRESTLE_CLAUDE_BIN", "/nonexistent/claude");
     stack.hub = Some(command.spawn().unwrap());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
 
@@ -1064,8 +1064,8 @@ fn a_prompt_sent_as_the_agent_dies_is_delivered_to_a_new_one() {
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
-    let exe = stack.path("agenthubd-copy");
-    install_executable(Path::new(env!("CARGO_BIN_EXE_agenthubd")), &exe);
+    let exe = stack.path("trestled-copy");
+    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), &exe);
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
     exe
@@ -1081,7 +1081,7 @@ fn install_executable(source: &Path, target: &Path) {
 }
 
 fn restore_real_worker(exe: &Path) {
-    install_executable(Path::new(env!("CARGO_BIN_EXE_agenthubd")), exe);
+    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), exe);
 }
 
 fn replace_with_script(exe: &Path, body: &str) {
@@ -1587,7 +1587,7 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
         _ => None,
     })
     .unwrap();
-    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_agenthubd")), "test").unwrap();
+    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_trestled")), "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());
     client.hub_shutdown().unwrap();
@@ -2028,7 +2028,7 @@ fn a_directory_the_user_pointed_us_at_keeps_its_permissions() {
     std::fs::create_dir(&shared).unwrap();
     std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut command = stack.command();
-    command.env("AGENTHUB_HOME", &shared);
+    command.env("TRESTLE_HOME", &shared);
     let mut hub = command.spawn().unwrap();
     let socket = shared.join("hub.sock");
     wait_until("the hub", || Client::connect(&socket, "test").is_ok());

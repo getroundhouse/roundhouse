@@ -1,13 +1,13 @@
 [package]
 name = "daemon"
-description = "Runs as a hub or a worker. `agenthubd` is a placeholder until the product has a name."
+description = "Runs as a hub or a worker."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "agenthubd"
+name = "trestled"
 path = "src/main.rs"
 
 [dependencies]

@@ -477,7 +477,7 @@ fn hub_is_missing(error: &ClientError) -> bool {
 fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
     use std::os::unix::process::CommandExt;
-    // Only sets the mode if it creates the directory, because AGENTHUB_HOME can point anywhere.
+    // Only sets the mode if it creates the directory, because TRESTLE_HOME can point anywhere.
     std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&paths.data_dir)?;
     let log = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
     let mut command = Command::new(daemon);

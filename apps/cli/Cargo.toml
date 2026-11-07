@@ -1,13 +1,13 @@
 [package]
 name = "cli"
-description = "Command-line client. `agenthub` is a placeholder until the product has a name."
+description = "Command-line client."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "agenthub"
+name = "trestle"
 path = "src/main.rs"
 
 [dependencies]

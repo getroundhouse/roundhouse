@@ -1,5 +1,5 @@
 //! The real app in a real window, opened on a given view, for looking at it by eye or taking a screenshot.
-//! Everything else in the app works normally. Uses the default hub, or `AGENTHUB_HOME` if it's set.
+//! Everything else in the app works normally. Uses the default hub, or `TRESTLE_HOME` if it's set.
 //!
 //!     cargo run -p desktop --example look -- some-workspace
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"

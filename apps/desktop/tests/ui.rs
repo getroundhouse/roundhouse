@@ -26,7 +26,7 @@ fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         let output = Command::new(env!("CARGO"))
-            .args(["build", "-p", "daemon", "--bin", "agenthubd", "--example", "fake_claude"])
+            .args(["build", "-p", "daemon", "--bin", "trestled", "--example", "fake_claude"])
             .output()
             .unwrap();
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
@@ -45,7 +45,7 @@ fn point_daemons_at_the_fake_agent() {
         let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
         // SAFETY: guarded by the OnceLock, and this runs before any daemon or thread here reads it.
         unsafe {
-            std::env::set_var("AGENTHUB_CLAUDE_BIN", binaries().join("examples/fake_claude"));
+            std::env::set_var("TRESTLE_CLAUDE_BIN", binaries().join("examples/fake_claude"));
             std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             std::env::set_var("HOME", scratch.join("ui-home"));
@@ -75,7 +75,7 @@ impl Stack {
             other => std::env::var(other).ok(),
         })
         .unwrap();
-        let hub = HubSource { paths, daemon: binaries().join("agenthubd") };
+        let hub = HubSource { paths, daemon: binaries().join("trestled") };
         Self { dir, hub }
     }
 

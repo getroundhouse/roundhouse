@@ -1,13 +1,10 @@
 //! Where a hub keeps its files. Takes the environment as a function, to stay free of IO.
-//!
-//! The product name isn't chosen yet. `agenthub` is a placeholder, and these constants, the binary
-//! names and the crate descriptions are all that need changing.
 
 use std::path::PathBuf;
 
-pub const DIR_NAME: &str = "agenthub";
-pub const ENV_HOME: &str = "AGENTHUB_HOME";
-pub const ENV_WORKSPACES: &str = "AGENTHUB_WORKSPACES";
+pub const DIR_NAME: &str = "trestle";
+pub const ENV_HOME: &str = "TRESTLE_HOME";
+pub const ENV_WORKSPACES: &str = "TRESTLE_WORKSPACES";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Paths {
@@ -79,7 +76,7 @@ mod tests {
     #[test]
     fn workspaces_default_to_a_visible_folder_in_home() {
         let paths = resolve(env_of(&[("HOME", "/h")])).unwrap();
-        assert_eq!(paths.workspaces_root, PathBuf::from("/h/agenthub/workspaces"));
+        assert_eq!(paths.workspaces_root, PathBuf::from("/h/trestle/workspaces"));
     }
 
     #[test]

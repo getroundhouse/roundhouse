@@ -13,7 +13,7 @@ use protocol::model::{AgentKind, Seq, Session, SessionStatus, Workspace};
 use protocol::paths::Paths;
 
 #[derive(Parser)]
-#[command(name = "agenthub", version, about = "Run coding agents in parallel, each in its own worktree")]
+#[command(name = "trestle", version, about = "Run coding agents in parallel, each in its own worktree")]
 struct Args {
     #[command(subcommand)]
     command: Cmd,
@@ -179,11 +179,11 @@ fn connect(paths: &Paths) -> anyhow::Result<Client> {
 
 /// The daemon ships next to this binary.
 fn find_daemon() -> anyhow::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("AGENTHUB_DAEMON_BIN") {
+    if let Some(path) = std::env::var_os("TRESTLE_DAEMON_BIN") {
         return Ok(path.into());
     }
     let exe = std::env::current_exe().context("finding this binary")?;
-    Ok(exe.with_file_name("agenthubd"))
+    Ok(exe.with_file_name("trestled"))
 }
 
 fn run(args: Args) -> anyhow::Result<()> {
@@ -332,7 +332,7 @@ fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyhow::Result<(
                 .iter()
                 .find(|r| r.name == repo || r.id == repo)
                 .or_else(|| repos.iter().find(|r| r.id.starts_with(&repo)))
-                .ok_or_else(|| anyhow!("no repository matches {repo}. Add one with `agenthub repo add <path>`"))?;
+                .ok_or_else(|| anyhow!("no repository matches {repo}. Add one with `trestle repo add <path>`"))?;
             let workspace = client.workspace_create(&found.id, name, base)?;
             println!("{}", workspace.name);
             println!("  path    {}", workspace.path.unwrap_or_default());
@@ -410,7 +410,7 @@ fn find_session(client: &Client, query: &str) -> anyhow::Result<Session> {
             if let Some(newest) = sessions.iter().rfind(|s| s.closed_at_ms.is_none()) {
                 return Ok(newest.clone());
             }
-            bail!("workspace {query} has no open sessions. Start one with `agenthub session new {query}`");
+            bail!("workspace {query} has no open sessions. Start one with `trestle session new {query}`");
         }
         by_prefix.extend(sessions.into_iter().filter(|s| s.id.starts_with(query)));
     }

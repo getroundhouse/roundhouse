@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "agenthubd", version, about = "Runs as a hub or a worker")]
+#[command(name = "trestled", version, about = "Runs as a hub or a worker")]
 struct Args {
     #[command(subcommand)]
     role: Role,
@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     unblock_signals();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("AGENTHUB_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(EnvFilter::try_from_env("TRESTLE_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();
