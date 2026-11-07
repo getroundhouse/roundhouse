@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model::{Seq, SessionId};
+use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, Seq, SessionId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
@@ -30,7 +30,7 @@ pub enum EventBody {
     UserPrompt {
         text: String,
         #[serde(default)]
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
     },
     /// The worker launched an agent process for this session.
     AgentStarted {
@@ -39,7 +39,7 @@ pub enum EventBody {
     },
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {
-        agent_session_id: Option<String>,
+        agent_session_id: Option<AgentSessionId>,
         model: Option<String>,
         cwd: Option<String>,
         permission_mode: Option<String>,
@@ -50,16 +50,16 @@ pub enum EventBody {
     },
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
-        message_id: Option<String>,
+        message_id: Option<MessageId>,
         #[serde(default)]
-        parent_tool_use_id: Option<String>,
+        parent_tool_use_id: Option<ToolUseId>,
         model: Option<String>,
         blocks: Vec<ContentBlock>,
     },
     /// Content the agent itself added on the user's side: tool results and interruption notes.
     AgentUser {
         #[serde(default)]
-        parent_tool_use_id: Option<String>,
+        parent_tool_use_id: Option<ToolUseId>,
         blocks: Vec<ContentBlock>,
     },
     TurnEnded {
@@ -72,9 +72,9 @@ pub enum EventBody {
         num_turns: Option<u64>,
     },
     ApprovalRequested {
-        approval_id: String,
+        approval_id: ApprovalId,
         tool_name: String,
-        tool_use_id: Option<String>,
+        tool_use_id: Option<ToolUseId>,
         input: Value,
         description: Option<String>,
         /// Agent-defined options for remembering the decision. Passed back unchanged.
@@ -82,7 +82,7 @@ pub enum EventBody {
         suggestions: Value,
     },
     ApprovalResolved {
-        approval_id: String,
+        approval_id: ApprovalId,
         outcome: ApprovalOutcome,
     },
     AgentExited {
@@ -147,7 +147,7 @@ pub enum ContentBlock {
         input: Value,
     },
     ToolResult {
-        tool_use_id: String,
+        tool_use_id: ToolUseId,
         is_error: bool,
         text: String,
         /// Images aren't copied into the normalized event. They stay in the raw line.

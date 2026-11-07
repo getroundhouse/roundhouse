@@ -40,7 +40,7 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Send { session, prompt, no_follow, client_msg_id } => {
             let session = find_session(&client, &session)?;
             // Generated here rather than left to the hub, so a retry of this exact send is safe.
-            let msg_id = client_msg_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let msg_id = client_msg_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string().into());
             let (seq, duplicate) = client.session_prompt(&session.id, &prompt, Some(msg_id))?;
             if duplicate {
                 eprintln!("(already recorded as event {seq})");

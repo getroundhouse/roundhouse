@@ -23,7 +23,7 @@ fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             title: row.get(11)?,
             closed_at_ms: row.get(12)?,
         },
-        agent_session_id: row.get(9)?,
+        agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
     })
 }
@@ -43,7 +43,7 @@ impl Store {
                 session.last_seq.cast_signed(),
                 session.created_at_ms,
                 session.updated_at_ms,
-                stored.agent_session_id,
+                stored.agent_session_id.as_str(),
                 stored.agent_opened,
                 session.title,
                 session.closed_at_ms,

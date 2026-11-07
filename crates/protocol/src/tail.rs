@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::EventBody;
+use crate::model::{MessageId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -21,9 +22,9 @@ pub enum BlockKind {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StreamDelta {
-    pub message_id: String,
+    pub message_id: MessageId,
     #[serde(default)]
-    pub parent_tool_use_id: Option<String>,
+    pub parent_tool_use_id: Option<ToolUseId>,
     pub change: DeltaChange,
 }
 
@@ -61,8 +62,8 @@ pub struct Tail {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TailMessage {
-    pub message_id: String,
-    pub parent_tool_use_id: Option<String>,
+    pub message_id: MessageId,
+    pub parent_tool_use_id: Option<ToolUseId>,
     pub blocks: Vec<TailBlock>,
 }
 
@@ -195,7 +196,7 @@ mod tests {
         assert_eq!(tail.messages.len(), 2);
         tail.on_event(&assistant("sub"));
         assert_eq!(tail.messages.len(), 1);
-        assert_eq!(tail.messages[0].message_id, "m1");
+        assert_eq!(tail.messages[0].message_id, "m1".into());
     }
 
     #[test]

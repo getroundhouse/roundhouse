@@ -29,8 +29,8 @@ fn delta() -> impl Strategy<Value = StreamDelta> {
         Just(DeltaChange::Unknown),
     ];
     ("m[0-2]", option::of("t[01]"), change).prop_map(|(message_id, parent_tool_use_id, change)| StreamDelta {
-        message_id,
-        parent_tool_use_id,
+        message_id: message_id.into(),
+        parent_tool_use_id: parent_tool_use_id.map(Into::into),
         change,
     })
 }
@@ -43,9 +43,9 @@ fn applied(deltas: &[StreamDelta]) -> Tail {
     tail
 }
 
-fn finished(message_id: &str) -> EventBody {
+fn finished(message_id: &MessageId) -> EventBody {
     EventBody::Assistant {
-        message_id: Some(message_id.to_string()),
+        message_id: Some(message_id.clone()),
         parent_tool_use_id: None,
         model: None,
         blocks: Vec::new(),
@@ -77,7 +77,7 @@ proptest! {
     /// A block's text is everything sent to it, in order, since its message last stopped.
     #[test]
     fn a_block_holds_everything_sent_to_it_in_order(deltas in vec(delta(), 0..40)) {
-        let mut expected: BTreeMap<(String, u32), String> = BTreeMap::new();
+        let mut expected: BTreeMap<(MessageId, u32), String> = BTreeMap::new();
         for delta in &deltas {
             match &delta.change {
                 DeltaChange::Text { index, text }
@@ -95,7 +95,7 @@ proptest! {
 
         let tail = applied(&deltas);
 
-        let held: BTreeMap<(String, u32), String> = tail
+        let held: BTreeMap<(MessageId, u32), String> = tail
             .messages
             .iter()
             .flat_map(|m| m.blocks.iter().map(|b| ((m.message_id.clone(), b.index), b.text.clone())))
@@ -128,9 +128,9 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(&finished(&which));
+        after.on_event(&finished(&which.as_str().into()));
 
-        let others: Vec<_> = before.messages.iter().filter(|m| m.message_id != which).cloned().collect();
+        let others: Vec<_> = before.messages.iter().filter(|m| m.message_id.as_str() != which).cloned().collect();
         prop_assert_eq!(after.messages, others);
     }
 }

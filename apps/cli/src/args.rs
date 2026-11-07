@@ -1,7 +1,7 @@
 //! What the command line accepts.
 
 use clap::{Parser, Subcommand};
-use protocol::model::Seq;
+use protocol::model::{ApprovalId, ClientMessageId, Seq};
 
 #[derive(Parser)]
 #[command(name = "trestle", version, about = "Run coding agents in parallel, each in its own worktree")]
@@ -32,7 +32,7 @@ pub(crate) enum Cmd {
         no_follow: bool,
         /// Makes retrying safe: the same ID is only ever recorded once.
         #[arg(long)]
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
     },
     /// Follow a session's events from any point in its history.
     Attach {
@@ -61,13 +61,13 @@ pub(crate) enum Cmd {
     /// Answer an approval the agent is waiting on.
     Approve {
         session: String,
-        approval_id: String,
+        approval_id: ApprovalId,
         /// Refuse, with this message to the agent.
         #[arg(long)]
         deny: Option<String>,
     },
     /// Answer a question the agent asked.
-    Answer { session: String, approval_id: String, question: String, answer: String },
+    Answer { session: String, approval_id: ApprovalId, question: String, answer: String },
     /// Stop the agent's current turn. The session stays usable.
     Cancel { session: String },
 }

@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
 /// can't be passed as another. They're plain strings on the wire and in storage.
 macro_rules! ids {
-    ($($name:ident),+ $(,)?) => {$(
+    ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$(
+        $(#[$doc])*
         #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         #[serde(transparent)]
         pub struct $name(String);
@@ -36,7 +37,24 @@ macro_rules! ids {
     )+};
 }
 
-ids!(RepoId, WorkspaceId, SessionId);
+ids!(
+    RepoId,
+    WorkspaceId,
+    SessionId,
+    CommentId,
+    /// The agent's own ID for an approval it asked for.
+    ApprovalId,
+    /// Where a workspace's worker runs, in its provider's terms.
+    InstanceId,
+    /// The agent's own ID for a conversation, which is what resumes it.
+    AgentSessionId,
+    /// Chosen by a client, so that retrying a prompt can't record it twice.
+    ClientMessageId,
+    /// The agent's own ID for a message it's sending.
+    MessageId,
+    /// The agent's own ID for one use of a tool.
+    ToolUseId,
+);
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.
 pub type Seq = u64;
@@ -80,7 +98,7 @@ pub struct Workspace {
     pub path: Option<String>,
     pub status: WorkspaceStatus,
     pub provider: String,
-    pub instance_id: String,
+    pub instance_id: InstanceId,
     pub created_at_ms: i64,
     pub archived_at_ms: Option<i64>,
     pub setup: SetupStatus,
@@ -212,7 +230,7 @@ pub enum DiffSide {
 /// A review comment on a changed line, waiting to be sent to the agent.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct DiffComment {
-    pub id: String,
+    pub id: CommentId,
     pub workspace_id: WorkspaceId,
     pub path: String,
     pub side: DiffSide,

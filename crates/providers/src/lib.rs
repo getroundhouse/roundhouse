@@ -6,11 +6,12 @@
 mod error;
 pub mod local;
 
-pub use error::ProviderError;
-
 use async_trait::async_trait;
+use protocol::model::InstanceId;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
+
+pub use error::ProviderError;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Capabilities {
@@ -33,15 +34,15 @@ pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
     /// Makes the instance and puts the worker binary in it.
-    async fn create(&self, instance_id: &str) -> Result<(), ProviderError>;
-    async fn start(&self, instance_id: &str) -> Result<(), ProviderError>;
+    async fn create(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
+    async fn start(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     /// Safe to call on an instance that isn't running. Also ends anything the worker left behind,
     /// so nothing from this run can still be working when the next one starts.
-    async fn stop(&self, instance_id: &str) -> Result<(), ProviderError>;
+    async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     /// Like `stop`, without giving the worker time to finish. For one that isn't responding.
-    async fn kill(&self, instance_id: &str) -> Result<(), ProviderError>;
+    async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     /// Can be called once per `start`.
-    async fn connect(&self, instance_id: &str) -> Result<WorkerStream, ProviderError>;
+    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerStream, ProviderError>;
     /// Safe to call on an instance that doesn't exist.
-    async fn destroy(&self, instance_id: &str) -> Result<(), ProviderError>;
+    async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
 }

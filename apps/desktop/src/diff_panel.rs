@@ -15,7 +15,7 @@ use gpui_kit::{
     InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Subscription,
     WeakEntity, Window, div,
 };
-use protocol::model::{DiffComment, DiffSide, WorkspaceId};
+use protocol::model::{CommentId, DiffComment, DiffSide, WorkspaceId};
 
 #[derive(Clone, Debug)]
 pub enum DiffEvent {
@@ -192,7 +192,7 @@ impl DiffPanel {
         .detach();
     }
 
-    pub fn delete_comment(&mut self, id: String, cx: &mut Context<Self>) {
+    pub fn delete_comment(&mut self, id: CommentId, cx: &mut Context<Self>) {
         self.comments.retain(|c| c.id != id);
         let client = self.client.clone();
         cx.spawn(async move |this, cx| {
@@ -238,7 +238,7 @@ impl DiffPanel {
             .iter()
             .map(|c| {
                 let position = DiffLinePosition::new(c.path.clone(), kit_side(c.side), c.line as usize);
-                DiffAnnotation::line(ElementId::Name(c.id.clone().into()), position)
+                DiffAnnotation::line(ElementId::Name(c.id.to_string().into()), position)
             })
             .collect();
         if let Some(position) = &self.draft {
@@ -266,7 +266,7 @@ impl DiffPanel {
                 if id == ElementId::Name("draft".into()) {
                     return draft_card(&draft_input, for_annotations.clone(), cx);
                 }
-                let text = comments.iter().find(|c| ElementId::Name(c.id.clone().into()) == id);
+                let text = comments.iter().find(|c| ElementId::Name(c.id.to_string().into()) == id);
                 let Some(comment) = text.cloned() else { return div().into_any_element() };
                 comment_card(comment, for_annotations.clone(), cx)
             })

@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Seq, seq_index};
+use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
 pub const PAGE_EVENTS: u64 = 250;
@@ -17,7 +17,7 @@ pub const MAX_LOADED_EVENTS: usize = 2000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingPrompt {
-    pub client_msg_id: String,
+    pub client_msg_id: ClientMessageId,
     pub text: String,
 }
 
@@ -174,13 +174,13 @@ impl SessionLog {
     }
 
     /// Adds a prompt that's on its way, so it shows straight away. Recording it removes this.
-    pub fn add_pending(&mut self, client_msg_id: String, text: String) {
+    pub fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String) {
         self.pending.push(PendingPrompt { client_msg_id, text });
     }
 
     /// The prompt couldn't be sent, so it no longer belongs in the transcript.
-    pub fn remove_pending(&mut self, client_msg_id: &str) -> Option<PendingPrompt> {
-        let at = self.pending.iter().position(|prompt| prompt.client_msg_id == client_msg_id)?;
+    pub fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
+        let at = self.pending.iter().position(|prompt| prompt.client_msg_id == *client_msg_id)?;
         Some(self.pending.remove(at))
     }
 
@@ -301,9 +301,9 @@ mod tests {
     fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
         let mut log = SessionLog::new(0);
         log.add_pending("m1".into(), "hello".into());
-        assert_eq!(log.remove_pending("m1").unwrap().text, "hello");
+        assert_eq!(log.remove_pending(&"m1".into()).unwrap().text, "hello");
         assert_eq!(log.row_count(), 0);
-        assert_eq!(log.remove_pending("m1"), None);
+        assert_eq!(log.remove_pending(&"m1".into()), None);
     }
 
     #[test]

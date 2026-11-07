@@ -1,13 +1,13 @@
 //! Each session's event log.
 
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{Seq, SessionId, SessionStatus};
+use protocol::model::{ApprovalId, ClientMessageId, Seq, SessionId, SessionStatus};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
 /// The event that closes an unanswered approval when nobody can answer it any more.
-pub fn cancelled_approval(approval_id: String) -> EventBody {
+pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
     EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled }
 }
 
@@ -19,7 +19,7 @@ impl Store {
         session_id: &SessionId,
         body: &EventBody,
         raw: Option<&str>,
-        client_msg_id: Option<&str>,
+        client_msg_id: Option<&ClientMessageId>,
         new_status: Option<SessionStatus>,
     ) -> Result<Appended, StoreError> {
         let mut conn = lock(&self.writer);
@@ -28,7 +28,7 @@ impl Store {
             let existing = tx
                 .query_row(
                     "SELECT seq, ts_ms, body FROM events WHERE session_id = ? AND client_msg_id = ?",
-                    params![session_id.as_str(), client_msg_id],
+                    params![session_id.as_str(), client_msg_id.as_str()],
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?)),
                 )
                 .optional()?;
@@ -48,7 +48,15 @@ impl Store {
         let encoded = serde_json::to_string(body)?;
         tx.execute(
             "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, body, raw) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            params![session_id.as_str(), seq, ts_ms, body.kind(), client_msg_id, encoded, raw],
+            params![
+                session_id.as_str(),
+                seq,
+                ts_ms,
+                body.kind(),
+                client_msg_id.map(ClientMessageId::as_str),
+                encoded,
+                raw
+            ],
         )?;
         tx.execute(
             "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
@@ -104,7 +112,7 @@ impl Store {
     }
 
     /// Approvals requested and never resolved.
-    pub fn open_approvals(&self, session_id: &SessionId) -> Result<Vec<String>, StoreError> {
+    pub fn open_approvals(&self, session_id: &SessionId) -> Result<Vec<ApprovalId>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn
             .prepare_cached(

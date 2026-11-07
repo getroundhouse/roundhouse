@@ -1,5 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{AgentKind, DiffComment, Repo, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, ApprovalId, DiffComment, Repo, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
+};
 
 use super::*;
 
@@ -76,10 +78,10 @@ fn a_status_change_commits_with_its_event() {
 fn a_repeated_client_msg_id_returns_the_original_and_adds_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let first = store.append(&"s".into(), &notice("a"), None, Some("msg-1"), None).unwrap();
+    let first = store.append(&"s".into(), &notice("a"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(!first.duplicate);
     store.append(&"s".into(), &notice("b"), None, None, None).unwrap();
-    let again = store.append(&"s".into(), &notice("c"), None, Some("msg-1"), None).unwrap();
+    let again = store.append(&"s".into(), &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(again.duplicate);
     assert_eq!(again.event.seq, first.event.seq);
     assert_eq!(again.event.body, notice("a"));
@@ -128,7 +130,7 @@ fn open_approvals_are_those_requested_and_not_resolved() {
     store.append(&"s".into(), &requested("a"), None, None, None).unwrap();
     store.append(&"s".into(), &requested("b"), None, None, None).unwrap();
     store.append(&"s".into(), &cancelled_approval("a".into()), None, None, None).unwrap();
-    assert_eq!(store.open_approvals(&"s".into()).unwrap(), vec!["b".to_string()]);
+    assert_eq!(store.open_approvals(&"s".into()).unwrap(), vec![ApprovalId::from("b")]);
 }
 
 #[test]
@@ -164,7 +166,7 @@ fn comments_belong_to_a_workspace_and_can_be_removed() {
     store.add_comment(&comment).unwrap();
     assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![comment]);
     assert_eq!(store.list_comments(&"other".into()).unwrap(), vec![]);
-    store.delete_comment("c1").unwrap();
+    store.delete_comment(&"c1".into()).unwrap();
     assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![]);
 }
 

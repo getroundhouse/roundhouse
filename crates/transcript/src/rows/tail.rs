@@ -15,7 +15,7 @@ pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
     let mut out = row();
     for message in &tail.messages {
         for block in &message.blocks {
-            let key = ((message.message_id.len() as u64) << 8) | u64::from(block.index);
+            let key = ((message.message_id.as_str().len() as u64) << 8) | u64::from(block.index);
             out = match block.kind {
                 BlockKind::Text => {
                     let id = ElementId::NamedInteger("tail".into(), key);

@@ -8,7 +8,7 @@ use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, S
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ElementId, Hsla, IntoElement, ParentElement, Styled, WeakEntity, div};
 use protocol::event::ApprovalDecision;
-use protocol::model::Seq;
+use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
 use crate::Transcript;
@@ -84,7 +84,7 @@ pub(crate) fn first_unanswered<'a>(
 /// Which card this is, and what its buttons act on.
 struct CardContext<'a> {
     seq: Seq,
-    approval_id: &'a str,
+    approval_id: &'a ApprovalId,
     open: bool,
     only_question: bool,
     this: &'a WeakEntity<Transcript>,
@@ -101,7 +101,7 @@ fn option_button(
 ) -> AnyElement {
     let (seq, only_question) = (card.seq, card.only_question);
     let (this, approval_id, question, label) =
-        (card.this.clone(), card.approval_id.to_string(), question.clone(), option.label.clone());
+        (card.this.clone(), card.approval_id.clone(), question.clone(), option.label.clone());
     Button::new(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
         .small()
         // It's two lines, which is more than a small button's fixed height.
@@ -161,7 +161,7 @@ fn question_view(
 
 fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, muted: Hsla) -> impl IntoElement {
     let seq = card.seq;
-    let (to_send, to_skip) = (card.approval_id.to_string(), card.approval_id.to_string());
+    let (to_send, to_skip) = (card.approval_id.clone(), card.approval_id.clone());
     let (send, skip) = (card.this.clone(), card.this.clone());
     h_flex()
         .w_full()
@@ -191,7 +191,7 @@ fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, muted: Hs
 
 pub(crate) fn card(
     seq: Seq,
-    approval_id: &str,
+    approval_id: &ApprovalId,
     input: &Value,
     open: bool,
     picks: &BTreeMap<String, Vec<String>>,

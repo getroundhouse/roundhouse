@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use protocol::event::{EventBody, ExitReason};
+use protocol::model::ApprovalId;
 use protocol::tail::StreamDelta;
 use tokio::sync::mpsc;
 use tracing::error;
@@ -101,7 +102,7 @@ impl LiveSession {
 
     /// Closes open approvals that nobody can answer now: those from `run`, or all if it's `None`.
     pub(crate) async fn cancel_approvals(&self, run: Option<u64>) {
-        let open: Vec<String> = {
+        let open: Vec<ApprovalId> = {
             let state = self.state.lock();
             let from_this_run = |asked_by: u64| run.is_none_or(|run| asked_by == run || asked_by == NO_RUN);
             state.pending_approvals.iter().filter(|(_, by)| from_this_run(**by)).map(|(id, _)| id.clone()).collect()

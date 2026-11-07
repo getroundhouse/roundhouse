@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{AgentKind, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
@@ -246,7 +246,7 @@ pub(crate) fn assistant_text(events: &[SessionEvent]) -> String {
     text
 }
 
-pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<String> {
+pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<ApprovalId> {
     let mut open = None;
     for event in events {
         match &event.body {
@@ -258,7 +258,7 @@ pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<String> {
     open
 }
 
-pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> String {
+pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> ApprovalId {
     let mut found = None;
     wait_until("an approval request", || {
         found = pending_approval(&read_all(client, session_id));

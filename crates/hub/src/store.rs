@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::Session;
+use protocol::model::{AgentSessionId, Session};
 use rusqlite::Connection;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -39,7 +39,7 @@ pub struct Store {
 #[derive(Clone, Debug)]
 pub struct StoredSession {
     pub session: Session,
-    pub agent_session_id: String,
+    pub agent_session_id: AgentSessionId,
     /// Whether the agent has opened this conversation, which decides how it's launched next.
     pub agent_opened: bool,
 }

@@ -12,7 +12,7 @@ use gpui_kit::{
     Window, px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{Seq, Session, SessionId, seq_index};
+use protocol::model::{ApprovalId, ClientMessageId, Seq, Session, SessionId, seq_index};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ pub(crate) struct Model {
     pub expanded: HashSet<(Seq, usize)>,
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
-    pub picks: HashMap<String, BTreeMap<String, Vec<String>>>,
+    pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
     /// The row a page was last wanted for, which decides what stays loaded.
     pub focus: usize,
     pub fetch_scheduled: bool,
@@ -224,7 +224,7 @@ impl Transcript {
     pub(crate) fn pick_answer(
         &mut self,
         seq: Seq,
-        approval_id: String,
+        approval_id: ApprovalId,
         question: &crate::questions::Question,
         label: String,
         only_question: bool,
@@ -246,7 +246,7 @@ impl Transcript {
     }
 
     /// Sends what's been chosen on a card with more than one thing to choose.
-    pub(crate) fn send_answers(&mut self, approval_id: String, cx: &mut Context<Self>) {
+    pub(crate) fn send_answers(&mut self, approval_id: ApprovalId, cx: &mut Context<Self>) {
         let picks = self.model.borrow_mut().picks.remove(&approval_id).unwrap_or_default();
         self.answer_approval(
             approval_id,
@@ -306,7 +306,7 @@ impl Transcript {
         if text.trim().is_empty() {
             return false;
         }
-        let client_msg_id = uuid::Uuid::new_v4().to_string();
+        let client_msg_id = ClientMessageId::from(uuid::Uuid::new_v4().to_string());
         self.model.borrow_mut().log.add_pending(client_msg_id.clone(), text.clone());
         self.sync_rows(cx);
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);
@@ -328,7 +328,7 @@ impl Transcript {
         true
     }
 
-    pub fn answer_approval(&mut self, approval_id: String, decision: ApprovalDecision, cx: &mut Context<Self>) {
+    pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {
         let (client, id) = (self.client.clone(), self.session_id.clone());
         cx.spawn(async move |this, cx| {
             let result = cx.background_spawn(async move { client.session_approve(&id, &approval_id, decision) }).await;

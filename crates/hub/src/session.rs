@@ -11,7 +11,9 @@ use std::sync::{Arc, Weak};
 use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, WorkspaceId};
+use protocol::model::{
+    AgentKind, AgentSessionId, ApprovalId, ClientMessageId, Seq, Session, SessionId, SessionStatus, WorkspaceId,
+};
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -48,10 +50,22 @@ pub(crate) enum Item {
 }
 
 pub(crate) enum Command {
-    Prompt { text: String, client_msg_id: Option<String>, reply: oneshot::Sender<Result<(Seq, bool), ApiError>> },
-    Approve { approval_id: String, decision: ApprovalDecision, reply: oneshot::Sender<Result<(), ApiError>> },
-    Cancel { reply: oneshot::Sender<Result<(), ApiError>> },
-    Stop { reply: oneshot::Sender<Result<(), ApiError>> },
+    Prompt {
+        text: String,
+        client_msg_id: Option<ClientMessageId>,
+        reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
+    },
+    Approve {
+        approval_id: ApprovalId,
+        decision: ApprovalDecision,
+        reply: oneshot::Sender<Result<(), ApiError>>,
+    },
+    Cancel {
+        reply: oneshot::Sender<Result<(), ApiError>>,
+    },
+    Stop {
+        reply: oneshot::Sender<Result<(), ApiError>>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -88,7 +102,7 @@ struct LiveState {
     tail: Tail,
     version: u64,
     /// Open approvals, by the run that asked. 0 means an earlier hub's, which can't be answered.
-    pending_approvals: HashMap<String, u64>,
+    pending_approvals: HashMap<ApprovalId, u64>,
     /// The agent believed to be running. Events from any other run are leftovers from one that has
     /// been replaced: they go in the log, but don't speak for the session's current state.
     agent: Option<AgentRun>,
@@ -106,7 +120,7 @@ pub(crate) struct LiveSession {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     agent: AgentKind,
-    agent_session_id: String,
+    agent_session_id: AgentSessionId,
     created_at_ms: i64,
     /// So a failed setup is mentioned once, rather than on every prompt.
     warned_about_setup: std::sync::atomic::AtomicBool,
@@ -136,7 +150,7 @@ fn publish(state: &mut LiveState, item: LiveItem) {
 }
 
 impl LiveSession {
-    pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<String>) -> Arc<Self> {
+    pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<ApprovalId>) -> Arc<Self> {
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {

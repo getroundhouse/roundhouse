@@ -1,13 +1,15 @@
 use std::io;
 
+use protocol::model::InstanceId;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
     #[error("instance {0} is already running")]
-    AlreadyRunning(String),
+    AlreadyRunning(InstanceId),
     #[error("instance {0} isn't running")]
-    NotRunning(String),
+    NotRunning(InstanceId),
     #[error("instance {0} already has a connection")]
-    AlreadyConnected(String),
+    AlreadyConnected(InstanceId),
     #[error("worker {0} started without its pipes")]
     NoPipes(String),
     /// What it was doing, and what went wrong.

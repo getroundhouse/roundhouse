@@ -8,7 +8,7 @@ use gpui_kit::{
     WeakEntity, Window, div,
 };
 use protocol::event::ApprovalDecision;
-use protocol::model::Seq;
+use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
 use super::{MONO, row, summarize_input};
@@ -20,7 +20,7 @@ use crate::transcript::Transcript;
 )]
 pub(super) fn approval_card(
     seq: Seq,
-    approval_id: &str,
+    approval_id: &ApprovalId,
     tool_name: &str,
     input: &Value,
     description: Option<&str>,
@@ -32,7 +32,7 @@ pub(super) fn approval_card(
     let theme = cx.theme();
     let summary = description.map_or_else(|| summarize_input(input).to_string(), str::to_string);
     let answer = |decision: ApprovalDecision| {
-        let (this, approval_id) = (this.clone(), approval_id.to_string());
+        let (this, approval_id) = (this.clone(), approval_id.clone());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             let _ = this.update(cx, |t, cx| t.answer_approval(approval_id.clone(), decision.clone(), cx));
         }

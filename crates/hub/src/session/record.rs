@@ -2,7 +2,7 @@
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Seq, Session, SessionStatus};
+use protocol::model::{ClientMessageId, Seq, Session, SessionStatus};
 use tracing::{error, warn};
 
 use super::status::{approvals_after, next_status};
@@ -31,7 +31,7 @@ impl LiveSession {
         &self,
         body: EventBody,
         raw: Option<String>,
-        client_msg_id: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
         speaks_for_session: bool,
         run: u64,
     ) -> Result<(SessionEvent, bool), ApiError> {
@@ -49,7 +49,7 @@ impl LiveSession {
         let id = self.id.clone();
         let for_store = body.clone();
         let appended = hub
-            .blocking(move |store| store.append(&id, &for_store, raw.as_deref(), client_msg_id.as_deref(), new_status))
+            .blocking(move |store| store.append(&id, &for_store, raw.as_deref(), client_msg_id.as_ref(), new_status))
             .await?;
         if appended.duplicate {
             return Ok((appended.event, true));

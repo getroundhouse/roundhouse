@@ -6,18 +6,18 @@
 pub mod claude;
 mod error;
 
-pub use error::AgentError;
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::AgentKind;
+use protocol::model::{AgentKind, ApprovalId};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
+
+pub use error::AgentError;
 
 #[derive(Debug)]
 pub enum AgentOutput {
@@ -65,7 +65,7 @@ pub trait AgentProcess: Send + Sync {
     fn is_gone(&self) -> bool;
     /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true.
     async fn send_prompt(&self, text: &str) -> Result<(), AgentError>;
-    async fn resolve_approval(&self, approval_id: &str, decision: &ApprovalDecision) -> Result<(), AgentError>;
+    async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError>;
     async fn interrupt(&self) -> Result<(), AgentError>;
     /// Changes the model or approval mode of the running process, and resolves once it has agreed.
     /// `None` leaves that setting alone. An error with [`AgentProcess::is_gone`] false is a refusal.

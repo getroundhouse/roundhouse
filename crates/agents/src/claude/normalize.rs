@@ -43,7 +43,7 @@ pub fn parse_line(line: &str) -> Parsed {
         "control_request" => control_request(&value),
         "control_cancel_request" => match str_of(&value, "request_id") {
             Some(id) => Parsed::Event(EventBody::ApprovalResolved {
-                approval_id: id.to_string(),
+                approval_id: id.into(),
                 outcome: ApprovalOutcome::Cancelled,
             }),
             None => other(kind),
@@ -101,6 +101,10 @@ fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
+fn id_of<T: From<String>>(value: &Value, key: &str) -> Option<T> {
+    string_of(value, key).map(T::from)
+}
+
 fn string_of(value: &Value, key: &str) -> Option<String> {
     str_of(value, key).map(str::to_string)
 }
@@ -127,7 +131,7 @@ fn system(value: &Value) -> Parsed {
     let subtype = str_of(value, "subtype").unwrap_or("unknown");
     match subtype {
         "init" => Parsed::Event(EventBody::AgentInit {
-            agent_session_id: string_of(value, "session_id"),
+            agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),
             permission_mode: string_of(value, "permissionMode"),
@@ -154,8 +158,8 @@ fn system(value: &Value) -> Parsed {
 fn assistant(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
-        message_id: string_of(message, "id"),
-        parent_tool_use_id: string_of(value, "parent_tool_use_id"),
+        message_id: id_of(message, "id"),
+        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
         model: string_of(message, "model"),
         blocks: blocks(message.get("content")),
     }
@@ -164,7 +168,7 @@ fn assistant(value: &Value) -> EventBody {
 fn user(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::AgentUser {
-        parent_tool_use_id: string_of(value, "parent_tool_use_id"),
+        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
         blocks: blocks(message.get("content")),
     }
 }
@@ -189,7 +193,7 @@ fn block(value: &Value) -> ContentBlock {
         Some("tool_result") => {
             let (text, image_count) = tool_result_content(value.get("content"));
             ContentBlock::ToolResult {
-                tool_use_id: string_of(value, "tool_use_id").unwrap_or_default(),
+                tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
                 is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
                 text,
                 image_count,
@@ -260,9 +264,9 @@ fn control_request(value: &Value) -> Parsed {
         return Parsed::UnsupportedControl { request_id, subtype: subtype.to_string() };
     }
     Parsed::Event(EventBody::ApprovalRequested {
-        approval_id: request_id,
+        approval_id: request_id.into(),
         tool_name: string_of(request, "tool_name").unwrap_or_default(),
-        tool_use_id: string_of(request, "tool_use_id"),
+        tool_use_id: id_of(request, "tool_use_id"),
         input: request.get("input").cloned().unwrap_or(Value::Null),
         description: string_of(request, "description"),
         suggestions: request.get("permission_suggestions").cloned().unwrap_or(Value::Null),
@@ -305,5 +309,9 @@ fn stream_event(value: &Value) -> Parsed {
         // message_start, content_block_stop and message_delta add nothing to the tail.
         _ => return Parsed::Drop,
     };
-    Parsed::Delta(StreamDelta { message_id, parent_tool_use_id: string_of(value, "parent_tool_use_id"), change })
+    Parsed::Delta(StreamDelta {
+        message_id: message_id.into(),
+        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
+        change,
+    })
 }
