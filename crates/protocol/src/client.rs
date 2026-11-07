@@ -42,7 +42,7 @@ pub enum ClientRequest {
     WorkspaceList {
         include_archived: bool,
     },
-    /// Fails if the worktree has uncommitted changes, unless `force` is set. The branch is kept.
+    /// Fails if work would be lost or the archive script fails, unless `force` is set. The branch is kept.
     WorkspaceArchive {
         id: WorkspaceId,
         force: bool,

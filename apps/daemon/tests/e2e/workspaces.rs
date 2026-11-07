@@ -10,7 +10,8 @@ use protocol::event::EventBody;
 use protocol::model::{DiffSide, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
-    Stack, assistant_text, git, install_executable, is_alive, read_all, wait_for_turn_end, wait_until,
+    Stack, assistant_text, commit_settings, git, install_executable, is_alive, read_all, wait_for_setup,
+    wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -186,4 +187,39 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
 
     let generated = client.workspace_create(&repo.id, None, None).unwrap();
     assert_ne!(generated.name, first.name);
+}
+
+#[test]
+fn an_archive_refused_for_work_it_would_lose_changes_nothing() {
+    let stack = Stack::start();
+    let marker = stack.path("archived-marker");
+    commit_settings(&stack, &format!("[scripts]\narchive = \"touch {}\"\n", marker.display()));
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    wait_for_setup(&client, &workspace.id);
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    let worktree = PathBuf::from(workspace.path.clone().unwrap());
+
+    // Commits on no branch.
+    git(&worktree, &["checkout", "-q", "--detach"]);
+    git(&worktree, &["commit", "-q", "--allow-empty", "-m", "on no branch"]);
+    let err = client.workspace_archive(&workspace.id, false).unwrap_err();
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NeedsForce));
+    assert!(!marker.exists(), "the archive script mustn't run");
+
+    // Uncommitted changes.
+    std::fs::write(worktree.join("work.txt"), "work\n").unwrap();
+    let err = client.workspace_archive(&workspace.id, false).unwrap_err();
+    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NeedsForce));
+    assert!(!marker.exists(), "the archive script mustn't run");
+
+    client.session_prompt(&session.id, "say:still here", None).unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    let started = events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(started, 1, "the agent mustn't have been stopped");
+
+    client.workspace_archive(&workspace.id, true).unwrap();
+    assert!(marker.exists());
+    assert!(!worktree.exists());
 }

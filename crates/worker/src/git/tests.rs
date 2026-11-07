@@ -149,6 +149,7 @@ async fn commits_only_reachable_from_a_detached_head_are_protected() {
     std::fs::write(path.join("work.txt"), "work\n").unwrap();
     run(path, &["add", "."]);
     run(path, &["commit", "-qm", "on no branch"]);
+    assert!(status(&prepared.path).await.unwrap().unreferenced_commits);
 
     let err = remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::NeedsForce, "{}", err.message);
@@ -250,4 +251,17 @@ async fn diff_covers_commits_uncommitted_and_untracked_work() {
     assert!(diff.patch.contains("+brand new"), "{}", diff.patch);
     assert!(!diff.patch.contains("elsewhere"), "{}", diff.patch);
     assert!(!diff.truncated);
+}
+
+#[tokio::test]
+async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
+    run(Path::new(&prepared.path), &["checkout", "-q", "--detach"]);
+
+    let current = status(&prepared.path).await.unwrap();
+    assert_eq!(current.branch, None);
+    assert!(!current.unreferenced_commits);
+    remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.unwrap();
 }
