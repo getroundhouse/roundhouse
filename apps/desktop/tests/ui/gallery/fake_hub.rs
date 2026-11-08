@@ -17,6 +17,10 @@ use protocol::model::{GitDiff, GitStatus, SessionId, WorkspaceStatus};
 
 use super::world::World;
 
+/// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
+/// checkout's version is.
+pub(crate) const BUILD: &str = "1.0.0";
+
 /// Listens until the process ends. Each screen gets its own socket, so nothing outlives the screen that needs it.
 pub(crate) fn serve(socket: &Path, world: World) {
     let listener = UnixListener::bind(socket).unwrap();
@@ -57,9 +61,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
     use ClientResponse as C;
     let reply = |response| Ok((response, Vec::new()));
     match request {
-        R::Hello { .. } => {
-            reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: protocol::BUILD_VERSION.to_string() })
-        }
+        R::Hello { .. } => reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: BUILD.to_string() }),
         R::HubStatus => reply(C::HubStatus(status())),
         R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
         R::WorkspaceList { include_archived } => reply(C::Workspaces {
@@ -125,7 +127,7 @@ fn subscribe(world: &World, id: &SessionId, from_seq: u64, subscription_id: u64)
 fn status() -> HubStatus {
     HubStatus {
         pid: std::process::id(),
-        hub_version: protocol::BUILD_VERSION.to_string(),
+        hub_version: BUILD.to_string(),
         protocol_version: PROTOCOL_VERSION,
         started_at_ms: 0,
         workers: 0,

@@ -12,6 +12,8 @@ use super::world::World;
 pub(crate) struct Screen {
     /// Also the image's file name.
     pub(crate) name: &'static str,
+    /// The spec's file for the area it's about, in `docs/spec/`, which shows it beside the rules it goes with.
+    pub(crate) spec: &'static str,
     /// What the hub holds. `None` is no hub at all.
     pub(crate) world: Option<fn() -> World>,
     pub(crate) steps: &'static [Step],
@@ -31,19 +33,25 @@ pub(crate) enum Step {
 const FOCUS: &str = "aspen";
 
 pub(crate) const SCREENS: &[Screen] = &[
-    Screen { name: "no-hub", world: None, steps: &[] },
-    Screen { name: "first-run", world: Some(World::default), steps: &[] },
-    Screen { name: "conversation", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
-    Screen { name: "streaming", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "no-hub", spec: "updates.md", world: None, steps: &[] },
+    Screen { name: "first-run", spec: "workspaces.md", world: Some(World::default), steps: &[] },
+    Screen {
+        name: "setup-failed",
+        spec: "workspaces.md",
+        world: Some(setup_failed),
+        steps: &[Step::Select(FOCUS), Step::OpenSetupLog],
+    },
+    Screen { name: "conversation", spec: "chats.md", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "streaming", spec: "chats.md", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "approval", spec: "chats.md", world: Some(approval), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "question", spec: "chats.md", world: Some(question), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "mode-picker",
+        spec: "chats.md",
         world: Some(conversation),
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
     },
-    Screen { name: "approval", world: Some(approval), steps: &[Step::Select(FOCUS)] },
-    Screen { name: "question", world: Some(question), steps: &[Step::Select(FOCUS)] },
-    Screen { name: "diff", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
-    Screen { name: "setup-failed", world: Some(setup_failed), steps: &[Step::Select(FOCUS), Step::OpenSetupLog] },
+    Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
 ];
 
 /// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden.

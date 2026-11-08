@@ -13,7 +13,8 @@ cargo test                        # The backend, with a fake agent. Needs no GPU
 cargo test --workspace            # Also the transcript and the desktop app's UI tests
 cargo run -p desktop --bin trestle-desktop   # The app
 cargo run -p desktop --example look -- <workspace> diff   # The app, opened on a view, for screenshots
-cargo test -p desktop --test ui gallery   # Every screen, from made-up data, to images in .context/gallery. No hub, no window
+cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens. No hub, no window
+TRESTLE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`

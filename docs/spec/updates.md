@@ -1,6 +1,6 @@
 # Updates
 
-What someone using the desktop app sees when it or its hub updates. How it works is under "Managing a hub" in `docs/architecture.md`.
+What someone using the desktop app sees when it or its hub updates, or when there is no hub to reach. How it works is under "Managing a hub" in `docs/architecture.md`.
 
 - **Updating never stops running agents.** An update looks like this:
   1. The app updates and relaunches. Everything shows as before, and running agents keep going on the old hub. *Not built:* the app doesn't update itself.
@@ -8,3 +8,9 @@ What someone using the desktop app sees when it or its hub updates. How it works
   3. Only a real protocol break shows a screen, with how many agents are running and a way to restart the hub.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
+
+## When there's no hub
+
+**The app couldn't reach a hub, or start one.** *Unconfirmed.*
+
+![No hub](screens/no-hub.png)

@@ -119,7 +119,7 @@ impl AppView {
 
     pub fn build_label(&self) -> BuildLabel {
         let client = self.client();
-        BuildLabel::new(protocol::BUILD_VERSION, client.as_ref().map(Client::hub_version))
+        BuildLabel::new(self.hub.build_version, client.as_ref().map(Client::hub_version))
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {

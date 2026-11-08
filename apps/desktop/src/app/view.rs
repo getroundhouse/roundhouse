@@ -29,7 +29,7 @@ impl Render for AppView {
         let main: AnyElement = match &self.connection {
             Connection::Connecting => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, danger, cx),
-            Connection::AcrossABreak(status) => across_a_break(status, muted, cx),
+            Connection::AcrossABreak(status) => across_a_break(status, self.hub.build_version, muted, cx),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => centered("Add a repository to get started.", muted),
@@ -161,8 +161,8 @@ fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
         .into_any_element()
 }
 
-fn across_a_break(status: &HubStatus, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
-    let versions = format!("The hub is version {}, and this app is {}.", status.hub_version, protocol::BUILD_VERSION);
+fn across_a_break(status: &HubStatus, app_version: &str, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+    let versions = format!("The hub is version {}, and this app is {app_version}.", status.hub_version);
     let next = if can_restart(status) {
         restart_note(status.running_sessions, status.running_setups)
     } else if status.on_demand {
