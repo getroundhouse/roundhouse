@@ -14,6 +14,9 @@ pub struct HubSource {
     pub daemon: PathBuf,
     /// Which build this app is, for telling whether a hub is older.
     pub build_number: Option<u64>,
+    /// Which build this app is, for telling people. A picture of the app sets its own, so it doesn't change
+    /// with the version.
+    pub build_version: &'static str,
 }
 
 /// Whether to replace this hub with this app's own. Only an older one, so two versions can't keep replacing
@@ -33,7 +36,7 @@ impl HubSource {
             || std::env::current_exe().and_then(|exe| client_core::daemon_beside(&exe)).unwrap_or("trestled".into()),
             PathBuf::from,
         );
-        Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER })
+        Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
     }
 
     /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to. Only here,

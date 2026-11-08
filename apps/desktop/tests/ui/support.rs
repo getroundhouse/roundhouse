@@ -93,7 +93,12 @@ impl Stack {
             other => std::env::var(other).ok(),
         })
         .unwrap();
-        let hub = HubSource { paths, daemon: binaries().join("trestled"), build_number: None };
+        let hub = HubSource {
+            paths,
+            daemon: binaries().join("trestled"),
+            build_number: None,
+            build_version: protocol::BUILD_VERSION,
+        };
         Self { dir, hub }
     }
 

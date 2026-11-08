@@ -11,7 +11,7 @@ Two things belong in neither place. Why a piece of code is the way it is goes in
 | Kind | What it holds |
 |---|---|
 | Product | What this is, who it's for, and why it exists |
-| Spec | What the product does for the person using it, how fast, and why |
+| Spec | What the product does for the person using it, how fast, how it looks, and why |
 | Architecture | How the system fits together, and why it's built that way |
 | Standards | How code, tests and docs are written |
 | Reference | Facts to look up: what words mean, how an outside system behaves, the bars to hit, what a person checks by hand |
@@ -22,7 +22,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | Doc | Kind | Decided by | Its one purpose |
 |---|---|---|---|
 | `README.md` | Product | Owner | What this is, why it exists, and how to try it |
-| `docs/spec/` | Spec | Owner | What the product does for the person using it, how fast, and why, one file per area |
+| `docs/spec/` | Spec | Owner | What the product does for the person using it, how fast, how it looks, and why, one file per area |
 | `docs/architecture.md` | Architecture | Owner | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format, what happens when a process dies, managing a hub, and providers |
 | `docs/ui.md` | Architecture | Owner | Why the desktop app is built on GPUI and gpui-kit, and its transcript on the kit's views |
 | `docs/documentation.md` | Standards | Owner | Where each kind of information goes, and who decides it |
