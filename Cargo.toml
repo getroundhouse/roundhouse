@@ -12,7 +12,6 @@ members = [
     "apps/cli",
     "apps/desktop",
     "crates/transcript",
-    "third_party/option-ext",
     "tools/policy",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
@@ -27,7 +26,6 @@ default-members = [
     "crates/client-core",
     "apps/daemon",
     "apps/cli",
-    "third_party/option-ext",
     "tools/policy",
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
@@ -90,7 +88,3 @@ undocumented_unsafe_blocks = "warn"
 # GPUI is unusably slow unoptimized, and dependencies only build once.
 [profile.dev.package."*"]
 opt-level = 2
-
-# Keeps an MPL-2.0 crate out of what ships. See third_party/option-ext/src/lib.rs.
-[patch.crates-io]
-option-ext = { path = "third_party/option-ext" }

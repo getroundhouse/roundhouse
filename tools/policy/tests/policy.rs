@@ -10,7 +10,8 @@ use std::process::Command;
 
 use serde_json::Value;
 
-/// Licenses that are fine to ship in an App Store app.
+/// Licenses that are fine in anything that ships, App Store apps included. `docs/decisions.md` has why
+/// these, and why not GPL, AGPL or LGPL.
 const ALLOWED: &[&str] = &[
     "0BSD",
     "Apache-2.0",
@@ -26,6 +27,14 @@ const ALLOWED: &[&str] = &[
     "Unlicense",
     "Zlib",
 ];
+
+/// File-level copyleft. Only the crate's own files stay under it, and shipping them unchanged just means
+/// saying where their source is. A changed copy would have to be published, so these are only allowed
+/// straight from crates.io, where a patched or vendored copy shows up as a different source.
+const ALLOWED_UNCHANGED: &[&str] = &["MPL-2.0"];
+
+/// How `cargo metadata` names crates.io as a package's source.
+const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 
 /// The most lines a Rust file can have, tests included. `docs/rust.md` has the reasoning.
 const MAX_FILE_LINES: usize = 400;
@@ -43,32 +52,47 @@ fn metadata() -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
-/// Whether an SPDX expression can be satisfied using only allowed licenses.
-fn is_allowed(expression: &str) -> bool {
+/// Whether a package with this SPDX license expression can ship, given where it comes from. `source` is
+/// `None` for a package kept in this repo.
+fn may_ship(expression: &str, source: Option<&str>) -> bool {
+    let unchanged = source == Some(CRATES_IO);
     // `/` is the old way of writing OR, and still appears in some manifests.
     let normalized = expression.replace('/', " OR ").replace(['(', ')'], " ");
     normalized.split(" OR ").any(|choice| {
-        choice
-            .split(" AND ")
-            .all(|license| ALLOWED.contains(&license.split_whitespace().collect::<Vec<_>>().join(" ").as_str()))
+        choice.split(" AND ").all(|license| {
+            let license = license.split_whitespace().collect::<Vec<_>>().join(" ");
+            ALLOWED.contains(&license.as_str()) || (unchanged && ALLOWED_UNCHANGED.contains(&license.as_str()))
+        })
     })
 }
 
 #[test]
 fn the_license_check_itself_works() {
-    assert!(is_allowed("MIT"));
-    assert!(is_allowed("MIT OR Apache-2.0"));
-    assert!(is_allowed("MIT/Apache-2.0"));
-    assert!(is_allowed("(MIT OR Apache-2.0) AND Unicode-3.0"));
-    assert!(is_allowed("GPL-3.0-or-later OR Apache-2.0"));
-    assert!(!is_allowed("GPL-3.0"));
-    assert!(!is_allowed("MIT AND GPL-3.0"));
-    assert!(!is_allowed("LGPL-2.1-only OR GPL-3.0"));
+    let git = Some("git+https://github.com/example/fork");
+    assert!(may_ship("MIT", Some(CRATES_IO)));
+    assert!(may_ship("MIT OR Apache-2.0", Some(CRATES_IO)));
+    assert!(may_ship("MIT/Apache-2.0", Some(CRATES_IO)));
+    assert!(may_ship("(MIT OR Apache-2.0) AND Unicode-3.0", Some(CRATES_IO)));
+    assert!(may_ship("GPL-3.0-or-later OR Apache-2.0", Some(CRATES_IO)));
+    assert!(may_ship("MIT", git));
+    assert!(may_ship("MIT", None));
+    assert!(!may_ship("GPL-3.0", Some(CRATES_IO)));
+    assert!(!may_ship("MIT AND GPL-3.0", Some(CRATES_IO)));
+    assert!(!may_ship("LGPL-2.1-only OR GPL-3.0", Some(CRATES_IO)));
+    assert!(!may_ship("AGPL-3.0-only", Some(CRATES_IO)));
+
+    // MPL-2.0 only straight from crates.io.
+    assert!(may_ship("MPL-2.0", Some(CRATES_IO)));
+    assert!(may_ship("MIT AND MPL-2.0", Some(CRATES_IO)));
+    assert!(!may_ship("MPL-2.0", git));
+    assert!(!may_ship("MPL-2.0", None));
+    assert!(!may_ship("MIT AND MPL-2.0", git));
+    assert!(!may_ship("MPL-2.0 AND GPL-3.0", Some(CRATES_IO)));
 }
 
 /// What ends up in a binary on one platform: its dependencies, leaving out build tools and proc macros,
-/// which only run while compiling.
-fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, String> {
+/// which only run while compiling. Each maps to its license expression and its source.
+fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, Option<String>)> {
     let packages: HashMap<&str, &Value> =
         metadata["packages"].as_array().unwrap().iter().map(|p| (p["id"].as_str().unwrap(), p)).collect();
     let nodes: HashMap<&str, &Value> =
@@ -92,10 +116,15 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, String> {
                 continue;
             }
             let package = packages[dep_id];
-            // Workspace members have no license field until the project chooses one.
-            if !package["source"].is_null() {
-                let license = package["license"].as_str().unwrap_or("none declared").to_string();
-                shipped.insert(package["name"].as_str().unwrap().to_string(), license);
+            let source = package["source"].as_str();
+            let license = package["license"].as_str();
+            // The project's own crates declare no license until #9 picks one. A copy of someone else's
+            // crate kept in the repo still declares theirs, so it gets checked.
+            if source.is_some() || license.is_some() {
+                shipped.insert(
+                    package["name"].as_str().unwrap().to_string(),
+                    (license.unwrap_or("none declared").to_string(), source.map(str::to_string)),
+                );
             }
             stack.push(dep_id);
         }
@@ -122,12 +151,11 @@ fn metadata_for(target: &str) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
-/// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`. That also
-/// holds build tools and other platforms' crates, some of them MPL-2.0: `cbindgen` (a build tool),
-/// `dwrote` (Windows only) and `option-ext` (only reached through a proc macro). Windows and iOS are
-/// here so that adding either has to face this.
+/// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
+/// holds build tools, proc macros and other platforms' crates. Add each platform here as it starts
+/// shipping, such as iOS or Windows.
 #[test]
-fn nothing_copyleft_ships() {
+fn only_allowed_licenses_ship() {
     for (root, targets) in [
         ("desktop", &["aarch64-apple-darwin", "x86_64-apple-darwin"][..]),
         (
@@ -142,7 +170,8 @@ fn nothing_copyleft_ships() {
         for target in targets {
             let shipped = shipped_packages(&metadata_for(target), root);
             assert!(!shipped.is_empty(), "{root} on {target} should have dependencies");
-            let bad: BTreeMap<_, _> = shipped.into_iter().filter(|(_, license)| !is_allowed(license)).collect();
+            let bad: BTreeMap<_, _> =
+                shipped.into_iter().filter(|(_, (license, source))| !may_ship(license, source.as_deref())).collect();
             assert!(bad.is_empty(), "{root} on {target} would ship licenses we can't: {bad:#?}");
         }
     }
@@ -213,19 +242,16 @@ fn the_hub_and_the_worker_stay_apart() {
     assert!(!runtime_closure(&metadata, "worker").contains("hub"));
 }
 
-/// The directory of each crate the Rust standards cover. `third_party/` is exempt, because it mirrors
-/// another crate's API.
+/// The directory of each crate the Rust standards cover, which is every workspace member.
 fn covered_crates(metadata: &Value) -> Vec<PathBuf> {
     let members: HashSet<&str> =
         metadata["workspace_members"].as_array().unwrap().iter().map(|id| id.as_str().unwrap()).collect();
-    let third_party = Path::new(metadata["workspace_root"].as_str().unwrap()).join("third_party");
     metadata["packages"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|package| members.contains(package["id"].as_str().unwrap()))
         .map(|package| Path::new(package["manifest_path"].as_str().unwrap()).parent().unwrap().to_path_buf())
-        .filter(|dir| !dir.starts_with(&third_party))
         .collect()
 }
 

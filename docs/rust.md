@@ -12,7 +12,7 @@ Two ideas sit behind the rules:
 ## Toolchain and workspace
 
 - `rust-toolchain.toml` pins Rust's version and components, and rustup installs them on first use. The Docker command in `AGENTS.md` uses the same version. There's no `rust-version`: nothing is published, so the pin is the only version to keep.
-- Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses. `third_party/` is exempt, because it mirrors another crate's API.
+- Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses.
 - `Cargo.lock` is committed, and commands that check something use `--locked`.
 - `rustfmt.toml` stays at 120 columns.
 
