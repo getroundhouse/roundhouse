@@ -1,8 +1,8 @@
-# Trestle
+# Roundhouse
 
 An open source app for running many coding agents in parallel, each in its own workspace. The workspace is the unit of delegation, and the branch and pull request are the unit of integration. It runs on your Mac first, and the same design extends to your own servers, the cloud and a phone.
 
-Trestle is a working name, after a rail bridge carried by many closely spaced supports, and rail is the theme for naming. It's early, and not ready for other people.
+Roundhouse is a working name, after the round building where a railway services its locomotives, each in its own stall around one turntable, and rail is the theme for naming. It's early, and not ready for other people.
 
 ## Why this exists
 
@@ -16,18 +16,18 @@ A web client isn't a target, since nothing depends on one, but nothing rules one
 
 ## Try it
 
-It uses your own Claude login and settings, keeps its data in `~/Library/Application Support/trestle`, and puts worktrees in `~/trestle/workspaces`.
+It uses your own Claude login and settings, keeps its data in `~/Library/Application Support/roundhouse`, and puts worktrees in `~/roundhouse/workspaces`.
 
 ```sh
 tools/install.sh
-"$HOME/Library/Application Support/trestle-builds/current/trestle-desktop"
+"$HOME/Library/Application Support/roundhouse-builds/current/roundhouse-desktop"
 ```
 
 Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated.
 
-To work on Trestle rather than use it, `cargo run -p desktop --bin trestle-desktop` runs your changes with their own hub and data, in `.context/dev`.
+To work on Roundhouse rather than use it, `cargo run -p desktop --bin roundhouse-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
-Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To comment, hover a line in the diff and click its add button. The `trestle` command-line client, in the same directory, talks to the same hub.
+Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To comment, hover a line in the diff and click its add button. The `roundhouse` command-line client, in the same directory, talks to the same hub.
 
 | Key | Action |
 |---|---|

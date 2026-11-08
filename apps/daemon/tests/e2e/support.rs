@@ -26,7 +26,7 @@ pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
 pub(crate) fn fake_agent() -> &'static Path {
     static FAKE: OnceLock<PathBuf> = OnceLock::new();
     FAKE.get_or_init(|| {
-        let bin_dir = Path::new(env!("CARGO_BIN_EXE_trestled")).parent().unwrap();
+        let bin_dir = Path::new(env!("CARGO_BIN_EXE_roundhoused")).parent().unwrap();
         let mut build = Command::new(env!("CARGO"));
         build.args(["build", "-p", "daemon", "--example", "fake_claude"]);
         if bin_dir.file_name().is_some_and(|name| name == "release") {
@@ -74,16 +74,16 @@ impl Stack {
     }
 
     pub(crate) fn command(&self) -> Command {
-        self.command_at(Path::new(env!("CARGO_BIN_EXE_trestled")))
+        self.command_at(Path::new(env!("CARGO_BIN_EXE_roundhoused")))
     }
 
     pub(crate) fn command_at(&self, exe: &Path) -> Command {
         let mut command = Command::new(exe);
         command
             .arg("hub")
-            .env("TRESTLE_HOME", self.path("home"))
-            .env("TRESTLE_WORKSPACES", self.path("workspaces"))
-            .env("TRESTLE_CLAUDE_BIN", fake_agent())
+            .env("ROUNDHOUSE_HOME", self.path("home"))
+            .env("ROUNDHOUSE_WORKSPACES", self.path("workspaces"))
+            .env("ROUNDHOUSE_CLAUDE_BIN", fake_agent())
             .env("FAKE_CLAUDE_STATE", self.agent_state())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))

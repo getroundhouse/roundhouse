@@ -69,7 +69,7 @@ Labels answer three questions, so any common search is one filter: what kind of 
 | `kind/risk` | Something that could go wrong, watched rather than worked on | It's mitigated or accepted |
 | `kind/plan` | An issue that breaks work into parts, or orders other issues | What it holds is closed |
 
-**Area: one or more.** Areas follow the parts in the layout in `docs/architecture.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Trestle itself, `area/docs`, and `area/project` for the license, scope and overall plans. Nothing else becomes an area.
+**Area: one or more.** Areas follow the parts in the layout in `docs/architecture.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Roundhouse itself, `area/docs`, and `area/project` for the license, scope and overall plans. Nothing else becomes an area.
 
 **`needs/owner`:** only the owner can move it, because it needs their decision, their account or device, or their judgment by hand. Agents leave these alone. A PR that changes an owner doc, or a file that enforces a standard, gets it too, and waits for the owner's approval.
 

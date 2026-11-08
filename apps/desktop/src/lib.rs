@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 
 actions!(
-    trestle,
+    roundhouse,
     [
         Quit,
         NewWorkspace,
@@ -50,7 +50,7 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
     std::thread::spawn(highlight::preload);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),
-        titlebar: Some(TitlebarOptions { title: Some("Trestle".into()), ..Default::default() }),
+        titlebar: Some(TitlebarOptions { title: Some("Roundhouse".into()), ..Default::default() }),
         focus: true,
         show: true,
         ..Default::default()

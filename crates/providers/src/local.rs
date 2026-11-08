@@ -22,7 +22,7 @@ const STOP_GRACE: Duration = Duration::from_secs(10);
 const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long an orphaned agent gets to stop by itself. It stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
-const PATH_MARKER: &str = "__TRESTLE_LOGIN_PATH__";
+const PATH_MARKER: &str = "__ROUNDHOUSE_LOGIN_PATH__";
 
 pub struct LocalConfig {
     /// The binary that runs `worker --stdio`.

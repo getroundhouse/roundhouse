@@ -168,7 +168,7 @@ fn across_a_break(status: &HubStatus, app_version: &str, muted: Hsla, cx: &mut C
     } else if status.on_demand {
         "It's newer than this app, so the app needs updating.".to_string()
     } else {
-        "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"trestle hub stop\"."
+        "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"roundhouse hub stop\"."
             .to_string()
     };
     let note = |text: String| div().max_w(px(560.0)).text_center().text_sm().text_color(muted).child(text);

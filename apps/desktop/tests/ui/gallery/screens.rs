@@ -57,15 +57,15 @@ pub(crate) const SCREENS: &[Screen] = &[
 /// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden.
 /// Returns the screen's own workspace, which comes after them.
 fn sidebar(world: &mut World) -> WorkspaceId {
-    let trestle = world.repo("trestle");
+    let roundhouse = world.repo("roundhouse");
     let signal_box = world.repo("signal-box");
     for (name, status) in
         [("alder", SessionStatus::Idle), ("birch", SessionStatus::Running), ("cedar", SessionStatus::WaitingApproval)]
     {
-        let id = world.workspace(&trestle, name);
+        let id = world.workspace(&roundhouse, name);
         world.chat(&id, status, Vec::new());
     }
-    let focus = world.workspace(&trestle, FOCUS);
+    let focus = world.workspace(&roundhouse, FOCUS);
     for (name, status) in [("elm", SessionStatus::Interrupted), ("fir", SessionStatus::Idle)] {
         let id = world.workspace(&signal_box, name);
         world.chat(&id, status, Vec::new());

@@ -21,7 +21,7 @@ use approved::Verdict;
 use screens::SCREENS;
 
 /// Set to accept how every screen looks now, as its approved image.
-const UPDATE: &str = "TRESTLE_UPDATE_SCREENS";
+const UPDATE: &str = "ROUNDHOUSE_UPDATE_SCREENS";
 
 #[test]
 fn every_screen_looks_as_approved() {

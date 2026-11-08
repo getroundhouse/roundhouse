@@ -82,7 +82,7 @@ pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Sessi
             if let Some(newest) = sessions.iter().rfind(|s| s.closed_at_ms.is_none()) {
                 return Ok(newest.clone());
             }
-            bail!("workspace {query} has no open sessions. Start one with `trestle session new {query}`");
+            bail!("workspace {query} has no open sessions. Start one with `roundhouse session new {query}`");
         }
         by_prefix.extend(sessions.into_iter().filter(|s| s.id.as_str().starts_with(query)));
     }

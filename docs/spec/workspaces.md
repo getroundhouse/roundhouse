@@ -15,7 +15,7 @@
 
 ## Settings from Conductor
 
-A repository set up for Conductor works here unchanged, because Trestle reads its settings and sets its variables under Conductor's names. There are no names of Trestle's own for these.
+A repository set up for Conductor works here unchanged, because Roundhouse reads its settings and sets its variables under Conductor's names. There are no names of Roundhouse's own for these.
 
 - **Settings:** `.conductor/settings.local.toml` in the repository, then `.conductor/settings.toml` in the worktree, then `~/.conductor/settings.toml`. The first to set a value wins.
 - **Scripts:** `[scripts]` with `setup` and `archive`. Run scripts, `run_mode` and managed settings aren't read.

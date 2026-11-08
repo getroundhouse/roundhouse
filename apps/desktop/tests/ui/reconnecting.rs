@@ -127,7 +127,7 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
 #[gpui_kit::test]
 fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
-    let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/trestled".into());
+    let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/roundhoused".into());
     let mut ui = Ui::open_without_waiting(cx, &stack);
     ui.wait("the failure", |ui| matches!(ui.view().connection, Connection::Failed(_)));
     let _hub = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();

@@ -10,14 +10,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN="${BIN:-$ROOT/target/debug}"
 # Cleanup deletes by this name, so an empty one would match every conversation the CLI has.
 WORK="$(mktemp -d /tmp/ahsmoke-XXXXXX)" || exit 1
-export TRESTLE_HOME="$WORK/home"
-export TRESTLE_WORKSPACES="$WORK/workspaces"
+export ROUNDHOUSE_HOME="$WORK/home"
+export ROUNDHOUSE_WORKSPACES="$WORK/workspaces"
 REPO="$WORK/myrepo"
 MODEL="${MODEL:-haiku}"
 failures=0
 passes=0
 
-cli() { "$BIN/trestle" "$@"; }
+cli() { "$BIN/roundhouse" "$@"; }
 pass() { passes=$((passes + 1)); echo "  ok    $1"; }
 fail() { failures=$((failures + 1)); echo "  FAIL  $1"; }
 check() { if eval "$2"; then pass "$1"; else fail "$1"; fi; }
@@ -88,7 +88,7 @@ cli repo add "$REPO" >/dev/null
 t0=$(started_ms)
 cli workspace create myrepo --name smoke >/dev/null
 echo "  time  creating a workspace, including starting the hub: $(($(started_ms) - t0)) ms"
-WT="$TRESTLE_WORKSPACES/myrepo/smoke"
+WT="$ROUNDHOUSE_WORKSPACES/myrepo/smoke"
 check "the worktree exists on its own branch" '[ "$(git -C "$WT" branch --show-current)" = smoke ]'
 t0=$(started_ms)
 cli workspace create myrepo --name timing >/dev/null
@@ -96,7 +96,7 @@ echo "  time  creating a second workspace: $(($(started_ms) - t0)) ms"
 SID=$(cli session new smoke --model "$MODEL" --permission-mode bypassPermissions)
 
 section "Surviving a client restart"
-"$BIN/trestle" send "$SID" "$(slow_tool 12 survived survived.txt)" > "$WORK/client1.out" 2>&1 &
+"$BIN/roundhouse" send "$SID" "$(slow_tool 12 survived survived.txt)" > "$WORK/client1.out" 2>&1 &
 CLIENT=$!
 wait_for "the agent starts a tool while a client is attached" "$SID" "any(b['type'] == 'tool_use' for e in events if e['body']['type'] == 'assistant' for b in e['body']['blocks'])"
 kill -9 "$CLIENT" 2>/dev/null; wait "$CLIENT" 2>/dev/null
@@ -106,8 +106,8 @@ WORKER=$(ps -o ppid= -p "$AGENT" | tr -d ' ')
 HUB=$(ps -o ppid= -p "$WORKER" | tr -d ' ')
 HUB_REPORTED=$(cli hub status | awk '{print $2}')
 check "the agent is a real claude process in the worktree's session" 'ps -o command= -p "$AGENT" | grep -q claude'
-check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -q "trestled worker"'
-check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -q "trestled hub"'
+check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -q "roundhoused worker"'
+check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -q "roundhoused hub"'
 check "the agent is still running with the client gone" 'alive "$AGENT"'
 check "the session still reports running" '[ "$(session_status smoke)" = Running ]'
 check "the hub sees only the client asking" 'cli hub status | grep -q "1 client(s)"'
@@ -133,7 +133,7 @@ done
 
 section "Approvals"
 ASID=$(cli session new timing --model "$MODEL" --permission-mode manual)
-WT2="$TRESTLE_WORKSPACES/myrepo/timing"
+WT2="$ROUNDHOUSE_WORKSPACES/myrepo/timing"
 cli send "$ASID" "Use the Bash tool to run exactly: echo approved > approved.txt   Then reply with the single word DONE." --no-follow >/dev/null
 wait_for "the agent asks for approval" "$ASID" "'approval_requested' in kinds"
 check "the tool hasn't run yet" '[ ! -f "$WT2/approved.txt" ]'
@@ -248,8 +248,8 @@ section "A clean stop and a hub started the way Finder would"
 cli hub stop >/dev/null
 check "the agent stops with the hub" 'wait_gone "$AGENT"'
 sleep 0.5
-env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin TRESTLE_HOME="$TRESTLE_HOME" TRESTLE_WORKSPACES="$TRESTLE_WORKSPACES" \
-  "$BIN/trestled" hub >>"$WORK/finder-hub.log" 2>&1 &
+env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin ROUNDHOUSE_HOME="$ROUNDHOUSE_HOME" ROUNDHOUSE_WORKSPACES="$ROUNDHOUSE_WORKSPACES" \
+  "$BIN/roundhoused" hub >>"$WORK/finder-hub.log" 2>&1 &
 deadline=$((SECONDS + 10))
 until cli hub status 2>/dev/null | grep -q pid || [ $SECONDS -ge $deadline ]; do sleep 0.1; done
 OUT=$(cli send "$SID" "Reply with the single word FINDER." 2>&1)
