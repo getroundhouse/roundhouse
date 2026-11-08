@@ -33,7 +33,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-PRs are squash-merged, so only each PR's final state reaches `main`. Between commits, `cargo check` and the tests for what changed are enough.
+PRs merge through GitHub's merge queue, squashed, once CI's `lint` and `test` pass on the PR merged onto `main` and whatever is ahead of it in the queue, so only each PR's final state reaches `main`. Add a PR to the queue only when the owner asks. Between commits, `cargo check` and the tests for what changed are enough.
 
 For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix.
 
