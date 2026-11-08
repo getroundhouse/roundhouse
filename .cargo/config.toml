@@ -1,5 +1,5 @@
 # Gives each checkout its own hub for `cargo run` and `cargo test`, so nothing run from a checkout can reach
 # the hub of the installed app. Not forced, so setting either variable by hand still wins.
 [env]
-TRESTLE_HOME = { value = ".context/dev", relative = true }
-TRESTLE_WORKSPACES = { value = ".context/dev/workspaces", relative = true }
+ROUNDHOUSE_HOME = { value = ".context/dev", relative = true }
+ROUNDHOUSE_WORKSPACES = { value = ".context/dev/workspaces", relative = true }

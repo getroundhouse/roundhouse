@@ -44,7 +44,7 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.take_unfinished_workspaces()
 }
 
-/// Only sets the mode on directories it creates. `TRESTLE_HOME` can point anywhere, and changing the
+/// Only sets the mode on directories it creates. `ROUNDHOUSE_HOME` can point anywhere, and changing the
 /// permissions of an existing directory could break something unrelated. The files that matter get
 /// their own restrictive modes.
 fn private_dir(path: &Path) -> Result<(), HubError> {

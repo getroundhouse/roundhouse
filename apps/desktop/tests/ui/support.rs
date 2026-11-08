@@ -29,7 +29,7 @@ pub(crate) fn binaries() -> &'static PathBuf {
                 "-p",
                 "daemon",
                 "--bin",
-                "trestled",
+                "roundhoused",
                 "--example",
                 "fake_claude",
                 "--example",
@@ -53,7 +53,7 @@ pub(crate) fn point_daemons_at_the_fake_agent() {
         let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
         // SAFETY: guarded by the OnceLock, and this runs before any daemon or thread here reads it.
         unsafe {
-            std::env::set_var("TRESTLE_CLAUDE_BIN", binaries().join("examples/fake_claude"));
+            std::env::set_var("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"));
             std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             std::env::set_var("HOME", scratch.join("ui-home"));
@@ -95,7 +95,7 @@ impl Stack {
         .unwrap();
         let hub = HubSource {
             paths,
-            daemon: binaries().join("trestled"),
+            daemon: binaries().join("roundhoused"),
             build_number: None,
             build_version: protocol::BUILD_VERSION,
         };

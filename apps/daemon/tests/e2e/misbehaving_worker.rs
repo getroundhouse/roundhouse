@@ -13,15 +13,15 @@ use crate::support::{Stack, assistant_text, install_executable, signal, wait_for
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
-    let exe = stack.path("trestled-copy");
-    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), &exe);
+    let exe = stack.path("roundhoused-copy");
+    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &exe);
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
     exe
 }
 
 fn restore_real_worker(exe: &Path) {
-    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), exe);
+    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), exe);
 }
 
 fn replace_with_script(exe: &Path, body: &str) {

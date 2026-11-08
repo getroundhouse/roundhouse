@@ -64,7 +64,7 @@ fn hub_source(dir: &Path) -> HubSource {
         _ => None,
     })
     .unwrap();
-    HubSource { paths, daemon: "/nonexistent/trestled".into(), build_number: None, build_version: fake_hub::BUILD }
+    HubSource { paths, daemon: "/nonexistent/roundhoused".into(), build_number: None, build_version: fake_hub::BUILD }
 }
 
 struct Driver {

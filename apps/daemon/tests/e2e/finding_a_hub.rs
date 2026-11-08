@@ -93,7 +93,7 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
 
     HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
 
-    let daemon = Path::new(env!("CARGO_BIN_EXE_trestled"));
+    let daemon = Path::new(env!("CARGO_BIN_EXE_roundhoused"));
     let client = Client::connect_or_start(&paths, daemon, "test").unwrap();
     let status = client.hub_status().unwrap();
     // First, because nothing else would stop this hub if an assertion failed.
@@ -113,11 +113,11 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     let (old, new, current) = (stack.path("old"), stack.path("new"), stack.path("current"));
     std::fs::create_dir_all(&old).unwrap();
     std::fs::create_dir_all(&new).unwrap();
-    install_executable(Path::new(env!("CARGO_BIN_EXE_trestled")), &old.join("trestled"));
+    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &old.join("roundhoused"));
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
-    install_executable(&stack.path("broken"), &new.join("trestled"));
+    install_executable(&stack.path("broken"), &new.join("roundhoused"));
     symlink(&old, &current).unwrap();
-    stack.hub = Some(stack.command_at(&current.join("trestled")).spawn().unwrap());
+    stack.hub = Some(stack.command_at(&current.join("roundhoused")).spawn().unwrap());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
 
     std::fs::remove_file(&current).unwrap();
@@ -130,7 +130,7 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     wait_for_turn_end(&client, &session.id, 1);
 }
 
-/// The code in a workspace can be another build of Trestle, whose commands would otherwise reach this hub.
+/// The code in a workspace can be another build of Roundhouse, whose commands would otherwise reach this hub.
 #[test]
 fn nothing_in_a_workspace_inherits_which_hub_this_is() {
     let stack = Stack::start();
@@ -150,7 +150,7 @@ fn nothing_in_a_workspace_inherits_which_hub_this_is() {
     for file in ["setup-env.txt", "agent-env.txt", "hook-env.txt"] {
         let env = std::fs::read_to_string(worktree.join(file)).unwrap();
         assert!(env.lines().any(|line| line.starts_with("PATH=")), "{file} isn't an environment: {env}");
-        let leaked: Vec<_> = env.lines().filter(|line| line.starts_with("TRESTLE_")).collect();
+        let leaked: Vec<_> = env.lines().filter(|line| line.starts_with("ROUNDHOUSE_")).collect();
         assert!(leaked.is_empty(), "{file}: {leaked:?}");
     }
 }
@@ -193,7 +193,7 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
         _ => None,
     })
     .unwrap();
-    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_trestled")), "test").unwrap();
+    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_roundhoused")), "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());
     client.hub_shutdown().unwrap();

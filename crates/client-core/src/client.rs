@@ -284,13 +284,13 @@ fn hub_is_missing(error: &ClientError) -> bool {
 /// The daemon that ships next to `exe`. Follows symlinks first, so a hub started through an install's
 /// `current` link stays on that version, whichever one the link names later.
 pub fn daemon_beside(exe: &Path) -> std::io::Result<PathBuf> {
-    Ok(exe.canonicalize()?.with_file_name("trestled"))
+    Ok(exe.canonicalize()?.with_file_name("roundhoused"))
 }
 
 fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
     use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
     use std::os::unix::process::CommandExt;
-    // Only sets the mode if it creates the directory, because TRESTLE_HOME can point anywhere.
+    // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere.
     std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&paths.data_dir)?;
     let log = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
     let mut command = Command::new(daemon);
@@ -325,12 +325,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let version = dir.path().canonicalize().unwrap().join("abc123");
         std::fs::create_dir(&version).unwrap();
-        std::fs::write(version.join("trestle"), "").unwrap();
+        std::fs::write(version.join("roundhouse"), "").unwrap();
         std::os::unix::fs::symlink(&version, dir.path().join("current")).unwrap();
 
-        let daemon = daemon_beside(&dir.path().join("current/trestle")).unwrap();
+        let daemon = daemon_beside(&dir.path().join("current/roundhouse")).unwrap();
 
-        assert_eq!(daemon, version.join("trestled"));
+        assert_eq!(daemon, version.join("roundhoused"));
     }
 
     /// Answers a hello, then answers the next request with a reply no build of this client can read.

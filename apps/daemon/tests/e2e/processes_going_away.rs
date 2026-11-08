@@ -193,7 +193,7 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
     let mut stack = Stack::start();
     stack.kill_hub();
     let mut command = stack.command();
-    command.env("TRESTLE_CLAUDE_BIN", "/nonexistent/claude");
+    command.env("ROUNDHOUSE_CLAUDE_BIN", "/nonexistent/claude");
     stack.hub = Some(command.spawn().unwrap());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
 

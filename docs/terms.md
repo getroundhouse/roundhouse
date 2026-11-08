@@ -8,7 +8,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Trestle | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase only for a binary | `trestle`, `trestled`, `trestle-desktop` |
+| Roundhouse | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase only for a binary | `roundhouse`, `roundhoused`, `roundhouse-desktop` |
 | Hub | The server that clients connect to. It owns workspaces, sessions and their logs, and leaves the work itself to workers | `hub` |
 | Worker | The process that does a workspace's work: its agents, git and scripts. It reports to its hub. There's one per workspace | `worker` |
 | Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. The local provider runs workers on this machine, and it isn't special | `Provider`, `LocalProvider` |
@@ -49,7 +49,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
 | Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
 | Protocol version | The number a client and hub compare in their hello. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
-| On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `trestled hub --on-demand` |
+| On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `roundhoused hub --on-demand` |
 | Build version | Which build a binary is, for people to read. An install stamps the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
 | Build number | Puts installed builds in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
@@ -64,7 +64,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Claude, Claude Code | The agent, and Anthropic's own product. The Agent SDK's terms bar calling an agent in another product "Claude Code" | "Claude" or "Claude Agent" in the interface. "Claude CLI" for the `claude` binary in docs |
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
-| Hub, daemon | `trestled` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
+| Hub, daemon | `roundhoused` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
 | Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |
 | Approval mode, permission mode | The same setting. `permission_mode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `permission_mode` in code |
 | Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |

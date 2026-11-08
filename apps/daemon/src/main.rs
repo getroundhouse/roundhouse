@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "trestled", version = protocol::BUILD_VERSION, about = "Runs as a hub or a worker")]
+#[command(name = "roundhoused", version = protocol::BUILD_VERSION, about = "Runs as a hub or a worker")]
 struct Args {
     #[command(subcommand)]
     role: Role,
@@ -50,7 +50,7 @@ fn unblock_signals() {
     }
 }
 
-/// Everything a worker starts runs the code in a workspace, which can be another build of Trestle, and these
+/// Everything a worker starts runs the code in a workspace, which can be another build of Roundhouse, and these
 /// would point it at this hub. That includes git hooks, so it has to cover every command rather than a few.
 fn forget_hub_variables() {
     for name in protocol::paths::HUB_ONLY_ENV {

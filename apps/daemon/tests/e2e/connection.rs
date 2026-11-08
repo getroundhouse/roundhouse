@@ -189,7 +189,7 @@ fn a_directory_the_user_pointed_us_at_keeps_its_permissions() {
     std::fs::create_dir(&shared).unwrap();
     std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut command = stack.command();
-    command.env("TRESTLE_HOME", &shared);
+    command.env("ROUNDHOUSE_HOME", &shared);
     let mut hub = command.spawn().unwrap();
     let socket = shared.join("hub.sock");
     wait_until("the hub", || Client::connect(&socket, "test").is_ok());
