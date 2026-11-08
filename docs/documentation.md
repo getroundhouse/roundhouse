@@ -1,6 +1,6 @@
 # Documentation
 
-Where each kind of information goes. There are two places: markdown in this repo, for what stays true, and GitHub, for what changes. Docs say how things are, and GitHub tracks what's changing.
+Where each kind of information goes. There are two places: markdown in this repo, for what stays true, and GitHub, for what changes. Docs say how things are, and GitHub tracks what's changing. A few kinds of information go in neither, and are kept private instead.
 
 **The test:** would it still be true if nobody changed the code or the design? Then it goes in a doc. If it can be finished, closed or go out of date on its own, it goes on GitHub.
 
@@ -69,7 +69,7 @@ Labels answer three questions, so any common search is one filter: what kind of 
 | `kind/risk` | Something that could go wrong, watched rather than worked on | It's mitigated or accepted |
 | `kind/plan` | An issue that breaks work into parts, or orders other issues | What it holds is closed |
 
-**Area: one or more.** Areas follow the parts in the layout in `docs/architecture.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Trestle itself, `area/docs`, and `area/project` for the name, license, scope and overall plans. Nothing else becomes an area.
+**Area: one or more.** Areas follow the parts in the layout in `docs/architecture.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Trestle itself, `area/docs`, and `area/project` for the license, scope and overall plans. Nothing else becomes an area.
 
 **`needs/owner`:** only the owner can move it, because it needs their decision, their account or device, or their judgment by hand. Agents leave these alone. A PR that changes an owner doc, or a file that enforces a standard, gets it too, and waits for the owner's approval.
 
@@ -79,6 +79,10 @@ Everything else uses GitHub's own fields rather than a label:
 - **What a plan holds:** a plan that breaks one piece of work into parts uses sub-issues, which nest and show progress. A plan that orders or selects issues with their own reasons to exist uses a checklist, since an issue can be in several.
 - **Blocked:** one issue waiting on another, without being part of it, is a "blocked by" link.
 - **Duplicate, or won't do:** the reason it was closed.
+
+### Kept private
+
+The product's name and trademarks, its domains and accounts, and other legal or business matters go in the private repo, `getroundhouse/private`, and nowhere in this one: not in a doc, an issue, a PR or a commit message. This repo may go public, and its history, issues and PRs would go with it. Research into other companies' names and marks shouldn't go with them, and neither should plans that would tip someone off before a name is held. The private repo's issues follow the same rules as this repo's. Work here mentions such a matter only as far as the code needs, such as the rename itself.
 
 ## Where they meet
 
@@ -108,9 +112,9 @@ Four searches cover everything waiting on the owner:
 
 | Queue | What's in it | Search |
 |---|---|---|
-| Decisions | Questions only the owner can answer | [Issues with `needs/owner` and `kind/question`](https://github.com/zlangbert/trestle/issues?q=is%3Aissue+is%3Aopen+label%3Aneeds%2Fowner+label%3Akind%2Fquestion) |
-| Tasks | What only the owner can do, such as trying something by hand | [Issues with `needs/owner` that aren't questions](https://github.com/zlangbert/trestle/issues?q=is%3Aissue+is%3Aopen+label%3Aneeds%2Fowner+-label%3Akind%2Fquestion) |
-| Unconfirmed | Agents' choices in owner docs, waiting to be confirmed | [*Unconfirmed* in `docs/`](https://github.com/search?q=repo%3Azlangbert%2Ftrestle+path%3Adocs+Unconfirmed&type=code). It also finds this doc and the spec's README, which define the mark |
-| Approvals | PRs that change an owner doc or a standard | [PRs with `needs/owner`](https://github.com/zlangbert/trestle/pulls?q=is%3Apr+is%3Aopen+label%3Aneeds%2Fowner) |
+| Decisions | Questions only the owner can answer | [Issues with `needs/owner` and `kind/question`](https://github.com/getroundhouse/roundhouse/issues?q=is%3Aissue+is%3Aopen+label%3Aneeds%2Fowner+label%3Akind%2Fquestion) |
+| Tasks | What only the owner can do, such as trying something by hand | [Issues with `needs/owner` that aren't questions](https://github.com/getroundhouse/roundhouse/issues?q=is%3Aissue+is%3Aopen+label%3Aneeds%2Fowner+-label%3Akind%2Fquestion) |
+| Unconfirmed | Agents' choices in owner docs, waiting to be confirmed | [*Unconfirmed* in `docs/`](https://github.com/search?q=repo%3Agetroundhouse%2Froundhouse+path%3Adocs+Unconfirmed&type=code). It also finds this doc and the spec's README, which define the mark |
+| Approvals | PRs that change an owner doc or a standard | [PRs with `needs/owner`](https://github.com/getroundhouse/roundhouse/pulls?q=is%3Apr+is%3Aopen+label%3Aneeds%2Fowner) |
 
 From a terminal, `gh issue list -l needs/owner` shows the first two, `git grep Unconfirmed docs` the third, and `gh pr list -l needs/owner` the last.
