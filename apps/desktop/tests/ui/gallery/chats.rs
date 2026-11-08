@@ -141,6 +141,7 @@ fn text(message: &str, text: &str) -> EventBody {
         parent_tool_use_id: None,
         model: Some("claude-opus".to_string()),
         blocks: vec![ContentBlock::Text { text: text.to_string() }],
+        first_index: None,
     }
 }
 
@@ -150,6 +151,7 @@ fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> Ev
         parent_tool_use_id: None,
         model: Some("claude-opus".to_string()),
         blocks: vec![ContentBlock::ToolUse { id: id.to_string(), name: name.to_string(), input }],
+        first_index: None,
     }
 }
 

@@ -4,7 +4,7 @@
 
 #![cfg(test)]
 
-use agents::claude::{Parsed, parse_line};
+use agents::claude::{Normalizer, Parsed};
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
 use protocol::model::ApprovalId;
 use protocol::tail::{BlockKind, Tail};
@@ -13,7 +13,8 @@ use serde_json::Value;
 const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");
 
 fn parsed() -> Vec<Parsed> {
-    FIXTURE.lines().map(parse_line).collect()
+    let mut normalizer = Normalizer::default();
+    FIXTURE.lines().map(|line| normalizer.line(line)).collect()
 }
 
 fn events() -> Vec<EventBody> {
@@ -28,8 +29,8 @@ fn events() -> Vec<EventBody> {
 
 #[test]
 fn every_line_is_understood_or_deliberately_kept() {
-    for (i, line) in FIXTURE.lines().enumerate() {
-        match parse_line(line) {
+    for (i, item) in parsed().into_iter().enumerate() {
+        match item {
             Parsed::Event(EventBody::AgentOther { kind }) => {
                 assert_ne!(kind, "unparsed", "line {i} isn't JSON");
                 // New kinds are fine as long as they're recorded, but these need real handling.
@@ -231,11 +232,13 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
         match item {
             Parsed::Delta(delta) => tail.apply(&delta),
             Parsed::Event(body) => {
-                if let EventBody::Assistant { message_id: Some(id), blocks, .. } = &body {
+                if let EventBody::Assistant { message_id: Some(id), blocks, first_index, .. } = &body {
                     let open = tail.messages.iter().find(|m| m.message_id == *id);
                     let open = open.unwrap_or_else(|| panic!("no streaming tail for {id}"));
                     assert_eq!(open.blocks.len(), 1, "one block at a time is open");
                     let streamed = &open.blocks[0];
+                    // So the finished block keeps the identity it had while it streamed.
+                    assert_eq!(*first_index, Some(streamed.index), "the block's place in its message");
                     match &blocks[0] {
                         ContentBlock::Text { text } => {
                             assert_eq!(streamed.kind, BlockKind::Text);

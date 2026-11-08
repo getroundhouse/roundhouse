@@ -354,6 +354,7 @@ mod tests {
                 parent_tool_use_id: None,
                 model: None,
                 blocks: vec![],
+                first_index: None,
             },
         ));
         assert!(log.tail().is_empty());

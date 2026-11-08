@@ -57,6 +57,7 @@ fn finished(message_id: &MessageId) -> EventBody {
         parent_tool_use_id: None,
         model: None,
         blocks: Vec::new(),
+        first_index: None,
     }
 }
 

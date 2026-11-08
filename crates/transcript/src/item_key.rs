@@ -21,6 +21,22 @@ impl ItemKey {
         client_msg_id.map_or(ItemKey::Event(seq, 0), |id| ItemKey::Prompt(id.clone()))
     }
 
+    /// A recorded block keeps the key it had while it streamed, when its event says where it sits in its
+    /// message. Otherwise it's known by its place in its event.
+    pub(crate) fn recorded_block(
+        seq: Seq,
+        position: usize,
+        message: Option<&MessageId>,
+        first_index: Option<u32>,
+    ) -> Self {
+        let offset = u32::try_from(position).ok();
+        let index = first_index.zip(offset).and_then(|(first, offset)| first.checked_add(offset));
+        match (message, index) {
+            (Some(message), Some(index)) => ItemKey::Block(message.clone(), index),
+            _ => ItemKey::Event(seq, position),
+        }
+    }
+
     /// The ID of one part of the item's element, such as its text or its output. Spelled out in
     /// full, so no two items or parts can share one.
     pub(crate) fn element(&self, part: &str) -> ElementId {
@@ -45,6 +61,17 @@ mod tests {
         let recorded = ItemKey::prompt(7, Some(&id)).element("prompt");
 
         assert_eq!(pending, recorded);
+    }
+
+    #[test]
+    fn a_block_keeps_its_id_from_streaming_to_recorded() {
+        let message = MessageId::from("msg_1");
+
+        let streaming = ItemKey::Block(message.clone(), 2).element("text");
+        let recorded = ItemKey::recorded_block(9, 0, Some(&message), Some(2)).element("text");
+
+        assert_eq!(streaming, recorded);
+        assert_eq!(ItemKey::recorded_block(9, 1, None, Some(2)), ItemKey::Event(9, 1), "nothing streamed");
     }
 
     #[test]

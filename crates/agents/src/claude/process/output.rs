@@ -13,7 +13,7 @@ use tracing::warn;
 
 use super::{STDERR_TAIL_LINES, Shared, write_line};
 use crate::AgentOutput;
-use crate::claude::normalize::{Parsed, parse_line};
+use crate::claude::normalize::{Normalizer, Parsed};
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
 /// leave the agent blocked and the session stuck.
@@ -32,11 +32,12 @@ async fn next_line<R: AsyncBufRead + Unpin>(reader: &mut R, buffer: &mut Vec<u8>
 pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sender<AgentOutput>) {
     let mut reader = BufReader::new(stdout);
     let mut buffer = Vec::new();
+    let mut normalizer = Normalizer::default();
     while let Some(line) = next_line(&mut reader, &mut buffer).await {
         if line.trim().is_empty() {
             continue;
         }
-        let item = match parse_line(&line) {
+        let item = match normalizer.line(&line) {
             Parsed::Drop => continue,
             Parsed::ControlReply { request_id, error } => {
                 if let Some(waiting) = shared.pending_controls.lock().remove(&request_id) {

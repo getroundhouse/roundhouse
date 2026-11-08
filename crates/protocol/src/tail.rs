@@ -169,7 +169,13 @@ mod tests {
     }
 
     fn assistant(id: &str) -> EventBody {
-        EventBody::Assistant { message_id: Some(id.into()), parent_tool_use_id: None, model: None, blocks: vec![] }
+        EventBody::Assistant {
+            message_id: Some(id.into()),
+            parent_tool_use_id: None,
+            model: None,
+            blocks: vec![],
+            first_index: None,
+        }
     }
 
     #[test]

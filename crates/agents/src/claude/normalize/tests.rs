@@ -119,3 +119,30 @@ fn the_clis_answers_to_control_requests_are_matched_up() {
         Parsed::ControlReply { request_id: "r".into(), error: Some("Model 'x' not found".into()) }
     );
 }
+
+#[test]
+fn a_finished_block_takes_its_place_from_its_own_deltas_only() {
+    let delta = |index: u32| {
+        json!({"type":"stream_event","api_message_id":"m","event":{"type":"content_block_delta","index":index,"delta":{"type":"text_delta","text":"x"}}})
+            .to_string()
+    };
+    let finished = |texts: &[&str]| {
+        let content: Vec<Value> = texts.iter().map(|text| json!({"type":"text","text":text})).collect();
+        json!({"type":"assistant","message":{"id":"m","content":content}}).to_string()
+    };
+    let first_index = |parsed: Parsed| {
+        let Parsed::Event(EventBody::Assistant { first_index, .. }) = &parsed else { panic!("{parsed:?}") };
+        *first_index
+    };
+    let ended = json!({"type":"result","subtype":"success","is_error":false}).to_string();
+    let mut normalizer = Normalizer::default();
+
+    normalizer.line(&delta(2));
+    assert_eq!(first_index(normalizer.line(&finished(&["x"]))), Some(2));
+    assert_eq!(first_index(normalizer.line(&finished(&["y"]))), None, "a block that didn't stream");
+    normalizer.line(&delta(3));
+    assert_eq!(first_index(normalizer.line(&finished(&["x", "y"]))), None, "which of them streamed is unknown");
+    normalizer.line(&delta(4));
+    normalizer.line(&ended);
+    assert_eq!(first_index(normalizer.line(&finished(&["x"]))), None, "a turn that ended left nothing streaming");
+}
