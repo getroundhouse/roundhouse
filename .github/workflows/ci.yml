@@ -6,9 +6,14 @@ name: CI
 on:
   pull_request:
   merge_group:
-  # Only main saves caches, so PRs start warm.
+  # Only main saves caches, so PRs start warm. The queue has already tested what lands, so main only runs when the
+  # cache key could change.
   push:
     branches: [main]
+    paths:
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/ci.yml
 
 permissions:
   contents: read
