@@ -2,7 +2,7 @@
 
 An open source app for running many coding agents in parallel, each in its own workspace. The workspace is the unit of delegation, and the branch and pull request are the unit of integration. It runs on your Mac first, and the same design extends to your own servers, the cloud and a phone.
 
-It's early, and not ready for other people yet. Milestone 1, a local desktop app, is in progress.
+Trestle is a working name, after a rail bridge carried by many closely spaced supports, and rail is the theme for naming. It's early, and not ready for other people.
 
 ## Why this exists
 
@@ -11,6 +11,8 @@ Running several agents at once works best when each one has its own workspace, a
 - None of the dozen options tried has quite the same mental model.
 - None has all the small day-to-day features.
 - Cloud and mobile are required, and existing options fall short there.
+
+A web client isn't a target, since nothing depends on one, but nothing rules one out.
 
 ## Try it
 
@@ -21,7 +23,7 @@ tools/install.sh
 "$HOME/Library/Application Support/trestle-builds/current/trestle-desktop"
 ```
 
-Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated, which #102 tracks.
+Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated.
 
 To work on Trestle rather than use it, `cargo run -p desktop --bin trestle-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
@@ -40,5 +42,5 @@ Use `Add repository` at the bottom left, then `New` beside the repository. The m
 
 ## Where things are
 
-- **Docs:** `AGENTS.md` lists them, each with its one purpose.
+- **Docs:** `docs/documentation.md` lists them, and says what goes in a doc and what goes on GitHub.
 - **What's left:** [issues](https://github.com/zlangbert/trestle/issues) for questions, risks, gaps and tasks, and [milestones](https://github.com/zlangbert/trestle/milestones) for the build order.

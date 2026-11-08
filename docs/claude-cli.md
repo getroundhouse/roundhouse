@@ -2,13 +2,13 @@
 
 How the worker runs the `claude` CLI, and how the CLI behaves.
 
-Step 1.1 settled this: the worker drives the CLI directly from Rust, without an SDK sidecar.
+The worker drives the CLI directly from Rust, without an SDK sidecar. It runs the user's installed `claude`, so there's nothing to redistribute, and it picks up their login and settings. The price is that a CLI upgrade can break the adapter, which the captured fixtures and contract tests are there to catch.
 
-**Why.** The Agent SDK spawns this same CLI and talks to it over the same stdio protocol, as its flag list and `sdk.d.ts` show (read from `@anthropic-ai/claude-agent-sdk` 0.3.319, which isn't vendored here). Prompts, streaming, approvals, interrupts and resuming all work directly, with no JavaScript runtime to ship. Features we might want later, such as `set_model`, `set_permission_mode`, `rewind_files` and hook callbacks, are control messages on the same stream. The SDK's in-process MCP tools have no direct equivalent, and nothing needs them so far.
+**Why.** The Agent SDK spawns this same CLI and talks to it over the same stdio protocol, as its flag list and `sdk.d.ts` show (read from `@anthropic-ai/claude-agent-sdk` 0.3.319, which isn't vendored here). Prompts, streaming, approvals, interrupts and resuming all work directly, with no JavaScript runtime to ship. Other features, such as `rewind_files` and hook callbacks, are control messages on the same stream, as `set_model` and `set_permission_mode` are. The SDK's in-process MCP tools have no direct equivalent, and nothing needs them.
 
 **The main risk.** The control protocol is described by the SDK's types rather than the CLI's documentation. `crates/agents/tests/claude/contract.rs` checks the adapter against captured real output, and rerunning `tools/smoke/capture_claude_fixture.py` after a CLI upgrade shows what changed.
 
-All of the following was observed on CLI 2.1.319 with Haiku, on 2026-11-06:
+All of the following was observed on CLI 2.1.319 with Haiku:
 
 | Behavior | What happens | What it means here |
 |---|---|---|
@@ -33,7 +33,7 @@ All of the following was observed on CLI 2.1.319 with Haiku, on 2026-11-06:
 | Order of a block | Deltas, then the finished `assistant` event, then `content_block_stop`, with one `assistant` event per block | The streaming tail depends on this, and a contract test replays it |
 | Other control requests | The CLI can also send `hook_callback`, `mcp_message`, `elicitation` and `request_user_dialog`, according to the SDK's types | The adapter answers these with an error so a session can't hang. None were seen in these runs |
 | Environment | A parent Claude session's variables, such as `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, are inherited by anything it starts | The adapter removes those by name, and passes login settings such as `ANTHROPIC_API_KEY` through |
-| Resources | An idle `claude` process used about 305 MB, against 11 MB for the hub and 8 MB for a worker (debug builds) | See issue #20 |
+| Resources | An idle `claude` process used about 305 MB, against 11 MB for the hub and 8 MB for a worker (debug builds) | An idle agent costs far more memory than the hub and worker together |
 
 ## Sources
 

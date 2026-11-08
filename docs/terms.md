@@ -11,7 +11,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Trestle | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase only for a binary | `trestle`, `trestled`, `trestle-desktop` |
 | Hub | The server that clients connect to. It owns workspaces, sessions and their logs, and leaves the work itself to workers | `hub` |
 | Worker | The process that does a workspace's work: its agents, git and scripts. It reports to its hub. There's one per workspace | `worker` |
-| Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. So far only this machine is built, as the local provider, and it isn't special | `Provider`, `LocalProvider` |
+| Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. The local provider runs workers on this machine, and it isn't special | `Provider`, `LocalProvider` |
 | Instance | Where a provider runs one workspace's worker | `instance_id` |
 | Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
 | Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
@@ -68,8 +68,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Approval mode, permission mode | The same setting. `permission_mode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `permission_mode` in code |
 | Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |
 | Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
-| Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built yet | Say which |
-| Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built yet | "Restore" alone means the workspace's |
+| Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
+| Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
 | Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
 
 ## Ending things

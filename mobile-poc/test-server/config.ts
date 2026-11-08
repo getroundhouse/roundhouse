@@ -1,4 +1,4 @@
-// Fixture shape, calibrated to aggregate measurements on 2026-11-06. See docs/usage.md.
+// Fixture shape, calibrated to aggregate measurements of real use. docs/performance.md has the test sizes.
 export const SEED = 20261106;
 // s: typical. m: longest local session (5,974). l: longest cloud session (14,205).
 // xl: headroom only, about 3.5x the real maximum. Bars are decided through l.

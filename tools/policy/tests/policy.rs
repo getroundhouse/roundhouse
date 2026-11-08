@@ -10,7 +10,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
-/// Licenses that are fine in anything that ships, App Store apps included. `docs/decisions.md` has why
+/// Licenses that are fine in anything that ships, App Store apps included. `docs/architecture.md` has why
 /// these, and why not GPL, AGPL or LGPL.
 const ALLOWED: &[&str] = &[
     "0BSD",

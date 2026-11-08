@@ -1,6 +1,6 @@
 # Architecture
 
-How the system fits together. What's built so far is the local path: the protocol, hub, worker, Claude adapter, local provider, CLI, transcript and desktop app. Everything beyond that is the agreed direction, and still a proposal. Decisions are in `docs/decisions.md`, and the build order is in the [GitHub milestones](https://github.com/zlangbert/trestle/milestones).
+How the system fits together, and why. This is the agreed design, so it includes parts that aren't built, and those are marked. Where the code does something simpler for now, this says what.
 
 ## Core model
 
@@ -47,37 +47,38 @@ The hub doesn't do the work itself. When a workspace is created, it records it a
 - **The same full daemon everywhere,** with each sandbox owning its log and the control plane holding a copy. Simpler to start, but it means two copies of each cloud log and a second read path for sleeping sandboxes.
 - **Separate local and cloud paths.** It would duplicate features.
 - **Everything through a central sync engine.** It would break offline use and keeping local data on the device.
+- **CRDTs for session history.** They suit many people typing in one buffer, which isn't this product. Long sessions are remote, so clients read a log by range instead, and never hold a whole transcript.
 
 ## Layout
 
-A single Cargo workspace in one repo. Items marked **built** exist now, and only as deep as the product needs so far.
+A single Cargo workspace in one repo. Directories marked *not built* don't exist.
 
 ```
 crates/
-  protocol/        Built. Client and worker protocol types, event log schema, versioning. No IO
-  hub/             Built. Workspaces, sessions, event log, platform API, SQLite storage
-  worker/          Built: git, worktrees, running agents. Later: terminals, buffered outbox
-  agents/          Built: Claude adapter, raw event capture. Later: Codex
-  process/         Built. Signalling a process group, and recording a PID with its start time
-  providers/       Built: provider contract, local provider. Later: external adapter host
-  client-core/     Built: connection, subscriptions, a window of a session's log. No UI
-  transcript/      Built. A session's history and live output, on the kit's list and text views
-  terminal-view/   GPUI terminal element
+  protocol/        Client and worker protocol types, event log schema, versioning. No IO
+  hub/             Workspaces, sessions, event log, platform API, SQLite storage
+  worker/          Git, worktrees, running agents
+  agents/          Claude adapter, raw event capture
+  process/         Signalling a process group, and recording a PID with its start time
+  providers/       Provider contract, local provider
+  client-core/     Connection, subscriptions, a window of a session's log, shared by every Rust client. No UI
+  transcript/      A session's history and live output, on the kit's list and text views
+  terminal-view/   GPUI terminal element. Not built
 apps/
-  daemon/          Built. One binary that runs as a hub or a worker
-  cli/             Built. Command-line client
-  desktop/         Built: GPUI and gpui-kit app, with its UI tests. Later: terminals, tabs, settings
-  mobile-ios/      Added after the proof of concept
+  daemon/          One binary that runs as a hub or a worker
+  cli/             Command-line client
+  desktop/         GPUI and gpui-kit app, with its UI tests
+  mobile-ios/      iOS app, after the proof of concept. Not built
 providers/
-  incus/           First external adapter
+  incus/           First external adapter. Not built
 services/
-  relay/           Lets phones reach hubs that aren't publicly reachable
-  hosted/          Accounts and billing, only if a hosted service is run
+  relay/           Lets phones reach hubs that aren't publicly reachable. Not built
+  hosted/          Accounts and billing, only if a hosted service is run. Not built
 tools/
-  policy/          Built. Tests that enforce the license and dependency rules below
-  smoke/           Built. Runs the stack against the real Claude CLI, and regenerates its fixture
-  install.sh       Built. Installs this commit as a version of its own, outside `target/`
-  perf/            Performance tests against the real app. Not built yet, see `docs/performance.md`
+  policy/          Tests that enforce the license and dependency rules below
+  smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
+  install.sh       Installs this commit as a version of its own, outside `target/`
+  perf/            Performance tests against the real app. Not built, see `docs/performance.md`
 ```
 
 The binaries are `trestle`, `trestled` and `trestle-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `trestle-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
@@ -95,13 +96,30 @@ agents, providers, worker ──> process
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.
 2. **`protocol` has no IO and no UI.** Everything depends on it, so it needs to stay small and stable.
 3. **The hub and worker must build on Linux without GPUI.** Nothing under `hub`, `worker`, `agents` or `providers` may depend on GPUI or gpui-kit.
-4. **GPUI stays in `transcript`, `terminal-view` and `apps/`.** `client-core` must stay free of it, so that a native mobile client remains possible if the GPUI path fails.
-5. **The worker boundary is real from day one.** On a Mac, the worker still runs as a separate process, so remote workers only change the transport.
+4. **GPUI stays in `transcript`, `terminal-view` and `apps/`.** `client-core` must stay free of it, and of any async runtime: it's blocking calls and channels, so GPUI's executor stays out, and a native mobile client remains possible if the GPUI path fails.
+5. **The worker boundary is real.** Even on a Mac, the worker runs as a separate process, so remote workers only change the transport.
 6. **Exact pins for GPUI and gpui-kit.** They are pre-1.0, so upgrades should be deliberate and in one place.
+7. **Nothing that ships is under GPL, AGPL or LGPL.** MPL-2.0 is allowed when it comes unchanged from crates.io, and everything else is permissive, such as Apache-2.0 or MIT. GPL or AGPL code would put the whole app under its terms, which would decide the project's own license and rule out closed or hosted versions, and GPL is widely seen as incompatible with the App Store. AGPL also reaches the hub over the network. LGPL expects users to be able to relink, which static linking makes awkward. MPL-2.0 only covers its own files (§3.3), and shipping it unchanged only means saying where its source is (§3.2), which goes in the notices every license needs anyway. A changed copy would have to be published, hence crates.io only.
 
-`tools/policy/tests/policy.rs` checks rules 1 to 4 and the license rule against the real dependency graph, so `cargo test` fails if a new dependency breaks one. The license check covers what actually ships on each platform, not everything in `Cargo.lock`. Rule 3 was also checked by building and testing on Linux in Docker.
+`tools/policy/tests/policy.rs` checks rules 1 to 4 and 7 against the real dependency graph, so `cargo test` fails if a new dependency breaks one. The license check covers what actually ships on each platform, not everything in `Cargo.lock`.
 
-`cargo test` covers everything that builds without GPUI, which is what a Linux server needs. `cargo test --workspace` adds the transcript and desktop app.
+### Layers
+
+Dependencies point inward, from handlers to operations to stores and integrations. A layer answers with a lower layer's type wherever it means the same, rather than copying it.
+
+| Layer | What it does | Here |
+|---|---|---|
+| Handlers | Parse a request, call one operation, map its result | `hub::server`, `worker::serve` |
+| Operations | One module per area, holding its logic | `hub` |
+| Stores | All SQL, inline: a few dozen statements, with nothing to check them at compile time | `hub::store` |
+| Integrations | One module per outside system. Nothing else knows its flags, wire format or retries | `agents::claude`, `worker::git`, `hub::worker_link`, `providers::local` |
+| Edges | Configuration and telemetry, read from the environment and passed down | `main` in each app |
+
+Errors follow the layers:
+
+- **Hub and worker operations return `protocol::client::ApiError`,** the error both protocols carry. Its `ErrorCode` is a closed set of meanings, such as `NotFound` and `Conflict`, not a transport status, so a second enum mapping onto it would only be a copy. Callers and tests match `code`, and `message` is for people. A condition callers must tell apart gets a new `ErrorCode`.
+- **`hub::store` has its own enum,** because `ApiError` holds only text, and using it at the bottom would throw away the SQLite error.
+- **Lower errors become `ApiError` in one place per crate,** an `impl From<…> for ApiError`, so the mapping reads as one table. `Internal` failures get logged there, with their source.
 
 ## State ownership
 
@@ -122,19 +140,32 @@ Each piece of state has one owner, and every other copy is a cache.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.
 - **A running agent decides its own model and approval mode.** A change goes to the agent first and is saved only once it agrees, and the agent reports every change of mode itself, so what's shown is never ahead of what's true.
 
-### Wire format and event log
+## Wire format and event log
 
-Settled in step 1.1. Details are in `crates/protocol/`.
+Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
-- **Versioning:** both sides say hello first and compare a protocol number. Unknown fields are ignored, unknown enum variants decode as `Unknown`, and a hub answers a request it doesn't know with an error rather than closing the connection, so additions don't need a version bump. A bump means a real break.
-- **`hub_status` and `hub_shutdown` work without a hello, and their forms can't change,** so a client of any version can see a hub and stop it. That's how `trestle hub status`, `trestle hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A connection from elsewhere, once there are any, shouldn't get this.
+- **Versioning:** both sides say hello first and compare a protocol number. "Changing the protocol" says what needs a bump, which is rare.
+- **`hub_status` and `hub_shutdown` work without a hello,** so a client of any version can see a hub and stop it. That's how `trestle hub status`, `trestle hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A connection from elsewhere, once there are any, shouldn't get this.
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
-- **Each event has a normalized body, plus the agent's raw line in a separate column.** Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
+- **Each event has a normalized body, plus the agent's raw line in a separate column.** Agent output is untrusted input, so `agents::claude::normalize` takes any line without panicking. Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
 - **Live deltas aren't stored.** The finished message arrives as a durable event and replaces them. A client attaching mid-message gets a snapshot of the streaming tail, then deltas, and `protocol::tail` holds the rules so the hub and clients can't disagree.
 - **Subscribers read from the log, and live updates only say that it moved.** A slow client can fall behind and catch up without losing anything, and it holds back only itself.
 - **A status change commits in the same transaction as its event,** so a client reading status after an event can't see an older value.
 - **Prompts carry an optional `client_msg_id`,** and the same ID is only recorded once, so a client can retry safely after a disconnect.
+
+### Changing the protocol
+
+These rules let peers on different versions keep working together.
+
+- **Each shape has one form.** It's the serde form in `protocol`, on the wire and in the hub's SQLite columns, so changing a type also changes how old rows read.
+- **A new field is `Option` or `#[serde(default)]`,** so a message from an older peer still decodes. The same goes for old rows.
+- **Every enum read as data has `#[serde(other)] Unknown`:** statuses, kinds, events and blocks. Without it, one new value fails the whole frame, which `client-core` drops, failing the call if it was a reply. Code that receives `Unknown` skips it or shows something neutral. It never panics.
+- **Other envelopes have no `Unknown`.** That covers `HubFrame`, `ClientResponse` and the like, since there's nothing sensible to do with one. A client only gets a new response by making a new request.
+- **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. A client checks `is_unsupported()`, and hides or disables whatever needed it. There's no list of capabilities until something needs one.
+- **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. Client and hub can't work together across one, so it should be rare.
+- **`hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** They're what lets a client see a hub and stop it across one. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it.
+- **The worker protocol follows the same rules once workers can differ in version.** Today a hub and its worker are one binary.
 
 ## When a process dies
 
@@ -143,14 +174,15 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 - **A hub is a separate process that outlives its clients,** so closing the app doesn't stop its agents. A client connects, or starts a hub if there's none, and a lock keeps each data directory to one hub.
 - **A prompt is recorded before anything else is tried,** and the client gets its reply at that point. Later failures go in the log, where every client can see them.
 - **A hub cleans up at startup.** Its workers exited with it, so it closes open approvals, marks active sessions `Interrupted`, fails setups that were cut off, and discards half-made workspaces.
-- **The worker buffers events on disk until the hub acknowledges them.** A worker has to keep going while its hub is unreachable, such as when a Mac running the hub goes to sleep. Not built yet: it comes with milestone 2. Until then a worker stops its agents when it loses its hub, so nothing runs unrecorded, and the next prompt resumes the conversation.
+- **The worker buffers events on disk until the hub acknowledges them.** A worker has to keep going while its hub is unreachable, such as when a Mac running the hub goes to sleep. For now, a worker stops its agents when it loses its hub, so nothing runs unrecorded, and the next prompt resumes the conversation.
 - **When a worker goes, the hub stops its instance and tells its sessions,** which close their open approvals and record that the agent exited. The next prompt starts a new worker and agent.
+- **Workers, agents and setup scripts each start in their own process group,** so stopping one reaches everything it started, and a signal to the hub's terminal doesn't reach them directly. Signalling a group, and recording a PID with its start time, each have one implementation, in `crates/process`.
 - **A worker that gets killed can't stop its agents, so it records them.** Each agent's PID and start time go in a file in the instance directory, and the local provider stops anything still recorded before the next worker starts. Otherwise an orphan and its replacement would both be working on one conversation and worktree.
 - **Each launch of an agent has a run ID,** and its events carry it. A late event from a replaced agent still goes in the log, but can't change the status of the session its replacement is running.
 
 ## Managing a hub
 
-Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. This is the agreed direction. Most of it is built for a local hub. Two parts aren't: replacing a hub while the app stays open waits on keeping drafts (#42), so for now it happens when the app connects, and hiding a feature an older hub lacks has nothing to hide yet.
+Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. For now, the app replaces a local hub only when it connects, not while it stays open.
 
 | | Local hub started on demand | A hub you run yourself, here or on a server | Hosted, if one is ever run |
 |---|---|---|---|
@@ -159,10 +191,13 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 | **When versions differ** | Keeps working, and the app replaces the hub later | Keeps working, and the app says the hub is older | Keeps working |
 
 - **A hub knows nothing about what manages it.** It offers its status and stops cleanly on `SIGTERM`, which is what systemd and Docker use. There's no desktop mode, and it doesn't exit when the app closes.
-- **A client never needs one exact hub version.** A hub politely refuses a request it doesn't know, and the client hides or disables just that feature. A protocol bump means a real break, and should be rare. This stays as simple as it can, and gets revisited if it turns out complicated.
+- **A client never needs one exact hub version.** It hides or disables what an older hub doesn't support, as "Changing the protocol" describes, and only a real break stops it. This stays as simple as it can, and gets revisited if it turns out complicated.
 - **A client only replaces a hub that says it's replaceable.** A hub started on demand reports that in its status, and one you started yourself gets left alone, even on the same Mac. Only the desktop app replaces a hub, and only an older one, so two versions can't keep replacing each other's.
 - **Only a local on-demand hub that's older than the client can be restarted from it,** and only the rare real break needs that to be visible. A client's own hub might not be able to open what a newer one has written. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs.
 - **The app ships a default hub, and that's the only link between them.** The hub doesn't depend on the app.
+- **`tools/install.sh` copies release binaries into `trestle-builds/<version>/`,** and a `current` link names the one to start. Clients and hubs resolve the link when they start, so they stay on their version when it moves. Running from `target/` would give a rebuilt hub workers from different code, and archiving that worktree would remove the binary. Keeping versions gives rollback by moving the link.
+- **An install stamps its commit through `TRESTLE_BUILD`,** and any other build says `0.1.0-dev`. The app and `trestle hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
+- **An install also stamps an order through `TRESTLE_BUILD_NUMBER`:** when its commit was made, or when it installed if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
 
 For someone with the desktop app, an update should look like this:
 
@@ -190,4 +225,4 @@ The hub needs a small contract from a provider:
 - **Providers declare their capabilities,** such as whether the filesystem survives a stop and whether they support snapshots. Persistent instances don't need snapshots to sleep, while ephemeral sandboxes do.
 - **Availability follows the hub.** A hub on an intermittently available machine, such as a Mac, is only reachable while that machine is awake. Agents on remote workers keep running and catch up later. Persistent mobile access needs a hub on an always-on machine.
 - **Each workspace gets its own worker process and provider instance,** so a crash in one doesn't touch the others. This matches sandboxes, where each workspace has its own machine. A worker uses about 8 MB, so this is cheap on a Mac.
-- **The contract is a Rust trait for now.** It becomes messages when the first external adapter needs them, in milestone 2. `snapshot` and `restore` come with the first provider that uses them.
+- **The contract is a Rust trait for now.** It becomes messages when the first external adapter needs them. `snapshot` and `restore` come with the first provider that uses them.
