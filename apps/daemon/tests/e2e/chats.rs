@@ -19,7 +19,7 @@ fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
     let client = stack.client();
     let (workspace, first) = stack.workspace(&client);
     let second =
-        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
     client.session_prompt(&first.id, "slow:15:from the first", None).unwrap();
     client.session_prompt(&second.id, "slow:15:from the second", None).unwrap();
     let first_events = wait_for_turn_end(&client, &first.id, 1);
@@ -47,7 +47,7 @@ fn closing_a_chat_stops_only_its_agent_and_reopening_continues_it() {
     let client = stack.client();
     let (workspace, closing) = stack.workspace(&client);
     let staying =
-        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
     client.session_prompt(&closing.id, "say:remember me", None).unwrap();
     client.session_prompt(&staying.id, "say:here", None).unwrap();
     let closing_pid = started_pid(&wait_for_turn_end(&client, &closing.id, 1)).unwrap();

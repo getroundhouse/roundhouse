@@ -1,6 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
+    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Workspace,
+    WorkspaceStatus,
 };
 
 use super::*;
@@ -12,42 +13,48 @@ fn store_with_session(dir: &Path) -> Store {
         Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
     store.add_repo(&repo).unwrap();
     store
-        .insert_workspace(&Workspace {
-            id: "w".into(),
-            repo_id: "r".into(),
-            name: "alder".into(),
-            branch: "alder".into(),
-            base_ref: None,
-            path: None,
-            status: WorkspaceStatus::Ready,
-            provider: "local".into(),
-            instance_id: "w".into(),
-            created_at_ms: now,
-            archived_at_ms: None,
-            setup: SetupStatus::NotStarted,
-            port_base: 55_000,
-            rev: Rev::default(),
-        })
+        .insert_workspace(
+            &Workspace {
+                id: "w".into(),
+                repo_id: "r".into(),
+                name: "alder".into(),
+                branch: "alder".into(),
+                base_ref: None,
+                path: None,
+                status: WorkspaceStatus::Ready,
+                provider: "local".into(),
+                instance_id: "w".into(),
+                created_at_ms: now,
+                archived_at_ms: None,
+                setup: SetupStatus::NotStarted,
+                port_base: 55_000,
+                rev: Rev::default(),
+            },
+            None,
+        )
         .unwrap();
     store
-        .insert_session(&StoredSession {
-            session: Session {
-                id: "s".into(),
-                workspace_id: "w".into(),
-                agent: AgentKind::Claude,
-                model: None,
-                permission_mode: None,
-                title: None,
-                closed_at_ms: None,
-                rev: Rev::default(),
-                status: SessionStatus::Idle,
-                last_seq: 0,
-                created_at_ms: now,
-                updated_at_ms: now,
+        .insert_session(
+            &StoredSession {
+                session: Session {
+                    id: "s".into(),
+                    workspace_id: "w".into(),
+                    agent: AgentKind::Claude,
+                    model: None,
+                    permission_mode: None,
+                    title: None,
+                    closed_at_ms: None,
+                    rev: Rev::default(),
+                    status: SessionStatus::Idle,
+                    last_seq: 0,
+                    created_at_ms: now,
+                    updated_at_ms: now,
+                },
+                agent_session_id: "s".into(),
+                agent_opened: false,
             },
-            agent_session_id: "s".into(),
-            agent_opened: false,
-        })
+            None,
+        )
         .unwrap();
     store
 }
@@ -230,12 +237,12 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     let mut half_made = store.get_workspace(&"w".into()).unwrap();
     half_made.id = "w2".into();
     half_made.name = "birch".into();
-    store.insert_workspace(&half_made).unwrap();
+    store.insert_workspace(&half_made, None).unwrap();
     newer(store.get_workspace(&"w2".into()).unwrap().rev, "a new workspace");
     newer(store.delete_workspace(&"w2".into()).unwrap().unwrap(), "removing a workspace");
     let mut another = store.get_session(&"s".into()).unwrap();
     another.session.id = "s2".into();
-    store.insert_session(&another).unwrap();
+    store.insert_session(&another, None).unwrap();
     newer(store.get_session(&"s2".into()).unwrap().session.rev, "a new session");
     let comment = DiffComment {
         id: "c".into(),
@@ -247,7 +254,8 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
         created_at_ms: 0,
         rev: Rev::default(),
     };
-    newer(store.add_comment(&comment).unwrap().rev, "a comment");
+    let Made::New(added) = store.add_comment(&comment, None).unwrap() else { panic!("made before") };
+    newer(added.rev, "a comment");
     newer(store.delete_comment(&"c".into()).unwrap().unwrap(), "removing a comment");
     let repo = Repo { id: "r2".into(), name: "two".into(), path: "/two".into(), created_at_ms: 0, rev: Rev::default() };
     newer(store.add_repo(&repo).unwrap().rev, "a repository");
@@ -257,6 +265,46 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     let revs = records.repos.iter().map(|r| r.rev).chain(records.workspaces.iter().map(|w| w.rev));
     assert!(revs.chain(records.sessions.iter().map(|s| s.rev)).all(|rev| rev <= records.rev));
     assert_eq!(store.delete_comment(&"c".into()).unwrap(), None, "nothing to remove");
+}
+
+/// Two of the same request can both get past the hub's check before either is stored, so the store finds
+/// what the first made, under the same lock as the insert.
+#[test]
+fn a_request_sent_again_gets_what_it_made_the_first_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+
+    let mut workspace = store.get_workspace(&"w".into()).unwrap();
+    let request = ClientRequestId::from("make a workspace");
+    (workspace.id, workspace.name) = ("w2".into(), "birch".into());
+    let Some(Made::New(first)) = store.insert_workspace(&workspace, Some(&request)).unwrap() else { panic!() };
+    (workspace.id, workspace.name) = ("w3".into(), "cedar".into());
+    let again = store.insert_workspace(&workspace, Some(&request)).unwrap();
+    assert_eq!(again, Some(Made::Earlier(first)), "a workspace");
+
+    let mut session = store.get_session(&"s".into()).unwrap();
+    let request = ClientRequestId::from("make a session");
+    session.session.id = "s2".into();
+    let Made::New(first) = store.insert_session(&session, Some(&request)).unwrap() else { panic!() };
+    session.session.id = "s3".into();
+    let Made::Earlier(again) = store.insert_session(&session, Some(&request)).unwrap() else { panic!("a session") };
+    assert_eq!(again.session, first.session);
+
+    let mut comment = DiffComment {
+        id: "c1".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: protocol::model::DiffSide::New,
+        line: 1,
+        text: "x".into(),
+        created_at_ms: 0,
+        rev: Rev::default(),
+    };
+    let request = ClientRequestId::from("add a comment");
+    let Made::New(first) = store.add_comment(&comment, Some(&request)).unwrap() else { panic!() };
+    comment.id = "c2".into();
+    assert_eq!(store.add_comment(&comment, Some(&request)).unwrap(), Made::Earlier(first), "a comment");
+    assert_eq!(store.list_comments(&"w".into()).unwrap().len(), 1);
 }
 
 #[test]
@@ -282,7 +330,7 @@ fn comments_belong_to_a_workspace_and_can_be_removed() {
         created_at_ms: 1,
         rev: Rev::default(),
     };
-    let stored = store.add_comment(&comment).unwrap();
+    let Made::New(stored) = store.add_comment(&comment, None).unwrap() else { panic!("made before") };
     assert_eq!(stored, DiffComment { rev: stored.rev, ..comment });
     assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![stored]);
     assert_eq!(store.list_comments(&"other".into()).unwrap(), vec![]);
@@ -299,7 +347,7 @@ fn each_workspace_gets_its_own_ports() {
     next.id = "w2".into();
     next.name = "birch".into();
     next.port_base = 55_010;
-    store.insert_workspace(&next).unwrap();
+    store.insert_workspace(&next, None).unwrap();
     assert_eq!(store.next_port_base().unwrap(), 55_020);
 }
 
@@ -337,5 +385,5 @@ fn workspace_names_are_unique_per_repo() {
     let store = store_with_session(dir.path());
     let mut duplicate = store.get_workspace(&"w".into()).unwrap();
     duplicate.id = "w2".into();
-    assert!(!store.insert_workspace(&duplicate).unwrap());
+    assert_eq!(store.insert_workspace(&duplicate, None).unwrap(), None);
 }

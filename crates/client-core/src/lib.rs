@@ -11,4 +11,7 @@ pub mod session_log;
 
 mod client;
 
-pub use client::{Client, ClientError, HubAdmin, Result, Subscription, SubscriptionItem, daemon_beside, stop_hub};
+pub use client::{
+    Client, ClientError, HubAdmin, Result, Subscription, SubscriptionItem, daemon_beside, new_message_id,
+    new_request_id, stop_hub,
+};

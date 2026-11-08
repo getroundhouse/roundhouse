@@ -2,172 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::{ApprovalDecision, SessionEvent};
+use crate::event::SessionEvent;
 use crate::model::{
-    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest,
-    RecordKey, Records, Repo, RepoId, Rev, Seq, Session, SessionId, Workspace, WorkspaceId,
+    DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, Workspace,
 };
 use crate::tail::{StreamDelta, Tail};
+
+mod request;
+
+pub use request::ClientRequest;
 
 /// Replies to a [`ClientFrame`] carry its `id`, and can arrive in any order.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ClientFrame {
     pub id: u64,
     pub request: ClientRequest,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "method", rename_all = "snake_case")]
-pub enum ClientRequest {
-    /// Must come first on a connection.
-    Hello {
-        protocol_version: u32,
-        client: String,
-    },
-    /// Works without a hello, and so does `HubShutdown`, so a client of any version can see a hub and
-    /// stop it. Neither can change form, even in a real break.
-    HubStatus,
-    /// Stops the hub and its workers. Agents are stopped and resume on the next prompt.
-    HubShutdown,
-
-    RepoAdd {
-        path: String,
-    },
-    RepoList,
-    /// Every repository, workspace, session and comment, read at one moment, with the revision it
-    /// was read at. Follow the feed first, then list, and keep whichever copy of a record is newer.
-    RecordsList,
-
-    /// Generates a name if none is given. Uses the repository's default branch if no base is given.
-    WorkspaceCreate {
-        repo_id: RepoId,
-        name: Option<String>,
-        base_ref: Option<String>,
-    },
-    WorkspaceList {
-        include_archived: bool,
-    },
-    /// Fails if work would be lost or the archive script fails, unless `force` is set. The branch is kept.
-    WorkspaceArchive {
-        id: WorkspaceId,
-        force: bool,
-    },
-    WorkspaceRestore {
-        id: WorkspaceId,
-    },
-    WorkspaceStatus {
-        id: WorkspaceId,
-    },
-    WorkspaceDiff {
-        id: WorkspaceId,
-    },
-    /// The end of the setup log, which the worker keeps.
-    WorkspaceSetupLog {
-        id: WorkspaceId,
-    },
-    /// Copies local files and runs the setup script again.
-    WorkspaceRerunSetup {
-        id: WorkspaceId,
-    },
-    /// The pull request for this workspace's branch. The reply is `None` if there isn't one, or if
-    /// GitHub's CLI isn't available.
-    WorkspacePullRequest {
-        id: WorkspaceId,
-    },
-    CommentAdd {
-        workspace_id: WorkspaceId,
-        path: String,
-        side: DiffSide,
-        line: u32,
-        text: String,
-    },
-    CommentList {
-        workspace_id: WorkspaceId,
-    },
-    CommentDelete {
-        id: CommentId,
-    },
-
-    SessionCreate {
-        workspace_id: WorkspaceId,
-        agent: AgentKind,
-        model: Option<String>,
-        permission_mode: Option<String>,
-    },
-    /// The workspace's newest open session, or a new one if it has none. Clients opening a workspace
-    /// at the same moment end up in the same session, rather than one each.
-    SessionEnsure {
-        workspace_id: WorkspaceId,
-        agent: AgentKind,
-    },
-    SessionList {
-        workspace_id: WorkspaceId,
-    },
-    SessionGet {
-        id: SessionId,
-    },
-    /// Reads events from `from_seq` on. Returns at least one event if any exist, and stops at
-    /// `limit` events or about `max_bytes`, so a huge event can't produce an unbounded reply.
-    SessionRead {
-        id: SessionId,
-        from_seq: Seq,
-        limit: u32,
-        max_bytes: Option<u64>,
-        #[serde(default)]
-        include_raw: bool,
-    },
-    /// Sends every event from `from_seq` on, then keeps streaming as new ones are recorded. To
-    /// catch up after reconnecting, subscribe from one past the last `seq` received. The client
-    /// picks `subscription_id`, because events can arrive before the reply does.
-    SessionSubscribe {
-        id: SessionId,
-        from_seq: Seq,
-        subscription_id: u64,
-    },
-    /// Works for any kind of subscription.
-    SessionUnsubscribe {
-        subscription_id: u64,
-    },
-    /// Sends a [`HubNotice`] whenever a record changes. Subscribe, then list with `RecordsList`, and
-    /// keep whichever copy of each record has the newer revision. List again on `Resync`.
-    FeedSubscribe {
-        subscription_id: u64,
-    },
-    /// Resolves once the prompt is recorded. Sending the same `client_msg_id` twice records it once,
-    /// so retrying after a disconnect can't send it twice. A retry only records: if the hub stopped
-    /// before delivering the original, the session shows as interrupted, and the prompt needs sending
-    /// again with a new ID.
-    SessionPrompt {
-        id: SessionId,
-        text: String,
-        client_msg_id: Option<ClientMessageId>,
-    },
-    SessionApprove {
-        id: SessionId,
-        approval_id: ApprovalId,
-        decision: ApprovalDecision,
-    },
-    SessionCancel {
-        id: SessionId,
-    },
-    /// Changes the model or approval mode, on the running agent too if there is one. `None` leaves
-    /// that setting as it is. Fails, changing nothing, if the agent refuses.
-    SessionConfigure {
-        id: SessionId,
-        model: Option<String>,
-        permission_mode: Option<String>,
-    },
-    /// Stops its agent and hides it from the tabs. The history stays, and it can be reopened.
-    SessionClose {
-        id: SessionId,
-    },
-    SessionReopen {
-        id: SessionId,
-    },
-    /// Any request this build doesn't know, from a client newer than it. A hub answers with
-    /// [`ErrorCode::Unsupported`] and carries on.
-    #[serde(other)]
-    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

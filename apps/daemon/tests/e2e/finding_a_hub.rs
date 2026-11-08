@@ -39,14 +39,14 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     let (created, result) = std::sync::mpsc::channel();
     let creating = client.clone();
     std::thread::spawn(move || {
-        let _ = created.send(creating.workspace_create(&repo.id, None, None));
+        let _ = created.send(creating.workspace_create(&repo.id, None, None, None));
     });
     let workspace = result.recv_timeout(Duration::from_secs(20)).expect("creating a workspace hung").unwrap();
     assert_eq!(workspace.status, WorkspaceStatus::Ready);
 
     // An agent started under it works too, and stopping it by signal still does.
     let session =
-        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
     client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     assert!(PathBuf::from(workspace.path.unwrap()).join("done.txt").exists());

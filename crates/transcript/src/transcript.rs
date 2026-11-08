@@ -12,7 +12,7 @@ use gpui_kit::{
     Window, px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, ClientMessageId, Seq, Session, SessionId, seq_index};
+use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -306,7 +306,7 @@ impl Transcript {
         if text.trim().is_empty() {
             return false;
         }
-        let client_msg_id = ClientMessageId::from(uuid::Uuid::new_v4().to_string());
+        let client_msg_id = client_core::new_message_id();
         self.model.borrow_mut().log.add_pending(client_msg_id.clone(), text.clone());
         self.sync_rows(cx);
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);

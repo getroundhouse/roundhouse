@@ -181,6 +181,7 @@ impl DiffPanel {
                         our_side(position.side()),
                         u32::try_from(position.line()).unwrap_or(u32::MAX),
                         &text,
+                        Some(client_core::new_request_id()),
                     )
                 })
                 .await;

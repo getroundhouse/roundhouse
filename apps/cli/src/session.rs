@@ -16,7 +16,13 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
     match command {
         SessionCmd::New { workspace, model, permission_mode } => {
             let workspace = find_workspace(client, &workspace)?;
-            let session = client.session_create(&workspace.id, AgentKind::Claude, model, permission_mode)?;
+            let session = client.session_create(
+                &workspace.id,
+                AgentKind::Claude,
+                model,
+                permission_mode,
+                Some(client_core::new_request_id()),
+            )?;
             println!("{}", session.id);
         }
         SessionCmd::List { workspace } => {

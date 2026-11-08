@@ -4,10 +4,10 @@
 
 use std::path::PathBuf;
 
-use client_core::{Client, ClientError};
+use client_core::{Client, ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{DiffSide, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, ClientRequestId, DiffSide, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, install_executable, is_alive, read_all, wait_for_setup,
@@ -120,8 +120,8 @@ fn comments_are_kept_by_the_hub_and_survive_a_restart() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
-    let added = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this").unwrap();
-    assert!(client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "  ").is_err(), "an empty comment");
+    let added = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", None).unwrap();
+    assert!(client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "  ", None).is_err(), "an empty comment");
     drop(client);
     stack.kill_hub();
     stack.start_hub();
@@ -129,6 +129,38 @@ fn comments_are_kept_by_the_hub_and_survive_a_restart() {
     assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![added.clone()]);
     client.comment_delete(&added.id).unwrap();
     assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![]);
+}
+
+/// So a client that loses the reply can send it again without making a second one.
+#[test]
+fn creating_again_with_the_same_request_id_returns_what_the_first_made() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    let (for_workspace, for_session, for_comment) = (new_request_id(), new_request_id(), new_request_id());
+    let repo = &workspace.repo_id;
+    let comment = |id: &ClientRequestId| {
+        client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", Some(id.clone()))
+    };
+    let session =
+        |id: &ClientRequestId| client.session_create(&workspace.id, AgentKind::Claude, None, None, Some(id.clone()));
+
+    let made = client.workspace_create(repo, None, None, Some(for_workspace.clone())).unwrap();
+    let again = client.workspace_create(repo, None, None, Some(for_workspace.clone())).unwrap();
+    let chats = [session(&for_session).unwrap(), session(&for_session).unwrap()];
+    let comments = [comment(&for_comment).unwrap(), comment(&for_comment).unwrap()];
+
+    // The same records, as they are now: the workspace's setup may have moved on.
+    assert_eq!(again.id, made.id);
+    assert_eq!(chats[0].id, chats[1].id);
+    assert_eq!(comments[0].id, comments[1].id);
+    assert_eq!(client.workspace_list(false).unwrap().len(), 2);
+    assert_eq!(client.session_list(&workspace.id).unwrap().len(), 2);
+    assert_eq!(client.comment_list(&workspace.id).unwrap().len(), 1);
+
+    // Sent again after things have changed, it still gets back what it made, rather than a refusal.
+    client.workspace_archive(&workspace.id, true).unwrap();
+    assert_eq!(session(&for_session).unwrap().id, chats[0].id);
 }
 
 #[test]
@@ -171,21 +203,21 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
 
-    let err = client.workspace_create(&repo.id, Some("../escape".into()), None).unwrap_err();
+    let err = client.workspace_create(&repo.id, Some("../escape".into()), None, None).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
 
-    let first = client.workspace_create(&repo.id, Some("mine".into()), None).unwrap();
-    let err = client.workspace_create(&repo.id, Some("mine".into()), None).unwrap_err();
+    let first = client.workspace_create(&repo.id, Some("mine".into()), None, None).unwrap();
+    let err = client.workspace_create(&repo.id, Some("mine".into()), None, None).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
 
     // A branch that exists outside the hub also blocks a chosen name, and leaves nothing behind.
     git(&stack.repo(), &["branch", "taken"]);
-    let err = client.workspace_create(&repo.id, Some("taken".into()), None).unwrap_err();
+    let err = client.workspace_create(&repo.id, Some("taken".into()), None, None).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
     assert_eq!(client.workspace_list(true).unwrap()[0].id, first.id);
 
-    let generated = client.workspace_create(&repo.id, None, None).unwrap();
+    let generated = client.workspace_create(&repo.id, None, None, None).unwrap();
     assert_ne!(generated.name, first.name);
 }
 

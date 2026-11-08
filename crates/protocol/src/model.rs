@@ -50,6 +50,8 @@ ids!(
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
     ClientMessageId,
+    /// Chosen by a client, so that retrying a request that creates something can't create it twice.
+    ClientRequestId,
     /// The agent's own ID for a message it's sending.
     MessageId,
     /// The agent's own ID for one use of a tool.

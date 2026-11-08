@@ -1,9 +1,10 @@
 //! Sessions.
 
-use protocol::model::{AgentKind, Session, SessionStatus};
+use protocol::model::{AgentKind, ClientRequestId, Session, SessionStatus};
 use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
+use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
 pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms";
@@ -30,10 +31,22 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
 }
 
 impl Store {
-    pub fn insert_session(&self, stored: &StoredSession) -> Result<(), StoreError> {
+    /// Returns the session as stored, with its revision.
+    pub fn insert_session(
+        &self,
+        stored: &StoredSession,
+        client_request_id: Option<&ClientRequestId>,
+    ) -> Result<Made<StoredSession>, StoreError> {
+        let conn = lock(&self.writer);
+        if let Some(made) = made_by(&conn, client_request_id)? {
+            return Ok(Made::Earlier(made));
+        }
         let session = &stored.session;
-        lock(&self.writer).execute(
-            &format!("INSERT INTO sessions ({SESSION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+        conn.execute(
+            &format!(
+                "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            ),
             params![
                 session.id.as_str(),
                 session.workspace_id.as_str(),
@@ -48,9 +61,10 @@ impl Store {
                 stored.agent_opened,
                 session.title,
                 session.closed_at_ms,
+                client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
-        Ok(())
+        Ok(inserted(&conn, session.id.as_str())?)
     }
 
     pub fn get_session(&self, id: &SessionId) -> Result<StoredSession, StoreError> {

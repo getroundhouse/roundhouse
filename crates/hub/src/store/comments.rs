@@ -1,8 +1,9 @@
 //! Comments left on a diff.
 
-use protocol::model::{CommentId, DiffComment, Rev, WorkspaceId};
+use protocol::model::{ClientRequestId, CommentId, DiffComment, Rev, WorkspaceId};
 use rusqlite::{Row, params};
 
+use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, from_text, lock, rev_of, text_of};
 
 pub(super) const COMMENT_COLUMNS: &str = "id, workspace_id, path, side, line, text, created_at_ms";
@@ -22,10 +23,19 @@ pub(super) fn comment_from_row(row: &Row) -> rusqlite::Result<DiffComment> {
 
 impl Store {
     /// Returns the comment as stored, with its revision.
-    pub fn add_comment(&self, comment: &DiffComment) -> Result<DiffComment, StoreError> {
+    pub fn add_comment(
+        &self,
+        comment: &DiffComment,
+        client_request_id: Option<&ClientRequestId>,
+    ) -> Result<Made<DiffComment>, StoreError> {
         let conn = lock(&self.writer);
+        if let Some(made) = made_by(&conn, client_request_id)? {
+            return Ok(Made::Earlier(made));
+        }
         conn.execute(
-            &format!("INSERT INTO diff_comments ({COMMENT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+            &format!(
+                "INSERT INTO diff_comments ({COMMENT_COLUMNS}, client_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ),
             params![
                 comment.id.as_str(),
                 comment.workspace_id.as_str(),
@@ -34,14 +44,10 @@ impl Store {
                 comment.line,
                 comment.text,
                 comment.created_at_ms,
+                client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
-        conn.query_row(
-            &format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments WHERE id = ?"),
-            [comment.id.as_str()],
-            comment_from_row,
-        )
-        .map_err(StoreError::from)
+        Ok(inserted(&conn, comment.id.as_str())?)
     }
 
     pub fn list_comments(&self, workspace_id: &WorkspaceId) -> Result<Vec<DiffComment>, StoreError> {

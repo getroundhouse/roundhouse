@@ -164,6 +164,16 @@ const MIGRATIONS: &[&str] = &[
         UPDATE counters SET value = value + 1 WHERE name = 'rev';
     END;
 ",
+    // What a client chose for a request that created a record, so sending it again returns that record.
+    r"
+    ALTER TABLE workspaces ADD COLUMN client_request_id TEXT;
+    ALTER TABLE sessions ADD COLUMN client_request_id TEXT;
+    ALTER TABLE diff_comments ADD COLUMN client_request_id TEXT;
+    CREATE UNIQUE INDEX workspaces_by_request ON workspaces (client_request_id) WHERE client_request_id IS NOT NULL;
+    CREATE UNIQUE INDEX sessions_by_request ON sessions (client_request_id) WHERE client_request_id IS NOT NULL;
+    CREATE UNIQUE INDEX diff_comments_by_request ON diff_comments (client_request_id)
+        WHERE client_request_id IS NOT NULL;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

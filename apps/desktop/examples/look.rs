@@ -63,7 +63,16 @@ fn main() {
                 let diff = client.workspace_diff(&id).unwrap();
                 let parsed = first_added_line(&diff.patch);
                 if let Some((path, line)) = parsed {
-                    client.comment_add(&id, &path, protocol::model::DiffSide::New, line, text).unwrap();
+                    client
+                        .comment_add(
+                            &id,
+                            &path,
+                            protocol::model::DiffSide::New,
+                            line,
+                            text,
+                            Some(client_core::new_request_id()),
+                        )
+                        .unwrap();
                 }
             }
             pane.update(cx, WorkspacePane::toggle_diff);

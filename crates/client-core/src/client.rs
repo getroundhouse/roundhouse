@@ -23,6 +23,7 @@ use protocol::paths::Paths;
 use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub};
+pub use api::{new_message_id, new_request_id};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {

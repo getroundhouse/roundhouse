@@ -10,12 +10,12 @@ mod workspaces;
 
 use crate::error::internal;
 use crate::session::{Item, LiveSession};
-use crate::store::{Store, StoreError, now_ms};
+use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
-use protocol::model::{InstanceId, Records, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{ClientRequestId, InstanceId, Records, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -97,6 +97,17 @@ impl Hub {
         let store = self.store.clone();
         let result = tokio::task::spawn_blocking(move || f(&store)).await.map_err(|e| internal(e.to_string()))?;
         Ok(result?)
+    }
+
+    /// What a request with this ID made, the first time it was sent. Sent again, it gets that back, however
+    /// things have changed since, rather than being checked again as if it were new. A comment deleted since
+    /// is gone, along with its ID, so sending its request again adds it again.
+    pub(crate) async fn made_earlier<T: MadeByRequest + Send + 'static>(
+        &self,
+        client_request_id: Option<&ClientRequestId>,
+    ) -> Result<Option<T>, ApiError> {
+        let Some(id) = client_request_id.cloned() else { return Ok(None) };
+        self.blocking(move |store| store.made_by(&id)).await
     }
 
     /// Every record, as of one revision, for a client starting to follow the feed.
