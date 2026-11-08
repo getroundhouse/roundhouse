@@ -32,6 +32,8 @@ env:
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
 
+# The ruleset on main requires `lint` and `test` by name, so renaming either job blocks every merge until the
+# ruleset is changed to match. The repo also only runs actions pinned to a full commit, as these are.
 jobs:
   # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
   lint:
