@@ -47,6 +47,7 @@ The hub doesn't do the work itself. When a workspace is created, it records it a
 - **The same full daemon everywhere,** with each sandbox owning its log and the control plane holding a copy. Simpler to start, but it means two copies of each cloud log and a second read path for sleeping sandboxes.
 - **Separate local and cloud paths.** It would duplicate features.
 - **Everything through a central sync engine.** It would break offline use and keeping local data on the device.
+- **An off-the-shelf sync engine,** such as PowerSync, Electric or Turso's sync. They solve merging writes from clients that work offline, which a hub that's the only writer doesn't need. They need Postgres or copy a whole database to each client, and none covers a window of a log or a tail that isn't stored, while "Keeping clients in sync" needs only a revision and a few rules. Clients that write while offline would be the reason to look again.
 - **CRDTs for session history.** They suit many people typing in one buffer, which isn't this product. Long sessions are remote, so clients read a log by range instead, and never hold a whole transcript.
 
 ## Layout
@@ -61,7 +62,7 @@ crates/
   agents/          Claude adapter, raw event capture
   process/         Signalling a process group, and recording a PID with its start time
   providers/       Provider contract, local provider
-  client-core/     Connection, subscriptions, a window of a session's log, shared by every Rust client. No UI
+  client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
   terminal-view/   GPUI terminal element. Not built
 apps/
@@ -136,9 +137,36 @@ Each piece of state has one owner, and every other copy is a cache.
 | Per-device view | Scroll position, open panels, selection | The client |
 
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
-- Clients read a range, then subscribe from an offset. Reconnecting means catching up from the last offset.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.
 - **A running agent decides its own model and approval mode.** A change goes to the agent first and is saved only once it agrees, and the agent reports every change of mode itself, so what's shown is never ahead of what's true.
+
+## Keeping clients in sync
+
+A client's copy of a hub's state has to stay correct through lag, reconnects and restarts at either end, without each view working out how. Everything a hub serves is one of three kinds, and each kind has one way to tell a newer copy from an older one, and one way to recover.
+
+| Kind | What | Newer or older | Recovering |
+|---|---|---|---|
+| Log | A session's events | By `seq`, which has no gaps | Subscribe again from one past the last `seq` |
+| Record | Repositories, workspaces, sessions, comments, and per-user state | By revision, `rev`, from one counter per hub that moves in the same transaction as the change | List again, and keep whichever copy has the newer revision |
+| Live | Output that isn't stored, such as the tail | Nothing to compare. It belongs to one run, and arrives in order on one connection | Replace it with a new snapshot |
+
+- **For logs and records, which copy is newer is decided per item, so the order things arrive in doesn't matter.** A duplicate or an older copy is dropped by its `seq` or revision, so a client doesn't depend on how a list and a feed notice interleave, which a relay or a second connection could change. A list is read in one transaction and carries the revision it was read at, so a record missing from it is gone, unless the client holds a newer copy from the feed. Removing a record is a change like any other, with a revision of its own. *Not built:* records have no revision, comments aren't on the feed, a client lists each kind with its own request, and the desktop app relies on feed notices arriving in order.
+- **Only the current run's live output reaches clients.** The hub knows which run it's starting before it launches it, and drops live output from any other, so a replaced agent can't clear or add to its replacement's tail. A replaced run's events are history, so they go in the log as usual, as "When a process dies" says. A run's ID doesn't repeat within its session, even across hub restarts, so this holds once workers outlive their hub. *Not built:* deltas don't carry their run, a replaced run's events update the tail, and run IDs start again with each hub, which is safe while workers exit with it.
+
+**Every ID has one allocator, and is unique only within its scope,** so nothing is taken as unique where it might not be.
+
+| ID | Chosen by | Unique within |
+|---|---|---|
+| Repository, workspace, session, comment | The hub, as a UUID | Everything, so one sidebar can merge several hubs |
+| `seq`, run | The hub | A session |
+| Revision | The hub | A hub |
+| `client_msg_id` | A client | A session |
+| Subscription | A client | A connection |
+| Message, tool use, approval | The agent | A session. Nothing promises an agent won't reuse one elsewhere, so they're never keys outside it |
+
+- **An item keeps one identity through every state it passes through.** A prompt is its `client_msg_id`, from pending to recorded. A block of the agent's output is its message ID and index, from its first delta to the event that records it. Anything with no identity before it's recorded is its `seq`, and its position in that event. The transcript makes every element ID from these in one function, so nothing on screen resets when a prompt is recorded or a block finishes. *Not built:* a pending prompt is keyed by its row, and a recorded block by `seq` and position, since an `Assistant` event doesn't keep its block's index.
+- **A command is safe to repeat, and its reply says only what the hub has recorded.** Each request that changes something either has the same effect however often it's applied, such as closing a session, or carries an ID the client chose, as a prompt carries `client_msg_id`. Whatever happens after the reply reaches every client through the log and records, not through the reply. *Not built:* creating a workspace, a session or a comment carries no such ID, so retrying one can make two.
+- **client-core keeps each hub's copy, and views only read it.** For each hub a client is connected to, client-core holds the records and a window of each open session, and does all the subscribing, fetching and recovering, reconnects included. It applies updates as they arrive and tells a view what changed, combining whatever the view hasn't looked at, so a slow view sees the latest state rather than a backlog, and nothing queues without limit. Views keep only per-device state, such as scroll position and selection, keyed by the IDs above, so it survives a reconnect. That way the CLI, the desktop app and a native mobile app make the same guarantees without each implementing them. *Not built:* the desktop app holds the records and reconnects by itself, the transcript subscribes and fetches by itself, subscription queues have no limit, and reconnecting starts every workspace's view afresh.
 
 ## Wire format and event log
 

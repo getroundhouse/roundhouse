@@ -54,6 +54,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Build number | Puts installed builds in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
+| Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `DiffComment` |
+| Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer. It isn't built | `rev` |
 
 ## Easily confused
 
