@@ -38,6 +38,7 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 ## Rules
 
 - **Put what you learn and decide where `docs/documentation.md` says,** as part of the same work. Not in agent memory, and not only in chat.
+- **Owner docs, and the files that enforce the standards, change only with the owner's approval, but propose a change whenever you see a better way.** `docs/documentation.md` says which they are, how to propose, and how an agent's choice gets in before the owner confirms it.
 - **Commit only when the user asks.**
 - **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
 - **Report only what you've verified.** Say what's unverified. "Running" only means an agent hasn't exited, so check processes and file timestamps before describing what it's doing.

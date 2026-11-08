@@ -13,7 +13,7 @@ From Conductor's docs (`/docs/concepts/workflow`):
 
 ## Sources
 
-Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are on the owner's Mac, in `~/conductor/archived-contexts/conductor-clone/merged-state/conductor-docs/`. They're the best source for new `small-features` issues. Don't republish them.
+Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are on the owner's Mac, in `~/conductor/archived-contexts/conductor-clone/merged-state/conductor-docs/`. They're the best source of ideas for new features. Don't republish them.
 
 Where the docs and the changelog disagree, the changelog is newer. For example, the FAQ says the sidebar shows a workspace's PR title or branch, but later releases name a workspace from its first prompt and show that name.
 

@@ -199,13 +199,7 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **An install stamps its commit through `TRESTLE_BUILD`,** and any other build says `0.1.0-dev`. The app and `trestle hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
 - **An install also stamps an order through `TRESTLE_BUILD_NUMBER`:** when its commit was made, or when it installed if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
 
-For someone with the desktop app, an update should look like this:
-
-1. The app updates and relaunches. Everything shows as before, and running agents keep going on the old hub.
-2. If nothing is running and no other client is connected, the app replaces the hub right away. Otherwise it waits until the next launch.
-3. Only a real protocol break shows a screen, with how many agents are running and a way to restart the hub.
-
-Workers that outlive their hub would remove the wait, as "When a process dies" describes.
+What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without waiting for it to be idle, as "When a process dies" describes.
 
 ## Providers
 

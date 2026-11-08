@@ -61,6 +61,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 |---|---|---|
 | Session, chat, conversation | The same thing at three levels. A session is ours, a chat is what the interface shows, and a conversation is the agent's own record, which is what it resumes | "Session" in code and docs, "chat" in text people read, and "conversation" only for the agent's side, as in `agent_session_id` |
 | Workspace | Ours, or another tool's, such as a Cargo workspace | A bare "workspace" means ours. Always qualify the others |
+| Claude, Claude Code | The agent, and Anthropic's own product. The Agent SDK's terms bar calling an agent in another product "Claude Code" | "Claude" or "Claude Agent" in the interface. "Claude CLI" for the `claude` binary in docs |
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
 | Hub, daemon | `trestled` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
