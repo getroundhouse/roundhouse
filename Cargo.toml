@@ -68,7 +68,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 two-face = { version = "0.4", default-features = false }
 uuid = { version = "1", features = ["v4"] }
 
-# docs/rust.md says what each of these is for. A crate sets `[lints] workspace = true` once it's clean.
+# docs/rust.md says what each of these is for.
 [workspace.lints.rust]
 unreachable_pub = "warn"
 

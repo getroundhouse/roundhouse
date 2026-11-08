@@ -1,6 +1,6 @@
 # Test server
 
-A simulated hub for testing a client on a phone. The real hub only listens on a Unix socket, so a phone can't reach it until the relay exists. This serves synthetic sessions over HTTP instead, with artificial latency, and streams deltas and terminal output. It's for step 3 of `mobile-poc/PLAN.md`.
+A simulated hub for testing a client on a phone. The real hub only listens on a Unix socket, so a phone can't reach it without the relay. This serves synthetic sessions over HTTP instead, with artificial latency, and streams deltas and terminal output.
 
 ```sh
 bun mobile-poc/test-server/gen.ts                # Generates the sessions into out/, which is gitignored
@@ -20,7 +20,7 @@ It binds to `127.0.0.1`, so a phone on Wi-Fi needs `hostname` in `server.ts` cha
 | `GET /diffs/:name` | Patch text |
 | `WS /ws/stream` | Send `{"sessions":[...],"chunks_per_sec":60,"duration_ms":30000}`. Receive `{session, seq, text}` per chunk and `{session, done:true}` at the end |
 | `WS /ws/terminal` | Send `{"bytes_per_sec":N,"duration_ms":N}`. Receive binary ANSI frames, then text `{done:true, bytes}` |
-| `POST /mark` | `{"name":"..."}` is accepted, and did nothing without the timing harness that's since been removed |
+| `POST /mark` | `{"name":"..."}` is accepted, and passed to an `onMark` handler when one is given |
 | `POST /results` | Saves a result JSON under `out/results/` |
 
 ## Items

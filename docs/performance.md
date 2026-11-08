@@ -1,8 +1,6 @@
 # Performance
 
-What the desktop app has to hit, how to measure it, and what's known about getting there.
-
-**Nothing measures the real app yet.** These bars were written for prototypes that have since been deleted, along with the harness that ran them. The next step is new tests against the app itself, in #50, and speed targets, in #64.
+What the desktop app has to hit, how to measure it, and what helps it get there.
 
 ## Bars
 
@@ -28,21 +26,19 @@ What can't be measured is in `docs/manual-checks.md`.
 | `l` | 15,000 | The longest cloud session |
 | `xl` | 50,000 | Headroom, at about 3.5x the real maximum |
 
-Bars are decided through `l`, and `xl` is only reported. The shape comes from the measurements in `docs/usage.md`. `mobile-poc/test-server/gen.ts` generates sessions of these sizes.
+Bars are decided through `l`, and `xl` is only reported. The sizes come from real use, which is heavy tailed: a worst case is about 15,000 items with a few over 1 MB, and tool calls and command output make up most of a transcript. `mobile-poc/test-server/gen.ts` generates sessions of these sizes.
 
-## What made the prototypes fast
+## What helps
 
-- Doing all layout off the main thread, and shaping only what's on screen.
-- Caching views per region.
-- An anchor-based scroll model with pinning. Drift was 0 px on all 100 jumps.
-- Parsing terminal output off the main thread, with a short lock per frame.
-- Using the kit's `Diff` and `Textarea` rather than writing those.
-- Oniguruma rather than `fancy-regex`, which took highlighting a large diff from 12.2 s of CPU to 2.6 s.
-- A caret that stops blinking after 10 s idle. Blinking forever cost 29 draws per 15 s, and this brought it to 0.
+- Do layout off the main thread, and shape only what's on screen.
+- Cache views per region.
+- Scroll by anchor, with pinning, so jumping to an item doesn't drift.
+- Parse terminal output off the main thread, with a short lock per frame.
+- Use the kit's `Diff` and `Textarea` rather than writing those.
+- Highlight with Oniguruma rather than `fancy-regex`, which takes several times the CPU on a large diff.
+- Stop the caret blinking after 10 s idle, so an idle window draws nothing.
 
 ## Measuring
 
 - A covered window looks exactly like a freeze, because macOS stops GPUI's frame source. Don't trust frame data without a window visibility log.
 - Run timing tests one app at a time on an otherwise idle Mac. Test windows take focus, and the user's typing can land in them.
-- Flags that exist only for tests must stay out of the product.
-- Only one M4 Max at 120 Hz has been tested so far.
