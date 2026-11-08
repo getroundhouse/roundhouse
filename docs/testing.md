@@ -1,6 +1,6 @@
 # Testing
 
-Where each kind of test goes. How to write a test is in `docs/rust.md`, the commands are in `AGENTS.md`, and what a person has to judge by hand is in `docs/manual-checks.md`. Known gaps are GitHub issues, labelled `gap`.
+Where each kind of test goes. How to write a test is in `docs/rust.md`, the commands are in `AGENTS.md`, and what a person has to judge by hand is in `docs/manual-checks.md`. Known gaps are GitHub issues.
 
 | Level | Tests | Where |
 |---|---|---|

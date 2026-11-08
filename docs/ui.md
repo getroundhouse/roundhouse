@@ -6,7 +6,7 @@ Why the desktop app is built on GPUI and gpui-kit, and why its transcript is bui
 
 The desktop app is native Rust on GPUI, Zed's UI framework, rather than a web view.
 
-- **It meets the bars in `docs/performance.md` at 120 Hz.** A web view started and opened diffs more slowly, and WKWebView caps animation near 60 Hz, with no public API to change that.
+- **It meets the bars in `docs/spec/speed.md` at 120 Hz.** A web view started and opened diffs more slowly, and WKWebView caps animation near 60 Hz, with no public API to change that.
 - **It's Rust end to end,** like the hub, the worker and `client-core`.
 - **It can reach a phone.** GPUI has experimental iOS backends, so a mobile client can share the transcript with the desktop app.
 - **It has AccessKit integration,** for VoiceOver.

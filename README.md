@@ -42,5 +42,6 @@ Use `Add repository` at the bottom left, then `New` beside the repository. The m
 
 ## Where things are
 
+- **What it does:** the product spec, in `docs/spec/`.
 - **Docs:** `docs/documentation.md` lists them, and says what goes in a doc and what goes on GitHub.
-- **What's left:** [issues](https://github.com/zlangbert/trestle/issues) for questions, risks, gaps and tasks, and [milestones](https://github.com/zlangbert/trestle/milestones) for the build order.
+- **What's left:** [issues](https://github.com/zlangbert/trestle/issues) for features, bugs, tasks, questions and risks, and [milestones](https://github.com/zlangbert/trestle/milestones) for the build order.
