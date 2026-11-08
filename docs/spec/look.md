@@ -1,6 +1,6 @@
 # Look
 
-The rules every screen follows: surfaces, type, space, buttons, colour, and the status mark. Each area's file shows its own screens. `crates/look` holds the theme, the colours the kit has no name for, and the mark.
+The rules every screen follows: surfaces, type, space, buttons, colour, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds the theme, the colours the kit has no name for, the mark and the icon.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
 
@@ -35,7 +35,7 @@ Each colour means one thing.
 
 ## The status mark
 
-Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of dots, spaced evenly along each row, so outer rows have more of them and the edge stays as dense as the middle. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line.
+Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of dots, spaced evenly along each row, so outer rows have more of them and the edge stays as dense as the middle. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the size it is in a four-row fan.
 
 The mark has three layers, and each is about one thing, so several facts can show at once without competing:
 
@@ -51,4 +51,25 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ## Empty states
 
-- **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button.
+- **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows.
+
+## The app icon
+
+The brand on a tile: the fan in copper, on a warm dark tile that fades from `#211d1b` at the top to the pane's `#151312`, with the thin edge colour around it.
+
+![The app icon, at 1024 pixels](../../apps/desktop/AppIcon.iconset/icon_512x512@2x.png)
+
+- **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge. Bigger drawings have more rows, so the dots stay as fine as the motif's.
+- **Below 128 pixels it's drawn on whole pixels,** where the fan's own shape would blur: square dots, a pixel clear around each, the left half mirrored to the right, and a turntable that's only its hub where a ring would be too small to see. *Unconfirmed.*
+- **macOS picks a drawing by its pixels,** so on a Retina display each is seen at half as many points.
+
+| Pixels | Seen at, on a Retina display | Rows | Drawn |
+|---|---|---|---|
+| 1024 and 512 | 512 and 256 points | 9 | The fan's shape, 62% of the canvas wide |
+| 256 | 128 points | 7 | The fan's shape, 62% wide |
+| 128 | 64 points, as in the Dock | 5 | The fan's shape, 64% wide |
+| 64 | 32 points | 4 | On whole pixels, with dots two pixels square and a ring |
+| 32 | 16 points, as in a list | 3 | On whole pixels, with dots one pixel square |
+| 16 | 16 points on a display that isn't Retina | 2 | On whole pixels, with dots one pixel square. *Unconfirmed* |
+
+- **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws every size, and the gallery checks each against its file in `apps/desktop/AppIcon.iconset/`, which `iconutil` packs into the `.icns`. *Not built:* the app isn't packaged yet, so nothing shows the icon.

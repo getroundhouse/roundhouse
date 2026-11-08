@@ -3,13 +3,8 @@
 //! it is the agent, while it's doing something. And when you're needed, or the agent stopped short, the whole fan
 //! turns amber or red.
 
-use std::f32::consts::PI;
-
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{
-    App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Point, Styled, Window, canvas, point, px,
-    quad, size, transparent_black,
-};
+use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
 
 /// The two sizes a mark comes in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,6 +25,7 @@ impl Size {
 }
 
 use crate::clock;
+use crate::fan::{self, ASPECT, Dot, Fan, as_f32};
 use crate::palette::{faint, hex};
 
 /// The work: where its pull request stands, in GitHub's colours. The fan's colour while nobody needs you.
@@ -92,20 +88,10 @@ pub enum Signal {
     Failed,
 }
 
-/// The moment in the animation every mark is drawn at, in seconds. *Not built:* the marks don't move yet.
 /// The moment, in seconds, a mark that isn't moving is drawn at. It catches a working mark with its light on the fan.
 const STILL_S: f64 = 0.9;
 const SWEEP_S: f64 = 2.4;
 const BUILD_S: f64 = 4.8;
-const ROWS: usize = 4;
-/// How tall the mark is, for its width: a half circle, with room under it for the turntable.
-const ASPECT: f32 = 0.62;
-/// The inner row's radius, as a share of the outer row's. Inside it is the turntable.
-const INNER: f32 = 0.4;
-/// A dot's radius, as a share of the space between rows.
-const DOT: f32 = 0.32;
-/// The turntable's ring, in dot radii.
-const TURNTABLE: f32 = 2.6;
 
 /// The mark for one workspace or chat.
 pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
@@ -120,8 +106,8 @@ pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElemen
     drawn(signal, color, size.width(), t, moves, cx)
 }
 
-/// The mark in copper with nothing on it: the brand, for empty states and the app icon. Copper is the theme's
-/// focus ring, because focus is the one other place the brand colour shows.
+/// The mark in copper with nothing on it: the brand, for empty states. Copper is the theme's focus ring, because
+/// focus is the one other place the brand colour shows. The app icon is the same fan, drawn for each of its sizes.
 pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
     drawn(Signal::Idle, cx.theme().ring, width, STILL_S, false, cx)
 }
@@ -143,65 +129,19 @@ fn drawn(signal: Signal, color: Hsla, width: Pixels, t: f64, moves: bool, cx: &A
     .h(width * ASPECT)
 }
 
-/// One dot: where it is, how far along the fan from left to right, from 0 to 1, and which row, from the inside.
-struct Dot {
-    at: Point<Pixels>,
-    along: f32,
-    row: usize,
-}
-
-/// Where everything sits inside the mark's bounds.
-struct Fan {
-    center: Point<Pixels>,
-    inner: Pixels,
-    pitch: Pixels,
-    dot: Pixels,
-}
-
-impl Fan {
-    fn within(bounds: Bounds<Pixels>) -> Self {
-        let outer = bounds.size.width * 0.5;
-        let inner = outer * INNER;
-        let pitch = (outer - inner) / (as_f32(ROWS) - 0.4);
-        let dot = (pitch * DOT).max(px(0.45));
-        let center = point(bounds.origin.x + bounds.size.width * 0.5, bounds.origin.y + bounds.size.height - dot * 1.4);
-        Fan { center, inner, pitch, dot }
-    }
-
-    /// Spaced evenly along each row, so outer rows have more dots and the edge stays as dense as the middle.
-    fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
-        (0..ROWS).flat_map(move |row| {
-            let r = self.inner + self.pitch * as_f32(row);
-            let count = dots_in((r * PI) / self.pitch) + 1;
-            (0..count).map(move |j| {
-                let along = as_f32(j) / as_f32(count - 1);
-                let angle = PI * (along - 1.0);
-                Dot { at: point(self.center.x + r * angle.cos(), self.center.y + r * angle.sin()), along, row }
-            })
-        })
-    }
-}
-
 fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, light: Hsla, t: f64, window: &mut Window) {
     let fan = Fan::within(bounds);
     for dot in fan.dots() {
         let (base, glow) = brightness(signal, &dot, t);
-        disc(window, dot.at, fan.dot, color.opacity(base));
+        fan::disc(window, dot.at, fan.dot, color.opacity(base));
         if glow > 0.01 {
-            disc(window, dot.at, fan.dot, light.opacity(glow * 0.92));
+            fan::disc(window, dot.at, fan.dot, light.opacity(glow * 0.92));
         }
     }
     let hub = color.opacity(0.6);
-    let bounds = square(fan.center, fan.dot * TURNTABLE);
-    window.paint_quad(quad(
-        bounds,
-        Corners::all(fan.dot * TURNTABLE),
-        transparent_black(),
-        Edges::all((fan.dot * 0.8).max(px(0.6))),
-        hub,
-        BorderStyle::default(),
-    ));
-    disc(window, fan.center, fan.dot, hub);
+    let turntable = fan.turntable();
+    fan::ring(window, fan.center, turntable.radius, turntable.line, hub);
+    fan::disc(window, fan.center, turntable.hub, hub);
 }
 
 /// How strongly a dot shows its colour, and how much of the agent's white light is on it, at `t` seconds.
@@ -218,46 +158,17 @@ fn brightness(signal: Signal, dot: &Dot, t: f64) -> (f32, f32) {
     }
 }
 
-fn square(center: Point<Pixels>, radius: Pixels) -> Bounds<Pixels> {
-    Bounds::new(point(center.x - radius, center.y - radius), size(radius * 2.0, radius * 2.0))
-}
-
-fn disc(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
-    window.paint_quad(quad(
-        square(center, radius),
-        Corners::all(radius),
-        color,
-        Edges::all(px(0.)),
-        transparent_black(),
-        BorderStyle::default(),
-    ));
-}
-
 /// How far through a motion that repeats every `period_s` seconds it is, from 0 to 1, at `t` seconds.
 #[expect(clippy::cast_possible_truncation, reason = "a fraction from 0 to 1")]
 fn phase(t: f64, period_s: f64) -> f32 {
     (t / period_s).fract() as f32
 }
 
-#[expect(clippy::cast_precision_loss, reason = "a count of rows or dots, a few dozen at most")]
-fn as_f32(n: usize) -> f32 {
-    n as f32
-}
-
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "how many dots fit along a row: positive, and a few dozen at most"
-)]
-fn dots_in(length_in_pitches: f32) -> usize {
-    length_in_pitches.round().max(1.0) as usize
-}
-
 #[cfg(test)]
 mod tests {
     use gpui_kit::{Bounds, point, px, size};
 
-    use super::{Fan, ROWS, Signal, Work, brightness};
+    use super::{Fan, Signal, Work, brightness};
 
     #[test]
     fn a_pull_request_is_read_from_githubs_words() {
@@ -278,19 +189,6 @@ mod tests {
         }
         for moving in [Signal::Working, Signal::SettingUp] {
             assert_ne!(at(moving, 0.3), at(moving, 1.7), "{moving:?} held still");
-        }
-    }
-
-    #[test]
-    fn outer_rows_have_more_dots_and_every_row_reaches_both_ends() {
-        let fan = Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(60.), px(37.2))));
-        let dots: Vec<_> = fan.dots().collect();
-        let per_row: Vec<usize> = (0..ROWS).map(|row| dots.iter().filter(|d| d.row == row).count()).collect();
-
-        assert!(per_row.windows(2).all(|pair| pair[0] < pair[1]), "{per_row:?}");
-        for row in 0..ROWS {
-            let along: Vec<f32> = dots.iter().filter(|d| d.row == row).map(|d| d.along).collect();
-            assert_eq!((along.first().copied(), along.last().copied()), (Some(0.0), Some(1.0)));
         }
     }
 }

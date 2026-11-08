@@ -8,7 +8,7 @@ Where each kind of test goes. How to write a test is in `docs/rust.md`, the comm
 | The agent adapter | Normalizing the CLI's captured output | `crates/agents/tests/` |
 | The whole backend | What spans processes: restarts, crashes, a real worker, with a fake agent | `apps/daemon/tests/` |
 | The window | Clicking and typing through to what's shown | `apps/desktop/tests/` |
-| How each screen looks | That it still matches its approved image in the spec | `apps/desktop/tests/ui/gallery/` |
+| How each screen looks, and the app icon | That each still matches its approved image | `apps/desktop/tests/ui/gallery/` |
 | The repo's rules | Dependencies, licenses, file length and lint inheritance, against the real dependency graph | `tools/policy/` |
 | The real CLI | That the fake agent is still honest. By hand, since it costs money | `tools/smoke/` |
 
