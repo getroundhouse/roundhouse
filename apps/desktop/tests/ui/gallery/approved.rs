@@ -1,4 +1,4 @@
-//! The screens' approved images, which the spec keeps in `docs/spec/screens/` and shows in `screens.md`.
+//! The screens' approved images, which the spec keeps in `docs/spec/screens/`, each shown in its area's file.
 
 #![cfg(test)]
 
@@ -36,10 +36,10 @@ pub(crate) fn without_a_screen(screens: &[&str]) -> Vec<String> {
         .collect()
 }
 
-/// Screens that `screens.md` doesn't show, so their image isn't where anyone reads the spec.
-pub(crate) fn not_in_the_spec<'a>(screens: &[&'a str]) -> Vec<&'a str> {
-    let spec = std::fs::read_to_string(dir().with_extension("md")).unwrap_or_default();
-    screens.iter().copied().filter(|name| !spec.contains(&format!("](screens/{name}.png)"))).collect()
+/// Whether the spec's file for its area shows it, so its image is beside the rules it goes with.
+pub(crate) fn shown_in(name: &str, spec: &str) -> bool {
+    let text = std::fs::read_to_string(dir().with_file_name(spec)).unwrap_or_default();
+    text.contains(&format!("](screens/{name}.png)"))
 }
 
 fn dir() -> PathBuf {

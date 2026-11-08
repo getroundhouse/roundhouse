@@ -2,8 +2,16 @@
 
 ## Creating and setting up
 
+**Before there's a repository.** *Unconfirmed.*
+
+![No repositories](screens/first-run.png)
+
 - **A workspace's name is generated from its first prompt,** and the sidebar shows it, so telling workspaces apart doesn't mean opening each one. *Not built.*
 - **Setup runs in the background once the worktree exists.** It copies gitignored files matching `.worktreeinclude`, then `file_include_globs`, then `.env*`, and runs `scripts.setup`. A prompt sent meanwhile is recorded at once and delivered when setup finishes. A failure warns, and never blocks. Restoring a workspace runs it again. The matching is git's own, so patterns mean what they do in `.gitignore`. *Unconfirmed.*
+
+**A new workspace whose setup script failed, with its log open.** *Unconfirmed.*
+
+![A failed setup](screens/setup-failed.png)
 
 ## Settings from Conductor
 

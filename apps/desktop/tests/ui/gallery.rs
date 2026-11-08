@@ -33,6 +33,9 @@ fn every_screen_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
     for screen in SCREENS {
+        if !approved::shown_in(screen.name, screen.spec) {
+            problems.push(format!("docs/spec/{} doesn't show {}", screen.spec, screen.name));
+        }
         let picture = capture::take(screen, &text_system);
         picture.image.save(out.join(format!("{}.png", screen.name))).unwrap();
         // A screen that never stops changing can't look the same from one run to the next, so it can't be compared.
@@ -50,8 +53,6 @@ fn every_screen_looks_as_approved() {
     }
     let names: Vec<&str> = SCREENS.iter().map(|s| s.name).collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
-    problems
-        .extend(approved::not_in_the_spec(&names).into_iter().map(|name| format!("screens.md doesn't show {name}")));
     assert!(
         problems.is_empty(),
         "{}\n\nWhat each screen looks like now is in .context/gallery/. If a change is meant, {UPDATE}=1 accepts it, \
