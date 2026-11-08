@@ -25,7 +25,7 @@ Roundhouse can be developed from inside Roundhouse, so nothing run from a checko
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 
-Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. On Linux, drop `--workspace`, since the transcript and desktop app need GPUI:
+Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. CI runs them too, on Linux for every PR, and on a Mac only when dependencies change, so it doesn't replace running them here. On Linux, `--workspace` needs the packages `.github/workflows/ci.yml` installs for GPUI, and the gallery doesn't run:
 
 ```sh
 cargo fmt --all --check
