@@ -12,8 +12,9 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{Seq, ToolUseId};
 use serde_json::Value;
 
-use super::disclosure;
 use super::tail::first_line;
+use super::{block_key, disclosure};
+use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 use crate::transcript::{Model, Transcript};
 
@@ -27,8 +28,7 @@ const INDENT: f32 = 20.0;
 
 /// A call's result, found in the log, to draw under the call.
 pub(super) struct Answer {
-    seq: Seq,
-    block: usize,
+    key: ItemKey,
     is_error: bool,
     text: String,
     expanded: bool,
@@ -51,12 +51,12 @@ fn result_in(m: &Model, ix: usize, call: &str) -> Option<Answer> {
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
     blocks.iter().enumerate().find_map(|(block, content)| {
         let ContentBlock::ToolResult { tool_use_id, is_error, text, .. } = content else { return None };
+        let key = block_key(event.seq, block);
         (tool_use_id.as_str() == call).then(|| Answer {
-            seq: event.seq,
-            block,
             is_error: *is_error,
             text: text.clone(),
-            expanded: m.expanded.contains(&(event.seq, block)),
+            expanded: m.expanded.contains(&key),
+            key,
         })
     })
 }
@@ -71,8 +71,9 @@ pub(super) fn drawn_with_call(m: &Model, seq: Seq, result: &ToolUseId) -> bool {
     })
 }
 
-/// One line for the call, with its result folded underneath when it's back.
+/// One line for the call in the event at `seq`, with its result folded underneath when it's back.
 pub(super) fn call(
+    seq: Seq,
     name: &str,
     input: &Value,
     answer: Option<&Answer>,
@@ -101,15 +102,15 @@ pub(super) fn call(
         .w_full()
         .child(line)
         .when_some(answer, |d, a| {
-            d.child(result(a.seq, a.block, a.is_error, &a.text, a.expanded, this, cx).pl(px(INDENT)))
+            d.child(result(seq, &a.key, a.is_error, &a.text, a.expanded, this, cx).pl(px(INDENT)))
         })
         .into_any_element()
 }
 
-/// A result's line, and its output when it's opened.
+/// A result's line, and its output when it's opened, drawn in the row of the event at `seq`.
 pub(super) fn result(
     seq: Seq,
-    block: usize,
+    key: &ItemKey,
     is_error: bool,
     text: &str,
     expanded: bool,
@@ -119,19 +120,10 @@ pub(super) fn result(
     let label = if is_error { "Error" } else { "Output" };
     let lines = text.lines().count();
     let summary = if lines == 1 { "1 line".to_string() } else { format!("{lines} lines") };
-    let id = ElementId::NamedInteger("output".into(), (seq << 8) | block as u64);
-    disclosure(
-        ElementId::NamedInteger("result".into(), (seq << 8) | block as u64),
-        label,
-        summary,
-        expanded,
-        seq,
-        block,
-        this,
-        cx,
-    )
-    .when(is_error, |d| d.text_color(cx.theme().danger))
-    .when(expanded, |d| d.child(output(id, text, is_error, cx)))
+    let output_id = key.element("output");
+    disclosure(label, summary, expanded, seq, key, this, cx)
+        .when(is_error, |d| d.text_color(cx.theme().danger))
+        .when(expanded, |d| d.child(output(output_id, text, is_error, cx)))
 }
 
 fn output(id: ElementId, text: &str, is_error: bool, cx: &App) -> AnyElement {
