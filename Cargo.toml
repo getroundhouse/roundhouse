@@ -12,6 +12,7 @@ members = [
     "apps/cli",
     "apps/desktop",
     "crates/transcript",
+    "crates/look",
     "tools/policy",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
@@ -45,6 +46,7 @@ worker = { path = "crates/worker" }
 hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }
+look = { path = "crates/look" }
 
 anyhow = "1"
 async-trait = "0.1"

@@ -2,7 +2,8 @@
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::text::TextView;
-use gpui_kit::{AnyElement, App, ElementId, IntoElement, ParentElement, SharedString, Styled, div};
+use gpui_kit::{AnyElement, App, Div, ElementId, IntoElement, ParentElement, SharedString, Styled, div, px};
+use look::{Signal, Work};
 use protocol::model::MessageId;
 use protocol::tail::{BlockKind, Tail};
 
@@ -21,23 +22,28 @@ pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
                     let id = block_id(&message.message_id, block.index);
                     out.child(TextView::markdown(id, SharedString::from(block.text.clone())).selectable(true))
                 }
-                BlockKind::Thinking => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("Thinking… {}", last_line(&block.text))),
-                ),
-                BlockKind::ToolUse => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("{}…", block.tool_name.as_deref().unwrap_or("Tool"))),
-                ),
+                BlockKind::Thinking => out.child(working(format!("Thinking  {}", last_line(&block.text)), cx)),
+                BlockKind::ToolUse => {
+                    out.child(working(format!("Running {}", block.tool_name.as_deref().unwrap_or("a tool")), cx))
+                }
                 BlockKind::Unknown => out,
             };
         }
     }
     out.into_any_element()
+}
+
+/// What the agent is doing, beside its mark with the light sweeping.
+fn working(text: String, cx: &App) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .h(px(22.))
+        .text_xs()
+        .text_color(cx.theme().muted_foreground)
+        .child(look::mark(Signal::Working, Work::NoPr, px(16.), cx))
+        .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
 }
 
 /// The kit's `TextView` keeps its state under this ID, including the text it shows. Blocks of messages streaming at

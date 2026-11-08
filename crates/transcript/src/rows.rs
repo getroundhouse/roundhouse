@@ -7,7 +7,7 @@ use std::rc::Rc;
 use client_core::session_log::Row;
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -31,12 +31,20 @@ const MONO: &str = "Menlo";
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
 const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 
+/// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
+const COLUMN: f32 = 780.0;
+
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
     this: &WeakEntity<Transcript>,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
+    let row = render_row_inner(model, this, ix, cx);
+    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(row)).into_any_element()
+}
+
+fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, ix: usize, cx: &mut App) -> AnyElement {
     let mut m = model.borrow_mut();
     if ix >= m.log.row_count() {
         let tail = m.log.tail().clone();
@@ -78,7 +86,7 @@ pub(crate) fn render_row(
 }
 
 fn row() -> Div {
-    v_flex().w_full().pb_3().gap_2()
+    v_flex().w_full().pb_4().gap_2()
 }
 
 fn empty() -> AnyElement {
@@ -91,9 +99,11 @@ fn prompt_bubble(id: ElementId, text: String, pending: bool, cx: &App) -> AnyEle
         .child(
             div()
                 .w_full()
-                .px_3()
-                .py_2()
+                .px_3p5()
+                .py_2p5()
                 .rounded_lg()
+                .border_1()
+                .border_color(theme.border)
                 .bg(theme.secondary)
                 .when(pending, |d| d.opacity(0.6))
                 .child(TextView::markdown(id, SharedString::from(text)).selectable(true)),
@@ -101,8 +111,8 @@ fn prompt_bubble(id: ElementId, text: String, pending: bool, cx: &App) -> AnyEle
         .into_any_element()
 }
 
-fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement {
-    row().child(div().text_xs().text_color(cx.theme().muted_foreground).child(text.into())).into_any_element()
+fn muted_line(text: impl Into<SharedString>, _: &App) -> AnyElement {
+    row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
 fn turn_ended(outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String], cx: &App) -> AnyElement {
@@ -220,15 +230,18 @@ fn render_block(
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
         ContentBlock::ToolUse { name, input, .. } => h_flex()
+            .h(px(24.))
             .gap_2()
             .text_xs()
-            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(SharedString::from(name.clone())))
+            .child(Icon::new(tool_icon(name)).xsmall().text_color(look::faint()))
+            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(name.clone())))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
+                    .text_ellipsis()
                     .font_family(MONO)
                     .text_color(cx.theme().muted_foreground)
                     .child(summarize_input(input)),
@@ -239,6 +252,9 @@ fn render_block(
             let lines = text.lines().count();
             let summary = if lines == 1 { "1 line".to_string() } else { format!("{lines} lines") };
             disclosure(id("result"), label, summary, expanded, seq, b, this, cx)
+                // Tucked under the tool call it answers, which is the row before it.
+                .mt(px(-14.))
+                .pl(px(20.))
                 .when(*is_error, |d| d.text_color(cx.theme().danger))
                 .when(expanded, |d| d.child(output(id("output"), text, *is_error, cx)))
                 .into_any_element()
@@ -254,11 +270,13 @@ fn output(id: ElementId, text: &str, is_error: bool, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let color = if is_error { theme.danger } else { theme.muted_foreground };
     let frame = div()
-        .ml_4()
-        .px_2()
-        .py_1()
+        .ml(px(20.))
+        .px_3()
+        .py_2()
         .rounded_md()
-        .bg(theme.secondary)
+        .border_1()
+        .border_color(theme.border)
+        .bg(theme.muted)
         .font_family(MONO)
         .text_size(px(12.))
         .text_color(color);
@@ -285,22 +303,35 @@ fn disclosure(
 ) -> Div {
     let theme = cx.theme();
     let this = this.clone();
-    let chevron = if expanded { "▾" } else { "▸" };
+    let chevron = if expanded { IconName::ChevronDown } else { IconName::ChevronRight };
+    let (faint, foreground) = (look::faint(), theme.foreground);
     v_flex().w_full().gap_1().text_xs().child(
         div()
             .id(id)
             .flex()
-            .gap_2()
+            .items_center()
+            .h(px(22.))
+            .gap_1p5()
             .cursor_pointer()
-            .text_color(theme.muted_foreground)
-            .hover(|d| d.text_color(gpui_kit::white()))
+            .text_color(faint)
+            .hover(move |d| d.text_color(foreground))
             .on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.toggle(seq, b, cx));
             })
-            .child(div().flex_none().child(chevron))
-            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(SharedString::from(label.to_string())))
+            .child(Icon::new(chevron).xsmall())
+            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(label.to_string())))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into())),
     )
+}
+
+/// A small picture of what kind of tool it is.
+fn tool_icon(name: &str) -> IconName {
+    match name {
+        "Bash" => IconName::SquareTerminal,
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => IconName::FileText,
+        "Grep" | "Glob" | "WebSearch" | "WebFetch" => IconName::Search,
+        _ => IconName::Ellipsis,
+    }
 }
 
 /// One line saying what a tool is doing. Shows the field that matters for common tools.

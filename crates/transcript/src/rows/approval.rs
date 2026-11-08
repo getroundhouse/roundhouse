@@ -76,8 +76,9 @@ pub(super) fn approval_card(
                 .gap_2()
                 .rounded_lg()
                 .border_1()
-                .border_color(if open { theme.warning } else { theme.border })
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
+                .border_color(if open { theme.warning.opacity(0.45) } else { theme.border })
+                .when(open, |d| d.bg(theme.warning.opacity(0.05)))
+                .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title))
                 .child(content)
                 .when(open, |d| d.child(buttons)),
         )

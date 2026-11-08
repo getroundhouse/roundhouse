@@ -1,0 +1,228 @@
+//! The status mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has three
+//! layers, each about one thing. The fan's colour is the work, where its pull request stands. A white light over
+//! it is the agent, while it's doing something. And when you're needed, or the agent stopped short, the whole fan
+//! turns amber or red.
+
+use std::f32::consts::PI;
+
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{
+    App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Point, Styled, Window, canvas, point, px,
+    quad, size, transparent_black,
+};
+
+use crate::palette::{accent, faint, hex};
+
+/// The work: where its pull request stands, in GitHub's colours. The fan's colour while nobody needs you.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Work {
+    NoPr,
+    Draft,
+    Open,
+    Merged,
+    Closed,
+}
+
+impl Work {
+    /// From GitHub's own words for a pull request's state. Anything else is taken as no pull request.
+    pub fn from_github(state: &str, is_draft: bool) -> Self {
+        match state {
+            "OPEN" if is_draft => Work::Draft,
+            "OPEN" => Work::Open,
+            "MERGED" => Work::Merged,
+            "CLOSED" => Work::Closed,
+            _ => Work::NoPr,
+        }
+    }
+
+    fn color(self) -> Hsla {
+        match self {
+            Work::NoPr => faint(),
+            Work::Draft => hex(0x008b_949e),
+            Work::Open => hex(0x003f_b950),
+            Work::Merged => hex(0x00a3_71f7),
+            Work::Closed => hex(0x00b9_605a),
+        }
+    }
+}
+
+/// What the agent is doing, and whether it needs you.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Signal {
+    /// Not running. Nothing moves.
+    Idle,
+    /// Being set up. The fan fills in, in white.
+    SettingUp,
+    /// Working. A white light sweeps the fan, the outer rows trailing.
+    Working,
+    /// Waiting on you, for an answer or an approval. The whole fan turns amber and holds still, because motion
+    /// means the agent is running.
+    NeedsYou,
+    /// Stopped short. The whole fan turns red.
+    Failed,
+}
+
+/// The moment in the animation every mark is drawn at, in seconds. *Not built:* the marks don't move yet.
+const STILL: f32 = 0.9;
+const SWEEP_S: f32 = 2.4;
+const BUILD_S: f32 = 4.8;
+const ROWS: usize = 4;
+/// How tall the mark is, for its width.
+const ASPECT: f32 = 0.62;
+
+/// The mark for one workspace or chat. `width` is its width, and it's a little under two thirds as tall.
+pub fn mark(signal: Signal, work: Work, width: Pixels, cx: &App) -> impl IntoElement {
+    let theme = cx.theme();
+    let color = match signal {
+        Signal::NeedsYou => theme.warning,
+        Signal::Failed => theme.danger,
+        Signal::Idle | Signal::SettingUp | Signal::Working => work.color(),
+    };
+    let light = theme.foreground;
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, signal, color, light, STILL, window))
+        .flex_none()
+        .w(width)
+        .h(width * ASPECT)
+}
+
+/// The mark in copper with nothing on it: the brand, for empty states and the app icon.
+pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
+    let light = cx.theme().foreground;
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, Signal::Idle, accent(), light, STILL, window))
+        .flex_none()
+        .w(width)
+        .h(width * ASPECT)
+}
+
+/// One dot: where it is, how far along the fan from left to right, from 0 to 1, and which row, from the inside.
+struct Dot {
+    at: Point<Pixels>,
+    along: f32,
+    row: usize,
+}
+
+/// Where everything sits inside the mark's bounds.
+struct Fan {
+    center: Point<Pixels>,
+    inner: Pixels,
+    pitch: Pixels,
+    dot: Pixels,
+}
+
+impl Fan {
+    fn within(bounds: Bounds<Pixels>) -> Self {
+        let outer = (bounds.size.width * 0.5).min(bounds.size.height * 0.94);
+        let inner = outer * 0.4;
+        let pitch = (outer - inner) / (as_f32(ROWS) - 0.4);
+        let dot = (pitch * 0.32).max(px(0.45));
+        let center = point(bounds.origin.x + bounds.size.width * 0.5, bounds.origin.y + bounds.size.height - dot * 1.4);
+        Fan { center, inner, pitch, dot }
+    }
+
+    /// Spaced evenly along each row, so outer rows have more dots and the edge stays as dense as the middle.
+    fn dots(&self) -> impl Iterator<Item = Dot> + '_ {
+        (0..ROWS).flat_map(move |row| {
+            let r = self.inner + self.pitch * as_f32(row);
+            let count = dots_in((r * PI) / self.pitch) + 1;
+            (0..count).map(move |j| {
+                let along = as_f32(j) / as_f32(count - 1);
+                let angle = PI * (along - 1.0);
+                Dot { at: point(self.center.x + r * angle.cos(), self.center.y + r * angle.sin()), along, row }
+            })
+        })
+    }
+}
+
+fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, light: Hsla, t: f32, window: &mut Window) {
+    let fan = Fan::within(bounds);
+    for dot in fan.dots() {
+        let (base, glow) = brightness(signal, &dot, t);
+        disc(window, dot.at, fan.dot, color.opacity(base));
+        if glow > 0.01 {
+            disc(window, dot.at, fan.dot, light.opacity(glow * 0.92));
+        }
+    }
+    let hub = color.opacity(0.6);
+    let bounds = square(fan.center, fan.dot * 2.6);
+    window.paint_quad(quad(
+        bounds,
+        Corners::all(fan.dot * 2.6),
+        transparent_black(),
+        Edges::all((fan.dot * 0.8).max(px(0.6))),
+        hub,
+        BorderStyle::default(),
+    ));
+    disc(window, fan.center, fan.dot, hub);
+}
+
+/// How strongly a dot shows its colour, and how much of the agent's white light is on it, at `t` seconds.
+fn brightness(signal: Signal, dot: &Dot, t: f32) -> (f32, f32) {
+    let row = as_f32(dot.row);
+    match signal {
+        Signal::Working => {
+            let sweep = (t / SWEEP_S).fract() * 1.5 - 0.25 - row * 0.06;
+            (1.0, (1.0 - (dot.along - sweep).abs() * 3.5).clamp(0.0, 1.0))
+        }
+        Signal::SettingUp if dot.along + row * 0.04 < (t / BUILD_S).fract() * 1.25 => (1.0, 0.4),
+        Signal::SettingUp => (0.2, 0.0),
+        Signal::Idle | Signal::NeedsYou | Signal::Failed => (1.0, 0.0),
+    }
+}
+
+fn square(center: Point<Pixels>, radius: Pixels) -> Bounds<Pixels> {
+    Bounds::new(point(center.x - radius, center.y - radius), size(radius * 2.0, radius * 2.0))
+}
+
+fn disc(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
+    window.paint_quad(quad(
+        square(center, radius),
+        Corners::all(radius),
+        color,
+        Edges::all(px(0.)),
+        transparent_black(),
+        BorderStyle::default(),
+    ));
+}
+
+#[expect(clippy::cast_precision_loss, reason = "a count of rows or dots, a few dozen at most")]
+fn as_f32(n: usize) -> f32 {
+    n as f32
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "how many dots fit along a row: positive, and a few dozen at most"
+)]
+fn dots_in(length_in_pitches: f32) -> usize {
+    length_in_pitches.round().max(1.0) as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{Bounds, point, px, size};
+
+    use super::{Fan, Work};
+
+    #[test]
+    fn a_pull_request_is_read_from_githubs_words() {
+        assert_eq!(Work::from_github("OPEN", false), Work::Open);
+        assert_eq!(Work::from_github("OPEN", true), Work::Draft);
+        assert_eq!(Work::from_github("MERGED", false), Work::Merged);
+        assert_eq!(Work::from_github("CLOSED", false), Work::Closed);
+        assert_eq!(Work::from_github("SOMETHING_NEW", false), Work::NoPr);
+    }
+
+    #[test]
+    fn outer_rows_have_more_dots_and_every_row_reaches_both_ends() {
+        let fan = Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(60.), px(37.2))));
+        let dots: Vec<_> = fan.dots().collect();
+        let per_row: Vec<usize> = (0..4).map(|row| dots.iter().filter(|d| d.row == row).count()).collect();
+
+        assert!(per_row.windows(2).all(|pair| pair[0] < pair[1]), "{per_row:?}");
+        for row in 0..4 {
+            let along: Vec<f32> = dots.iter().filter(|d| d.row == row).map(|d| d.along).collect();
+            assert_eq!((along.first().copied(), along.last().copied()), (Some(0.0), Some(1.0)));
+        }
+    }
+}

@@ -32,8 +32,28 @@ impl Render for AppView {
             Connection::AcrossABreak(status) => across_a_break(status, self.hub.build_version, muted, cx),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
-                None if self.repos.is_empty() => centered("Add a repository to get started.", muted),
-                None => centered("Create a workspace to get started.", muted),
+                None if self.repos.is_empty() => empty_state(
+                    "Add a repository",
+                    "Each workspace is a copy of a repository on its own branch, with its own agents. Start by adding \
+                     a repository from this Mac.",
+                    Button::new("first-add-repository")
+                        .primary()
+                        .label("Add repository")
+                        .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+                    cx,
+                ),
+                None => empty_state(
+                    "Start a workspace",
+                    "Pick a repository in the sidebar and press + to give an agent a branch of its own.",
+                    Button::new("first-new-workspace").primary().label("New workspace").on_click(cx.listener(
+                        |t, _, _, cx| {
+                            if let Some(repo) = t.current_repo() {
+                                t.new_workspace(repo, cx);
+                            }
+                        },
+                    )),
+                    cx,
+                ),
             },
         };
         with_actions(h_flex(), cx)
@@ -188,6 +208,26 @@ fn across_a_break(status: &HubStatus, app_version: &str, muted: Hsla, cx: &mut C
         .child("This app can't talk to the running hub.")
         .child(note(versions))
         .child(note(next))
+        .child(action)
+        .into_any_element()
+}
+
+/// What an empty pane shows: the mark, what's missing and why, and the one thing to do about it.
+fn empty_state(title: &str, body: &str, action: Button, cx: &mut Context<AppView>) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    v_flex()
+        .size_full()
+        .items_center()
+        .justify_center()
+        .gap_4()
+        .child(look::brand(px(72.), cx))
+        .child(
+            v_flex()
+                .items_center()
+                .gap_1p5()
+                .child(div().text_base().font_weight(gpui_kit::FontWeight::MEDIUM).child(title.to_string()))
+                .child(div().max_w(px(400.)).text_center().text_sm().text_color(muted).child(body.to_string())),
+        )
         .child(action)
         .into_any_element()
 }

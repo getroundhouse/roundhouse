@@ -7,7 +7,6 @@ mod sidebar;
 pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
-use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
     actions, px, size,
@@ -56,7 +55,7 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
         ..Default::default()
     };
     gpui_kit::open_window(options, cx, |window, cx| {
-        Theme::change(ThemeMode::Dark, Some(window), cx);
+        look::apply(Some(window), cx);
         window.activate_window();
         cx.new(|cx| app::AppView::new(hub, window, cx))
     })
