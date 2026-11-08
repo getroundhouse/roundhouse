@@ -40,7 +40,8 @@ impl HubSource {
     }
 
     /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to. Only here,
-    /// while connecting, because the panes are empty and nobody's typing can be lost.
+    /// while connecting, and only an idle hub, so nothing running is lost. The panes stay, with what's typed in
+    /// them.
     pub(super) fn connect(&self) -> Result<Client, ClientError> {
         let client = self.connect_or_start()?;
         if !should_replace(&client.hub_status()?, self.build_number) {

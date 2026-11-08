@@ -7,6 +7,8 @@ use gpui_kit::component::diff::{DiffLinePosition, DiffSide as KitSide};
 use gpui_kit::{AppContext, Context, Window};
 use protocol::model::{CommentId, DiffComment, DiffSide};
 
+use client_core::records::Record;
+
 use super::{DiffEvent, DiffPanel};
 
 fn our_side(side: KitSide) -> DiffSide {
@@ -88,10 +90,10 @@ impl DiffPanel {
                     )
                 })
                 .await;
-            let _ = this.update(cx, |_, cx| {
+            let _ = this.update(cx, |t, cx| {
                 match added {
                     // Shown once client-core's copy has it, like any other change.
-                    Ok(comment) => cx.emit(DiffEvent::Replied(comment)),
+                    Ok(comment) => t.records.take_reply(Record::Comment(comment)),
                     Err(e) => cx.emit(DiffEvent::Error(format!("couldn't save that comment: {e}"))),
                 }
                 cx.notify();

@@ -9,7 +9,7 @@ use protocol::model::{
     PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
-use super::{Client, Result, Subscription, hub_is_missing, unexpected};
+use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
 
 impl Client {
     pub fn hub_status(&self) -> Result<HubStatus> {
@@ -213,7 +213,7 @@ impl Client {
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
         // Registered before the request goes out, because events can arrive before the reply.
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (items_tx, items) = flume::unbounded();
+        let (items_tx, items) = subscription_channel();
         self.inner.subscriptions.lock().insert(subscription_id, items_tx);
         let reply = self.expect_ok(ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id });
         if let Err(e) = reply {
@@ -226,7 +226,7 @@ impl Client {
     /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
     pub fn feed_subscribe(&self) -> Result<Subscription> {
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (items_tx, items) = flume::unbounded();
+        let (items_tx, items) = subscription_channel();
         self.inner.subscriptions.lock().insert(subscription_id, items_tx);
         if let Err(e) = self.expect_ok(ClientRequest::FeedSubscribe { subscription_id }) {
             self.inner.subscriptions.lock().remove(&subscription_id);

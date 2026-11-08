@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use client_core::Client;
+use client_core::{Client, RecordsFeed};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
@@ -27,8 +27,6 @@ pub use comments::comments_prompt;
 pub enum DiffEvent {
     Error(String),
     SendToAgent(String),
-    /// A reply carried this comment, for client-core's copy of the records.
-    Replied(DiffComment),
 }
 
 fn kit_side(side: DiffSide) -> KitSide {
@@ -40,6 +38,8 @@ fn kit_side(side: DiffSide) -> KitSide {
 
 pub struct DiffPanel {
     client: Client,
+    /// Client-core's copy of the hub's records, which replies go into.
+    records: RecordsFeed,
     workspace_id: WorkspaceId,
     pub state: Option<Entity<DiffState>>,
     pub empty: bool,
@@ -59,7 +59,13 @@ pub struct DiffPanel {
 impl EventEmitter<DiffEvent> for DiffPanel {}
 
 impl DiffPanel {
-    pub fn new(client: Client, workspace_id: WorkspaceId, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        client: Client,
+        records: RecordsFeed,
+        workspace_id: WorkspaceId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let draft_input = cx.new(|cx| {
             TextareaState::new(window, cx).auto_grow(2, 6).submit_on_enter(true).placeholder("Leave a comment")
         });
@@ -70,6 +76,7 @@ impl DiffPanel {
         });
         let mut this = Self {
             client,
+            records,
             workspace_id,
             state: None,
             empty: false,
@@ -83,6 +90,12 @@ impl DiffPanel {
         };
         this.refresh(cx);
         this
+    }
+
+    /// Carries on on a new connection to the hub, and loads the diff again on it.
+    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
+        self.client = client.clone();
+        self.refresh(cx);
     }
 
     /// Loads the diff again. Keeps showing the old one until the new one is ready.

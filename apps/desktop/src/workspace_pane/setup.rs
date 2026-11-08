@@ -77,8 +77,8 @@ impl WorkspacePane {
         let (client, id) = (self.client.clone(), self.workspace.id.clone());
         cx.spawn(async move |this, cx| {
             let started = cx.background_spawn(async move { client.workspace_rerun_setup(&id) }).await;
-            let _ = this.update(cx, |_, cx| match started {
-                Ok(workspace) => cx.emit(PaneEvent::Replied(Box::new(Record::Workspace(workspace)))),
+            let _ = this.update(cx, |t, cx| match started {
+                Ok(workspace) => t.records.take_reply(Record::Workspace(workspace)),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))),
             });
         })

@@ -4,7 +4,8 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use client_core::session_log::Row;
+use client_core::OpenSession;
+use client_core::session_log::{PendingPrompt, Row, SessionLog};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -12,8 +13,9 @@ use gpui_kit::{
     AnyElement, App, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, WeakEntity, div, px,
 };
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
 use protocol::model::Seq;
+use protocol::tail::Tail;
 
 use crate::item_key::ItemKey;
 use crate::questions;
@@ -33,49 +35,57 @@ const COLUMN: f32 = 780.0;
 
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
+    session: &OpenSession,
     this: &WeakEntity<Transcript>,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
-    let row = render_row_inner(model, this, ix, cx);
+    let row = render_row_inner(model, session, this, ix, cx);
     div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(row)).into_any_element()
 }
 
-fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, ix: usize, cx: &mut App) -> AnyElement {
-    let mut m = model.borrow_mut();
-    if ix >= m.log.row_count() {
-        let tail = m.log.tail().clone();
-        drop(m);
-        return render_tail(&tail, cx);
-    }
-    match m.log.row(ix) {
-        Row::Event(event) => {
-            let (seq, body) = (event.seq, event.body.clone());
-            let around = Around::read(&m, seq, &body);
-            drop(m);
-            render_event(seq, &body, &around, this, cx)
-        }
-        Row::Pending(prompt) => {
-            let (key, text) = (ItemKey::Prompt(prompt.client_msg_id.clone()), prompt.text.clone());
-            drop(m);
-            prompt_bubble(&key, text, true, cx)
-        }
-        Row::Unloaded => {
-            m.focus = ix;
-            if !m.fetch_scheduled {
-                m.fetch_scheduled = true;
-                let this = this.clone();
-                cx.defer(move |cx| {
-                    let _ = this.update(cx, Transcript::fetch_wanted);
-                });
+/// What a row shows, copied out so the log isn't held while it's drawn.
+#[expect(clippy::large_enum_variant, reason = "made for one row and matched straight away")]
+enum Shown {
+    Tail(Tail),
+    Event(SessionEvent, Around),
+    Pending(PendingPrompt),
+    Unloaded,
+}
+
+fn render_row_inner(
+    model: &Rc<RefCell<Model>>,
+    session: &OpenSession,
+    this: &WeakEntity<Transcript>,
+    ix: usize,
+    cx: &mut App,
+) -> AnyElement {
+    let shown = {
+        let m = model.borrow();
+        session.read(|log| {
+            if ix >= log.row_count() {
+                return Shown::Tail(log.tail().clone());
             }
+            match log.row(ix) {
+                Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
+                Row::Pending(prompt) => Shown::Pending(prompt.clone()),
+                Row::Unloaded => Shown::Unloaded,
+            }
+        })
+    };
+    match shown {
+        Shown::Tail(tail) => render_tail(&tail, cx),
+        Shown::Event(event, around) => render_event(event.seq, &event.body, &around, this, cx),
+        Shown::Pending(prompt) => prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, true, cx),
+        Shown::Unloaded => {
+            session.want(ix);
             // A guess at the height. The list keeps its anchor when the real one arrives.
             div().h(px(120.)).into_any_element()
         }
     }
 }
 
-/// What drawing one event needs from the rest of the model, read while it's borrowed.
+/// What drawing one event needs from the rest of the log and the model, read while they're held.
 struct Around {
     /// What each of the event's blocks is, by position.
     keys: Vec<ItemKey>,
@@ -91,7 +101,7 @@ struct Around {
 }
 
 impl Around {
-    fn read(m: &Model, seq: Seq, body: &EventBody) -> Self {
+    fn read(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody) -> Self {
         let keys = block_keys(seq, body);
         let expanded = keys.iter().map(|key| m.expanded.contains(key)).collect();
         let mut around = Around {
@@ -103,21 +113,21 @@ impl Around {
             with_call: Vec::new(),
         };
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
-            around.approval_open =
-                m.log.open_approvals().iter().any(
-                    |e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
-                );
+            around.approval_open = log
+                .open_approvals()
+                .iter()
+                .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
             around.picks = m.picks.get(approval_id).cloned().unwrap_or_default();
         }
         if let EventBody::Assistant { blocks, .. } = body {
-            around.answers = tools::answers(m, seq, blocks);
+            around.answers = tools::answers(log, &m.expanded, seq, blocks);
         }
         if let EventBody::AgentUser { blocks, .. } = body {
             around.with_call = blocks
                 .iter()
                 .map(|block| {
                     matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
-                        if tools::drawn_with_call(m, seq, tool_use_id))
+                        if tools::drawn_with_call(log, seq, tool_use_id))
                 })
                 .collect();
         }

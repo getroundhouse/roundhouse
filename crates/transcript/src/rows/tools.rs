@@ -1,7 +1,9 @@
 //! A tool call, and the result it got back, drawn together. They arrive as separate events, often with other calls
 //! in between when the agent runs several at once, so each call finds its own result by ID.
 
-use client_core::session_log::Row;
+use std::collections::HashSet;
+
+use client_core::session_log::{Row, SessionLog};
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -16,7 +18,7 @@ use super::tail::first_line;
 use super::{block_key, disclosure};
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
-use crate::transcript::{Model, Transcript};
+use crate::transcript::Transcript;
 
 /// How many events apart a call and its result can be and still be drawn together. A result follows its call
 /// within a few events. One further away is drawn where it is.
@@ -35,19 +37,24 @@ pub(super) struct Answer {
 }
 
 /// The result for each call among an event's `blocks`, by the block's position.
-pub(super) fn answers(m: &Model, seq: Seq, blocks: &[ContentBlock]) -> Vec<Option<Answer>> {
+pub(super) fn answers(
+    log: &SessionLog,
+    expanded: &HashSet<ItemKey>,
+    seq: Seq,
+    blocks: &[ContentBlock],
+) -> Vec<Option<Answer>> {
     let after = usize::try_from(seq).unwrap_or(usize::MAX);
     blocks
         .iter()
         .map(|block| {
             let ContentBlock::ToolUse { id, .. } = block else { return None };
-            (after..after.saturating_add(NEAR)).find_map(|ix| result_in(m, ix, id))
+            (after..after.saturating_add(NEAR)).find_map(|ix| result_in(log, expanded, ix, id))
         })
         .collect()
 }
 
-fn result_in(m: &Model, ix: usize, call: &str) -> Option<Answer> {
-    let Row::Event(event) = m.log.row(ix) else { return None };
+fn result_in(log: &SessionLog, expanded: &HashSet<ItemKey>, ix: usize, call: &str) -> Option<Answer> {
+    let Row::Event(event) = log.row(ix) else { return None };
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
     blocks.iter().enumerate().find_map(|(block, content)| {
         let ContentBlock::ToolResult { tool_use_id, is_error, text, .. } = content else { return None };
@@ -55,17 +62,17 @@ fn result_in(m: &Model, ix: usize, call: &str) -> Option<Answer> {
         (tool_use_id.as_str() == call).then(|| Answer {
             is_error: *is_error,
             text: text.clone(),
-            expanded: m.expanded.contains(&key),
+            expanded: expanded.contains(&key),
             key,
         })
     })
 }
 
 /// Whether the result in an event at `seq` is drawn with its call, which is a little earlier in the log.
-pub(super) fn drawn_with_call(m: &Model, seq: Seq, result: &ToolUseId) -> bool {
+pub(super) fn drawn_with_call(log: &SessionLog, seq: Seq, result: &ToolUseId) -> bool {
     let at = usize::try_from(seq).unwrap_or(usize::MAX).saturating_sub(1);
     (at.saturating_sub(NEAR)..at).rev().any(|ix| {
-        let Row::Event(event) = m.log.row(ix) else { return false };
+        let Row::Event(event) = log.row(ix) else { return false };
         let EventBody::Assistant { blocks, .. } = &event.body else { return false };
         blocks.iter().any(|block| matches!(block, ContentBlock::ToolUse { id, .. } if id == result.as_str()))
     })
@@ -170,7 +177,7 @@ pub(crate) fn summarize_input(input: &Value) -> SharedString {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, HashMap, HashSet};
+    use std::collections::HashSet;
 
     use client_core::session_log::SessionLog;
     use protocol::event::{ContentBlock, EventBody, SessionEvent};
@@ -178,7 +185,6 @@ mod tests {
     use serde_json::json;
 
     use super::{answers, drawn_with_call, summarize_input};
-    use crate::transcript::Model;
 
     fn event(seq: Seq, body: EventBody) -> SessionEvent {
         SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
@@ -202,24 +208,21 @@ mod tests {
         EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
     }
 
-    fn model(events: Vec<SessionEvent>) -> Model {
+    fn log(events: Vec<SessionEvent>) -> SessionLog {
         let mut log = SessionLog::new(0);
-        log.install_page(1, events, 0);
-        Model {
-            log,
-            expanded: HashSet::new(),
-            picks: HashMap::<_, BTreeMap<_, _>>::new(),
-            focus: 0,
-            fetch_scheduled: false,
+        for event in events {
+            log.apply_event(event);
         }
+        log
     }
 
     #[test]
     fn calls_made_at_once_each_get_their_own_result() {
-        let m = model(vec![event(1, calls(&["a", "b"])), event(2, result("b")), event(3, result("a"))]);
+        let m = log(vec![event(1, calls(&["a", "b"])), event(2, result("b")), event(3, result("a"))]);
         let EventBody::Assistant { blocks, .. } = calls(&["a", "b"]) else { unreachable!() };
 
-        let found: Vec<Option<String>> = answers(&m, 1, &blocks).into_iter().map(|a| a.map(|a| a.text)).collect();
+        let found: Vec<Option<String>> =
+            answers(&m, &HashSet::new(), 1, &blocks).into_iter().map(|a| a.map(|a| a.text)).collect();
 
         assert_eq!(found, [Some("from a".to_string()), Some("from b".to_string())]);
         assert!(drawn_with_call(&m, 2, &ToolUseId::from("b")));
@@ -228,11 +231,14 @@ mod tests {
 
     #[test]
     fn a_result_without_its_call_nearby_is_drawn_where_it_is() {
-        let m = model(vec![event(1, calls(&["a"])), event(2, result("elsewhere"))]);
+        let m = log(vec![event(1, calls(&["a"])), event(2, result("elsewhere"))]);
         let EventBody::Assistant { blocks, .. } = calls(&["a"]) else { unreachable!() };
 
         assert!(!drawn_with_call(&m, 2, &ToolUseId::from("elsewhere")));
-        assert!(answers(&m, 1, &blocks)[0].is_none(), "a call whose result hasn't come back has nothing under it");
+        assert!(
+            answers(&m, &HashSet::new(), 1, &blocks)[0].is_none(),
+            "a call whose result hasn't come back has nothing under it"
+        );
     }
 
     #[test]

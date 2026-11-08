@@ -110,7 +110,6 @@ impl WorkspacePane {
         let view = cx.new(|cx| Transcript::new(client, &session, cx));
         let events = cx.subscribe(&view, |this, _, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
-            TranscriptEvent::Disconnected => cx.emit(PaneEvent::Disconnected),
             TranscriptEvent::TurnEnded => {
                 this.refresh_pull_request(cx);
                 if let Some(diff) = &this.diff {
@@ -178,7 +177,7 @@ impl WorkspacePane {
     /// Passes on a session a reply carried, for client-core's copy, which this then shows like any other
     /// change.
     pub fn took_reply(&mut self, session: Session, cx: &mut Context<Self>) {
-        cx.emit(PaneEvent::Replied(Box::new(Record::Session(session))));
+        self.records.take_reply(Record::Session(session));
         self.show_next(cx);
     }
 

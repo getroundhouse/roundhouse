@@ -33,7 +33,8 @@ impl AppView {
                 match created {
                     Ok((workspace, session)) => {
                         let id = workspace.id.clone();
-                        t.take_replies([Record::Workspace(workspace), Record::Session(session)], cx);
+                        t.take_reply(Record::Workspace(workspace), cx);
+                        t.take_reply(Record::Session(session), cx);
                         t.select(id, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't create the workspace: {e}"), cx),
@@ -57,7 +58,7 @@ impl AppView {
             let Some(path) = paths.into_iter().next() else { return };
             let added = cx.background_spawn(async move { client.repo_add(&path.to_string_lossy()) }).await;
             let _ = this.update(cx, |t, cx| match added {
-                Ok(repo) => t.take_replies([Record::Repo(repo)], cx),
+                Ok(repo) => t.take_reply(Record::Repo(repo), cx),
                 Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
             });
         })
@@ -75,7 +76,7 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 match result {
-                    Ok(workspace) => t.take_replies([Record::Workspace(workspace)], cx),
+                    Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                         t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
@@ -118,7 +119,7 @@ impl AppView {
                 match result {
                     Ok(workspace) => {
                         let id = workspace.id.clone();
-                        t.take_replies([Record::Workspace(workspace)], cx);
+                        t.take_reply(Record::Workspace(workspace), cx);
                         t.select(id, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't restore: {e}"), cx),

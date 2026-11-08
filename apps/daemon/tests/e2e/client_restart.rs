@@ -5,9 +5,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use client_core::SubscriptionItem;
+use client_core::session_log::{Row, SessionLog};
+use client_core::{OpenSession, SubscriptionItem};
 use protocol::client::ClientRequest;
-use protocol::event::EventBody;
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::SessionStatus;
 use protocol::tail::Tail;
 
@@ -139,7 +140,11 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                         attaches += 1;
                         let mut tail = Tail::default();
                         for _ in 0..50 {
-                            let Ok(item) = subscription.items.recv_timeout(Duration::from_millis(50)) else { break };
+                            let item = match subscription.items.recv_timeout(Duration::from_millis(50)) {
+                                Ok(item) => item,
+                                Err(flume::RecvTimeoutError::Timeout) => break,
+                                Err(flume::RecvTimeoutError::Disconnected) => panic!("lost the hub"),
+                            };
                             match item {
                                 SubscriptionItem::Delta(delta) => tail.apply(&delta),
                                 SubscriptionItem::Tail(snapshot) => {
@@ -148,7 +153,6 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                                 }
                                 SubscriptionItem::Event(event) => tail.on_event(event.run, &event.body),
                                 SubscriptionItem::Notice(_) => {}
-                                SubscriptionItem::Disconnected => panic!("lost the hub"),
                             }
                         }
                         let held: String =
@@ -255,4 +259,37 @@ fn status_is_already_current_when_an_event_is_delivered() {
             client.session_prompt(&session.id, &format!("say:{idles}"), None).unwrap();
         }
     }
+}
+
+/// Every event the open session holds, if it holds all of them, in order.
+fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
+    (0..log.row_count())
+        .map(|row| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded | Row::Pending(_) => None,
+        })
+        .collect()
+}
+
+#[test]
+fn an_open_session_carries_on_from_where_it_got_to_on_a_new_connection() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let open = OpenSession::start(&client, &session);
+    client.session_prompt(&session.id, "say:before", None).unwrap();
+    wait_until("the first turn", || open.read(held).is_some_and(|events| assistant_text(&events).contains("before")));
+
+    drop(client);
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    open.reconnect(&client);
+    client.session_prompt(&session.id, "say:after", None).unwrap();
+
+    // Everything the hub has, with nothing missing.
+    let hub_has = || client.session_read(&session.id, 1, 1000, false).unwrap().0;
+    wait_until("the second turn", || {
+        open.read(held).is_some_and(|events| assistant_text(&events).contains("after") && events == hub_has())
+    });
 }

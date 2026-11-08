@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use client_core::records::Record;
-use client_core::{Client, ClientError, HubAdmin, RecordsFeed};
+use client_core::{Client, HubAdmin, RecordsFeed};
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
@@ -38,6 +38,8 @@ pub struct AppView {
     pub connection: Connection,
     /// Client-core's copy of the hub's records. The lists below are what's shown of it.
     feed: Option<RecordsFeed>,
+    /// A new connection, until client-core has caught up on it.
+    joining: Option<Client>,
     pub repos: Vec<Repo>,
     pub workspaces: Vec<Workspace>,
     pub sessions: HashMap<WorkspaceId, Vec<Session>>,
@@ -51,8 +53,9 @@ pub struct AppView {
     pub creating_in: Option<RepoId>,
     focus: FocusHandle,
     window: AnyWindowHandle,
-    /// Held so the task stops when the view goes away.
-    feed_task: Option<Task<()>>,
+    /// Held so these tasks stop when the view goes away.
+    connecting: Option<Task<()>>,
+    following: Option<Task<()>>,
 }
 
 impl AppView {
@@ -63,6 +66,7 @@ impl AppView {
             hub,
             connection: Connection::Connecting,
             feed: None,
+            joining: None,
             repos: Vec::new(),
             workspaces: Vec::new(),
             sessions: HashMap::new(),
@@ -74,7 +78,8 @@ impl AppView {
             creating_in: None,
             focus,
             window: window.window_handle(),
-            feed_task: None,
+            connecting: None,
+            following: None,
         };
         this.connect(cx);
         this
@@ -93,7 +98,7 @@ impl AppView {
         self.connection = Connection::Connecting;
         cx.notify();
         let socket = self.hub.paths.socket.clone();
-        self.feed_task = Some(cx.spawn(async move |this, cx| {
+        self.connecting = Some(cx.spawn(async move |this, cx| {
             let stopped = cx.background_spawn(async move { client_core::stop_hub(&socket) }).await;
             let _ = this.update(cx, |t, cx| match stopped {
                 Ok(()) => t.connect(cx),
@@ -115,25 +120,17 @@ impl AppView {
         cx.notify();
     }
 
-    /// Connects, and has client-core follow the hub's records. Comes back here if the hub goes away,
-    /// which starts a new one.
+    /// Connects. Everything already shown carries on on the new connection, and the first time, client-core
+    /// starts following the hub's records. Comes back here if the connection goes, which starts a new hub.
     pub fn connect(&mut self, cx: &mut Context<Self>) {
         self.connection = Connection::Connecting;
-        self.feed = None;
-        self.panes.clear();
         cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
-        self.feed_task = Some(cx.spawn(async move |this, cx| {
-            let connected = cx
-                .background_spawn(async move {
-                    let client = hub.connect()?;
-                    let feed = RecordsFeed::follow(&client)?;
-                    Ok::<_, ClientError>((client, feed))
-                })
-                .await;
-            let (client, feed) = match connected {
-                Ok(connected) => connected,
+        self.connecting = Some(cx.spawn(async move |this, cx| {
+            let connected = cx.background_spawn(async move { hub.connect() }).await;
+            let client = match connected {
+                Ok(client) => client,
                 Err(e) => {
                     let status = if e.is_version_mismatch() {
                         cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
@@ -150,34 +147,71 @@ impl AppView {
                     return;
                 }
             };
-            let _ = this.update(cx, |t, cx| {
-                t.connection = Connection::Ready(client);
-                t.feed = Some(feed.clone());
-                t.refresh(&feed, true, cx);
-            });
-            while feed.changed.recv_async().await.is_ok() {
-                if this.update(cx, |t, cx| t.refresh(&feed, false, cx)).is_err() {
-                    return;
-                }
-            }
-            // The feed ends when the connection does.
-            let _ = this.update(cx, AppView::connect);
+            let _ = this.update(cx, |t, cx| t.connected(client, cx));
         }));
     }
 
-    /// Passes on records that replies carried, so what's shown needn't wait for the feed.
-    pub(crate) fn take_replies(&mut self, records: impl IntoIterator<Item = Record>, cx: &mut Context<Self>) {
-        let Some(feed) = self.feed.clone() else { return };
-        for record in records {
-            feed.take_reply(record);
+    /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
+    fn connected(&mut self, client: Client, cx: &mut Context<Self>) {
+        if let Some(feed) = &self.feed {
+            feed.reconnect(&client);
+        } else {
+            let feed = RecordsFeed::start(&client);
+            self.follow(feed.clone(), cx);
+            self.feed = Some(feed);
         }
-        // Even if client-core had these already: what's shown here may not have caught up with it yet.
-        self.refresh(&feed, false, cx);
+        // Every pane stays as it was, with whatever's typed in it, and carries on here.
+        for pane in self.panes.values() {
+            pane.update(cx, |p, cx| p.reconnect(&client, cx));
+        }
+        self.joining = Some(client);
+    }
+
+    /// Shows what client-core holds whenever it changes, and connects again when its connection goes.
+    fn follow(&mut self, feed: RecordsFeed, cx: &mut Context<Self>) {
+        self.following = Some(cx.spawn(async move |this, cx| {
+            let changed = feed.changed().clone();
+            while changed.recv_async().await.is_ok() {
+                if this.update(cx, |t, cx| t.feed_changed(&feed, cx)).is_err() {
+                    return;
+                }
+            }
+        }));
+    }
+
+    fn feed_changed(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
+        let errors = feed.take_errors();
+        if !feed.connected() {
+            // Following failed on a connection that's there, which needs a person. A connection that went
+            // is made again.
+            if let Some(error) = errors.first() {
+                self.joining = None;
+                self.connection = Connection::Failed(error.to_string());
+                cx.notify();
+            } else if matches!(self.connection, Connection::Ready(_)) {
+                self.connect(cx);
+            }
+            return;
+        }
+        if let Some(client) = self.joining.take() {
+            self.connection = Connection::Ready(client);
+        }
+        if let Some(error) = errors.first() {
+            self.show_error(error.to_string(), cx);
+        }
+        self.refresh(feed, cx);
+    }
+
+    /// Passes on a record a reply carried, so what's shown needn't wait for the feed.
+    pub(crate) fn take_reply(&mut self, record: Record, cx: &mut Context<Self>) {
+        let Some(feed) = self.feed.clone() else { return };
+        feed.take_reply(record);
+        self.refresh(&feed, cx);
     }
 
     /// Brings what's shown up to date with client-core's copy of the records, and tells each pane what
-    /// it holds for its workspace. `connected` is the first time on a connection.
-    fn refresh(&mut self, feed: &RecordsFeed, connected: bool, cx: &mut Context<Self>) {
+    /// it holds for its workspace.
+    fn refresh(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
         let (repos, workspaces, sessions, mut comments) =
             feed.read(|records| (records.repos(), records.workspaces(), records.sessions(), records.comments()));
         self.panes.retain(|id, _| workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived));
@@ -196,7 +230,7 @@ impl AppView {
             self.selected = self.visible_workspaces().first().map(|w| w.id.clone());
         }
         let has_pane = self.selected.as_ref().is_some_and(|id| self.panes.contains_key(id));
-        if connected || !still_there || !has_pane {
+        if !still_there || !has_pane {
             self.show_selected(cx);
         }
         cx.notify();
@@ -244,14 +278,12 @@ impl AppView {
                 return;
             }
             let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
-            let comments =
-                self.feed.as_ref().and_then(|feed| feed.read(|r| r.comments().remove(&id))).unwrap_or_default();
-            let pane = cx.new(|cx| WorkspacePane::new(client, workspace, sessions, comments, window, cx));
+            let Some(records) = self.feed.clone() else { return };
+            let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
+            let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
-                PaneEvent::Disconnected => t.connect(cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
-                PaneEvent::Replied(record) => t.take_replies([*record], cx),
             })
             .detach();
             self.panes.insert(id.clone(), pane);

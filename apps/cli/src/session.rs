@@ -3,7 +3,7 @@
 use std::io::Write;
 
 use anyhow::bail;
-use client_core::{Client, SubscriptionItem};
+use client_core::{Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus};
 
@@ -108,7 +108,6 @@ pub(crate) fn follow(
     until_idle: bool,
     json: bool,
 ) -> anyhow::Result<()> {
-    let subscription = client.session_subscribe(session_id, from)?;
     let mut printer = render::Printer::default();
     let mut last_seq = from.saturating_sub(1);
     // Nothing is left to wait for if the agent has stopped and everything recorded has been seen.
@@ -116,42 +115,45 @@ pub(crate) fn follow(
         let session = client.session_get(session_id)?;
         Ok(session.last_seq <= seen && matches!(session.status, SessionStatus::Idle | SessionStatus::Interrupted))
     };
-    for item in &subscription.items {
-        let check = match item {
-            SubscriptionItem::Event(event) => {
-                last_seq = event.seq;
-                if json {
-                    println!("{}", serde_json::to_string(&event)?);
-                } else {
-                    printer.event(&event);
+    loop {
+        let subscription = client.session_subscribe(session_id, last_seq + 1)?;
+        for item in &subscription.items {
+            let check = match item {
+                SubscriptionItem::Event(event) => {
+                    last_seq = event.seq;
+                    if json {
+                        println!("{}", serde_json::to_string(&event)?);
+                    } else {
+                        printer.event(&event);
+                    }
+                    matches!(
+                        event.body,
+                        EventBody::AgentState { .. } | EventBody::TurnEnded { .. } | EventBody::AgentExited { .. }
+                    )
                 }
-                matches!(
-                    event.body,
-                    EventBody::AgentState { .. } | EventBody::TurnEnded { .. } | EventBody::AgentExited { .. }
-                )
-            }
-            SubscriptionItem::Delta(delta) => {
-                if !json {
-                    printer.delta(&delta);
+                SubscriptionItem::Delta(delta) => {
+                    if !json {
+                        printer.delta(&delta);
+                    }
+                    false
                 }
-                false
-            }
-            // A tail arrives once the subscription has caught up with the log.
-            SubscriptionItem::Tail(tail) => {
-                if !json {
-                    printer.tail(&tail);
+                // A tail arrives once the subscription has caught up with the log.
+                SubscriptionItem::Tail(tail) => {
+                    if !json {
+                        printer.tail(&tail);
+                    }
+                    true
                 }
-                true
+                SubscriptionItem::Notice(_) => false,
+            };
+            if until_idle && check && finished(last_seq)? {
+                return Ok(());
             }
-            SubscriptionItem::Notice(_) => false,
-            SubscriptionItem::Disconnected => {
-                std::io::stdout().flush().ok();
-                bail!("lost the hub after event {last_seq}. Resume with `attach --from {}`", last_seq + 1);
-            }
-        };
-        if until_idle && check && finished(last_seq)? {
-            return Ok(());
+        }
+        // Printing fell behind the agent, so it carries on from the last event printed.
+        if subscription.ended() != Some(Ended::FellBehind) {
+            std::io::stdout().flush().ok();
+            bail!("lost the hub after event {last_seq}. Resume with `attach --from {}`", last_seq + 1);
         }
     }
-    Ok(())
 }

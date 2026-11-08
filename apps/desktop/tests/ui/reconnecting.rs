@@ -23,6 +23,8 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
     ui.input("say:before");
     ui.press("enter");
     ui.wait_idle_with("the first turn", |text| text.contains("before"));
+    ui.input("say:after");
+    let (pane, transcript) = (ui.pane().unwrap(), ui.transcript().unwrap());
 
     let pid = stack.client().hub_status().unwrap().pid;
     let killed = Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap();
@@ -33,8 +35,11 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
             && stack.client().hub_status().is_ok_and(|status| status.pid != pid)
             && ui.transcript().is_some()
     });
+    // The same workspace view, with what was typed and the history it had, carrying on on the new hub.
+    assert_eq!(ui.pane().unwrap().entity_id(), pane.entity_id());
+    assert_eq!(ui.transcript().unwrap().entity_id(), transcript.entity_id());
+    assert_eq!(ui.composer_text(), "say:after");
     ui.wait("the history", |ui| ui.assistant_text().contains("before"));
-    ui.input("say:after");
     ui.press("enter");
     ui.wait_idle_with("the next turn", |text| text.contains("after"));
 }

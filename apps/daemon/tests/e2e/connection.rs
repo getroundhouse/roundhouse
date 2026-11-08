@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use client_core::records::HubRecords;
-use client_core::{Client, ClientError, HubAdmin, RecordsFeed, Subscription, SubscriptionItem};
+use client_core::{Client, ClientError, Ended, HubAdmin, RecordsFeed, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, DiffSide, RecordKey, SessionStatus, WorkspaceStatus};
@@ -105,7 +105,7 @@ fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
 fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     let stack = Stack::start();
     let client = stack.client();
-    let feed = RecordsFeed::follow(&client).unwrap();
+    let feed = RecordsFeed::start(&client);
 
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
@@ -344,12 +344,9 @@ fn losing_the_hub_ends_a_subscription_with_a_clear_signal() {
     let subscription = client.session_subscribe(&session.id, 1).unwrap();
     stack.kill_hub();
     let deadline = Instant::now() + TIMEOUT;
-    loop {
-        let item = subscription.items.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
-        if item == SubscriptionItem::Disconnected {
-            break;
-        }
-    }
+    while subscription.items.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_ok() {}
+
+    assert_eq!(subscription.ended(), Some(Ended::Disconnected));
     assert!(matches!(client.hub_status().unwrap_err(), ClientError::Disconnected | ClientError::Io(_)));
 }
 

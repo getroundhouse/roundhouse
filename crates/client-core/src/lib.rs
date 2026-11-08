@@ -4,7 +4,8 @@
 //! for a native mobile client.
 //!
 //! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
-//! session's history.
+//! session's history. [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its
+//! own, so a view only reads them.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -14,6 +15,6 @@ pub mod session_log;
 mod client;
 
 pub use client::{
-    Client, ClientError, HubAdmin, RecordsFeed, Result, Subscription, SubscriptionItem, daemon_beside, new_message_id,
-    new_request_id, stop_hub,
+    Client, ClientError, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, Result, Subscription,
+    SubscriptionItem, daemon_beside, new_message_id, new_request_id, stop_hub,
 };

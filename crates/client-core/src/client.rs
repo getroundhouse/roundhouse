@@ -3,15 +3,16 @@
 mod admin;
 mod api;
 mod feed;
+mod follow;
+mod open_session;
+mod start;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
@@ -20,12 +21,14 @@ use protocol::client::{
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
-use protocol::paths::Paths;
 use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub};
 pub use api::{new_message_id, new_request_id};
 pub use feed::RecordsFeed;
+pub use follow::FollowError;
+pub use open_session::OpenSession;
+pub use start::daemon_beside;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -53,8 +56,8 @@ impl ClientError {
 
 pub type Result<T> = std::result::Result<T, ClientError>;
 
-/// What a subscription delivers. `Disconnected` is last. To resume, connect again and subscribe
-/// from one past the last event's `seq`.
+/// What a subscription delivers. When it ends, its channel closes, and [`Subscription::ended`] says why.
+/// To carry on, subscribe again from one past the last event's `seq`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubscriptionItem {
     Event(SessionEvent),
@@ -63,8 +66,20 @@ pub enum SubscriptionItem {
     Delta(StreamDelta),
     /// Only on a feed subscription.
     Notice(HubNotice),
+}
+
+/// Why a subscription's channel closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ended {
+    /// Its reader fell behind. Subscribing again on the same connection carries on.
+    FellBehind,
+    /// The connection to the hub has gone.
     Disconnected,
 }
+
+/// Far more than a reader that keeps up ever has waiting. A subscription that fills it has fallen behind,
+/// and ends, so its reader can start again from where it got to rather than queue without limit.
+const SUBSCRIPTION_CAPACITY: usize = 4096;
 
 /// Dropping it tells the hub to stop sending.
 pub struct Subscription {
@@ -73,9 +88,24 @@ pub struct Subscription {
     connection: Arc<Inner>,
 }
 
+impl Subscription {
+    /// Why it ended, once its channel has closed. `None` while it's still going.
+    pub fn ended(&self) -> Option<Ended> {
+        if self.connection.lagged.lock().contains(&self.id) {
+            Some(Ended::FellBehind)
+        } else if *self.connection.disconnected.lock() {
+            Some(Ended::Disconnected)
+        } else {
+            None
+        }
+    }
+}
+
 impl Drop for Subscription {
     fn drop(&mut self) {
+        // In this order, so a delivery under way can't mark it as fallen behind after it's gone.
         self.connection.subscriptions.lock().remove(&self.id);
+        self.connection.lagged.lock().remove(&self.id);
         // Not waiting for the reply: this can run on any thread, and the reply doesn't matter.
         let _ = self.connection.send_only(ClientRequest::SessionUnsubscribe { subscription_id: self.id });
     }
@@ -87,6 +117,8 @@ struct Inner {
     writer: Mutex<UnixStream>,
     pending: Mutex<HashMap<u64, PendingReply>>,
     subscriptions: Mutex<HashMap<u64, flume::Sender<SubscriptionItem>>>,
+    /// Subscriptions ended because their readers fell behind.
+    lagged: Mutex<HashSet<u64>>,
     next_id: AtomicU64,
     /// Set once the reader has finished, so a later call can't wait forever.
     disconnected: Mutex<bool>,
@@ -142,6 +174,7 @@ impl Client {
             writer: Mutex::new(stream),
             pending: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
+            lagged: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(1),
             disconnected: Mutex::new(false),
             hub_version: OnceLock::new(),
@@ -158,27 +191,6 @@ impl Client {
         self.inner.hub_version.get().map_or("", String::as_str)
     }
 
-    /// Connects, starting a hub first if none is running. The hub is a separate process that
-    /// outlives this client, which is why closing a client doesn't stop its agents.
-    pub fn connect_or_start(paths: &Paths, daemon: &Path, client_name: &str) -> Result<Client> {
-        match Client::connect(&paths.socket, client_name) {
-            Ok(client) => return Ok(client),
-            Err(e) if hub_is_missing(&e) => {}
-            Err(e) => return Err(e),
-        }
-        start_hub(paths, daemon)?;
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match Client::connect(&paths.socket, client_name) {
-                Ok(client) => return Ok(client),
-                Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(25));
-                }
-                Err(e) => return Err(e),
-            }
-        }
-    }
-
     pub fn call(&self, request: ClientRequest) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
@@ -188,9 +200,10 @@ impl Client {
             self.inner.pending.lock().remove(&id);
             return Err(ClientError::Disconnected);
         }
-        if let Err(e) = self.inner.writer.lock().write_all(&line) {
+        // Writing to the hub only fails once it has gone.
+        if self.inner.writer.lock().write_all(&line).is_err() {
             self.inner.pending.lock().remove(&id);
-            return Err(e.into());
+            return Err(ClientError::Disconnected);
         }
         reply_rx.recv().map_err(|_| ClientError::Disconnected)?
     }
@@ -242,9 +255,8 @@ fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
     for (_, reply) in pending {
         let _ = reply.send(Err(ClientError::Disconnected));
     }
-    for (_, subscription) in inner.subscriptions.lock().drain() {
-        let _ = subscription.send(SubscriptionItem::Disconnected);
-    }
+    // Dropping the senders closes each channel once what's in it has been read, and `ended` says why.
+    inner.subscriptions.lock().clear();
 }
 
 /// A hub can be a different version, so a reply might not decode, and without this whoever made the
@@ -263,9 +275,21 @@ fn fail_unreadable_reply(inner: &Inner, line: &[u8], error: &serde_json::Error) 
 }
 
 fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
-    if let Some(subscription) = inner.subscriptions.lock().get(&subscription_id) {
-        let _ = subscription.send(item);
+    let mut subscriptions = inner.subscriptions.lock();
+    let Some(subscription) = subscriptions.get(&subscription_id) else { return };
+    if let Err(flume::TrySendError::Full(_)) = subscription.try_send(item) {
+        // Its reader has fallen behind. Marked first, so its reader never sees the channel close
+        // without knowing why. Ending it closes the channel once what's in it has been read.
+        inner.lagged.lock().insert(subscription_id);
+        subscriptions.remove(&subscription_id);
+        drop(subscriptions);
+        let _ = inner.send_only(ClientRequest::SessionUnsubscribe { subscription_id });
     }
+}
+
+/// A channel for one subscription's items, limited to what a reader that keeps up could have waiting.
+fn subscription_channel() -> (flume::Sender<SubscriptionItem>, flume::Receiver<SubscriptionItem>) {
+    flume::bounded(SUBSCRIPTION_CAPACITY)
 }
 
 /// Nothing's there, or what was there went away as we connected: a hub that's exiting can accept a
@@ -284,57 +308,11 @@ fn hub_is_missing(error: &ClientError) -> bool {
     }
 }
 
-/// The daemon that ships next to `exe`. Follows symlinks first, so a hub started through an install's
-/// `current` link stays on that version, whichever one the link names later.
-pub fn daemon_beside(exe: &Path) -> std::io::Result<PathBuf> {
-    Ok(exe.canonicalize()?.with_file_name("roundhoused"))
-}
-
-fn start_hub(paths: &Paths, daemon: &Path) -> Result<()> {
-    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-    use std::os::unix::process::CommandExt;
-    // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere.
-    std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&paths.data_dir)?;
-    let log = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
-    let mut command = Command::new(daemon);
-    command
-        .args(["hub", "--on-demand"])
-        // The hub this client will look for, whatever this process's environment says.
-        .env(protocol::paths::ENV_HOME, &paths.data_dir)
-        .env(protocol::paths::ENV_WORKSPACES, &paths.workspaces_root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(log.try_clone()?))
-        .stderr(Stdio::from(log));
-    // SAFETY: setsid is async-signal-safe, which is all pre_exec requires. It detaches the hub from
-    // this terminal and process group, so closing the client doesn't reach it.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    command.spawn().map_err(|e| std::io::Error::new(e.kind(), format!("starting {}: {e}", daemon.display())))?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
-
-    #[test]
-    fn the_daemon_beside_a_linked_binary_is_in_the_version_the_link_named() {
-        let dir = tempfile::tempdir().unwrap();
-        let version = dir.path().canonicalize().unwrap().join("abc123");
-        std::fs::create_dir(&version).unwrap();
-        std::fs::write(version.join("roundhouse"), "").unwrap();
-        std::os::unix::fs::symlink(&version, dir.path().join("current")).unwrap();
-
-        let daemon = daemon_beside(&dir.path().join("current/roundhouse")).unwrap();
-
-        assert_eq!(daemon, version.join("roundhoused"));
-    }
 
     /// Answers a hello, then answers the next request with a reply no build of this client can read.
     fn start_hub_with_an_unreadable_reply(socket: &Path) {
@@ -367,5 +345,48 @@ mod tests {
         let outcome = outcome.recv_timeout(Duration::from_secs(10)).expect("the call hung");
 
         assert!(matches!(outcome, Err(ClientError::Unexpected(_))), "{outcome:?}");
+    }
+
+    /// Answers a hello and a feed subscription, then sends more notices than a subscription holds before
+    /// anyone reads them, and reports what the client asks next.
+    fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<ClientRequest> {
+        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
+        let (asked, next) = flume::unbounded();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
+            let mut reply = |id, response| {
+                let outcome = ReplyOutcome::Response(response);
+                stream.write_all(&frame::encode(&HubFrame::Reply { id, outcome }).unwrap()).unwrap();
+            };
+            let mut read = || frame::decode::<ClientFrame>(requests.next().unwrap().unwrap().as_bytes()).unwrap();
+            let hello = read();
+            reply(hello.id, ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".into() });
+            let subscribe = read();
+            let ClientRequest::FeedSubscribe { subscription_id } = subscribe.request else { panic!() };
+            reply(subscribe.id, ClientResponse::Ok);
+            for _ in 0..SUBSCRIPTION_CAPACITY + 10 {
+                let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
+                stream.write_all(&frame::encode(&notice).unwrap()).unwrap();
+            }
+            asked.send(read().request).unwrap();
+        });
+        next
+    }
+
+    #[test]
+    fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("hub.sock");
+        let asked = start_hub_that_floods_a_subscription(&socket);
+        let client = Client::connect(&socket, "test").unwrap();
+        let subscription = client.feed_subscribe().unwrap();
+
+        let next = asked.recv_timeout(Duration::from_secs(10)).unwrap();
+
+        assert_eq!(next, ClientRequest::SessionUnsubscribe { subscription_id: subscription.id });
+        assert_eq!(subscription.items.drain().count(), SUBSCRIPTION_CAPACITY);
+        assert!(subscription.items.recv().is_err(), "it ended");
+        assert_eq!(subscription.ended(), Some(Ended::FellBehind));
     }
 }
