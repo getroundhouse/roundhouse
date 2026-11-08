@@ -7,7 +7,7 @@ use gpui_kit::{
     linear_color_stop, linear_gradient, point, px, quad, size,
 };
 
-use crate::fan::{self, ASPECT, Fan};
+use crate::fan::{self, ASPECT, Count, Fan};
 use crate::palette::tile_top;
 
 /// The sizes macOS keeps a drawing of the icon for. It picks one by the pixels it needs, so on a Retina display
@@ -51,10 +51,10 @@ impl IconSize {
     fn drawing(self) -> Drawing {
         match self {
             IconSize::Px16 => {
-                Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., pitch: 2., inner: 3., hub: 1., ring: None })
+                Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., pitch: 2.5, inner: 3., hub: 2., ring: None })
             }
             IconSize::Px32 => {
-                Drawing::OnPixels(OnPixels { inset: 3., rows: 3, dot: 1., pitch: 2.5, inner: 5., hub: 3., ring: None })
+                Drawing::OnPixels(OnPixels { inset: 3., rows: 3, dot: 2., pitch: 3.5, inner: 3.5, hub: 2., ring: None })
             }
             IconSize::Px64 => Drawing::OnPixels(OnPixels {
                 inset: 6.,
@@ -82,9 +82,9 @@ enum Drawing {
 }
 
 /// A fan laid out in the display's pixels, on a tile `inset` from the edge: each dot `dot` across, rows `pitch`
-/// apart from `inner` out, and dots `pitch` apart along a row. The turntable is a hub `hub` across, in a ring of one
-/// pixel out to `ring`, if any. The hub and the ring are odd or even across as the dots are, so they share the dots'
-/// centre on whole pixels.
+/// apart from `inner` out, and dots about `pitch` apart along a row. The turntable is a hub `hub` across, in a ring of
+/// one pixel out to `ring`, if any. The tile's middle falls between two pixels, so the hub and the ring are an even
+/// number of pixels across, to centre on it.
 struct OnPixels {
     inset: f32,
     rows: usize,
@@ -188,11 +188,14 @@ impl Layout {
     fn of(fan: &OnPixels, canvas: f32) -> Self {
         let outer = fan.inner + fan.pitch * fan::as_f32(fan.rows - 1);
         let (up, down) = (outer + fan.dot / 2.0, (fan.hub / 2.0).max(fan.ring.unwrap_or(0.)));
-        // On whole pixels itself, so its two sides come out the same, and centred on what it reaches.
-        let center = (on_whole_pixels(canvas / 2.0, fan.dot), on_whole_pixels((canvas + up - down) / 2.0, fan.dot));
+        // On the line between the tile's two middle pixels, and centred up and down on what it reaches. Dots an odd
+        // number of pixels across sit on pixels' middles, so to mirror across that line, none can sit on it.
+        let center = (canvas / 2.0, ((canvas + up - down) / 2.0).round());
+        let count = if odd(fan.dot) { Count::Even } else { Count::Fitting };
         let touch = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0).abs().max((a.1 - b.1).abs()) < fan.dot + 1.;
         let mut dots: Vec<(f32, f32)> = Vec::new();
-        let rows = fan::rows_of_dots(point(px(center.0), px(center.1)), px(fan.inner), px(fan.pitch), fan.rows);
+        let middle = point(px(center.0), px(center.1));
+        let rows = fan::rows_of_dots(middle, px(fan.inner), px(fan.pitch), fan.rows, count);
         for dot in rows.filter(|d| d.along <= 0.5) {
             let at = (on_whole_pixels(dot.at.x / px(1.), fan.dot), on_whole_pixels(dot.at.y / px(1.), fan.dot));
             let twins = if dot.along < 0.5 { vec![at, (center.0 * 2.0 - at.0, at.1)] } else { vec![at] };
@@ -209,12 +212,16 @@ impl Layout {
 /// Where something `across` pixels wide covers whole pixels: centred on a pixel's edge if it's an even number of
 /// pixels across, and on a pixel's middle if odd.
 fn on_whole_pixels(v: f32, across: f32) -> f32 {
-    if (across / 2.0).fract() > 0.25 { v.floor() + 0.5 } else { v.round() }
+    if odd(across) { v.floor() + 0.5 } else { v.round() }
+}
+
+fn odd(pixels: f32) -> bool {
+    (pixels / 2.0).fract() > 0.25
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Drawing, IconSize, Layout, OnPixels};
+    use super::{Drawing, IconSize, Layout, OnPixels, odd};
 
     fn on_pixels() -> Vec<(u16, OnPixels)> {
         IconSize::ALL
@@ -265,12 +272,25 @@ mod tests {
     }
 
     #[test]
-    fn the_turntable_shares_the_dots_centre_on_whole_pixels() {
-        let odd = |across: f32| (across / 2.0).fract() > 0.25;
+    fn a_fan_on_whole_pixels_sits_in_the_middle_of_its_tile() {
         for (pixels, fan) in on_pixels() {
-            assert_eq!(odd(fan.hub), odd(fan.dot), "{pixels}: the hub");
+            let canvas = f32::from(pixels);
+            let layout = Layout::of(&fan, canvas);
+            let left = layout.dots.iter().map(|d| d.0 - fan.dot / 2.0).fold(f32::MAX, f32::min);
+            let right = layout.dots.iter().map(|d| d.0 + fan.dot / 2.0).fold(f32::MIN, f32::max);
+
+            let (space_left, space_right) = (left - fan.inset, canvas - fan.inset - right);
+            assert!((space_left - space_right).abs() < 0.01, "{pixels}: {space_left} on the left, {space_right} right");
+            assert!((layout.center.0 - canvas / 2.0).abs() < 0.01, "{pixels}: the turntable");
+        }
+    }
+
+    #[test]
+    fn the_turntable_centres_on_the_line_between_two_pixels() {
+        for (pixels, fan) in on_pixels() {
+            assert!(!odd(fan.hub), "{pixels}: the hub is {} across", fan.hub);
             if let Some(ring) = fan.ring {
-                assert_eq!(odd(ring * 2.0), odd(fan.dot), "{pixels}: the ring");
+                assert!(!odd(ring * 2.0), "{pixels}: the ring is {} across", ring * 2.0);
             }
         }
     }

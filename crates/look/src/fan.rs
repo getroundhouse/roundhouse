@@ -75,7 +75,7 @@ impl Fan {
     }
 
     pub(crate) fn dots(&self) -> impl Iterator<Item = Dot> + use<> {
-        rows_of_dots(self.center, self.inner, self.pitch, self.rows)
+        rows_of_dots(self.center, self.inner, self.pitch, self.rows, Count::Fitting)
     }
 
     /// Its line and hub keep a share of its size, so they don't thin out as the dots get finer.
@@ -90,17 +90,32 @@ impl Fan {
     }
 }
 
+/// How many dots a row gets.
+#[derive(Clone, Copy)]
+pub(crate) enum Count {
+    /// As many as fit `pitch` apart.
+    Fitting,
+    /// The even number nearest that, so no dot sits on the middle line. A fan of dots an odd number of pixels across
+    /// needs it to centre on the line between two pixels.
+    Even,
+}
+
 /// Rows of dots in a half circle over `center`, the first `inner` from it and each `pitch` further out. The dots in
-/// a row are spaced evenly, `pitch` apart, so outer rows have more of them and the edge stays as dense as the middle.
+/// a row are spaced evenly, about `pitch` apart, so outer rows have more of them and the edge stays as dense as the
+/// middle.
 pub(crate) fn rows_of_dots(
     center: Point<Pixels>,
     inner: Pixels,
     pitch: Pixels,
     rows: usize,
+    count: Count,
 ) -> impl Iterator<Item = Dot> + use<> {
     (0..rows).flat_map(move |row| {
         let r = inner + pitch * as_f32(row);
-        let count = dots_in((r * PI) / pitch) + 1;
+        let count = match count {
+            Count::Fitting => dots_in((r * PI) / pitch) + 1,
+            Count::Even => 2 * dots_in((r * PI) / pitch / 2.0 + 0.5),
+        };
         (0..count).map(move |j| {
             let along = as_f32(j) / as_f32(count - 1);
             let angle = PI * (along - 1.0);
