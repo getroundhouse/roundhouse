@@ -8,7 +8,7 @@ The worker drives the CLI directly from Rust, without an SDK sidecar. It runs th
 
 **The main risk.** The control protocol is described by the SDK's types rather than the CLI's documentation. `crates/agents/tests/claude/contract.rs` checks the adapter against captured real output, and rerunning `tools/smoke/capture_claude_fixture.py` after a CLI upgrade shows what changed.
 
-All of the following was observed on CLI 2.1.319 with Haiku:
+All of the following was observed on CLI 2.1.319 with Haiku, except where a row says otherwise:
 
 | Behavior | What happens | What it means here |
 |---|---|---|
@@ -33,6 +33,7 @@ All of the following was observed on CLI 2.1.319 with Haiku:
 | Order of a block | Deltas, then the finished `assistant` event, then `content_block_stop`, with one `assistant` event per block | The streaming tail depends on this, and a contract test replays it |
 | Other control requests | The CLI can also send `hook_callback`, `mcp_message`, `elicitation` and `request_user_dialog`, according to the SDK's types | The adapter answers these with an error so a session can't hang. None were seen in these runs |
 | Environment | A parent Claude session's variables, such as `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, are inherited by anything it starts | The adapter removes those by name, and passes login settings such as `ANTHROPIC_API_KEY` through |
+| Model aliases | With Opus, on the owner's account: `--model opus` and no `--model` both report `claude-opus-5-5` in `init`, and a `contextWindow` of 1,000,000 in the result's `modelUsage`. The CLI also has `opus[1m]` aliases, and a message saying 1M "is not available for your account" | The picker's aliases give 1M context on an account that has it, with no `[1m]` needed. Another account may get a smaller window |
 | Resources | An idle `claude` process used about 305 MB, against 11 MB for the hub and 8 MB for a worker (debug builds) | An idle agent costs far more memory than the hub and worker together |
 
 ## Sources
