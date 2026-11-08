@@ -73,8 +73,6 @@ providers/
 services/
   relay/           Lets phones reach hubs that aren't publicly reachable
   hosted/          Accounts and billing, only if a hosted service is run
-third_party/
-  option-ext/      Built. Stands in for an MPL-2.0 crate that would otherwise ship. See its source
 tools/
   policy/          Built. Tests that enforce the license and dependency rules below
   smoke/           Built. Runs the stack against the real Claude CLI, and regenerates its fixture

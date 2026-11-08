@@ -1,9 +1,0 @@
-[package]
-name = "option-ext"
-version = "0.2.0"
-edition = "2021"
-publish = false
-description = "Stands in for the MPL-2.0 option-ext crate, which GPUI's font code reaches through dirs. See src/lib.rs."
-
-[lib]
-path = "src/lib.rs"

@@ -54,6 +54,6 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 - **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
 - **Report only what you've verified.** Say what's unverified. "Running" only means an agent hasn't exited, so check processes and file timestamps before describing what it's doing.
 - **Check primary sources for licenses.** Read `Cargo.toml` and the license terms, not GitHub's label, which reported `gpui-mobile` as AGPL when it's tri-licensed with Apache-2.0.
-- **Keep shipped code free of copyleft.** Apache-2.0, MIT and similar only. Zed's GPL-3.0 crates are out, and only GPUI's Apache-2.0 crates are in.
+- **Keep strong copyleft out of shipped code.** No GPL, AGPL or LGPL, so Zed's GPL-3.0 crates are out and only GPUI's Apache-2.0 crates are in. `docs/decisions.md` has why, and `tools/policy` checks it.
 - **Conductor is an inspiration, not a spec.** This is a new product, so design and describe things on their own terms, and don't call it a clone or a replacement. Don't copy Conductor's code or assets, or use its name. Reading its settings and variables is a compatibility feature, nothing more.
 - **Keep client data and credentials out of the repo.** Fixtures are synthetic, and docs use aggregate numbers only.
