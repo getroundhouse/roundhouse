@@ -6,7 +6,7 @@ use protocol::model::{ClientMessageId, Seq, Session, SessionStatus};
 use tracing::{error, warn};
 
 use super::status::{approvals_after, next_status};
-use super::{LiveItem, LiveSession, NO_RUN, publish};
+use super::{LiveItem, LiveSession, Origin, publish};
 use crate::hub::Hub;
 use crate::store::{self};
 
@@ -25,21 +25,19 @@ pub(crate) fn title_from_prompt(prompt: &str) -> Option<String> {
 impl LiveSession {
     /// Commits to the log first, so nothing is seen that isn't durable, then updates live state.
     /// One at a time: both tasks record, and status has to change in the same order as the log.
-    /// `speaks_for_session` is false for a leftover event from a replaced agent, which mustn't change
-    /// the status of the session its replacement is now running.
     pub(crate) async fn record(
         &self,
+        origin: Origin,
         body: EventBody,
         raw: Option<String>,
         client_msg_id: Option<ClientMessageId>,
-        speaks_for_session: bool,
-        run: u64,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
+        let run = origin.run();
         let (next, new_status) = {
             let state = self.state.lock();
-            if speaks_for_session {
+            if origin.speaks_for_session() {
                 let next = next_status(state.status, &body, approvals_after(&state.pending_approvals, &body));
                 (next, (next != state.status).then_some(next))
             } else {
@@ -49,7 +47,9 @@ impl LiveSession {
         let id = self.id.clone();
         let for_store = body.clone();
         let appended = hub
-            .blocking(move |store| store.append(&id, &for_store, raw.as_deref(), client_msg_id.as_ref(), new_status))
+            .blocking(move |store| {
+                store.append(&id, run, &for_store, raw.as_deref(), client_msg_id.as_ref(), new_status)
+            })
             .await?;
         if appended.duplicate {
             return Ok((appended.event, true));
@@ -57,7 +57,7 @@ impl LiveSession {
         let seq = appended.event.seq;
         let mut state = self.state.lock();
         state.last_seq = seq;
-        state.tail.on_event(&body);
+        state.tail.on_event(run, &body);
         match &body {
             EventBody::ApprovalRequested { approval_id, .. } => {
                 state.pending_approvals.insert(approval_id.clone(), run);
@@ -129,13 +129,9 @@ impl LiveSession {
         self.state.lock().title = Some(title);
     }
 
-    /// Records something the hub itself knows, as opposed to agent output.
-    pub(crate) async fn record_own(&self, body: EventBody) -> Result<(SessionEvent, bool), ApiError> {
-        self.record(body, None, None, true, NO_RUN).await
-    }
-
-    pub(crate) async fn record_or_log(&self, body: EventBody) {
-        if let Err(e) = self.record_own(body).await {
+    /// For where nobody is waiting to hear that recording failed.
+    pub(crate) async fn record_or_log(&self, origin: Origin, body: EventBody) {
+        if let Err(e) = self.record(origin, body, None, None).await {
             error!(session = %self.id, "could not record an event: {e}");
         }
     }

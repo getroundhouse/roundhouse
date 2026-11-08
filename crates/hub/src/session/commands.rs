@@ -9,8 +9,9 @@ use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
-use super::{AgentRun, Command, LiveSession, NO_RUN};
+use super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
+use crate::store::Store;
 use crate::worker_link::WorkerLink;
 
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
@@ -56,13 +57,27 @@ impl LiveSession {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
+        self.start_agent(&hub, &link, cwd, env).await?;
+        Ok(link)
+    }
+
+    /// Picks the run before the launch and marks it current, so the new agent's first deltas aren't
+    /// taken for a replaced agent's and dropped.
+    async fn start_agent(
+        &self,
+        hub: &Hub,
+        link: &WorkerLink,
+        cwd: String,
+        env: Vec<(String, String)>,
+    ) -> Result<(), ApiError> {
         let (resume, model, permission_mode) = {
             let state = self.state.lock();
             (state.agent_opened, state.model.clone(), state.permission_mode.clone())
         };
+        let asked = hub.blocking(Store::next_run).await?;
         let spec = AgentSpec {
             session_id: self.id.clone(),
-            run: hub.next_run(),
+            run: asked,
             agent: self.agent,
             cwd,
             agent_session_id: self.agent_session_id.clone(),
@@ -71,17 +86,37 @@ impl LiveSession {
             permission_mode,
             env,
         };
-        let reply = link.call(WorkerRequest::AgentStart(spec)).await?;
-        let WorkerResponse::AgentStarted { pid, run, already_running } = reply else {
-            return Err(ApiError::new(ErrorCode::Worker, format!("unexpected reply: {reply:?}")));
+        let starting = AgentRun { link: link.id, run: asked };
+        self.state.lock().agent = Some(starting);
+        let reply = link.call(WorkerRequest::AgentStart(spec)).await;
+        let Ok(WorkerResponse::AgentStarted { pid, run, already_running }) = reply else {
+            let mut state = self.state.lock();
+            if state.agent == Some(starting) {
+                state.agent = None;
+            }
+            return Err(match reply {
+                Err(e) => e,
+                Ok(reply) => ApiError::new(ErrorCode::Worker, format!("unexpected reply: {reply:?}")),
+            });
         };
-        self.state.lock().agent = Some(AgentRun { link: link.id, run });
+        let current = {
+            let mut state = self.state.lock();
+            // An agent that was already running keeps the run it started with. A new one can exit before
+            // this reply arrives, and then its exit has already been recorded, so it isn't made current
+            // again.
+            let current = already_running || state.agent == Some(starting);
+            if current {
+                state.agent = Some(AgentRun { link: link.id, run });
+            }
+            current
+        };
         if !already_running {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;
-            self.record_or_log(EventBody::AgentStarted { pid, resumed: resume }).await;
+            let started = EventBody::AgentStarted { pid, resumed: resume };
+            self.record_or_log(Origin::Run { run, current }, started).await;
         }
-        Ok(link)
+        Ok(())
     }
 
     async fn forward_prompt(&self, text: String) -> Result<(), ApiError> {
@@ -115,7 +150,7 @@ impl LiveSession {
         }
         self.name_from(text).await;
         let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: client_msg_id.clone() };
-        let (event, duplicate) = self.record(body, None, client_msg_id, true, NO_RUN).await?;
+        let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         Ok((event.seq, duplicate))
     }
 
@@ -153,10 +188,13 @@ impl LiveSession {
             && let SetupStatus::Failed { .. } = workspace.setup
             && !self.warned_about_setup.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
-            self.record_or_log(EventBody::Notice {
-                level: NoticeLevel::Warning,
-                message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
-            })
+            self.record_or_log(
+                Origin::Hub,
+                EventBody::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
+                },
+            )
             .await;
         }
         if let Err(e) = self.forward_prompt(text).await {
@@ -165,12 +203,15 @@ impl LiveSession {
             }
             warn!(session = %self.id, "could not deliver a prompt: {e}");
             self.cancel_approvals(None).await;
-            self.record_or_log(EventBody::AgentExited {
-                reason: ExitReason::StartFailed,
-                code: None,
-                signal: None,
-                stderr_tail: vec![e.message.clone()],
-            })
+            self.record_or_log(
+                Origin::Hub,
+                EventBody::AgentExited {
+                    reason: ExitReason::StartFailed,
+                    code: None,
+                    signal: None,
+                    stderr_tail: vec![e.message.clone()],
+                },
+            )
             .await;
         }
     }
@@ -184,7 +225,7 @@ impl LiveSession {
                     format!("approval {approval_id} isn't waiting for an answer"),
                 ));
             };
-            if state.agent.map(|agent| agent.run) != Some(*asked_by) {
+            if asked_by.is_none() || state.agent.map(|agent| agent.run) != *asked_by {
                 return Err(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
             }
         }
@@ -192,7 +233,8 @@ impl LiveSession {
             ApprovalDecision::Allow { .. } | ApprovalDecision::Answer { .. } => ApprovalOutcome::Allowed,
             ApprovalDecision::Deny { .. } => ApprovalOutcome::Denied,
         };
-        self.record_own(EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome }).await?;
+        let resolved = EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome };
+        self.record(Origin::Hub, resolved, None, None).await?;
         let hub = self.hub()?;
         let link = hub
             .existing_worker(&self.workspace_id)
@@ -201,10 +243,13 @@ impl LiveSession {
         let WorkerResponse::AgentNotRunning = link.call(request).await? else {
             return Ok(());
         };
-        self.record_or_log(EventBody::Notice {
-            level: NoticeLevel::Warning,
-            message: "The agent had already exited when this approval was answered.".to_string(),
-        })
+        self.record_or_log(
+            Origin::Hub,
+            EventBody::Notice {
+                level: NoticeLevel::Warning,
+                message: "The agent had already exited when this approval was answered.".to_string(),
+            },
+        )
         .await;
         Err(ApiError::new(ErrorCode::Conflict, "the agent has exited"))
     }

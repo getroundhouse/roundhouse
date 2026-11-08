@@ -154,7 +154,7 @@ impl SessionLog {
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
-        self.tail.on_event(&event.body);
+        self.tail.on_event(event.run, &event.body);
         let added = event.seq > self.last_seq;
         self.last_seq = self.last_seq.max(event.seq);
         // Only the tail stays loaded from live events. Anything older is fetched when scrolled to.
@@ -225,13 +225,14 @@ mod tests {
             session_id: "s".into(),
             seq,
             ts_ms: 0,
+            run: None,
             body: EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") },
             raw: None,
         }
     }
 
     fn event(seq: Seq, body: EventBody) -> SessionEvent {
-        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, body, raw: None }
+        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
     }
 
     pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {
@@ -340,6 +341,7 @@ mod tests {
     fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
         let mut log = SessionLog::new(0);
         log.apply_delta(&StreamDelta {
+            run: None,
             message_id: "m".into(),
             parent_tool_use_id: None,
             change: DeltaChange::Text { index: 0, text: "hi".into() },

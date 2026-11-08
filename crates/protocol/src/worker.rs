@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
-use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, SessionId};
+use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, SessionId};
 use crate::tail::StreamDelta;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -95,9 +95,9 @@ pub enum WorkerRequest {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentSpec {
     pub session_id: SessionId,
-    /// Chosen by the hub and unique to this launch. The agent's events carry it, so a late event
-    /// from an agent that has been replaced can't be taken for one from the new agent.
-    pub run: u64,
+    /// Chosen by the hub and unique to this launch. The agent's output carries it, so a late event
+    /// or delta from an agent that has been replaced can't be taken for one from the new agent.
+    pub run: RunId,
     pub agent: AgentKind,
     pub cwd: String,
     /// The agent's own ID for this conversation, which survives restarts.
@@ -139,7 +139,7 @@ pub enum WorkerResponse {
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {
         pid: u32,
-        run: u64,
+        run: RunId,
         already_running: bool,
     },
     /// The session has no running agent. The hub starts one and sends the request again.
@@ -156,7 +156,7 @@ pub enum WorkerFrame {
     },
     AgentEvent {
         session_id: SessionId,
-        run: u64,
+        run: RunId,
         body: EventBody,
         /// The agent's original line, kept by the hub beside the event.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,6 +164,7 @@ pub enum WorkerFrame {
     },
     AgentDelta {
         session_id: SessionId,
+        run: RunId,
         delta: StreamDelta,
     },
 }

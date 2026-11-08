@@ -5,14 +5,14 @@
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use client_core::{Client, ClientError};
+use client_core::{Client, ClientError, SubscriptionItem};
 use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::SessionStatus;
 
 use crate::support::{
-    Stack, assert_gapless, assistant_text, is_alive, latest_started_pid, parent_of, pending_approval, read_all, signal,
-    started_pid, wait_for_approval, wait_for_status, wait_for_turn_end, wait_until,
+    Follower, Stack, assert_gapless, assistant_text, is_alive, latest_started_pid, parent_of, pending_approval,
+    read_all, signal, started_pid, wait_for_approval, wait_for_status, wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -242,8 +242,10 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    // Something it started keeps its stdout open, so the worker takes seconds to report the exit.
-    client.session_prompt(&session.id, "say:first; holdpipe:7; crash:3", None).unwrap();
+    // Something it started keeps its stdout open, so the worker takes seconds to report the exit, and
+    // writes to it when told, just before letting go.
+    let go = stack.path("late-output");
+    client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; crash:3", go.display()), None).unwrap();
     let mut first = None;
     wait_until("the agent to start", || {
         first = latest_started_pid(&read_all(&client, &session.id));
@@ -255,21 +257,41 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
         |events: &[SessionEvent]| events.iter().filter(|e| matches!(e.body, EventBody::AgentExited { .. })).count();
     assert_eq!(exits(&read_all(&client, &session.id)), 0, "the exit should still be on its way");
 
-    // A prompt in that window goes to a new agent, rather than failing on the dead one's pipe.
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    // A prompt in that window goes to a new agent, rather than failing on the dead one's pipe. The new
+    // agent leaves text streaming, which the old one's exit mustn't clear.
+    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let mut follower = Follower::default();
+    client.session_prompt(&session.id, "partial:still writing; hang:60000", None).unwrap();
+    follower.drain_until(&subscription, "the new agent's text", |f| f.tail_text().contains("still writing"));
+    let late = |events: &[SessionEvent]| {
+        events.iter().any(|e| matches!(&e.body, EventBody::AgentOther { kind } if kind == "late_marker"))
+    };
+    assert!(!late(&follower.events), "the new agent should be writing before the old one's last output");
+    std::fs::write(&go, "").unwrap();
     let mut second = 0;
     wait_until("a new agent to start", || {
         second = latest_started_pid(&read_all(&client, &session.id)).unwrap_or(first);
         second != first
     });
-    wait_until("the old exit to be reported", || exits(&read_all(&client, &session.id)) == 1);
+    follower.drain_until(&subscription, "the old agent's last output", |f| late(&f.events));
+    assert_eq!(follower.tail_text(), "still writing", "the old agent's text must not reach anyone");
+    follower.drain_until(&subscription, "the old exit to be reported", |f| exits(&f.events) == 1);
     let events = read_all(&client, &session.id);
     assert_gapless(&events);
     assert!(!events.iter().any(|e| matches!(e.body, EventBody::AgentExited { reason: ExitReason::StartFailed, .. })));
 
-    // It's in the log, but it wasn't about the agent running now.
+    // It's in the log, but it wasn't about the agent running now: not its status, and not its text,
+    // either for a client that was watching or for one that starts watching now.
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Running);
     assert!(is_alive(second));
+    assert_eq!(follower.tail_text(), "still writing");
+    let joining = client.session_subscribe(&session.id, 1).unwrap();
+    let snapshot = loop {
+        if let SubscriptionItem::Tail(tail) = joining.items.recv_timeout(Duration::from_secs(30)).unwrap() {
+            break tail;
+        }
+    };
+    assert_eq!(Follower { events: Vec::new(), tail: snapshot }.tail_text(), "still writing");
 
     // The hub still knows about the new agent, so losing its worker is noticed and it gets stopped.
     signal(parent_of(second), libc::SIGKILL);

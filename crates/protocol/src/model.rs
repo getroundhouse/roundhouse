@@ -59,6 +59,40 @@ ids!(
 /// Position in a session's event log. The first event is 1, and there are no gaps.
 pub type Seq = u64;
 
+/// Declares counters a hub hands out: numbers that only go up, with a type each so that one can't be
+/// passed as another. They're plain numbers on the wire and in storage.
+macro_rules! counters {
+    ($($(#[$meta:meta])* $name:ident),+ $(,)?) => {$(
+        $(#[$meta])*
+        #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        #[serde(transparent)]
+        pub struct $name(u64);
+
+        impl $name {
+            pub const fn new(value: u64) -> Self {
+                Self(value)
+            }
+
+            pub const fn get(self) -> u64 {
+                self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+    )+};
+}
+
+counters!(
+    /// One launch of an agent. The hub picks it before the launch, and it never repeats, even across
+    /// hub restarts, so whatever a run produced can always be told apart from its replacement's. A
+    /// later launch has a higher one.
+    RunId,
+);
+
 /// A `seq` as a position in a list of events.
 #[expect(
     clippy::cast_possible_truncation,

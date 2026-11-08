@@ -28,11 +28,19 @@ fn delta() -> impl Strategy<Value = StreamDelta> {
         Just(DeltaChange::MessageStop),
         Just(DeltaChange::Unknown),
     ];
-    ("m[0-2]", option::of("t[01]"), change).prop_map(|(message_id, parent_tool_use_id, change)| StreamDelta {
-        message_id: message_id.into(),
-        parent_tool_use_id: parent_tool_use_id.map(Into::into),
-        change,
-    })
+    (option::of(run()), "m[0-2]", option::of("t[01]"), change).prop_map(
+        |(run, message_id, parent_tool_use_id, change)| StreamDelta {
+            run,
+            message_id: message_id.into(),
+            parent_tool_use_id: parent_tool_use_id.map(Into::into),
+            change,
+        },
+    )
+}
+
+/// Three runs, so one often ends while another is writing, earlier or later.
+fn run() -> impl Strategy<Value = RunId> {
+    (1u64..4).prop_map(RunId::new)
 }
 
 fn applied(deltas: &[StreamDelta]) -> Tail {
@@ -128,9 +136,33 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(&finished(&which.as_str().into()));
+        after.on_event(None, &finished(&which.as_str().into()));
 
         let others: Vec<_> = before.messages.iter().filter(|m| m.message_id.as_str() != which).cloned().collect();
         prop_assert_eq!(after.messages, others);
+    }
+
+    /// The end of a run's turn clears what that run or an earlier one left open, and leaves a later
+    /// run's writing alone, however late it arrives.
+    #[test]
+    fn the_end_of_a_turn_never_clears_a_later_run(deltas in vec(delta(), 0..40), ended in run()) {
+        let before = applied(&deltas);
+        let mut after = before.clone();
+
+        after.on_event(Some(ended), &turn_ended());
+
+        let later: Vec<_> = before.messages.iter().filter(|m| m.run.is_some_and(|run| run > ended)).cloned().collect();
+        prop_assert_eq!(after.messages, later);
+    }
+}
+
+fn turn_ended() -> EventBody {
+    EventBody::TurnEnded {
+        outcome: crate::event::TurnOutcome::Cancelled,
+        result: None,
+        errors: Vec::new(),
+        duration_ms: None,
+        cost_usd: None,
+        num_turns: None,
     }
 }

@@ -77,6 +77,31 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE sessions ADD COLUMN title TEXT;
     ALTER TABLE sessions ADD COLUMN closed_at_ms INTEGER;
 ",
+    // Rebuilt rather than altered, so `run` comes before `raw` and `raw` stays last.
+    r"
+    CREATE TABLE events_with_run (
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        ts_ms INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        client_msg_id TEXT,
+        run INTEGER,
+        body TEXT NOT NULL,
+        raw TEXT,
+        PRIMARY KEY (session_id, seq)
+    );
+    INSERT INTO events_with_run (session_id, seq, ts_ms, kind, client_msg_id, body, raw)
+        SELECT session_id, seq, ts_ms, kind, client_msg_id, body, raw FROM events;
+    DROP TABLE events;
+    ALTER TABLE events_with_run RENAME TO events;
+    CREATE UNIQUE INDEX events_client_msg ON events (session_id, client_msg_id) WHERE client_msg_id IS NOT NULL;
+    CREATE INDEX events_by_kind ON events (session_id, kind);
+    CREATE TABLE counters (
+        name TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
+    );
+    INSERT INTO counters (name, value) VALUES ('run', 0);
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
@@ -90,14 +115,23 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
+/// How many migrations there were before events recorded their run, so a test can make an older database.
+#[cfg(test)]
+pub(crate) const BEFORE_RUNS: usize = 4;
+
 pub(crate) fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+    migrate_to(conn, MIGRATIONS.len())
+}
+
+/// Applies migrations until `target` have run.
+pub(crate) fn migrate_to(conn: &mut Connection, target: usize) -> Result<(), StoreError> {
     let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
     // Negative isn't something this code ever writes, so it counts as newer.
     let version = usize::try_from(version).unwrap_or(usize::MAX);
     if version > MIGRATIONS.len() {
         return Err(StoreError::TooNew { found: version, known: MIGRATIONS.len() });
     }
-    for (reached, migration) in (1_i64..).zip(MIGRATIONS).skip(version) {
+    for (reached, migration) in (1_i64..).zip(&MIGRATIONS[..target]).skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(migration)?;
         tx.pragma_update(None, "user_version", reached)?;

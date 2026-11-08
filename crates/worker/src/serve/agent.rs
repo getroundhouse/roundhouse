@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::SessionId;
+use protocol::model::{RunId, SessionId};
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -41,20 +41,20 @@ pub(crate) async fn start_agent(
     };
     let process = agents::spawn(spec, tx, options)?;
     let pid = process.pid();
-    info!(pid, %session_id, run, "started agent");
+    info!(pid, %session_id, %run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
 }
 
-async fn forward_output(state: Arc<State>, session_id: SessionId, run: u64, mut output: mpsc::Receiver<AgentOutput>) {
+async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mut output: mpsc::Receiver<AgentOutput>) {
     while let Some(item) = output.recv().await {
         let frame = match item {
             AgentOutput::Event { body, raw } => {
                 WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw }
             }
-            AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), delta },
+            AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();

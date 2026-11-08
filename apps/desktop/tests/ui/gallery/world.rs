@@ -85,6 +85,7 @@ impl World {
                 session_id: id.clone(),
                 seq,
                 ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
+                run: None,
                 body,
                 raw: None,
             })

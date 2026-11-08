@@ -26,7 +26,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
-| Run | One launch of an agent. A session can have many, because an agent can exit and be started again | `AgentSpec.run` |
+| Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
 | Turn | From a prompt until the agent finishes responding. A run can have many, and a prompt sent mid-turn folds into the running one | `TurnEnded` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |

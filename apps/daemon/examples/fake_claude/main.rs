@@ -10,7 +10,9 @@
 //!   tool:COMMAND    Ask for approval if the mode requires it, then run COMMAND with `sh -c`.
 //!   hang:MS         A tool that takes MS milliseconds. Cancelling stops it.
 //!   partial:TEXT    Start a message and leave it unfinished, so a crash can cut it off.
-//!   holdpipe:SECS   Leave a process holding stdout open that long, so an exit takes time to notice.
+//!   late:FILE:TEXT  Leave a process holding stdout open until FILE exists, so an exit takes time to notice,
+//!                   then write TEXT as a delta and a `late_marker` line, as an agent that has been replaced
+//!                   might. The worker reads for 5 s after an exit.
 //!   recall          Say every prompt this conversation has seen, to prove a resume worked.
 //!   crash:CODE      Exit immediately with CODE.
 //!   env:NAME        Say the value of an environment variable.
