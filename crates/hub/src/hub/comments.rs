@@ -1,7 +1,7 @@
 //! Comments left on a diff.
 
-use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{CommentId, DiffComment, DiffSide, WorkspaceId};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
+use protocol::model::{CommentId, DiffComment, DiffSide, RecordKey, Rev, WorkspaceId};
 
 use super::{Hub, new_id};
 use crate::store::now_ms;
@@ -22,10 +22,18 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that side of a diff"));
         }
         self.workspace(&workspace_id).await?;
-        let comment =
-            DiffComment { id: new_id().into(), workspace_id, path, side, line, text, created_at_ms: now_ms() };
-        let stored = comment.clone();
-        self.blocking(move |store| store.add_comment(&stored)).await?;
+        let comment = DiffComment {
+            id: new_id().into(),
+            workspace_id,
+            path,
+            side,
+            line,
+            text,
+            created_at_ms: now_ms(),
+            rev: Rev::default(),
+        };
+        let comment = self.blocking(move |store| store.add_comment(&comment)).await?;
+        self.notify(HubNotice::Comment(comment.clone()));
         Ok(comment)
     }
 
@@ -34,6 +42,10 @@ impl Hub {
     }
 
     pub(crate) async fn comment_delete(&self, id: CommentId) -> Result<(), ApiError> {
-        self.blocking(move |store| store.delete_comment(&id)).await
+        let deleted = id.clone();
+        if let Some(rev) = self.blocking(move |store| store.delete_comment(&deleted)).await? {
+            self.notify(HubNotice::Removed { record: RecordKey::Comment { id }, rev });
+        }
+        Ok(())
     }
 }

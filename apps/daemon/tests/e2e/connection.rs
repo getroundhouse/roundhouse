@@ -10,7 +10,7 @@ use std::time::Instant;
 use client_core::{Client, ClientError, HubAdmin, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, DiffSide, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, DiffSide, RecordKey, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
     Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_setup, wait_for_turn_end, wait_until,
@@ -61,6 +61,43 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let restored = client.workspace_restore(&workspace.id).unwrap();
     let HubNotice::Workspace(seen) = next_notice(&feed, "the restore") else { panic!() };
     assert_eq!((seen.id.as_str(), seen.status), (restored.id.as_str(), WorkspaceStatus::Ready));
+}
+
+#[test]
+fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let feed = client.feed_subscribe().unwrap();
+    let (workspace, session) = stack.workspace(&client);
+    let before = client.records_list().unwrap();
+
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    let comment = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this").unwrap();
+    client.comment_delete(&comment.id).unwrap();
+    let mut notices = Vec::new();
+    while !matches!(notices.last(), Some(HubNotice::Removed { .. })) {
+        notices.push(next_notice(&feed, "the comment's removal"));
+    }
+    let after = client.records_list().unwrap();
+
+    // Each change since the first list is newer than it, and the second list is at least as new.
+    let newest_session = notices.iter().rev().find_map(|n| match n {
+        HubNotice::Session(s) if s.id == session.id && s.rev > before.rev => Some(s),
+        _ => None,
+    });
+    let listed = after.sessions.iter().find(|s| s.id == session.id).unwrap();
+    assert!(listed.rev >= newest_session.unwrap().rev);
+    assert_eq!(listed.status, SessionStatus::Idle);
+    let added = notices.iter().find_map(|n| match n {
+        HubNotice::Comment(c) if c.id == comment.id => Some(c),
+        _ => None,
+    });
+    assert_eq!(added, Some(&comment));
+    let Some(HubNotice::Removed { record, rev }) = notices.last() else { unreachable!() };
+    assert_eq!(record, &RecordKey::Comment { id: comment.id.clone() });
+    assert!(before.rev < comment.rev && comment.rev < *rev && *rev <= after.rev);
+    assert!(after.comments.is_empty());
 }
 
 #[test]

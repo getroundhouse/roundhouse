@@ -3,7 +3,8 @@
 #![cfg(test)]
 
 use protocol::model::{
-    CommentId, DiffComment, DiffSide, GitDiff, PullRequest, SessionStatus, SetupStatus, WorkspaceId, WorkspaceStatus,
+    CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, WorkspaceId,
+    WorkspaceStatus,
 };
 
 use super::chats;
@@ -133,6 +134,7 @@ fn diff() -> World {
             line: 101,
             text: "Should this say when it was last checked, so a stale state can show as stale?".to_string(),
             created_at_ms: 0,
+            rev: Rev::default(),
         }],
     );
     world

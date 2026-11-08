@@ -43,11 +43,12 @@ fn the_stop_button_stops_the_turn(cx: &mut TestAppContext) {
     });
     ui.click("stop");
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
-    assert!(
+    // The session's status and its log arrive separately, in either order.
+    ui.wait("the cancelled turn in the log", |ui| {
         ui.events()
             .iter()
             .any(|e| matches!(e.body, EventBody::TurnEnded { outcome: protocol::event::TurnOutcome::Cancelled, .. }))
-    );
+    });
 }
 
 #[gpui_kit::test]

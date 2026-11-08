@@ -342,6 +342,7 @@ mod tests {
             line,
             text: text.into(),
             created_at_ms: 0,
+            rev: protocol::model::Rev::default(),
         }
     }
 

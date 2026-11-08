@@ -103,7 +103,9 @@ impl LiveSession {
             return;
         }
         self.state.lock().permission_mode = Some(mode);
-        self.announce(&hub);
+        if let Err(e) = self.announce(&hub).await {
+            error!(session = %self.id, "could not announce the agent's mode: {e}");
+        }
     }
 
     /// Closes open approvals that nobody can answer now: those from `run`, or all if it's `None`.

@@ -2,13 +2,12 @@
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Seq, Session, SessionStatus};
+use protocol::model::{ClientMessageId, Session};
 use tracing::{error, warn};
 
 use super::status::{approvals_after, next_status};
 use super::{LiveItem, LiveSession, Origin, publish};
 use crate::hub::Hub;
-use crate::store::{self};
 
 /// The first line of a prompt, cut at a word if it's long.
 pub(crate) fn title_from_prompt(prompt: &str) -> Option<String> {
@@ -55,64 +54,48 @@ impl LiveSession {
             return Ok((appended.event, true));
         }
         let seq = appended.event.seq;
-        let mut state = self.state.lock();
-        state.last_seq = seq;
-        state.tail.on_event(run, &body);
-        match &body {
-            EventBody::ApprovalRequested { approval_id, .. } => {
-                state.pending_approvals.insert(approval_id.clone(), run);
+        {
+            let mut state = self.state.lock();
+            state.last_seq = seq;
+            state.tail.on_event(run, &body);
+            match &body {
+                EventBody::ApprovalRequested { approval_id, .. } => {
+                    state.pending_approvals.insert(approval_id.clone(), run);
+                }
+                EventBody::ApprovalResolved { approval_id, .. } => {
+                    state.pending_approvals.remove(approval_id);
+                }
+                EventBody::UserPrompt { .. }
+                | EventBody::AgentStarted { .. }
+                | EventBody::AgentInit { .. }
+                | EventBody::AgentState { .. }
+                | EventBody::Assistant { .. }
+                | EventBody::AgentUser { .. }
+                | EventBody::TurnEnded { .. }
+                | EventBody::AgentExited { .. }
+                | EventBody::Notice { .. }
+                | EventBody::AgentMode { .. }
+                | EventBody::AgentOther { .. }
+                | EventBody::Unknown => {}
             }
-            EventBody::ApprovalResolved { approval_id, .. } => {
-                state.pending_approvals.remove(approval_id);
-            }
-            EventBody::UserPrompt { .. }
-            | EventBody::AgentStarted { .. }
-            | EventBody::AgentInit { .. }
-            | EventBody::AgentState { .. }
-            | EventBody::Assistant { .. }
-            | EventBody::AgentUser { .. }
-            | EventBody::TurnEnded { .. }
-            | EventBody::AgentExited { .. }
-            | EventBody::Notice { .. }
-            | EventBody::AgentMode { .. }
-            | EventBody::AgentOther { .. }
-            | EventBody::Unknown => {}
+            state.status = next;
+            publish(&mut state, LiveItem::Appended(seq));
         }
-        state.status = next;
-        publish(&mut state, LiveItem::Appended(seq));
-        drop(state);
-        if new_status.is_some() {
-            hub.notify(HubNotice::Session(self.record_now(next, seq, appended.event.ts_ms)));
+        if new_status.is_some()
+            && let Err(e) = self.announce(&hub).await
+        {
+            error!(session = %self.id, "could not announce a change of status: {e}");
         }
         Ok((appended.event, false))
     }
 
-    fn record_now(&self, status: SessionStatus, last_seq: Seq, updated_at_ms: i64) -> Session {
-        let state = self.state.lock();
-        Session {
-            id: self.id.clone(),
-            workspace_id: self.workspace_id.clone(),
-            agent: self.agent,
-            model: state.model.clone(),
-            permission_mode: state.permission_mode.clone(),
-            status,
-            last_seq,
-            created_at_ms: self.created_at_ms,
-            updated_at_ms,
-            title: state.title.clone(),
-            closed_at_ms: state.closed_at_ms,
-        }
-    }
-
-    /// What this session is right now, for anything that changed outside the log.
-    pub(crate) fn announce(&self, hub: &Hub) -> Session {
-        let (status, last_seq) = {
-            let state = self.state.lock();
-            (state.status, state.last_seq)
-        };
-        let session = self.record_now(status, last_seq, store::now_ms());
+    /// Tells everyone following the feed what this session is now. It's read back from the store
+    /// rather than put together here, so what's sent and its revision always belong together.
+    pub(crate) async fn announce(&self, hub: &Hub) -> Result<Session, ApiError> {
+        let id = self.id.clone();
+        let session = hub.blocking(move |store| store.get_session(&id)).await?.session;
         hub.notify(HubNotice::Session(session.clone()));
-        session
+        Ok(session)
     }
 
     /// The first prompt names the session.

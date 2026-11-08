@@ -1,6 +1,6 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, DiffComment, Repo, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
+    AgentKind, ApprovalId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Workspace, WorkspaceStatus,
 };
 
 use super::*;
@@ -8,7 +8,9 @@ use super::*;
 fn store_with_session(dir: &Path) -> Store {
     let store = Store::open(&dir.join("hub.db")).unwrap();
     let now = now_ms();
-    store.add_repo(&Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now }).unwrap();
+    let repo =
+        Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
+    store.add_repo(&repo).unwrap();
     store
         .insert_workspace(&Workspace {
             id: "w".into(),
@@ -24,6 +26,7 @@ fn store_with_session(dir: &Path) -> Store {
             archived_at_ms: None,
             setup: SetupStatus::NotStarted,
             port_base: 55_000,
+            rev: Rev::default(),
         })
         .unwrap();
     store
@@ -36,6 +39,7 @@ fn store_with_session(dir: &Path) -> Store {
                 permission_mode: None,
                 title: None,
                 closed_at_ms: None,
+                rev: Rev::default(),
                 status: SessionStatus::Idle,
                 last_seq: 0,
                 created_at_ms: now,
@@ -159,7 +163,7 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
 }
 
 #[test]
-fn an_event_recorded_before_runs_were_is_kept_with_none() {
+fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("hub.db");
     let mut conn = schema::open_connection(&path).unwrap();
@@ -183,6 +187,76 @@ fn an_event_recorded_before_runs_were_is_kept_with_none() {
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
     assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, 2);
+    // Records from before revisions are at the first one, and anything after moves past it.
+    let records = store.list_records().unwrap();
+    assert_eq!(
+        (records.repos[0].rev, records.workspaces[0].rev, records.sessions[0].rev),
+        (Rev::new(1), Rev::new(1), Rev::new(1))
+    );
+    store.set_session_title(&"s".into(), "t").unwrap();
+    assert!(store.get_session(&"s".into()).unwrap().session.rev > Rev::new(1));
+}
+
+/// Every way a record changes moves its revision past everything before it, and a list says how far
+/// it reaches, so a client can always tell which of two copies is newer.
+#[test]
+fn every_change_to_a_record_gives_it_a_newer_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let mut seen = store.list_records().unwrap().rev;
+    let mut newer = |rev: Rev, what: &str| {
+        assert!(rev > seen, "{what} left revision {rev}, which isn't past {seen}");
+        seen = rev;
+    };
+    let session = |store: &Store| store.get_session(&"s".into()).unwrap().session.rev;
+    let workspace = |store: &Store| store.get_workspace(&"w".into()).unwrap().rev;
+
+    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
+    let status_changed = session(&store);
+    newer(status_changed, "a change of status");
+    store.append(&"s".into(), None, &notice("y"), None, None, None).unwrap();
+    assert_eq!(session(&store), status_changed, "an event alone isn't announced, so it leaves the revision");
+    store.set_session_options(&"s".into(), Some("model"), None).unwrap();
+    newer(session(&store), "a model");
+    store.set_session_title(&"s".into(), "title").unwrap();
+    newer(session(&store), "a title");
+    store.set_session_closed(&"s".into(), Some(1)).unwrap();
+    newer(session(&store), "closing");
+    newer(store.workspace_ready(&"w".into(), "/w", "alder", "main").unwrap().rev, "a ready workspace");
+    newer(store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap().rev, "setup");
+    store.set_workspace_branch(&"w".into(), "renamed").unwrap();
+    newer(workspace(&store), "a branch");
+    newer(store.set_workspace_archived(&"w".into(), true).unwrap().rev, "archiving");
+    let mut half_made = store.get_workspace(&"w".into()).unwrap();
+    half_made.id = "w2".into();
+    half_made.name = "birch".into();
+    store.insert_workspace(&half_made).unwrap();
+    newer(store.get_workspace(&"w2".into()).unwrap().rev, "a new workspace");
+    newer(store.delete_workspace(&"w2".into()).unwrap().unwrap(), "removing a workspace");
+    let mut another = store.get_session(&"s".into()).unwrap();
+    another.session.id = "s2".into();
+    store.insert_session(&another).unwrap();
+    newer(store.get_session(&"s2".into()).unwrap().session.rev, "a new session");
+    let comment = DiffComment {
+        id: "c".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: protocol::model::DiffSide::New,
+        line: 1,
+        text: "x".into(),
+        created_at_ms: 0,
+        rev: Rev::default(),
+    };
+    newer(store.add_comment(&comment).unwrap().rev, "a comment");
+    newer(store.delete_comment(&"c".into()).unwrap().unwrap(), "removing a comment");
+    let repo = Repo { id: "r2".into(), name: "two".into(), path: "/two".into(), created_at_ms: 0, rev: Rev::default() };
+    newer(store.add_repo(&repo).unwrap().rev, "a repository");
+
+    let records = store.list_records().unwrap();
+    assert_eq!(records.rev, seen);
+    let revs = records.repos.iter().map(|r| r.rev).chain(records.workspaces.iter().map(|w| w.rev));
+    assert!(revs.chain(records.sessions.iter().map(|s| s.rev)).all(|rev| rev <= records.rev));
+    assert_eq!(store.delete_comment(&"c".into()).unwrap(), None, "nothing to remove");
 }
 
 #[test]
@@ -206,9 +280,11 @@ fn comments_belong_to_a_workspace_and_can_be_removed() {
         line: 12,
         text: "Rename this".into(),
         created_at_ms: 1,
+        rev: Rev::default(),
     };
-    store.add_comment(&comment).unwrap();
-    assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![comment]);
+    let stored = store.add_comment(&comment).unwrap();
+    assert_eq!(stored, DiffComment { rev: stored.rev, ..comment });
+    assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![stored]);
     assert_eq!(store.list_comments(&"other".into()).unwrap(), vec![]);
     store.delete_comment(&"c1".into()).unwrap();
     assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![]);
@@ -244,7 +320,13 @@ fn adding_a_repo_twice_returns_the_same_record() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let again = store
-        .add_repo(&Repo { id: "other".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: 0 })
+        .add_repo(&Repo {
+            id: "other".into(),
+            name: "repo".into(),
+            path: "/repo".into(),
+            created_at_ms: 0,
+            rev: Rev::default(),
+        })
         .unwrap();
     assert_eq!(again.id, "r".into());
 }

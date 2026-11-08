@@ -7,8 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, Session};
-use rusqlite::Connection;
+use protocol::model::{AgentSessionId, Rev, Session};
+use rusqlite::{Connection, Row};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -16,6 +16,7 @@ use serde_json::Value;
 mod comments;
 mod error;
 mod events;
+mod records;
 mod repos;
 mod schema;
 mod sessions;
@@ -64,6 +65,28 @@ fn text_of<T: Serialize>(value: &T) -> String {
         Ok(Value::String(text)) => text,
         _ => unreachable!("only used with unit enums"),
     }
+}
+
+fn rev_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Rev> {
+    Ok(Rev::new(row.get::<_, i64>(column)?.cast_unsigned()))
+}
+
+impl Store {
+    /// Deletes the row with this ID from `table`. Returns the revision of the removal, or `None` if there
+    /// was nothing to remove.
+    fn delete(&self, table: &str, id: &str) -> Result<Option<Rev>, StoreError> {
+        let conn = lock(&self.writer);
+        let deleted = conn.execute(&format!("DELETE FROM {table} WHERE id = ?"), [id])?;
+        Ok(if deleted == 0 { None } else { Some(current_rev(&conn)?) })
+    }
+}
+
+/// The newest revision, which on the writer is the one its last change made.
+fn current_rev(conn: &Connection) -> rusqlite::Result<Rev> {
+    Ok(Rev::new(
+        conn.query_row("SELECT value FROM counters WHERE name = 'rev'", [], |row| row.get::<_, i64>(0))?
+            .cast_unsigned(),
+    ))
 }
 
 fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {

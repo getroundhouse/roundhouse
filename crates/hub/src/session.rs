@@ -151,7 +151,6 @@ pub(crate) struct LiveSession {
     pub workspace_id: WorkspaceId,
     agent: AgentKind,
     agent_session_id: AgentSessionId,
-    created_at_ms: i64,
     /// So a failed setup is mentioned once, rather than on every prompt.
     warned_about_setup: std::sync::atomic::AtomicBool,
     hub: Weak<Hub>,
@@ -185,7 +184,6 @@ impl LiveSession {
             workspace_id: stored.session.workspace_id.clone(),
             agent: stored.session.agent,
             agent_session_id: stored.agent_session_id,
-            created_at_ms: stored.session.created_at_ms,
             warned_about_setup: std::sync::atomic::AtomicBool::new(false),
             hub: Arc::downgrade(hub),
             commands: commands_tx,
@@ -268,7 +266,7 @@ impl LiveSession {
             state.model = model.or(state.model.take());
             state.permission_mode = permission_mode.or(state.permission_mode.take());
         }
-        Ok(self.announce(&hub))
+        self.announce(&hub).await
     }
 
     pub(crate) async fn close(&self) -> Result<Session, ApiError> {
@@ -281,9 +279,12 @@ impl LiveSession {
             hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
             self.state.lock().closed_at_ms = Some(closed_at);
         }
-        // Past anything in the queue, so a prompt waiting on setup can't outlive this.
-        self.handle_stop().await?;
-        Ok(self.announce(&hub))
+        // Past anything in the queue, so a prompt waiting on setup can't outlive this. It's closed whether
+        // or not the agent stopped cleanly, so everyone hears that first.
+        let stopped = self.handle_stop().await;
+        let announced = self.announce(&hub).await;
+        stopped?;
+        announced
     }
 
     pub(crate) async fn reopen(&self) -> Result<Session, ApiError> {
@@ -291,7 +292,7 @@ impl LiveSession {
         let id = self.id.clone();
         hub.blocking(move |store| store.set_session_closed(&id, None)).await?;
         self.state.lock().closed_at_ms = None;
-        Ok(self.announce(&hub))
+        self.announce(&hub).await
     }
 
     fn is_closed(&self) -> bool {

@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo,
-    RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Records,
+    Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, unexpected};
@@ -34,6 +34,16 @@ impl Client {
             return unexpected(&reply);
         };
         Ok(repo)
+    }
+
+    /// Every record as of one revision. Follow the feed first. A hub older than this refuses it, as
+    /// `is_unsupported` says.
+    pub fn records_list(&self) -> Result<Records> {
+        let reply = self.call(ClientRequest::RecordsList)?;
+        let ClientResponse::Records(records) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(records)
     }
 
     pub fn repo_list(&self) -> Result<Vec<Repo>> {

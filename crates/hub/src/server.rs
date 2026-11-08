@@ -176,6 +176,7 @@ async fn handle(
         }
         R::RepoAdd { path } => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos { repos: hub.repo_list().await? },
+        R::RecordsList => C::Records(hub.records_list().await?),
         R::WorkspaceCreate { repo_id, name, base_ref } => {
             C::Workspace(hub.workspace_create(repo_id, name, base_ref).await?)
         }

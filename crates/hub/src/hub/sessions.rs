@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, ClientMessageId, Rev, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
@@ -44,14 +44,20 @@ impl Hub {
                 updated_at_ms: now,
                 title: None,
                 closed_at_ms: None,
+                rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
             // agent never reported one.
             agent_session_id: id.into(),
             agent_opened: false,
         };
-        let session = stored.session.clone();
-        self.blocking(move |store| store.insert_session(&stored)).await?;
+        let session = self
+            .blocking(move |store| {
+                store.insert_session(&stored)?;
+                store.get_session(&stored.session.id)
+            })
+            .await?
+            .session;
         self.notify(HubNotice::Session(session.clone()));
         Ok(session)
     }

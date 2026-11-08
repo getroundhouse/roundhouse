@@ -1,18 +1,18 @@
 //! Workspaces.
 
-use protocol::model::{RepoId, WorkspaceId};
+use protocol::model::{RepoId, Rev, WorkspaceId};
 use protocol::model::{SetupStatus, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::{Store, StoreError, from_text, lock, now_ms, text_of};
+use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
 
 const FIRST_PORT_BASE: u16 = 55_000;
 
 const PORTS_PER_WORKSPACE: u16 = 10;
 
-const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base";
 
-fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
+pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
         id: row.get::<_, String>(0)?.into(),
         repo_id: row.get::<_, String>(1)?.into(),
@@ -27,6 +27,7 @@ fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         archived_at_ms: row.get(10)?,
         setup: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or(SetupStatus::Unknown),
         port_base: row.get(12)?,
+        rev: rev_of(row, 13)?,
     })
 }
 
@@ -57,9 +58,9 @@ impl Store {
         Ok(inserted == 1)
     }
 
-    pub fn delete_workspace(&self, id: &WorkspaceId) -> Result<(), StoreError> {
-        lock(&self.writer).execute("DELETE FROM workspaces WHERE id = ?", [id.as_str()])?;
-        Ok(())
+    /// Returns the revision of the removal, or `None` if there was nothing to remove.
+    pub fn delete_workspace(&self, id: &WorkspaceId) -> Result<Option<Rev>, StoreError> {
+        self.delete("workspaces", id.as_str())
     }
 
     pub fn workspace_ready(
@@ -120,7 +121,7 @@ impl Store {
     pub fn get_workspace(&self, id: &WorkspaceId) -> Result<Workspace, StoreError> {
         lock(&self.reader)
             .query_row(
-                &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE id = ?"),
+                &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE id = ?"),
                 [id.as_str()],
                 workspace_from_row,
             )
@@ -131,8 +132,9 @@ impl Store {
     pub fn list_workspaces(&self, include_archived: bool) -> Result<Vec<Workspace>, StoreError> {
         let conn = lock(&self.reader);
         let filter = if include_archived { "" } else { "WHERE status != 'archived'" };
-        let mut statement = conn
-            .prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces {filter} ORDER BY created_at_ms"))?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces {filter} ORDER BY created_at_ms"
+        ))?;
         let rows = statement.query_map([], workspace_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
@@ -148,7 +150,7 @@ impl Store {
     pub fn take_unfinished_workspaces(&self) -> Result<Vec<Workspace>, StoreError> {
         let conn = lock(&self.writer);
         let mut statement =
-            conn.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE status = ?"))?;
+            conn.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE status = ?"))?;
         let creating = text_of(&WorkspaceStatus::Creating);
         let rows = statement.query_map([&creating], workspace_from_row)?;
         let workspaces = rows.collect::<rusqlite::Result<Vec<_>>>()?;

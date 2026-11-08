@@ -15,7 +15,7 @@ use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
-use protocol::model::{InstanceId, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{InstanceId, Records, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -97,6 +97,11 @@ impl Hub {
         let store = self.store.clone();
         let result = tokio::task::spawn_blocking(move || f(&store)).await.map_err(|e| internal(e.to_string()))?;
         Ok(result?)
+    }
+
+    /// Every record, as of one revision, for a client starting to follow the feed.
+    pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
+        self.blocking(Store::list_records).await
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {

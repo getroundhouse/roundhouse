@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
-    GitDiff, GitStatus, PullRequest, Repo, RepoId, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -98,6 +98,7 @@ impl Hub {
             archived_at_ms: None,
             setup: SetupStatus::NotStarted,
             port_base: self.blocking(Store::next_port_base).await?,
+            rev: Rev::default(),
         };
         let record = workspace.clone();
         if !self.blocking(move |store| store.insert_workspace(&record)).await? {
@@ -153,8 +154,10 @@ impl Hub {
             warn!(%id, "cleaning up a failed workspace: {}", error_chain(&e));
         }
         let owned = id.clone();
-        if let Err(e) = self.blocking(move |store| store.delete_workspace(&owned)).await {
-            error!(%id, "removing a failed workspace: {e}");
+        match self.blocking(move |store| store.delete_workspace(&owned)).await {
+            Ok(Some(rev)) => self.notify(HubNotice::Removed { record: RecordKey::Workspace { id: id.clone() }, rev }),
+            Ok(None) => {}
+            Err(e) => error!(%id, "removing a failed workspace: {e}"),
         }
     }
 
