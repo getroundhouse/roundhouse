@@ -11,6 +11,7 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | `diff.md` | The diff, and comments on it |
 | `sidebar.md` | The sidebar |
 | `updates.md` | What someone sees when the app or its hub updates, or when there's no hub |
+| `look.md` | The rules every screen follows: surfaces, type, space, buttons, colour and the status mark |
 | `speed.md` | How fast the desktop app has to be |
 
 ## How it looks
@@ -21,7 +22,7 @@ A screen is confirmed the same way as a rule. One an agent adds, or changes befo
 
 An image is exact about everything, including what nobody chose, such as how text is smoothed. So a GPUI upgrade or a font change can change confirmed images too, and those need approving the same way.
 
-The rules every screen follows, such as spacing, type and colour, go in a file of their own, the way `speed.md` holds the bars every area meets. *Not built.*
+The rules every screen follows, such as spacing, type and colour, are in `look.md`, the way `speed.md` holds the bars every area meets.
 
 ## How a feature is designed
 

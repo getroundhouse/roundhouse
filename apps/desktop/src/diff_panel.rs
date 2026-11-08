@@ -7,15 +7,18 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
 };
-use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::input::{InputEvent, TextareaState};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, Div, ElementId, Entity, EventEmitter, HighlightStyle, Hsla,
-    InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Subscription,
-    WeakEntity, Window, div,
+    AnyElement, AppContext, Context, ElementId, Entity, EventEmitter, HighlightStyle, Hsla, IntoElement, ParentElement,
+    Render, Styled, Subscription, Window, div, px,
 };
 use protocol::model::{CommentId, DiffComment, DiffSide, WorkspaceId};
+
+use annotations::{comment_card, draft_card};
+
+mod annotations;
 
 #[derive(Clone, Debug)]
 pub enum DiffEvent {
@@ -278,58 +281,26 @@ impl DiffPanel {
         h_flex()
             .flex_none()
             .w_full()
+            .h(px(40.))
             .px_3()
-            .py_2()
             .gap_2()
             .justify_between()
             .border_b_1()
             .border_color(cx.theme().border)
-            .child(div().text_sm().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
+                    .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
+            )
             .child(
                 Button::new("send-comments")
                     .primary()
+                    .small()
                     .label("Send to agent")
                     .on_click(cx.listener(|t, _, _, cx| t.send_comments(cx))),
             )
     }
-}
-
-fn annotation_frame(cx: &App) -> Div {
-    v_flex().m_2().p_2().gap_2().rounded_md().bg(cx.theme().secondary).text_sm()
-}
-
-fn draft_card(input: &Entity<TextareaState>, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
-    let (cancel, save) = (panel.clone(), panel);
-    annotation_frame(cx)
-        .child(Textarea::new(input))
-        .child(
-            h_flex()
-                .gap_2()
-                .child(Button::new("save-comment").primary().label("Comment").on_click(move |_, window, cx| {
-                    let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
-                }))
-                .child(Button::new("cancel-comment").label("Cancel").on_click(move |_, _, cx| {
-                    let _ = cancel.update(cx, DiffPanel::cancel_draft);
-                })),
-        )
-        .into_any_element()
-}
-
-fn comment_card(comment: DiffComment, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
-    annotation_frame(cx)
-        .child(comment.text.clone())
-        .child(
-            div()
-                .id(ElementId::Name(format!("delete-{}", comment.id).into()))
-                .text_xs()
-                .cursor_pointer()
-                .text_color(cx.theme().muted_foreground)
-                .on_click(move |_, _, cx| {
-                    let _ = panel.update(cx, |t, cx| t.delete_comment(comment.id.clone(), cx));
-                })
-                .child("Delete"),
-        )
-        .into_any_element()
 }
 
 fn placeholder(text: &'static str, color: Hsla) -> AnyElement {

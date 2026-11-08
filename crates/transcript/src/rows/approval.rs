@@ -1,7 +1,7 @@
 //! The card that asks for a tool's approval, or a plan's.
 
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Styled,
@@ -11,7 +11,7 @@ use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
-use super::{MONO, row, summarize_input};
+use super::{row, summarize_input, waiting_card};
 use crate::transcript::Transcript;
 
 #[expect(
@@ -61,7 +61,12 @@ pub(super) fn approval_card(
         let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
         (
             format!("{tool_name} needs approval"),
-            div().text_xs().font_family(MONO).text_color(theme.muted_foreground).child(summary).into_any_element(),
+            div()
+                .text_xs()
+                .font_family(theme.mono_font_family.clone())
+                .text_color(theme.muted_foreground)
+                .child(summary)
+                .into_any_element(),
             h_flex()
                 .gap_2()
                 .child(answer_button("allow", "Allow", allow).primary())
@@ -70,14 +75,9 @@ pub(super) fn approval_card(
     };
     row()
         .child(
-            v_flex()
-                .w_full()
-                .p_3()
+            waiting_card(open, cx)
                 .gap_2()
-                .rounded_lg()
-                .border_1()
-                .border_color(if open { theme.warning } else { theme.border })
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
+                .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title))
                 .child(content)
                 .when(open, |d| d.child(buttons)),
         )

@@ -23,8 +23,8 @@ pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
         .py_2()
         .border_t_1()
         .border_color(cx.theme().border)
-        .font_family("Menlo")
-        .text_size(px(12.))
+        .font_family(cx.theme().mono_font_family.clone())
+        .text_size(cx.theme().mono_font_size)
         .text_color(cx.theme().muted_foreground)
         .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
 }

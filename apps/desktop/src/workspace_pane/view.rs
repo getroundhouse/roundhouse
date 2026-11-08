@@ -13,7 +13,8 @@ use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
 
 use super::setup::setup_log_view;
-use super::{PaneEvent, WorkspacePane, is_working};
+use super::{HEADER_HEIGHT, PaneEvent, WorkspacePane, is_working};
+use crate::StopAgent;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
 pub(super) const MODELS: [(&str, &str); 5] =
@@ -34,15 +35,17 @@ impl WorkspacePane {
     fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id);
-        let dot = crate::sidebar::status_color(Some(session.status), cx);
+        let mark = crate::sidebar::signal(Some(session.status));
+        let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         h_flex()
             .flex_none()
-            .max_w(px(220.))
+            .max_w(px(240.))
+            .gap_0p5()
             .child(
                 Button::new(ElementId::Name(format!("chat-{}", session.id).into()))
                     .ghost()
-                    .xsmall()
+                    .small()
                     .flex_1()
                     .min_w_0()
                     .selected(selected)
@@ -50,9 +53,10 @@ impl WorkspacePane {
                     .child(
                         h_flex()
                             .w_full()
-                            .gap_2()
+                            .gap_1p5()
+                            .text_sm()
                             .when(!selected, |d| d.text_color(muted))
-                            .child(div().flex_none().size_2().rounded_full().bg(dot))
+                            .child(look::mark(mark, work, look::Size::Inline, cx))
                             .child(
                                 div()
                                     .flex_1()
@@ -70,6 +74,7 @@ impl WorkspacePane {
                     .xsmall()
                     .icon(IconName::Close)
                     .tooltip("Close chat")
+                    .when(!selected, Styled::invisible)
                     .on_click(cx.listener(move |t, _, window, cx| t.close_chat(to_close.clone(), window, cx))),
             )
             .into_any_element()
@@ -95,8 +100,9 @@ impl WorkspacePane {
             .id("chat-tabs")
             .flex_none()
             .w_full()
-            .px_2()
-            .py_1()
+            .h(px(40.))
+            .items_center()
+            .px_3()
             .gap_1()
             .border_b_1()
             .border_color(border)
@@ -166,11 +172,9 @@ impl WorkspacePane {
             }
         };
         h_flex()
-            .flex_none()
-            .w_full()
-            .px_3()
-            .pb_2()
-            .gap_1()
+            .flex_1()
+            .min_w_0()
+            .gap_0p5()
             .child(
                 Button::new("model-picker")
                     .ghost()
@@ -192,79 +196,98 @@ impl WorkspacePane {
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let mono = theme.mono_font_family.clone();
         let (border, muted) = (theme.border, theme.muted_foreground);
         let id = self.workspace.id.clone();
         let pr = self.pull_request.clone();
         h_flex()
             .flex_none()
             .w_full()
-            .pl_3()
-            .pr_3()
-            .py_2()
-            .gap_3()
+            .h(HEADER_HEIGHT)
+            .px_4()
+            .gap_2()
             .border_b_1()
             .border_color(border)
             .child(
-                v_flex()
+                h_flex()
                     .flex_1()
                     .min_w_0()
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(self.workspace.name.clone()))
-                    .child(div().text_xs().text_color(muted).overflow_hidden().whitespace_nowrap().child(format!(
-                        "{} from {}",
-                        self.workspace.branch,
-                        self.workspace.base_ref.as_deref().unwrap_or("?")
-                    ))),
+                    .gap_2()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(self.workspace.name.clone()))
+                    .child(div().text_color(look::faint()).child("/"))
+                    .child(div().text_xs().font_family(mono).text_color(muted).child(self.workspace.branch.clone()))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(look::faint())
+                            .child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?"))),
+                    ),
             )
+            .child(
+                Button::new("toggle-diff")
+                    .ghost()
+                    .small()
+                    .icon(IconName::PanelRight)
+                    .label(if self.diff_open { "Hide diff" } else { "Diff" })
+                    .on_click(cx.listener(|t, _, _, cx| t.toggle_diff(cx))),
+            )
+            .child(Button::new("archive").ghost().small().label("Archive").on_click(cx.listener(move |_, _, _, cx| {
+                cx.emit(PaneEvent::Archive(id.clone(), false));
+            })))
             .when_some(pr, |d, pr| {
                 let url = pr.url.clone();
                 d.child(
                     Button::new("pull-request")
-                        .label(format!("#{} {}", pr.number, pr.state.to_lowercase()))
+                        .small()
+                        .icon(IconName::Github)
+                        .label(format!("#{} · {}", pr.number, self.work().name()))
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             })
             .when(self.pull_request.is_none(), |d| {
                 d.child(
                     Button::new("create-pr")
+                        .primary()
+                        .small()
                         .label("Create PR")
                         .on_click(cx.listener(|t, _, _, cx| t.create_pull_request(cx))),
                 )
             })
-            .child(
-                Button::new("toggle-diff")
-                    .label(if self.diff_open { "Hide diff" } else { "Diff" })
-                    .on_click(cx.listener(|t, _, _, cx| t.toggle_diff(cx))),
-            )
-            .child(Button::new("archive").label("Archive").on_click(cx.listener(move |_, _, _, cx| {
-                cx.emit(PaneEvent::Archive(id.clone(), false));
-            })))
     }
 
     fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let pickers = self.pickers(cx).into_any_element();
         let working = self.session().is_some_and(is_working);
-        h_flex()
-            .flex_none()
-            .w_full()
-            .items_end()
-            .px_3()
-            .pt_3()
-            .pb_1()
-            .gap_2()
-            .border_t_1()
-            .border_color(cx.theme().border)
-            .child(div().flex_1().min_w_0().child(Textarea::new(&self.composer)))
-            .child(if working {
-                Button::new("stop")
-                    .label("Stop")
-                    .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
-                    .into_any_element()
-            } else {
-                Button::new("send")
-                    .primary()
-                    .label("Send")
-                    .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
-                    .into_any_element()
-            })
+        let theme = cx.theme();
+        let (surface, border) = (theme.muted, theme.input);
+        div().flex_none().w_full().px_4().pb_4().pt_1().child(
+            v_flex()
+                .w_full()
+                .rounded_lg()
+                .border_1()
+                .border_color(border)
+                .bg(surface)
+                .child(div().w_full().px_1().pt_1().child(Textarea::new(&self.composer).appearance(false)))
+                .child(h_flex().w_full().px_2().pb_2().gap_2().child(pickers).child(if working {
+                    Button::new("stop")
+                        .small()
+                        .icon(IconName::Square)
+                        .label("Stop")
+                        .tooltip_with_action("Stop", &StopAgent, None)
+                        .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
+                        .into_any_element()
+                } else {
+                    Button::new("send")
+                        .primary()
+                        .small()
+                        .icon(IconName::ArrowUp)
+                        .tooltip("Send")
+                        .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
+                        .into_any_element()
+                })),
+        )
     }
 }
 
@@ -275,7 +298,6 @@ impl Render for WorkspacePane {
         let setup_line = self.setup_line(cx);
         let header = self.header(cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
-        let pickers = self.pickers(cx).into_any_element();
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
@@ -295,12 +317,11 @@ impl Render for WorkspacePane {
                         .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
                         .children(setup_line)
                         .when(interrupted, |d| {
-                            d.child(div().flex_none().w_full().px_3().py_1().text_xs().text_color(muted).child(
+                            d.child(div().flex_none().w_full().px_4().py_1().text_xs().text_color(muted).child(
                                 "The agent stopped before it finished. Send a message to pick up where it left off.",
                             ))
                         })
-                        .child(composer)
-                        .child(pickers),
+                        .child(composer),
                 )
                 .when_some(diff, |d, diff| {
                     d.child(div().flex_1().min_w_0().h_full().border_l_1().border_color(border).child(diff))

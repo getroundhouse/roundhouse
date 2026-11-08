@@ -18,6 +18,7 @@ protocol.workspace = true
 client-core.workspace = true
 transcript.workspace = true
 gpui-kit.workspace = true
+look.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 # The kit's highlighter is private, so diffs use the same two crates directly. Oniguruma took

@@ -35,6 +35,13 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Setup | What happens once a worktree exists: copying local files and running the repository's setup script | `SetupStatus`, `worker::setup` |
 | Diff comment | A comment on one line of a workspace's diff, which can be sent to the agent | `DiffComment` |
 
+## On screen
+
+| Term | Meaning | In code |
+|---|---|---|
+| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, and amber or red when it needs you. `docs/spec/look.md` has the rules | `look::mark` |
+| Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
+
 ## History and delivery
 
 | Term | Meaning | In code |
