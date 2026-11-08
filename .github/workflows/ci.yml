@@ -28,8 +28,9 @@ env:
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
 
 jobs:
+  # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
   lint:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +58,7 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   test:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
