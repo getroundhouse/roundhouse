@@ -46,8 +46,9 @@ impl IconSize {
         }
     }
 
-    /// Each is tuned by eye at its size. More rows as it grows keeps the dots fine. Below 128 the fan's own shape
-    /// would blur into a smudge, so it's drawn on whole pixels instead, with fewer rows and a pixel between dots.
+    /// Each is tuned by eye at its size. From 64 to 256 it's the sidebar's four rows, with dots big enough to see: the
+    /// Dock shrinks the 256 to under half, where finer dots read as a smudge. Only the biggest have the pixels for
+    /// nine rows of fine dots. Below 128 the fan's own shape would blur, so it's drawn on whole pixels instead.
     fn drawing(self) -> Drawing {
         match self {
             IconSize::Px16 => {
@@ -65,8 +66,7 @@ impl IconSize {
                 hub: 2.,
                 ring: Some(4.),
             }),
-            IconSize::Px128 => Drawing::Scaled { rows: 5, fan: 0.64 },
-            IconSize::Px256 => Drawing::Scaled { rows: 7, fan: 0.62 },
+            IconSize::Px128 | IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
             IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
         }
     }

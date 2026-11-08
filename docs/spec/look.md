@@ -59,15 +59,16 @@ The brand on a tile: the fan in copper, on a warm dark tile that fades from `#21
 
 ![The app icon, at 1024 pixels](../../apps/desktop/AppIcon.iconset/icon_512x512@2x.png)
 
-- **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge. Bigger drawings have more rows, so the dots stay as fine as the motif's.
+- **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge.
+- **From 64 to 256 pixels it's the sidebar's four rows,** with dots big enough to see. The Dock shrinks the 256-pixel drawing to under half its size, where finer dots read as a smudge. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
 - **Below 128 pixels it's drawn on whole pixels,** where the fan's own shape would blur: square dots with a pixel clear around each, mirrored across the line between the tile's two middle pixels so the fan sits in the middle, and a turntable that's only its hub where a ring would be too small to see. *Unconfirmed.*
-- **macOS uses the smallest drawing with at least the pixels it needs,** and shrinks it to fit, so on a Retina display each drawing covers the sizes up to half its pixels in points.
+- **macOS mostly uses the smallest drawing with at least the pixels it needs,** and shrinks it to fit, so on a Retina display each drawing covers the sizes up to half its pixels in points. The Dock is the exception: at about 55 points it uses the 256-pixel drawing.
 
 | Pixels | Used on a Retina display | Rows | Drawn |
 |---|---|---|---|
-| 1024 and 512 | 129 to 512 points | 9 | The fan's shape, 62% of the canvas wide |
-| 256 | 65 to 128 points | 7 | The fan's shape, 62% wide |
-| 128 | 33 to 64 points, such as the Dock | 5 | The fan's shape, 64% wide |
+| 1024 and 512 | 129 to 512 points, such as Finder's largest icons | 9 | The fan's shape, 62% of the canvas wide |
+| 256 | 65 to 128 points, and the Dock | 4 | The fan's shape, 66% wide |
+| 128 | 33 to 64 points | 4 | The fan's shape, 66% wide |
 | 64 | 17 to 32 points | 4 | On whole pixels, with dots two pixels square and a ring |
 | 32 | 16 points and under, such as a list | 3 | On whole pixels, with dots two pixels square |
 | 16 | Only on a display that isn't Retina, at 16 points | 2 | On whole pixels, with dots one pixel square. *Unconfirmed* |
