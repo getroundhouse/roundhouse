@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What only tests use: holding the marks still for pictures.
+testing = []
+
 [dependencies]
 gpui-kit.workspace = true
 serde_json.workspace = true

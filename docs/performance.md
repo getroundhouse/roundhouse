@@ -22,6 +22,7 @@ Bars are decided through `l`, and `xl` is only reported. The sizes come from rea
 - Use the kit's `Diff` and `Textarea` rather than writing those.
 - Highlight with Oniguruma rather than `fancy-regex`, which takes several times the CPU on a large diff.
 - Stop the caret blinking after 10 s idle, so an idle window draws nothing.
+- Redraw a moving status mark on every frame of the display, and only while it's on screen and its agent works or its workspace is set up. Smoothness comes first until a measurement shows it costs too much. Nothing in the window is cached, so each of those frames redraws the whole window, and an idle window still draws nothing.
 
 ## Measuring
 
