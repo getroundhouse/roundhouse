@@ -18,5 +18,6 @@ Start with trackpad feel, then IME, then selection and copy.
 - Links open, and right-click menus exist where expected
 - VoiceOver reads messages and sidebar rows
 - Font rendering next to native apps at your usual size
+- Status marks: a working agent's light sweeps smoothly at the display's rate, nothing else moves, Reduce Motion holds it still, and with every agent idle the window draws nothing, which Activity Monitor shows as no CPU
 - Resize and window snapping stay smooth during streaming
 - Overall: does it feel like an app you want to live in all day?

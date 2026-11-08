@@ -27,6 +27,7 @@ syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
 
 [dev-dependencies]
+look = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true

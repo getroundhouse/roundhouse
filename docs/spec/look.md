@@ -45,7 +45,7 @@ The mark has three layers, and each is about one thing, so several facts can sho
 | A white light over the fan | The agent | A light sweeps the fan while the agent works, and the fan fills in while the workspace is set up |
 | The whole fan in amber or red | You | Amber when it's your turn to answer or approve, red when the agent stopped short. The pull request's colour comes back once that's dealt with |
 
-- **Only a running agent moves the mark.** Motion says the agent is working, so nothing else moves. When it's your turn, the fan turns amber and holds still. *Not built:* the marks are drawn still, at one moment of their motion.
+- **Only a running agent moves the mark.** Motion says the agent is working, so nothing else moves. When it's your turn, the fan turns amber and holds still. A moving mark is redrawn on every frame of the display, as smoothly as it can show, and the system's Reduce Motion setting holds it still. Pictures of the app hold every mark still at one moment, so they come out the same every time.
 - **A workspace's mark speaks for its open chat that most needs attention.** `sidebar.md` has the rule.
 - **The sidebar shows every workspace's pull request.** *Not built:* only a workspace that's open knows its pull request, until the hub sends it with each workspace. The others show no pull request.
 
