@@ -225,13 +225,23 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **A hub knows nothing about what manages it.** It offers its status and stops cleanly on `SIGTERM`, which is what systemd and Docker use. There's no desktop mode, and it doesn't exit when the app closes.
 - **A client never needs one exact hub version.** It hides or disables what an older hub doesn't support, as "Changing the protocol" describes, and only a real break stops it. This stays as simple as it can, and gets revisited if it turns out complicated.
 - **A client only replaces a hub that says it's replaceable.** A hub started on demand reports that in its status, and one you started yourself gets left alone, even on the same Mac. Only the desktop app replaces a hub, and only an older one, so two versions can't keep replacing each other's.
-- **Only a local on-demand hub that's older than the client can be restarted from it,** and only the rare real break needs that to be visible. A client's own hub might not be able to open what a newer one has written. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs.
+- **Only a local on-demand hub that's older than the client can be restarted from it.** The app offers that whenever such a hub is older, so nobody has to wait for it to be idle, and only a real break puts it in the way. A client's own hub might not be able to open what a newer one has written. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs.
 - **The app ships a default hub, and that's the only link between them.** The hub doesn't depend on the app.
 - **`tools/install.sh` copies release binaries into `roundhouse-builds/<version>/`,** and a `current` link names the one to start. Clients and hubs resolve the link when they start, so they stay on their version when it moves. Running from `target/` would give a rebuilt hub workers from different code, and archiving that worktree would remove the binary. Keeping versions gives rollback by moving the link.
 - **An install stamps its commit through `ROUNDHOUSE_BUILD`,** and any other build says `0.1.0-dev`. The app and `roundhouse hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
 - **An install also stamps an order through `ROUNDHOUSE_BUILD_NUMBER`:** when its commit was made, or when it installed if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
 
 What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without waiting for it to be idle, as "When a process dies" describes.
+
+### Updating the app
+
+The app is downloaded, signed and notarized, and it updates itself from inside the app as changes land on `main`. *Not built:* `tools/install.sh` installs it, as above.
+
+- **Velopack packages, installs and updates the app.** One tool makes the installer and the updates for macOS, Windows and Linux, and an update downloads only what changed. Sparkle checks more for itself, but covers only the Mac, and an updater of our own would have to rebuild Velopack's Windows installer. The app reaches Velopack through one module, so replacing it would touch nothing else.
+- **CI builds, signs and publishes every merge to `main`.** The merge queue has already run the checks by then.
+- **The feed is signed, and the app checks the signature before trusting anything in it.** Velopack only checks each package against a checksum in the feed, so without a signature, whoever controls the host controls the app. *Unconfirmed.*
+- **The hub runs from its own copy for each build, outside the app's install directory.** An update replaces that directory, and on Windows Velopack first kills everything running from it, which would stop the hub and its agents. *Unconfirmed.*
+- **The app decides when an update installs,** so an update doesn't interrupt what someone is doing.
 
 ## Providers
 
