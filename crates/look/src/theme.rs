@@ -2,19 +2,19 @@
 
 use std::rc::Rc;
 
+use gpui_kit::App;
 use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
-use gpui_kit::{App, Window};
 
 const THEME: &str = include_str!("theme.json");
 
 /// Installs the app's theme as the kit's dark theme, and switches to it. Going through the kit, rather than setting
 /// colours on the theme directly, is what lets its other layers, such as rich text, pick the colours up too.
-pub fn apply(window: Option<&mut Window>, cx: &mut App) {
+pub fn apply(cx: &mut App) {
     if !cx.has_global::<Theme>() {
         Theme::change(ThemeMode::Dark, None, cx);
     }
     Theme::global_mut(cx).dark_theme = Rc::new(config());
-    Theme::change(ThemeMode::Dark, window, cx);
+    Theme::change(ThemeMode::Dark, None, cx);
 }
 
 #[expect(clippy::expect_used, reason = "the theme is built in, and a test checks that it parses")]

@@ -7,6 +7,6 @@ mod mark;
 mod palette;
 mod theme;
 
-pub use mark::{Signal, Work, brand, mark};
-pub use palette::{accent, faint, raised};
+pub use mark::{Signal, Size, Work, brand, mark};
+pub use palette::faint;
 pub use theme::apply;

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use client_core::Client;
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, EventEmitter, Subscription, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::model::{PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use transcript::Transcript;
 
@@ -63,7 +63,15 @@ pub struct WorkspacePane {
 
 impl EventEmitter<PaneEvent> for WorkspacePane {}
 
+/// The workspace header's height. The sidebar's list starts level with its bottom edge, so the two line up.
+pub(crate) const HEADER_HEIGHT: Pixels = px(48.);
+
 impl WorkspacePane {
+    /// Where the workspace's work stands, as its mark and header show it.
+    pub(crate) fn work(&self) -> look::Work {
+        self.pull_request.as_ref().map_or(look::Work::NoPr, |pr| look::Work::from_github(&pr.state, pr.is_draft))
+    }
+
     pub fn new(
         client: Client,
         workspace: Workspace,

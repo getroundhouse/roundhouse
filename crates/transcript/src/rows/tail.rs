@@ -22,7 +22,7 @@ pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
                     let id = block_id(&message.message_id, block.index);
                     out.child(TextView::markdown(id, SharedString::from(block.text.clone())).selectable(true))
                 }
-                BlockKind::Thinking => out.child(working(format!("Thinking  {}", last_line(&block.text)), cx)),
+                BlockKind::Thinking => out.child(working(format!("Thinking… {}", last_line(&block.text)), cx)),
                 BlockKind::ToolUse => {
                     out.child(working(format!("Running {}", block.tool_name.as_deref().unwrap_or("a tool")), cx))
                 }
@@ -42,7 +42,7 @@ fn working(text: String, cx: &App) -> Div {
         .h(px(22.))
         .text_xs()
         .text_color(cx.theme().muted_foreground)
-        .child(look::mark(Signal::Working, Work::NoPr, px(16.), cx))
+        .child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx))
         .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
 }
 

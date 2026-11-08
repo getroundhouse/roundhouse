@@ -11,7 +11,25 @@ use gpui_kit::{
     quad, size, transparent_black,
 };
 
-use crate::palette::{accent, faint, hex};
+/// The two sizes a mark comes in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Size {
+    /// In the sidebar.
+    Row,
+    /// Beside text: chat tabs, cards and the working line.
+    Inline,
+}
+
+impl Size {
+    fn width(self) -> Pixels {
+        match self {
+            Size::Row => px(18.),
+            Size::Inline => px(16.),
+        }
+    }
+}
+
+use crate::palette::{faint, hex};
 
 /// The work: where its pull request stands, in GitHub's colours. The fan's colour while nobody needs you.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -32,6 +50,17 @@ impl Work {
             "MERGED" => Work::Merged,
             "CLOSED" => Work::Closed,
             _ => Work::NoPr,
+        }
+    }
+
+    /// What to call it beside a pull request's number.
+    pub fn name(self) -> &'static str {
+        match self {
+            Work::NoPr => "No pull request",
+            Work::Draft => "Draft",
+            Work::Open => "Open",
+            Work::Merged => "Merged",
+            Work::Closed => "Closed",
         }
     }
 
@@ -67,28 +96,35 @@ const STILL: f32 = 0.9;
 const SWEEP_S: f32 = 2.4;
 const BUILD_S: f32 = 4.8;
 const ROWS: usize = 4;
-/// How tall the mark is, for its width.
+/// How tall the mark is, for its width: a half circle, with room under it for the turntable.
 const ASPECT: f32 = 0.62;
+/// The inner row's radius, as a share of the outer row's. Inside it is the turntable.
+const INNER: f32 = 0.4;
+/// A dot's radius, as a share of the space between rows.
+const DOT: f32 = 0.32;
+/// The turntable's ring, in dot radii.
+const TURNTABLE: f32 = 2.6;
 
-/// The mark for one workspace or chat. `width` is its width, and it's a little under two thirds as tall.
-pub fn mark(signal: Signal, work: Work, width: Pixels, cx: &App) -> impl IntoElement {
+/// The mark for one workspace or chat.
+pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let color = match signal {
         Signal::NeedsYou => theme.warning,
         Signal::Failed => theme.danger,
         Signal::Idle | Signal::SettingUp | Signal::Working => work.color(),
     };
-    let light = theme.foreground;
-    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, signal, color, light, STILL, window))
-        .flex_none()
-        .w(width)
-        .h(width * ASPECT)
+    drawn(signal, color, size.width(), STILL, cx)
 }
 
-/// The mark in copper with nothing on it: the brand, for empty states and the app icon.
+/// The mark in copper with nothing on it: the brand, for empty states and the app icon. Copper is the theme's
+/// focus ring, because focus is the one other place the brand colour shows.
 pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
+    drawn(Signal::Idle, cx.theme().ring, width, STILL, cx)
+}
+
+fn drawn(signal: Signal, color: Hsla, width: Pixels, t: f32, cx: &App) -> impl IntoElement {
     let light = cx.theme().foreground;
-    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, Signal::Idle, accent(), light, STILL, window))
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, signal, color, light, t, window))
         .flex_none()
         .w(width)
         .h(width * ASPECT)
@@ -111,10 +147,10 @@ struct Fan {
 
 impl Fan {
     fn within(bounds: Bounds<Pixels>) -> Self {
-        let outer = (bounds.size.width * 0.5).min(bounds.size.height * 0.94);
-        let inner = outer * 0.4;
+        let outer = bounds.size.width * 0.5;
+        let inner = outer * INNER;
         let pitch = (outer - inner) / (as_f32(ROWS) - 0.4);
-        let dot = (pitch * 0.32).max(px(0.45));
+        let dot = (pitch * DOT).max(px(0.45));
         let center = point(bounds.origin.x + bounds.size.width * 0.5, bounds.origin.y + bounds.size.height - dot * 1.4);
         Fan { center, inner, pitch, dot }
     }
@@ -143,10 +179,10 @@ fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, light: Hsla, t: f3
         }
     }
     let hub = color.opacity(0.6);
-    let bounds = square(fan.center, fan.dot * 2.6);
+    let bounds = square(fan.center, fan.dot * TURNTABLE);
     window.paint_quad(quad(
         bounds,
-        Corners::all(fan.dot * 2.6),
+        Corners::all(fan.dot * TURNTABLE),
         transparent_black(),
         Edges::all((fan.dot * 0.8).max(px(0.6))),
         hub,
@@ -202,7 +238,7 @@ fn dots_in(length_in_pitches: f32) -> usize {
 mod tests {
     use gpui_kit::{Bounds, point, px, size};
 
-    use super::{Fan, Work};
+    use super::{Fan, ROWS, Work};
 
     #[test]
     fn a_pull_request_is_read_from_githubs_words() {
@@ -217,10 +253,10 @@ mod tests {
     fn outer_rows_have_more_dots_and_every_row_reaches_both_ends() {
         let fan = Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(60.), px(37.2))));
         let dots: Vec<_> = fan.dots().collect();
-        let per_row: Vec<usize> = (0..4).map(|row| dots.iter().filter(|d| d.row == row).count()).collect();
+        let per_row: Vec<usize> = (0..ROWS).map(|row| dots.iter().filter(|d| d.row == row).count()).collect();
 
         assert!(per_row.windows(2).all(|pair| pair[0] < pair[1]), "{per_row:?}");
-        for row in 0..4 {
+        for row in 0..ROWS {
             let along: Vec<f32> = dots.iter().filter(|d| d.row == row).map(|d| d.along).collect();
             assert_eq!((along.first().copied(), along.last().copied()), (Some(0.0), Some(1.0)));
         }

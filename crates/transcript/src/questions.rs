@@ -12,6 +12,7 @@ use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
 use crate::Transcript;
+use crate::rows::{row, waiting_card};
 use look::Signal;
 
 pub(crate) const TOOL_NAME: &str = "AskUserQuestion";
@@ -134,7 +135,7 @@ fn option_button(
                         .rounded_sm()
                         .border_1()
                         .border_color(border)
-                        .text_size(px(11.))
+                        .text_xs()
                         .text_color(muted)
                         .child(format!("{}", o + 1)),
                 )
@@ -186,7 +187,7 @@ fn question_view(
         .into_any_element()
 }
 
-fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, _muted: Hsla) -> impl IntoElement {
+fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool) -> impl IntoElement {
     let seq = card.seq;
     let (to_send, to_skip) = (card.approval_id.clone(), card.approval_id.clone());
     let (send, skip) = (card.this.clone(), card.this.clone());
@@ -246,18 +247,10 @@ pub(crate) fn card(
         .enumerate()
         .map(|(q, question)| question_view(&context, q, question, picks.get(&question.text), muted))
         .collect();
-    div()
-        .w_full()
-        .pb_3()
+    row()
         .child(
-            v_flex()
-                .w_full()
-                .p_3()
+            waiting_card(open, cx)
                 .gap_3()
-                .rounded_lg()
-                .border_1()
-                .border_color(if open { amber.opacity(0.45) } else { theme.border })
-                .when(open, |d| d.bg(amber.opacity(0.05)))
                 .child(
                     h_flex()
                         .gap_2()
@@ -267,13 +260,13 @@ pub(crate) fn card(
                         .child(look::mark(
                             if open { Signal::NeedsYou } else { Signal::Idle },
                             look::Work::NoPr,
-                            px(16.),
+                            look::Size::Inline,
                             cx,
                         ))
                         .child(if open { format!("The agent is asking · {header}") } else { header }),
                 )
                 .children(rendered)
-                .when(open, |d| d.child(card_actions(&context, needs_send, ready, muted))),
+                .when(open, |d| d.child(card_actions(&context, needs_send, ready))),
         )
         .into_any_element()
 }

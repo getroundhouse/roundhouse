@@ -5,9 +5,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use client_core::session_log::Row;
-use gpui_kit::base::SelectableText;
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -15,21 +14,18 @@ use gpui_kit::{
 };
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome};
 use protocol::model::Seq;
-use serde_json::Value;
 
-use crate::log_block::{LogBlock, LogText};
 use crate::questions;
 use crate::transcript::{Model, Transcript};
 
 mod approval;
 mod tail;
+mod tools;
 
 use approval::approval_card;
 use tail::{first_line, render_tail};
-
-const MONO: &str = "Menlo";
-/// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
-const LOG_BLOCK_ABOVE: usize = 16 * 1024;
+use tools::Answer;
+pub(crate) use tools::summarize_input;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
 const COLUMN: f32 = 780.0;
@@ -54,16 +50,9 @@ fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, i
     match m.log.row(ix) {
         Row::Event(event) => {
             let (seq, body) = (event.seq, event.body.clone());
-            let (open, picks) = if let EventBody::ApprovalRequested { approval_id, .. } = &body {
-                (m.log.open_approvals().iter().any(
-                    |e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
-                ), m.picks.get(approval_id).cloned().unwrap_or_default())
-            } else {
-                (false, BTreeMap::default())
-            };
-            let expanded: Vec<usize> = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
+            let around = Around::read(&m, seq, &body);
             drop(m);
-            render_event(seq, &body, &expanded, open, &picks, this, cx)
+            render_event(seq, &body, &around, this, cx)
         }
         Row::Pending(prompt) => {
             let text = prompt.text.clone();
@@ -85,8 +74,67 @@ fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, i
     }
 }
 
-fn row() -> Div {
+/// What drawing one event needs from the rest of the model, read while it's borrowed.
+struct Around {
+    /// The event's blocks the user has opened, by position.
+    expanded: Vec<usize>,
+    /// For an approval: whether it's still waiting, and what's been chosen on its questions so far.
+    approval_open: bool,
+    picks: BTreeMap<String, Vec<String>>,
+    /// For a call: its result, by the call's position, to draw under it.
+    answers: Vec<Option<Answer>>,
+    /// For a result: whether it's drawn with its call instead, by the result's position.
+    with_call: Vec<bool>,
+}
+
+impl Around {
+    fn read(m: &Model, seq: Seq, body: &EventBody) -> Self {
+        let expanded = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
+        let mut around = Around {
+            expanded,
+            approval_open: false,
+            picks: BTreeMap::new(),
+            answers: Vec::new(),
+            with_call: Vec::new(),
+        };
+        if let EventBody::ApprovalRequested { approval_id, .. } = body {
+            around.approval_open =
+                m.log.open_approvals().iter().any(
+                    |e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
+                );
+            around.picks = m.picks.get(approval_id).cloned().unwrap_or_default();
+        }
+        if let EventBody::Assistant { blocks, .. } = body {
+            around.answers = tools::answers(m, seq, blocks);
+        }
+        if let EventBody::AgentUser { blocks, .. } = body {
+            around.with_call = blocks
+                .iter()
+                .map(|block| {
+                    matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
+                        if tools::drawn_with_call(m, seq, tool_use_id))
+                })
+                .collect();
+        }
+        around
+    }
+}
+
+pub(crate) fn row() -> Div {
     v_flex().w_full().pb_4().gap_2()
+}
+
+/// A card that can wait on the person, such as a question or an approval. While it waits, it has an amber edge and a
+/// faint amber wash.
+pub(crate) fn waiting_card(open: bool, cx: &App) -> Div {
+    let theme = cx.theme();
+    v_flex()
+        .w_full()
+        .p_3()
+        .rounded_lg()
+        .border_1()
+        .border_color(if open { theme.warning.opacity(0.45) } else { theme.border })
+        .when(open, |d| d.bg(theme.warning.opacity(0.05)))
 }
 
 fn empty() -> AnyElement {
@@ -111,22 +159,22 @@ fn prompt_bubble(id: ElementId, text: String, pending: bool, cx: &App) -> AnyEle
         .into_any_element()
 }
 
-fn muted_line(text: impl Into<SharedString>, _: &App) -> AnyElement {
+fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
 fn turn_ended(outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String], cx: &App) -> AnyElement {
     let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
     match outcome {
-        TurnOutcome::Cancelled => muted_line("Stopped", cx),
+        TurnOutcome::Cancelled => muted_line("Stopped"),
         TurnOutcome::Error => {
             let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
-            colored_line(detail, cx.theme().danger, cx)
+            colored_line(detail, cx.theme().danger)
         }
         TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
-            muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"), cx)
+            muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"))
         }
-        TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s"), cx),
+        TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s")),
     }
 }
 
@@ -134,27 +182,20 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
     match reason {
         ExitReason::Requested => empty(),
         ExitReason::HubRestart => {
-            muted_line("The app restarted while the agent was working. Send a message to continue.", cx)
+            muted_line("The app restarted while the agent was working. Send a message to continue.")
         }
         ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
             let detail = stderr_tail.last().cloned().unwrap_or_default();
-            colored_line(format!("The agent stopped unexpectedly. {detail}"), cx.theme().danger, cx)
+            colored_line(format!("The agent stopped unexpectedly. {detail}"), cx.theme().danger)
         }
     }
 }
 
-fn render_event(
-    seq: Seq,
-    body: &EventBody,
-    expanded: &[usize],
-    approval_open: bool,
-    picks: &BTreeMap<String, Vec<String>>,
-    this: &WeakEntity<Transcript>,
-    cx: &App,
-) -> AnyElement {
+fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<Transcript>, cx: &App) -> AnyElement {
+    let approval_open = around.approval_open;
     match body {
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-            questions::card(seq, approval_id, input, approval_open, picks, this, cx)
+            questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
         EventBody::UserPrompt { text, .. } => {
             prompt_bubble(ElementId::NamedInteger("prompt".into(), seq), text.clone(), false, cx)
@@ -163,7 +204,7 @@ fn render_event(
             let rendered: Vec<AnyElement> = blocks
                 .iter()
                 .enumerate()
-                .filter_map(|(b, block)| render_block(seq, b, block, expanded.contains(&b), this, cx))
+                .filter_map(|(b, block)| render_block(seq, b, block, around, this, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -176,10 +217,10 @@ fn render_event(
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
         }
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled", cx),
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied", cx),
+        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
+        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => {
-            muted_line(format!("Approval mode is now {}", crate::mode_label(permission_mode)), cx)
+            muted_line(format!("Approval mode is now {}", crate::mode_label(permission_mode)))
         }
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(*reason, stderr_tail, cx),
         EventBody::Notice { level, message } => {
@@ -188,7 +229,7 @@ fn render_event(
                 NoticeLevel::Warning => cx.theme().warning,
                 NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
             };
-            colored_line(message.clone(), color, cx)
+            colored_line(message.clone(), color)
         }
         // These tell the hub things, and there's nothing here for a person.
         EventBody::AgentStarted { .. }
@@ -200,7 +241,7 @@ fn render_event(
     }
 }
 
-fn colored_line(text: String, color: Hsla, _: &App) -> AnyElement {
+fn colored_line(text: String, color: Hsla) -> AnyElement {
     row().child(div().text_sm().text_color(color).child(text)).into_any_element()
 }
 
@@ -208,11 +249,12 @@ fn render_block(
     seq: Seq,
     b: usize,
     block: &ContentBlock,
-    expanded: bool,
+    around: &Around,
     this: &WeakEntity<Transcript>,
     cx: &App,
 ) -> Option<AnyElement> {
     let id = |kind: &'static str| ElementId::NamedInteger(kind.into(), (seq << 8) | b as u64);
+    let expanded = around.expanded.contains(&b);
     Some(match block {
         ContentBlock::Text { text } => {
             TextView::markdown(id("text"), SharedString::from(text.clone())).selectable(true).into_any_element()
@@ -229,35 +271,12 @@ fn render_block(
         }
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
-        ContentBlock::ToolUse { name, input, .. } => h_flex()
-            .h(px(24.))
-            .gap_2()
-            .text_xs()
-            .child(Icon::new(tool_icon(name)).xsmall().text_color(look::faint()))
-            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(name.clone())))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .font_family(MONO)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(summarize_input(input)),
-            )
-            .into_any_element(),
+        ContentBlock::ToolUse { name, input, .. } => {
+            tools::call(name, input, around.answers.get(b).and_then(Option::as_ref), this, cx)
+        }
+        ContentBlock::ToolResult { .. } if around.with_call.get(b).copied().unwrap_or(false) => return None,
         ContentBlock::ToolResult { is_error, text, .. } => {
-            let label = if *is_error { "Error" } else { "Output" };
-            let lines = text.lines().count();
-            let summary = if lines == 1 { "1 line".to_string() } else { format!("{lines} lines") };
-            disclosure(id("result"), label, summary, expanded, seq, b, this, cx)
-                // Tucked under the tool call it answers, which is the row before it.
-                .mt(px(-14.))
-                .pl(px(20.))
-                .when(*is_error, |d| d.text_color(cx.theme().danger))
-                .when(expanded, |d| d.child(output(id("output"), text, *is_error, cx)))
-                .into_any_element()
+            tools::result(seq, b, *is_error, text, expanded, this, cx).into_any_element()
         }
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
@@ -266,32 +285,11 @@ fn render_block(
     })
 }
 
-fn output(id: ElementId, text: &str, is_error: bool, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let color = if is_error { theme.danger } else { theme.muted_foreground };
-    let frame = div()
-        .ml(px(20.))
-        .px_3()
-        .py_2()
-        .rounded_md()
-        .border_1()
-        .border_color(theme.border)
-        .bg(theme.muted)
-        .font_family(MONO)
-        .text_size(px(12.))
-        .text_color(color);
-    if text.len() > LOG_BLOCK_ABOVE {
-        frame.child(LogBlock { log: LogText::new(text), color, font: MONO.into() }).into_any_element()
-    } else {
-        frame.child(SelectableText::new(id, text.to_string())).into_any_element()
-    }
-}
-
 #[expect(
     clippy::too_many_arguments,
     reason = "each is a separate input to the card, and a struct would only bundle them for this call"
 )]
-fn disclosure(
+pub(super) fn disclosure(
     id: ElementId,
     label: &str,
     summary: impl Into<SharedString>,
@@ -322,37 +320,4 @@ fn disclosure(
             .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(label.to_string())))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into())),
     )
-}
-
-/// A small picture of what kind of tool it is.
-fn tool_icon(name: &str) -> IconName {
-    match name {
-        "Bash" => IconName::SquareTerminal,
-        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => IconName::FileText,
-        "Grep" | "Glob" | "WebSearch" | "WebFetch" => IconName::Search,
-        _ => IconName::Ellipsis,
-    }
-}
-
-/// One line saying what a tool is doing. Shows the field that matters for common tools.
-pub(crate) fn summarize_input(input: &Value) -> SharedString {
-    for key in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"] {
-        if let Some(value) = input.get(key).and_then(Value::as_str) {
-            return first_line(value).into();
-        }
-    }
-    first_line(&input.to_string()).into()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::summarize_input;
-    use serde_json::json;
-
-    #[test]
-    fn tool_summaries_pick_the_field_that_matters() {
-        assert_eq!(summarize_input(&json!({"command": "cargo test\nsecond line", "description": "x"})), "cargo test");
-        assert_eq!(summarize_input(&json!({"file_path": "src/a.rs", "old_string": "y"})), "src/a.rs");
-        assert_eq!(summarize_input(&json!({"other": 1})), "{\"other\":1}");
-    }
 }

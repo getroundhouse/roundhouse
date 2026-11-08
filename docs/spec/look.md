@@ -8,17 +8,17 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 - **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a message, a card, a popover or the selected tab, is `#24201e`. The composer and code blocks are `#1e1b19`.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
-- **The system font, at 14px for body text, 12px for secondary text and tool calls, and 11px for small details.** It's dense enough to watch many agents, and still easy to read.
+- **The system font, at 14px for body text.** Secondary text and tool calls use the kit's small size, 12.25px, and small details its extra-small size, 10.5px, both scaled from the body text. It's dense enough to watch many agents, and still easy to read.
 - **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
-- **Code is Menlo at 12px.**
+- **Code is Menlo at 12px,** set once in the theme.
 
 ## Space and shape
 
 - **A 4px grid.** Controls are 28px tall, sidebar rows 30px, the workspace header 48px, and the chat tabs 40px.
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **The transcript is a centred column, at most 780px wide,** so lines stay short enough to read in a wide window.
-- **A tool call is one compact line,** with an icon for its kind and the input that matters, and its output folds underneath it.
+- **A tool call is one compact line,** with an icon for its kind and the input that matters, and its result folds underneath it, even when the agent runs several calls at once.
 
 ## Buttons
 

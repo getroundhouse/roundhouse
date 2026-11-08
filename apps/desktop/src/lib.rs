@@ -55,7 +55,7 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
         ..Default::default()
     };
     gpui_kit::open_window(options, cx, |window, cx| {
-        look::apply(Some(window), cx);
+        look::apply(cx);
         window.activate_window();
         cx.new(|cx| app::AppView::new(hub, window, cx))
     })

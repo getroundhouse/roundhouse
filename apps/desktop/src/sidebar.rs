@@ -13,6 +13,7 @@ use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::{AppView, BuildLabel};
+use crate::workspace_pane::HEADER_HEIGHT;
 
 const WIDTH: f32 = 260.0;
 
@@ -32,7 +33,7 @@ pub(crate) fn signal(status: Option<SessionStatus>) -> Signal {
         Some(SessionStatus::Running) => Signal::Working,
         Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
         Some(SessionStatus::Interrupted) => Signal::Failed,
-        _ => Signal::Idle,
+        None | Some(SessionStatus::Idle | SessionStatus::Unknown) => Signal::Idle,
     }
 }
 
@@ -44,11 +45,7 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
     let muted = cx.theme().muted_foreground;
     let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status) };
     // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
-    let work = app
-        .panes
-        .get(&workspace.id)
-        .and_then(|pane| pane.read(cx).pull_request.as_ref().map(|pr| Work::from_github(&pr.state, pr.is_draft)))
-        .unwrap_or(Work::NoPr);
+    let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
     Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .ghost()
         .small()
@@ -69,7 +66,7 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
                 .text_sm()
                 .when(selected, |d| d.font_weight(FontWeight::MEDIUM))
                 .when(archived, |d| d.text_color(muted))
-                .child(look::mark(mark, work, px(18.), cx))
+                .child(look::mark(mark, work, look::Size::Row, cx))
                 .child(
                     div()
                         .flex_1()
@@ -160,7 +157,7 @@ fn footer(show_archived: bool, build: BuildLabel, cx: &mut Context<AppView>) -> 
                     cx.notify();
                 })),
         )
-        .child(div().px_2().pt_1().text_size(px(11.)).text_color(build_color).child(build.text))
+        .child(div().px_2().pt_1().text_xs().text_color(build_color).child(build.text))
 }
 
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -182,7 +179,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
                 .min_h_0()
                 .overflow_y_scroll()
                 .px_2()
-                .pt(px(44.))
+                .pt(HEADER_HEIGHT)
                 .gap_4()
                 .children(groups),
         )

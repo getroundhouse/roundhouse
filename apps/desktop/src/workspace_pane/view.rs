@@ -13,7 +13,8 @@ use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
 
 use super::setup::setup_log_view;
-use super::{PaneEvent, WorkspacePane, is_working};
+use super::{HEADER_HEIGHT, PaneEvent, WorkspacePane, is_working};
+use crate::StopAgent;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
 pub(super) const MODELS: [(&str, &str); 5] =
@@ -35,8 +36,7 @@ impl WorkspacePane {
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id);
         let mark = crate::sidebar::signal(Some(session.status));
-        let work =
-            self.pull_request.as_ref().map_or(look::Work::NoPr, |pr| look::Work::from_github(&pr.state, pr.is_draft));
+        let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         h_flex()
             .flex_none()
@@ -54,9 +54,9 @@ impl WorkspacePane {
                         h_flex()
                             .w_full()
                             .gap_1p5()
-                            .text_size(px(13.))
+                            .text_sm()
                             .when(!selected, |d| d.text_color(muted))
-                            .child(look::mark(mark, work, px(16.), cx))
+                            .child(look::mark(mark, work, look::Size::Inline, cx))
                             .child(
                                 div()
                                     .flex_1()
@@ -196,13 +196,14 @@ impl WorkspacePane {
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let mono = theme.mono_font_family.clone();
         let (border, muted) = (theme.border, theme.muted_foreground);
         let id = self.workspace.id.clone();
         let pr = self.pull_request.clone();
         h_flex()
             .flex_none()
             .w_full()
-            .h(px(48.))
+            .h(HEADER_HEIGHT)
             .px_4()
             .gap_2()
             .border_b_1()
@@ -216,7 +217,7 @@ impl WorkspacePane {
                     .whitespace_nowrap()
                     .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(self.workspace.name.clone()))
                     .child(div().text_color(look::faint()).child("/"))
-                    .child(div().text_xs().font_family("Menlo").text_color(muted).child(self.workspace.branch.clone()))
+                    .child(div().text_xs().font_family(mono).text_color(muted).child(self.workspace.branch.clone()))
                     .child(
                         div()
                             .text_xs()
@@ -241,7 +242,7 @@ impl WorkspacePane {
                     Button::new("pull-request")
                         .small()
                         .icon(IconName::Github)
-                        .label(format!("#{} · {}", pr.number, capitalized(&pr.state.to_lowercase())))
+                        .label(format!("#{} · {}", pr.number, self.work().name()))
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             })
@@ -256,7 +257,8 @@ impl WorkspacePane {
             })
     }
 
-    fn composer_row(&self, pickers: AnyElement, cx: &mut Context<Self>) -> impl IntoElement {
+    fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let pickers = self.pickers(cx).into_any_element();
         let working = self.session().is_some_and(is_working);
         let theme = cx.theme();
         let (surface, border) = (theme.muted, theme.input);
@@ -273,7 +275,7 @@ impl WorkspacePane {
                         .small()
                         .icon(IconName::Square)
                         .label("Stop")
-                        .tooltip("Stop  ⌘.")
+                        .tooltip_with_action("Stop", &StopAgent, None)
                         .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                         .into_any_element()
                 } else {
@@ -281,17 +283,12 @@ impl WorkspacePane {
                         .primary()
                         .small()
                         .icon(IconName::ArrowUp)
-                        .tooltip("Send  ↩")
+                        .tooltip("Send")
                         .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
                         .into_any_element()
                 })),
         )
     }
-}
-
-fn capitalized(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
 
 impl Render for WorkspacePane {
@@ -301,8 +298,7 @@ impl Render for WorkspacePane {
         let setup_line = self.setup_line(cx);
         let header = self.header(cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
-        let pickers = self.pickers(cx).into_any_element();
-        let composer = self.composer_row(pickers, cx).into_any_element();
+        let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
         let diff = if self.diff_open { self.diff.clone() } else { None };
