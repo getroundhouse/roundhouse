@@ -9,6 +9,8 @@ mod chats;
 mod core_loop;
 #[cfg(target_os = "macos")]
 mod gallery;
+#[cfg(target_os = "macos")]
+mod motif;
 mod pickers;
 mod questions;
 mod reconnecting;

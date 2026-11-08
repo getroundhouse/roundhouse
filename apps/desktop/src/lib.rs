@@ -7,7 +7,7 @@ mod sidebar;
 pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
-use gpui_kit::component::{Theme, ThemeMode};
+use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
     actions, px, size,
@@ -57,9 +57,18 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
     };
     gpui_kit::open_window(options, cx, |window, cx| {
         Theme::change(ThemeMode::Dark, Some(window), cx);
+        apply_theme(Some(window), cx);
         window.activate_window();
         cx.new(|cx| app::AppView::new(hub, window, cx))
     })
+}
+
+/// SKETCH: Roundhouse's own dark theme, over the kit's. Installed as the dark theme and then switched to, so the
+/// kit's other layers, such as rich text, pick it up too.
+pub fn apply_theme(window: Option<&mut gpui_kit::Window>, cx: &mut App) {
+    let config: ThemeConfig = serde_json::from_str(include_str!("theme.json")).expect("theme.json is valid");
+    Theme::global_mut(cx).dark_theme = std::rc::Rc::new(config);
+    Theme::change(ThemeMode::Dark, window, cx);
 }
 
 pub fn run() {

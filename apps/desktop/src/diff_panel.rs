@@ -8,12 +8,12 @@ use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
 };
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, Div, ElementId, Entity, EventEmitter, HighlightStyle, Hsla,
     InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Subscription,
-    WeakEntity, Window, div,
+    WeakEntity, Window, div, px,
 };
 use protocol::model::{CommentId, DiffComment, DiffSide, WorkspaceId};
 
@@ -278,16 +278,22 @@ impl DiffPanel {
         h_flex()
             .flex_none()
             .w_full()
+            .h(px(40.))
             .px_3()
-            .py_2()
             .gap_2()
             .justify_between()
             .border_b_1()
             .border_color(cx.theme().border)
-            .child(div().text_sm().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
+                    .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
+            )
             .child(
                 Button::new("send-comments")
                     .primary()
+                    .small()
                     .label("Send to agent")
                     .on_click(cx.listener(|t, _, _, cx| t.send_comments(cx))),
             )
@@ -295,7 +301,19 @@ impl DiffPanel {
 }
 
 fn annotation_frame(cx: &App) -> Div {
-    v_flex().m_2().p_2().gap_2().rounded_md().bg(cx.theme().secondary).text_sm()
+    let theme = cx.theme();
+    v_flex()
+        .mx_3()
+        .my_2()
+        .max_w(px(380.))
+        .px_3()
+        .py_2p5()
+        .gap_2()
+        .rounded_md()
+        .border_1()
+        .border_color(theme.border)
+        .bg(theme.secondary)
+        .text_sm()
 }
 
 fn draft_card(input: &Entity<TextareaState>, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
@@ -317,13 +335,21 @@ fn draft_card(input: &Entity<TextareaState>, panel: WeakEntity<DiffPanel>, cx: &
 
 fn comment_card(comment: DiffComment, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
     annotation_frame(cx)
+        .child(
+            h_flex()
+                .gap_2()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(div().size(px(6.)).rounded_full().bg(transcript::look::accent()))
+                .child("Your comment, for the agent"),
+        )
         .child(comment.text.clone())
         .child(
             div()
                 .id(ElementId::Name(format!("delete-{}", comment.id).into()))
                 .text_xs()
                 .cursor_pointer()
-                .text_color(cx.theme().muted_foreground)
+                .text_color(transcript::look::faint())
                 .on_click(move |_, _, cx| {
                     let _ = panel.update(cx, |t, cx| t.delete_comment(comment.id.clone(), cx));
                 })

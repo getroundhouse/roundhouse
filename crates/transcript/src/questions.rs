@@ -4,14 +4,18 @@
 use std::collections::BTreeMap;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, ElementId, Hsla, IntoElement, ParentElement, Styled, WeakEntity, div};
+use gpui_kit::{
+    AnyElement, App, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, WeakEntity, div, px,
+};
 use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
 use crate::Transcript;
+use crate::look::{self, Signal};
 
 pub(crate) const TOOL_NAME: &str = "AskUserQuestion";
 
@@ -83,6 +87,7 @@ pub(crate) fn first_unanswered<'a>(
 
 /// Which card this is, and what its buttons act on.
 struct CardContext<'a> {
+    colors: OptionColors,
     seq: Seq,
     approval_id: &'a ApprovalId,
     open: bool,
@@ -102,26 +107,65 @@ fn option_button(
     let (seq, only_question) = (card.seq, card.only_question);
     let (this, approval_id, question, label) =
         (card.this.clone(), card.approval_id.clone(), question.clone(), option.label.clone());
-    Button::new(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
-        .small()
-        // It's two lines, which is more than a small button's fixed height.
-        .h_auto()
-        .selected(selected)
+    let theme = cx_theme_colors(card);
+    h_flex()
+        .id(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
+        .w_full()
+        .px_2()
+        .py_1p5()
+        .gap_3()
+        .items_start()
+        .rounded_md()
+        .border_1()
+        .border_color(if selected { theme.ring } else { theme.border })
+        .bg(if selected { theme.selected } else { theme.surface })
+        .cursor_pointer()
+        .hover(move |d| d.bg(theme.hover))
         .on_click(move |_, _, cx| {
             let _ = this.update(cx, |t, cx| {
                 t.pick_answer(seq, approval_id.clone(), &question, label.clone(), only_question, cx);
             });
         })
         .child(
+            div()
+                .flex_none()
+                .mt(px(1.))
+                .size(px(18.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_sm()
+                .border_1()
+                .border_color(theme.border)
+                .text_size(px(11.))
+                .text_color(muted)
+                .child(format!("{}", o + 1)),
+        )
+        .child(
             v_flex()
-                .items_start()
-                .py_1()
-                .child(option.label.clone())
+                .flex_1()
+                .min_w_0()
+                .gap_0p5()
+                .child(div().text_sm().child(option.label.clone()))
                 .when_some(option.description.clone(), |d, description| {
                     d.child(div().text_xs().text_color(muted).child(description))
                 }),
         )
         .into_any_element()
+}
+
+/// SKETCH: the colours an option row needs, picked once per card.
+#[derive(Clone, Copy)]
+struct OptionColors {
+    border: Hsla,
+    ring: Hsla,
+    surface: Hsla,
+    hover: Hsla,
+    selected: Hsla,
+}
+
+fn cx_theme_colors(card: &CardContext<'_>) -> OptionColors {
+    card.colors
 }
 
 fn question_view(
@@ -149,24 +193,23 @@ fn question_view(
         .collect();
     v_flex()
         .w_full()
-        .gap_1()
-        .when_some(question.header.clone(), |d, header| d.child(div().text_xs().text_color(muted).child(header)))
-        .child(div().text_sm().child(question.text.clone()))
-        .when(card.open && !options.is_empty(), |d| d.child(h_flex().flex_wrap().gap_2().children(options)))
+        .gap_2()
+        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(question.text.clone()))
+        .when(card.open && !options.is_empty(), |d| d.child(v_flex().w_full().gap_1().children(options)))
         .when(card.open && !typed.is_empty(), |d| {
             d.child(div().text_xs().text_color(muted).child(format!("Your answer: {typed}")))
         })
         .into_any_element()
 }
 
-fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, muted: Hsla) -> impl IntoElement {
+fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool, _muted: Hsla) -> impl IntoElement {
     let seq = card.seq;
     let (to_send, to_skip) = (card.approval_id.clone(), card.approval_id.clone());
     let (send, skip) = (card.this.clone(), card.this.clone());
     h_flex()
         .w_full()
         .gap_2()
-        .child(div().flex_1().min_w_0().text_xs().text_color(muted).child("Or type your own answer below."))
+        .child(div().flex_1().min_w_0().text_xs().text_color(look::faint()).child("Or type your own answer in the box below."))
         .child(
             Button::new(ElementId::Name(format!("skip-question-{seq}").into())).small().ghost().label("Skip").on_click(
                 move |_, _, cx| {
@@ -199,12 +242,21 @@ pub(crate) fn card(
     cx: &App,
 ) -> AnyElement {
     let theme = cx.theme();
-    let (border, muted) = (if open { theme.warning } else { theme.border }, theme.muted_foreground);
+    let muted = theme.muted_foreground;
+    let amber = theme.warning;
+    let colors = OptionColors {
+        border: theme.border,
+        ring: amber.opacity(0.7),
+        surface: theme.background,
+        hover: theme.secondary,
+        selected: amber.opacity(0.12),
+    };
     let asked = parse(input);
     let only_question = asked.len() == 1;
     let needs_send = !only_question || asked.iter().any(|q| q.multiple);
     let ready = first_unanswered(&asked, picks).is_none();
-    let context = CardContext { seq, approval_id, open, only_question, this };
+    let header = asked.iter().find_map(|q| q.header.clone()).unwrap_or_else(|| "Question".to_string());
+    let context = CardContext { colors, seq, approval_id, open, only_question, this };
     let rendered: Vec<AnyElement> = asked
         .iter()
         .enumerate()
@@ -212,8 +264,7 @@ pub(crate) fn card(
         .collect();
     div()
         .w_full()
-        .px_4()
-        .py_1()
+        .pb_3()
         .child(
             v_flex()
                 .w_full()
@@ -221,7 +272,17 @@ pub(crate) fn card(
                 .gap_3()
                 .rounded_lg()
                 .border_1()
-                .border_color(border)
+                .border_color(if open { amber.opacity(0.45) } else { theme.border })
+                .when(open, |d| d.bg(amber.opacity(0.05)))
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(if open { amber } else { muted })
+                        .child(look::fan(if open { Signal::NeedsYou } else { Signal::Idle }, look::Work::NoPr, px(16.), cx))
+                        .child(if open { format!("The agent is asking · {header}") } else { header }),
+                )
                 .children(rendered)
                 .when(open, |d| d.child(card_actions(&context, needs_send, ready, muted))),
         )

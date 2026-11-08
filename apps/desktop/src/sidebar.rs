@@ -1,13 +1,14 @@
 //! Workspaces grouped by repository, each with its status.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, div, px,
 };
-use protocol::model::{Repo, Session, SessionStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
+use transcript::look::{self, Signal, Work};
 
 use crate::app::{AppView, BuildLabel};
 
@@ -24,13 +25,12 @@ pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
     sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
 }
 
-pub(crate) fn status_color(status: Option<SessionStatus>, cx: &App) -> Hsla {
-    let theme = cx.theme();
+pub(crate) fn signal(status: Option<SessionStatus>) -> Signal {
     match status {
-        Some(SessionStatus::Running) => theme.primary,
-        Some(SessionStatus::WaitingApproval) => theme.warning,
-        Some(SessionStatus::Interrupted) => theme.danger,
-        _ => theme.muted_foreground.opacity(0.4),
+        Some(SessionStatus::Running) => Signal::Working,
+        Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
+        Some(SessionStatus::Interrupted) => Signal::Failed,
+        _ => Signal::Idle,
     }
 }
 
@@ -39,13 +39,27 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
     let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
     let archived = workspace.status == WorkspaceStatus::Archived;
     let id = workspace.id.clone();
-    let muted = cx.theme().muted_foreground;
-    let dot = status_color(status, cx);
-    Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
-        .ghost()
-        .small()
+    let theme = cx.theme();
+    let (muted, selected_bg, hover_bg) = (theme.muted_foreground, theme.sidebar_accent, theme.list_hover);
+    let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status) };
+    // SKETCH: only a workspace whose pane is open knows its PR. *Not built*: the hub sends it with each workspace.
+    let work = app
+        .panes
+        .get(&workspace.id)
+        .and_then(|pane| pane.read(cx).pull_request.as_ref().map(|pr| Work::from_github(&pr.state, pr.is_draft)))
+        .unwrap_or(Work::NoPr);
+    h_flex()
+        .id(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .w_full()
-        .selected(selected)
+        .h(px(30.))
+        .px_2()
+        .gap_2()
+        .rounded_md()
+        .text_sm()
+        .cursor_pointer()
+        .when(selected, |d| d.bg(selected_bg).font_weight(FontWeight::MEDIUM))
+        .when(!selected, |d| d.hover(move |d| d.bg(hover_bg)))
+        .when(archived, |d| d.text_color(muted))
         .on_click(cx.listener(move |t, _, _, cx| {
             if archived {
                 t.restore(id.clone(), cx);
@@ -53,15 +67,9 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
                 t.select(id.clone(), cx);
             }
         }))
-        .child(
-            h_flex()
-                .w_full()
-                .gap_2()
-                .when(archived, |d| d.text_color(muted))
-                .child(div().flex_none().size_2().rounded_full().bg(dot))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(workspace.name.clone()))
-                .when(archived, |d| d.child(div().flex_none().text_xs().child("Restore"))),
-        )
+        .child(look::fan(mark, work, px(18.), cx))
+        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(workspace.name.clone()))
+        .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore")))
 }
 
 fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Context<AppView>) -> AnyElement {
@@ -72,65 +80,79 @@ fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Conte
         visible.iter().filter(|w| w.repo_id == repo.id).map(|w| workspace_row(app, w, cx).into_any_element()).collect();
     v_flex()
         .w_full()
-        .gap_1()
+        .gap_px()
         .child(
             h_flex()
                 .w_full()
-                .px_2()
+                .h(px(26.))
+                .pl_2()
                 .justify_between()
-                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(muted).child(repo.name.clone()))
+                .child(
+                    h_flex()
+                        .gap_1p5()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(muted)
+                        .child(Icon::new(IconName::Folder).xsmall().text_color(look::faint()))
+                        .child(repo.name.clone()),
+                )
                 .child(
                     Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
                         .ghost()
                         .xsmall()
-                        .label("New")
+                        .icon(IconName::Plus)
+                        .tooltip("New workspace")
                         .loading(creating)
                         .disabled(app.busy)
                         .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
                 ),
         )
         .children(rows)
-        .when(creating, |d| d.child(div().px_2().text_xs().text_color(muted).child("Creating a workspace…")))
+        .when(creating, |d| d.child(div().px_2().h(px(30.)).flex().items_center().text_xs().text_color(muted).child("Creating a workspace…")))
         .into_any_element()
+}
+
+fn footer_item(id: &'static str, icon: IconName, label: &'static str, cx: &mut Context<AppView>) -> gpui_kit::Stateful<gpui_kit::Div> {
+    let theme = cx.theme();
+    let (muted, hover_bg, foreground) = (theme.muted_foreground, theme.list_hover, theme.foreground);
+    h_flex()
+        .id(id)
+        .h(px(28.))
+        .px_2()
+        .gap_2()
+        .rounded_md()
+        .text_sm()
+        .text_color(muted)
+        .cursor_pointer()
+        .hover(move |d| d.bg(hover_bg).text_color(foreground))
+        .child(Icon::new(icon).small())
+        .child(label)
 }
 
 fn footer(show_archived: bool, build: BuildLabel, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
-    let build_color = if build.differs { theme.warning } else { theme.muted_foreground };
-    let border = theme.border;
+    let build_color = if build.differs { theme.warning } else { look::faint() };
+    let border = theme.sidebar_border;
     v_flex()
         .flex_none()
         .p_2()
-        .gap_1()
+        .gap_px()
         .border_t_1()
         .border_color(border)
+        .child(footer_item("add-repository", IconName::Plus, "Add repository", cx).on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))))
         .child(
-            h_flex()
-                .gap_3()
-                .child(
-                    Button::new("add-repository")
-                        .ghost()
-                        .xsmall()
-                        .label("Add repository")
-                        .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-                )
-                .child(
-                    Button::new("toggle-archived")
-                        .ghost()
-                        .xsmall()
-                        .label(if show_archived { "Hide archived" } else { "Show archived" })
-                        .on_click(cx.listener(|t, _, _, cx| {
-                            t.show_archived = !t.show_archived;
-                            cx.notify();
-                        })),
-                ),
+            footer_item("toggle-archived", IconName::Inbox, if show_archived { "Hide archived" } else { "Archived" }, cx)
+                .on_click(cx.listener(|t, _, _, cx| {
+                    t.show_archived = !t.show_archived;
+                    cx.notify();
+                })),
         )
-        .child(div().px_2().text_xs().text_color(build_color).child(build.text))
+        .child(div().px_2().pt_1().text_size(px(11.)).text_color(build_color).child(build.text))
 }
 
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
-    let (background, border) = (theme.sidebar, theme.border);
+    let (background, border) = (theme.sidebar, theme.sidebar_border);
     let visible = app.visible_workspaces();
     let groups: Vec<AnyElement> = app.repos.iter().map(|repo| repo_group(app, repo, &visible, cx)).collect();
     v_flex()
@@ -140,7 +162,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .bg(background)
         .border_r_1()
         .border_color(border)
-        .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().p_2().pt_8().gap_4().children(groups))
+        .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().px_2().pt(px(44.)).gap_4().children(groups))
         .child(footer(app.show_archived, app.build_label(), cx))
 }
 

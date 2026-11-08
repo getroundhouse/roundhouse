@@ -7,6 +7,19 @@ use protocol::tail::{BlockKind, Tail};
 
 use super::{empty, row};
 
+/// SKETCH: the fan with its light sweeping, beside what the agent is doing.
+fn working(text: String, cx: &App) -> gpui_kit::Div {
+    gpui_kit::div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .h(gpui_kit::px(22.))
+        .text_xs()
+        .text_color(cx.theme().muted_foreground)
+        .child(crate::look::fan(crate::look::Signal::Working, crate::look::Work::NoPr, gpui_kit::px(16.), cx))
+        .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
+}
+
 /// Text the agent is still writing. Tool input is hidden until it's complete, because it's partial JSON.
 pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
     if tail.is_empty() {
@@ -21,18 +34,10 @@ pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
                     let id = ElementId::NamedInteger("tail".into(), key);
                     out.child(TextView::markdown(id, SharedString::from(block.text.clone())).selectable(true))
                 }
-                BlockKind::Thinking => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("Thinking… {}", last_line(&block.text))),
-                ),
-                BlockKind::ToolUse => out.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("{}…", block.tool_name.as_deref().unwrap_or("Tool"))),
-                ),
+                BlockKind::Thinking => out.child(working(format!("Thinking  {}", last_line(&block.text)), cx)),
+                BlockKind::ToolUse => {
+                    out.child(working(format!("Running {}", block.tool_name.as_deref().unwrap_or("a tool")), cx))
+                }
                 BlockKind::Unknown => out,
             };
         }

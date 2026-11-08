@@ -4,6 +4,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+pub mod look;
 mod log_block;
 mod questions;
 mod rows;
