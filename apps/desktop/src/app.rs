@@ -1,11 +1,12 @@
-//! The window: the sidebar on the left and the selected workspace beside it. Holds the hub's records,
-//! kept current by its feed, and is the only place that connects and reconnects.
+//! The window: the sidebar on the left and the selected workspace beside it. Shows the hub's records,
+//! which client-core keeps current, and is the only place that connects and reconnects.
 
 use std::collections::HashMap;
 
-use client_core::{Client, ClientError, HubAdmin, SubscriptionItem};
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Result, Task, Window};
-use protocol::client::{HubNotice, HubStatus};
+use client_core::records::Record;
+use client_core::{Client, ClientError, HubAdmin, RecordsFeed};
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
+use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
@@ -32,25 +33,11 @@ pub enum Connection {
     AcrossABreak(HubStatus),
 }
 
-struct Snapshot {
-    repos: Vec<Repo>,
-    workspaces: Vec<Workspace>,
-    sessions: HashMap<WorkspaceId, Vec<Session>>,
-}
-
-fn load_snapshot(client: &Client) -> Result<Snapshot, ClientError> {
-    let repos = client.repo_list()?;
-    let workspaces = client.workspace_list(true)?;
-    let mut sessions = HashMap::new();
-    for workspace in workspaces.iter().filter(|w| w.status == WorkspaceStatus::Ready) {
-        sessions.insert(workspace.id.clone(), client.session_list(&workspace.id)?);
-    }
-    Ok(Snapshot { repos, workspaces, sessions })
-}
-
 pub struct AppView {
     hub: HubSource,
     pub connection: Connection,
+    /// Client-core's copy of the hub's records. The lists below are what's shown of it.
+    feed: Option<RecordsFeed>,
     pub repos: Vec<Repo>,
     pub workspaces: Vec<Workspace>,
     pub sessions: HashMap<WorkspaceId, Vec<Session>>,
@@ -75,6 +62,7 @@ impl AppView {
         let mut this = Self {
             hub,
             connection: Connection::Connecting,
+            feed: None,
             repos: Vec::new(),
             workspaces: Vec::new(),
             sessions: HashMap::new(),
@@ -127,9 +115,11 @@ impl AppView {
         cx.notify();
     }
 
-    /// Connects and follows the feed. Comes back here if the hub goes away, which starts a new one.
+    /// Connects, and has client-core follow the hub's records. Comes back here if the hub goes away,
+    /// which starts a new one.
     pub fn connect(&mut self, cx: &mut Context<Self>) {
         self.connection = Connection::Connecting;
+        self.feed = None;
         self.panes.clear();
         cx.notify();
         let hub = self.hub.clone();
@@ -138,13 +128,11 @@ impl AppView {
             let connected = cx
                 .background_spawn(async move {
                     let client = hub.connect()?;
-                    // Subscribing first means nothing can change between the list and the feed.
-                    let feed = client.feed_subscribe()?;
-                    let snapshot = load_snapshot(&client)?;
-                    Ok::<_, ClientError>((client, feed, snapshot))
+                    let feed = RecordsFeed::follow(&client)?;
+                    Ok::<_, ClientError>((client, feed))
                 })
                 .await;
-            let (client, feed, snapshot) = match connected {
+            let (client, feed) = match connected {
                 Ok(connected) => connected,
                 Err(e) => {
                     let status = if e.is_version_mismatch() {
@@ -164,97 +152,54 @@ impl AppView {
             };
             let _ = this.update(cx, |t, cx| {
                 t.connection = Connection::Ready(client);
-                t.apply_snapshot(snapshot, cx);
+                t.feed = Some(feed.clone());
+                t.refresh(&feed, true, cx);
             });
-            while let Ok(item) = feed.items.recv_async().await {
-                match item {
-                    SubscriptionItem::Notice(notice) => {
-                        if this.update(cx, |t, cx| t.apply_notice(notice, cx)).is_err() {
-                            return;
-                        }
-                    }
-                    SubscriptionItem::Disconnected => {
-                        let _ = this.update(cx, AppView::connect);
-                        return;
-                    }
-                    _ => {}
+            while feed.changed.recv_async().await.is_ok() {
+                if this.update(cx, |t, cx| t.refresh(&feed, false, cx)).is_err() {
+                    return;
                 }
             }
+            // The feed ends when the connection does.
+            let _ = this.update(cx, AppView::connect);
         }));
     }
 
-    fn apply_snapshot(&mut self, snapshot: Snapshot, cx: &mut Context<Self>) {
-        self.repos = snapshot.repos;
-        self.workspaces = snapshot.workspaces;
-        self.sessions = snapshot.sessions;
-        for (id, pane) in &self.panes {
-            let sessions = self.sessions.get(id).cloned().unwrap_or_default();
-            pane.update(cx, |p, cx| p.set_sessions(sessions, cx));
+    /// Passes on records that replies carried, so what's shown needn't wait for the feed.
+    pub(crate) fn take_replies(&mut self, records: impl IntoIterator<Item = Record>, cx: &mut Context<Self>) {
+        let Some(feed) = self.feed.clone() else { return };
+        for record in records {
+            feed.take_reply(record);
         }
+        // Even if client-core had these already: what's shown here may not have caught up with it yet.
+        self.refresh(&feed, false, cx);
+    }
+
+    /// Brings what's shown up to date with client-core's copy of the records, and tells each pane what
+    /// it holds for its workspace. `connected` is the first time on a connection.
+    fn refresh(&mut self, feed: &RecordsFeed, connected: bool, cx: &mut Context<Self>) {
+        let (repos, workspaces, sessions, mut comments) =
+            feed.read(|records| (records.repos(), records.workspaces(), records.sessions(), records.comments()));
+        self.panes.retain(|id, _| workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived));
+        for (id, pane) in &self.panes {
+            let Some(workspace) = workspaces.iter().find(|w| &w.id == id).cloned() else { continue };
+            let its_sessions = sessions.get(id).cloned().unwrap_or_default();
+            let its_comments = comments.remove(id).unwrap_or_default();
+            pane.update(cx, |p, cx| p.set_records(workspace, its_sessions, its_comments, cx));
+        }
+        self.repos = repos;
+        self.workspaces = workspaces;
+        self.sessions = sessions;
         let still_there =
             self.selected.as_ref().is_some_and(|id| self.visible_workspaces().iter().any(|w| &w.id == id));
         if !still_there {
             self.selected = self.visible_workspaces().first().map(|w| w.id.clone());
         }
-        self.show_selected(cx);
-        cx.notify();
-    }
-
-    fn apply_notice(&mut self, notice: HubNotice, cx: &mut Context<Self>) {
-        match notice {
-            HubNotice::Repo(repo) => match self.repos.iter_mut().find(|r| r.id == repo.id) {
-                Some(existing) => *existing = repo,
-                None => self.repos.push(repo),
-            },
-            HubNotice::Workspace(workspace) => {
-                if workspace.status == WorkspaceStatus::Archived {
-                    self.panes.remove(&workspace.id);
-                }
-                if let Some(pane) = self.panes.get(&workspace.id) {
-                    pane.update(cx, |p, cx| p.set_workspace(workspace.clone(), cx));
-                }
-                match self.workspaces.iter_mut().find(|w| w.id == workspace.id) {
-                    Some(existing) => *existing = workspace,
-                    None => self.workspaces.push(workspace),
-                }
-                self.keep_selection_valid(cx);
-            }
-            HubNotice::Session(session) => {
-                if let Some(pane) = self.panes.get(&session.workspace_id) {
-                    pane.update(cx, |p, cx| p.set_session(session.clone(), cx));
-                }
-                let list = self.sessions.entry(session.workspace_id.clone()).or_default();
-                match list.iter_mut().find(|s| s.id == session.id) {
-                    Some(existing) => *existing = session,
-                    None => list.push(session),
-                }
-            }
-            HubNotice::Resync => {
-                if let Some(client) = self.client() {
-                    cx.spawn(async move |this, cx| {
-                        let snapshot = cx.background_spawn(async move { load_snapshot(&client) }).await;
-                        let _ = this.update(cx, |t, cx| match snapshot {
-                            Ok(snapshot) => t.apply_snapshot(snapshot, cx),
-                            Err(e) => t.show_error(format!("{e}"), cx),
-                        });
-                    })
-                    .detach();
-                }
-            }
-            // A removed workspace stays listed until the next list, and comments are fetched by the diff
-            // panel itself.
-            HubNotice::Comment(_) | HubNotice::Removed { .. } | HubNotice::Unknown => {}
-        }
-        cx.notify();
-    }
-
-    fn keep_selection_valid(&mut self, cx: &mut Context<Self>) {
-        let visible = self.visible_workspaces();
-        let fine = self.selected.as_ref().is_some_and(|id| visible.iter().any(|w| &w.id == id));
-        if !fine {
-            self.selected = visible.first().map(|w| w.id.clone());
+        let has_pane = self.selected.as_ref().is_some_and(|id| self.panes.contains_key(id));
+        if connected || !still_there || !has_pane {
             self.show_selected(cx);
         }
+        cx.notify();
     }
 
     pub fn visible_workspaces(&self) -> Vec<&Workspace> {
@@ -299,11 +244,14 @@ impl AppView {
                 return;
             }
             let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
-            let pane = cx.new(|cx| WorkspacePane::new(client, workspace, sessions, window, cx));
+            let comments =
+                self.feed.as_ref().and_then(|feed| feed.read(|r| r.comments().remove(&id))).unwrap_or_default();
+            let pane = cx.new(|cx| WorkspacePane::new(client, workspace, sessions, comments, window, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Disconnected => t.connect(cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
+                PaneEvent::Replied(record) => t.take_replies([*record], cx),
             })
             .detach();
             self.panes.insert(id.clone(), pane);

@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use client_core::Client;
+use client_core::records::Record;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
-use protocol::model::{PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::diff_panel::{DiffEvent, DiffPanel};
@@ -25,6 +26,8 @@ pub enum PaneEvent {
     Error(String),
     Disconnected,
     Archive(WorkspaceId, bool),
+    /// A reply carried this record, for client-core's copy of the records. Boxed, because records are large.
+    Replied(Box<Record>),
 }
 
 /// What `Create PR` asks of the agent. The agent writes it, because it knows why the changes were made.
@@ -43,6 +46,10 @@ pub struct WorkspacePane {
     pub workspace: Workspace,
     /// In the order they were made, including closed ones.
     pub sessions: Vec<Session>,
+    /// A chat to show once client-core's copy has it, such as one just made.
+    showing_next: Option<SessionId>,
+    /// What client-core holds for this workspace, for the diff panel.
+    comments: Vec<DiffComment>,
     pub active: Option<SessionId>,
     /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
     transcripts: HashMap<SessionId, (Entity<Transcript>, Subscription)>,
@@ -76,6 +83,7 @@ impl WorkspacePane {
         client: Client,
         workspace: Workspace,
         sessions: Vec<Session>,
+        comments: Vec<DiffComment>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -94,6 +102,8 @@ impl WorkspacePane {
             client,
             workspace,
             sessions,
+            showing_next: None,
+            comments,
             active: None,
             transcripts: HashMap::new(),
             drafts: HashMap::new(),
@@ -137,18 +147,36 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let changed = cx.background_spawn(async move { client.session_configure(&id, model, mode) }).await;
             let _ = this.update(cx, |t, cx| match changed {
-                Ok(session) => t.set_session(session, cx),
+                Ok(session) => t.took_reply(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't change that: {e}"))),
             });
         })
         .detach();
     }
 
-    pub fn set_workspace(&mut self, workspace: Workspace, cx: &mut Context<Self>) {
-        self.workspace = workspace;
-        // Picks up the last lines of the log once setup has finished.
-        if self.setup_log.is_some() {
-            self.load_setup_log(cx);
+    /// What client-core holds for this workspace now. Only what changed is passed on.
+    pub fn set_records(
+        &mut self,
+        workspace: Workspace,
+        sessions: Vec<Session>,
+        comments: Vec<DiffComment>,
+        cx: &mut Context<Self>,
+    ) {
+        if workspace != self.workspace {
+            self.workspace = workspace;
+            // Picks up the last lines of the log once setup has finished.
+            if self.setup_log.is_some() {
+                self.load_setup_log(cx);
+            }
+        }
+        if sessions != self.sessions {
+            self.set_sessions(sessions, cx);
+        }
+        if comments != self.comments {
+            if let Some(diff) = &self.diff {
+                diff.update(cx, |d, cx| d.set_comments(comments.clone(), cx));
+            }
+            self.comments = comments;
         }
         cx.notify();
     }
@@ -213,8 +241,12 @@ impl WorkspacePane {
                 let _ = this.update(cx, |t, cx| {
                     let (client, id) = (t.client.clone(), t.workspace.id.clone());
                     let diff = cx.new(|cx| DiffPanel::new(client, id, window, cx));
+                    diff.update(cx, |d, cx| d.set_comments(t.comments.clone(), cx));
                     let events = cx.subscribe(&diff, |this, _, event: &DiffEvent, cx| match event {
                         DiffEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
+                        DiffEvent::Replied(comment) => {
+                            cx.emit(PaneEvent::Replied(Box::new(Record::Comment(comment.clone()))));
+                        }
                         DiffEvent::SendToAgent(prompt) => {
                             if let Some(transcript) = this.transcript() {
                                 transcript.update(cx, |t, cx| t.send_prompt(prompt.clone(), cx));

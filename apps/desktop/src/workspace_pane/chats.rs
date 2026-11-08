@@ -6,6 +6,7 @@ use transcript::{Transcript, TranscriptEvent};
 
 use super::{PaneEvent, WorkspacePane, is_working};
 use crate::diff_panel::DiffPanel;
+use client_core::records::Record;
 
 /// What a new chat starts with. It keeps the model and how edits are handled, but Plan belongs to the
 /// task at hand, and full access should be chosen on purpose each time.
@@ -57,11 +58,7 @@ impl WorkspacePane {
     fn chat_created(&mut self, created: Result<Session, client_core::ClientError>, cx: &mut Context<Self>) {
         self.creating_chat = false;
         match created {
-            Ok(session) => {
-                let id = session.id.clone();
-                self.set_session(session, cx);
-                self.activate(id, cx);
-            }
+            Ok(session) => self.took_chat_to_show(session, cx),
             Err(e) => cx.emit(PaneEvent::Error(format!("couldn't start a chat: {e}"))),
         }
     }
@@ -159,7 +156,7 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let closed = cx.background_spawn(async move { client.session_close(&id) }).await;
             let _ = this.update(cx, |t, cx| match closed {
-                Ok(session) => t.set_session(session, cx),
+                Ok(session) => t.took_reply(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't close the chat: {e}"))),
             });
         })
@@ -171,31 +168,39 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let reopened = cx.background_spawn(async move { client.session_reopen(&id) }).await;
             let _ = this.update(cx, |t, cx| match reopened {
-                Ok(session) => {
-                    let id = session.id.clone();
-                    t.set_session(session, cx);
-                    t.activate(id, cx);
-                }
+                Ok(session) => t.took_chat_to_show(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't reopen the chat: {e}"))),
             });
         })
         .detach();
     }
 
-    pub fn set_session(&mut self, session: Session, cx: &mut Context<Self>) {
-        match self.sessions.iter_mut().find(|s| s.id == session.id) {
-            Some(existing) => *existing = session,
-            None => self.sessions.push(session),
-        }
+    /// Passes on a session a reply carried, for client-core's copy, which this then shows like any other
+    /// change.
+    pub fn took_reply(&mut self, session: Session, cx: &mut Context<Self>) {
+        cx.emit(PaneEvent::Replied(Box::new(Record::Session(session))));
+        self.show_next(cx);
+    }
+
+    /// The same, and the chat becomes the one showing once client-core's copy has it open.
+    fn took_chat_to_show(&mut self, session: Session, cx: &mut Context<Self>) {
+        self.showing_next = Some(session.id.clone());
+        self.took_reply(session, cx);
+    }
+
+    pub(super) fn set_sessions(&mut self, sessions: Vec<Session>, cx: &mut Context<Self>) {
+        self.sessions = sessions;
         self.keep_active_valid(cx);
+        self.show_next(cx);
         cx.notify();
     }
 
-    /// After reconnecting, or anything else that means the list has to be read again.
-    pub fn set_sessions(&mut self, sessions: Vec<Session>, cx: &mut Context<Self>) {
-        self.sessions = sessions;
-        self.keep_active_valid(cx);
-        cx.notify();
+    /// Shows the chat waiting to be shown, once client-core's copy has it open.
+    fn show_next(&mut self, cx: &mut Context<Self>) {
+        let ready = self.showing_next.as_ref().is_some_and(|id| self.open_sessions().any(|s| &s.id == id));
+        if ready && let Some(id) = self.showing_next.take() {
+            self.activate(id, cx);
+        }
     }
 
     /// Moves off a chat that's been closed, here or anywhere else, and starts one if none are left.

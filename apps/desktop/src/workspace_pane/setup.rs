@@ -8,6 +8,8 @@ use gpui_kit::{
 };
 use protocol::model::SetupStatus;
 
+use client_core::records::Record;
+
 use super::{PaneEvent, WorkspacePane};
 
 const SETUP_LOG_REFRESH: std::time::Duration = std::time::Duration::from_secs(1);
@@ -75,8 +77,8 @@ impl WorkspacePane {
         let (client, id) = (self.client.clone(), self.workspace.id.clone());
         cx.spawn(async move |this, cx| {
             let started = cx.background_spawn(async move { client.workspace_rerun_setup(&id) }).await;
-            let _ = this.update(cx, |t, cx| match started {
-                Ok(workspace) => t.set_workspace(workspace, cx),
+            let _ = this.update(cx, |_, cx| match started {
+                Ok(workspace) => cx.emit(PaneEvent::Replied(Box::new(Record::Workspace(workspace)))),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))),
             });
         })

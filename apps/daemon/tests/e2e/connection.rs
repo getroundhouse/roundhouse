@@ -7,7 +7,8 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Instant;
 
-use client_core::{Client, ClientError, HubAdmin, Subscription, SubscriptionItem};
+use client_core::records::HubRecords;
+use client_core::{Client, ClientError, HubAdmin, RecordsFeed, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, DiffSide, RecordKey, SessionStatus, WorkspaceStatus};
@@ -98,6 +99,35 @@ fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
     assert_eq!(record, &RecordKey::Comment { id: comment.id.clone() });
     assert!(before.rev < comment.rev && comment.rev < *rev && *rev <= after.rev);
     assert!(after.comments.is_empty());
+}
+
+#[test]
+fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let feed = RecordsFeed::follow(&client).unwrap();
+
+    let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    let kept = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Kept", None).unwrap();
+    let removed = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 2, "Removed", None).unwrap();
+    client.comment_delete(&removed.id).unwrap();
+
+    // Everything the feed announces. A session's newest event moves without a notice, so it's left out.
+    let shown = |records: &HubRecords| {
+        let mut sessions = records.sessions();
+        for session in sessions.values_mut().flatten() {
+            (session.last_seq, session.updated_at_ms) = (0, 0);
+        }
+        (records.repos(), records.workspaces(), sessions, records.comments())
+    };
+    wait_until("the copy to match a list", || {
+        let mut listed = HubRecords::default();
+        listed.apply_list(client.records_list().unwrap());
+        feed.read(shown) == shown(&listed)
+    });
+    assert_eq!(feed.read(HubRecords::comments).get(&workspace.id), Some(&vec![kept]));
 }
 
 #[test]

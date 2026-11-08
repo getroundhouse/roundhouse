@@ -3,15 +3,17 @@
 //! threads and async tasks can read. This keeps GPUI's executor out of it and leaves a path open
 //! for a native mobile client.
 //!
-//! [`session_log`] holds what a client has of a session's history.
+//! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
+//! session's history.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+pub mod records;
 pub mod session_log;
 
 mod client;
 
 pub use client::{
-    Client, ClientError, HubAdmin, Result, Subscription, SubscriptionItem, daemon_beside, new_message_id,
+    Client, ClientError, HubAdmin, RecordsFeed, Result, Subscription, SubscriptionItem, daemon_beside, new_message_id,
     new_request_id, stop_hub,
 };

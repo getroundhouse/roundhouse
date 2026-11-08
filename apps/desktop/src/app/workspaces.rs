@@ -1,6 +1,7 @@
 //! Adding repositories, and making, archiving and restoring workspaces.
 
 use client_core::ClientError;
+use client_core::records::Record;
 use gpui_kit::{AppContext, Context, PathPromptOptions, PromptLevel};
 use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, RepoId, WorkspaceId};
@@ -32,13 +33,7 @@ impl AppView {
                 match created {
                     Ok((workspace, session)) => {
                         let id = workspace.id.clone();
-                        if !t.workspaces.iter().any(|w| w.id == id) {
-                            t.workspaces.push(workspace);
-                        }
-                        let list = t.sessions.entry(id.clone()).or_default();
-                        if !list.iter().any(|s| s.id == session.id) {
-                            list.push(session);
-                        }
+                        t.take_replies([Record::Workspace(workspace), Record::Session(session)], cx);
                         t.select(id, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't create the workspace: {e}"), cx),
@@ -62,12 +57,7 @@ impl AppView {
             let Some(path) = paths.into_iter().next() else { return };
             let added = cx.background_spawn(async move { client.repo_add(&path.to_string_lossy()) }).await;
             let _ = this.update(cx, |t, cx| match added {
-                Ok(repo) => {
-                    if !t.repos.iter().any(|r| r.id == repo.id) {
-                        t.repos.push(repo);
-                    }
-                    cx.notify();
-                }
+                Ok(repo) => t.take_replies([Record::Repo(repo)], cx),
                 Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
             });
         })
@@ -85,13 +75,7 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 match result {
-                    Ok(workspace) => {
-                        t.panes.remove(&workspace.id);
-                        if let Some(existing) = t.workspaces.iter_mut().find(|w| w.id == workspace.id) {
-                            *existing = workspace;
-                        }
-                        t.keep_selection_valid(cx);
-                    }
+                    Ok(workspace) => t.take_replies([Record::Workspace(workspace)], cx),
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                         t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
@@ -128,23 +112,13 @@ impl AppView {
         self.busy = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_spawn(async move {
-                    let workspace = client.workspace_restore(&id)?;
-                    let sessions = client.session_list(&workspace.id)?;
-                    Ok::<_, ClientError>((workspace, sessions))
-                })
-                .await;
+            let result = cx.background_spawn(async move { client.workspace_restore(&id) }).await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 match result {
-                    Ok((workspace, sessions)) => {
+                    Ok(workspace) => {
                         let id = workspace.id.clone();
-                        t.sessions.insert(id.clone(), sessions);
-                        match t.workspaces.iter_mut().find(|w| w.id == id) {
-                            Some(existing) => *existing = workspace,
-                            None => t.workspaces.push(workspace),
-                        }
+                        t.take_replies([Record::Workspace(workspace)], cx);
                         t.select(id, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't restore: {e}"), cx),
