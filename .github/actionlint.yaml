@@ -1,0 +1,4 @@
+# Runners set up in the org, which actionlint can't know about.
+self-hosted-runner:
+  labels:
+    - ubuntu-latest-arm64-8cores

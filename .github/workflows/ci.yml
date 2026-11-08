@@ -1,0 +1,87 @@
+# The full checks from AGENTS.md, for every PR and the merge queue. They run on Linux, where everything passes but
+# the gallery: the window tests use GPUI's test platform, which draws nothing, and the gallery, whose images are
+# exact to the Mac that approved them, is compiled only on macOS. mac.yml covers what only a Mac catches.
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  # Only main saves caches, so PRs start warm.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # Smaller caches and faster links. A panic still gets line numbers.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized.
+  LINUX_PACKAGES: >-
+    pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
+    libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+
+jobs:
+  # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
+  lint:
+    runs-on: ubuntu-latest-arm64-8cores
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update -qq && xargs sudo apt-get install -y -qq <<< "$LINUX_PACKAGES"
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: linux-lint-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: linux-lint-
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  test:
+    runs-on: ubuntu-latest-arm64-8cores
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update -qq && xargs sudo apt-get install -y -qq <<< "$LINUX_PACKAGES"
+      # The tests make commits.
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: linux-test-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: linux-test-
+      - run: cargo test --workspace --locked
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
