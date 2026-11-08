@@ -1529,6 +1529,8 @@ dependencies = [
  "anyhow",
  "client-core",
  "gpui-kit",
+ "gpui-pre-apple",
+ "image",
  "protocol",
  "serde_json",
  "syntect",
