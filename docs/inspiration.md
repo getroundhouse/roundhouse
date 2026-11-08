@@ -13,6 +13,8 @@ From Conductor's docs (`/docs/concepts/workflow`):
 
 ## Sources
 
-Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are in `.context/conductor-docs/`, which is the best source for new `small-features` issues. It's gitignored, and only exists in the `yaounde` workspace. Don't republish it.
+Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are on the owner's Mac, in `~/conductor/archived-contexts/conductor-clone/merged-state/conductor-docs/`. They're the best source for new `small-features` issues. Don't republish them.
+
+Where the docs and the changelog disagree, the changelog is newer. For example, the FAQ says the sidebar shows a workspace's PR title or branch, but later releases name a workspace from its first prompt and show that name.
 
 - Conductor: [announcement](https://www.conductor.build/announcement), [changelog](https://conductor.build/changelog), [workflow](https://conductor.build/docs/concepts/workflow), [API](https://www.conductor.build/docs/api), [cloud FAQ](https://www.conductor.build/docs/cloud/faq), [docs index](https://conductor.build/llms.txt)
