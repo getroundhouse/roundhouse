@@ -10,7 +10,6 @@ use gpui_kit::{
 };
 
 use super::highlight::spans;
-use super::line::INDENT;
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 
@@ -19,11 +18,10 @@ const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 /// How tall a block's output gets before it scrolls: about a dozen lines.
 const MAX_HEIGHT: f32 = 236.0;
 
-/// The block itself, lined up under its call's title.
+/// The block itself, on the column's left edge with the call's icon, as everything in the transcript is.
 pub(in crate::rows) fn frame(cx: &App) -> Div {
     let theme = cx.theme();
     div()
-        .ml(px(INDENT))
         .mt_1()
         .mb_2()
         .flex()

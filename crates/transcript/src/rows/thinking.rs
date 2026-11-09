@@ -1,16 +1,16 @@
 //! What the agent thought, on the same line as its calls, so the two read as one list. Closed, the line shows the
-//! start of it, faint. Opened, all of it at body size, muted, under the title, and the line says only that it's
-//! thinking, so the start isn't shown twice.
+//! start of it, faint. Opened, all of it at body size, muted, under the line and on the column's left edge, and the
+//! line says only that it's thinking, so the start isn't shown twice.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::text::TextView;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled, TestSupportExt as _,
-    div, px,
+    div,
 };
 
-use super::line::{self, INDENT, Line, Part};
+use super::line::{self, Line, Part};
 use super::tools::Toggle;
 use crate::calls::first_line;
 use crate::item_key::ItemKey;
@@ -36,7 +36,6 @@ pub(super) fn text(key: &ItemKey, thought: &str, cx: &App) -> impl IntoElement {
     let text = TextView::markdown(key.element("thinking-text"), SharedString::from(thought.to_string()));
     div()
         .id(key.element("thinking"))
-        .ml(px(INDENT))
         .mb_1()
         .text_color(cx.theme().muted_foreground)
         .child(text.selectable(true))

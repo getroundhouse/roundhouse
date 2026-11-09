@@ -5,10 +5,10 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, px};
+use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled};
 use protocol::event::ContentBlock;
 
-use super::line::{INDENT, Line, Part};
+use super::line::{Line, Part};
 use super::{Answer, Subagent, Toggle, block, line};
 use crate::calls::agent::{self, Agent};
 use crate::calls::count;
@@ -34,7 +34,7 @@ pub(super) fn draw(
 fn opened(call: &Agent, answer: Option<&Answer>, subagent: Option<&Subagent>, toggle: &Toggle, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let prompt = call.prompt.map(|prompt| {
-        block::frame(cx).ml(px(0.)).child(block::label("Prompt", cx)).child(block::prose(toggle.key, "prompt", prompt))
+        block::frame(cx).child(block::label("Prompt", cx)).child(block::prose(toggle.key, "prompt", prompt))
     });
     let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
     let mut work = Vec::new();
@@ -51,8 +51,8 @@ fn opened(call: &Agent, answer: Option<&Answer>, subagent: Option<&Subagent>, to
         .iter()
         .any(|(event, _)| blocks_of(&event.body).iter().any(|block| matches!(block, ContentBlock::Text { .. })));
     let report = answer.and_then(Answer::success).filter(|text| !said && !agent::only_launched(text));
+    // The rule is on the column's left edge, like everything else, and the work sits in from it to show it's nested.
     v_flex()
-        .ml(px(INDENT))
         .pl_3()
         .mt_1()
         .mb_2()
