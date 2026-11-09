@@ -50,7 +50,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, amber or red when it needs you, and all white for a reply you haven't read. `docs/spec/look.md` has the rules | `look::mark` |
 | Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
 | Sidebar of changes | The sidebar on the right that lists the files a workspace changes against its base. `docs/spec/diff.md` has the rules | `Changes` |
-| Diff tab | A workspace's one tab for a changed file's diff, after its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
+| Diff tab | A workspace's one tab for a changed file's diff, before its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery
