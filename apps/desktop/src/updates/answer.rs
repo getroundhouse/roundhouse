@@ -1,52 +1,26 @@
-//! What the app says when someone checks for updates.
+//! What the sidebar says when someone checks for updates and nothing else there answers them. A downloaded update
+//! answers as its card, and a problem as itself.
 
-use gpui_kit::{App, PromptLevel};
-use velopack::UpdateInfo;
+use std::time::Duration;
 
-use super::Problem;
+/// How long an answer stays under the build. Long enough to read after looking down from the menu, and short enough
+/// that it doesn't become something else to read in the sidebar.
+pub(super) const SHOWN_FOR: Duration = Duration::from_secs(5);
 
-/// What a check found.
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum Answer {
-    /// Nothing is newer than this version.
-    UpToDate { version: String },
-    /// This version is downloaded, and installs when the app restarts to update or quits.
-    Ready { version: String },
-    /// What stopped the check, or stops this app updating at all.
-    Failed(Problem),
+/// What a check found, when it isn't an update or a problem.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Answer {
+    /// Nothing is newer than this version, and nothing newer is downloaded.
+    UpToDate,
     /// A build Velopack didn't install, which never updates.
     NotUpdating,
 }
 
 impl Answer {
-    /// What the look that answers someone found. An update an earlier look downloaded counts, since it's what
-    /// installs. Any problem is said at once, even being out of reach, which the sidebar waits a day to show, because
-    /// someone asked.
-    pub(super) fn after(outcome: &Result<(), Problem>, ready: Option<&UpdateInfo>, current: String) -> Self {
-        match (outcome, ready) {
-            (Err(problem), _) => Self::Failed(problem.clone()),
-            (Ok(()), Some(info)) => Self::Ready { version: info.TargetFullRelease.Version.clone() },
-            (Ok(()), None) => Self::UpToDate { version: current },
+    pub(crate) fn text(self) -> &'static str {
+        match self {
+            Self::UpToDate => "Up to date",
+            Self::NotUpdating => "This build doesn't update itself",
         }
-    }
-
-    pub(super) fn show(self, cx: &mut App) {
-        let (level, message, detail) = match self {
-            Self::UpToDate { version } => {
-                (PromptLevel::Info, "Roundhouse is up to date".to_string(), format!("{version} is the newest version."))
-            }
-            Self::Ready { version } => {
-                let detail = "Restart to update, at the bottom of the sidebar, installs it now. Otherwise it installs when \
-                              you quit.";
-                (PromptLevel::Info, format!("Roundhouse {version} is ready"), detail.to_string())
-            }
-            Self::Failed(problem) => (PromptLevel::Warning, problem.summary(), problem.detail),
-            Self::NotUpdating => (
-                PromptLevel::Info,
-                "This build doesn't update itself".to_string(),
-                "Only Roundhouse installed from a release updates itself.".to_string(),
-            ),
-        };
-        crate::alert::show(level, message, detail, cx);
     }
 }

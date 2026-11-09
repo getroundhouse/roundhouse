@@ -103,10 +103,16 @@ fn action(ui: &Ui<'_>, name: &str) -> Box<dyn Action> {
     action.unwrap_or_else(|| panic!("no {name} in the app menu"))
 }
 
-/// Chooses an item in the app menu, as the menu bar does, and returns the alert it shows.
-fn choose(ui: &mut Ui<'_>, name: &str) -> (String, String) {
+/// Chooses an item in the app menu, as the menu bar does.
+fn choose(ui: &mut Ui<'_>, name: &str) {
     let action = action(ui, name);
     ui.cx.update(|cx| cx.dispatch_action(action.as_ref()));
+    ui.frame();
+}
+
+/// Chooses an item in the app menu, and returns the alert it shows.
+fn choose_and_read(ui: &mut Ui<'_>, name: &str) -> (String, String) {
+    choose(ui, name);
     ui.wait("the alert", |ui| ui.cx.has_pending_prompt());
     ui.cx.pending_prompt().unwrap()
 }
@@ -126,30 +132,36 @@ fn about_says_which_build_this_is(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
 
-    let (message, detail) = choose(&mut ui, "About Roundhouse");
+    let (message, detail) = choose_and_read(&mut ui, "About Roundhouse");
 
     assert_eq!(message, "Roundhouse");
     assert_eq!(detail, format!("Version {}", protocol::BUILD_VERSION));
 }
 
+/// Under the build, for a few seconds, rather than in an alert.
 #[gpui_kit::test]
-fn checking_for_updates_in_a_build_that_doesnt_update_says_so(cx: &mut TestAppContext) {
+fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
+    assert!(!ui.has("update-answer"));
 
-    let (message, _) = choose(&mut ui, "Check for Updates…");
+    choose(&mut ui, "Check for Updates…");
 
-    assert_eq!(message, "This build doesn't update itself");
+    assert!(ui.has("update-answer"));
+    assert!(!ui.cx.has_pending_prompt());
 }
 
+/// The sidebar already says why, which is the answer.
 #[gpui_kit::test]
-fn checking_for_updates_where_the_app_cant_update_says_why(cx: &mut TestAppContext) {
+fn checking_for_updates_where_the_app_cant_update_adds_nothing_to_why(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
     let problem = Problem { kind: Kind::Translocated, detail: "/private/var/folders/AppTranslocation".to_string() };
     ui.cx.update(|cx| desktop::updates::show_problem(problem, cx));
 
-    let (message, _) = choose(&mut ui, "Check for Updates…");
+    choose(&mut ui, "Check for Updates…");
 
-    assert_eq!(message, "Move Roundhouse to Applications to update it");
+    assert!(ui.has("update-problem"));
+    assert!(!ui.has("update-answer"));
+    assert!(!ui.cx.has_pending_prompt());
 }
