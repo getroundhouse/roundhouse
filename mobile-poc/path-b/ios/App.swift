@@ -133,6 +133,9 @@ final class HostController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         displayLink = CADisplayLink(target: self, selector: #selector(renderFrame))
+        // An iPhone runs a display link at 60 Hz unless it asks for more, and Info.plist sets
+        // CADisableMinimumFrameDurationOnPhone. The system clamps this to what the display supports.
+        displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
         displayLink?.add(to: .main, forMode: .common)
     }
 

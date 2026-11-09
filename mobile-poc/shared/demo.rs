@@ -4,7 +4,13 @@
 //! of items, Markdown with fenced code, a composer, a button and sidebar rows. It also keeps a
 //! small event log, because a screenshot cannot show whether an event was delivered.
 
-use std::{fs::OpenOptions, io::Write as _, rc::Rc, sync::OnceLock};
+use std::{
+    fs::OpenOptions,
+    io::Write as _,
+    rc::Rc,
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
 
 use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, StyledExt as _, Theme, ThemeMode,
@@ -116,6 +122,8 @@ pub struct DemoApp {
     drawer_open: bool,
     active_workspace: usize,
     taps: usize,
+    frames: FrameStats,
+    _drag_script: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -172,6 +180,8 @@ impl DemoApp {
             drawer_open: false,
             active_workspace: 0,
             taps: 0,
+            frames: FrameStats::default(),
+            _drag_script: None,
             _subscriptions: subscriptions,
         };
         this.apply_scene(window, cx);
@@ -188,6 +198,7 @@ impl DemoApp {
             "mid" => self.scroll_to(2501, cx),
             "drawer" => self.drawer_open = true,
             "focus" => self.composer.update(cx, |state, cx| state.focus(window, cx)),
+            "drag" => self._drag_script = Some(drag_script(window, cx)),
             _ => {}
         }
     }
@@ -250,7 +261,16 @@ impl DemoApp {
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
                             .child(format!("{} items, top row #{top_index}, taps {}", self.items.len(), self.taps)),
-                    ),
+                    )
+                    .when(!self.frames.summary.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .truncate()
+                                .child(self.frames.summary.clone()),
+                        )
+                    }),
             )
             .child(
                 Button::new("to-top").label("Top").small().outline().on_click(cx.listener(|this, _, _, cx| {
@@ -348,6 +368,186 @@ impl DemoApp {
     }
 }
 
+/// Frame timing while the transcript moves, so scrolling can be measured rather than only judged.
+///
+/// It records the time between consecutive renders of a moving transcript. While a run lasts it
+/// asks for every frame, so a render that misses its display slot shows up as a longer interval.
+/// It can't see GPU work that finishes after the render, or how long a frame waits to be shown,
+/// so it measures smoothness, not latency.
+#[derive(Default)]
+struct FrameStats {
+    last_render: Option<Instant>,
+    last_top: Option<ListOffset>,
+    /// When the transcript last moved, while a run is in progress.
+    moved_at: Option<Instant>,
+    run: Vec<Duration>,
+    /// Every run since the last summary, for the line a drag script ends with.
+    all: Vec<Duration>,
+    /// The last run, shown in the header.
+    summary: SharedString,
+}
+
+impl FrameStats {
+    /// How long the transcript has to stay still before a run ends.
+    const SETTLE: Duration = Duration::from_millis(300);
+    /// Fewer frames than this, such as a tap's nudge, aren't worth a line.
+    const MIN_FRAMES: usize = 10;
+
+    fn on_render(&mut self, top: ListOffset, window: &Window) {
+        let now = Instant::now();
+        if self.last_top.is_some_and(|last| last != top) {
+            // The first frame of a run has no previous frame of the same run to measure from.
+            if let (Some(_), Some(last)) = (self.moved_at, self.last_render) {
+                self.run.push(now - last);
+            }
+            self.moved_at = Some(now);
+        }
+        if let Some(moved_at) = self.moved_at {
+            if now - moved_at < Self::SETTLE {
+                window.request_animation_frame();
+            } else {
+                self.finish_run();
+            }
+        }
+        self.last_render = Some(now);
+        self.last_top = Some(top);
+    }
+
+    fn finish_run(&mut self) {
+        self.moved_at = None;
+        let run = std::mem::take(&mut self.run);
+        if run.len() < Self::MIN_FRAMES {
+            return;
+        }
+        let stats = IntervalStats::new(&run);
+        log_event(format!("scroll run: {stats}"));
+        self.summary = stats.short().into();
+        self.all.extend(run);
+    }
+
+    fn log_total(&mut self, label: &str) {
+        let all = std::mem::take(&mut self.all);
+        if !all.is_empty() {
+            log_event(format!("{label}: {}", IntervalStats::new(&all)));
+        }
+    }
+}
+
+struct IntervalStats {
+    frames: usize,
+    median: f64,
+    p95: f64,
+    p99: f64,
+    max: f64,
+    /// Intervals over one and a half times the median, each one at least one missed display slot.
+    missed: usize,
+}
+
+impl IntervalStats {
+    fn new(intervals: &[Duration]) -> Self {
+        let mut ms: Vec<f64> = intervals.iter().map(|interval| interval.as_secs_f64() * 1000.).collect();
+        ms.sort_by(f64::total_cmp);
+        let at = |fraction: f64| ms[((ms.len() - 1) as f64 * fraction).round() as usize];
+        let median = at(0.5);
+        Self {
+            frames: ms.len(),
+            median,
+            p95: at(0.95),
+            p99: at(0.99),
+            max: ms[ms.len() - 1],
+            missed: ms.iter().filter(|&&interval| interval > median * 1.5).count(),
+        }
+    }
+
+    fn short(&self) -> String {
+        format!(
+            "Last scroll: {:.0} Hz, p99 {:.1} ms, {} of {} missed",
+            1000. / self.median,
+            self.p99,
+            self.missed,
+            self.frames
+        )
+    }
+}
+
+impl std::fmt::Display for IntervalStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} frames, median {:.2} ms ({:.0} Hz), p95 {:.2} ms, p99 {:.2} ms, max {:.2} ms, missed {}",
+            self.frames,
+            self.median,
+            1000. / self.median,
+            self.p95,
+            self.p99,
+            self.max,
+            self.missed
+        )
+    }
+}
+
+/// `POC_SCENE=drag`: flings and slow drags made of synthetic touches, sent through the same GPUI
+/// gesture code a finger goes through, so a scrolling run can be repeated without a person.
+///
+/// Touches arrive on a timer at about 120 Hz rather than in step with the display, as UIKit
+/// delivers them, so this measures rendering, not how the backend handles real touches.
+fn drag_script(window: &mut Window, cx: &mut Context<DemoApp>) -> Task<()> {
+    /// Name, drags, touch moves per drag, and pixels per move. A fling's quick moves leave it
+    /// coasting, and a slow drag scrolls by a few pixels every frame for about a second.
+    const DRAGS: [(&str, usize, usize, f32); 2] = [("fling", 5, 10, 30.), ("slow drag", 3, 120, 3.)];
+    const TOUCH_INTERVAL: Duration = Duration::from_millis(8);
+    // Long enough for a fling to coast to a stop and its run to end.
+    const BETWEEN_DRAGS: Duration = Duration::from_millis(2500);
+
+    cx.spawn_in(window, async move |this, cx| {
+        let executor = cx.background_executor().clone();
+        executor.timer(Duration::from_secs(3)).await;
+        log_event("drag script started");
+        let mut next_id = 1u64 << 32;
+        for (name, count, moves, step) in DRAGS {
+            for _ in 0..count {
+                let id = TouchId(next_id);
+                next_id += 1;
+                let Ok(size) = cx.update(|window, _| window.viewport_size()) else { return };
+                let x = size.width / 2.;
+                let mut y = size.height * 0.3;
+                let mut touch = |phase, y| {
+                    let event = TouchEvent { id, phase, position: point(x, y), predicted_position: None, force: None };
+                    cx.update(|window, cx| {
+                        window.dispatch_event(PlatformInput::Touch(event), cx);
+                    })
+                    .is_ok()
+                };
+                if !touch(TouchPhase::Started, y) {
+                    return;
+                }
+                for _ in 0..moves {
+                    executor.timer(TOUCH_INTERVAL).await;
+                    y += px(step);
+                    if !touch(TouchPhase::Moved, y) {
+                        return;
+                    }
+                }
+                executor.timer(TOUCH_INTERVAL).await;
+                if !touch(TouchPhase::Ended, y) {
+                    return;
+                }
+                executor.timer(BETWEEN_DRAGS).await;
+            }
+            // A fling can still be coasting, so let its run end before totalling the phase.
+            for _ in 0..100 {
+                let Ok(running) = this.update(cx, |this, _| this.frames.moved_at.is_some()) else { return };
+                if !running {
+                    break;
+                }
+                executor.timer(Duration::from_millis(100)).await;
+            }
+            this.update(cx, |this, _| this.frames.log_total(&format!("drag script, {name}s"))).ok();
+        }
+        log_event("drag script done");
+    })
+}
+
 fn render_row(index: usize, item: &Item, cx: &App) -> AnyElement {
     match item {
         Item::User(text) => h_flex()
@@ -382,7 +582,9 @@ impl Render for DemoApp {
         let insets = window.insets();
         // The keyboard covers the home indicator area, so use whichever is taller, not the sum.
         let bottom = insets.effective().bottom;
-        let top_index = self.scroller.read(cx).logical_scroll_top().item_ix;
+        let top = self.scroller.read(cx).logical_scroll_top();
+        self.frames.on_render(top, window);
+        let top_index = top.item_ix;
         let items = self.items.clone();
 
         div()

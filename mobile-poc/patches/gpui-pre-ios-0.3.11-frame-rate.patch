@@ -1,0 +1,36 @@
+--- Cargo.toml
++++ Cargo.toml
+@@ -126,6 +126,7 @@
+     "CAMetalLayer",
+     "objc2-metal",
+     "CADisplayLink",
++    "CAFrameRateRange",
+ ]
+ default-features = false
+ 
+--- src/ios/application.rs
++++ src/ios/application.rs
+@@ -12,7 +12,7 @@
+     NSDictionary, NSObject, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSSet, NSString,
+     NSUserActivity, NSUserActivityTypeBrowsingWeb,
+ };
+-use objc2_quartz_core::CADisplayLink;
++use objc2_quartz_core::{CADisplayLink, CAFrameRateRange};
+ use objc2_ui_kit::{
+     UIApplication, UIApplicationDelegate, UIApplicationLaunchOptionsKey, UIOpenURLContext, UIScene,
+     UISceneConfiguration, UISceneConnectionOptions, UISceneDelegate, UISceneSession, UIWindowScene,
+@@ -333,6 +333,14 @@
+                 let display_link =
+                     CADisplayLink::displayLinkWithTarget_selector(self, sel!(renderFrame:));
+                 display_link.setPaused(true);
++                // An iPhone runs a display link at 60 Hz unless it asks for more, and the app's
++                // Info.plist sets CADisableMinimumFrameDurationOnPhone. The system clamps the
++                // range to what the display supports.
++                display_link.setPreferredFrameRateRange(CAFrameRateRange {
++                    minimum: 80.,
++                    maximum: 120.,
++                    preferred: 120.,
++                });
+                 display_link.addToRunLoop_forMode(
+                     &NSRunLoop::mainRunLoop(),
+                     NSRunLoopCommonModes,

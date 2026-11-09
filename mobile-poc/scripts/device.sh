@@ -4,10 +4,13 @@
 #
 # Lets Xcode manage signing, which can register the device and the bundle identifier and create a
 # development profile in the Apple Developer account for TEAM_ID. Run it only when that is intended.
+# DEVICE is the phone's UDID, the identifier `xcrun devicectl list devices` shows.
 set -euo pipefail
 
 path="${1:?usage: TEAM_ID=<team> DEVICE=<id> scripts/device.sh <a|b> [--release]}"; shift
 : "${TEAM_ID:?set TEAM_ID to the Apple Developer team that should sign the app}"
+# devicectl also lists booted simulators as connected, so the device is never guessed.
+device="${DEVICE:?set DEVICE to the identifier shown by: xcrun devicectl list devices}"
 config=Debug; cargo_args=()
 if [[ "${1:-}" == "--release" ]]; then config=Release; cargo_args+=(--release); fi
 
@@ -24,15 +27,20 @@ esac
 (cd "$dir" && CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}" IPHONEOS_DEPLOYMENT_TARGET="$min" \
   nice -n 10 cargo build --target aarch64-apple-ios ${cargo_args[@]+"${cargo_args[@]}"})
 
+built="$dir/build/DerivedData/Build/Products/$config-iphoneos/$app"
+# Path A's build copies the Rust binary over the stub on every build, but Xcode signs again only when
+# it thinks the bundle changed, so a rebuild would leave the binary unsigned. A missing bundle makes
+# it link and sign again.
+rm -rf "$built"
+
 (cd "$dir/ios" && POC_BUNDLE_ID="$bundle" xcodegen generate --quiet)
-nice -n 10 xcodebuild build -quiet -allowProvisioningUpdates \
+# Building for the phone itself, rather than any iOS device, is what lets Xcode add it to the profile.
+nice -n 10 xcodebuild build -quiet -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+  -destination "platform=iOS,id=$device" \
   -project "$dir/ios/$scheme.xcodeproj" -scheme "$scheme" -configuration "$config" \
   -sdk iphoneos -derivedDataPath "$dir/build/DerivedData" -jobs 6 \
   CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM="$TEAM_ID" \
   PRODUCT_BUNDLE_IDENTIFIER="$bundle" BUNDLE_ID="$bundle"
 
-built="$dir/build/DerivedData/Build/Products/$config-iphoneos/$app"
-# devicectl also lists booted simulators as connected, so the device is never guessed.
-device="${DEVICE:?set DEVICE to the identifier shown by: xcrun devicectl list devices}"
 xcrun devicectl device install app --device "$device" "$built"
 xcrun devicectl device process launch --device "$device" "$bundle"

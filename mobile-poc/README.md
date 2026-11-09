@@ -38,25 +38,38 @@ SIMCTL_CHILD_POC_SCENE=top xcrun simctl launch <device-id> dev.gpuikit.iospocb
 uitest/run.sh <device-id> dev.gpuikit.iospoc /tmp/shots-a
 ```
 
-- **Scenes (`POC_SCENE`):** `top`, `mid`, `drawer`, `focus`, or empty for the tail.
+- **Scenes (`POC_SCENE`):** `top`, `mid`, `drawer`, `focus`, `drag`, or empty for the tail. `drag` starts at the tail and, after 3 seconds, sends five flings and three slow one-second drags as synthetic touches through GPUI's gesture code, then logs a total for each. It takes about 35 seconds.
 - **Native UI (`POC_HOST=native`):** on path B this adds a native navigation bar and text field around GPUI. On path A it adds a native text field on top of GPUI.
 - **Event log:** the app writes `Documents/poc.log` in its data container, because a screenshot can't show whether an event arrived. Its `keystroke:` lines show which keys arrive.
+- **Frame timing:** whenever the transcript moves, the app times every frame until it has been still for 300 ms. Then it writes a `scroll run:` line to the log, and shows the frame rate, p99 and missed frames under the header. It measures the time between renders, so it shows missed frames but not touch-to-screen latency.
 - **Wait about 14 seconds before a screenshot.** Debug builds show a white launch screen for 2 to 3 seconds, and shots taken within about 5 seconds of launch show a gray veil, probably the fade from that white screen.
 
 `simctl` can't inject touches, so `uitest/` uses XCUITest to send real UIKit touches and on-screen keyboard taps to a headless simulator. GPUI elements are invisible to XCUITest, so the driver taps by coordinates. XCUITest can't send hardware keys, because `typeKey` isn't in the iOS SDK headers, so those need a person.
 
 ## On an iPhone
 
-The phone needs Developer Mode on, under Settings > Privacy & Security > Developer Mode, followed by a restart. Signing needs a team with an Apple Development certificate, since a Developer ID certificate can't sign for an iPhone. `security find-identity -v -p codesigning` lists the certificates, and `xcrun devicectl list devices` lists the devices.
+The phone needs Developer Mode on, under Settings > Privacy & Security > Developer Mode, followed by a restart. Signing needs a paid team signed in to Xcode. A Developer ID certificate can't sign for an iPhone, but Xcode creates an Apple Development certificate if the team has none. `security find-identity -v -p codesigning` lists the certificates, and `xcrun devicectl list devices` lists the devices. `DEVICE` is the phone's UDID from that list.
 
 Connect the phone by cable, unlock it, and accept any trust prompt. Then, from `mobile-poc/`:
 
 ```sh
-TEAM_ID=<team> DEVICE=<device-id> scripts/device.sh a
-TEAM_ID=<team> DEVICE=<device-id> scripts/device.sh b
+TEAM_ID=<team> DEVICE=<device-id> scripts/device.sh a --release
+TEAM_ID=<team> DEVICE=<device-id> scripts/device.sh b --release
 ```
 
-This lets Xcode manage signing, so it registers the device and bundle ID and creates a development profile in that team. If a bundle ID is already taken, add `BUNDLE_ID_SUFFIX=.yourname`. If iOS blocks the first launch, trust the developer under Settings > General > VPN & Device Management.
+This lets Xcode manage signing, so it registers the device and bundle ID and creates a development profile in that team. If a bundle ID is already taken, add `BUNDLE_ID_SUFFIX=.yourname`. If iOS blocks the first launch, trust the developer under Settings > General > VPN & Device Management. The phone has to be unlocked for the launch.
+
+**Use `--release` on a phone.** Debug builds of both paths crash on launch with a stack overflow. An iPhone's main thread has a 1 MB stack, and when the first code block is laid out, syntect compiles its regexes on that thread, which takes more than 1 MB of unoptimized frames. The simulator runs on the Mac's larger main-thread stack, so it doesn't show this. Crash reports are under `xcrun devicectl device info files --device <device-id> --domain-type systemCrashLogs`.
+
+To launch with a scene and read the log afterwards:
+
+```sh
+DEVICECTL_CHILD_POC_SCENE=drag xcrun devicectl device process launch --device <device-id> --terminate-existing dev.gpuikit.iospoc
+xcrun devicectl device copy from --device <device-id> --domain-type appDataContainer \
+  --domain-identifier dev.gpuikit.iospoc --source Documents/poc.log --destination poc.log
+```
+
+Nobody should touch the phone during a `drag` run. Synthetic touches don't count as activity for Auto-Lock, so set it to at least 5 minutes, and turn Low Power Mode off, because it caps the display at 60 Hz.
 
 ## Patches and workarounds
 
@@ -64,6 +77,7 @@ This lets Xcode manage signing, so it registers the device and bundle ID and cre
 
 | Item | Why | Maintenance |
 |---|---|---|
+| `CADisableMinimumFrameDurationOnPhone` in each `Info.plist`, and 80 to 120 Hz asked of each display link | An iPhone app runs at 60 Hz without both, while Safari runs at the display's full rate | Low. Path A's display link needs the patch below |
 | Explicit monospace font (`probe_mono_font` in `shared/demo.rs`) | The kit's default names a Linux font on iOS and silently falls back to the proportional system font. GPUI panics on a font it can't load, so each candidate is loaded through the platform first | Low. App code |
 | `.occlude()` on the drawer panel | Without it, a tap on a row also hits the scrim behind it. The bug is the demo's, not either backend's | None |
 
@@ -72,6 +86,7 @@ This lets Xcode manage signing, so it registers the device and bundle ID and cre
 | Item | Why | Maintenance |
 |---|---|---|
 | `patches/gpui-base-0.9.0-text-length.patch`: one method, `text_length_utf16`, on the kit's input handler | **Required.** Without it the keyboard never appears. `gpui_ios` won't show it or apply edits unless it knows the document's length, and the kit never reports one | Low. 10 lines, re-applied on each kit release until gpui-kit takes it |
+| `patches/gpui-pre-ios-0.3.11-frame-rate.patch`: `preferredFrameRateRange` on the display link, and the `objc2-quartz-core` feature it needs | `gpui_ios` never asks for more than 60 Hz | Low. 10 lines, until `gpui_ios` sets it itself |
 | `runtime_shaders` feature on `gpui-pre-ios` | It avoids needing Xcode's Metal Toolchain component. The kit uses the same feature on desktop | None. `xcodebuild -downloadComponent MetalToolchain` would allow precompiled shaders |
 | `ios/project.yml` with a stub target | Only for signing: Xcode signs a stub whose executable is replaced by the Rust binary. Works with ad-hoc signing on the simulator, and an unsigned device bundle also builds | Low |
 

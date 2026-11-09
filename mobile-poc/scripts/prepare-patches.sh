@@ -18,6 +18,18 @@ if [[ ! -f "$base/.patched" ]]; then
   touch "$base/.patched"
 fi
 
+# Path A: gpui-pre-ios 0.3.11 from crates.io, asking its display link for 120 Hz.
+ios="$out/gpui-pre-ios-0.3.11"
+if [[ ! -f "$ios/.patched" ]]; then
+  rm -rf "$ios"
+  tarball="$out/gpui-pre-ios-0.3.11.crate"
+  curl -fsSL https://static.crates.io/crates/gpui-pre-ios/gpui-pre-ios-0.3.11.crate -o "$tarball"
+  echo "326382c3b3f004617ac0f61338594c00f053b08b7875f3486ea0f221e9b20a75  $tarball" | shasum -a 256 -c - >/dev/null
+  tar -xzf "$tarball" -C "$out"
+  (cd "$ios" && patch -p0 --no-backup-if-mismatch < "$root/patches/gpui-pre-ios-0.3.11-frame-rate.patch")
+  touch "$ios/.patched"
+fi
+
 # Path B: Longbridge's fork at a pinned commit, bumped to GPUI 0.3.11.
 fork="$out/gpui-mobile"
 rev=7548ebc

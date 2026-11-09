@@ -27,7 +27,9 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString"] }
 raw-window-handle = "0.6"
 
-# gpui-kit's inputs never report a document length, so gpui_ios refuses to show the keyboard.
-# One method, kept as a diff in ../patches. Run ../scripts/prepare-patches.sh first.
+# Both are kept as diffs in ../patches. Run ../scripts/prepare-patches.sh first.
 [patch.crates-io]
+# gpui-kit's inputs never report a document length, so gpui_ios refuses to show the keyboard.
 gpui-base = { path = "../patches/build/gpui-base-0.9.0" }
+# gpui_ios never asks its display link for more than an iPhone's default 60 Hz.
+gpui-pre-ios = { path = "../patches/build/gpui-pre-ios-0.3.11" }
