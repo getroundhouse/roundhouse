@@ -228,7 +228,7 @@ impl Driver {
         let had = self.attached();
         self.cx.update(|cx| cx.write_to_clipboard(item));
         self.frame();
-        self.cx.update_window(self.handle, |_, window, cx| window.press("cmd-v", cx)).unwrap();
+        self.cx.update_window(self.handle, |_, window, cx| window.press("secondary-v", cx)).unwrap();
         self.wait("the composer to take the paste", |view, cx| {
             selected_pane(view).is_some_and(|pane| pane.read(cx).attached_names().len() > had)
         });

@@ -329,7 +329,8 @@ impl<'a> Ui<'a> {
     /// Puts this on the clipboard and pastes it where focus is, as Cmd-V does.
     pub(crate) fn paste(&mut self, item: gpui_kit::ClipboardItem) {
         self.cx.write_to_clipboard(item);
-        self.press("cmd-v");
+        // The platform's own paste: cmd-v on a Mac, ctrl-v on Linux.
+        self.press("secondary-v");
     }
 
     pub(crate) fn attached(&self) -> Vec<String> {
