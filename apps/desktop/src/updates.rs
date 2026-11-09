@@ -9,11 +9,10 @@ mod serving;
 
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Context, Global, Subscription};
-use velopack::locator::{LocationContext, auto_locate_app_manifest};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
 
 use feed::{FeedError, FeedKey, SignedFeed};
@@ -133,8 +132,7 @@ pub fn start(cx: &mut App) {
         Err(velopack::Error::NotInstalled(_)) => return,
         Err(e) => return show(problem(Step::Check, &e), cx),
     };
-    let bundle = auto_locate_app_manifest(LocationContext::FromCurrentExe).map(|locator| locator.get_root_dir());
-    if let Some(problem) = bundle.ok().and_then(|bundle| cant_install(&bundle)) {
+    if let Some(problem) = bundle().and_then(|bundle| cant_install(&bundle)) {
         return show(problem, cx);
     }
     cx.set_global(Shown::new(Instant::now()));
@@ -170,6 +168,12 @@ pub(crate) fn problem_shown(cx: &App) -> Option<&Problem> {
 #[cfg(feature = "testing")]
 pub fn show_problem(problem: Problem, cx: &mut App) {
     show(problem, cx);
+}
+
+/// The `.app` this binary runs from, which Velopack replaces whole. Only a Mac app has one.
+fn bundle() -> Option<PathBuf> {
+    let binary = std::env::current_exe().ok()?;
+    binary.ancestors().find(|dir| dir.extension().is_some_and(|extension| extension == "app")).map(Path::to_path_buf)
 }
 
 /// Why the app can't replace itself where it is, if it can't. Velopack replaces the whole bundle, so it has to be able
