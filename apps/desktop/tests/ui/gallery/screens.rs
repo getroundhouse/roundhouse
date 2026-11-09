@@ -63,6 +63,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(conversation),
         steps: &[Step::Select(FOCUS), Step::UpdateReady("1.0.1")],
     },
+    Screen {
+        name: "finishing-update",
+        spec: "updates.md",
+        world: Some(finishing_update),
+        steps: &[Step::Select(FOCUS)],
+    },
     Screen { name: "own-hub", spec: "updates.md", world: Some(own_hub), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "update-problem",
@@ -72,10 +78,19 @@ pub(crate) const SCREENS: &[Screen] = &[
     },
 ];
 
+/// The conversation, on an older hub that a client started, with chats still running on it.
+fn finishing_update() -> World {
+    older_hub(true)
+}
+
 /// The conversation, on an older hub that someone runs themselves.
 fn own_hub() -> World {
+    older_hub(false)
+}
+
+fn older_hub(on_demand: bool) -> World {
     let mut world = conversation();
-    world.hub = Some(HubBuild { version: "0.9.0", number: 1, on_demand: false });
+    world.hub = Some(HubBuild { version: "0.9.0", number: 1, on_demand });
     world
 }
 

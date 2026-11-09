@@ -156,25 +156,29 @@ fn update_problem(problem: &Problem, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// The version, faint, and the hub's too when it's another build.
+/// The version, faint, and the hub's too when it's another build the app leaves alone.
 fn version(line: &BuildLine) -> AnyElement {
     let text = div().id("build-line").px_2().pt_1().text_xs().text_color(look::faint());
     match line {
         BuildLine::OtherHub { app, hub } => {
-            let detail = format!("The hub is {hub}, and this app is {app}.");
+            let detail = format!(
+                "The hub is {hub}, and this app is {app}. The app leaves a hub someone started themselves for them to \
+                 update, and never restarts a newer one."
+            );
             text.child(format!("{app} · hub {hub}"))
                 .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
                 .test_support()
                 .into_any_element()
         }
-        BuildLine::Current { app } | BuildLine::UpdateReady { app, .. } => {
+        BuildLine::Current { app } | BuildLine::UpdateReady { app, .. } | BuildLine::Finishing { app, .. } => {
             text.child(app.clone()).test_support().into_any_element()
         }
     }
 }
 
 /// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
-/// which says the version on hover.
+/// which says the version on hover. Installing an update is the card's main action. Finishing one stops agents, and
+/// happens by itself, so it's a quiet button under what it's waiting on.
 fn update_card(line: &BuildLine, cx: &mut Context<AppView>) -> Option<AnyElement> {
     let theme = cx.theme();
     let (surface, edge, muted) = (theme.secondary, theme.border, theme.muted_foreground);
@@ -196,13 +200,31 @@ fn update_card(line: &BuildLine, cx: &mut Context<AppView>) -> Option<AnyElement
                      running. Quitting installs it too."
                 ),
             ),
-            Button::new("restart-to-update")
-                .primary()
-                .small()
-                .w_full()
-                .label("Restart to update")
-                .on_click(cx.listener(|t, _, window, cx| t.restart_to_update(window, cx))),
+            Some(
+                Button::new("restart-to-update")
+                    .primary()
+                    .small()
+                    .w_full()
+                    .label("Restart to update")
+                    .on_click(cx.listener(|t, _, window, cx| t.restart_to_update(window, cx))),
+            ),
         ),
+        BuildLine::Finishing { app, hub, agents } => {
+            let hover = if *agents == 0 {
+                format!(
+                    "This is {app}, and the previous version, {hub}, is still busy, such as with a setup script or \
+                     the command line connected to it. The update finishes by itself once it's free."
+                )
+            } else {
+                format!(
+                    "This is {app}, and agents are still running on the previous version, {hub}. The update \
+                     finishes by itself once they're done."
+                )
+            };
+            // Under the text, and in line with it, past the button's own padding.
+            let finish = h_flex().pt_1().ml(px(-3.5)).child(finish_now(cx));
+            (text("Finishing update", waiting_on(*agents), hover).child(finish), None)
+        }
         BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
     };
     let card = v_flex()
@@ -216,9 +238,24 @@ fn update_card(line: &BuildLine, cx: &mut Context<AppView>) -> Option<AnyElement
         .border_1()
         .border_color(edge)
         .child(h_flex().items_start().gap_2p5().child(look::icon(IconStyle::Working, IconSize::Px64, cx)).child(about))
-        .child(action)
+        .when_some(action, ParentElement::child)
         .test_support();
     Some(card.into_any_element())
+}
+
+/// What finishing an update is waiting on.
+fn waiting_on(agents: usize) -> String {
+    match agents {
+        0 => "Waiting on other work".to_string(),
+        1 => "Waiting on 1 agent".to_string(),
+        n => format!("Waiting on {n} agents"),
+    }
+}
+
+/// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
+fn finish_now(cx: &mut Context<AppView>) -> Button {
+    let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
+    Button::new("finish-update").ghost().xsmall().label("Finish now").on_click(finish)
 }
 
 fn footer(

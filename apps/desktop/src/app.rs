@@ -5,16 +5,15 @@ use std::collections::HashMap;
 
 use client_core::records::Record;
 use client_core::{Client, HubAdmin, RecordsFeed};
-use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, PromptButton, PromptLevel, Task, Window,
-};
+use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
 mod hub_source;
+mod restarts;
 mod view;
 mod workspaces;
 
@@ -42,6 +41,9 @@ pub struct AppView {
     feed: Option<RecordsFeed>,
     /// A new connection, until client-core has caught up on it.
     joining: Option<Client>,
+    /// The pid of the hub this is connected to, when it's an older one a client started, which this app may restart.
+    /// A hub's build can't change while it runs, so this is only found when connecting.
+    restartable_hub: Option<u32>,
     pub repos: Vec<Repo>,
     pub workspaces: Vec<Workspace>,
     pub sessions: HashMap<WorkspaceId, Vec<Session>>,
@@ -60,6 +62,8 @@ pub struct AppView {
     /// Held so these tasks stop when the view goes away.
     connecting: Option<Task<()>>,
     following: Option<Task<()>>,
+    /// Asking whether to finish an update now, so pressing again doesn't ask twice.
+    asking: Option<Task<()>>,
 }
 
 impl AppView {
@@ -72,6 +76,7 @@ impl AppView {
             connection: Connection::Connecting,
             feed: None,
             joining: None,
+            restartable_hub: None,
             repos: Vec::new(),
             workspaces: Vec::new(),
             sessions: HashMap::new(),
@@ -86,6 +91,7 @@ impl AppView {
             window: window.window_handle(),
             connecting: None,
             following: None,
+            asking: None,
         };
         this.connect(cx);
         this
@@ -98,45 +104,17 @@ impl AppView {
         }
     }
 
-    /// For a hub across a real break, so one that matches this app can start. This also stops its agents,
-    /// which the app says first.
-    pub fn restart_hub(&mut self, cx: &mut Context<Self>) {
-        self.connection = Connection::Connecting;
-        cx.notify();
-        let socket = self.hub.paths.socket.clone();
-        self.connecting = Some(cx.spawn(async move |this, cx| {
-            let stopped = cx.background_spawn(async move { client_core::stop_hub(&socket) }).await;
-            let _ = this.update(cx, |t, cx| match stopped {
-                Ok(()) => t.connect(cx),
-                Err(e) => {
-                    t.connection = Connection::Failed(e.to_string());
-                    cx.notify();
-                }
-            });
-        }));
-    }
-
     pub fn build_line(&self, cx: &App) -> BuildLine {
         let client = self.client();
-        BuildLine::new(self.hub.build_version, client.as_ref().map(Client::hub_version), crate::updates::ready(cx))
-    }
-
-    /// Restarts the app to install the update that's downloaded, asking first when that would lose what's typed and
-    /// not sent.
-    pub fn restart_to_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (chats, comments) =
-            self.panes.values().map(|pane| pane.read(cx).unsent(cx)).fold((0, 0), |(a, b), (c, d)| (a + c, b + d));
-        let Some(lost) = view::unsent_note(chats, comments) else {
-            return crate::updates::restart_to_update(cx);
-        };
-        let answers = [PromptButton::cancel("Keep working"), PromptButton::new("Restart")];
-        let answer = window.prompt(PromptLevel::Warning, "Restart to update?", Some(&lost), &answers, cx);
-        cx.spawn(async move |_, cx| {
-            if answer.await == Ok(1) {
-                cx.update(crate::updates::restart_to_update);
-            }
-        })
-        .detach();
+        let hub = client.as_ref().map(Client::hub_version);
+        // As the hub counts them, from what the sidebar already has, so it's current without asking.
+        let agents = self
+            .sessions
+            .values()
+            .flatten()
+            .filter(|s| matches!(s.status, SessionStatus::Running | SessionStatus::WaitingApproval))
+            .count();
+        BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
@@ -153,8 +131,8 @@ impl AppView {
         let socket = hub.paths.socket.clone();
         self.connecting = Some(cx.spawn(async move |this, cx| {
             let connected = cx.background_spawn(async move { hub.connect() }).await;
-            let client = match connected {
-                Ok(client) => client,
+            let (client, status) = match connected {
+                Ok(connected) => connected,
                 Err(e) => {
                     let status = if e.is_version_mismatch() {
                         cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
@@ -171,12 +149,12 @@ impl AppView {
                     return;
                 }
             };
-            let _ = this.update(cx, |t, cx| t.connected(client, cx));
+            let _ = this.update(cx, |t, cx| t.connected(client, &status, cx));
         }));
     }
 
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
-    fn connected(&mut self, client: Client, cx: &mut Context<Self>) {
+    fn connected(&mut self, client: Client, status: &HubStatus, cx: &mut Context<Self>) {
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);
         } else {
@@ -189,6 +167,7 @@ impl AppView {
             pane.update(cx, |p, cx| p.reconnect(&client, cx));
         }
         self.joining = Some(client);
+        self.restartable_hub = hub_source::may_restart(status, self.hub.build_number).then_some(status.pid);
     }
 
     /// Shows what client-core holds whenever it changes, and connects again when its connection goes.

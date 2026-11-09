@@ -6,7 +6,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
   1. The app downloads an update in the background and installs it when you quit, without relaunching. Everything shows as before, and running agents keep going on the old hub. *Unconfirmed:* `Restart to update` installs it sooner, and opens the app again.
   2. If nothing is running and no other client is connected, the app replaces the hub right away. Otherwise it waits until the next launch. *Not built:* the app only replaces a hub when it connects.
   3. Only a real protocol break shows a screen, with how many agents are running and a way to restart the hub.
-- **You can restart an older hub yourself rather than wait.** While the hub is older than the app and wasn't started by hand, the app offers to restart it, and says how many agents and setup scripts that would stop. Each stopped agent picks up its conversation at its next prompt. *Not built.*
+- **You can restart an older hub yourself rather than wait.** While the hub is older than the app and wasn't started by hand, the app offers to restart it, and says how many agents and setup scripts that would stop. Each stopped agent picks up its conversation at its next prompt. *Unconfirmed:* `Finish now`, at the bottom of the sidebar, does it, as "The build line" below shows.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
 - **A problem updating says so under the build in the sidebar,** with the detail on hover, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
@@ -19,6 +19,10 @@ The bottom of the sidebar shows which build is running, faint, and only brings u
 **An update is downloaded.** The card says "Update ready" with the version, and `Restart to update` is its main action. That installs it and opens the app again, and agents keep running, since the hub outlives the app. Quitting installs it too. Anything typed and not sent would be lost, so it asks first when there is.
 
 ![Update ready](screens/update-ready.png)
+
+**The app has updated, and agents are still running on the previous version.** The card says "Finishing update" and how many agents it's waiting on, or "Waiting on other work" when what's left is a setup script or something else connected to it, such as the command line, and the app restarts the hub once that's done. `Finish now` is a quiet button, since it stops them: it asks "Finish the update now?" and says what it stops, such as "This stops the 1 agent still running on the previous version. The agent picks up its conversation at its next prompt." `Not now` and Escape leave it running. *Not built:* the app only restarts the hub by itself when it connects.
+
+![Finishing the update](screens/finishing-update.png)
 
 **A hub someone runs themselves is another build.** The version says so, as "1.0.0 · hub 0.9.0", and the app leaves it alone.
 

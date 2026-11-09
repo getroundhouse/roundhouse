@@ -4,9 +4,10 @@
 
 mod diff;
 mod hub;
+mod stand_in;
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -69,16 +70,6 @@ pub(crate) struct Stack {
     pub(crate) hub: HubSource,
 }
 
-/// Goes away with the test, even a failed one, since nothing else would stop it.
-pub(crate) struct StandInHub(pub(crate) Child);
-
-impl Drop for StandInHub {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
-
 impl Stack {
     pub(crate) fn new() -> Self {
         point_daemons_at_the_fake_agent();
@@ -107,26 +98,6 @@ impl Stack {
 
     pub(crate) fn repo(&self) -> PathBuf {
         self.dir.path().join("repo")
-    }
-
-    /// A hub of another build, as `examples/stand_in_hub` describes.
-    pub(crate) fn start_stand_in_hub(&self, args: &[&str]) -> StandInHub {
-        let hub = Command::new(binaries().join("examples/stand_in_hub"))
-            .args(args)
-            .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
-            .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)
-            // Keeping the test's output open would hang whatever reads it, if it were ever left running.
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let hub = StandInHub(hub);
-        let deadline = Instant::now() + TIMEOUT;
-        while client_core::HubAdmin::connect(&self.hub.paths.socket).is_err() {
-            assert!(Instant::now() < deadline, "timed out waiting for it to listen");
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        hub
     }
 
     /// A second client, for setting things up and checking them from outside the app.
