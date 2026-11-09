@@ -8,7 +8,7 @@ use std::time::Duration;
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::AgentKind;
+use protocol::model::{AgentKind, RunId};
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -28,7 +28,7 @@ fn script(dir: &Path, body: &str) -> PathBuf {
 fn spec(dir: &Path) -> AgentSpec {
     AgentSpec {
         session_id: "s".into(),
-        run: 1,
+        run: RunId::new(1),
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
         agent_session_id: "s".into(),

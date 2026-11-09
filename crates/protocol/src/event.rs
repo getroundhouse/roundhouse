@@ -9,13 +9,17 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, Seq, SessionId, ToolUseId};
+use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
     pub session_id: SessionId,
     pub seq: Seq,
     pub ts_ms: i64,
+    /// The launch of the agent that produced it. `None` for what the hub records itself, and for
+    /// events recorded before runs were.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
     pub body: EventBody,
     /// The agent's original line. Only sent when a read asks for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

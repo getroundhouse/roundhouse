@@ -51,7 +51,6 @@ pub(crate) struct Hub {
     pub(crate) shutdown: Notify,
     shutting_down: AtomicBool,
     name_salt: AtomicU64,
-    next_run: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
 }
@@ -81,7 +80,6 @@ impl Hub {
             shutdown: Notify::new(),
             shutting_down: AtomicBool::new(false),
             name_salt: AtomicU64::new(now_ms().cast_unsigned()),
-            next_run: AtomicU64::new(1),
             clients: AtomicU32::new(0),
             requests: AtomicU32::new(0),
         }
@@ -104,11 +102,6 @@ impl Hub {
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
         let id = id.clone();
         self.blocking(move |store| store.get_workspace(&id)).await
-    }
-
-    /// A number no agent launched by this hub has used. Starts above the "no run" marker.
-    pub(crate) fn next_run(&self) -> u64 {
-        self.next_run.fetch_add(1, Ordering::Relaxed)
     }
 
     pub(crate) fn subscribe_feed(&self) -> broadcast::Receiver<HubNotice> {

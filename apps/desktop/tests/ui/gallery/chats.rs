@@ -44,6 +44,7 @@ pub(crate) fn streaming() -> Vec<EventBody> {
 pub(crate) fn streaming_tail() -> Tail {
     Tail {
         messages: vec![TailMessage {
+            run: None,
             message_id: MessageId::from("msg-3"),
             parent_tool_use_id: None,
             blocks: vec![TailBlock {

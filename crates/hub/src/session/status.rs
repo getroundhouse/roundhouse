@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use protocol::event::{AgentRunState, EventBody};
-use protocol::model::{ApprovalId, SessionStatus};
+use protocol::model::{ApprovalId, RunId, SessionStatus};
 
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
 /// its own, so `AgentState` is what says when the agent is really idle. `TurnEnded` also goes to
@@ -43,7 +43,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_le
 }
 
 /// How many approvals stay open once this event is applied.
-pub(crate) fn approvals_after(pending: &HashMap<ApprovalId, u64>, body: &EventBody) -> usize {
+pub(crate) fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBody) -> usize {
     match body {
         EventBody::ApprovalRequested { approval_id, .. } if !pending.contains_key(approval_id) => pending.len() + 1,
         EventBody::ApprovalResolved { approval_id, .. } if pending.contains_key(approval_id) => pending.len() - 1,

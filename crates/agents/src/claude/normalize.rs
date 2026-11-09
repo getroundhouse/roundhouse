@@ -310,6 +310,8 @@ fn stream_event(value: &Value) -> Parsed {
         _ => return Parsed::Drop,
     };
     Parsed::Delta(StreamDelta {
+        // The hub knows the run, and sets it.
+        run: None,
         message_id: message_id.into(),
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
         change,

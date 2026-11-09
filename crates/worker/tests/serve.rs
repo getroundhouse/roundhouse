@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use protocol::PROTOCOL_VERSION;
 use protocol::frame;
-use protocol::model::AgentKind;
+use protocol::model::{AgentKind, RunId};
 use protocol::worker::{AgentSpec, WorkerCall, WorkerRequest};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::timeout;
@@ -41,7 +41,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
             WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION },
             WorkerRequest::AgentStart(AgentSpec {
                 session_id: format!("s{attempt}").into(),
-                run: 1,
+                run: RunId::new(1),
                 agent: AgentKind::Claude,
                 cwd: dir.path().to_string_lossy().into_owned(),
                 agent_session_id: "a".into(),

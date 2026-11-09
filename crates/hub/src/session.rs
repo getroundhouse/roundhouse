@@ -12,7 +12,7 @@ use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, ClientMessageId, Seq, Session, SessionId, SessionStatus, WorkspaceId,
+    AgentKind, AgentSessionId, ApprovalId, ClientMessageId, RunId, Seq, Session, SessionId, SessionStatus, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -38,11 +38,14 @@ const LIVE_CAPACITY: usize = 4096;
 /// What arrives from a worker.
 pub(crate) enum Item {
     Event {
-        run: u64,
+        run: RunId,
         body: EventBody,
         raw: Option<String>,
     },
-    Delta(StreamDelta),
+    Delta {
+        run: RunId,
+        delta: StreamDelta,
+    },
     /// The worker connection ended. Everything it sent has been queued ahead of this.
     WorkerLost(u64),
     /// Resolves once everything queued ahead of it has been recorded.
@@ -89,11 +92,37 @@ pub(crate) struct Snapshot {
     pub version: u64,
 }
 
+/// Where an event comes from, which decides what it may change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Origin {
+    /// Something the hub knows itself.
+    Hub,
+    /// One launch of the agent, from it or about it. `current` is false for a leftover from one that's
+    /// been replaced, which mustn't change the status of the session its replacement is now running.
+    Run { run: RunId, current: bool },
+}
+
+impl Origin {
+    fn run(self) -> Option<RunId> {
+        match self {
+            Origin::Hub => None,
+            Origin::Run { run, .. } => Some(run),
+        }
+    }
+
+    fn speaks_for_session(self) -> bool {
+        match self {
+            Origin::Hub => true,
+            Origin::Run { current, .. } => current,
+        }
+    }
+}
+
 /// One launch of an agent, on one connection to a worker.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct AgentRun {
     link: u64,
-    run: u64,
+    run: RunId,
 }
 
 struct LiveState {
@@ -101,10 +130,11 @@ struct LiveState {
     status: SessionStatus,
     tail: Tail,
     version: u64,
-    /// Open approvals, by the run that asked. 0 means an earlier hub's, which can't be answered.
-    pending_approvals: HashMap<ApprovalId, u64>,
-    /// The agent believed to be running. Events from any other run are leftovers from one that has
-    /// been replaced: they go in the log, but don't speak for the session's current state.
+    /// Open approvals, by the run that asked. `None` means an earlier hub's, which can't be answered.
+    pending_approvals: HashMap<ApprovalId, Option<RunId>>,
+    /// The agent running, or being started. Events from any other run are leftovers from one that has
+    /// been replaced: they go in the log, but don't speak for the session's current state, and its
+    /// deltas are dropped.
     agent: Option<AgentRun>,
     agent_opened: bool,
     model: Option<String>,
@@ -133,9 +163,6 @@ pub(crate) struct LiveSession {
     /// so a change can't fall between the two and reach neither.
     configuring: tokio::sync::Mutex<()>,
 }
-
-/// For events the hub records itself, which belong to no run of an agent.
-const NO_RUN: u64 = 0;
 
 /// Tells subscribers something changed, under the lock, so their order matches `version`.
 fn publish(state: &mut LiveState, item: LiveItem) {
@@ -168,7 +195,7 @@ impl LiveSession {
                 status: stored.session.status,
                 tail: Tail::default(),
                 version: 0,
-                pending_approvals: open_approvals.into_iter().map(|id| (id, 0)).collect(),
+                pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
                 agent: None,
                 agent_opened: stored.agent_opened,
                 model: stored.session.model.clone(),

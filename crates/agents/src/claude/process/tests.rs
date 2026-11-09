@@ -1,6 +1,6 @@
 use std::os::unix::fs::PermissionsExt as _;
 
-use protocol::model::AgentKind;
+use protocol::model::{AgentKind, RunId};
 
 use super::supervise::{LaunchFailure, classify_launch_failure};
 use super::*;
@@ -51,7 +51,7 @@ fn a_file_that_cant_be_run_is_not_the_binary() {
 fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
     AgentSpec {
         session_id: "s".into(),
-        run: 1,
+        run: RunId::new(1),
         agent: AgentKind::Claude,
         cwd: "/tmp".into(),
         agent_session_id: "abc".into(),

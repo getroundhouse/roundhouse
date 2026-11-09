@@ -189,7 +189,7 @@ mod tests {
     use crate::transcript::Model;
 
     fn event(seq: Seq, body: EventBody) -> SessionEvent {
-        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, body, raw: None }
+        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
     }
 
     fn calls(ids: &[&str]) -> EventBody {

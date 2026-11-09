@@ -57,7 +57,7 @@ fn sequence_numbers_start_at_one_with_no_gaps() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for expected in 1..=5 {
-        assert_eq!(store.append(&"s".into(), &notice("x"), None, None, None).unwrap().event.seq, expected);
+        assert_eq!(store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap().event.seq, expected);
     }
     let events = store.read_events(&"s".into(), 1, 100, u64::MAX, false).unwrap();
     assert_eq!(events.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
@@ -68,9 +68,9 @@ fn sequence_numbers_start_at_one_with_no_gaps() {
 fn a_status_change_commits_with_its_event() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.append(&"s".into(), &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
+    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
     assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
-    store.append(&"s".into(), &notice("x"), None, None, None).unwrap();
+    store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
     assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
 }
 
@@ -78,10 +78,10 @@ fn a_status_change_commits_with_its_event() {
 fn a_repeated_client_msg_id_returns_the_original_and_adds_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let first = store.append(&"s".into(), &notice("a"), None, Some(&"msg-1".into()), None).unwrap();
+    let first = store.append(&"s".into(), None, &notice("a"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(!first.duplicate);
-    store.append(&"s".into(), &notice("b"), None, None, None).unwrap();
-    let again = store.append(&"s".into(), &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
+    store.append(&"s".into(), None, &notice("b"), None, None, None).unwrap();
+    let again = store.append(&"s".into(), None, &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(again.duplicate);
     assert_eq!(again.event.seq, first.event.seq);
     assert_eq!(again.event.body, notice("a"));
@@ -93,7 +93,7 @@ fn reads_page_by_count_and_by_size_and_always_make_progress() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for _ in 0..10 {
-        store.append(&"s".into(), &notice(&"x".repeat(1000)), None, None, None).unwrap();
+        store.append(&"s".into(), None, &notice(&"x".repeat(1000)), None, None, None).unwrap();
     }
     assert_eq!(store.read_events(&"s".into(), 1, 3, u64::MAX, false).unwrap().len(), 3);
     assert_eq!(store.read_events(&"s".into(), 9, 100, u64::MAX, false).unwrap().len(), 2);
@@ -107,7 +107,7 @@ fn reads_page_by_count_and_by_size_and_always_make_progress() {
 fn raw_lines_are_kept_and_only_returned_when_asked_for() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.append(&"s".into(), &notice("x"), Some("{\"original\":true}"), None, None).unwrap();
+    store.append(&"s".into(), None, &notice("x"), Some("{\"original\":true}"), None, None).unwrap();
     assert_eq!(store.read_events(&"s".into(), 1, 1, u64::MAX, false).unwrap()[0].raw, None);
     assert_eq!(
         store.read_events(&"s".into(), 1, 1, u64::MAX, true).unwrap()[0].raw.as_deref(),
@@ -127,18 +127,62 @@ fn open_approvals_are_those_requested_and_not_resolved() {
         description: None,
         suggestions: Value::Null,
     };
-    store.append(&"s".into(), &requested("a"), None, None, None).unwrap();
-    store.append(&"s".into(), &requested("b"), None, None, None).unwrap();
-    store.append(&"s".into(), &cancelled_approval("a".into()), None, None, None).unwrap();
+    store.append(&"s".into(), None, &requested("a"), None, None, None).unwrap();
+    store.append(&"s".into(), None, &requested("b"), None, None, None).unwrap();
+    store.append(&"s".into(), None, &cancelled_approval("a".into()), None, None, None).unwrap();
     assert_eq!(store.open_approvals(&"s".into()).unwrap(), vec![ApprovalId::from("b")]);
 }
 
 #[test]
 fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
-    store_with_session(dir.path()).append(&"s".into(), &notice("kept"), None, None, None).unwrap();
+    store_with_session(dir.path()).append(&"s".into(), None, &notice("kept"), None, None, None).unwrap();
     let store = Store::open(&dir.path().join("hub.db")).unwrap();
     assert_eq!(store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
+}
+
+#[test]
+fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let first = store.next_run().unwrap();
+    store.append(&"s".into(), Some(first), &notice("from the agent"), None, None, None).unwrap();
+    store.append(&"s".into(), None, &notice("from the hub"), None, None, None).unwrap();
+    drop(store);
+
+    let store = Store::open(&dir.path().join("hub.db")).unwrap();
+    let second = store.next_run().unwrap();
+
+    assert!(second > first, "a reopened store handed out {second} after {first}");
+    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap();
+    assert_eq!(events.iter().map(|e| e.run).collect::<Vec<_>>(), vec![Some(first), None]);
+}
+
+#[test]
+fn an_event_recorded_before_runs_were_is_kept_with_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hub.db");
+    let mut conn = schema::open_connection(&path).unwrap();
+    schema::migrate_to(&mut conn, schema::BEFORE_RUNS).unwrap();
+    conn.execute_batch(
+        r#"
+        INSERT INTO repos VALUES ('r', 'repo', '/repo', 0);
+        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
+            VALUES ('w', 'r', 'alder', 'alder', 'ready', 'local', 'w', 0);
+        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms)
+            VALUES ('s', 'w', 'claude', 's', 'idle', 1, 0, 0);
+        INSERT INTO events (session_id, seq, ts_ms, kind, body, raw)
+            VALUES ('s', 1, 0, 'notice', '{"type":"notice","level":"info","message":"old"}', 'line');
+        "#,
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+
+    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
+    assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
+    assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, 2);
 }
 
 #[test]

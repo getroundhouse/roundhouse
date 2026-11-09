@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
-use protocol::model::SessionId;
+use protocol::model::{RunId, SessionId};
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -43,7 +43,7 @@ pub struct Config {
 
 struct RunningAgent {
     process: Arc<dyn AgentProcess>,
-    run: u64,
+    run: RunId,
 }
 
 struct State {

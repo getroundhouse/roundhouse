@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::EventBody;
-use crate::model::{MessageId, ToolUseId};
+use crate::model::{MessageId, RunId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -22,6 +22,9 @@ pub enum BlockKind {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StreamDelta {
+    /// The launch of the agent that wrote it. The hub sets it, and only passes on the current run's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
     pub message_id: MessageId,
     #[serde(default)]
     pub parent_tool_use_id: Option<ToolUseId>,
@@ -62,6 +65,9 @@ pub struct Tail {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TailMessage {
+    /// The run writing it, so the end of an earlier run's turn can't clear it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
     pub message_id: MessageId,
     pub parent_tool_use_id: Option<ToolUseId>,
     pub blocks: Vec<TailBlock>,
@@ -84,6 +90,7 @@ impl Tail {
         }
         let position = self.messages.iter().position(|m| m.message_id == delta.message_id).unwrap_or_else(|| {
             self.messages.push(TailMessage {
+                run: delta.run,
                 message_id: delta.message_id.clone(),
                 parent_tool_use_id: delta.parent_tool_use_id.clone(),
                 blocks: Vec::new(),
@@ -108,14 +115,20 @@ impl Tail {
         }
     }
 
-    /// Updates the tail for a durable event. Claude sends a finished block as an `Assistant` event
-    /// before starting the next block, so everything open for that message is now in the log.
-    pub fn on_event(&mut self, body: &EventBody) {
+    /// Updates the tail for a durable event from `run`. Claude sends a finished block as an
+    /// `Assistant` event before starting the next block, so everything open for that message is now
+    /// in the log. The end of a turn, or of the agent, clears what that run or an earlier one left
+    /// open, and never what a later run is writing: a replaced agent's last events can arrive after
+    /// its replacement has started. An event with no run, which the hub recorded itself, clears
+    /// everything.
+    pub fn on_event(&mut self, run: Option<RunId>, body: &EventBody) {
         match body {
             EventBody::Assistant { message_id: Some(id), .. } => {
                 self.messages.retain(|m| m.message_id != *id);
             }
-            EventBody::TurnEnded { .. } | EventBody::AgentExited { .. } => self.messages.clear(),
+            EventBody::TurnEnded { .. } | EventBody::AgentExited { .. } => {
+                self.messages.retain(|m| run.is_some_and(|ended| m.run.is_some_and(|by| by > ended)));
+            }
             EventBody::Assistant { message_id: None, .. }
             | EventBody::UserPrompt { .. }
             | EventBody::AgentStarted { .. }
@@ -152,7 +165,7 @@ mod tests {
     use super::*;
 
     fn delta(change: DeltaChange) -> StreamDelta {
-        StreamDelta { message_id: "m1".into(), parent_tool_use_id: None, change }
+        StreamDelta { run: None, message_id: "m1".into(), parent_tool_use_id: None, change }
     }
 
     fn assistant(id: &str) -> EventBody {
@@ -172,7 +185,7 @@ mod tests {
     fn a_finished_block_leaves_the_tail_and_the_next_block_starts_clean() {
         let mut tail = Tail::default();
         tail.apply(&delta(DeltaChange::Text { index: 0, text: "first".into() }));
-        tail.on_event(&assistant("m1"));
+        tail.on_event(None, &assistant("m1"));
         assert!(tail.is_empty());
         tail.apply(&delta(DeltaChange::BlockStart {
             index: 1,
@@ -189,12 +202,13 @@ mod tests {
         let mut tail = Tail::default();
         tail.apply(&delta(DeltaChange::Text { index: 0, text: "main".into() }));
         tail.apply(&StreamDelta {
+            run: None,
             message_id: "sub".into(),
             parent_tool_use_id: Some("toolu_1".into()),
             change: DeltaChange::Text { index: 0, text: "sub".into() },
         });
         assert_eq!(tail.messages.len(), 2);
-        tail.on_event(&assistant("sub"));
+        tail.on_event(None, &assistant("sub"));
         assert_eq!(tail.messages.len(), 1);
         assert_eq!(tail.messages[0].message_id, "m1".into());
     }
@@ -203,14 +217,17 @@ mod tests {
     fn the_end_of_a_turn_clears_everything() {
         let mut tail = Tail::default();
         tail.apply(&delta(DeltaChange::Text { index: 0, text: "cut off".into() }));
-        tail.on_event(&EventBody::TurnEnded {
-            outcome: crate::event::TurnOutcome::Cancelled,
-            result: None,
-            errors: vec![],
-            duration_ms: None,
-            cost_usd: None,
-            num_turns: None,
-        });
+        tail.on_event(
+            None,
+            &EventBody::TurnEnded {
+                outcome: crate::event::TurnOutcome::Cancelled,
+                result: None,
+                errors: vec![],
+                duration_ms: None,
+                cost_usd: None,
+                num_turns: None,
+            },
+        );
         assert!(tail.is_empty());
     }
 }

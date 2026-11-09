@@ -206,18 +206,12 @@ pub(crate) fn run_command(
         let chunks: Vec<String> = (0..count.parse::<u32>().unwrap()).map(|i| format!("{i} ")).collect();
         return turn.say(chunks, Duration::ZERO, rx, queued, eof);
     }
-    if let Some(seconds) = command.strip_prefix("holdpipe:") {
-        // Never waited on, because the point is that it outlives this process.
-        #[expect(
-            clippy::zombie_processes,
-            reason = "never waited on, because the point is that it outlives this process"
-        )]
-        std::process::Command::new("sleep")
-            .arg(seconds)
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap();
+    if let Some(rest) = command.strip_prefix("late:") {
+        let (file, text) = rest.rsplit_once(':').unwrap();
+        let delta = json!({"type":"stream_event","session_id":turn.config.session_id,"parent_tool_use_id":null,
+            "api_message_id":"msg_late",
+            "event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}}});
+        outlive_until(file, &[delta, json!({"type":"late_marker"})]);
         return false;
     }
     if let Some(text) = command.strip_prefix("partial:") {
@@ -254,4 +248,18 @@ pub(crate) fn run_command(
         return turn.say(vec![text], Duration::ZERO, rx, queued, eof);
     }
     false
+}
+
+/// Leaves a process holding stdout open until `file` exists, and then writing `lines` to it.
+fn outlive_until(file: &str, lines: &[Value]) {
+    let lines: Vec<String> = lines.iter().map(Value::to_string).collect();
+    let script = r#"while [ ! -e "$1" ]; do sleep 0.05; done; shift; for line in "$@"; do printf '%s\n' "$line"; done"#;
+    #[expect(clippy::zombie_processes, reason = "never waited on, because the point is that it outlives this process")]
+    std::process::Command::new("sh")
+        .args(["-c", script, "sh", file])
+        .args(lines)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
 }

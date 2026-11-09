@@ -278,7 +278,7 @@ impl Follower {
     pub(crate) fn apply(&mut self, item: SubscriptionItem) {
         match item {
             SubscriptionItem::Event(event) => {
-                self.tail.on_event(&event.body);
+                self.tail.on_event(event.run, &event.body);
                 self.events.push(event);
             }
             SubscriptionItem::Tail(tail) => self.tail = tail,

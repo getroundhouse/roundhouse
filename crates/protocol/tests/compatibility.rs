@@ -6,7 +6,9 @@
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
+use protocol::event::SessionEvent;
 use protocol::frame;
+use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
 /// break. If this fails, a client can no longer see or stop a hub it can't otherwise talk to.
@@ -61,4 +63,15 @@ fn a_known_request_with_a_new_field_still_decodes() {
     let frame: ClientFrame = frame::decode(line).unwrap();
 
     assert_eq!(frame.request, ClientRequest::RepoAdd { path: "a".to_string() });
+}
+
+#[test]
+fn an_event_or_delta_from_a_hub_without_runs_has_none() {
+    let event: SessionEvent =
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":null,"cost_usd":null,"num_turns":null}}"#)
+            .unwrap();
+    let delta: StreamDelta =
+        frame::decode(br#"{"message_id":"m","change":{"type":"text","index":0,"text":"hi"}}"#).unwrap();
+
+    assert_eq!((event.run, delta.run), (None, None));
 }

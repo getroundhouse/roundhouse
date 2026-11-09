@@ -262,7 +262,7 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
                         other => panic!("unexpected block {other:?}"),
                     }
                 }
-                tail.on_event(&body);
+                tail.on_event(None, &body);
             }
             _ => {}
         }

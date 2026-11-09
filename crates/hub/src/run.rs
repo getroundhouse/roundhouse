@@ -31,10 +31,11 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.fail_interrupted_setups()?;
     for id in store.active_session_ids()? {
         for approval_id in store.open_approvals(&id)? {
-            store.append(&id, &cancelled_approval(approval_id), None, None, None)?;
+            store.append(&id, None, &cancelled_approval(approval_id), None, None, None)?;
         }
         store.append(
             &id,
+            None,
             &EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] },
             None,
             None,
