@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use std::process::Command;
-
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::SetupStatus;
@@ -52,8 +50,7 @@ fn a_setup_cut_off_by_the_hub_crashing_shows_as_failed_after_it_comes_back(cx: &
     let pane = ui.pane().unwrap();
     ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
 
-    let pid = stack.client().hub_status().unwrap().pid;
-    assert!(Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap().success());
+    stack.crash_hub();
 
     ui.wait("the new hub to say setup didn't finish", |ui| {
         ui.cx.read_entity(&pane, |p, _| matches!(p.workspace.setup, SetupStatus::Failed { code: None }))

@@ -292,15 +292,12 @@ impl AppView {
             .detach();
             self.panes.insert(id.clone(), pane);
         }
-        // Without a connection, `refresh` catches it up once there is one.
-        let ready = matches!(self.connection, Connection::Ready(_));
+        // Only with a connection. Without one, `refresh` catches it up once there is one.
+        if let Some(pane) = self.selected_pane() {
+            pane.update(cx, WorkspacePane::catch_up);
+        }
         if let Some(pane) = self.panes.get(&id) {
-            pane.update(cx, |p, cx| {
-                if ready {
-                    p.catch_up(cx);
-                }
-                p.focus_composer(window, cx);
-            });
+            pane.update(cx, |p, cx| p.focus_composer(window, cx));
         }
         cx.notify();
     }
