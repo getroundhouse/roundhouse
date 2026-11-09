@@ -24,6 +24,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Repository | A git repository added to a hub | `Repo` |
 | Workspace | The unit of delegation: a name, a branch and a worktree in one repository, with its sessions and diff comments | `Workspace` |
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
+| Title | What a workspace or a chat is called on screen. It comes from the first prompt, or is typed by hand, and one typed by hand is never replaced | `Workspace.title`, `Session.title`, `TitleSource` |
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
@@ -79,6 +80,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Workspace | Ours, or another tool's, such as a Cargo workspace | A bare "workspace" means ours. Always qualify the others |
 | Claude, Claude Code | The agent, and Anthropic's own product. The Agent SDK's terms bar calling an agent in another product "Claude Code" | "Claude" or "Claude Agent" in the interface. "Claude CLI" for the `claude` binary in docs |
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
+| Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
 | Hub, daemon | `roundhoused` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
 | Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |

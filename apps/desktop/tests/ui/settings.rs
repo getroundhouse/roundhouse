@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, OwnedMenuItem, TestAppContext};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, Ui, labelled};
 
 /// Whether Settings is showing, by its way back.
 fn settings_showing(ui: &mut Ui<'_>) -> bool {
@@ -27,9 +27,7 @@ fn open_settings(ui: &mut Ui<'_>) {
 
 /// Flips the switch for "Always expand thinking".
 fn flip_always_expand_thinking(ui: &mut Ui<'_>) {
-    ui.frame();
-    let switch = ui.cx.update_window(ui.handle, |_, window, _| window.find_by_label("Always expand thinking")).unwrap();
-    ui.click(switch.path().last().unwrap().clone());
+    ui.click_label("Always expand thinking");
 }
 
 /// Whether each recorded thinking block in the chat is open, top to bottom, as its line tells assistive apps.
@@ -165,10 +163,9 @@ fn a_setting_changed_just_before_quitting_is_saved(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "");
     open_settings(&mut ui);
-    let switch = ui.cx.update_window(ui.handle, |_, window, _| window.find_by_label("Always expand thinking")).unwrap();
+    let id = ui.cx.update_window(ui.handle, |_, window, _| labelled(window, "Always expand thinking")).unwrap();
 
     // Straight after, with nothing let run in between.
-    let id = switch.path().last().unwrap().clone();
     ui.cx.update_window(ui.handle, |_, window, cx| window.click(id, cx)).unwrap();
     ui.cx.update(gpui_kit::App::shutdown);
 

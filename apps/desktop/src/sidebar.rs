@@ -3,19 +3,20 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex, v_virtual_list,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, FontWeight, IntoElement, ParentElement, Pixels, Rems, Size, Styled, Window, div,
-    px, rems, size,
+    AnyElement, App, Context, ElementId, FontWeight, IntoElement, ParentElement, Pixels, Rems, Size, Styled, Window,
+    div, px, rems, size,
 };
 use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
+use crate::right_click;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 mod footer;
@@ -117,8 +118,10 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
     let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
     // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
     let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
-    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
+    let menu = row_menu(app, workspace, archived, cx);
+    let label = workspace.label().to_string();
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
+        .accessibility_label(label.clone())
         .ghost()
         .small()
         .w_full()
@@ -140,26 +143,32 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
                 // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
                 .when(archived || !(selected || unread), |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(workspace.name.clone()),
-                )
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                 .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore"))),
         );
-    let Some((marking, chats)) = marking else { return row.into_any_element() };
-    let this = cx.weak_entity();
-    row.context_menu(move |menu, _, _| {
-        let (this, chats) = (this.clone(), chats.clone());
-        menu.item(PopupMenuItem::new(format!("Mark as {}", marking.word())).on_click(move |_, _, cx| {
-            let _ = this.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
-        }))
+    row.context_menu(menu).into_any_element()
+}
+
+/// What a right-click on a workspace's row offers. Marking its chats needs one with a reply, and an archived
+/// workspace has none to show.
+fn row_menu(
+    app: &AppView,
+    workspace: &Workspace,
+    archived: bool,
+    cx: &mut Context<AppView>,
+) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
+    let (this, id) = (cx.weak_entity(), workspace.id.clone());
+    let to_mark = this.clone();
+    let marking = marking.map(|(marking, chats)| {
+        let mark = move |cx: &mut App| {
+            let _ = to_mark.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
+        };
+        (marking, mark)
+    });
+    right_click::menu(marking, move |window, cx| {
+        let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
     })
-    .into_any_element()
 }
 
 fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElement {
@@ -253,6 +262,7 @@ mod tests {
             read_seq: 0,
             background_tasks: Vec::new(),
             rev: protocol::model::Rev::default(),
+            title_source: protocol::model::TitleSource::FirstLine,
         }
     }
 

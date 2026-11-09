@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
-use protocol::model::{SessionId, SessionStatus};
+use protocol::model::{SessionId, SessionStatus, Title};
 
 use crate::support::{Stack, Ui};
 
@@ -66,7 +66,7 @@ fn chats_keep_their_own_transcript_and_draft(cx: &mut TestAppContext) {
     ui.wait("the title to reach the app", |ui| {
         let pane = ui.pane().unwrap();
         ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.title.clone()))
-            == Some("say:from the second chat".to_string())
+            == Title::tidied("say:from the second chat")
     });
 }
 

@@ -205,6 +205,29 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // Titles, and where each came from. A workspace from before takes its oldest chat's title, which is that chat's
+    // first prompt's first line, so whatever is said in it next doesn't become its title. Where a session's title
+    // came from is a column its record shows, so the trigger names it.
+    r"
+    ALTER TABLE workspaces ADD COLUMN title TEXT;
+    ALTER TABLE workspaces ADD COLUMN title_source TEXT NOT NULL DEFAULT 'first_line';
+    ALTER TABLE sessions ADD COLUMN title_source TEXT NOT NULL DEFAULT 'first_line';
+    UPDATE workspaces SET title = (
+        SELECT title FROM sessions
+        WHERE sessions.workspace_id = workspaces.id AND title IS NOT NULL
+        ORDER BY created_at_ms, rowid LIMIT 1
+    )
+    WHERE EXISTS (SELECT 1 FROM sessions WHERE sessions.workspace_id = workspaces.id AND title IS NOT NULL);
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks, title_source
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
@@ -221,6 +244,10 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
 /// How many migrations there were before events recorded their run, so a test can make an older database.
 #[cfg(test)]
 pub(crate) const BEFORE_RUNS: usize = 4;
+
+/// How many migrations there were before workspaces had titles.
+#[cfg(test)]
+pub(crate) const BEFORE_TITLES: usize = 9;
 
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.

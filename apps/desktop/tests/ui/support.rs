@@ -5,6 +5,7 @@
 mod chats;
 mod diff;
 mod hub;
+mod labels;
 mod stand_in;
 
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use client_core::{Client, Daemon};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
@@ -23,6 +25,7 @@ use protocol::model::{RepoId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
 use transcript::Transcript;
 
+pub(crate) use labels::labelled;
 pub(crate) use stand_in::StandInHub;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -269,6 +272,11 @@ impl<'a> Ui<'a> {
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.right_click(id, cx)).unwrap();
         self.frame();
+    }
+
+    pub(crate) fn has_dialog(&mut self) -> bool {
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.has_active_dialog(cx)).unwrap()
     }
 
     pub(crate) fn input(&mut self, text: &str) {

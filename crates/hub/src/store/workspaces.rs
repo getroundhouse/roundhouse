@@ -1,7 +1,7 @@
 //! Workspaces.
 
 use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
-use protocol::model::{SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{SetupStatus, Title, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::made::{Made, inserted, made_by};
@@ -11,7 +11,7 @@ const FIRST_PORT_BASE: u16 = 55_000;
 
 const PORTS_PER_WORKSPACE: u16 = 10;
 
-pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source";
 
 pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -28,7 +28,9 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         archived_at_ms: row.get(10)?,
         setup: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or(SetupStatus::Unknown),
         port_base: row.get(12)?,
-        rev: rev_of(row, 13)?,
+        title: row.get::<_, Option<String>>(13)?.as_deref().and_then(Title::tidied),
+        title_source: from_text(row.get(14)?)?,
+        rev: rev_of(row, 15)?,
     })
 }
 
@@ -46,7 +48,7 @@ impl Store {
         let added = conn.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -63,6 +65,8 @@ impl Store {
                 workspace.archived_at_ms,
                 serde_json::to_string(&workspace.setup)?,
                 i64::from(workspace.port_base),
+                workspace.title.as_deref(),
+                text_of(&workspace.title_source),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

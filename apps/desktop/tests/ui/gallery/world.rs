@@ -10,7 +10,7 @@ use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     AgentKind, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    SessionStatus, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::tail::Tail;
 
@@ -80,6 +80,8 @@ impl World {
             setup: SetupStatus::Succeeded,
             port_base,
             rev: Rev::default(),
+            title: None,
+            title_source: TitleSource::FirstLine,
         });
         id
     }
@@ -105,7 +107,7 @@ impl World {
         let id = SessionId::from(format!("chat-{}", self.sessions.len() + 1));
         let created_at_ms = self.next_time();
         let title = events.iter().find_map(|body| match body {
-            EventBody::UserPrompt { text, .. } => Some(text.chars().take(60).collect()),
+            EventBody::UserPrompt { text, .. } => Title::from_first_line(text),
             _ => None,
         });
         let log: Vec<SessionEvent> = events
@@ -140,6 +142,7 @@ impl World {
             created_at_ms,
             updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq).unwrap(),
             title,
+            title_source: TitleSource::FirstLine,
             closed_at_ms: None,
             reply_seq: 0,
             read_seq: 0,

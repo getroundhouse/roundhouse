@@ -17,6 +17,7 @@ use image::RgbaImage;
 
 use super::fake_hub;
 use super::screens::{Screen, Step};
+use crate::support::labelled;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
 const TIMEOUT: Duration = Duration::from_secs(20);
@@ -49,6 +50,8 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     cx.allow_parking();
     cx.update(gpui_kit::init);
     cx.update(look::hold_still);
+    // The kit's own animations, such as a dialog's entrance, show as they end.
+    cx.update(|cx| cx.set_reduce_motion(true));
     // As people see it, so no checkout.
     let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, None, cx)).unwrap();
     let mut app = Driver { cx, handle, view };
@@ -121,6 +124,8 @@ impl Driver {
                 self.step(&Step::Click("finish-update"));
                 self.wait("the question", |view, _| view.update_question.is_some());
             }
+            Step::RightClick(id) => self.right_click(id),
+            Step::ClickItem(label) => self.click_item(label),
             Step::UpdateReady(version) => self.cx.update(|cx| desktop::updates::show_ready(version, cx)),
             Step::UpdateProblem => {
                 let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
@@ -150,6 +155,20 @@ impl Driver {
         });
         let id = gpui_kit::SharedString::from(format!("chat-{chat}"));
         self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
+    }
+
+    fn right_click(&mut self, id: &'static str) {
+        self.frame();
+        let id = gpui_kit::SharedString::from(id);
+        self.cx.update_window(self.handle, |_, window, cx| window.right_click(id, cx)).unwrap();
+        // The menu opens on the next frame.
+        self.frame();
+    }
+
+    fn click_item(&mut self, label: &str) {
+        self.frame();
+        let id = self.cx.update_window(self.handle, |_, window, _| labelled(window, label)).unwrap();
+        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
     }
 
     fn update_pane(&mut self, change: impl FnOnce(&mut WorkspacePane, &mut gpui_kit::Context<WorkspacePane>)) {

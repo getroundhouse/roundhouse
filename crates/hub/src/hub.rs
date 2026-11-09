@@ -7,6 +7,7 @@ mod comments;
 mod repos;
 mod sessions;
 mod setup;
+mod titles;
 mod workspaces;
 
 use crate::error::internal;

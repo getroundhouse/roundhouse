@@ -1,7 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Workspace,
-    WorkspaceStatus,
+    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Title, TitleSource,
+    Workspace, WorkspaceStatus,
 };
 
 use super::*;
@@ -35,6 +35,8 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
                 setup: SetupStatus::NotStarted,
                 port_base: 55_000,
                 rev: Rev::default(),
+                title: None,
+                title_source: TitleSource::FirstLine,
             },
             None,
         )
@@ -49,6 +51,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
                     model: None,
                     permission_mode: None,
                     title: None,
+                    title_source: TitleSource::FirstLine,
                     closed_at_ms: None,
                     reply_seq: 0,
                     read_seq: 0,
@@ -210,7 +213,7 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
         (records.repos[0].rev, records.workspaces[0].rev, records.sessions[0].rev),
         (Rev::new(1), Rev::new(1), Rev::new(1))
     );
-    store.set_session_title(&"s".into(), "t").unwrap();
+    store.retitle_session(&"s".into(), &Title::typed("t").unwrap(), Retitle::ByHand).unwrap();
     assert!(store.get_session(&"s".into()).unwrap().session.rev > Rev::new(1));
 }
 
@@ -235,7 +238,8 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     assert_eq!(session(&store), status_changed, "an event alone isn't announced, so it leaves the revision");
     store.set_session_options(&"s".into(), Some("model"), None).unwrap();
     newer(session(&store), "a model");
-    store.set_session_title(&"s".into(), "title").unwrap();
+    let title = Title::typed("title").unwrap();
+    store.retitle_session(&"s".into(), &title, Retitle::FirstLine).unwrap();
     newer(session(&store), "a title");
     store.set_session_closed(&"s".into(), Some(1)).unwrap();
     newer(session(&store), "closing");
@@ -243,6 +247,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap().rev, "setup");
     store.set_workspace_branch(&"w".into(), "renamed").unwrap();
     newer(workspace(&store), "a branch");
+    newer(store.retitle_workspace(&"w".into(), &title, Retitle::FirstLine).unwrap().record.rev, "a title");
     newer(store.set_workspace_archived(&"w".into(), true).unwrap().rev, "archiving");
     let mut half_made = store.get_workspace(&"w".into()).unwrap();
     half_made.id = "w2".into();

@@ -20,4 +20,5 @@ mod reading;
 mod setup;
 #[cfg(test)]
 mod support;
+mod titles;
 mod workspaces;

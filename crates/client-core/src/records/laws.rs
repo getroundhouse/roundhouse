@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{AgentKind, SessionId, SessionStatus};
+use protocol::model::{AgentKind, SessionId, SessionStatus, Title, TitleSource};
 
 use super::*;
 
@@ -35,12 +35,13 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         last_seq: 0,
         created_at_ms: 0,
         updated_at_ms: 0,
-        title: Some(title.to_string()),
+        title: Title::tidied(&title.to_string()),
         closed_at_ms: None,
         reply_seq: 0,
         read_seq: 0,
         background_tasks: Vec::new(),
         rev: Rev::new(rev),
+        title_source: TitleSource::FirstLine,
     }
 }
 

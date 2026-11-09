@@ -148,9 +148,11 @@ impl LiveSession {
         if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
             return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
         }
-        self.name_from(text).await;
         let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: client_msg_id.clone() };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
+        if !duplicate {
+            hub.title_from_prompt(&self.id, &self.workspace_id, text).await;
+        }
         Ok((event.seq, duplicate))
     }
 

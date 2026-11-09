@@ -49,10 +49,15 @@ fn the_feed_reports_what_a_sidebar_shows() {
         client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
     assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
 
-    // One notice per change of status, not one per event.
+    // One notice per change of status, not one per event. Once the first prompt is recorded, it titles the
+    // workspace and the chat.
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     let HubNotice::Session(running) = next_notice(&feed, "running") else { panic!() };
     assert_eq!((running.id.as_str(), running.status), (session.id.as_str(), SessionStatus::Running));
+    let HubNotice::Workspace(titled) = next_notice(&feed, "the workspace's title") else { panic!() };
+    assert_eq!((titled.id.as_str(), titled.title.as_deref()), (workspace.id.as_str(), Some("say:hello")));
+    let HubNotice::Session(titled) = next_notice(&feed, "the chat's title") else { panic!() };
+    assert_eq!((titled.status, titled.title.as_deref()), (SessionStatus::Running, Some("say:hello")));
     let HubNotice::Session(idle) = next_notice(&feed, "idle") else { panic!() };
     assert_eq!(idle.status, SessionStatus::Idle);
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);

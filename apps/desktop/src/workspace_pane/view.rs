@@ -3,12 +3,12 @@
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
-    StatefulInteractiveElement, Styled, Window, div, px, relative,
+    Anchor, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels,
+    Render, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
@@ -16,6 +16,7 @@ use transcript::mode_label;
 use super::setup::setup_log_view;
 use super::{HEADER_HEIGHT, Mark, PaneEvent, WorkspacePane, in_turn};
 use crate::StopAgent;
+use crate::right_click;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
 pub(super) const MODELS: [(&str, &str); 5] =
@@ -34,7 +35,7 @@ const TAB_WIDTH: Pixels = px(200.);
 const TAB_GROUP: &str = "chat-tab";
 
 fn chat_title(session: &Session, number: usize) -> String {
-    session.title.clone().unwrap_or_else(|| format!("Chat {number}"))
+    session.title.as_deref().map_or_else(|| format!("Chat {number}"), str::to_string)
 }
 
 impl WorkspacePane {
@@ -55,6 +56,7 @@ impl WorkspacePane {
                 cx.stop_propagation();
                 t.close_chat(to_close.clone(), window, cx);
             }));
+        let menu = Self::tab_menu(session, &title, unread, cx);
         let tab = div()
             .id(ElementId::Name(format!("tab-{}", session.id).into()))
             .group(TAB_GROUP)
@@ -85,16 +87,28 @@ impl WorkspacePane {
             .when(selected, |d| {
                 d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
             });
+        tab.context_menu(menu).into_any_element()
+    }
+
+    /// What a right-click on a chat's tab offers. Marking it needs a reply.
+    fn tab_menu(
+        session: &Session,
+        title: &str,
+        unread: bool,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
         let marking = if unread { Some(Mark::Read) } else { (session.reply_seq > 0).then_some(Mark::Unread) };
-        let Some(marking) = marking else { return tab.into_any_element() };
-        let (this, session) = (cx.weak_entity(), session.clone());
-        tab.context_menu(move |menu, _, _| {
-            let (this, session) = (this.clone(), session.clone());
-            menu.item(PopupMenuItem::new(format!("Mark as {}", marking.word())).on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.mark(&session, marking, cx));
-            }))
+        let (this, session, title) = (cx.weak_entity(), session.clone(), title.to_string());
+        let (to_mark, id) = (this.clone(), session.id.clone());
+        let marking = marking.map(|marking| {
+            let mark = move |cx: &mut App| {
+                let _ = to_mark.update(cx, |t, cx| t.mark(&session, marking, cx));
+            };
+            (marking, mark)
+        });
+        right_click::menu(marking, move |window, cx| {
+            let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
         })
-        .into_any_element()
     }
 
     /// One tab for each open chat, then a way to start another, and any closed ones to go back to.
@@ -216,9 +230,7 @@ impl WorkspacePane {
     }
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let mono = theme.mono_font_family.clone();
-        let (border, muted) = (theme.border, theme.muted_foreground);
+        let border = cx.theme().border;
         let id = self.workspace.id.clone();
         let pr = self.pull_request.clone();
         h_flex()
@@ -229,23 +241,7 @@ impl WorkspacePane {
             .gap_2()
             .border_b_1()
             .border_color(border)
-            .child(
-                h_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap_2()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(self.workspace.name.clone()))
-                    .child(div().text_color(look::faint()).child("/"))
-                    .child(div().text_xs().font_family(mono).text_color(muted).child(self.workspace.branch.clone()))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(look::faint())
-                            .child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?"))),
-                    ),
-            )
+            .child(self.heading(cx))
             .child(
                 Button::new("toggle-diff")
                     .ghost()
@@ -276,6 +272,37 @@ impl WorkspacePane {
                         .on_click(cx.listener(|t, _, _, cx| t.create_pull_request(cx))),
                 )
             })
+    }
+
+    /// What the workspace is called, and the branch it's on and where that started.
+    fn heading(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (mono, muted) = (theme.mono_font_family.clone(), theme.muted_foreground);
+        let title = self.workspace.label().to_string();
+        h_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_2()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .child(
+                div()
+                    .id("workspace-title")
+                    .role(gpui_kit::Role::Heading)
+                    .aria_label(title.clone())
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(title)
+                    .test_support(),
+            )
+            .child(div().text_color(look::faint()).child("/"))
+            .child(div().text_xs().font_family(mono).text_color(muted).child(self.workspace.branch.clone()))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(look::faint())
+                    .child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?"))),
+            )
     }
 
     fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {

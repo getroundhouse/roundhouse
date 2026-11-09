@@ -86,6 +86,11 @@ impl Client {
         self.expect_workspace(ClientRequest::WorkspaceRestore { id: id.clone() })
     }
 
+    /// See [`ClientRequest::WorkspaceRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn workspace_rename(&self, id: &WorkspaceId, title: &str) -> Result<Workspace> {
+        self.expect_workspace(ClientRequest::WorkspaceRename { id: id.clone(), title: title.to_string() })
+    }
+
     pub fn workspace_status(&self, id: &WorkspaceId) -> Result<GitStatus> {
         let reply = self.call(ClientRequest::WorkspaceStatus { id: id.clone() })?;
         let ClientResponse::GitStatus(status) = reply else {
@@ -279,6 +284,11 @@ impl Client {
     /// See [`ClientRequest::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_mark_unread(&self, id: &SessionId) -> Result<Session> {
         self.expect_session(ClientRequest::SessionMarkUnread { id: id.clone() })
+    }
+
+    /// See [`ClientRequest::SessionRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_rename(&self, id: &SessionId, title: &str) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionRename { id: id.clone(), title: title.to_string() })
     }
 
     pub fn session_cancel(&self, id: &SessionId) -> Result<()> {

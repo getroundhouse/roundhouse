@@ -1,4 +1,4 @@
-//! Which chats a workspace has, and which one is showing.
+//! Which chats a workspace has, which one is showing, and what each is called.
 
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::model::{AgentKind, Session, SessionId};
@@ -6,6 +6,7 @@ use transcript::{Transcript, TranscriptEvent};
 
 use super::{PaneEvent, WorkspacePane};
 use crate::diff_panel::DiffPanel;
+use crate::rename::{self, Renaming};
 use client_core::records::Record;
 
 /// What a new chat starts with. It keeps the model and how edits are handled, but Plan belongs to the
@@ -174,6 +175,26 @@ impl WorkspacePane {
             let _ = this.update(cx, |t, cx| match reopened {
                 Ok(session) => t.took_chat_to_show(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't reopen the chat: {e}"))),
+            });
+        })
+        .detach();
+    }
+
+    /// Asks what to call the chat, and renames it. `current` is what its tab says.
+    pub fn start_renaming_chat(&mut self, id: SessionId, current: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let this = cx.weak_entity();
+        rename::open(Renaming::Chat, current, window, cx, move |title, cx| {
+            let _ = this.update(cx, |t, cx| t.rename_chat(id.clone(), title, cx));
+        });
+    }
+
+    fn rename_chat(&mut self, id: SessionId, title: String, cx: &mut Context<Self>) {
+        let renaming = self.client.start(move |client| client.session_rename(&id, &title));
+        cx.spawn(async move |this, cx| {
+            let renamed = renaming.recv().await;
+            let _ = this.update(cx, |t, cx| match renamed {
+                Ok(session) => t.took_reply(session, cx),
+                Err(e) => cx.emit(PaneEvent::Error(Renaming::Chat.failed(&e))),
             });
         })
         .detach();

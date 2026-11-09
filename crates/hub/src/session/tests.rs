@@ -1,6 +1,5 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TurnOutcome};
 
-use super::record::title_from_prompt;
 use super::status::{Open, ends_turn, next_status};
 use super::*;
 
@@ -56,16 +55,6 @@ fn resolved() -> EventBody {
 }
 
 use SessionStatus::*;
-
-#[test]
-fn a_title_is_the_first_line_cut_at_a_word() {
-    assert_eq!(title_from_prompt("\n  Fix the login bug\nand then the rest").as_deref(), Some("Fix the login bug"));
-    assert_eq!(title_from_prompt("   \n "), None);
-    let long = "word ".repeat(30);
-    let title = title_from_prompt(&long).unwrap();
-    assert!(title.ends_with("word…"), "{title}");
-    assert!(title.chars().count() <= 49, "{title}");
-}
 
 #[test]
 fn a_prompt_starts_running_from_any_state() {

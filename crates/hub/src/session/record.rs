@@ -3,24 +3,12 @@
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{AgentTask, EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Session, SessionStatus};
-use tracing::{error, warn};
+use tracing::error;
 
 use super::status::{ends_turn, next_status, open_after};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
 use crate::store::StatusChange;
-
-/// The first line of a prompt, cut at a word if it's long.
-pub(crate) fn title_from_prompt(prompt: &str) -> Option<String> {
-    const MOST: usize = 48;
-    let line = prompt.lines().map(str::trim).find(|line| !line.is_empty())?;
-    if line.chars().count() <= MOST {
-        return Some(line.to_string());
-    }
-    let cut: String = line.chars().take(MOST).collect();
-    let shortened = cut.rsplit_once(' ').map_or(cut.as_str(), |(start, _)| start);
-    Some(format!("{}…", shortened.trim_end()))
-}
 
 /// The status and the work in the background once `body` is applied, and what of that has changed, to commit with it.
 /// Only the hub and the current agent speak for the session.
@@ -102,20 +90,6 @@ impl LiveSession {
         let session = hub.blocking(move |store| store.get_session(&id)).await?.session;
         hub.notify(HubNotice::Session(session.clone()));
         Ok(session)
-    }
-
-    /// The first prompt names the session.
-    pub(crate) async fn name_from(&self, prompt: &str) {
-        let Some(title) = title_from_prompt(prompt) else { return };
-        if self.state.lock().title.is_some() {
-            return;
-        }
-        let Ok(hub) = self.hub() else { return };
-        let (id, saved) = (self.id.clone(), title.clone());
-        if let Err(e) = hub.blocking(move |store| store.set_session_title(&id, &saved)).await {
-            warn!(session = %self.id, "could not save the session's title: {e}");
-        }
-        self.state.lock().title = Some(title);
     }
 
     /// For where nobody is waiting to hear that recording failed.

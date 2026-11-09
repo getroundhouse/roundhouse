@@ -107,6 +107,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::WorkspaceCreate { .. }
         | R::WorkspaceArchive { .. }
         | R::WorkspaceRestore { .. }
+        | R::WorkspaceRename { .. }
         | R::WorkspaceRerunSetup { .. }
         | R::CommentAdd { .. }
         | R::CommentDelete { .. }
@@ -118,7 +119,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionClose { .. }
         | R::SessionReopen { .. }
         | R::SessionMarkRead { .. }
-        | R::SessionMarkUnread { .. } => Err(read_only("change anything")),
+        | R::SessionMarkUnread { .. }
+        | R::SessionRename { .. } => Err(read_only("change anything")),
         R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
     }
 }

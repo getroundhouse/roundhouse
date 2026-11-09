@@ -25,11 +25,12 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
         WorkspaceCmd::List { all } => {
             for workspace in client.workspace_list(all)? {
                 println!(
-                    "{}  {}  {:?}  {}",
+                    "{}  {}  {:?}  {}  {}",
                     short(workspace.id.as_str()),
                     workspace.name,
                     workspace.status,
-                    workspace.path.unwrap_or_default()
+                    workspace.path.unwrap_or_default(),
+                    workspace.title.as_deref().unwrap_or_default()
                 );
             }
         }
@@ -42,6 +43,11 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
             let found = find_workspace(client, &workspace)?;
             let restored = client.workspace_restore(&found.id)?;
             println!("restored {} at {}", restored.name, restored.path.unwrap_or_default());
+        }
+        WorkspaceCmd::Rename { workspace, title } => {
+            let found = find_workspace(client, &workspace)?;
+            let renamed = client.workspace_rename(&found.id, &title)?;
+            println!("renamed {} to {}", renamed.name, renamed.label());
         }
         WorkspaceCmd::Status { workspace } => {
             let found = find_workspace(client, &workspace)?;

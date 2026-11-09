@@ -17,6 +17,11 @@
 
 ![A reply being written](screens/streaming.png)
 
+## Titles
+
+- **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.
+- **A chat's title is generated from its first prompt,** by the same rules as a workspace's. *Not built.* For now it's the first prompt's first line, cut at a word after 48 characters.
+
 ## Questions and approvals
 
 - **While the agent waits on a question, what's typed in the composer is the answer,** and the card says so. A plain Allow button would throw the question away. *Unconfirmed.*

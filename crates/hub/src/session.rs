@@ -141,7 +141,6 @@ struct LiveState {
     agent_opened: bool,
     model: Option<String>,
     permission_mode: Option<String>,
-    title: Option<String>,
     closed_at_ms: Option<i64>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
@@ -201,7 +200,6 @@ impl LiveSession {
                 agent_opened: stored.agent_opened,
                 model: stored.session.model.clone(),
                 permission_mode: stored.session.permission_mode.clone(),
-                title: stored.session.title.clone(),
                 closed_at_ms: stored.session.closed_at_ms,
                 live: None,
             }),

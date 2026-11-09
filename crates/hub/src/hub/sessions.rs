@@ -5,8 +5,8 @@ use std::sync::Arc;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus, WorkspaceId,
-    WorkspaceStatus,
+    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus, TitleSource,
+    WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
@@ -48,6 +48,7 @@ impl Hub {
                 created_at_ms: now,
                 updated_at_ms: now,
                 title: None,
+                title_source: TitleSource::FirstLine,
                 closed_at_ms: None,
                 reply_seq: 0,
                 read_seq: 0,

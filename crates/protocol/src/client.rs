@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, Workspace,
+    DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError, Workspace,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -204,6 +204,13 @@ impl std::fmt::Display for ApiError {
 }
 
 impl std::error::Error for ApiError {}
+
+/// A title someone typed that the hub refuses, with a message they can read.
+impl From<TitleError> for ApiError {
+    fn from(e: TitleError) -> Self {
+        ApiError::new(ErrorCode::InvalidRequest, e.to_string())
+    }
+}
 
 #[cfg(test)]
 mod tests {
