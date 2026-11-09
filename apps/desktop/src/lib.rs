@@ -1,5 +1,7 @@
 //! The desktop app. It only talks to a hub, through `client-core`, the same way the CLI does.
 
+#[cfg(target_os = "macos")]
+mod accessibility_focus;
 mod alert;
 pub mod app;
 mod assets;
@@ -57,6 +59,8 @@ pub fn open_main_window(
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     settings::load(&hub.paths.data_dir, cx);
+    #[cfg(target_os = "macos")]
+    accessibility_focus::install();
     cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),

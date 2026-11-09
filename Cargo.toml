@@ -64,6 +64,8 @@ gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25", default-features = false }
 libc = "0.2"
+# Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
+objc2 = "0.6"
 parking_lot = "0.12"
 proptest = "1"
 # Already under rustls. Checks the update feed's signature.

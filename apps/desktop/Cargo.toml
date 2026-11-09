@@ -35,6 +35,9 @@ libc.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG. GPUI already builds these.
 image = { workspace = true, features = ["bmp", "png", "tiff"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
