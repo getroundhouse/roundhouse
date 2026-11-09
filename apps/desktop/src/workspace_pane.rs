@@ -20,6 +20,7 @@ use reading::Reading;
 
 mod attaching;
 mod chats;
+mod composer;
 mod diff_tab;
 mod reading;
 mod setup;

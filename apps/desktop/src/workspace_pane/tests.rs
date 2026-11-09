@@ -1,7 +1,7 @@
 use protocol::model::SessionId;
 
 use super::chats::{inherited_mode, neighbor};
-use super::view::{MODELS, model_label};
+use super::composer::{MODELS, model_label};
 
 #[test]
 fn a_new_chat_doesnt_inherit_plan_or_full_access() {
