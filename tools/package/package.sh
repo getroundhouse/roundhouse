@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Packages this checkout as Roundhouse.app with Velopack's `vpk`: the three binaries, which `tools/build.sh` builds and
-# stamps, in one bundle with Velopack's updater. It makes the portable zip people download, and the update package and
-# feed the release workflow publishes. Unsigned unless it's given an identity. It's macOS on Apple silicon only, like
-# the app, and needs `jq` and the .NET SDK 8, 9 or 10, which runs `vpk`.
+# stamps with the version, in one bundle with Velopack's updater. It makes the portable zip people download, and the
+# update package and feed the release workflow publishes. Unsigned unless it's given an identity. It's macOS on Apple
+# silicon only, like the app, and needs `jq` and the .NET SDK 8, 9 or 10, which runs `vpk`.
 #
 #   tools/package/package.sh                  Package this commit, unsigned
 #   tools/package/package.sh --allow-dirty    The same, with uncommitted changes in the build
@@ -15,12 +15,13 @@
 # the portable zip, to check or run. The default directory's `releases/` starts empty. Another directory's keeps what's
 # there, and a package from an earlier version gets a delta to this one.
 #
-# The version is `0.1.<commits>`, as `docs/architecture.md` says. A package with uncommitted changes gets its commit's
-# version, which is never published, since the release workflow packages a clean checkout.
+# The version is `0.1.<commits>`, as `docs/architecture.md` says, and it's the build the app and its hub say they are. A
+# package with uncommitted changes gets its commit's version, which is never published, since the release workflow
+# packages a clean checkout, and its build says when it was built after the version.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# BINARIES, ROOT, stamp, target_dir and build_release.
+# BINARIES, ROOT, version, stamp, target_dir and build_release.
 # shellcheck source=SCRIPTDIR/../build.sh
 source "$HERE/../build.sh"
 # Velopack's name for the app, which names its packages and its cache directory. The bundle identifier is in
@@ -34,14 +35,6 @@ die() { echo "error: $1" >&2; exit 1; }
 # Runs .NET from the directory that holds dotnet-tools.json, which is how it finds the vpk that file pins.
 dotnet_here() {
   (cd "$HERE" && DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet "$@")
-}
-
-# The version, `0.1.<commits>`, as `docs/architecture.md` says. It refuses a shallow clone, which would count only the
-# commits it fetched.
-version() {
-  [ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" = false ] \
-    || die "this is a shallow clone, so its commits can't be counted for the version. Fetch the whole history"
-  echo "0.1.$(git -C "$ROOT" rev-list --count HEAD)"
 }
 
 # Stops before the build if `releases/` has this version or a newer one, since vpk refuses a version that isn't newer
@@ -80,7 +73,8 @@ check() {
     value="$(lipo -archs "$app/Contents/MacOS/$bin")"
     [ "$value" = arm64 ] || die "$bin is built for $value, not arm64"
   done
-  # The app has no --version, since it opens a window, but it shows its build, so the build is in the binary.
+  # A package's build is its version, so this is what the app and its hub will say they are. The app has no
+  # --version, since it opens a window, but it shows its build, so the build is in the binary.
   for bin in roundhoused roundhouse; do
     value="$("$app/Contents/MacOS/$bin" --version)"
     [ "$value" = "$bin $BUILD" ] || die "$bin says it's \"$value\", not $BUILD"
@@ -108,7 +102,7 @@ package() {
   [ -z "$vpk_vars" ] || die "unset $(echo "$vpk_vars" | tr '\n' ' ')first, since vpk would take them over this script"
   dotnet_here tool restore > /dev/null
   VERSION="$(version)"
-  stamp "$allow_dirty"
+  stamp "$allow_dirty" package
   mkdir -p "$out/releases"
   check_newer "$out/releases"
   # Not local, because the trap outlives this function if anything fails.

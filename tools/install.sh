@@ -53,7 +53,7 @@ make_current() {
 
 install_this_commit() {
   local allow_dirty=$1
-  stamp "$allow_dirty"
+  stamp "$allow_dirty" install
   if [ ! -d "$INSTALL_ROOT/$BUILD" ]; then
     mkdir -p "$INSTALL_ROOT"
     # Not local, because the trap outlives this function if anything fails.
