@@ -44,11 +44,30 @@ fn a_title_typed_by_hand_replaces_a_first_line_and_stays() {
 }
 
 #[test]
+fn a_generated_title_replaces_only_a_first_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+
+    let untitled = store.retitle_workspace(&"w".into(), &title("Login redirect"), Retitle::Generated).unwrap();
+    store.retitle_workspace(&"w".into(), &title("fix the login"), Retitle::FirstLine).unwrap();
+    let generated = store.retitle_workspace(&"w".into(), &title("Login redirect"), Retitle::Generated).unwrap();
+    store.retitle_session(&"s".into(), &title("Login bug"), Retitle::ByHand).unwrap();
+    let typed = store.retitle_session(&"s".into(), &title("Login redirect"), Retitle::Generated).unwrap();
+
+    assert!(!untitled.changed, "nothing to replace before the first line");
+    assert!(generated.changed);
+    let workspace = generated.record;
+    assert_eq!((workspace.title.as_deref(), workspace.title_source), (Some("Login redirect"), TitleSource::Generated));
+    assert!(!typed.changed, "a title typed by hand stays");
+    assert_eq!((typed.record.title.as_deref(), typed.record.title_source), (Some("Login bug"), TitleSource::ByHand));
+}
+
+#[test]
 fn retitling_something_missing_is_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
-    for how in [Retitle::FirstLine, Retitle::ByHand] {
+    for how in [Retitle::FirstLine, Retitle::Generated, Retitle::ByHand] {
         let workspace = store.retitle_workspace(&"missing".into(), &title("x"), how);
         let chat = store.retitle_session(&"missing".into(), &title("x"), how);
 

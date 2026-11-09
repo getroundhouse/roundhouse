@@ -29,8 +29,9 @@ mod supervise;
 #[cfg(test)]
 mod tests;
 
+use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
-use launch::{launch, resolve_binary};
+pub(super) use launch::{command, record, resolve_binary, start};
 use supervise::supervise;
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.

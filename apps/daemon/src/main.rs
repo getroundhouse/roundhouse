@@ -96,6 +96,7 @@ fn main() -> anyhow::Result<()> {
                     home: std::env::var_os("HOME").map(PathBuf::from),
                     path: std::env::var_os("PATH"),
                     claude_bin,
+                    scratch_dir: std::env::temp_dir(),
                 },
             ));
             Ok(())

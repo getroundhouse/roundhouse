@@ -3,6 +3,8 @@
 
 mod normalize;
 mod process;
+mod title;
 
 pub use normalize::{Normalizer, Parsed};
 pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
+pub use title::title_for;

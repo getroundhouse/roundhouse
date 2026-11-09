@@ -1,4 +1,4 @@
-//! Starting and stopping agents, and forwarding what they say to the hub.
+//! Starting and stopping agents, forwarding what they say to the hub, and the one-off call that titles a prompt.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -6,13 +6,31 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{RunId, SessionId};
+use protocol::model::{AgentKind, RunId, SessionId};
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::info;
 
 use super::{RunningAgent, State};
+
+/// Gives up once the worker is stopping, which ends the call, so a title nobody will see can't keep it running.
+pub(crate) async fn title_for(state: &State, agent: AgentKind, prompt: &str) -> Result<WorkerResponse, ApiError> {
+    let call = state.calls.fetch_add(1, Ordering::Relaxed);
+    let options = AgentOptions {
+        binary: binary(state),
+        pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("title-{call}.pid"))),
+    };
+    let mut stopping = state.stopping.subscribe();
+    tokio::select! {
+        title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir) => {
+            Ok(WorkerResponse::Title { title: title?.to_string() })
+        }
+        _ = stopping.wait_for(|stopping| *stopping) => {
+            Err(ApiError::new(ErrorCode::Worker, "the worker stopped before the title came"))
+        }
+    }
+}
 
 pub(crate) async fn start_agent(
     state: &Arc<State>,
@@ -30,11 +48,7 @@ pub(crate) async fn start_agent(
     }
     let (tx, rx) = mpsc::channel(1024);
     let options = AgentOptions {
-        binary: BinaryLookup {
-            explicit: state.config.claude_bin.clone(),
-            path: state.config.path.clone(),
-            home: state.config.home.clone(),
-        },
+        binary: binary(state),
         // Named by run, because a replaced agent removes its own file as it finishes, which can be
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
@@ -98,5 +112,13 @@ pub(crate) async fn stop_agent(state: &State, session_id: &SessionId) -> Result<
             Ok(WorkerResponse::Ok)
         }
         None => Ok(WorkerResponse::AgentNotRunning),
+    }
+}
+
+fn binary(state: &State) -> BinaryLookup {
+    BinaryLookup {
+        explicit: state.config.claude_bin.clone(),
+        path: state.config.path.clone(),
+        home: state.config.home.clone(),
     }
 }

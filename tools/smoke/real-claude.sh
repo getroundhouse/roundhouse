@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The whole stack against the real `claude` CLI: step 1.1's "done when", plus the behaviors the fake
-# agent can only imitate. Makes about 25 small Haiku calls, and one to Sonnet, on your own login, so run it by hand
-# rather than in CI. Uses a throwaway home, repository and worktrees under /tmp.
+# agent can only imitate. Makes about 25 small Haiku calls, a few more that title chats, and one to Sonnet,
+# on your own login, so run it by hand rather than in CI. Uses a throwaway home, repository and worktrees
+# under /tmp.
 #
 #   cargo build --workspace && tools/smoke/real-claude.sh
 set -u
@@ -37,6 +38,16 @@ def pid():
 def text():
     return ''.join(b.get('text', '') for e in events if e['body']['type'] == 'assistant' for b in e['body']['blocks'] if b['type'] == 'text')
 print($2)"
+}
+
+# Where a workspace's title and its first chat's came from, as the hub stored them, since the CLI doesn't print that.
+title_sources() { # workspace name
+  python3 -I -c "
+import sqlite3, sys
+db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
+workspace, source = db.execute('SELECT id, title_source FROM workspaces WHERE name = ?', (sys.argv[2],)).fetchone()
+chat = db.execute('SELECT title_source FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms', (workspace,)).fetchone()
+print(source, chat[0])" "$ROUNDHOUSE_HOME/hub.db" "$1"
 }
 
 wait_for() { # description, session, python expression that's truthy when done, timeout
@@ -120,6 +131,8 @@ check "the log has no gaps" '[ "$(q "$SID" "[e[\"seq\"] for e in events] == list
 check "the file landed in the worktree" '[ -f "$WT/survived.txt" ]'
 check "and not in the repository" '[ ! -f "$REPO/survived.txt" ]'
 check "raw agent lines were kept" '[ "$(q "$SID" "any(\"raw\" in e and json.loads(e[\"raw\"]).get(\"type\") == \"assistant\" for e in events)")" = True ]'
+
+check "the first prompt's title was generated, for the workspace and its chat" '[ "$(title_sources smoke)" = "generated generated" ]'
 
 section "The conversation continues"
 OUT=$(cli send "$SID" "What file did you just create? Reply with only its file name." 2>&1)

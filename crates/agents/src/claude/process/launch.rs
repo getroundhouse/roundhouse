@@ -1,6 +1,6 @@
 //! Starting the CLI: its arguments, its environment, and finding the binary.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use process::ProcessRecord;
@@ -61,7 +61,7 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
 
 /// `PATH` first, then the places the installers use. A hub started from Finder may have neither
 /// `~/.local/bin` nor Homebrew on its `PATH`, and it may not be able to read the login shell's.
-pub(super) fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
+pub(in crate::claude) fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
     if let Some(path) = &lookup.explicit {
         return Some(path.clone());
     }
@@ -86,42 +86,62 @@ pub(super) struct Launched {
 }
 
 pub(super) fn launch(
-    bin: &PathBuf,
+    bin: &Path,
     spec: &AgentSpec,
     resume: bool,
     options: &AgentOptions,
 ) -> Result<Launched, AgentError> {
-    let mut command = Command::new(bin);
+    let cwd = Path::new(&spec.cwd);
+    let mut command = command(bin, cwd);
     command
         .args(build_args(spec, resume))
-        .current_dir(&spec.cwd)
         // Reports idle, running and waiting directly. Counting `result` events can't, because a
         // prompt sent mid-turn folds into the running turn and produces no result of its own.
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        // Its own process group, so a signal to the hub's terminal doesn't reach it directly.
-        .process_group(0)
-        .kill_on_drop(true);
-    for name in SCRUBBED_ENV {
-        command.env_remove(name);
-    }
-    command.envs(spec.env.iter().map(|(k, v)| (k, v)));
-    let mut child = command.spawn().map_err(|source| AgentError::Start {
-        bin: bin.display().to_string(),
-        cwd: spec.cwd.clone(),
-        source,
-    })?;
+        .envs(spec.env.iter().map(|(k, v)| (k, v)));
+    let mut child = start(&mut command, bin, cwd)?;
     let pid = child.id().unwrap_or_default();
-    if let Some(path) = &options.pid_file
-        && let Err(e) = ProcessRecord::write(path, pid)
-    {
-        warn!("could not record agent {pid} in {}: {e}", path.display());
-    }
+    record(options.pid_file.as_deref(), pid);
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
         return Err(AgentError::NoPipes { bin: bin.display().to_string() });
     };
     Ok(Launched { child, pid, stdin, stdout, stderr })
+}
+
+/// The CLI at `bin`, run in `cwd` with its stdio piped. It's in a process group of its own, so a stop reaches
+/// everything it starts and a signal to the hub's terminal doesn't reach it directly, and it doesn't get what a
+/// parent Claude session set.
+pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
+    let mut command = Command::new(bin);
+    command
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .kill_on_drop(true);
+    for name in SCRUBBED_ENV {
+        command.env_remove(name);
+    }
+    command
+}
+
+/// Starts `command`, which runs `bin` in `cwd`, and says which if it can't.
+pub(in crate::claude) fn start(command: &mut Command, bin: &Path, cwd: &Path) -> Result<Child, AgentError> {
+    command.spawn().map_err(|source| AgentError::Start {
+        bin: bin.display().to_string(),
+        cwd: cwd.display().to_string(),
+        source,
+    })
+}
+
+/// Records a running process at `pid_file`, so the provider can stop it if this worker is killed. Failing to only
+/// loses that, so it's logged rather than stopping the process.
+pub(in crate::claude) fn record(pid_file: Option<&Path>, pid: u32) {
+    if let Some(path) = pid_file
+        && let Err(e) = ProcessRecord::write(path, pid)
+    {
+        warn!("could not record {pid} in {}: {e}", path.display());
+    }
 }

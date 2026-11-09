@@ -91,6 +91,12 @@ pub enum WorkerRequest {
     AgentStop {
         session_id: SessionId,
     },
+    /// A short title for a prompt, from a call of its own to a small model of `agent`'s, outside any session. It
+    /// changes nothing, so sending it again only asks again.
+    TitleFor {
+        agent: AgentKind,
+        prompt: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -145,6 +151,9 @@ pub enum WorkerResponse {
     },
     /// The session has no running agent. The hub starts one and sends the request again.
     AgentNotRunning,
+    Title {
+        title: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
