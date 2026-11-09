@@ -2,6 +2,7 @@
 
 mod admin;
 mod api;
+mod commands;
 mod feed;
 mod follow;
 mod open_session;
@@ -25,6 +26,7 @@ use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub, stop_hub_if_still};
 pub use api::{new_message_id, new_request_id};
+pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub use open_session::OpenSession;
@@ -124,6 +126,7 @@ struct Inner {
     disconnected: Mutex<bool>,
     /// Set by the hello, before anyone else has this connection.
     hub_version: OnceLock<String>,
+    running: Arc<commands::Running>,
 }
 
 impl Inner {
@@ -178,6 +181,7 @@ impl Client {
             next_id: AtomicU64::new(1),
             disconnected: Mutex::new(false),
             hub_version: OnceLock::new(),
+            running: Arc::default(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()

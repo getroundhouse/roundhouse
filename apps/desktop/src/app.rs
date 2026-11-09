@@ -13,6 +13,7 @@ use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
 mod hub_source;
+mod quitting;
 mod reading;
 mod restarts;
 mod settings;
@@ -191,6 +192,7 @@ impl AppView {
 
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
     fn connected(&mut self, client: Client, status: &HubStatus, cx: &mut Context<Self>) {
+        quitting::wait_for(&client, cx);
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);
         } else {

@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide as KitSide};
-use gpui_kit::{AppContext, Context, Window};
+use gpui_kit::{Context, Window};
 use protocol::model::{CommentId, DiffComment, DiffSide};
 
 use client_core::records::Record;
@@ -76,20 +76,19 @@ impl DiffPanel {
         }
         self.draft = None;
         self.draft_input.update(cx, |input, cx| input.set_value("", window, cx));
-        let (client, id) = (self.client.clone(), self.workspace_id.clone());
+        let id = self.workspace_id.clone();
+        let adding = self.client.start(move |client| {
+            client.comment_add(
+                &id,
+                position.path(),
+                our_side(position.side()),
+                u32::try_from(position.line()).unwrap_or(u32::MAX),
+                &text,
+                Some(client_core::new_request_id()),
+            )
+        });
         cx.spawn(async move |this, cx| {
-            let added = cx
-                .background_spawn(async move {
-                    client.comment_add(
-                        &id,
-                        position.path(),
-                        our_side(position.side()),
-                        u32::try_from(position.line()).unwrap_or(u32::MAX),
-                        &text,
-                        Some(client_core::new_request_id()),
-                    )
-                })
-                .await;
+            let added = adding.recv().await;
             let _ = this.update(cx, |t, cx| {
                 match added {
                     // Shown once client-core's copy has it, like any other change.
@@ -105,11 +104,10 @@ impl DiffPanel {
     pub fn delete_comment(&mut self, id: CommentId, cx: &mut Context<Self>) {
         self.deleting.insert(id.clone());
         self.show_comments(cx);
-        let client = self.client.clone();
+        let target = id.clone();
+        let deleting = self.client.start(move |client| client.comment_delete(&target));
         cx.spawn(async move |this, cx| {
-            let target = id.clone();
-            let deleted = cx.background_spawn(async move { client.comment_delete(&target) }).await;
-            if let Err(e) = deleted {
+            if let Err(e) = deleting.recv().await {
                 let _ = this.update(cx, |t, cx| {
                     t.kept(&[id], cx);
                     cx.emit(DiffEvent::Error(format!("couldn't delete that comment: {e}")));
@@ -128,17 +126,15 @@ impl DiffPanel {
         self.deleting.extend(sent.iter().map(|c| c.id.clone()));
         self.show_comments(cx);
         cx.emit(DiffEvent::SendToAgent(comments_prompt(&sent)));
-        let (client, ids): (_, Vec<CommentId>) = (self.client.clone(), sent.iter().map(|c| c.id.clone()).collect());
+        let ids: Vec<CommentId> = sent.iter().map(|c| c.id.clone()).collect();
+        let clearing = self.client.start(move |client| {
+            for comment in &sent {
+                client.comment_delete(&comment.id)?;
+            }
+            Ok(())
+        });
         cx.spawn(async move |this, cx| {
-            let cleared = cx
-                .background_spawn(async move {
-                    for comment in &sent {
-                        client.comment_delete(&comment.id)?;
-                    }
-                    Ok::<_, client_core::ClientError>(())
-                })
-                .await;
-            if let Err(e) = cleared {
+            if let Err(e) = clearing.recv().await {
                 // Those already deleted go when client-core hears so, and the rest show again.
                 let _ = this.update(cx, |t, cx| {
                     t.kept(&ids, cx);

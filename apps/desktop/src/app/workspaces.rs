@@ -2,7 +2,7 @@
 
 use client_core::ClientError;
 use client_core::records::Record;
-use gpui_kit::{AppContext, Context, PathPromptOptions, PromptLevel};
+use gpui_kit::{Context, PathPromptOptions, PromptLevel};
 use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, RepoId, WorkspaceId};
 
@@ -17,16 +17,14 @@ impl AppView {
         self.busy = true;
         self.creating_in = Some(repo_id.clone());
         cx.notify();
+        let creating = client.start(move |client| {
+            let workspace = client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
+            // Leaves the model and approval mode to the user's own Claude settings.
+            let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
+            Ok((workspace, session))
+        });
         cx.spawn(async move |this, cx| {
-            let created = cx
-                .background_spawn(async move {
-                    let workspace =
-                        client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
-                    // Leaves the model and approval mode to the user's own Claude settings.
-                    let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
-                    Ok::<_, ClientError>((workspace, session))
-                })
-                .await;
+            let created = creating.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 t.creating_in = None;
@@ -56,7 +54,7 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = picked.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            let added = cx.background_spawn(async move { client.repo_add(&path.to_string_lossy()) }).await;
+            let added = client.start(move |client| client.repo_add(&path.to_string_lossy())).recv().await;
             let _ = this.update(cx, |t, cx| match added {
                 Ok(repo) => t.take_reply(Record::Repo(repo), cx),
                 Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
@@ -70,9 +68,10 @@ impl AppView {
         let Some(client) = self.client() else { return };
         self.busy = true;
         cx.notify();
+        let target = id.clone();
+        let archiving = client.start(move |client| client.workspace_archive(&target, force));
         cx.spawn(async move |this, cx| {
-            let target = id.clone();
-            let result = cx.background_spawn(async move { client.workspace_archive(&target, force) }).await;
+            let result = archiving.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 match result {
@@ -112,8 +111,9 @@ impl AppView {
         let Some(client) = self.client() else { return };
         self.busy = true;
         cx.notify();
+        let restoring = client.start(move |client| client.workspace_restore(&id));
         cx.spawn(async move |this, cx| {
-            let result = cx.background_spawn(async move { client.workspace_restore(&id) }).await;
+            let result = restoring.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 match result {

@@ -14,6 +14,7 @@ mod marks;
 mod other_hubs;
 mod pickers;
 mod questions;
+mod quitting;
 mod reconnecting;
 mod settings;
 mod setup;

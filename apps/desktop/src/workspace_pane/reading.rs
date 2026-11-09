@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use gpui_kit::{AppContext as _, Context};
+use gpui_kit::Context;
 use protocol::model::{Seq, Session, SessionId};
 
 use super::{PaneEvent, WorkspacePane};
@@ -60,17 +60,14 @@ impl WorkspacePane {
 
     /// Marks a chat, from what client-core's copy says of it.
     pub(crate) fn mark(&mut self, session: &Session, mark: Mark, cx: &mut Context<Self>) {
-        let (client, id, reply) = (self.client.clone(), session.id.clone(), session.reply_seq);
+        let (id, reply) = (session.id.clone(), session.reply_seq);
+        let target = id.clone();
+        let marking = self.client.start(move |client| match mark {
+            Mark::Read => client.session_mark_read(&target, reply),
+            Mark::Unread => client.session_mark_unread(&target),
+        });
         cx.spawn(async move |this, cx| {
-            let target = id.clone();
-            let marked = cx
-                .background_spawn(async move {
-                    match mark {
-                        Mark::Read => client.session_mark_read(&target, reply),
-                        Mark::Unread => client.session_mark_unread(&target),
-                    }
-                })
-                .await;
+            let marked = marking.recv().await;
             let _ = this.update(cx, |t, cx| {
                 if t.reading.marking.get(&id) == Some(&reply) {
                     t.reading.marking.remove(&id);
