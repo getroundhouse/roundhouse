@@ -161,6 +161,7 @@ fn metadata_for(target: &str) -> Value {
 fn only_allowed_licenses_ship() {
     for (root, targets) in [
         ("desktop", &["aarch64-apple-darwin", "x86_64-apple-darwin"][..]),
+        ("mobile-ios", &["aarch64-apple-ios"][..]),
         (
             "daemon",
             &["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"][..],
