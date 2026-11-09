@@ -31,9 +31,11 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
     let killed = Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap();
     assert!(killed.success());
 
+    // Not `stack.client()`, which would start the new hub itself if it looked before the app had.
     ui.wait("a new hub", |ui| {
         matches!(ui.view().connection, Connection::Ready(_))
-            && stack.client().hub_status().is_ok_and(|status| status.pid != pid)
+            && Client::connect(&stack.hub.paths.socket, "test")
+                .is_ok_and(|c| c.hub_status().is_ok_and(|s| s.pid != pid))
             && ui.transcript().is_some()
     });
     // The same workspace view, with what was typed and the history it had, carrying on on the new hub.
@@ -122,8 +124,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     let hidden_has_changes = open_empty_diff(&mut ui);
     let shown = ui.new_workspace();
     let shown_has_changes = open_empty_diff(&mut ui);
-    client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
-    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    lose_the_hub(&mut ui, &stack);
     // A kept pane does nothing until there's a connection for it, even when a shortcut reaches the window.
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
@@ -145,6 +146,44 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     ui.click(SharedString::from(format!("workspace-{hidden}")));
     ui.wait("the other pane to catch up once shown", |ui| hidden_has_changes(ui) == Some(true));
     assert_eq!(ui.composer_text(), "say:still here");
+}
+
+/// A pane still behind from one reconnect, and shown while the hub's gone again, doesn't try the lost
+/// connection. It catches up on the next.
+#[gpui_kit::test]
+fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/roundhoused".into());
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let behind = ui.new_workspace();
+    let has_changes = open_empty_diff(&mut ui);
+    ui.new_workspace();
+    lose_the_hub(&mut ui, &stack);
+    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    ui.click("try-hub-again");
+    ui.wait("the hub to come back", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    lose_the_hub(&mut ui, &stack);
+    std::fs::write(ui.worktree(&behind).join("a.txt"), "one\nchanged while away\n").unwrap();
+
+    ui.click(SharedString::from(format!("workspace-{behind}")));
+    ui.frame();
+
+    assert_eq!(ui.view().selected.as_ref(), Some(&behind));
+    assert_eq!(ui.view().error.as_deref(), None);
+    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    ui.click("try-hub-again");
+    ui.wait("it to catch up", |ui| {
+        matches!(ui.view().connection, Connection::Ready(_)) && has_changes(ui) == Some(true)
+    });
+    assert_eq!(ui.view().error.as_deref(), None);
+}
+
+/// Stops the hub, and waits for the app to find it can't start another.
+fn lose_the_hub(ui: &mut Ui<'_>, stack: &Stack) {
+    client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
 }
 
 /// Opens the selected workspace's diff, and waits for it to load with nothing in it. Returns whether it shows
