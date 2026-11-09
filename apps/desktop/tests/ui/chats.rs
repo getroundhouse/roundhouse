@@ -163,6 +163,27 @@ fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_chat_with_work_in_the_background_takes_a_prompt_and_asks_before_closing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let first = ui.active_chat();
+    let working = ui.new_chat();
+    ui.input(&format!("background:{}", stack.dir.path().join("never").display()));
+    ui.press("enter");
+    ui.wait("its turn to end with work left going", |ui| ui.session_status() == Some(SessionStatus::Background));
+
+    // Its turn is over, and stopping a turn wouldn't reach that work.
+    assert!(ui.has("send") && !ui.has("stop"));
+    ui.close_from_tab(&working);
+    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    ui.cx.simulate_prompt_answer("Close chat");
+    ui.wait("it to close", |ui| ui.open_chats() == [first.clone()]);
+}
+
+#[gpui_kit::test]
 fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();

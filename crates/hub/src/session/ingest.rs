@@ -38,6 +38,7 @@ async fn ingest_event(session: &Arc<LiveSession>, run: RunId, body: EventBody, r
         EventBody::UserPrompt { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
+        | EventBody::AgentTasks { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }

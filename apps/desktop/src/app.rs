@@ -8,7 +8,7 @@ use client_core::{Client, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Repo, RepoId, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::checkout::Checkout;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
@@ -152,12 +152,7 @@ impl AppView {
         let client = self.client();
         let hub = client.as_ref().map(Client::hub_version);
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = self
-            .sessions
-            .values()
-            .flatten()
-            .filter(|s| matches!(s.status, SessionStatus::Running | SessionStatus::WaitingApproval))
-            .count();
+        let agents = self.sessions.values().flatten().filter(|s| s.status.is_active()).count();
         BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 

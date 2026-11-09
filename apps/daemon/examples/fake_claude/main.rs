@@ -19,6 +19,9 @@
 //!   env:NAME        Say the value of an environment variable.
 //!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
 //!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
+//!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
+//!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
+//!                   SIGTERM stops it, and lists none left.
 //!
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
@@ -40,6 +43,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 
+mod background;
 mod tools;
 mod turn;
 
@@ -54,9 +58,12 @@ fn emit(out: &Out, value: Value) {
     let _ = out.flush();
 }
 
+#[derive(Clone)]
 struct Config {
     session_id: String,
     conversation: PathBuf,
+    /// Reaches the agent the way stdin does, for what it's told by its own work, such as a task finishing.
+    input: mpsc::Sender<Input>,
 }
 
 /// What a control request changed. Starts as what the flags said.
@@ -87,6 +94,8 @@ fn answer_control(out: &Out, request_id: &Value, result: Result<Value, String>) 
 
 enum Input {
     Prompt(String),
+    /// A prompt the agent gives itself, whose turn starts with no state event, as the real CLI's does.
+    Resume(String),
     Approval(Value),
     Interrupt,
     Eof,
@@ -130,9 +139,9 @@ fn main() {
     }
     *LIVE_MODE.lock() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
     *LIVE_MODEL.lock() = flag(&args, "--model");
-    let config = Config { conversation: state.join(&session_id), session_id };
-
     let (input_tx, input_rx) = mpsc::channel();
+    let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
+
     let control_out = out.clone();
     std::thread::spawn(move || read_stdin(input_tx, control_out));
 
@@ -140,16 +149,17 @@ fn main() {
     let mut queued: VecDeque<String> = VecDeque::new();
     let mut eof = false;
     loop {
-        let script = match queued.pop_front() {
-            Some(script) => script,
+        let (script, by_itself) = match queued.pop_front() {
+            Some(script) => (script, false),
             None if eof => return,
             None => match input_rx.recv() {
-                Ok(Input::Prompt(text)) => text,
+                Ok(Input::Prompt(text)) => (text, false),
+                Ok(Input::Resume(text)) => (text, true),
                 Ok(Input::Interrupt | Input::Approval(_)) => continue,
                 Ok(Input::Eof) | Err(_) => return,
             },
         };
-        run_turn(&config, &out, script, &input_rx, &mut queued, &mut eof);
+        run_turn(&config, &out, script, by_itself, &input_rx, &mut queued, &mut eof);
     }
 }
 
@@ -202,7 +212,7 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
 fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<String>, eof: &mut bool) -> bool {
     match rx.recv_timeout(wait) {
         Ok(Input::Interrupt) => true,
-        Ok(Input::Prompt(text)) => {
+        Ok(Input::Prompt(text) | Input::Resume(text)) => {
             queued.push_back(text);
             false
         }

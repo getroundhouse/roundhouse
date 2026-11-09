@@ -10,6 +10,9 @@ use protocol::model::MessageId;
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
+use tasks::StoppedTasks;
+
+mod tasks;
 #[cfg(test)]
 mod tests;
 
@@ -30,15 +33,22 @@ pub enum Parsed {
 
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
-/// message, as its deltas did.
+/// message, as its deltas did. It also says it stopped a background task before the list that leaves it
+/// out, so the list can say which left without finishing.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     streaming: HashMap<MessageId, u32>,
+    stopped_tasks: StoppedTasks,
 }
 
 impl Normalizer {
     pub fn line(&mut self, line: &str) -> Parsed {
-        let mut parsed = parse_line(line);
+        let Some(value) = value_of(line) else { return unparsed() };
+        self.stopped_tasks.note(&value);
+        let mut parsed = parse_value(&value);
+        if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
+            *stopped = self.stopped_tasks.gone_from(tasks);
+        }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {
                 DeltaChange::BlockStart { index, .. }
@@ -67,24 +77,35 @@ impl Normalizer {
     }
 }
 
-/// One line on its own. A [`Normalizer`] also says where a finished block sits in its message.
+/// One line on its own, for tests of what needs nothing before it. A [`Normalizer`] also says where a finished
+/// block sits in its message, and which background tasks were stopped.
+#[cfg(test)]
 fn parse_line(line: &str) -> Parsed {
-    let parsed = serde_json::from_str::<Value>(line)
+    value_of(line).map_or_else(unparsed, |value| parse_value(&value))
+}
+
+fn value_of(line: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(line)
         // JavaScript strings can hold half of a surrogate pair, and JSON.stringify writes it as an
         // escape. That's rare, and it can land in a line that matters, such as an approval.
-        .or_else(|_| serde_json::from_str::<Value>(&repair_lone_surrogates(line)));
-    let Ok(value) = parsed else {
-        return Parsed::Event(EventBody::AgentOther { kind: "unparsed".into() });
-    };
-    let kind = str_of(&value, "type").unwrap_or("unknown");
+        .or_else(|_| serde_json::from_str::<Value>(&repair_lone_surrogates(line)))
+        .ok()
+}
+
+fn unparsed() -> Parsed {
+    Parsed::Event(EventBody::AgentOther { kind: "unparsed".into() })
+}
+
+fn parse_value(value: &Value) -> Parsed {
+    let kind = str_of(value, "type").unwrap_or("unknown");
     match kind {
-        "assistant" => Parsed::Event(assistant(&value)),
-        "user" => Parsed::Event(user(&value)),
-        "result" => Parsed::Event(turn_ended(&value)),
-        "system" => system(&value),
-        "stream_event" => stream_event(&value),
-        "control_request" => control_request(&value),
-        "control_cancel_request" => match str_of(&value, "request_id") {
+        "assistant" => Parsed::Event(assistant(value)),
+        "user" => Parsed::Event(user(value)),
+        "result" => Parsed::Event(turn_ended(value)),
+        "system" => system(value),
+        "stream_event" => stream_event(value),
+        "control_request" => control_request(value),
+        "control_cancel_request" => match str_of(value, "request_id") {
             Some(id) => Parsed::Event(EventBody::ApprovalResolved {
                 approval_id: id.into(),
                 outcome: ApprovalOutcome::Cancelled,
@@ -92,7 +113,7 @@ fn parse_line(line: &str) -> Parsed {
             None => other(kind),
         },
         // Replies to the adapter's own requests, such as an interrupt.
-        "control_response" => control_reply(&value),
+        "control_response" => control_reply(value),
         _ => other(kind),
     }
 }
@@ -188,6 +209,7 @@ fn system(value: &Value) -> Parsed {
                 _ => AgentRunState::Unknown,
             },
         }),
+        "background_tasks_changed" => tasks::listed(value),
         "status" => match str_of(value, "permissionMode") {
             Some(mode) => Parsed::Event(EventBody::AgentMode { permission_mode: launch_name(mode).to_string() }),
             None => other("system/status"),

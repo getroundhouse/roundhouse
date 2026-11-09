@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, ToolUseId};
+use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
@@ -51,6 +51,14 @@ pub enum EventBody {
     },
     AgentState {
         state: AgentRunState,
+    },
+    /// Everything the agent is running in the background, whenever that changes, and empty once it's all done.
+    AgentTasks {
+        tasks: Vec<AgentTask>,
+        /// Those that left the list because they were stopped rather than finishing, as they are when the agent
+        /// itself is stopped.
+        #[serde(default)]
+        stopped: Vec<TaskId>,
     },
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
@@ -127,6 +135,7 @@ impl EventBody {
             EventBody::AgentStarted { .. } => "agent_started",
             EventBody::AgentInit { .. } => "agent_init",
             EventBody::AgentState { .. } => "agent_state",
+            EventBody::AgentTasks { .. } => "agent_tasks",
             EventBody::Assistant { .. } => "assistant",
             EventBody::AgentUser { .. } => "agent_user",
             EventBody::TurnEnded { .. } => "turn_ended",
@@ -139,6 +148,16 @@ impl EventBody {
             EventBody::Unknown => "unknown",
         }
     }
+}
+
+/// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
+/// started it ends.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct AgentTask {
+    pub id: TaskId,
+    /// What the agent said it's for.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

@@ -14,7 +14,7 @@ use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
 
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, PaneEvent, WorkspacePane, is_working};
+use super::{HEADER_HEIGHT, Mark, PaneEvent, WorkspacePane, in_turn};
 use crate::StopAgent;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
@@ -280,7 +280,7 @@ impl WorkspacePane {
 
     fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let pickers = self.pickers(cx).into_any_element();
-        let working = self.session().is_some_and(is_working);
+        let working = self.session().is_some_and(in_turn);
         let theme = cx.theme();
         let (surface, border) = (theme.muted, theme.input);
         div().flex_none().w_full().px_4().pb_4().pt_1().child(

@@ -5,7 +5,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Session};
 use tracing::{error, warn};
 
-use super::status::{approvals_after, ends_turn, next_status};
+use super::status::{ends_turn, next_status, open_after};
 use super::{LiveItem, LiveSession, Origin, publish};
 use crate::hub::Hub;
 use crate::store::StatusChange;
@@ -35,14 +35,15 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let (next, change) = {
+        let (next, change, tasks) = {
             let state = self.state.lock();
             if origin.speaks_for_session() {
-                let next = next_status(state.status, &body, approvals_after(&state.pending_approvals, &body));
+                let open = open_after(&state.pending_approvals, state.background_tasks, &body);
+                let next = next_status(state.status, &body, open);
                 let ends_turn = ends_turn(state.status, next);
-                (next, (next != state.status).then_some(StatusChange { status: next, ends_turn }))
+                (next, (next != state.status).then_some(StatusChange { status: next, ends_turn }), open.tasks)
             } else {
-                (state.status, None)
+                (state.status, None, state.background_tasks)
             }
         };
         let id = self.id.clone();
@@ -69,6 +70,7 @@ impl LiveSession {
                 | EventBody::AgentStarted { .. }
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }
+                | EventBody::AgentTasks { .. }
                 | EventBody::Assistant { .. }
                 | EventBody::AgentUser { .. }
                 | EventBody::TurnEnded { .. }
@@ -79,6 +81,7 @@ impl LiveSession {
                 | EventBody::Unknown => {}
             }
             state.status = next;
+            state.background_tasks = tasks;
             publish(&mut state, LiveItem::Appended(seq));
         }
         if change.is_some()

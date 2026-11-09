@@ -87,7 +87,7 @@ fn line(app: &AppView, line: Line, cx: &mut Context<AppView>) -> AnyElement {
 pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
     let urgency = |status: &SessionStatus| match status {
         SessionStatus::WaitingApproval => 3,
-        SessionStatus::Running => 2,
+        SessionStatus::Running | SessionStatus::Background => 2,
         SessionStatus::Interrupted => 1,
         SessionStatus::Idle | SessionStatus::Unknown => 0,
     };
@@ -98,7 +98,8 @@ pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
 /// will reply again, and amber or red needs dealing with first.
 pub(crate) fn signal(status: Option<SessionStatus>, unread: bool) -> Signal {
     match status {
-        Some(SessionStatus::Running) => Signal::Working,
+        // Work left in the background picks the agent up again, so it's still at work.
+        Some(SessionStatus::Running | SessionStatus::Background) => Signal::Working,
         Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
         Some(SessionStatus::Interrupted) => Signal::Failed,
         None | Some(SessionStatus::Idle | SessionStatus::Unknown) if unread => Signal::Unread,
@@ -271,6 +272,8 @@ mod tests {
         assert_eq!(workspace_status(&chats), Some(WaitingApproval));
         let chats = [session(Idle, false), session(Running, false), session(Interrupted, false)];
         assert_eq!(workspace_status(&chats), Some(Running));
+        let chats = [session(Interrupted, false), session(Background, false), session(Idle, false)];
+        assert_eq!(workspace_status(&chats), Some(Background));
     }
 
     #[test]
@@ -286,6 +289,7 @@ mod tests {
         assert_eq!(signal(Some(Idle), true), Signal::Unread);
         assert_eq!(signal(None, true), Signal::Unread);
         assert_eq!(signal(Some(Running), true), Signal::Working);
+        assert_eq!(signal(Some(Background), true), Signal::Working);
         assert_eq!(signal(Some(WaitingApproval), true), Signal::NeedsYou);
         assert_eq!(signal(Some(Interrupted), true), Signal::Failed);
         assert_eq!(signal(Some(Idle), false), Signal::Idle);

@@ -287,6 +287,7 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
         EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
+        | EventBody::AgentTasks { .. }
         | EventBody::AgentOther { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Unknown => empty(),

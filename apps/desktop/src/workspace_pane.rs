@@ -21,7 +21,9 @@ mod setup;
 mod tests;
 mod view;
 
-fn is_working(session: &Session) -> bool {
+/// In a turn, which the composer offers to stop. Work left in the background isn't, since stopping a turn doesn't
+/// reach it.
+fn in_turn(session: &Session) -> bool {
     matches!(session.status, SessionStatus::Running | SessionStatus::WaitingApproval)
 }
 

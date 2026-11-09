@@ -132,6 +132,8 @@ struct LiveState {
     version: u64,
     /// Open approvals, by the run that asked. `None` means an earlier hub's, which can't be answered.
     pending_approvals: HashMap<ApprovalId, Option<RunId>>,
+    /// How many tasks the current agent is running in the background. None outlive the agent, so it starts at 0.
+    background_tasks: usize,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
     /// been replaced: they go in the log, but don't speak for the session's current state, and its
     /// deltas are dropped.
@@ -194,6 +196,7 @@ impl LiveSession {
                 tail: Tail::default(),
                 version: 0,
                 pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
+                background_tasks: 0,
                 agent: None,
                 agent_opened: stored.agent_opened,
                 model: stored.session.model.clone(),

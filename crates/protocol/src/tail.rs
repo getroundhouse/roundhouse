@@ -134,6 +134,7 @@ impl Tail {
             | EventBody::AgentStarted { .. }
             | EventBody::AgentInit { .. }
             | EventBody::AgentState { .. }
+            | EventBody::AgentTasks { .. }
             | EventBody::AgentUser { .. }
             | EventBody::ApprovalRequested { .. }
             | EventBody::ApprovalResolved { .. }

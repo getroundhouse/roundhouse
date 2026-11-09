@@ -26,7 +26,7 @@ pub struct HubConfig {
     pub on_demand: bool,
 }
 
-/// Anything left mid-turn or half-made by the last run. Its workers exited when it went away.
+/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too.
 fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.fail_interrupted_setups()?;
     for id in store.active_session_ids()? {

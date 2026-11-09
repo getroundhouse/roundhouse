@@ -2,6 +2,8 @@
 
 ## A turn
 
+- **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, the agent counts as working: its mark moves, an update waits for it, and closing its chat asks first. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
+
 **A finished turn,** with tools, a list and code, and a pull request open for the branch. *Unconfirmed.*
 
 ![A finished turn](screens/conversation.png)

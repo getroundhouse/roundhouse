@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 mod approvals;
+mod background;
 mod cancelling;
 mod chats;
 mod client_restart;
