@@ -17,6 +17,6 @@ pub use clock::hold_still;
 pub use highlight::{Spans, highlight, preload_highlighting, try_highlight};
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, mark};
-pub use palette::{faint, tab_underline};
+pub use palette::{faint, prompt, tab_underline};
 pub use theme::apply;
 pub use work::Work;

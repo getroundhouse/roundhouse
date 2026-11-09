@@ -17,6 +17,8 @@ Measured from screenshots of its chat, on a Retina display:
 
 - The composer is centred under the chat, at most 896px wide, and about 152px tall when it's empty. Its send and stop button is 24px square, about 14px from its right edge and 16px from its bottom edge.
 - The chat starts 24 to 26px inside the composer's left edge. Where the chat's column ends on the right didn't show, since no line ran that far.
+- A prompt is a bubble at the right of the chat, only as wide as its text, with no edge and small corners, about 6px. A one-line prompt is about 44px tall, with about 16px of room beside its text.
+- A prompt has more room above it than below, about 40px against 20px, so each prompt starts a new stretch of the conversation.
 
 ## Sources
 
