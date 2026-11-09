@@ -6,25 +6,14 @@ use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
 use client_core::records::HubRecords;
-use client_core::session_log::{Row, SessionLog};
 use client_core::{Client, ClientError, Ended, OpenSession, RecordsFeed, RemoteHub, WriteOnly};
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ClientRequest, ErrorCode};
-use protocol::event::SessionEvent;
 
-use crate::support::{Stack, TIMEOUT, assistant_text, pair_phone, wait_for_turn_end, wait_until};
+use crate::support::{Stack, TIMEOUT, assistant_text, held, pair_phone, wait_for_turn_end, wait_until};
 
 fn connections(client: &Client) -> u32 {
     client.device_list().unwrap().iter().map(|device| device.connections).sum()
-}
-
-fn held(log: &SessionLog) -> Vec<SessionEvent> {
-    (0..log.row_count())
-        .filter_map(|row| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded | Row::Pending(_) => None,
-        })
-        .collect()
 }
 
 #[test]
@@ -40,7 +29,9 @@ fn a_paired_phone_follows_the_hub_as_a_client_on_its_machine_does() {
 
     let has_workspace = |records: &HubRecords| records.workspaces().iter().any(|w| w.id == workspace.id);
     wait_until("the phone to see the workspace", || records.read(has_workspace));
-    wait_until("the phone to see the reply", || assistant_text(&open.read(held)).contains("hello from the phone"));
+    wait_until("the phone to see the reply", || {
+        open.read(held).is_some_and(|events| assistant_text(&events).contains("hello from the phone"))
+    });
     assert_eq!(phone.hub_version(), protocol::BUILD_VERSION);
     assert_eq!(phone.records_list().unwrap().workspaces, client.records_list().unwrap().workspaces);
     assert_eq!(connections(&client), 1);

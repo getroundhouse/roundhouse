@@ -7,6 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+use client_core::session_log::{Row, SessionLog};
 use client_core::{Client, PairingLink, RemoteHub, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
@@ -344,6 +345,16 @@ pub(crate) fn pairing_link(client: &Client) -> (PairingLink, PairingCode) {
 
 pub(crate) fn pair_phone(client: &Client, name: &str) -> RemoteHub {
     client_core::pair(&pairing_link(client).0, name).unwrap()
+}
+
+/// Every event the open session holds, if it holds all of them, in order.
+pub(crate) fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
+    (0..log.row_count())
+        .map(|row| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded | Row::Pending(_) => None,
+        })
+        .collect()
 }
 
 /// Commits Conductor-style settings to the test repository.

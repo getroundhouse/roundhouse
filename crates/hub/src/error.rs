@@ -4,6 +4,7 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use providers::ProviderError;
 use tracing::error;
 
+use crate::remote::certificate::CertificateError;
 use crate::store::StoreError;
 
 /// Why a hub couldn't start or keep running. Failures of a single request are [`ApiError`]s.
@@ -31,6 +32,13 @@ pub(crate) fn internal(message: impl Into<String>) -> ApiError {
     let message = message.into();
     error!("{message}");
     ApiError::new(ErrorCode::Internal, message)
+}
+
+/// Only someone at the hub's machine can fix it, and the whole chain names the file to look at.
+impl From<CertificateError> for ApiError {
+    fn from(error: CertificateError) -> Self {
+        internal(format!("the hub's certificate: {}", error_chain(&error)))
+    }
 }
 
 /// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's.

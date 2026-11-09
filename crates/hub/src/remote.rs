@@ -16,7 +16,7 @@ use std::time::Duration;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::DeviceId;
 use protocol::pairing::Fingerprint;
 use protocol::paths::ENV_LISTEN;
@@ -151,8 +151,7 @@ impl Remote {
         let (certificate, key) = (self.config.certificate.clone(), self.config.certificate_key.clone());
         let identity = tokio::task::spawn_blocking(move || certificate::load_or_create(&certificate, &key))
             .await
-            .map_err(|e| internal(e.to_string()))?
-            .map_err(|e| internal(format!("the hub's certificate: {}", error_chain(&e))))?;
+            .map_err(|e| internal(e.to_string()))??;
         Ok(self.identity.lock().get_or_insert(Arc::new(identity)).clone())
     }
 

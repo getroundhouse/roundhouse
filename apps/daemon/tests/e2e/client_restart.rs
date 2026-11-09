@@ -5,15 +5,15 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use client_core::session_log::{Row, SessionLog};
 use client_core::{OpenSession, SubscriptionItem};
 use protocol::client::ClientRequest;
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::EventBody;
 use protocol::model::SessionStatus;
 use protocol::tail::Tail;
 
 use crate::support::{
-    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, is_alive, wait_for_status, wait_for_turn_end, wait_until,
+    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, held, is_alive, wait_for_status, wait_for_turn_end,
+    wait_until,
 };
 
 #[test]
@@ -259,16 +259,6 @@ fn status_is_already_current_when_an_event_is_delivered() {
             client.session_prompt(&session.id, &format!("say:{idles}"), None).unwrap();
         }
     }
-}
-
-/// Every event the open session holds, if it holds all of them, in order.
-fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
-    (0..log.row_count())
-        .map(|row| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded | Row::Pending(_) => None,
-        })
-        .collect()
 }
 
 #[test]

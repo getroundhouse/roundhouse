@@ -6,12 +6,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, anyhow, bail};
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
-use protocol::pairing::Device;
 use qrcode::QrCode;
 use qrcode::render::unicode::Dense1x2;
 
 use crate::args::PhoneCmd;
-use crate::run::short;
+use crate::run::{find_one, short};
 
 pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Result<()> {
     match command {
@@ -34,7 +33,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
         }
         PhoneCmd::Revoke { phone } => {
             let devices = client.device_list().map_err(too_old)?;
-            let device = find_device(&devices, &phone)?;
+            let device = find_one(&devices, &phone, "paired phone", |d| &d.name, |d| d.id.as_str())?;
             client.device_revoke(&device.id)?;
             println!("revoked {}. It has to pair again to reconnect", device.name);
             Ok(())
@@ -72,19 +71,6 @@ fn qr_code(link: &str) -> anyhow::Result<String> {
         return Ok(image);
     }
     Ok(image.lines().map(|line| format!("\x1b[97;40m{line}\x1b[0m")).collect::<Vec<_>>().join("\n"))
-}
-
-/// A phone's name, ID or ID prefix.
-fn find_device<'a>(devices: &'a [Device], query: &str) -> anyhow::Result<&'a Device> {
-    let mut matches: Vec<_> = devices.iter().filter(|d| d.name == query || d.id.as_str() == query).collect();
-    if matches.is_empty() {
-        matches = devices.iter().filter(|d| d.id.as_str().starts_with(query)).collect();
-    }
-    match matches.as_slice() {
-        [one] => Ok(one),
-        [] => bail!("no paired phone matches {query}. `roundhouse phone list` shows them"),
-        many => bail!("{query} matches {} phones. Use more of the ID", many.len()),
-    }
 }
 
 fn too_old(error: ClientError) -> anyhow::Error {
