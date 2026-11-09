@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
@@ -73,6 +74,16 @@ impl Stack {
 
     pub(crate) fn socket(&self) -> PathBuf {
         self.path("home/hub.sock")
+    }
+
+    /// Where a client looks for this stack's hub, and starts one if there's none.
+    pub(crate) fn paths(&self) -> Paths {
+        protocol::paths::resolve(|name| match name {
+            protocol::paths::ENV_HOME => Some(self.path("home").to_str().unwrap().to_string()),
+            protocol::paths::ENV_WORKSPACES => Some(self.path("workspaces").to_str().unwrap().to_string()),
+            _ => None,
+        })
+        .unwrap()
     }
 
     pub(crate) fn agent_state(&self) -> PathBuf {

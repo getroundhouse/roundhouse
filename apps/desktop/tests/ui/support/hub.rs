@@ -2,10 +2,9 @@
 
 #![cfg(test)]
 
-use std::path::PathBuf;
 use std::process::Command;
 
-use client_core::Client;
+use client_core::{Client, Daemon};
 use desktop::app::Connection;
 
 use super::{Stack, Ui};
@@ -20,8 +19,8 @@ impl Stack {
 
     /// Gives the app a daemon that isn't there, so it can't start a hub of its own, and waits while the test
     /// changes things. Returns the real one, for the test to start a hub with.
-    pub(crate) fn without_a_daemon(&mut self) -> PathBuf {
-        std::mem::replace(&mut self.hub.daemon, "/nonexistent/roundhoused".into())
+    pub(crate) fn without_a_daemon(&mut self) -> Daemon {
+        std::mem::replace(&mut self.hub.daemon, Daemon::in_place("/nonexistent/roundhoused"))
     }
 }
 

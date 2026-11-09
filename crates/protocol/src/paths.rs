@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::StampedBuild;
+
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.
 pub const DIR_NAME: &str = dir_name(cfg!(debug_assertions));
@@ -10,6 +12,9 @@ pub const ENV_WORKSPACES: &str = "ROUNDHOUSE_WORKSPACES";
 pub const ENV_DAEMON_BIN: &str = "ROUNDHOUSE_DAEMON_BIN";
 pub const ENV_CLAUDE_BIN: &str = "ROUNDHOUSE_CLAUDE_BIN";
 pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
+
+/// The binary that runs as a hub or a worker. It gives this name in `--version` too.
+pub const DAEMON_NAME: &str = "roundhoused";
 
 /// Which hub this is and what it runs. Nothing a worker starts in a workspace gets these, because the
 /// code there can be another build of Roundhouse, and its commands would otherwise reach this hub.
@@ -29,7 +34,16 @@ pub struct Paths {
     pub backups_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
+    /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
+    pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
+}
+
+impl Paths {
+    /// The copy of the daemon that `build`'s hubs run from, in a directory named for the build.
+    pub fn hub_copy(&self, build: &StampedBuild) -> PathBuf {
+        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(DAEMON_NAME)
+    }
 }
 
 /// macOS limits a socket path to 103 bytes.
@@ -68,6 +82,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         backups_dir: data_dir.join("backups"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
+        daemons_dir: data_dir.join("daemons"),
         workspaces_root,
         data_dir,
     })
@@ -99,6 +114,15 @@ mod tests {
         assert_eq!(dir_name(false), "roundhouse");
         assert_eq!(dir_name(true), "roundhouse-dev");
         assert_eq!(DIR_NAME, dir_name(cfg!(debug_assertions)));
+    }
+
+    #[test]
+    fn a_hub_copy_is_named_for_its_build_version_and_number() {
+        let paths = resolve(env_of(&[("HOME", "/h"), (ENV_HOME, "/d")])).unwrap();
+
+        let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
+
+        assert_eq!(copy, PathBuf::from("/d/daemons/abc123-7/roundhoused"));
     }
 
     #[test]

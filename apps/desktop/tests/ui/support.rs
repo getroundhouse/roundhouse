@@ -10,7 +10,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use client_core::Client;
+use client_core::{Client, Daemon};
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
@@ -98,7 +98,7 @@ impl Stack {
         .unwrap();
         let hub = HubSource {
             paths,
-            daemon: binaries().join("roundhoused"),
+            daemon: Daemon::in_place(binaries().join("roundhoused")),
             build_number: None,
             build_version: protocol::BUILD_VERSION,
         };

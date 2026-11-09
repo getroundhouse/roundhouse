@@ -9,6 +9,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod build;
 pub mod client;
 pub mod event;
 pub mod frame;
@@ -19,19 +20,4 @@ pub mod worker;
 
 pub const PROTOCOL_VERSION: u32 = 3;
 
-/// Which build this is, for telling people. An install stamps the commit it came from with
-/// `ROUNDHOUSE_BUILD`, and anything else says `-dev`.
-pub const BUILD_VERSION: &str = match option_env!("ROUNDHOUSE_BUILD") {
-    Some(version) => version,
-    None => concat!(env!("CARGO_PKG_VERSION"), "-dev"),
-};
-
-/// Puts builds in order, which a commit hash can't, so the app can tell a hub is older than it. An install stamps
-/// when its commit was made with `ROUNDHOUSE_BUILD_NUMBER`, and anything else has none, so it's never replaced.
-pub const BUILD_NUMBER: Option<u64> = match option_env!("ROUNDHOUSE_BUILD_NUMBER") {
-    Some(number) => match u64::from_str_radix(number, 10) {
-        Ok(number) => Some(number),
-        Err(_) => panic!("ROUNDHOUSE_BUILD_NUMBER has to be a number"),
-    },
-    None => None,
-};
+pub use build::{BUILD_NUMBER, BUILD_VERSION, STAMPED_BUILD, StampedBuild};

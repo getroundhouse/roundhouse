@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::{Client, HubAdmin};
+use client_core::{Client, Daemon, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
@@ -12,17 +12,9 @@ use crate::session::{find_session, follow, print_log, session_command};
 use crate::workspace::workspace_command;
 
 fn connect(paths: &Paths) -> anyhow::Result<Client> {
-    let daemon = find_daemon()?;
+    let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
+    let daemon = Daemon::find(named).context("finding the daemon next to this binary")?;
     Client::connect_or_start(paths, &daemon, "cli").context("connecting to the hub")
-}
-
-/// The daemon ships next to this binary.
-fn find_daemon() -> anyhow::Result<PathBuf> {
-    if let Some(path) = std::env::var_os(protocol::paths::ENV_DAEMON_BIN) {
-        return Ok(path.into());
-    }
-    let exe = std::env::current_exe().context("finding this binary")?;
-    client_core::daemon_beside(&exe).context("finding the daemon next to this binary")
 }
 
 pub(crate) fn run(args: Args) -> anyhow::Result<()> {
