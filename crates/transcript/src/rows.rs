@@ -108,8 +108,7 @@ fn render_row_inner(
             render_event(event.seq, &event.body, &around, this, cx)
         }
         Shown::Pending(prompt, carried) => {
-            let carried = attachments::view(None, &carried, this, cx);
-            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, Progress::Sending, cx)
+            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, &carried, Progress::Sending, this, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => {
@@ -185,9 +184,9 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
-            let carried = attachments::view(Some(seq), &around.carried, this, cx);
-            let (key, progress) = (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(around.prompt));
-            prompt_bubble(&key, text.clone(), carried, progress, cx)
+            let (key, progress) =
+                (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
+            prompt_bubble(&key, text.clone(), &around.carried, progress, this, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks

@@ -173,14 +173,16 @@ fn picture(seq: Option<Seq>, file: &Carried, this: &WeakEntity<Transcript>, cx: 
         }
         None => frame,
     };
-    let frame = if file.opened {
-        // A line of its own, as wide as it is, up to the column, at its own shape.
-        frame.w_full().max_w(px(width)).aspect_ratio(width / height)
-    } else {
-        frame.h(px(THUMBNAIL_HEIGHT)).w(px((THUMBNAIL_HEIGHT * width / height).clamp(32., THUMBNAIL_MAX_WIDTH)))
-    };
-    let fit = if file.opened { ObjectFit::Contain } else { ObjectFit::Cover };
-    frame.child(img(image).size_full().object_fit(fit)).test_support().into_any_element()
+    if file.opened {
+        // A line of its own, as wide as the image, up to what it's in, at its own shape. Its own width, rather than a
+        // share of what it's in, is what lets a prompt that fits its contents grow to show it.
+        let frame = frame.w(px(width)).max_w_full().aspect_ratio(width / height);
+        let picture = frame.child(img(image).size_full().object_fit(ObjectFit::Contain)).test_support();
+        return div().w_full().child(picture).into_any_element();
+    }
+    let frame =
+        frame.h(px(THUMBNAIL_HEIGHT)).w(px((THUMBNAIL_HEIGHT * width / height).clamp(32., THUMBNAIL_MAX_WIDTH)));
+    frame.child(img(image).size_full().object_fit(ObjectFit::Cover)).test_support().into_any_element()
 }
 
 /// A file that isn't drawn, as its name and size, the same in the transcript and the composer.

@@ -6,7 +6,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Surfaces and type
 
-- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a message, a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`.
+- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
 - **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
@@ -19,7 +19,8 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 - **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what the system's setting for a title bar says, except where a button takes the press, and pressing it leaves focus where it was.
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
-- **Everything in the transcript starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a prompt, a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
+- **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
+- **A prompt sits at the right of the column, on a bubble only as wide as what it says,** so what was asked stands apart from the agent's work, which starts at the left. The bubble has no edge, a control's 6px corners, 16px of room beside its text and 12px above and below. It's at most 80% of the column wide, so it never reaches across the column the way the agent's work does, even with an image open in it. *Unconfirmed.*
 - **The composer is centred under the transcript, 24px wider than its column on each side, and at most 896px wide,** so the transcript's text sits inside the composer's edges. It has room for four lines before it grows, so a longer prompt doesn't start out cramped, and empty it's about 150px tall. *Unconfirmed.*
 - **A tool call is one line:** an icon for its kind, what it did in a few words, and the detail that matters, such as the command on a raised pill or an MCP server in an outlined chip. Hovering the line turns its icon into a chevron, and clicking it opens what the call did in a block underneath, which scrolls once it's taller than a dozen lines or so. Calls in a row sit 36px apart, as one list. `chats.md` has how each kind of call reads. *Unconfirmed.*
 
@@ -33,7 +34,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 Each colour means one thing.
 
-- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus and the edge of a comment being written, and never a status.
+- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written and the wash behind a prompt, and never a status.
 - **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
 - **Amber means it's your turn, and red means the agent stopped short,** wherever the app shows where things stand. A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
