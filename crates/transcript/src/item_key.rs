@@ -3,7 +3,7 @@
 //! recorded, and every element ID for an item comes from its key here.
 
 use gpui_kit::ElementId;
-use protocol::model::{ClientMessageId, MessageId, Seq};
+use protocol::model::{AttachmentId, ClientMessageId, MessageId, Seq};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ItemKey {
@@ -13,6 +13,8 @@ pub(crate) enum ItemKey {
     Block(MessageId, u32),
     /// Anything else, by its event and its place in that event.
     Event(Seq, usize),
+    /// A file a prompt carries, by the ID its client chose, pending or recorded.
+    Attachment(AttachmentId),
 }
 
 impl ItemKey {
@@ -44,6 +46,7 @@ impl ItemKey {
             ItemKey::Prompt(id) => format!("{part}/prompt/{id}"),
             ItemKey::Block(message, index) => format!("{part}/block/{message}/{index}"),
             ItemKey::Event(seq, position) => format!("{part}/event/{seq}/{position}"),
+            ItemKey::Attachment(id) => format!("{part}/attachment/{id}"),
         };
         ElementId::Name(name.into())
     }
@@ -87,6 +90,7 @@ mod tests {
             ItemKey::Block("1".into(), 0).element("text"),
             ItemKey::prompt(3, None).element("text"),
             ItemKey::Prompt("1".into()).element("text"),
+            ItemKey::Attachment("1".into()).element("text"),
         ];
 
         for (i, id) in ids.iter().enumerate() {

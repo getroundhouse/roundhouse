@@ -9,6 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use protocol::PROTOCOL_VERSION;
+use protocol::attachment::AttachmentBytes;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
@@ -102,6 +103,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),
         R::FeedSubscribe { .. } | R::SessionUnsubscribe { .. } => reply(C::Ok),
+        R::AttachmentRead { id, .. } => {
+            let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
+            reply(C::AttachmentData { data: AttachmentBytes::new(data.clone()) })
+        }
         R::HubShutdown
         | R::RepoAdd { .. }
         | R::WorkspaceCreate { .. }
@@ -115,7 +120,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCreate { .. }
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
-        | R::AttachmentRead { .. }
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
         | R::SessionConfigure { .. }

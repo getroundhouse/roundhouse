@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::event::{AgentRunState, AgentTask, ContentBlock, EventBody, TurnOutcome};
 use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
@@ -80,6 +81,38 @@ pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
         },
     ]
 }
+
+/// A prompt carrying a screenshot and a log, and the reply to it.
+pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
+    vec![
+        EventBody::UserPrompt {
+            text: "When the sidebar is narrow, the PR badge runs over the workspace's name. This is how it looks, \
+                   with the layout log."
+                .to_string(),
+            client_msg_id: None,
+            attachments,
+        },
+        text(
+            "msg-1",
+            "The badge comes after the name in the row, but the name isn't allowed to shrink, so at this width the \
+             badge is pushed over it rather than the name being cut short. Letting the name shrink and end in an \
+             ellipsis, with the badge kept at its own width, fixes it.",
+        ),
+        EventBody::TurnEnded {
+            outcome: TurnOutcome::Success,
+            result: None,
+            errors: Vec::new(),
+            duration_ms: Some(21_000),
+            cost_usd: Some(0.08),
+            num_turns: Some(1),
+        },
+    ]
+}
+
+pub(crate) const LAYOUT_LOG: &str = "\
+row aspen: width 212, name 148 (min 148), badge 58
+row aspen: overflow 6 px, badge moved left over the name
+";
 
 /// Partway through a turn, with a reply still being written. The rest of it is [`streaming_tail`].
 pub(crate) fn streaming() -> Vec<EventBody> {

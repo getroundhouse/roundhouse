@@ -14,9 +14,11 @@ use transcript::Transcript;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
 use crate::review::Review;
+use attaching::{Attached, Draft};
 pub use reading::Mark;
 use reading::Reading;
 
+mod attaching;
 mod chats;
 mod diff_tab;
 mod reading;
@@ -89,8 +91,10 @@ pub struct WorkspacePane {
     pub active: Option<SessionId>,
     /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
     transcripts: HashMap<SessionId, (Entity<Transcript>, Subscription)>,
-    /// What's been typed in the chats not showing.
-    drafts: HashMap<SessionId, String>,
+    /// What's been typed and attached in the chats not showing.
+    drafts: HashMap<SessionId, Draft>,
+    /// What's attached in the chat showing, to go with what's typed.
+    attached: Vec<Attached>,
     /// A new chat is on its way, so another press doesn't make a second.
     creating_chat: bool,
     reading: Reading,
@@ -119,8 +123,8 @@ impl WorkspacePane {
     /// composer, and how many comments on the diff are being written.
     pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
         let typed = |text: &str| !text.trim().is_empty();
-        let showing = usize::from(typed(&self.composer.read(cx).text().to_string()));
-        let others = self.drafts.values().filter(|draft| typed(draft)).count();
+        let showing = usize::from(typed(&self.composer.read(cx).text().to_string()) || !self.attached.is_empty());
+        let others = self.drafts.values().filter(|draft| draft.has_anything()).count();
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others, usize::from(comment))
@@ -166,6 +170,7 @@ impl WorkspacePane {
             active: None,
             transcripts: HashMap::new(),
             drafts: HashMap::new(),
+            attached: Vec::new(),
             creating_chat: false,
             reading: Reading::default(),
             composer,
@@ -320,11 +325,17 @@ impl WorkspacePane {
     pub fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
-        // While the agent is waiting on a question, what's typed is the answer to it.
-        let taken = transcript.update(cx, |t, cx| t.answer_with_text(&text, cx) || t.send_prompt(text, cx));
-        if taken {
+        // While the agent is waiting on a question, what's typed is the answer to it, and the files wait for the next
+        // prompt, since an answer can't carry them.
+        if transcript.update(cx, |t, cx| t.answer_with_text(&text, cx)) {
+            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            return;
+        }
+        let files = std::mem::take(&mut self.attached).into_iter().map(Attached::into_file).collect();
+        if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         }
+        cx.notify();
     }
 
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {

@@ -12,6 +12,7 @@ mod chats;
 mod fake_hub;
 mod icon;
 mod patch;
+mod pictures;
 mod screens;
 mod world;
 

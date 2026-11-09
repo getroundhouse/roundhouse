@@ -326,6 +326,17 @@ impl<'a> Ui<'a> {
         self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
     }
 
+    /// Puts this on the clipboard and pastes it where focus is, as Cmd-V does.
+    pub(crate) fn paste(&mut self, item: gpui_kit::ClipboardItem) {
+        self.cx.write_to_clipboard(item);
+        self.press("cmd-v");
+    }
+
+    pub(crate) fn attached(&self) -> Vec<String> {
+        let pane = self.pane().unwrap();
+        self.cx.read_entity(&pane, |p, _| p.attached_names())
+    }
+
     pub(crate) fn composer_text(&self) -> String {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, cx| p.composer.read(cx).text().to_string())

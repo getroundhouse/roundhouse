@@ -7,8 +7,8 @@ use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMen
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels,
-    Render, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
+    Anchor, AnyElement, App, Context, ElementId, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
+    ParentElement, Pixels, Render, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
@@ -307,20 +307,37 @@ impl WorkspacePane {
             )
     }
 
+    /// What's attached, what's typed, and below them the attach button, the pickers and Send. Files dropped anywhere on
+    /// it are attached, and so is a paste that holds images or files.
     fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let pickers = self.pickers(cx).into_any_element();
+        let attached = self.attached_tiles(cx);
         let working = self.session().is_some_and(in_turn);
         let theme = cx.theme();
-        let (surface, border) = (theme.muted, theme.input);
+        let (surface, border, ring) = (theme.muted, theme.input, theme.ring);
+        let this = cx.weak_entity();
+        let textarea = Textarea::new(&self.composer)
+            .appearance(false)
+            .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
+        let attach = Button::new("attach")
+            .ghost()
+            .xsmall()
+            .icon(IconName::Plus)
+            .tooltip("Attach images or files")
+            .on_click(cx.listener(|_, _, _, cx| Self::pick_files(cx)));
         div().flex_none().w_full().px_4().pb_4().pt_1().child(
             v_flex()
+                .id("composer")
                 .w_full()
                 .rounded_lg()
                 .border_1()
                 .border_color(border)
                 .bg(surface)
-                .child(div().w_full().px_1().pt_1().child(Textarea::new(&self.composer).appearance(false)))
-                .child(h_flex().w_full().px_2().pb_2().gap_2().child(pickers).child(if working {
+                .drag_over::<ExternalPaths>(move |style, _, _, _| style.border_color(ring))
+                .on_drop(cx.listener(|t, dropped: &ExternalPaths, _, cx| t.attach_paths(dropped.paths().to_vec(), cx)))
+                .children(attached)
+                .child(div().w_full().px_1().pt_1().child(textarea))
+                .child(h_flex().w_full().px_2().pb_2().gap_2().child(attach).child(pickers).child(if working {
                     Button::new("stop")
                         .small()
                         .icon(IconName::Square)
