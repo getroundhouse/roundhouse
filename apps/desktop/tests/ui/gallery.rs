@@ -11,6 +11,7 @@ mod capture;
 mod chats;
 mod events;
 mod fake_hub;
+mod file_chats;
 mod icon;
 mod patch;
 mod pictures;

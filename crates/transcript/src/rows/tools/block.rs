@@ -38,9 +38,10 @@ pub(super) fn separator(cx: &App) -> Div {
     div().h(px(1.)).bg(cx.theme().border)
 }
 
-/// A faint name for the part of a block below it, such as "Input".
-pub(super) fn label(text: &'static str, cx: &App) -> Div {
+/// A faint name for the part of a block below it, such as "Input" or a file's path.
+pub(super) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
     let theme = cx.theme();
+    let text: SharedString = text.into();
     div().px_3().pt_2().font_family(theme.mono_font_family.clone()).text_xs().text_color(look::faint()).child(text)
 }
 
@@ -65,7 +66,7 @@ pub(super) fn output(id: ElementId, text: &str, color: Hsla, cx: &App) -> AnyEle
 }
 
 /// Code in a block, highlighted as `language`, after `prompt` in faint text.
-pub(super) fn code(id: ElementId, language: &'static str, prompt: &str, text: &str, cx: &App) -> AnyElement {
+pub(super) fn code(id: ElementId, language: &str, prompt: &str, text: &str, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let body: SharedString = text.trim_end().to_string().into();
     let spans = spans(language, &body);
@@ -86,6 +87,6 @@ pub(super) fn code(id: ElementId, language: &'static str, prompt: &str, text: &s
         .into_any_element()
 }
 
-fn scrolling(id: ElementId) -> gpui_kit::Stateful<Div> {
+pub(super) fn scrolling(id: ElementId) -> gpui_kit::Stateful<Div> {
     div().id(id).max_h(px(MAX_HEIGHT)).overflow_y_scroll()
 }

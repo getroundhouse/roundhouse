@@ -6,16 +6,26 @@
 use serde_json::Value;
 
 mod command;
+pub(crate) mod diff;
 pub(crate) mod failure;
+pub(crate) mod files;
+pub(crate) mod lines;
 mod other;
+mod search;
 
 pub(crate) use command::Command;
 pub(crate) use failure::Failure;
+pub(crate) use files::{EditFile, ReadFile, WriteFile};
 pub(crate) use other::Other;
+pub(crate) use search::{Found, Looks, Search};
 
 /// A call, by what kind of thing it does.
 pub(crate) enum ToolCall<'a> {
     Command(Command<'a>),
+    Read(ReadFile<'a>),
+    Write(WriteFile<'a>),
+    Edit(EditFile<'a>),
+    Search(Search<'a>),
     Other(Other),
 }
 
@@ -23,6 +33,11 @@ impl<'a> ToolCall<'a> {
     pub(crate) fn read(name: &'a str, input: &'a Value) -> Self {
         let known = match name {
             "Bash" => Command::read(input).map(ToolCall::Command),
+            "Read" => ReadFile::read(input).map(ToolCall::Read),
+            "Write" => WriteFile::read(input).map(ToolCall::Write),
+            "Edit" | "MultiEdit" => EditFile::read(input).map(ToolCall::Edit),
+            "Grep" => Search::read(input, Looks::InFiles).map(ToolCall::Search),
+            "Glob" => Search::read(input, Looks::ForNames).map(ToolCall::Search),
             _ => None,
         };
         // A known tool whose input isn't what it should be is still drawn, as any tool would be.

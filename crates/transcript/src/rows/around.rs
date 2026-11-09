@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use client_core::session_log::SessionLog;
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::Seq;
 
 use crate::attachments::{self, Carried};
@@ -43,12 +43,25 @@ pub(super) struct BlockAround {
 pub(super) struct Answer {
     pub(super) is_error: bool,
     pub(super) text: String,
+    /// What it changed in a file, when its agent said.
+    pub(super) change: Option<FileChange>,
 }
 
 impl Answer {
     /// What it says went wrong, if it failed.
     pub(super) fn failure(&self) -> Option<&str> {
         self.is_error.then_some(self.text.as_str())
+    }
+
+    /// What it sent back, if it didn't fail.
+    pub(super) fn success(&self) -> Option<&str> {
+        (!self.is_error).then_some(self.text.as_str())
+    }
+
+    /// The parts of a file it changed, when its agent said which they were.
+    pub(super) fn hunks(&self) -> Option<&[Hunk]> {
+        let Some(FileChange::Changed { hunks }) = &self.change else { return None };
+        (!hunks.is_empty()).then_some(hunks.as_slice())
     }
 }
 
@@ -93,8 +106,8 @@ impl BlockAround {
 fn answer_in(event: &SessionEvent, id: &str) -> Option<Answer> {
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
     blocks.iter().find_map(|block| {
-        let ContentBlock::ToolResult { tool_use_id, is_error, text, .. } = block else { return None };
-        (tool_use_id.as_str() == id).then(|| Answer { is_error: *is_error, text: text.clone() })
+        let ContentBlock::ToolResult { tool_use_id, is_error, text, change, .. } = block else { return None };
+        (tool_use_id.as_str() == id).then(|| Answer { is_error: *is_error, text: text.clone(), change: change.clone() })
     })
 }
 

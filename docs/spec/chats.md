@@ -45,7 +45,7 @@
 Every call is drawn the same way, as `look.md` says, and each kind fills in what its line says and what it opens to. A tool that has no drawing of its own still gets a readable line, so a new tool, or one from an MCP server, never shows as raw JSON until it's opened.
 
 - **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. Opened, the command comes first, highlighted as shell after a faint `$`, then what it printed. *Unconfirmed.*
-- **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. The output itself stays in muted text, so it's still easy to read. *Unconfirmed.*
+- **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. Opened, the call shows all of what went wrong, since the line only has room for its start, then what it tried, such as an edit's diff. The output itself stays in muted text, so it's still easy to read. *Unconfirmed.*
 - **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
 - **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
 
@@ -56,6 +56,33 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **Tools with no drawing of their own: one from an MCP server opened, one that failed, and a built-in one.** *Unconfirmed.*
 
 ![Other tools, one opened to its input and output](screens/tool-any.png)
+
+- **A file call names the file in an outlined chip, and says how much it read or wrote,** such as `Read 10 lines` or `Write 12 lines`. Opened, the file's path, then its lines with their numbers in the file, highlighted for its language. The full path is only there, since the file's name is enough to tell calls apart. *Unconfirmed.*
+- **An edit shows how many lines it added and removed,** as `+5 −0` in green and red, and so does a write over a file that was already there. A write that made a new file shows no counts, since all of it is new, and opens to the whole file marked as added. *Unconfirmed.*
+- **An edit's diff uses the file's own line numbers,** from the patch the agent sent back, with a gap mark between parts of the file that aren't next to each other. Added and removed lines are tinted, with a bar down their left, and where a line changed in place, the part that changed is picked out. Before the patch comes back, the diff is worked out from the edit itself, without numbers. *Unconfirmed.*
+- **Hovering an edit shows its diff,** so a change can be checked without opening it. The preview is a dozen lines tall at most. *Unconfirmed.*
+- **A search shows its pattern, where it looked, and how much it found,** such as `4 matches in 3 files`, or `Nothing found`. Opened, matching lines under their file's path, with their numbers, or the files it found. Anything else it sends back, such as matches with lines of context around them, shows as it came, so nothing is lost. Finding files by name says `Find files`. *Unconfirmed.*
+- **A block of a file's lines is twelve and a half lines tall at most,** so a dozen fit whole and anything longer shows half a line as a sign that it scrolls. *Unconfirmed.*
+
+**Each kind of file call: a read, an edit opened to its diff, a new file, an edit that failed, and a write over a file that was there.** *Unconfirmed.*
+
+![File calls, an edit opened to its diff](screens/tool-files.png)
+
+**An edit's diff, shown while it's hovered.** *Unconfirmed.*
+
+![An edit's diff in a preview](screens/tool-edit-preview.png)
+
+**A read of part of a file and a new file, both opened to their lines.** *Unconfirmed.*
+
+![A read and a new file, opened](screens/tool-file-contents.png)
+
+**Searches: one opened to its matching lines, one listing files, and one by name.** *Unconfirmed.*
+
+![Searches, one opened to its matches](screens/tool-search.png)
+
+**An edit and a search that failed, opened to all of what went wrong.** *Unconfirmed.*
+
+![An edit and a search that failed, opened](screens/tool-failures.png)
 
 ## Questions and approvals
 

@@ -2,16 +2,19 @@
 //! Clicking it opens and closes what's under it. Each kind of call fills in the parts, and the line is the same for
 //! all of them.
 
+use std::rc::Rc;
+
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, div, px, relative,
+    AnyElement, AnyView, App, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
+    StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 
-use super::Toggle;
-use crate::calls::Failure;
+use super::{Toggle, block};
+use crate::calls::lines::Counts;
+use crate::calls::{Failure, failure};
 use crate::rows::around::Answer;
 
 /// How far what a line opens to sits in from it, so it lines up under the title.
@@ -25,7 +28,13 @@ pub(super) struct Line {
     icon: IconName,
     title: SharedString,
     parts: Vec<Part>,
+    preview: Option<Preview>,
+    /// Whether what the call opens to shows what came back, so a failure's whole text isn't added under its line.
+    shows_output: bool,
 }
+
+/// What shows while a closed line is hovered, on a device that has hover, such as a change's diff.
+pub(super) type Preview = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 /// A detail after the title.
 pub(super) enum Part {
@@ -37,11 +46,24 @@ pub(super) enum Part {
     Code(SharedString),
     /// A quiet word or two, such as the tool's name.
     Note(SharedString),
+    /// How many lines a change added and removed.
+    Counts(Counts),
 }
 
 impl Line {
     pub(super) fn new(icon: IconName, title: impl Into<SharedString>) -> Self {
-        Self { icon, title: title.into(), parts: Vec::new() }
+        Self { icon, title: title.into(), parts: Vec::new(), preview: None, shows_output: false }
+    }
+
+    /// Says whether what the call opens to shows what came back, failures included.
+    pub(super) fn shows_output(mut self, shows: bool) -> Self {
+        self.shows_output = shows;
+        self
+    }
+
+    pub(super) fn preview(mut self, preview: Preview) -> Self {
+        self.preview = Some(preview);
+        self
     }
 
     pub(super) fn part(mut self, part: impl Into<Option<Part>>) -> Self {
@@ -72,6 +94,7 @@ impl Line {
             .on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !open, cx));
             })
+            .when_some(self.preview.filter(|_| !open), |d, preview| d.tooltip(move |window, cx| preview(window, cx)))
             .child(icon(self.icon, open, cx))
             .child(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title))
             .children(parts)
@@ -105,6 +128,14 @@ impl Part {
                 .child(text)
                 .into_any_element(),
             Part::Note(text) => div().flex_none().text_color(look::faint()).child(text).into_any_element(),
+            Part::Counts(Counts { added, removed }) => h_flex()
+                .flex_none()
+                .gap_1()
+                .font_family(theme.mono_font_family.clone())
+                .text_size(theme.mono_font_size)
+                .child(div().text_color(theme.success).child(format!("+{added}")))
+                .child(div().text_color(theme.danger).child(format!("−{removed}")))
+                .into_any_element(),
         }
     }
 }
@@ -156,9 +187,16 @@ pub(super) fn drawn(
     toggle: &Toggle,
     cx: &App,
 ) -> AnyElement {
+    let failed = answer.and_then(Answer::failure);
+    // The line under a failed call has room for the start of what went wrong, so opened, the call shows all of it.
+    let whole = failed.map(failure::output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
     v_flex()
         .child(line.render(toggle, cx))
-        .when_some(answer.and_then(Answer::failure), |d, text| d.child(failure(&Failure::read(text), cx)))
+        .when_some(failed, |d, text| d.child(failure(&Failure::read(text), cx)))
+        .when_some(whole, |d, text| {
+            let output = block::output(toggle.key.element("error"), text, cx.theme().muted_foreground, cx);
+            d.child(block::frame(cx).child(output))
+        })
         .children(opened)
         .into_any_element()
 }

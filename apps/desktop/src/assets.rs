@@ -9,6 +9,8 @@ gpui_kit::assets::icon_assets!(
     Extra,
     [
         CornerDownRight,
+        FilePen,
+        FilePlus,
         ListTree,
         MessageSquarePlus,
         Pencil,

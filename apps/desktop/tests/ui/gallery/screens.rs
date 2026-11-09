@@ -10,7 +10,7 @@ use super::worlds::{
     attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, setup_failed, streaming, titled,
     unread,
 };
-use super::{chats, pictures, tool_chats};
+use super::{chats, file_chats, pictures, tool_chats};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -61,7 +61,7 @@ pub(crate) enum Step {
     /// Opens Settings, as its menu item does.
     OpenSettings,
     /// Clicks the transcript's line with this label, such as a tool call, to open it, then moves the pointer away,
-    /// so the picture shows it open rather than hovered.
+    /// so the picture shows it open rather than hovered. The first, if there are several.
     Open(&'static str),
 }
 
@@ -136,6 +136,36 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::any_tool())),
         steps: &[Step::Select(FOCUS), Step::Open("Create issue")],
+    },
+    Screen {
+        name: "tool-files",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, file_chats::files())),
+        steps: &[Step::Select(FOCUS), Step::Open("Edit")],
+    },
+    Screen {
+        name: "tool-edit-preview",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, file_chats::files())),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Label("Edit"), shows: "edit-preview" }],
+    },
+    Screen {
+        name: "tool-file-contents",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, file_chats::file_contents())),
+        steps: &[Step::Select(FOCUS), Step::Open("Read 10 lines"), Step::Open("Write 12 lines")],
+    },
+    Screen {
+        name: "tool-search",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, file_chats::searches())),
+        steps: &[Step::Select(FOCUS), Step::Open("Search")],
+    },
+    Screen {
+        name: "tool-failures",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, file_chats::failures())),
+        steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
     },
     Screen {
         name: "mode-picker",

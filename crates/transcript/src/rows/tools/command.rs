@@ -12,7 +12,7 @@ use crate::calls::{Command, failure};
 
 pub(super) fn draw(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::Pill(command.summary().to_string().into()));
-    let line = Line::new(IconName::Terminal, command.title()).part(summary);
+    let line = Line::new(IconName::Terminal, command.title()).part(summary).shows_output(true);
     let opened = toggle.open.then(|| opened(command, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }

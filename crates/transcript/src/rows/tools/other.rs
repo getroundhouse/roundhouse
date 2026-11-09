@@ -17,7 +17,8 @@ pub(super) fn draw(other: &Other, input: &Value, answer: Option<&Answer>, toggle
     let line = Line::new(icon, other.title.clone())
         .part(other.server.clone().map(|server| Part::Chip(server.into())))
         .part(other.tool.clone().map(|tool| Part::Note(tool.into())))
-        .part(detail.map(|detail| Part::Code(detail.into())));
+        .part(detail.map(|detail| Part::Code(detail.into())))
+        .shows_output(true);
     let opened = toggle.open.then(|| opened(input, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }
