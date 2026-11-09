@@ -1,0 +1,171 @@
+//! Where an update has got to, as a card in the version's place.
+
+use gpui_kit::base::ElementExt as _;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, Context, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    Stateful, Styled as _, TestSupportExt as _, Window, div, px,
+};
+use look::{IconSize, IconStyle};
+
+use super::update_details::{Details, Shown};
+use crate::app::{AppView, BuildLine, UpdateQuestion};
+
+/// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
+/// and a mark in its corner that says which versions, and what happens next, on hover. Installing an update is the
+/// card's main action. Finishing one stops agents, and happens by itself, so it's a quiet button under what it's
+/// waiting on. When either would lose work, the card asks first, as its title, in place of its buttons.
+pub(super) fn update_card(
+    line: &BuildLine,
+    question: Option<&UpdateQuestion>,
+    cx: &mut Context<AppView>,
+) -> Option<AnyElement> {
+    let (about, action) = match line {
+        BuildLine::UpdateReady { next, .. } => {
+            ready_card(next, question.filter(|q| matches!(q, UpdateQuestion::Restart { .. })), cx)
+        }
+        BuildLine::Finishing { agents, .. } => {
+            finishing_card(*agents, question.filter(|q| matches!(q, UpdateQuestion::Finish(_))), cx)
+        }
+        BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
+    };
+    let details = Details::of(line)?;
+    Some(UpdateCard { about, details, action }.into_any_element())
+}
+
+/// A component of its own, rather than a function, because it keeps whether its details show, and where it was last
+/// drawn, which places them.
+#[derive(IntoElement)]
+struct UpdateCard {
+    /// Beside the icon.
+    about: Stateful<Div>,
+    details: Details,
+    /// Under the rest, across the card.
+    action: Option<AnyElement>,
+}
+
+impl RenderOnce for UpdateCard {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let shown = window.use_keyed_state("update-details-shown", cx, |_, _| Shown::default());
+        let details = self.details.shown(shown.read(cx), cx);
+        let mark = Details::mark(&shown, cx);
+        let theme = cx.theme();
+        v_flex()
+            .id("update-card")
+            .w_full()
+            .mt_2()
+            .p_2p5()
+            .gap_2p5()
+            .rounded(px(10.))
+            .bg(theme.secondary)
+            .border_1()
+            .border_color(theme.border)
+            .child(
+                h_flex()
+                    .items_start()
+                    .gap_2p5()
+                    .child(look::icon(IconStyle::Working, IconSize::Px64, cx))
+                    .child(self.about.flex_1())
+                    .child(mark),
+            )
+            .when_some(self.action, ParentElement::child)
+            .when_some(details, ParentElement::child)
+            .on_prepaint(move |bounds, _, cx| shown.update(cx, |shown, _| shown.card_width = bounds.size.width))
+            .test_support()
+    }
+}
+
+/// What the card says beside the icon: its title, and a detail under it.
+fn card_text(title: &str, detail: String, cx: &App) -> Stateful<Div> {
+    v_flex()
+        .id("update-about")
+        .min_w_0()
+        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
+        .child(div().text_xs().text_color(cx.theme().muted_foreground).child(detail))
+}
+
+/// An update is downloaded, and restarting installs it, unless the card is asking first.
+fn ready_card(
+    next: &str,
+    question: Option<&UpdateQuestion>,
+    cx: &mut Context<AppView>,
+) -> (Stateful<Div>, Option<AnyElement>) {
+    let title = question.map_or("Update ready", UpdateQuestion::title);
+    let about = card_text(title, format!("Roundhouse {next}"), cx);
+    let action = if let Some(question) = question {
+        asking(question, "Keep working", "Restart", AppView::restart_to_update_anyway, cx)
+    } else {
+        let restart = cx.listener(|t, _, _, cx| t.restart_to_update(cx));
+        Button::new("restart-to-update")
+            .primary()
+            .small()
+            .w_full()
+            .label("Restart to update")
+            .on_click(restart)
+            .into_any_element()
+    };
+    (about, Some(action))
+}
+
+/// The app has updated, and the older hub is still busy, so it finishes by itself later, or now if asked.
+fn finishing_card(
+    agents: usize,
+    question: Option<&UpdateQuestion>,
+    cx: &mut Context<AppView>,
+) -> (Stateful<Div>, Option<AnyElement>) {
+    if let Some(question) = question {
+        let about = card_text(question.title(), waiting_on(agents), cx);
+        return (about, Some(asking(question, "Not now", "Finish now", AppView::finish_update_now, cx)));
+    }
+    // Under the text, and in line with it, past the button's own padding.
+    let finish = h_flex().pt_1().ml(px(-3.5)).child(finish_now(cx));
+    (card_text("Finishing update", waiting_on(agents), cx).child(finish), None)
+}
+
+/// What the card asks before going ahead: what that loses, then a quiet button that leaves things as they are, and
+/// the main one, which goes ahead.
+fn asking(
+    question: &UpdateQuestion,
+    stay: &'static str,
+    go: &'static str,
+    go_ahead: fn(&mut AppView, &mut Context<AppView>),
+    cx: &mut Context<AppView>,
+) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    let stay = Button::new("update-not-now")
+        .ghost()
+        .small()
+        .flex_1()
+        .label(stay)
+        .on_click(cx.listener(|t, _, _, cx| t.dismiss_update_question(cx)));
+    let go = Button::new("update-go-ahead")
+        .primary()
+        .small()
+        .flex_1()
+        .label(go)
+        .on_click(cx.listener(move |t, _, _, cx| go_ahead(t, cx)));
+    v_flex()
+        .id("update-question")
+        .gap_2p5()
+        .child(div().text_xs().text_color(muted).child(question.detail()))
+        .child(h_flex().gap_2().child(stay).child(go))
+        .test_support()
+        .into_any_element()
+}
+
+/// What finishing an update is waiting on.
+fn waiting_on(agents: usize) -> String {
+    match agents {
+        0 => "Waiting on other work".to_string(),
+        1 => "Waiting on 1 agent".to_string(),
+        n => format!("Waiting on {n} agents"),
+    }
+}
+
+/// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
+fn finish_now(cx: &mut Context<AppView>) -> Button {
+    let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
+    Button::new("finish-update").ghost().xsmall().label("Finish now").on_click(finish)
+}
