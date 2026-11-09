@@ -91,7 +91,7 @@ pub fn open_main_window(
         titlebar: Some(TitlebarOptions {
             title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(16.), px(16.))),
+            traffic_light_position: Some(point(px(12.), px(12.))),
         }),
         // The app moves the window itself, from the strip along the top. GPUI says AppKit's own handling
         // there holds back each click while it waits for a double click, from macOS 27 on.
