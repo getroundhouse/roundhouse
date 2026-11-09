@@ -5,6 +5,7 @@ use std::io::Write;
 
 use protocol::client::{ClientFrame, ClientRequest};
 use protocol::frame;
+use protocol::pairing::Fingerprint;
 
 use super::reach;
 use crate::client::transport::Closer;
@@ -18,7 +19,7 @@ pub struct WriteOnly {
 
 impl WriteOnly {
     /// Connects to the first of `hosts` to answer with the pinned key, and sends nothing yet.
-    pub fn open(hosts: &[String], fingerprint: &str) -> Result<WriteOnly> {
+    pub fn open(hosts: &[String], fingerprint: &Fingerprint) -> Result<WriteOnly> {
         let transport = reach(hosts, fingerprint)?;
         Ok(WriteOnly { writer: transport.writer, next_id: 1, _closer: transport.closer })
     }

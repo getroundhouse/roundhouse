@@ -6,8 +6,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use protocol::pairing::Fingerprint;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -15,8 +14,7 @@ use tracing::{info, warn};
 
 /// What the hub needs to serve TLS, and what a device pins.
 pub(crate) struct Identity {
-    /// See [`fingerprint`].
-    pub(crate) fingerprint: String,
+    pub(crate) fingerprint: Fingerprint,
     pub(crate) acceptor: TlsAcceptor,
 }
 
@@ -38,12 +36,13 @@ pub(crate) enum CertificateError {
     Tls(#[from] tokio_rustls::rustls::Error),
 }
 
-/// The SHA-256 of a certificate's `SubjectPublicKeyInfo`, in unpadded base64url, which is what a pairing link
-/// carries. It's the key that's pinned rather than the whole certificate, so the same key could be certified again.
-/// `client_core` works it out the same way from what a hub presents, and pairing fails if the two ever differ.
-pub(crate) fn fingerprint(certificate: &CertificateDer<'_>) -> Result<String, webpki::Error> {
+/// What a pairing link carries for this certificate. `client_core` works it out from the same bytes of what a hub
+/// presents, and pairing fails if the two ever differ.
+pub(crate) fn fingerprint(certificate: &CertificateDer<'_>) -> Result<Fingerprint, webpki::Error> {
     let key = webpki::EndEntityCert::try_from(certificate)?.subject_public_key_info();
-    Ok(URL_SAFE_NO_PAD.encode(ring::digest::digest(&ring::digest::SHA256, key.as_ref())))
+    let mut sha256 = [0; 32];
+    sha256.copy_from_slice(ring::digest::digest(&ring::digest::SHA256, key.as_ref()).as_ref());
+    Ok(Fingerprint::of_sha256(sha256))
 }
 
 /// The certificate and key kept at these paths, or new ones if there's no key yet. Blocks.
@@ -58,7 +57,7 @@ pub(crate) fn load_or_create(certificate: &Path, key: &Path) -> Result<Identity,
         write_private(key, &key_der)?;
         write_private(certificate, &certificate_der)?;
         let identity = identity(certificate_der, key_der)?;
-        info!(fingerprint = identity.fingerprint, "made a certificate for paired devices");
+        info!(fingerprint = %identity.fingerprint, "made a certificate for paired devices");
         return Ok(identity);
     };
     let unusable =
@@ -204,8 +203,9 @@ mod tests {
 
         let fingerprint = fingerprint(&CertificateDer::from(certify(&key).unwrap())).unwrap();
 
-        let expected =
-            ring::digest::digest(&ring::digest::SHA256, &rcgen::PublicKeyData::subject_public_key_info(&key));
-        assert_eq!(fingerprint, URL_SAFE_NO_PAD.encode(expected));
+        let spki = rcgen::PublicKeyData::subject_public_key_info(&key);
+        let mut expected = [0; 32];
+        expected.copy_from_slice(ring::digest::digest(&ring::digest::SHA256, &spki).as_ref());
+        assert_eq!(fingerprint, Fingerprint::of_sha256(expected));
     }
 }

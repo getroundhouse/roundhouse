@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+use protocol::pairing::Fingerprint;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection};
 use socket2::{SockRef, TcpKeepalive};
@@ -39,7 +40,7 @@ impl From<io::Error> for Failure {
 /// Connects, and finishes the handshake before handing over the stream, so a key that isn't pinned is refused
 /// before anything is sent. Connecting and the whole handshake have until `deadline`, so something that accepts the
 /// connection but never answers, or answers a byte at a time, can't hold it longer.
-pub(super) fn connect(address: SocketAddr, fingerprint: &str, deadline: Instant) -> Result<Transport, Failure> {
+pub(super) fn connect(address: SocketAddr, fingerprint: &Fingerprint, deadline: Instant) -> Result<Transport, Failure> {
     let tcp = open_tcp(address, time_left(deadline)?)?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let pinned = Arc::new(PinnedKey::new(fingerprint, provider.clone()));
@@ -227,7 +228,7 @@ mod tests {
         });
         let started = Instant::now();
 
-        let failed = connect(address, &"f".repeat(43), started + Duration::from_millis(500));
+        let failed = connect(address, &Fingerprint::of_sha256([0; 32]), started + Duration::from_millis(500));
 
         assert!(matches!(&failed, Err(Failure::Io(e)) if e.kind() == io::ErrorKind::TimedOut));
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());

@@ -3,8 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use protocol::pairing::Fingerprint;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -14,15 +13,15 @@ use rustls::{CertificateError, DigitallySignedStruct, SignatureScheme};
 /// itself, and the handshake's signature still proves the hub holds the key.
 #[derive(Debug)]
 pub(super) struct PinnedKey {
-    fingerprint: String,
+    fingerprint: Fingerprint,
     provider: Arc<CryptoProvider>,
     /// Set once it has refused a certificate, so a failed handshake can say why.
     refused: AtomicBool,
 }
 
 impl PinnedKey {
-    pub(super) fn new(fingerprint: &str, provider: Arc<CryptoProvider>) -> PinnedKey {
-        PinnedKey { fingerprint: fingerprint.to_string(), provider, refused: AtomicBool::new(false) }
+    pub(super) fn new(fingerprint: &Fingerprint, provider: Arc<CryptoProvider>) -> PinnedKey {
+        PinnedKey { fingerprint: fingerprint.clone(), provider, refused: AtomicBool::new(false) }
     }
 
     pub(super) fn refused(&self) -> bool {
@@ -30,12 +29,13 @@ impl PinnedKey {
     }
 }
 
-/// The SHA-256 of a certificate's `SubjectPublicKeyInfo`, in unpadded base64url, which is what a pairing link
-/// carries. The hub works it out the same way for the link, in `hub::remote::certificate`, and pairing fails if the
-/// two ever differ.
-fn fingerprint(certificate: &CertificateDer<'_>) -> Option<String> {
+/// What a pairing link would carry for this certificate. The hub works it out from the same bytes, in
+/// `hub::remote::certificate`, and pairing fails if the two ever differ.
+fn fingerprint(certificate: &CertificateDer<'_>) -> Option<Fingerprint> {
     let key = webpki::EndEntityCert::try_from(certificate).ok()?.subject_public_key_info();
-    Some(URL_SAFE_NO_PAD.encode(ring::digest::digest(&ring::digest::SHA256, key.as_ref())))
+    let mut sha256 = [0; 32];
+    sha256.copy_from_slice(ring::digest::digest(&ring::digest::SHA256, key.as_ref()).as_ref());
+    Some(Fingerprint::of_sha256(sha256))
 }
 
 impl ServerCertVerifier for PinnedKey {

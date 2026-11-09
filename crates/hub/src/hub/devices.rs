@@ -76,10 +76,10 @@ impl Hub {
             hub_name: machine.name,
             hosts: machine.hosts.iter().map(|host| format!("{host}:{port}")).collect(),
             fingerprint,
-            code: code.as_str().to_string(),
+            code: code.clone(),
         };
         let expires_at_ms = now_ms().saturating_add(i64::try_from(life.as_millis()).unwrap_or(i64::MAX));
-        Ok(Pairing { link: link.to_string(), code, expires_at_ms })
+        Ok(Pairing { link, code, expires_at_ms })
     }
 
     pub(crate) async fn pairing_wait(&self, code: PairingCode) -> Result<Device, ApiError> {

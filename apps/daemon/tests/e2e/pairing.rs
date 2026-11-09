@@ -5,7 +5,7 @@
 use std::io::Write as _;
 use std::os::unix::net::UnixStream;
 
-use client_core::{Client, ClientError, PairingLink, RemoteHub};
+use client_core::{Client, ClientError, Fingerprint, PairingLink, RemoteHub};
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ClientFrame, ClientRequest, ErrorCode};
 use protocol::frame;
@@ -89,7 +89,7 @@ fn a_phone_refuses_a_hub_with_another_key() {
     let stack = Stack::start();
     let client = stack.client();
     let (link, _) = pairing_link(&client);
-    let another_key = "A".repeat(43);
+    let another_key = Fingerprint::of_sha256([0; 32]);
 
     let refused = client_core::pair(&PairingLink { fingerprint: another_key.clone(), ..link.clone() }, "phone");
 
@@ -111,7 +111,8 @@ fn a_phone_that_reaches_only_a_hub_with_another_key_says_it_can_not_reach_its_ow
     let other = paired.hosts[0].clone();
     let hosts = vec![CLOSED.to_string(), other.clone()];
 
-    let unreachable = Client::connect_remote(&RemoteHub { hosts, fingerprint: "A".repeat(43), ..paired }, "phone");
+    let unreachable =
+        Client::connect_remote(&RemoteHub { hosts, fingerprint: Fingerprint::of_sha256([0; 32]), ..paired }, "phone");
 
     let unreachable = unreachable.map(drop).unwrap_err();
     assert!(matches!(&unreachable, ClientError::Unreachable { not_pinned, .. } if *not_pinned == [other]));

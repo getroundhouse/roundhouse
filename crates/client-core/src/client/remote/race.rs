@@ -13,6 +13,8 @@ use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
+use protocol::pairing::Fingerprint;
+
 use super::tls::{self, Failure};
 use crate::client::transport::Transport;
 
@@ -40,7 +42,7 @@ enum Event {
 }
 
 /// A connection to one of `hosts` that passed the pin.
-pub(super) fn race(hosts: &[String], fingerprint: &str) -> Result<Transport, Lost> {
+pub(super) fn race(hosts: &[String], fingerprint: &Fingerprint) -> Result<Transport, Lost> {
     let (events, received) = flume::unbounded();
     let lookups_end = Instant::now() + LOOKUP_TIMEOUT;
     let mut race = Race {
@@ -82,7 +84,7 @@ pub(super) fn race(hosts: &[String], fingerprint: &str) -> Result<Transport, Los
 
 struct Race<'a> {
     hosts: &'a [String],
-    fingerprint: &'a str,
+    fingerprint: &'a Fingerprint,
     events: flume::Sender<Event>,
     /// Addresses to try, in the order of the hosts they're for, and then the order they were found in.
     ready: Vec<(usize, SocketAddr)>,
@@ -145,7 +147,7 @@ impl Race<'_> {
         }
         let (host, address) = self.ready.remove(0);
         let (attempt, deadline) = (self.attempts.len(), now + ATTEMPT_TIMEOUT);
-        let (events, fingerprint) = (self.events.clone(), self.fingerprint.to_string());
+        let (events, fingerprint) = (self.events.clone(), self.fingerprint.clone());
         let connecting = std::thread::Builder::new().name("hub-connect".to_string()).spawn(move || {
             let result = tls::connect(address, &fingerprint, deadline);
             // Fails once the race is over, and then what was made is dropped.

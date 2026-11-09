@@ -77,7 +77,7 @@ fn a_wrong_token_is_refused() {
     let client = stack.client();
     let paired = pair_phone(&client, "phone");
 
-    let refused = Client::connect_remote(&RemoteHub { token: "not-its-token".to_string(), ..paired.clone() }, "phone");
+    let refused = Client::connect_remote(&RemoteHub { token: "not-its-token".into(), ..paired.clone() }, "phone");
 
     assert!(refused.as_ref().is_err_and(ClientError::is_unauthorized), "{:?}", refused.map(drop));
     assert!(Client::connect_remote(&paired, "phone").is_ok());
@@ -91,7 +91,7 @@ fn a_revoked_phone_is_cut_off_at_once_and_refused_after() {
     let phone = Client::connect_remote(&revoked, "phone").unwrap();
     let feed = phone.feed_subscribe().unwrap();
 
-    client.device_revoke(&revoked.device_id.as_str().into()).unwrap();
+    client.device_revoke(&revoked.device_id).unwrap();
 
     while let Ok(_notice) = feed.items.recv_timeout(TIMEOUT) {}
     assert_eq!(feed.ended(), Some(Ended::Disconnected));
@@ -99,7 +99,7 @@ fn a_revoked_phone_is_cut_off_at_once_and_refused_after() {
     assert!(refused.as_ref().is_err_and(ClientError::is_unauthorized), "{refused:?}");
     assert!(Client::connect_remote(&kept, "phone").is_ok(), "only the revoked phone is refused");
     // With no phone left, the hub stops listening.
-    client.device_revoke(&kept.device_id.as_str().into()).unwrap();
+    client.device_revoke(&kept.device_id).unwrap();
     assert_eq!(client.hub_status().unwrap().network_port, None);
     let gone = Client::connect_remote(&kept, "phone").map(drop);
     // Another test's hub can have the port by now, with its own key.
@@ -119,7 +119,7 @@ fn a_revoked_phone_is_cut_off_even_while_the_hub_waits_for_it_to_read() {
     wait_for_turn_end(&client, &session.id, 1);
     let paired = pair_phone(&client, "phone");
     let mut phone = WriteOnly::open(&paired.hosts, &paired.fingerprint).unwrap();
-    phone.send(ClientRequest::Authenticate { token: paired.token.as_str().into() }).unwrap();
+    phone.send(ClientRequest::Authenticate { token: paired.token.clone() }).unwrap();
     phone.send(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: "phone".to_string() }).unwrap();
     // About a megabyte each.
     let read =
@@ -132,7 +132,7 @@ fn a_revoked_phone_is_cut_off_even_while_the_hub_waits_for_it_to_read() {
     // Counting the request that asks.
     wait_until("the hub to answer everything", || client.hub_status().unwrap().requests == 1);
 
-    client.device_revoke(&paired.device_id.as_str().into()).unwrap();
+    client.device_revoke(&paired.device_id).unwrap();
 
     wait_until("the revoked phone to stop counting", || client.hub_status().unwrap().clients == 1);
 }
@@ -149,7 +149,7 @@ fn a_phone_can_neither_see_nor_stop_the_hub_nor_choose_its_devices() {
         phone.hub_shutdown(),
         phone.pairing_start().map(drop),
         phone.device_list().map(drop),
-        phone.device_revoke(&paired.device_id.as_str().into()),
+        phone.device_revoke(&paired.device_id),
     ];
 
     for refused in refused {

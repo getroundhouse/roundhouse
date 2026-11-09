@@ -7,25 +7,28 @@
 
 use std::fmt;
 
-/// The version of the link's format this build writes, and the newest it reads.
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use super::{Fingerprint, PairingCode};
+
+/// The version of the link's format this build writes, and the newest it reads. Raising it means raising
+/// [`crate::PROTOCOL_VERSION`] too, since a hub's reply to `pairing_start` carries a link, and a client that can't read
+/// the link can't read the reply.
 pub const LINK_VERSION: u32 = 1;
 
 const PREFIX: &str = "roundhouse://pair?";
-/// A SHA-256 hash in unpadded base64url.
-const FINGERPRINT_CHARS: usize = 43;
 
 /// Everything a phone needs to pair with a hub. A record: [`PairingLink::parse`] checks a link it's given, and a
-/// hub fills one in from what it knows.
-#[derive(Clone, PartialEq, Eq)]
+/// hub fills one in from what it knows. On the wire, it's the link's text.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PairingLink {
     /// What the hub's machine is called, for people.
     pub hub_name: String,
     /// Each `host:port` the hub might be reached at, in the order to try them.
     pub hosts: Vec<String>,
-    /// The SHA-256 of the hub certificate's `SubjectPublicKeyInfo`, in unpadded base64url. A connection to anything
-    /// else is refused, whatever its certificate says.
-    pub fingerprint: String,
-    pub code: String,
+    /// A connection to anything else is refused, whatever its certificate says.
+    pub fingerprint: Fingerprint,
+    pub code: PairingCode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -66,10 +69,8 @@ impl PairingLink {
         }
         let hub_name = hub_name.filter(|name| !name.is_empty()).ok_or(LinkError::Missing("hub name"))?;
         let fingerprint = fingerprint.ok_or(LinkError::Missing("fingerprint"))?;
-        if !is_fingerprint(&fingerprint) {
-            return Err(LinkError::Invalid("fingerprint"));
-        }
-        let code = code.filter(|code| !code.is_empty()).ok_or(LinkError::Missing("code"))?;
+        let fingerprint = Fingerprint::try_from(fingerprint).map_err(|_| LinkError::Invalid("fingerprint"))?;
+        let code = PairingCode::from(code.filter(|code| !code.is_empty()).ok_or(LinkError::Missing("code"))?);
         if hosts.is_empty() {
             return Err(LinkError::Missing("host"));
         }
@@ -83,7 +84,7 @@ impl PairingLink {
 impl fmt::Display for PairingLink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{PREFIX}v={LINK_VERSION}&name={}", Encoded(&self.hub_name))?;
-        write!(f, "&fp={}&code={}", Encoded(&self.fingerprint), Encoded(&self.code))?;
+        write!(f, "&fp={}&code={}", Encoded(self.fingerprint.as_str()), Encoded(self.code.as_str()))?;
         for host in &self.hosts {
             write!(f, "&host={}", Encoded(host))?;
         }
@@ -91,15 +92,15 @@ impl fmt::Display for PairingLink {
     }
 }
 
-/// Without the code, which pairs whoever has it.
-impl fmt::Debug for PairingLink {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PairingLink")
-            .field("hub_name", &self.hub_name)
-            .field("hosts", &self.hosts)
-            .field("fingerprint", &self.fingerprint)
-            .field("code", &format_args!("…"))
-            .finish()
+impl Serialize for PairingLink {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for PairingLink {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        PairingLink::parse(&String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
 }
 
@@ -111,10 +112,6 @@ fn field_name(key: &str) -> &'static str {
         "code" => "code",
         _ => "host",
     }
-}
-
-fn is_fingerprint(text: &str) -> bool {
-    text.len() == FINGERPRINT_CHARS && text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// A name or address, then a port that isn't 0. An IPv6 address would be in brackets, so its colons come first.
@@ -168,8 +165,8 @@ mod tests {
         PairingLink {
             hub_name: "Ada’s MacBook Pro".to_string(),
             hosts: vec!["Adas-MacBook-Pro.local:7867".to_string(), "100.64.0.7:7867".to_string()],
-            fingerprint: FINGERPRINT.to_string(),
-            code: "c0de".to_string(),
+            fingerprint: FINGERPRINT.parse().unwrap(),
+            code: PairingCode::from("c0de"),
         }
     }
 

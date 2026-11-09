@@ -45,7 +45,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
 fn pair(client: &Client) -> anyhow::Result<()> {
     let pairing = client.pairing_start().map_err(too_old)?;
     println!("Scan this with the iPhone's camera to pair it with this hub:\n");
-    println!("{}\n", qr_code(&pairing.link)?);
+    println!("{}\n", qr_code(&pairing.link.to_string())?);
     println!("Or open this link on the phone:\n{}\n", pairing.link);
     let minutes =
         Duration::from_millis(u64::try_from(pairing.expires_at_ms - now_ms()).unwrap_or(0)).as_secs().div_ceil(60);

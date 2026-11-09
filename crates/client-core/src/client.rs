@@ -23,7 +23,6 @@ use protocol::client::{
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
-use protocol::pairing::LinkError;
 use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub};
@@ -47,8 +46,6 @@ pub enum ClientError {
     Disconnected,
     #[error("unexpected reply from the hub: {0}")]
     Unexpected(String),
-    #[error(transparent)]
-    Link(#[from] LinkError),
     /// A remote hub didn't answer with its key at any of its hosts, and some didn't answer at all, as when its
     /// machine is asleep or this device is on another network.
     #[error("couldn't reach the hub at {}{}", hosts.join(", "), answered_with_another_key(not_pinned))]
@@ -344,10 +341,7 @@ fn hub_is_missing(error: &ClientError) -> bool {
                 | std::io::ErrorKind::ConnectionReset
                 | std::io::ErrorKind::BrokenPipe
         ),
-        ClientError::Api(_)
-        | ClientError::Unexpected(_)
-        | ClientError::Link(_)
-        | ClientError::FingerprintMismatch { .. } => false,
+        ClientError::Api(_) | ClientError::Unexpected(_) | ClientError::FingerprintMismatch { .. } => false,
     }
 }
 

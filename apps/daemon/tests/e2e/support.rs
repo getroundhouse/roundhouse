@@ -339,7 +339,7 @@ impl Follower {
 /// the hub bound, but tests listen on loopback, so it points there instead.
 pub(crate) fn pairing_link(client: &Client) -> (PairingLink, PairingCode) {
     let pairing = client.pairing_start().unwrap();
-    let mut link = PairingLink::parse(&pairing.link).unwrap();
+    let mut link = pairing.link;
     let port = client.hub_status().unwrap().network_port.expect("listening once a code is made");
     assert!(link.hosts.iter().all(|host| host.ends_with(&format!(":{port}"))), "{:?}", link.hosts);
     link.hosts = vec![format!("127.0.0.1:{port}")];

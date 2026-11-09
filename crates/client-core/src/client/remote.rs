@@ -7,10 +7,9 @@ mod tls;
 #[cfg(feature = "testing")]
 mod write_only;
 
-use std::fmt;
-
 use protocol::client::{ClientRequest, ClientResponse};
-use protocol::pairing::{DeviceToken, PairingCode, PairingLink};
+use protocol::model::DeviceId;
+use protocol::pairing::{DeviceToken, Fingerprint, PairingLink};
 use serde::{Deserialize, Serialize};
 
 use super::transport::Transport;
@@ -19,38 +18,24 @@ use race::Lost;
 #[cfg(feature = "testing")]
 pub use write_only::WriteOnly;
 
-/// What a device needs to connect to a hub it paired with. An app keeps it, and the token in it is a secret, so
-/// `Debug` leaves the token out.
-#[derive(Clone, Serialize, Deserialize)]
+/// What a device needs to connect to a hub it paired with. An app keeps it, as JSON with a string for each field,
+/// and `Debug` leaves the token out.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RemoteHub {
     pub hub_name: String,
     /// Each `host:port`, in the order to try them.
     pub hosts: Vec<String>,
-    /// The hub's pinned key. See [`PairingLink::fingerprint`].
-    pub fingerprint: String,
-    pub device_id: String,
-    pub token: String,
-}
-
-impl fmt::Debug for RemoteHub {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RemoteHub")
-            .field("hub_name", &self.hub_name)
-            .field("hosts", &self.hosts)
-            .field("fingerprint", &self.fingerprint)
-            .field("device_id", &self.device_id)
-            .field("token", &"…")
-            .finish()
-    }
+    /// The hub's pinned key.
+    pub fingerprint: Fingerprint,
+    pub device_id: DeviceId,
+    pub token: DeviceToken,
 }
 
 /// Connects, pairs, and returns what's needed to connect again. A code works once, so if this fails after
 /// reaching the hub, pairing again needs a new link.
 pub fn pair(link: &PairingLink, device_name: &str) -> Result<RemoteHub> {
     let client = open(&link.hosts, &link.fingerprint)?;
-    let request =
-        ClientRequest::Pair { code: PairingCode::from(link.code.as_str()), device_name: device_name.to_string() };
-    let reply = client.call(request)?;
+    let reply = client.call(ClientRequest::Pair { code: link.code.clone(), device_name: device_name.to_string() })?;
     let ClientResponse::Paired { device_id, token } = reply else {
         return unexpected(&reply);
     };
@@ -58,8 +43,8 @@ pub fn pair(link: &PairingLink, device_name: &str) -> Result<RemoteHub> {
         hub_name: link.hub_name.clone(),
         hosts: link.hosts.clone(),
         fingerprint: link.fingerprint.clone(),
-        device_id: device_id.to_string(),
-        token: token.as_str().to_string(),
+        device_id,
+        token,
     })
 }
 
@@ -69,7 +54,7 @@ impl Client {
     /// a hub refuses what only its own machine may ask, such as stopping it.
     pub fn connect_remote(hub: &RemoteHub, client_name: &str) -> Result<Client> {
         let client = open(&hub.hosts, &hub.fingerprint)?;
-        let reply = client.call(ClientRequest::Authenticate { token: DeviceToken::from(hub.token.as_str()) })?;
+        let reply = client.call(ClientRequest::Authenticate { token: hub.token.clone() })?;
         let ClientResponse::Ok = reply else {
             return unexpected(&reply);
         };
@@ -79,19 +64,19 @@ impl Client {
 
     /// A connection over the network that hasn't authenticated, so a test can see what a hub does with one.
     #[cfg(feature = "testing")]
-    pub fn open_remote(hosts: &[String], fingerprint: &str) -> Result<Client> {
+    pub fn open_remote(hosts: &[String], fingerprint: &Fingerprint) -> Result<Client> {
         open(hosts, fingerprint)
     }
 }
 
-fn open(hosts: &[String], fingerprint: &str) -> Result<Client> {
+fn open(hosts: &[String], fingerprint: &Fingerprint) -> Result<Client> {
     Client::start(reach(hosts, fingerprint)?)
 }
 
 /// A connection to whichever of these hosts first answers with the pinned key. If none does, it says the hub has
 /// another key only if every host answered with one, since that means pairing again. If any host didn't answer, the
 /// hub couldn't be reached, as when its machine is asleep and another machine has an address it had.
-fn reach(hosts: &[String], fingerprint: &str) -> Result<Transport> {
+fn reach(hosts: &[String], fingerprint: &Fingerprint) -> Result<Transport> {
     race::race(hosts, fingerprint).map_err(|lost| match lost {
         Lost { all_not_pinned: true, not_pinned, .. } => {
             ClientError::FingerprintMismatch { host: not_pinned.into_iter().next().unwrap_or_default() }
@@ -104,19 +89,30 @@ fn reach(hosts: &[String], fingerprint: &str) -> Result<Transport> {
 mod tests {
     use super::*;
 
+    /// An app keeps it as JSON, so its form can't change.
     #[test]
-    fn a_kept_hub_reads_back_and_its_token_stays_out_of_debug_output() {
+    fn a_kept_hub_is_plain_text_and_its_token_stays_out_of_debug_output() {
+        let fingerprint = Fingerprint::of_sha256([0; 32]);
         let hub = RemoteHub {
             hub_name: "Mac".to_string(),
             hosts: vec!["mac.local:7867".to_string()],
-            fingerprint: "f".to_string(),
-            device_id: "d".to_string(),
-            token: "s3cret".to_string(),
+            fingerprint: fingerprint.clone(),
+            device_id: DeviceId::from("d"),
+            token: DeviceToken::from("s3cret"),
         };
 
-        let kept: RemoteHub = serde_json::from_str(&serde_json::to_string(&hub).unwrap()).unwrap();
+        let json = serde_json::to_value(&hub).unwrap();
 
-        assert_eq!((kept.hosts, kept.token), (hub.hosts.clone(), hub.token.clone()));
+        let expected = serde_json::json!({
+            "hub_name": "Mac",
+            "hosts": ["mac.local:7867"],
+            "fingerprint": fingerprint.as_str(),
+            "device_id": "d",
+            "token": "s3cret",
+        });
+        assert_eq!(json, expected);
+        let kept: RemoteHub = serde_json::from_value(json).unwrap();
+        assert_eq!((kept.fingerprint, kept.token), (hub.fingerprint.clone(), hub.token.clone()));
         assert!(!format!("{hub:?}").contains("s3cret"));
     }
 
@@ -126,7 +122,7 @@ mod tests {
         // freed, nothing can take it while this looks.
         let closed = "127.0.0.1:1".to_string();
 
-        let error = open(std::slice::from_ref(&closed), "f").map(drop).unwrap_err();
+        let error = open(std::slice::from_ref(&closed), &Fingerprint::of_sha256([0; 32])).map(drop).unwrap_err();
 
         assert!(matches!(error, ClientError::Unreachable { hosts, .. } if hosts == [closed]));
     }

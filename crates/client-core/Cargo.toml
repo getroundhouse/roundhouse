@@ -9,7 +9,6 @@ publish.workspace = true
 testing = []
 
 [dependencies]
-base64.workspace = true
 parking_lot.workspace = true
 protocol.workspace = true
 flume.workspace = true

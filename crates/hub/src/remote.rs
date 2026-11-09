@@ -18,6 +18,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::DeviceId;
+use protocol::pairing::Fingerprint;
 use protocol::paths::ENV_PORT;
 use ring::rand::SecureRandom;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore, watch};
@@ -132,7 +133,7 @@ impl Remote {
         info!(port = listening.port, "stopped listening for devices");
     }
 
-    pub(crate) async fn fingerprint(&self) -> Result<String, ApiError> {
+    pub(crate) async fn fingerprint(&self) -> Result<Fingerprint, ApiError> {
         Ok(self.identity().await?.fingerprint.clone())
     }
 

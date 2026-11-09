@@ -23,4 +23,4 @@ pub use client::{
     Client, ClientError, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, RemoteHub, Result,
     Subscription, SubscriptionItem, new_message_id, new_request_id, pair, stop_hub,
 };
-pub use protocol::pairing::{LinkError, PairingLink};
+pub use protocol::pairing::{DeviceToken, Fingerprint, LinkError, PairingLink};
