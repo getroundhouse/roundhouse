@@ -7,25 +7,27 @@
 //!     cargo run -p desktop --example look -- some-workspace click:mode-picker
 //!
 //! Selects the named workspace. With `diff`, opens its diff, and a further argument adds a comment on the
-//! first changed line.
+//! first changed line. `--note TEXT` anywhere says why it's open, as it does for the app.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::SharedString;
 use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let checkout = Checkout::of_this_build(desktop::checkout::take_note(&mut args));
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
-        let (handle, view) =
-            desktop::open_main_window(HubSource::default_local().expect("find the hub"), cx).expect("open a window");
+        let (handle, view) = desktop::open_main_window(HubSource::default_local().expect("find the hub"), checkout, cx)
+            .expect("open a window");
         let args = args.clone();
         cx.spawn(async move |cx| {
             let wanted = args.first().cloned();

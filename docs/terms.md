@@ -62,6 +62,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Build version | Which build a binary is, for people to read. A package stamps its published version, `0.1.N`, an install the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
 | Build number | Puts the builds an install or a package makes in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
 | Stamped build | A build stamped with both a build version and a build number, as an install or a package does. Any other build says `-dev` whatever its code | `protocol::StampedBuild`, `protocol::STAMPED_BUILD` |
+| Checkout | A copy of this repository that the app is built from, such as one in a workspace. A build that isn't stamped names its checkout in the sidebar and the window's title, with the note it was opened with, so copies open at once can be told apart | `desktop::checkout::Checkout`, `--note` |
 | Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory | `Paths::hub_copy`, `Daemon` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |

@@ -225,15 +225,7 @@ pub(crate) fn render(app: &AppView, window: &Window, cx: &mut Context<AppView>) 
         // under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_2())
-        .child(footer::footer(
-            app.show_archived,
-            &app.build_line(cx),
-            app.update_question.as_ref(),
-            crate::updates::checking(cx),
-            crate::updates::answered(cx),
-            crate::updates::problem_shown(cx).cloned().as_ref(),
-            cx,
-        ))
+        .child(footer::footer(app, cx))
 }
 
 #[cfg(test)]
