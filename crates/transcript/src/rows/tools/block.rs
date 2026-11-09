@@ -20,7 +20,7 @@ const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 const MAX_HEIGHT: f32 = 236.0;
 
 /// The block itself, lined up under its call's title.
-pub(super) fn frame(cx: &App) -> Div {
+pub(in crate::rows) fn frame(cx: &App) -> Div {
     let theme = cx.theme();
     div()
         .ml(px(INDENT))
@@ -48,7 +48,7 @@ pub(super) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
 }
 
 /// Text a tool sent back, selectable, scrolling past a dozen lines or so.
-pub(super) fn output(id: ElementId, text: &str, color: Hsla, cx: &App) -> AnyElement {
+pub(in crate::rows) fn output(id: ElementId, text: &str, color: Hsla, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let font = theme.mono_font_family.clone();
     let body = if text.len() > LOG_BLOCK_ABOVE {

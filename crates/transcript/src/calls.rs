@@ -90,7 +90,7 @@ pub(crate) fn count(n: usize, one: &str, many: &str) -> String {
 }
 
 /// The first line of `text`, which is all a call's line has room for.
-fn first_line(text: &str) -> &str {
+pub(crate) fn first_line(text: &str) -> &str {
     text.lines().find(|line| !line.trim().is_empty()).unwrap_or("").trim()
 }
 

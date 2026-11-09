@@ -6,12 +6,9 @@ use std::rc::Rc;
 use client_core::OpenSession;
 use client_core::session_log::{PendingPrompt, Row};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
+use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    AnyElement, App, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, WeakEntity, div, px,
-};
+use gpui_kit::{AnyElement, App, Div, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
 use protocol::model::Seq;
 use protocol::tail::Tail;
@@ -23,15 +20,17 @@ use crate::{calls, questions};
 
 mod approval;
 mod around;
+mod line;
 mod prompt;
 mod tail;
+mod thinking;
 mod tools;
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, drawn_in_its_call};
 use prompt::prompt_bubble;
-use tail::{first_line, render_tail};
+use tail::render_tail;
 use tools::Toggle;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
@@ -107,17 +106,6 @@ fn agent_text(key: &ItemKey, text: &str) -> TextView {
     TextView::markdown(key.element("text"), SharedString::from(text.to_string())).selectable(true)
 }
 
-/// What the agent thought, opened, under the same ID while it streams and once it's recorded.
-fn thinking_text(key: &ItemKey, text: &str, cx: &App) -> impl IntoElement {
-    let text = TextView::markdown(key.element("thinking-text"), SharedString::from(text.to_string()));
-    div()
-        .id(key.element("thinking"))
-        .pl_4()
-        .text_color(cx.theme().muted_foreground)
-        .child(text.selectable(true))
-        .test_support()
-}
-
 pub(crate) fn row() -> Div {
     v_flex().w_full().pb_4().gap_2()
 }
@@ -191,10 +179,14 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             if rendered.is_empty() {
                 return empty();
             }
-            // Calls in a row read as one list, so they sit closer together than paragraphs do.
-            let only_tools =
-                blocks.iter().all(|b| matches!(b, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }));
-            row().when(only_tools, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
+            // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
+            let only_lines = blocks.iter().all(|b| {
+                matches!(
+                    b,
+                    ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. }
+                )
+            });
+            row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
         EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
             turn_ended(*outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors, cx)
@@ -243,9 +235,7 @@ fn render_block(
     Some(match block {
         ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
-        ContentBlock::Thinking { text } => disclosure("Thinking", first_line(text), expanded, seq, key, this, cx)
-            .when(expanded, |d| d.child(thinking_text(key, text, cx)))
-            .into_any_element(),
+        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if calls::asks_in_a_card(name) => return None,
         ContentBlock::ToolUse { name, input, .. } => {
@@ -258,43 +248,4 @@ fn render_block(
         }
         ContentBlock::Unknown => return None,
     })
-}
-
-/// A line that opens and closes the block `key`, drawn in the row of the event at `seq`.
-pub(super) fn disclosure(
-    label: &str,
-    summary: impl Into<SharedString>,
-    expanded: bool,
-    seq: Seq,
-    key: &ItemKey,
-    this: &WeakEntity<Transcript>,
-    cx: &App,
-) -> Div {
-    let theme = cx.theme();
-    let id = key.element("disclosure");
-    let (this, key) = (this.clone(), key.clone());
-    let chevron = if expanded { IconName::ChevronDown } else { IconName::ChevronRight };
-    let (faint, foreground) = (look::faint(), theme.foreground);
-    let label = SharedString::from(label.to_string());
-    v_flex().w_full().gap_1().text_xs().child(
-        div()
-            .id(id)
-            .role(Role::Button)
-            .aria_label(label.clone())
-            .aria_expanded(expanded)
-            .flex()
-            .items_center()
-            .h(px(22.))
-            .gap_1p5()
-            .cursor_pointer()
-            .text_color(faint)
-            .hover(move |d| d.text_color(foreground))
-            .on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !expanded, cx));
-            })
-            .child(Icon::new(chevron).xsmall())
-            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(label))
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into()))
-            .test_support(),
-    )
 }

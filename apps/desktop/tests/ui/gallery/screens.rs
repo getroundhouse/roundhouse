@@ -168,6 +168,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
     },
     Screen {
+        name: "thinking",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, chats::thinking())),
+        steps: &[Step::Select(FOCUS), Step::Open("Thinking")],
+    },
+    Screen {
         name: "tool-subagent",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents())),

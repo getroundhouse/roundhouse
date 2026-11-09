@@ -1,4 +1,5 @@
-//! What the screens' chats say. It's all made up, about a change this repo might make, so it reads like real work.
+//! What the screens' chats say. It's all made up, mostly about a change this repo might make, so it reads like real
+//! work.
 
 #![cfg(test)]
 
@@ -8,7 +9,7 @@ use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
-use super::events::{finished_turn, text, tool_result, tool_use, user_prompt};
+use super::events::{finished_turn, text, thought, tool_result, tool_use, user_prompt};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 
@@ -156,6 +157,32 @@ pub(crate) fn question() -> Vec<EventBody> {
         suggestions: serde_json::Value::Null,
     });
     events
+}
+
+const FIRST_THOUGHT: &str = "The test says a train should slow at caution, not stop. `approach` brakes whenever the \
+                             signal isn't clear, so it treats caution like stop.
+
+That's the bug: it should brake only at stop, and slow at caution. I'll check how `brake` and `slow` differ before \
+changing it, since `slow` might need a speed.";
+
+/// Thinking between calls, about the signalling crate the tool calls' chats work on: a long thought opened, and a
+/// short one closed.
+pub(crate) fn thinking() -> Vec<EventBody> {
+    vec![
+        user_prompt("Why does the train stop at a caution signal in the depot test?"),
+        thought("msg-1", FIRST_THOUGHT),
+        tool_use("msg-2", "toolu-1", "Read", json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" })),
+        tool_result(
+            "toolu-1",
+            "    52\t    fn approach(&mut self, signal: Aspect) {\n    53\t        if signal != Aspect::Clear {\n    54\t            self.brake();",
+        ),
+        thought("msg-3", "`slow` takes a target speed, so caution can pass half the line speed."),
+        text(
+            "msg-4",
+            "The train treats caution as stop: `approach` brakes for any signal that isn't clear. It should brake only at stop, and slow to half speed at caution.",
+        ),
+        finished_turn(18, 0.07),
+    ]
 }
 
 /// The start every chat here shares: the prompt, a search and a file read.
