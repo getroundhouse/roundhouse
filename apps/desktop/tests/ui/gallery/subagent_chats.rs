@@ -6,7 +6,7 @@
 use protocol::event::EventBody;
 use serde_json::json;
 
-use super::events::{finished_turn, taken, text, tool_result, tool_use, user_prompt, within};
+use super::events::{replied, taken, text, tool_result, tool_use, user_prompt, within};
 
 /// What Claude sends back as soon as a subagent starts in the background.
 const LAUNCHED: &str = "Async agent launched successfully.";
@@ -25,6 +25,7 @@ Both compare with `Aspect::Stop` directly, so either could use `may_pass`.";
 /// A subagent that searched while the agent read, its work interleaved with the agent's own, and a second one
 /// that checked the change.
 pub(crate) fn subagents() -> Vec<EventBody> {
+    let reply = "Both checks use `may_pass` now, and the tests pass.";
     let mut events = vec![
         user_prompt("Find every place that treats a stop signal specially, and make them use `may_pass`."),
         taken(1),
@@ -62,8 +63,8 @@ pub(crate) fn subagents() -> Vec<EventBody> {
         ),
         within("toolu-3", tool_result("toolu-s4", "test result: ok. 5 passed; 0 failed")),
         within("toolu-3", text("sub-7", "Both now use `may_pass`, and the signal tests pass.")),
-        text("msg-6", "Both checks use `may_pass` now, and the tests pass."),
-        finished_turn(94, 0.41),
+        text("msg-6", reply),
+        replied(reply, 94, 0.41),
     ]);
     events
 }

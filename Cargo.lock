@@ -4295,6 +4295,7 @@ dependencies = [
 name = "look"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "gpui-kit",
  "serde_json",
  "syntect",
@@ -7851,6 +7852,7 @@ dependencies = [
 name = "transcript"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "client-core",
  "gpui-kit",
  "image",

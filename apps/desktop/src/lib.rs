@@ -20,8 +20,6 @@ mod sidebar;
 pub mod updates;
 pub mod workspace_pane;
 
-#[cfg(feature = "testing")]
-pub use ago::fix_now;
 pub use assets::Assets;
 use checkout::Checkout;
 use gpui_kit::{

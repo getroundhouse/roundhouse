@@ -9,7 +9,7 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px};
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
@@ -26,6 +26,8 @@ mod prompt;
 mod tail;
 mod thinking;
 mod tools;
+mod turn_end;
+mod turn_times;
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
@@ -103,12 +105,12 @@ fn render_row_inner(
     };
     match shown {
         Shown::Tail(tail) => {
-            let model = model.borrow();
-            render_tail(&tail, &model.background, model.folds.thinking_open(), cx)
+            let m = model.borrow();
+            render_tail(&tail, &m.at_work, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
-            render_event(event.seq, &event.body, &around, this, linked, cx)
+            render_event(&event, &around, this, linked, cx)
         }
         Shown::Pending(prompt, carried) => {
             prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, &carried, Progress::Sending, this, cx)
@@ -152,21 +154,6 @@ fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
-fn turn_ended(outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String], cx: &App) -> AnyElement {
-    let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
-    match outcome {
-        TurnOutcome::Cancelled => muted_line("Stopped"),
-        TurnOutcome::Error => {
-            let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
-            colored_line(detail, cx.theme().danger)
-        }
-        TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
-            muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"))
-        }
-        TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s")),
-    }
-}
-
 fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElement {
     match reason {
         ExitReason::Requested => empty(),
@@ -181,13 +168,13 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
 }
 
 fn render_event(
-    seq: Seq,
-    body: &EventBody,
+    event: &SessionEvent,
     around: &Around,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
     cx: &App,
 ) -> AnyElement {
+    let (seq, body) = (event.seq, &event.body);
     let approval_open = around.approval_open;
     match body {
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
@@ -217,9 +204,7 @@ fn render_event(
             });
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-            turn_ended(*outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors, cx)
-        }
+        EventBody::TurnEnded { .. } => turn_end::line(event, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
         }

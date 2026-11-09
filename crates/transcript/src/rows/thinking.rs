@@ -15,12 +15,15 @@ use super::tools::Toggle;
 use crate::calls::first_line;
 use crate::item_key::ItemKey;
 
+/// What a thought's line starts with, recorded or still streaming.
+pub(super) const ICON: IconName = IconName::Brain;
+
 /// More of a thought's start than its line has room for, so a long first line isn't copied to be cut off.
 const START_CHARS: usize = 160;
 
 pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::Summary(start(thought).into()));
-    let line = Line::new(IconName::Brain, "Thinking").part(summary);
+    let line = Line::new(ICON, "Thinking").part(summary);
     let opened = toggle.open.then(|| text(toggle.key, thought, cx).into_any_element());
     line::drawn(line, None, opened, toggle, cx)
 }

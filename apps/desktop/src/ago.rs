@@ -1,33 +1,8 @@
-//! How long ago something happened, as the app says it, and the time now that it's measured from.
-
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use gpui_kit::{App, Global};
+//! How long ago something happened, as the app says it.
 
 const MINUTE_MS: i64 = 60_000;
 const MINUTES_IN_AN_HOUR: i64 = 60;
 const MINUTES_IN_A_DAY: i64 = 24 * MINUTES_IN_AN_HOUR;
-
-/// Set by pictures of the app, so a time shown as how long ago comes out the same on every run.
-struct FixedNow {
-    at_ms: i64,
-}
-
-impl Global for FixedNow {}
-
-/// Milliseconds since the Unix epoch, as the hub keeps times.
-pub(crate) fn now_ms(cx: &App) -> i64 {
-    if let Some(fixed) = cx.try_global::<FixedNow>() {
-        return fixed.at_ms;
-    }
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
-}
-
-/// Has the app take this as the time now, from now on.
-#[cfg(feature = "testing")]
-pub fn fix_now(at_ms: i64, cx: &mut App) {
-    cx.set_global(FixedNow { at_ms });
-}
 
 /// How long before `now_ms` `then_ms` was, in its largest whole unit, such as "9m ago" or "4h ago". Under a minute
 /// is "just now", and so is a time after now, which a hub whose clock runs ahead of this one's can give.

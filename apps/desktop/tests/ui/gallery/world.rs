@@ -14,14 +14,15 @@ use protocol::model::{
 };
 use protocol::tail::Tail;
 
-/// When the first record was made: 1 November 2026. Each one after it is a minute later, and each event a second.
-const START_MS: i64 = 1_793_491_200_000;
+/// When the first record was made: 1 November 2026, at 2 PM in UTC, which pictures show times in. Each one after it is
+/// a minute later, and each event a second.
+const START_MS: i64 = 1_793_541_600_000;
 const RECORD_GAP_MS: i64 = 60_000;
 const EVENT_GAP_MS: i64 = 1_000;
 const MINUTE_MS: i64 = 60_000;
-/// What the app takes as the time now, in every picture: a day after the first record, so later than any record a
-/// world makes.
-pub(crate) const NOW_MS: i64 = START_MS + 24 * 60 * MINUTE_MS;
+/// What the app takes as the time now, in every picture: an hour after the first record, so later than any record a
+/// world makes, and on the same day, so a turn that ended says only its time.
+pub(crate) const NOW_MS: i64 = START_MS + 60 * MINUTE_MS;
 
 #[derive(Default)]
 pub(crate) struct World {
@@ -162,6 +163,23 @@ impl World {
         });
         self.logs.insert(id.clone(), log);
         id
+    }
+
+    /// Has the agent been working on the chat's turn for this long when the picture is taken.
+    pub(crate) fn working_for(&mut self, id: &SessionId, so_far_ms: i64) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        assert_eq!(session.status, SessionStatus::Running, "only a running chat has a turn going");
+        session.turn_started_at_ms = Some(NOW_MS - so_far_ms);
+    }
+
+    /// Has the turn that ends a chat's log taken this long by the hub's clock, as the hub says on its end and on the
+    /// chat's record.
+    pub(crate) fn last_turn_took(&mut self, id: &SessionId, took_ms: i64) {
+        let ended = self.logs.get_mut(id).and_then(|log| log.last_mut()).unwrap();
+        let EventBody::TurnEnded { started_at_ms, .. } = &mut ended.body else { panic!("the log ends mid-turn") };
+        *started_at_ms = Some(ended.ts_ms - took_ms);
+        let started = *started_at_ms;
+        self.sessions.iter_mut().find(|s| &s.id == id).unwrap().turn_started_at_ms = started;
     }
 
     /// Makes the end of a chat's log a reply nobody has read.

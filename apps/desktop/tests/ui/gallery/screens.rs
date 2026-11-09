@@ -8,7 +8,7 @@ use protocol::model::SessionStatus;
 use super::world::World;
 use super::worlds::{
     attachments, chat_tabs, chat_world, closed_chats, conversation, diff, finishing_update, own_hub, pointed,
-    queue_held, queued, setup_failed, streaming, titled, unread,
+    queue_held, queued, setup_failed, steered, streaming, thinking_streaming, titled, unread, working_background,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -123,17 +123,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "working-background",
+        spec: "chats.md",
+        world: Some(working_background),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "question",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::question())),
         steps: &[Step::Select(FOCUS)],
     },
-    Screen {
-        name: "steered",
-        spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::Running, chats::steered())),
-        steps: &[Step::Select(FOCUS)],
-    },
+    Screen { name: "steered", spec: "chats.md", world: Some(steered), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "queued",
         spec: "chats.md",
@@ -189,6 +190,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, chats::thinking())),
         steps: &[Step::Select(FOCUS), Step::Open("Thinking")],
+    },
+    Screen {
+        name: "thinking-streaming",
+        spec: "chats.md",
+        world: Some(thinking_streaming),
+        steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "tool-subagent",

@@ -57,9 +57,9 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     // The hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
     cx.allow_parking();
     cx.update(gpui_kit::init);
-    cx.update(look::hold_still);
-    // So how long ago something was is the same on every run.
-    cx.update(|cx| desktop::fix_now(world::NOW_MS, cx));
+    // Marks hold still, and so does the time, so how long something took or how long ago it was is the same on every
+    // run.
+    cx.update(|cx| look::hold_still(world::NOW_MS, cx));
     // The kit's own animations, such as a dialog's entrance, show as they end.
     cx.update(|cx| cx.set_reduce_motion(true));
     // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
