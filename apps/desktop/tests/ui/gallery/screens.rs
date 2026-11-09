@@ -32,6 +32,11 @@ pub(crate) enum Step {
     HoverTab(usize),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
+    /// Rests the pointer on the element with the first ID, and waits for the one with the second, such as its tooltip.
+    Hover {
+        on: &'static str,
+        shows: &'static str,
+    },
     /// Presses Finish now in the update's card, and waits for what it asks.
     AskToFinish,
     /// Has the app show this version as downloaded, as if an update had come.
@@ -94,6 +99,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "updates.md",
         world: Some(finishing_update),
         steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "update-details",
+        spec: "updates.md",
+        world: Some(finishing_update),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: "update-details", shows: "update-details-text" }],
     },
     Screen {
         name: "finish-update-question",
