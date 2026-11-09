@@ -1,5 +1,6 @@
 //! Which build this is. An install or a package stamps a build with `ROUNDHOUSE_BUILD` and `ROUNDHOUSE_BUILD_NUMBER`,
-//! and any other build says `-dev`.
+//! and any other build says `-dev`. A package's build version is its published version, `0.1.N`, and an install's its
+//! commit.
 
 /// A build stamped with both a build version and a build number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

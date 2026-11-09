@@ -77,4 +77,4 @@ The brand on a tile, caught working: the fan in copper with the agent's white li
 | 32 | 16 points and under, such as a list | 5, 9 | On whole pixels, with dots two pixels square |
 | 16 | Only on a display that isn't Retina, at 16 points | 4, 8 | On whole pixels, with dots one pixel square. *Unconfirmed* |
 
-- **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws each style at every size, and the gallery checks each against its file in the style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns`. *Not built:* the app isn't packaged yet, so nothing shows the icon.
+- **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws each style at every size, and the gallery checks each against its file in the style's iconset in `apps/desktop/icons/`. `tools/package/package.sh` packs the app's, `working.iconset`, into the `.icns` with `iconutil`.

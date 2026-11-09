@@ -57,8 +57,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
 | Protocol version | The number a client and hub compare in their hello. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
 | On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `roundhoused hub --on-demand` |
-| Build version | Which build a binary is, for people to read. An install stamps the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
-| Build number | Puts installed builds in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
+| Build version | Which build a binary is, for people to read. A package stamps its published version, `0.1.N`, an install the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
+| Build number | Puts the builds an install or a package makes in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
 | Stamped build | A build stamped with both a build version and a build number, as an install or a package does. Any other build says `-dev` whatever its code | `protocol::StampedBuild`, `protocol::STAMPED_BUILD` |
 | Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory | `Paths::hub_copy`, `Daemon` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |

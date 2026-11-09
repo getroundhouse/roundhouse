@@ -79,7 +79,9 @@ services/
 tools/
   policy/          Tests that enforce the license and dependency rules below
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
+  build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh` and `package/`
   install.sh       Installs this commit as a version of its own, outside `target/`
+  package/         Packages this commit as Roundhouse.app with Velopack, signed when given an identity, and notarized when also given a notary profile
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
 .github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change
 ```
@@ -105,7 +107,7 @@ agents, providers, worker ──> process
 6. **Exact pins for GPUI and gpui-kit.** They are pre-1.0, so upgrades should be deliberate and in one place.
 7. **Nothing that ships is under GPL, AGPL or LGPL.** MPL-2.0 is allowed when it comes unchanged from crates.io, and everything else is permissive, such as Apache-2.0 or MIT. GPL or AGPL code would put the whole app under its terms, which would decide the project's own license and rule out closed or hosted versions, and GPL is widely seen as incompatible with the App Store. AGPL also reaches the hub over the network. LGPL expects users to be able to relink, which static linking makes awkward. MPL-2.0 only covers its own files (§3.3), and shipping it unchanged only means saying where its source is (§3.2), which goes in the notices every license needs anyway. A changed copy would have to be published, hence crates.io only.
 
-`tools/policy/tests/policy.rs` checks rules 1 to 4 and 7 against the real dependency graph, so `cargo test` fails if a new dependency breaks one. The license check covers what actually ships on each platform, not everything in `Cargo.lock`.
+`tools/policy/tests/policy.rs` checks rules 1 to 4 and 7 against the real dependency graph, so `cargo test` fails if a new dependency breaks one. The license check covers what actually ships on each platform, not everything in `Cargo.lock`, with one gap. The Mac app also ships `UpdateMac`, the updater Velopack builds from its own Rust and ships prebuilt, so the crates in it aren't in `Cargo.lock` and the check can't see them. Velopack itself is MIT.
 
 ### Layers
 
@@ -229,8 +231,8 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **Only a local on-demand hub that's older than the client can be restarted from it.** A client's own hub might not be able to open what a newer one has written. The app offers to restart one whenever it's older, so nobody has to wait for it to be idle. A remote mismatch only gets an explanation. Stopping a shared hub is for its admins, not for any client whose version differs. *Not built:* the app offers it only across a real break.
 - **The app ships a default hub, and that's the only link between them.** The hub doesn't depend on the app.
 - **`tools/install.sh` copies release binaries into `roundhouse-builds/<version>/`,** and a `current` link names the one to start. Keeping versions gives rollback by moving the link, and past a migration, the database goes back to the copy the hub saved before it, as the README says. A client resolves the link when it starts, so it stays on its version when the link moves, and rebuilding or archiving the worktree it was built in can't touch it. Its hub stays on one build through its own copy, as "Updating the app" says.
-- **An install stamps its commit through `ROUNDHOUSE_BUILD`,** and any other build says `0.1.0-dev`. The app and `roundhouse hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
-- **An install also stamps an order through `ROUNDHOUSE_BUILD_NUMBER`:** when its commit was made, or when it installed if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
+- **A package stamps its published version through `ROUNDHOUSE_BUILD`, and an install its commit,** and any other build says `0.1.0-dev`. The app and `roundhouse hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from, and the version is the name of what people download. Version `0.1.N` is the Nth commit on `main`, which `git rev-list --reverse main | sed -n Np` prints. With uncommitted changes, the build also says when it was built, so two different builds never show the same. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
+- **An install or a package also stamps an order through `ROUNDHOUSE_BUILD_NUMBER`:** when its commit was made, or when it was built if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
 
 What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without stopping its agents, as "When a process dies" describes.
 
