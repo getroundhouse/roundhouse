@@ -10,13 +10,14 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, WeakEntity, div, px,
+    AnyElement, App, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
+    StatefulInteractiveElement, Styled, TestSupportExt as _, WeakEntity, div, px,
 };
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
+use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::questions;
 use crate::transcript::{Model, Transcript};
@@ -74,7 +75,7 @@ fn render_row_inner(
         })
     };
     match shown {
-        Shown::Tail(tail) => render_tail(&tail, cx),
+        Shown::Tail(tail) => render_tail(&tail, model.borrow().folds.thinking_open(), cx),
         Shown::Event(event, around) => render_event(event.seq, &event.body, &around, this, cx),
         Shown::Pending(prompt) => prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, true, cx),
         Shown::Unloaded => {
@@ -89,7 +90,7 @@ fn render_row_inner(
 struct Around {
     /// What each of the event's blocks is, by position.
     keys: Vec<ItemKey>,
-    /// Whether the user has opened each of the event's blocks, by position.
+    /// Whether each of the event's blocks is open, by position.
     expanded: Vec<bool>,
     /// For an approval: whether it's still waiting, and what's been chosen on its questions so far.
     approval_open: bool,
@@ -103,7 +104,8 @@ struct Around {
 impl Around {
     fn read(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody) -> Self {
         let keys = block_keys(seq, body);
-        let expanded = keys.iter().map(|key| m.expanded.contains(key)).collect();
+        let expanded =
+            keys.iter().zip(blocks_of(body)).map(|(key, block)| m.folds.is_open(key, Fold::of(block))).collect();
         let mut around = Around {
             keys,
             expanded,
@@ -120,7 +122,7 @@ impl Around {
             around.picks = m.picks.get(approval_id).cloned().unwrap_or_default();
         }
         if let EventBody::Assistant { blocks, .. } = body {
-            around.answers = tools::answers(log, &m.expanded, seq, blocks);
+            around.answers = tools::answers(log, &m.folds, seq, blocks);
         }
         if let EventBody::AgentUser { blocks, .. } = body {
             around.with_call = blocks
@@ -137,12 +139,12 @@ impl Around {
 
 /// What each block of an event is, by position.
 fn block_keys(seq: Seq, body: &EventBody) -> Vec<ItemKey> {
-    let count = if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body {
-        blocks.len()
-    } else {
-        0
-    };
-    (0..count).map(|position| block_key(seq, body, position)).collect()
+    (0..blocks_of(body).len()).map(|position| block_key(seq, body, position)).collect()
+}
+
+/// The blocks an event holds, if it's one that holds any.
+fn blocks_of(body: &EventBody) -> &[ContentBlock] {
+    if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body { blocks } else { &[] }
 }
 
 /// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
@@ -157,6 +159,17 @@ fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.
 fn agent_text(key: &ItemKey, text: &str) -> TextView {
     TextView::markdown(key.element("text"), SharedString::from(text.to_string())).selectable(true)
+}
+
+/// What the agent thought, opened, under the same ID while it streams and once it's recorded.
+fn thinking_text(key: &ItemKey, text: &str, cx: &App) -> impl IntoElement {
+    let text = TextView::markdown(key.element("thinking-text"), SharedString::from(text.to_string()));
+    div()
+        .id(key.element("thinking"))
+        .pl_4()
+        .text_color(cx.theme().muted_foreground)
+        .child(text.selectable(true))
+        .test_support()
 }
 
 pub(crate) fn row() -> Div {
@@ -293,20 +306,13 @@ fn render_block(
     cx: &App,
 ) -> Option<AnyElement> {
     let key = around.keys.get(b)?;
-    let id = |part: &str| key.element(part);
     let expanded = around.expanded.get(b).copied().unwrap_or(false);
     Some(match block {
         ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
-        ContentBlock::Thinking { text } => {
-            disclosure("Thinking", first_line(text), expanded, seq, key, this, cx)
-                .when(expanded, |d| {
-                    d.child(div().pl_4().text_color(cx.theme().muted_foreground).child(
-                        TextView::markdown(id("thinking-text"), SharedString::from(text.clone())).selectable(true),
-                    ))
-                })
-                .into_any_element()
-        }
+        ContentBlock::Thinking { text } => disclosure("Thinking", first_line(text), expanded, seq, key, this, cx)
+            .when(expanded, |d| d.child(thinking_text(key, text, cx)))
+            .into_any_element(),
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
         ContentBlock::ToolUse { name, input, .. } => {
@@ -338,9 +344,13 @@ pub(super) fn disclosure(
     let (this, key) = (this.clone(), key.clone());
     let chevron = if expanded { IconName::ChevronDown } else { IconName::ChevronRight };
     let (faint, foreground) = (look::faint(), theme.foreground);
+    let label = SharedString::from(label.to_string());
     v_flex().w_full().gap_1().text_xs().child(
         div()
             .id(id)
+            .role(Role::Button)
+            .aria_label(label.clone())
+            .aria_expanded(expanded)
             .flex()
             .items_center()
             .h(px(22.))
@@ -349,11 +359,12 @@ pub(super) fn disclosure(
             .text_color(faint)
             .hover(move |d| d.text_color(foreground))
             .on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.toggle(seq, key.clone(), cx));
+                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !expanded, cx));
             })
             .child(Icon::new(chevron).xsmall())
-            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(label.to_string())))
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into())),
+            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(label))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into()))
+            .test_support(),
     )
 }
 

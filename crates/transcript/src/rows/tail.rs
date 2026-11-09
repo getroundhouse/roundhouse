@@ -5,20 +5,23 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement, Styled, div, px
 use look::{Signal, Work};
 use protocol::tail::{BlockKind, Tail};
 
-use super::{agent_text, empty, row};
+use super::{agent_text, empty, row, thinking_text};
 use crate::item_key::ItemKey;
 
-/// Text the agent is still writing. Tool input is hidden until it's complete, because it's partial JSON.
-pub(super) fn render_tail(tail: &Tail, cx: &App) -> AnyElement {
+/// Text the agent is still writing. Tool input is hidden until it's complete, because it's partial JSON. Thinking
+/// shows its latest line, or all of it when `thinking_open`, the way it will once it's recorded.
+pub(super) fn render_tail(tail: &Tail, thinking_open: bool, cx: &App) -> AnyElement {
     if tail.is_empty() {
         return empty();
     }
     let mut out = row();
     for message in &tail.messages {
         for block in &message.blocks {
+            let key = ItemKey::Block(message.message_id.clone(), block.index);
             out = match block.kind {
-                BlockKind::Text => {
-                    out.child(agent_text(&ItemKey::Block(message.message_id.clone(), block.index), &block.text))
+                BlockKind::Text => out.child(agent_text(&key, &block.text)),
+                BlockKind::Thinking if thinking_open => {
+                    out.child(working("Thinking…".to_string(), cx)).child(thinking_text(&key, &block.text, cx))
                 }
                 BlockKind::Thinking => out.child(working(format!("Thinking… {}", last_line(&block.text)), cx)),
                 BlockKind::ToolUse => {

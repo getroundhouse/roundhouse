@@ -36,6 +36,8 @@ pub(crate) enum Step {
     UpdateReady(&'static str),
     /// Has the app show that it couldn't reach the update server.
     UpdateProblem,
+    /// Opens Settings, as its menu item does.
+    OpenSettings,
 }
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
@@ -97,6 +99,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "updates.md",
         world: Some(conversation),
         steps: &[Step::Select(FOCUS), Step::UpdateProblem],
+    },
+    Screen {
+        name: "settings",
+        spec: "settings.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::OpenSettings],
     },
 ];
 

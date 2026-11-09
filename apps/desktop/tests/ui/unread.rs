@@ -93,6 +93,22 @@ fn a_reply_while_another_app_is_in_front_waits_for_the_app_to_come_back(cx: &mut
 }
 
 #[gpui_kit::test]
+fn a_reply_while_settings_shows_waits_until_you_go_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.press("cmd-,");
+    ui.wait("Settings", |ui| ui.has("settings-back"));
+
+    stack.client().session_prompt(&chat, "say:while you were in Settings", None).unwrap();
+
+    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+    assert!(replied(&stack, &chat).unread());
+    ui.press("escape");
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
+}
+
+#[gpui_kit::test]
 fn a_chat_marked_unread_stays_so_until_its_shown_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);

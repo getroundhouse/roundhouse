@@ -151,13 +151,14 @@ fn choose_and_read(ui: &mut Ui<'_>, name: &str) -> (String, String) {
 }
 
 #[gpui_kit::test]
-fn the_app_menu_has_about_check_for_updates_and_quit(cx: &mut TestAppContext) {
+fn the_app_menu_has_about_check_for_updates_settings_and_quit(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    assert_eq!(app_menu(&ui), ["About Roundhouse", "Check for Updates…", "Quit"]);
-    // The same as ⌘Q, which the menu shows beside it.
+    assert_eq!(app_menu(&ui), ["About Roundhouse", "Check for Updates…", "Settings…", "Quit"]);
+    // The same as ⌘Q and ⌘,, which the menu shows beside them.
     assert!(action(&ui, "Quit").partial_eq(&desktop::Quit));
+    assert!(action(&ui, "Settings…").partial_eq(&desktop::OpenSettings));
 }
 
 #[gpui_kit::test]

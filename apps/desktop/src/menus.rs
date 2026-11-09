@@ -2,15 +2,17 @@
 
 use gpui_kit::{App, Menu, MenuItem, PromptLevel};
 
-use crate::{About, CheckForUpdates, Quit};
+use crate::{About, CheckForUpdates, OpenSettings, Quit};
 
-/// Sets the menu bar, and handles its items wherever focus is.
+/// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself.
 pub(crate) fn set(cx: &mut App) {
     // macOS names the first menu after the app, whatever it's called here.
     cx.set_menus([Menu::new("Roundhouse").items([
         MenuItem::action("About Roundhouse", About),
         MenuItem::separator(),
         MenuItem::action("Check for Updates…", CheckForUpdates),
+        MenuItem::separator(),
+        MenuItem::action("Settings…", OpenSettings),
         MenuItem::separator(),
         MenuItem::action("Quit", Quit),
     ])]);
