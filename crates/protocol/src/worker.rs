@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{AttachmentBytes, AttachmentFile};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
-use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, SessionId};
+use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId};
 use crate::tail::StreamDelta;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -79,9 +79,11 @@ pub enum WorkerRequest {
         data: AttachmentBytes,
     },
     AgentStart(AgentSpec),
-    /// Each of `attachments` has been written into the worktree first.
+    /// Each of `attachments` has been written into the worktree first. `prompt` is where it's recorded, which the
+    /// agent's [`crate::event::EventBody::PromptTaken`] names.
     AgentPrompt {
         session_id: SessionId,
+        prompt: Seq,
         text: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<AttachmentFile>,

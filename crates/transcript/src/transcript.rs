@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
-use client_core::session_log::{Row, SessionLog};
+use client_core::session_log::{PromptState, Row, SessionLog};
 use client_core::{Client, FileToSend, OpenSession};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
 use gpui_kit::{
@@ -119,6 +119,16 @@ impl Transcript {
         self.session.read(|log| match log.row(row) {
             Row::Event(event) => Some(event.clone()),
             Row::Unloaded | Row::Pending(_) => None,
+        })
+    }
+
+    /// Where the prompt recorded at a row stands with the agent, if that row is a recorded prompt that's loaded.
+    pub fn prompt_state_at(&self, row: usize) -> Option<PromptState> {
+        self.session.read(|log| match log.row(row) {
+            Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
+                Some(log.prompt_state(event.seq))
+            }
+            Row::Event(_) | Row::Unloaded | Row::Pending(_) => None,
         })
     }
 

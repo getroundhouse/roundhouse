@@ -29,7 +29,7 @@ mod tools;
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, drawn_in_its_call};
-use prompt::prompt_bubble;
+use prompt::{Progress, prompt_bubble};
 use tail::render_tail;
 use tools::Toggle;
 
@@ -90,7 +90,7 @@ fn render_row_inner(
         }
         Shown::Pending(prompt, carried) => {
             let carried = attachments::view(None, &carried, this, cx);
-            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, true, cx)
+            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, Progress::Sending, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => {
@@ -167,7 +167,8 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let carried = attachments::view(Some(seq), &around.carried, this, cx);
-            prompt_bubble(&ItemKey::prompt(seq, client_msg_id.as_ref()), text.clone(), carried, false, cx)
+            let (key, progress) = (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(around.prompt));
+            prompt_bubble(&key, text.clone(), carried, progress, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks
@@ -209,7 +210,9 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             colored_line(message.clone(), color)
         }
         // These tell the hub things, and there's nothing here for a person.
-        EventBody::AgentStarted { .. }
+        EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
+        | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }

@@ -103,6 +103,15 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![Thinking, one opened in full and one closed](screens/thinking.png)
 
+## Sending while the agent works
+
+- **Enter sends what's typed to the agent while it works, and the agent reads it at its next chance,** such as when a running tool finishes. Until then the prompt is faint, so it's clear the agent hasn't seen it. One sent while the agent writes its last reply starts a turn of its own straight after. *Unconfirmed.*
+- **Stopping the agent drops a prompt it hasn't read yet, and the prompt says so,** since stopping means stopping. *Unconfirmed.*
+
+**A prompt sent while a tool runs, waiting for the agent.** *Unconfirmed.*
+
+![A prompt waiting for the agent](screens/steered.png)
+
 ## Questions and approvals
 
 - **While the agent waits on a question, what's typed in the composer is the answer,** and the card says so. A plain Allow button would throw the question away. *Unconfirmed.*

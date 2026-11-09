@@ -19,6 +19,7 @@ mod comments;
 mod error;
 mod events;
 mod made;
+mod queue;
 mod reading;
 mod records;
 mod repos;
@@ -32,8 +33,9 @@ mod workspaces;
 use schema::{migrate, open_connection};
 
 pub use error::{BackupError, StoreError};
-pub use events::{StatusChange, cancelled_approval};
+pub use events::{SessionChange, StatusChange, cancelled_approval};
 pub use made::{Made, MadeByRequest};
+pub use queue::Queued;
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
 

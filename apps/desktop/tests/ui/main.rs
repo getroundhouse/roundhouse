@@ -23,6 +23,7 @@ mod reconnecting;
 mod settings;
 mod setup;
 mod sidebar;
+mod steering;
 mod streaming;
 #[cfg(test)]
 mod support;

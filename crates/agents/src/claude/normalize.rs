@@ -10,9 +10,11 @@ use protocol::model::MessageId;
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
+pub(crate) use prompt::PromptProgress;
 use tasks::StoppedTasks;
 
 mod file_change;
+mod prompt;
 mod tasks;
 #[cfg(test)]
 mod tests;
@@ -30,6 +32,9 @@ pub enum Parsed {
     Drop,
     /// The CLI's answer to a control request of ours.
     ControlReply { request_id: String, error: Option<String> },
+    /// Where a prompt the adapter sent has got to, by the `uuid` the adapter gave it. Only the adapter knows which
+    /// recorded prompt that is.
+    Prompt { uuid: String, progress: PromptProgress },
 }
 
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
@@ -115,6 +120,7 @@ fn parse_value(value: &Value) -> Parsed {
         },
         // Replies to the adapter's own requests, such as an interrupt.
         "control_response" => control_reply(value),
+        "command_lifecycle" => prompt::command_lifecycle(value),
         _ => other(kind),
     }
 }

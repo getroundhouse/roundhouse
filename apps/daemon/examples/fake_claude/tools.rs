@@ -6,14 +6,14 @@ use std::sync::mpsc::Receiver;
 use serde_json::{Value, json};
 
 use crate::turn::{Turn, state_event};
-use crate::{Input, current_mode, emit, set_mode};
+use crate::{Input, Prompt, current_mode, emit, set_mode};
 
 /// The result reads like the real CLI's, which goes by whether it was given answers.
 pub(crate) fn ask_questions(
     turn: &mut Turn,
     spec: &str,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     let questions: Vec<Value> = spec
@@ -61,7 +61,7 @@ pub(crate) fn ask_questions(
                 turn.tool_result(&tool_use_id, "cancelled", true);
                 return true;
             }
-            Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
+            Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => queued.push_back(prompt),
             Ok(Input::Eof) | Err(_) => {
                 *eof = true;
                 return true;
@@ -75,7 +75,7 @@ pub(crate) fn present_plan(
     turn: &mut Turn,
     plan: &str,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.named_tool_use("ExitPlanMode", json!({}));
@@ -105,7 +105,7 @@ pub(crate) fn present_plan(
                 turn.tool_result(&tool_use_id, "cancelled", true);
                 return true;
             }
-            Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
+            Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => queued.push_back(prompt),
             Ok(Input::Eof) | Err(_) => {
                 *eof = true;
                 return true;
@@ -118,7 +118,7 @@ pub(crate) fn run_tool(
     turn: &mut Turn,
     command: &str,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use(command);
@@ -151,7 +151,7 @@ pub(crate) fn run_tool(
                     turn.tool_result(&tool_use_id, "cancelled", true);
                     return true;
                 }
-                Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
+                Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => queued.push_back(prompt),
                 Ok(Input::Eof) | Err(_) => {
                     *eof = true;
                     return true;

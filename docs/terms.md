@@ -29,12 +29,14 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
-| Turn | From a prompt until the agent finishes responding. A run can have many, and a prompt sent mid-turn folds into the running one. The agent starts one by itself when a background task finishes | `TurnEnded` |
+| Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded` |
 | Background task | Work an agent started that carries on after its turn ends, such as a command or a subagent. The agent is still at work until it finishes | `AgentTasks`, `SessionStatus::Background` |
 | Reply | What the agent said in a turn, as of the event that ended it. A turn the agent was cut off from isn't one | `Session.reply_seq` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
 | Attachment | A file a prompt carries, of any kind. The worker puts it in the worktree's `.context/attachments/`, and the hub keeps it too if it's an image. The interface says "file" or "image" | `Attachment`, `AttachmentId`, `AttachmentFile`, the `attachments` table |
 | Tool call | An agent using one of its tools, such as running a command or editing a file, and the result it got back. They arrive as two events, and the transcript draws them as one line that opens to what the call did | `ContentBlock::ToolUse`, `ContentBlock::ToolResult`, `transcript::calls` |
+| Steer | Send a prompt while the agent works, which it reads at its next chance, such as when a running tool finishes. Until then the prompt is waiting, and a stop drops it | `PromptTaken`, `PromptDropped`, `PromptState` |
+| Queue | Prompts waiting for the agent to finish, on the session's record. The hub sends each as a turn of its own. It's held, waiting for the person, after a stop or once the agent goes away mid-turn | `Session.queued`, `Session.queue_held`, `QueuedPrompt`, `SessionQueue`, `SessionSendQueued` |
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
 | Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
 | Approval mode | How much an agent may do without asking, such as "Ask first", "Plan" or "Full access" | `permission_mode` |

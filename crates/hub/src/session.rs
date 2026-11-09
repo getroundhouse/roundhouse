@@ -26,6 +26,7 @@ use crate::store::{self, StoredSession};
 
 mod commands;
 mod ingest;
+mod queue;
 mod record;
 mod status;
 #[cfg(test)]
@@ -33,6 +34,7 @@ mod tests;
 
 use commands::run_commands;
 use ingest::run_ingest;
+use queue::QueueWatch;
 
 const LIVE_CAPACITY: usize = 4096;
 
@@ -70,6 +72,13 @@ pub(crate) enum Command {
     },
     Stop {
         reply: oneshot::Sender<Result<(), ApiError>>,
+    },
+    /// Sends the first queued prompt, if the agent is ready for it by the time this runs.
+    SendQueued,
+    /// Sends the queued prompt with this ID now, whether or not the agent is ready for it.
+    SendQueuedNow {
+        client_msg_id: ClientMessageId,
+        reply: oneshot::Sender<Result<Session, ApiError>>,
     },
 }
 
@@ -144,6 +153,8 @@ struct LiveState {
     model: Option<String>,
     permission_mode: Option<String>,
     closed_at_ms: Option<i64>,
+    /// Whether the agent can take a queued prompt yet.
+    queue: QueueWatch,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
     live: Option<broadcast::Sender<Live>>,
@@ -161,6 +172,9 @@ pub(crate) struct LiveSession {
     ingest: mpsc::Sender<Item>,
     state: Mutex<LiveState>,
     recording: tokio::sync::Mutex<()>,
+    /// Held while a queued prompt is sent, and while the queue changes, so a change can't land between reading the
+    /// prompt and taking it out of the queue, and be lost.
+    queue_lock: tokio::sync::Mutex<()>,
     /// Held while the model and mode are being changed, and while an agent is being started with them,
     /// so a change can't fall between the two and reach neither.
     configuring: tokio::sync::Mutex<()>,
@@ -180,6 +194,7 @@ fn publish(state: &mut LiveState, item: LiveItem) {
 
 impl LiveSession {
     pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<ApprovalId>) -> Arc<Self> {
+        let has_queue = !stored.session.queued.is_empty();
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {
@@ -203,13 +218,19 @@ impl LiveSession {
                 model: stored.session.model.clone(),
                 permission_mode: stored.session.permission_mode.clone(),
                 closed_at_ms: stored.session.closed_at_ms,
+                queue: QueueWatch::starting(stored.session.queue_held),
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
+            queue_lock: tokio::sync::Mutex::new(()),
             configuring: tokio::sync::Mutex::new(()),
         });
         tokio::spawn(run_commands(session.clone(), commands_rx));
         tokio::spawn(run_ingest(session.clone(), ingest_rx));
+        // A queue the last hub left ready to send.
+        if has_queue && session.ready_for_queue() {
+            session.wake_queue();
+        }
         session
     }
 

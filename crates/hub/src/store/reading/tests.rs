@@ -9,7 +9,7 @@ const TURN_ENDS: StatusChange = StatusChange { status: SessionStatus::Idle, ends
 /// A prompt, then the event that ends its turn. Returns that event's `seq`.
 fn turn(store: &Store) -> Seq {
     store.append(&"s".into(), None, &notice("prompt"), None, None, Some(SessionStatus::Running.into())).unwrap();
-    store.append(&"s".into(), None, &notice("done"), None, None, Some(TURN_ENDS)).unwrap().event.seq
+    store.append(&"s".into(), None, &notice("done"), None, None, Some(TURN_ENDS.into())).unwrap().event.seq
 }
 
 fn session(store: &Store) -> protocol::model::Session {

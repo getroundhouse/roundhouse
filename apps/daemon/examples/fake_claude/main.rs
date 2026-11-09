@@ -27,6 +27,10 @@
 //!                   SIGTERM stops it, and lists none left.
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
 //!
+//! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
+//! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
+//! with `cancel_queued`.
+//!
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
 //!
@@ -146,10 +150,23 @@ fn answer_control(out: &Out, request_id: &Value, result: Result<Value, String>) 
     emit(out, json!({"type":"control_response","response":response}));
 }
 
+/// A prompt, and the `uuid` it came with, by which it's reported as queued, started, and then completed or cancelled.
+struct Prompt {
+    text: String,
+    uuid: Option<String>,
+}
+
+/// Reports where a prompt has got to, as the real CLI does for one sent with a `uuid`.
+fn lifecycle(out: &Out, prompt: &Prompt, state: &str) {
+    if let Some(uuid) = &prompt.uuid {
+        emit(out, json!({"type":"command_lifecycle","command_uuid":uuid,"state":state}));
+    }
+}
+
 enum Input {
-    Prompt(String),
+    Prompt(Prompt),
     /// A prompt the agent gives itself, whose turn starts with no state event, as the real CLI's does.
-    Resume(String),
+    Resume(Prompt),
     Approval(Value),
     Interrupt,
     Eof,
@@ -204,20 +221,20 @@ fn main() {
     std::thread::spawn(move || read_stdin(input_tx, control_out));
 
     // The real CLI finishes its turn on EOF, then exits. Prompts sent mid-turn fold into that turn.
-    let mut queued: VecDeque<String> = VecDeque::new();
+    let mut queued: VecDeque<Prompt> = VecDeque::new();
     let mut eof = false;
     loop {
-        let (script, by_itself) = match queued.pop_front() {
-            Some(script) => (script, false),
+        let (prompt, by_itself) = match queued.pop_front() {
+            Some(prompt) => (prompt, false),
             None if eof => return,
             None => match input_rx.recv() {
-                Ok(Input::Prompt(text)) => (text, false),
-                Ok(Input::Resume(text)) => (text, true),
+                Ok(Input::Prompt(prompt)) => (prompt, false),
+                Ok(Input::Resume(prompt)) => (prompt, true),
                 Ok(Input::Interrupt | Input::Approval(_)) => continue,
                 Ok(Input::Eof) | Err(_) => return,
             },
         };
-        run_turn(&config, &out, script, by_itself, &input_rx, &mut queued, &mut eof);
+        run_turn(&config, &out, prompt, by_itself, &input_rx, &mut queued, &mut eof);
     }
 }
 
@@ -226,7 +243,14 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
         let Ok(line) = line else { break };
         let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
         let item = match value["type"].as_str() {
-            Some("user") => Input::Prompt(read_prompt(&value["message"]["content"])),
+            Some("user") => {
+                let prompt = Prompt {
+                    text: read_prompt(&value["message"]["content"]),
+                    uuid: value["uuid"].as_str().map(str::to_string),
+                };
+                lifecycle(&out, &prompt, "queued");
+                Input::Prompt(prompt)
+            }
             Some("control_response") => Input::Approval(value["response"].clone()),
             Some("control_request") => match value["request"]["subtype"].as_str() {
                 Some("interrupt") => Input::Interrupt,
@@ -265,11 +289,11 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
 
 /// Waits without blocking on input, so a turn notices interrupts and later prompts as they arrive.
 /// Returns true if the turn should stop.
-fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<String>, eof: &mut bool) -> bool {
+fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     match rx.recv_timeout(wait) {
         Ok(Input::Interrupt) => true,
-        Ok(Input::Prompt(text) | Input::Resume(text)) => {
-            queued.push_back(text);
+        Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => {
+            queued.push_back(prompt);
             false
         }
         Ok(Input::Eof) => {

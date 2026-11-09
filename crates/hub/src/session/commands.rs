@@ -30,6 +30,8 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             Command::Stop { reply } => {
                 let _ = reply.send(session.handle_stop().await);
             }
+            Command::SendQueued => session.send_queued().await,
+            Command::SendQueuedNow { client_msg_id, reply } => session.send_queued_now(client_msg_id, reply).await,
         }
     }
 }
@@ -122,7 +124,7 @@ impl LiveSession {
         Ok(())
     }
 
-    async fn forward_prompt(&self, text: String, attachments: Vec<Attachment>) -> Result<(), ApiError> {
+    async fn forward_prompt(&self, prompt: Seq, text: String, attachments: Vec<Attachment>) -> Result<(), ApiError> {
         // Only now, after waiting on setup, since the worktree has to be ready for them.
         let attachments = self.hub()?.place_attachments(&self.id, &self.workspace_id, &attachments).await?;
         // Twice, because the agent can exit between checking on it and sending to it.
@@ -130,6 +132,7 @@ impl LiveSession {
             let link = self.ensure_agent().await?;
             let request = WorkerRequest::AgentPrompt {
                 session_id: self.id.clone(),
+                prompt,
                 text: text.clone(),
                 attachments: attachments.clone(),
             };
@@ -145,7 +148,7 @@ impl LiveSession {
     }
 
     /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
-    async fn record_prompt(
+    pub(super) async fn record_prompt(
         &self,
         hub: &Arc<Hub>,
         text: &str,
@@ -196,15 +199,19 @@ impl LiveSession {
         // Recorded, so the prompt is real and the client can stop retrying. From here, failures are
         // reported in the log, where every client can see them.
         let _ = reply.send(Ok((seq, duplicate)));
-        if duplicate {
-            return;
+        if !duplicate {
+            self.deliver_prompt(&hub, seq, text, attachments).await;
         }
+    }
+
+    /// Gets a recorded prompt to the agent, starting one if it has to. Failures go in the log.
+    pub(super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, text: String, attachments: Vec<Attachment>) {
         hub.wait_for_setup(&self.workspace_id).await;
         if self.is_closed() {
             return;
         }
-        self.warn_if_setup_failed(&hub).await;
-        if let Err(e) = self.forward_prompt(text, attachments).await {
+        self.warn_if_setup_failed(hub).await;
+        if let Err(e) = self.forward_prompt(seq, text, attachments).await {
             if self.is_closed() {
                 return;
             }

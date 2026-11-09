@@ -135,6 +135,20 @@ pub(crate) fn approval() -> Vec<EventBody> {
     events
 }
 
+/// Running the UI tests, with a prompt sent meanwhile that the agent takes once they finish.
+pub(crate) fn steered() -> Vec<EventBody> {
+    let mut events = looked_around();
+    events
+        .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
+    events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
+    events.push(EventBody::UserPrompt {
+        text: "Only the sidebar's tests matter here, so skip the rest next time.".to_string(),
+        client_msg_id: None,
+        attachments: Vec::new(),
+    });
+    events
+}
+
 /// Waiting for an answer to a question with choices.
 pub(crate) fn question() -> Vec<EventBody> {
     let mut events = looked_around();

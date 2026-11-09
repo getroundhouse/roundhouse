@@ -17,8 +17,10 @@ mod misbehaving_worker;
 mod model_and_mode;
 mod processes_going_away;
 mod questions;
+mod queueing;
 mod reading;
 mod setup;
+mod steering;
 #[cfg(test)]
 mod support;
 mod titles;

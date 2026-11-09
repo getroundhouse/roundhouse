@@ -36,6 +36,8 @@ async fn ingest_event(session: &Arc<LiveSession>, run: RunId, body: EventBody, r
             session.cancel_approvals(Some(run)).await;
         }
         EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }

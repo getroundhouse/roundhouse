@@ -13,7 +13,7 @@ use tracing::warn;
 
 use super::{STDERR_TAIL_LINES, Shared, write_line};
 use crate::AgentOutput;
-use crate::claude::normalize::{Normalizer, Parsed};
+use crate::claude::normalize::{Normalizer, Parsed, PromptProgress};
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
 /// leave the agent blocked and the session stuck.
@@ -46,6 +46,9 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 continue;
             }
             Parsed::Delta(delta) => AgentOutput::Delta(delta),
+            Parsed::Prompt { uuid, progress } => {
+                AgentOutput::Event { body: prompt_progress(&shared, &uuid, progress), raw: Some(line) }
+            }
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
                 AgentOutput::Event {
@@ -77,6 +80,22 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
     }
 }
 
+/// What the CLI's report on a prompt means for the log. Only a prompt the CLI hasn't taken can be taken or dropped, so
+/// the cancel that ends a turn says nothing of the prompts it took.
+fn prompt_progress(shared: &Shared, uuid: &str, progress: PromptProgress) -> EventBody {
+    shared.reports_prompts.store(true, Ordering::SeqCst);
+    let unchanged = || EventBody::AgentOther { kind: "command_lifecycle".to_string() };
+    let moved = match progress {
+        PromptProgress::Started | PromptProgress::Cancelled => shared.untaken.lock().remove(uuid),
+        PromptProgress::Other => None,
+    };
+    match (progress, moved) {
+        (PromptProgress::Started, Some(prompt)) => EventBody::PromptTaken { prompt },
+        (PromptProgress::Cancelled, Some(prompt)) => EventBody::PromptDropped { prompt },
+        (PromptProgress::Started | PromptProgress::Cancelled | PromptProgress::Other, _) => unchanged(),
+    }
+}
+
 async fn refuse_control(shared: &Shared, request_id: &str, subtype: &str) {
     warn!("answering unsupported control request {subtype} with an error");
     let reply = json!({"type":"control_response","response":{
@@ -97,6 +116,8 @@ fn track_approval(shared: &Shared, body: &EventBody) {
             shared.pending_inputs.lock().remove(approval_id);
         }
         EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }

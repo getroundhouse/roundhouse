@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
+use protocol::attachment::Attachment;
 use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::model::{MessageId, Seq, TaskId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
@@ -36,14 +37,16 @@ impl Printer {
         }
     }
 
+    /// What was typed, and the names of the files it carries.
+    fn prompt(&mut self, seq: Seq, text: &str, attachments: &[Attachment]) {
+        let names: Vec<&str> = attachments.iter().map(|a| a.name.as_str()).collect();
+        let carried = if names.is_empty() { String::new() } else { format!(" [attached: {}]", names.join(", ")) };
+        self.line(seq, &format!("you: {text}{carried}"));
+    }
+
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
-            EventBody::UserPrompt { text, attachments, .. } => {
-                let names: Vec<&str> = attachments.iter().map(|a| a.name.as_str()).collect();
-                let carried =
-                    if names.is_empty() { String::new() } else { format!(" [attached: {}]", names.join(", ")) };
-                self.line(event.seq, &format!("you: {text}{carried}"));
-            }
+            EventBody::UserPrompt { text, attachments, .. } => self.prompt(event.seq, text, attachments),
             EventBody::AgentStarted { pid, resumed } => {
                 let how = if *resumed { "resumed" } else { "started" };
                 self.line(event.seq, &format!("agent {how}, pid {pid}"));
@@ -94,7 +97,13 @@ impl Printer {
                 self.line(event.seq, &format!("approval mode: {permission_mode}"));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
-            EventBody::AgentState { .. } | EventBody::AgentOther { .. } | EventBody::Unknown => {}
+            EventBody::PromptDropped { prompt } => {
+                self.line(event.seq, &format!("the agent stopped before reading the prompt at {prompt}"));
+            }
+            EventBody::PromptTaken { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::AgentOther { .. }
+            | EventBody::Unknown => {}
         }
     }
 

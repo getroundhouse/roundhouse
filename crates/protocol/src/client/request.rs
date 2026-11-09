@@ -187,6 +187,29 @@ pub enum ClientRequest {
         session_id: SessionId,
         id: AttachmentId,
     },
+    /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
+    /// place. So sending it again changes nothing more. Refused with `Conflict` once that prompt has been sent, since
+    /// the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the queue is
+    /// held, as `Session::queue_held` says.
+    SessionQueue {
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+        text: String,
+    },
+    /// Takes a prompt out of the queue. Taking out one that isn't there, because it's been sent or taken out already,
+    /// changes nothing. Answers with the session.
+    SessionUnqueue {
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+    },
+    /// Sends the prompt queued under `client_msg_id` now, out of its turn: into the turn the agent is working on, which
+    /// steers it, or as a turn of its own. Like any prompt the person sends, it lets a held queue go on once its turn
+    /// ends. Sending one that isn't queued, because it's been sent or taken out, changes nothing. Answers with the
+    /// session once the prompt is recorded.
+    SessionSendQueued {
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+    },
     /// Answering again is refused, changing nothing.
     SessionApprove {
         id: SessionId,

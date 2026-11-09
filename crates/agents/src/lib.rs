@@ -13,7 +13,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentKind, ApprovalId, Title};
+use protocol::model::{AgentKind, ApprovalId, Seq, Title};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -70,8 +70,9 @@ pub trait AgentProcess: Send + Sync {
     /// its last output may still be on the way.
     fn is_gone(&self) -> bool;
     /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true. `text` can be
-    /// empty when there are attachments, which are in the worktree already.
-    async fn send_prompt(&self, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError>;
+    /// empty when there are attachments, which are in the worktree already. `prompt` is where the prompt is recorded,
+    /// which the process names when it reports taking or dropping it.
+    async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError>;
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError>;
     async fn interrupt(&self) -> Result<(), AgentError>;
     /// Changes the model or approval mode of the running process, and resolves once it has agreed.

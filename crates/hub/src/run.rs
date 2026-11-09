@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::error::HubError;
 use crate::hub::Hub;
-use crate::store::{StatusChange, Store, StoreError, cancelled_approval};
+use crate::store::{SessionChange, StatusChange, Store, StoreError, cancelled_approval};
 
 pub struct HubConfig {
     pub paths: Paths,
@@ -26,7 +26,8 @@ pub struct HubConfig {
     pub on_demand: bool,
 }
 
-/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too.
+/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too. A
+/// queue whose agent went away at work is held, as when the agent exits mid-turn with the hub still there.
 fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.fail_interrupted_setups()?;
     for id in store.active_session_ids()? {
@@ -40,7 +41,10 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
             None,
             None,
             // Its agent took what it was running in the background with it.
-            Some(StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }),
+            Some(SessionChange {
+                status: Some(StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }),
+                queue_held: Some(true),
+            }),
         )?;
     }
     store.take_unfinished_workspaces()
@@ -114,6 +118,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let _ = provider.destroy(&workspace.instance_id).await;
     }
     let hub = Arc::new(Hub::new(store, paths.attachments_dir.clone(), provider, config.on_demand));
+    hub.start_queues().await;
 
     let listener = bind_socket(&paths.socket)?;
     info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");

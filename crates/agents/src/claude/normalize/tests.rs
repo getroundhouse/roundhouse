@@ -213,3 +213,24 @@ fn a_finished_block_takes_its_place_from_its_own_deltas_only() {
     normalizer.line(&ended);
     assert_eq!(first_index(normalizer.line(&finished(&["x"]))), None, "a turn that ended left nothing streaming");
 }
+
+#[test]
+fn a_prompts_lifecycle_names_it_by_the_uuid_it_was_sent_with() {
+    let line = |state: &str| {
+        json!({"type":"command_lifecycle","command_uuid":"u1","state":state,"uuid":"other","session_id":"s"})
+            .to_string()
+    };
+    let progress = |state: &str| {
+        let Parsed::Prompt { uuid, progress } = parse_line(&line(state)) else { panic!("{state}") };
+        assert_eq!(uuid, "u1");
+        progress
+    };
+
+    assert_eq!(progress("started"), PromptProgress::Started);
+    assert_eq!(progress("cancelled"), PromptProgress::Cancelled);
+    assert_eq!(progress("queued"), PromptProgress::Other);
+    assert_eq!(progress("completed"), PromptProgress::Other);
+    assert_eq!(progress("something newer"), PromptProgress::Other);
+    let nameless = json!({"type":"command_lifecycle","state":"started"}).to_string();
+    assert_eq!(parse_line(&nameless), Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into() }));
+}

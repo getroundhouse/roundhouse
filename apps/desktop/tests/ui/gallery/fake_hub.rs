@@ -120,6 +120,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCreate { .. }
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
+        | R::SessionQueue { .. }
+        | R::SessionUnqueue { .. }
+        | R::SessionSendQueued { .. }
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
         | R::SessionConfigure { .. }

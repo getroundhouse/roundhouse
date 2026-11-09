@@ -364,7 +364,7 @@ impl Client {
         Ok(workspace)
     }
 
-    fn expect_session(&self, request: ClientRequest) -> Result<Session> {
+    pub(super) fn expect_session(&self, request: ClientRequest) -> Result<Session> {
         let reply = self.call(request)?;
         let ClientResponse::Session(session) = reply else {
             return unexpected(&reply);

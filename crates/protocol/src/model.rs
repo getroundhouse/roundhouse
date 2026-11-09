@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::AgentTask;
 
+mod queue;
 mod title;
 
+pub use queue::QueuedPrompt;
 pub use title::{Title, TitleError, TitleSource};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
@@ -298,6 +300,12 @@ pub struct Session {
     /// takes that work with it.
     #[serde(default)]
     pub background_tasks: Vec<AgentTask>,
+    /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.
+    #[serde(default)]
+    pub queued: Vec<QueuedPrompt>,
+    /// The queue waits for the person, as [`QueuedPrompt`] says.
+    #[serde(default)]
+    pub queue_held: bool,
     #[serde(default)]
     pub rev: Rev,
     #[serde(default)]
