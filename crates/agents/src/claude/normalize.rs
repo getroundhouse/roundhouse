@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use tasks::StoppedTasks;
 
+mod file_change;
 mod tasks;
 #[cfg(test)]
 mod tests;
@@ -234,10 +235,12 @@ fn assistant(value: &Value) -> EventBody {
 
 fn user(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
-    EventBody::AgentUser {
-        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
-        blocks: blocks(message.get("content")),
+    let mut blocks = blocks(message.get("content"));
+    // Claude says what an edit changed beside the line's one result, rather than in it.
+    if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
+        *change = file_change::read(value);
     }
+    EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks }
 }
 
 fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {
@@ -264,6 +267,7 @@ fn block(value: &Value) -> ContentBlock {
                 is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
                 text,
                 image_count,
+                change: None,
             }
         }
         Some("image") => {

@@ -33,6 +33,7 @@ pub(crate) fn result(id: &str) -> EventBody {
         is_error: false,
         text: format!("from {id}"),
         image_count: 0,
+        change: None,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }

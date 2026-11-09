@@ -45,6 +45,7 @@ fn tool_answer(id: &str, text: &str, is_error: bool) -> EventBody {
             is_error,
             text: text.to_string(),
             image_count: 0,
+            change: None,
         }],
     }
 }

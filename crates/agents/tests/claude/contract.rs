@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
+use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::ApprovalId;
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
@@ -219,6 +219,24 @@ fn thinking_tools_and_results_all_normalize() {
         ContentBlock::ToolResult { is_error: true, text, .. } if text.contains("Not allowed")
     )));
     assert!(!blocks.iter().any(|b| matches!(b, ContentBlock::Unknown)));
+}
+
+/// The fixture's plan is written to a new file, and the CLI says so beside the write's result.
+#[test]
+fn a_write_s_result_says_it_made_the_file() {
+    let changes: Vec<FileChange> = events()
+        .into_iter()
+        .filter_map(|e| match e {
+            EventBody::AgentUser { blocks, .. } => Some(blocks),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|b| match b {
+            ContentBlock::ToolResult { change, .. } => change,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(changes, [FileChange::Created]);
 }
 
 /// The streaming tail depends on a sequence the CLI could change: each block's deltas, then its
