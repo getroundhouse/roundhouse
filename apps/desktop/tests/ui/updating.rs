@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+use desktop::app::UpdateQuestion;
 use desktop::updates::{Kind, Problem};
 use gpui_kit::{Action, OwnedMenuItem, TestAppContext};
 
@@ -55,20 +56,52 @@ fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, ty
     ui
 }
 
+/// What the card asks before restarting to update, while it asks.
+fn restart_question(ui: &Ui<'_>) -> Option<(&'static str, String)> {
+    let question = ui.view().update_question.clone()?;
+    assert!(matches!(question, UpdateQuestion::Restart { .. }));
+    Some((question.title(), question.detail()))
+}
+
+/// In the card, in place of its button, rather than in a dialog.
 #[gpui_kit::test]
 fn restarting_to_update_asks_first_when_something_typed_would_be_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
 
     ui.click("restart-to-update");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
 
-    let (message, detail) = ui.cx.pending_prompt().unwrap();
-    assert_eq!(message, "Restart to update?");
+    let (title, detail) = restart_question(&ui).unwrap();
+    assert_eq!(title, "Restart to update?");
     assert_eq!(detail, "What's typed in 1 chat hasn't been sent, and restarting loses it.");
-    ui.cx.simulate_prompt_answer("Keep working");
-    ui.frame();
+    assert!(ui.has("update-question"));
+    assert!(!ui.has("restart-to-update"));
+    assert!(!ui.cx.has_pending_prompt());
+    ui.click("update-not-now");
+    assert_eq!(restart_question(&ui), None);
+    assert!(ui.has("restart-to-update"));
+    assert!(!ui.has("update-problem"), "it didn't try to install");
     assert_eq!(ui.composer_text(), "say:not sent yet");
+}
+
+/// The card doesn't hold anything else up, so more can be typed while it asks, and it says so before losing it.
+#[gpui_kit::test]
+fn restarting_anyway_asks_again_when_more_is_typed_since_it_asked(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
+    ui.click("restart-to-update");
+    ui.new_chat();
+    ui.input("say:nor this");
+
+    ui.click("update-go-ahead");
+
+    let (_, detail) = restart_question(&ui).unwrap();
+    assert_eq!(detail, "What's typed in 2 chats hasn't been sent, and restarting loses it.");
+    assert!(!ui.has("update-problem"), "it didn't try to install");
+    // Only an app Velopack installed can install an update, so here it says it couldn't, which shows it went ahead.
+    ui.click("update-go-ahead");
+    assert_eq!(restart_question(&ui), None);
+    assert!(ui.has("update-problem"));
 }
 
 /// Only an app Velopack installed can install an update, so here it says it couldn't, which shows it went ahead.
@@ -80,7 +113,7 @@ fn restarting_to_update_with_nothing_typed_asks_nothing(cx: &mut TestAppContext)
 
     ui.click("restart-to-update");
 
-    assert!(!ui.cx.has_pending_prompt());
+    assert_eq!(restart_question(&ui), None);
     assert!(ui.has("update-problem"));
 }
 

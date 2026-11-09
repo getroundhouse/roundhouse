@@ -19,6 +19,7 @@ mod workspaces;
 
 pub use build_line::BuildLine;
 pub use hub_source::HubSource;
+pub use restarts::UpdateQuestion;
 
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
 #[cfg(feature = "testing")]
@@ -66,7 +67,10 @@ pub struct AppView {
     /// Held so these tasks stop when the view goes away.
     connecting: Option<Task<()>>,
     following: Option<Task<()>>,
-    /// Asking whether to finish an update now, so pressing again doesn't ask twice.
+    /// What the update's card asks before going ahead, while it asks.
+    pub update_question: Option<UpdateQuestion>,
+    /// Reading what's running on the older hub, to ask about finishing the update or to go ahead with it, so pressing
+    /// again doesn't read it twice.
     asking: Option<Task<()>>,
     /// Looks every so often, while connected to an older hub, for whether it has gone idle, so the update can finish.
     finishing: Option<Task<()>>,
@@ -101,6 +105,7 @@ impl AppView {
             window: window.window_handle(),
             connecting: None,
             following: None,
+            update_question: None,
             asking: None,
             finishing: None,
             looking: None,
@@ -140,6 +145,9 @@ impl AppView {
         self.connection = Connection::Connecting;
         // What it was connected to says nothing about what it connects to next.
         (self.restartable_hub, self.finishing, self.looking) = (None, None, None);
+        if matches!(self.update_question, Some(UpdateQuestion::Finish(_))) {
+            self.update_question = None;
+        }
         cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
