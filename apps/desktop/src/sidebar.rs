@@ -178,6 +178,8 @@ mod tests {
             updated_at_ms: 0,
             title: None,
             closed_at_ms: closed.then_some(1),
+            reply_seq: 0,
+            read_seq: 0,
             rev: protocol::model::Rev::default(),
         }
     }

@@ -242,6 +242,8 @@ async fn handle(
         }
         R::SessionClose { id } => C::Session(hub.session_close(id).await?),
         R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
+        R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
+        R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
         R::SessionCancel { id } => {
             hub.session_cancel(id).await?;
             C::Ok

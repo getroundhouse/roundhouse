@@ -248,8 +248,23 @@ pub struct Session {
     pub title: Option<String>,
     #[serde(default)]
     pub closed_at_ms: Option<i64>,
+    /// The event that ended the newest turn, which makes what the agent said then its reply. 0 until a turn has
+    /// ended. It moves with a change of status, so the feed announces it.
+    #[serde(default)]
+    pub reply_seq: Seq,
+    /// How far the person has read, so a reply past it is unread. It's theirs rather than the session's, which a
+    /// hub with several people would keep for each.
+    #[serde(default)]
+    pub read_seq: Seq,
     #[serde(default)]
     pub rev: Rev,
+}
+
+impl Session {
+    /// The agent has replied since the person last read this chat.
+    pub fn unread(&self) -> bool {
+        self.reply_seq > self.read_seq
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]

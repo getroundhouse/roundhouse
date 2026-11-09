@@ -28,6 +28,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
 | Turn | From a prompt until the agent finishes responding. A run can have many, and a prompt sent mid-turn folds into the running one | `TurnEnded` |
+| Reply | What the agent said in a turn, as of the event that ended it. A turn the agent was cut off from isn't one | `Session.reply_seq` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
 | Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
@@ -41,6 +42,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 |---|---|---|
 | Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, and amber or red when it needs you. `docs/spec/look.md` has the rules | `look::mark` |
 | Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
+| Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery
 

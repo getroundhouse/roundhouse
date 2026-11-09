@@ -6,14 +6,28 @@ use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
+/// A session's next status, which commits with the event that brings it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StatusChange {
+    pub status: SessionStatus,
+    /// The event ends a turn, so it becomes the session's newest reply.
+    pub ends_turn: bool,
+}
+
+impl From<SessionStatus> for StatusChange {
+    fn from(status: SessionStatus) -> Self {
+        Self { status, ends_turn: false }
+    }
+}
+
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
     EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled }
 }
 
 impl Store {
-    /// `new_status` commits with the event, so nobody can see one without the other. A client that
-    /// reads status after an event gets at least that event's status.
+    /// `change` commits with the event, so nobody can see one without the other. A client that reads status after an
+    /// event gets at least that event's status, and the reply it made.
     pub fn append(
         &self,
         session_id: &SessionId,
@@ -21,7 +35,7 @@ impl Store {
         body: &EventBody,
         raw: Option<&str>,
         client_msg_id: Option<&ClientMessageId>,
-        new_status: Option<SessionStatus>,
+        change: Option<StatusChange>,
     ) -> Result<Appended, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -55,8 +69,16 @@ impl Store {
             "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
             params![seq, ts_ms, session_id.as_str()],
         )?;
-        if let Some(status) = new_status {
-            tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![text_of(&status), session_id.as_str()])?;
+        if let Some(StatusChange { status, ends_turn }) = change {
+            let status = text_of(&status);
+            if ends_turn {
+                tx.execute(
+                    "UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?",
+                    params![status, seq, session_id.as_str()],
+                )?;
+            } else {
+                tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, session_id.as_str()])?;
+            }
         }
         tx.commit()?;
         let event = SessionEvent {

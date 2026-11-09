@@ -37,6 +37,8 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         updated_at_ms: 0,
         title: Some(title.to_string()),
         closed_at_ms: None,
+        reply_seq: 0,
+        read_seq: 0,
         rev: Rev::new(rev),
     }
 }

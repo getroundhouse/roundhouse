@@ -42,6 +42,12 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, approvals_le
     }
 }
 
+/// Whether going from `current` to `next` ends a turn, which makes what the agent said its newest reply. A turn the
+/// agent was cut off from isn't one, since the session shows it as interrupted instead.
+pub(crate) fn ends_turn(current: SessionStatus, next: SessionStatus) -> bool {
+    next == SessionStatus::Idle && matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval)
+}
+
 /// How many approvals stay open once this event is applied.
 pub(crate) fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBody) -> usize {
     match body {

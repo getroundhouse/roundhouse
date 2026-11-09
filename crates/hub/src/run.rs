@@ -39,7 +39,7 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
             &EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] },
             None,
             None,
-            Some(SessionStatus::Interrupted),
+            Some(SessionStatus::Interrupted.into()),
         )?;
     }
     store.take_unfinished_workspaces()

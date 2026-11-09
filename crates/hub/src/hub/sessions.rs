@@ -13,7 +13,7 @@ use tokio::sync::oneshot;
 use super::{Hub, new_id, not_ready};
 use crate::error::internal;
 use crate::session::Command;
-use crate::store::{Made, StoredSession, now_ms};
+use crate::store::{Made, Reading, Store, StoreError, StoredSession, now_ms};
 
 impl Hub {
     pub(crate) async fn session_create(
@@ -49,6 +49,8 @@ impl Hub {
                 updated_at_ms: now,
                 title: None,
                 closed_at_ms: None,
+                reply_seq: 0,
+                read_seq: 0,
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
@@ -161,6 +163,28 @@ impl Hub {
 
     pub(crate) async fn session_reopen(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
         self.live_session(&id).await?.reopen().await
+    }
+
+    pub(crate) async fn session_mark_read(&self, id: SessionId, through_seq: Seq) -> Result<Session, ApiError> {
+        self.change_reading(move |store| store.mark_read(&id, through_seq)).await
+    }
+
+    pub(crate) async fn session_mark_unread(&self, id: SessionId) -> Result<Session, ApiError> {
+        self.change_reading(move |store| store.mark_unread(&id)).await
+    }
+
+    /// Changes how far a session is read. Only the store's lock orders this against an agent's events, which needs
+    /// nothing more, as each reads the session back with the revision its change gave it. Nothing is announced when
+    /// nothing changed, since the revision didn't move.
+    async fn change_reading(
+        &self,
+        change: impl FnOnce(&Store) -> Result<Reading, StoreError> + Send + 'static,
+    ) -> Result<Session, ApiError> {
+        let Reading { session, changed } = self.blocking(change).await?;
+        if changed {
+            self.notify(HubNotice::Session(session.session.clone()));
+        }
+        Ok(session.session)
     }
 
     pub(crate) async fn session_cancel(self: &Arc<Self>, id: SessionId) -> Result<(), ApiError> {

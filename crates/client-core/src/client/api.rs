@@ -271,6 +271,16 @@ impl Client {
         self.expect_session(ClientRequest::SessionReopen { id: id.clone() })
     }
 
+    /// See [`ClientRequest::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_mark_read(&self, id: &SessionId, through_seq: Seq) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionMarkRead { id: id.clone(), through_seq })
+    }
+
+    /// See [`ClientRequest::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_mark_unread(&self, id: &SessionId) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionMarkUnread { id: id.clone() })
+    }
+
     pub fn session_cancel(&self, id: &SessionId) -> Result<()> {
         self.expect_ok(ClientRequest::SessionCancel { id: id.clone() })
     }

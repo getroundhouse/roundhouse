@@ -95,3 +95,14 @@ fn a_removed_record_of_a_kind_this_build_does_not_know_still_reads() {
 
     assert_eq!(notice, HubNotice::Removed { record: RecordKey::Unknown, rev: Rev::new(3) });
 }
+
+#[test]
+fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+
+    let notice: HubNotice = frame::decode(line).unwrap();
+
+    let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
+    assert_eq!((session.reply_seq, session.read_seq), (0, 0));
+    assert!(!session.unread());
+}
