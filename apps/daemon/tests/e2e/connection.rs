@@ -155,11 +155,19 @@ impl RawConnection {
     }
 
     fn ask(&mut self, id: u64, request: &str) -> ReplyOutcome {
+        self.ask_unless_closed(id, request)
+            .unwrap_or_else(|| panic!("the hub closed the connection before replying to {id}"))
+    }
+
+    /// `None` if the hub closes the connection before it replies.
+    fn ask_unless_closed(&mut self, id: u64, request: &str) -> Option<ReplyOutcome> {
         writeln!(self.socket, r#"{{"id":{id},"request":{request}}}"#).unwrap();
         let mut line = String::new();
-        self.replies.read_line(&mut line).unwrap();
+        if self.replies.read_line(&mut line).unwrap() == 0 {
+            return None;
+        }
         match protocol::frame::decode(line.as_bytes()).unwrap() {
-            HubFrame::Reply { id: answered, outcome } if answered == id => outcome,
+            HubFrame::Reply { id: answered, outcome } if answered == id => Some(outcome),
             other => panic!("not the reply to {id}: {other:?}"),
         }
     }
@@ -191,8 +199,9 @@ fn a_hub_shows_its_status_and_stops_without_a_hello() {
     let status = connection.ask(1, r#"{"method":"hub_status"}"#);
 
     assert!(matches!(status, ReplyOutcome::Response(ClientResponse::HubStatus(s)) if s.pid == stack.hub_pid()));
-    let stopped = connection.ask(2, r#"{"method":"hub_shutdown"}"#);
-    assert_eq!(stopped, ReplyOutcome::Response(ClientResponse::Ok));
+    let stopped = connection.ask_unless_closed(2, r#"{"method":"hub_shutdown"}"#);
+    // It can stop before its reply gets out, which a client takes as done, as `Client::hub_shutdown` does.
+    assert!(matches!(stopped, None | Some(ReplyOutcome::Response(ClientResponse::Ok))), "{stopped:?}");
     stack.hub.take().unwrap().wait().unwrap();
 }
 
