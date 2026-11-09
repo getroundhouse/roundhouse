@@ -13,8 +13,17 @@ pub fn apply(cx: &mut App) {
     if !cx.has_global::<Theme>() {
         Theme::change(ThemeMode::Dark, None, cx);
     }
-    Theme::global_mut(cx).dark_theme = Rc::new(config());
+    let config = Rc::new(config());
+    Theme::global_mut(cx).dark_theme = config.clone();
     Theme::change(ThemeMode::Dark, None, cx);
+    // The kit can't tell a code font chosen to be the same as its own default from no choice, and swaps either for
+    // one it finds installed. It finds that once for the whole process, from whichever app asks first, and in a test
+    // that can be one that lists no fonts, which would leave every later picture with code in the system font. The
+    // theme's is on every Mac, so it goes back as chosen.
+    if let Some(mono) = config.mono_font_family.clone() {
+        Theme::global_mut(cx).mono_font_family = mono;
+        Theme::sync_base(cx);
+    }
 }
 
 #[expect(clippy::expect_used, reason = "the theme is built in, and a test checks that it parses")]
