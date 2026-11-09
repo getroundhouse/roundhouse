@@ -75,9 +75,9 @@ impl LiveSession {
         cwd: String,
         env: Vec<(String, String)>,
     ) -> Result<(), ApiError> {
-        let (resume, model, permission_mode) = {
+        let (resume, options) = {
             let state = self.state.lock();
-            (state.agent_opened, state.model.clone(), state.permission_mode.clone())
+            (state.agent_opened, state.options.clone())
         };
         let asked = hub.blocking(Store::next_run).await?;
         let spec = AgentSpec {
@@ -87,8 +87,7 @@ impl LiveSession {
             cwd,
             agent_session_id: self.agent_session_id.clone(),
             resume,
-            model,
-            permission_mode,
+            options,
             env,
         };
         let starting = AgentRun { link: link.id, run: asked };

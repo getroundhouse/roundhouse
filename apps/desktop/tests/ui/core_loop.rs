@@ -3,10 +3,11 @@
 #![cfg(test)]
 
 use desktop::app::BuildLine;
+use desktop::new_workspace::Request;
 use gpui_kit::component::Theme;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
 use desktop::workspace_pane::Showing;
 
@@ -176,6 +177,8 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
 
     let before = ui.view().workspaces.len();
     ui.press("cmd-n");
+    ui.wait("the new-workspace dialog", Ui::has_dialog);
+    ui.press("enter");
     ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && !ui.view().busy);
 }
 
@@ -188,15 +191,20 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     let repo = ui.first_repo_id();
 
     let view = ui.view.clone();
-    ui.cx.update_entity(&view, |v, cx| v.new_workspace(repo.clone(), cx));
+    ui.cx.update_entity(&view, |v, cx| v.create_workspace(nothing_typed(&repo), cx)).unwrap();
     assert_eq!(ui.view().creating_in.as_ref(), Some(&repo));
     ui.wait("the workspace", |ui| ui.transcript().is_some() && ui.view().creating_in.is_none());
 
     // It can't get stuck showing that if creating one fails.
     std::fs::remove_dir_all(stack.repo()).unwrap();
-    ui.cx.update_entity(&view, |v, cx| v.new_workspace(repo.clone(), cx));
+    ui.cx.update_entity(&view, |v, cx| v.create_workspace(nothing_typed(&repo), cx)).unwrap();
     assert_eq!(ui.view().creating_in.as_ref(), Some(&repo));
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().creating_in.is_none());
+}
+
+/// What the new-workspace dialog asks for when Create is pressed with nothing in it.
+fn nothing_typed(repo: &RepoId) -> Request {
+    Request { repo: repo.clone(), prompt: String::new(), files: Vec::new(), model: None, effort: None }
 }
 
 #[gpui_kit::test]

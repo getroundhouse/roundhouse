@@ -18,9 +18,9 @@ impl AppView {
     pub(super) fn with_shortcuts(&self, root: Div, cx: &mut Context<Self>) -> Div {
         let connected = self.client().is_some();
         root.when(connected && self.current_repo().is_some(), |root| {
-            root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
+            root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| {
                 if let Some(repo) = t.current_repo() {
-                    t.new_workspace(repo, cx);
+                    t.open_new_workspace(repo, window, cx);
                 }
             }))
         })

@@ -3,10 +3,13 @@
 mod alert;
 pub mod app;
 mod assets;
+mod attached;
 pub mod changes;
 pub mod checkout;
 pub mod file_diff;
 mod menus;
+mod model_picker;
+pub mod new_workspace;
 mod rename;
 pub mod review;
 mod right_click;

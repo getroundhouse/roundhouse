@@ -6,10 +6,16 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use protocol::event::{ApprovalDecision, EventBody};
+use protocol::model::SessionOptions;
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, read_all, wait_for_approval, wait_for_turn_end, wait_until,
+    Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
 };
+
+/// Settings that set only the model.
+fn on_model(model: &str) -> SessionOptions {
+    SessionOptions { model: Some(model.into()), ..SessionOptions::default() }
+}
 
 #[test]
 fn a_change_reaches_the_running_agent_and_the_next_launch() {
@@ -22,7 +28,9 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
     client.session_approve(&session.id, &approval, allow).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
 
-    let changed = client.session_configure(&session.id, Some("opus".into()), Some("bypassPermissions".into())).unwrap();
+    let changed = client
+        .session_configure(&session.id, SessionOptions { model: Some("opus".into()), ..in_mode("bypassPermissions") })
+        .unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("bypassPermissions"));
     assert_eq!(changed.model.as_deref(), Some("opus"));
 
@@ -56,10 +64,10 @@ fn a_change_with_no_agent_running_just_saves_it() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace_with_mode(&client, None);
-    let changed = client.session_configure(&session.id, None, Some("plan".into())).unwrap();
+    let changed = client.session_configure(&session.id, in_mode("plan")).unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("plan"));
     assert_eq!(changed.model, None, "None leaves a setting as it is");
-    let changed = client.session_configure(&session.id, Some("haiku".into()), None).unwrap();
+    let changed = client.session_configure(&session.id, on_model("haiku")).unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("plan"), "None leaves a setting as it is");
     let saved = client.session_get(&session.id).unwrap();
     assert_eq!((saved.model.as_deref(), saved.permission_mode.as_deref()), (Some("haiku"), Some("plan")));
@@ -73,9 +81,9 @@ fn a_change_the_agent_refuses_changes_nothing() {
     client.session_prompt(&session.id, "say:ready", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
 
-    let refused = client.session_configure(&session.id, Some("not-a-model".into()), None).unwrap_err();
+    let refused = client.session_configure(&session.id, on_model("not-a-model")).unwrap_err();
     assert!(refused.to_string().contains("not found"), "{refused}");
-    client.session_configure(&session.id, None, Some("nonsense".into())).unwrap_err();
+    client.session_configure(&session.id, in_mode("nonsense")).unwrap_err();
     let after = client.session_get(&session.id).unwrap();
     assert_eq!((after.model, after.permission_mode.as_deref()), (None, Some("bypassPermissions")));
 
@@ -123,7 +131,7 @@ fn a_mode_chosen_during_setup_applies_to_the_prompt_waiting_on_it() {
     client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
 
     let started = Instant::now();
-    client.session_configure(&session.id, None, Some("bypassPermissions".into())).unwrap();
+    client.session_configure(&session.id, in_mode("bypassPermissions")).unwrap();
     assert!(started.elapsed() < Duration::from_secs(1), "waited for setup: {:?}", started.elapsed());
     assert_eq!(client.workspace_list(false).unwrap()[0].setup, protocol::model::SetupStatus::Running);
 

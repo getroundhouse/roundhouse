@@ -6,6 +6,7 @@ mod commands;
 mod feed;
 mod follow;
 mod open_session;
+mod options;
 mod queue;
 mod start;
 

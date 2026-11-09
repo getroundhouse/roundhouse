@@ -163,7 +163,7 @@ cli approve "$ASID" "$APPROVAL" --deny "Not this time"
 check "a denied tool doesn't run" 'wait_idle timing && [ ! -f "$WT2/denied.txt" ]'
 check "the agent is told why" '[ "$(q "$ASID" "any(b.get(\"is_error\") and \"Not this time\" in b.get(\"text\", \"\") for e in events if e[\"body\"][\"type\"] == \"agent_user\" for b in e[\"body\"][\"blocks\"])")" = True ]'
 
-section "Changing the model and approval mode"
+section "Changing the model, approval mode and effort"
 MSID=$(cli session new timing --model "$MODEL" --permission-mode manual)
 mode_of() { cli session list timing | grep "^${MSID:0:8}" | sed 's/.*mode=\([^ ]*\).*/\1/'; }
 OUT=$(cli send "$MSID" "Reply with the single word READY." 2>&1)
@@ -202,6 +202,9 @@ cli session set "$MSID" --model sonnet >/dev/null
 OUT=$(cli send "$MSID" "Reply with the single word SWITCHED." 2>&1)
 check "another model takes over on the running agent" '[ "$(q "$MSID" "\"sonnet\" in str([e[\"body\"][\"model\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][-1])")" = True ] && [ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
 cli session set "$MSID" --model "$MODEL" >/dev/null
+OUT=$(cli session set "$MSID" --effort low 2>&1)
+check "an effort the running agent takes is saved" 'echo "$OUT" | grep -q "effort=low" && cli session list timing | grep "^${MSID:0:8}" | grep -q "effort=low"'
+check "and it's the same process" '[ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
 cli send "$MSID" "$(slow_tool 44 midturn midturn.txt)" --no-follow >/dev/null
 wait_for "a long tool is running" "$MSID" "'44' in str(events[-5:])"
 BEFORE=$SECONDS

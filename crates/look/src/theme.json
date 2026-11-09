@@ -32,6 +32,7 @@
     "button.primary.foreground": "#1d1a18",
     "button.primary.hover.background": "#ffffff",
     "button.primary.active.background": "#ddd8d2",
+    "overlay": "#00000099",
     "popover.background": "#221f1d",
     "popover.foreground": "#ebe7e3",
     "sidebar.background": "#1a1715",

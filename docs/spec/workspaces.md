@@ -6,6 +6,22 @@
 
 ![No repositories](screens/first-run.png)
 
+- **New Workspace in the File menu, `Cmd-N` and the `+` beside a repository open a dialog that asks what to work on,** so the task is given as the workspace is made, and the agent starts on it at once. `Cmd-N` opens it for the selected workspace's repository, and a `+` for its own. *Unconfirmed.*
+- **The dialog holds the repository, the first prompt, the model and its effort, and files to go with the prompt.** The repository's name at the top opens a menu of the others. Files are pasted, dropped or chosen with its `+`, as in a chat's composer. *Unconfirmed.*
+- **Create is the dialog's main action, and Return presses it.** Shift-Return starts a new line. Create with nothing typed makes the workspace and sends nothing, so making one is still two keys. *Unconfirmed.*
+- **Create closes the dialog at once, and the sidebar shows the workspace being made,** since it fetches first and can take a while. Once it's made it's selected, and the prompt is its first chat's, sent with the model and effort chosen. If it can't be made, what was typed goes back to the dialog, which opens again to show it, and a prompt the new chat couldn't be sent goes to its composer, so nothing typed is lost. *Unconfirmed.*
+- **The dialog opens while another workspace is being made, and its Create waits until that one is.** A workspace that's made meanwhile is selected behind the dialog, and typing stays in the dialog until it closes. *Unconfirmed.*
+- **Closing the dialog keeps what's in it for the next time it opens,** whether with Escape or a click outside it. The model and effort stay as chosen for the next workspace too. *Unconfirmed.*
+- **The dialog's header also starts a workspace from another branch or a pull request, and links an issue to it.** *Not built.*
+
+**The new-workspace dialog, opened over a workspace.** *Unconfirmed.*
+
+![The new-workspace dialog](screens/new-workspace.png)
+
+**A task described in the dialog, with a screenshot to go with it, for Opus at extra high effort.** *Unconfirmed.*
+
+![A task described in the new-workspace dialog](screens/new-workspace-written.png)
+
 - **Setup runs in the background once the worktree exists.** It copies gitignored files matching `.worktreeinclude`, then `file_include_globs`, then `.env*`, and runs `scripts.setup`. A prompt sent meanwhile is recorded at once and delivered when setup finishes. A failure warns, and never blocks. Restoring a workspace runs it again. The matching is git's own, so patterns mean what they do in `.gitignore`. *Unconfirmed.*
 
 **A new workspace whose setup script failed, with its log open.** *Unconfirmed.*

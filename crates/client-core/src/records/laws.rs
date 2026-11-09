@@ -31,6 +31,7 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         agent: AgentKind::Claude,
         model: None,
         permission_mode: None,
+        effort: None,
         status: SessionStatus::Idle,
         last_seq: 0,
         created_at_ms: 0,

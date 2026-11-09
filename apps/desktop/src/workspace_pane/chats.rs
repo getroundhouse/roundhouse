@@ -1,7 +1,7 @@
 //! Which chats a workspace has, which one is showing, and what each is called.
 
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
-use protocol::model::{AgentKind, Session, SessionId};
+use protocol::model::{AgentKind, Effort, Session, SessionId, SessionOptions};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Draft;
@@ -45,10 +45,13 @@ impl WorkspacePane {
         }
         self.creating_chat = true;
         let id = self.workspace.id.clone();
-        let model = self.session().and_then(|s| s.model.clone());
+        let (model, effort) = (self.session().and_then(|s| s.model.clone()), self.session().and_then(|s| s.effort));
         let mode = inherited_mode(self.session().and_then(|s| s.permission_mode.as_deref()));
+        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat leaves it to the
+        // user's settings.
+        let options = SessionOptions { model, permission_mode: mode, effort: effort.and_then(Effort::known) };
         let creating = self.client.start(move |client| {
-            client.session_create(&id, AgentKind::Claude, model, mode, Some(client_core::new_request_id()))
+            client.session_create(&id, AgentKind::Claude, options, Some(client_core::new_request_id()))
         });
         cx.spawn(async move |this, cx| {
             let created = creating.recv().await;
@@ -95,10 +98,16 @@ impl WorkspacePane {
         self.bring_to_front(Showing::Chat, cx);
     }
 
-    /// Puts the active chat's draft in the composer, once there's the window to do it with.
+    /// Puts the active chat's draft in the composer, once there's the window to do it with, or for a chat with none, a
+    /// prompt waiting for the first chat to show. Files can come for the chat between its being made active and this,
+    /// such as with a prompt handed back, and they go after the draft's.
     fn show_draft(&mut self, cx: &mut Context<Self>) {
         self.with_window(cx, |t, window, cx| {
-            let Draft { text, files } = t.active.as_ref().and_then(|id| t.drafts.remove(id)).unwrap_or_default();
+            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id)).or_else(|| t.waiting.take());
+            let Draft { text, mut files } = draft.unwrap_or_default();
+            for problem in files.append(std::mem::take(&mut t.attached)) {
+                cx.emit(PaneEvent::Error(problem));
+            }
             t.attached = files;
             let end = text.len();
             t.composer.update(cx, |c, cx| {
@@ -119,7 +128,7 @@ impl WorkspacePane {
         let events = cx.subscribe(&view, move |this, _, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             TranscriptEvent::NotSent { message, text, files } => {
-                this.give_back(&chat, text.clone(), files.clone(), cx);
+                this.give_back(Some(&chat), text.clone(), files.clone(), cx);
                 cx.emit(PaneEvent::Error(message.clone()));
             }
             TranscriptEvent::TurnEnded => {

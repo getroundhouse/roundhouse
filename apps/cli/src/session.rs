@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus};
+use protocol::model::{AgentKind, Effort, Seq, Session, SessionId, SessionOptions, SessionStatus};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -14,13 +14,13 @@ use crate::workspace::find_workspace;
 
 pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::Result<()> {
     match command {
-        SessionCmd::New { workspace, model, permission_mode } => {
+        SessionCmd::New { workspace, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
+            let options = SessionOptions { model, permission_mode, effort };
             let session = client.session_create(
                 &workspace.id,
                 AgentKind::Claude,
-                model,
-                permission_mode,
+                options,
                 Some(client_core::new_request_id()),
             )?;
             println!("{}", session.id);
@@ -31,24 +31,19 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
                 let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
                 let unread = if session.unread() { "  unread" } else { "" };
                 println!(
-                    "{}  {:?}{closed}{unread}  {} events  model={} mode={}  {}",
+                    "{}  {:?}{closed}{unread}  {} events  {}  {}",
                     short(session.id.as_str()),
                     session.status,
                     session.last_seq,
-                    session.model.as_deref().unwrap_or("-"),
-                    session.permission_mode.as_deref().unwrap_or("-"),
+                    options(&session),
                     session.title.as_deref().unwrap_or(""),
                 );
             }
         }
-        SessionCmd::Set { session, model, permission_mode } => {
+        SessionCmd::Set { session, model, permission_mode, effort } => {
             let session = find_session(client, &session)?;
-            let session = client.session_configure(&session.id, model, permission_mode)?;
-            println!(
-                "model={} mode={}",
-                session.model.as_deref().unwrap_or("-"),
-                session.permission_mode.as_deref().unwrap_or("-")
-            );
+            let session = client.session_configure(&session.id, SessionOptions { model, permission_mode, effort })?;
+            println!("{}", options(&session));
         }
         SessionCmd::Close { session } => {
             let session = find_session(client, &session)?;
@@ -79,6 +74,21 @@ pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, r
         }
     }
     Ok(())
+}
+
+/// What the session runs with, `-` for what's left to the user's own Claude settings.
+fn options(session: &Session) -> String {
+    format!(
+        "model={} mode={} effort={}",
+        session.model.as_deref().unwrap_or("-"),
+        session.permission_mode.as_deref().unwrap_or("-"),
+        session.effort.map_or("-", effort_name),
+    )
+}
+
+/// A level from a newer hub has no name here.
+fn effort_name(effort: Effort) -> &'static str {
+    effort.as_str().unwrap_or("unknown")
 }
 
 /// A session ID or prefix, or a workspace name for that workspace's newest session.
@@ -161,5 +171,17 @@ pub(crate) fn follow(
             std::io::stdout().flush().ok();
             bail!("lost the hub after event {last_seq}. Resume with `attach --from {}`", last_seq + 1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_level_from_a_newer_hub_is_shown_as_unknown_rather_than_as_none() {
+        let shown = [Effort::Max, Effort::Unknown].map(effort_name);
+
+        assert_eq!(shown, ["max", "unknown"]);
     }
 }

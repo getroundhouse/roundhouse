@@ -2,8 +2,9 @@
 
 use std::path::PathBuf;
 
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
-use protocol::model::{ApprovalId, ClientMessageId, Seq};
+use protocol::model::{ApprovalId, ClientMessageId, Effort, Seq};
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = protocol::BUILD_VERSION, about = "Run coding agents in parallel, each in its own worktree")]
@@ -146,17 +147,22 @@ pub(crate) enum SessionCmd {
         /// out to use the mode from your own Claude settings.
         #[arg(long)]
         permission_mode: Option<String>,
+        /// How hard the agent thinks. Leave it out to use the effort from your own Claude settings.
+        #[arg(long, value_parser = effort())]
+        effort: Option<Effort>,
     },
     List {
         workspace: String,
     },
-    /// Change the model or approval mode, on the running agent too if there is one.
+    /// Change the model, approval mode or effort, on the running agent too if there is one.
     Set {
         session: String,
         #[arg(long)]
         model: Option<String>,
         #[arg(long)]
         permission_mode: Option<String>,
+        #[arg(long, value_parser = effort())]
+        effort: Option<Effort>,
     },
     /// Stop a session's agent and hide it. The history stays.
     Close {
@@ -170,4 +176,10 @@ pub(crate) enum SessionCmd {
         session: String,
         title: String,
     },
+}
+
+/// Takes the name of any level, and lists them all in the help and in the error for another name.
+fn effort() -> impl TypedValueParser<Value = Effort> {
+    PossibleValuesParser::new(Effort::ALL.into_iter().filter_map(Effort::as_str))
+        .try_map(|name| Effort::parse(&name).ok_or("not a level of effort"))
 }

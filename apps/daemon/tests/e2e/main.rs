@@ -11,6 +11,7 @@ mod chats;
 mod client_restart;
 mod connection;
 mod core_loop;
+mod effort;
 mod finding_a_hub;
 mod launch_flags;
 mod misbehaving_worker;

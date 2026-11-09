@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{
+    AgentKind, ApprovalId, Session, SessionId, SessionOptions, SessionStatus, Workspace, WorkspaceId,
+};
 use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
@@ -136,10 +138,15 @@ impl Stack {
     pub(crate) fn workspace_with_mode(&self, client: &Client, mode: Option<&str>) -> (Workspace, Session) {
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-        let session =
-            client.session_create(&workspace.id, AgentKind::Claude, None, mode.map(String::from), None).unwrap();
+        let options = SessionOptions { permission_mode: mode.map(String::from), ..SessionOptions::default() };
+        let session = client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap();
         (workspace, session)
     }
+}
+
+/// Settings that set only the approval mode.
+pub(crate) fn in_mode(mode: &str) -> SessionOptions {
+    SessionOptions { permission_mode: Some(mode.into()), ..SessionOptions::default() }
 }
 
 impl Drop for Stack {

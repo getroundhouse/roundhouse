@@ -19,6 +19,8 @@ mod comments;
 mod error;
 mod events;
 mod made;
+#[cfg(test)]
+mod older;
 mod prompts;
 mod queue;
 mod reading;

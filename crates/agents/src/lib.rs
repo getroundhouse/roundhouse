@@ -13,7 +13,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentKind, ApprovalId, Seq, Title};
+use protocol::model::{AgentKind, ApprovalId, Seq, SessionOptions, Title};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -75,9 +75,10 @@ pub trait AgentProcess: Send + Sync {
     async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError>;
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError>;
     async fn interrupt(&self) -> Result<(), AgentError>;
-    /// Changes the model or approval mode of the running process, and resolves once it has agreed.
-    /// `None` leaves that setting alone. An error with [`AgentProcess::is_gone`] false is a refusal.
-    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> Result<(), AgentError>;
+    /// Changes the model, approval mode or effort of the running process, and resolves once it has agreed. A setting
+    /// that's `None` is left alone. An error with [`AgentProcess::is_gone`] false is a refusal, of the first setting
+    /// refused, and the ones before it may already have been taken.
+    async fn configure(&self, options: &SessionOptions) -> Result<(), AgentError>;
     /// Asks the process to stop, and forces it if it doesn't. Resolves once it has exited.
     async fn stop(&self);
 }

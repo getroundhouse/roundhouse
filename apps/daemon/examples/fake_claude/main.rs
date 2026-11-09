@@ -17,6 +17,8 @@
 //!   recall          Say every prompt this conversation has seen, to prove a resume worked.
 //!   crash:CODE      Exit immediately with CODE.
 //!   env:NAME        Say the value of an environment variable.
+//!   effort          Say the effort it's using, as `get_settings` reports it.
+//!   keep-effort     From now on, answer a change of effort as if it took, and change nothing.
 //!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
 //!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
 //!   attached        Say what the newest prompt carried besides its script: each image's type and size, each
@@ -136,6 +138,26 @@ fn current_model() -> String {
     LIVE_MODEL.lock().clone().unwrap_or_else(|| "fake-model".to_string())
 }
 
+/// The real CLI's levels. It ignores any other, with a warning at launch and silently when it's changed.
+const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+static LIVE_EFFORT: Mutex<Option<String>> = Mutex::new(None);
+/// After `keep-effort`, a change of effort is answered as if it took, and changes nothing.
+static KEEPS_EFFORT: Mutex<bool> = Mutex::new(false);
+
+/// With no `--effort`, the real CLI takes the user's own settings. This stands in for them.
+fn current_effort() -> String {
+    LIVE_EFFORT.lock().clone().unwrap_or_else(|| "high".to_string())
+}
+
+/// `apply_flag_settings` answers success whatever it's given, as the real CLI does, so only `get_settings` says
+/// whether an effort took.
+fn apply_flag_settings(settings: &Value) {
+    let level = settings["effortLevel"].as_str().filter(|level| EFFORTS.contains(level));
+    if let Some(level) = level.filter(|_| !*KEEPS_EFFORT.lock()) {
+        *LIVE_EFFORT.lock() = Some(level.to_string());
+    }
+}
+
 /// Reported the way the real CLI does: in order, and for changes it makes itself.
 fn set_mode(out: &Out, mode: &str) {
     *LIVE_MODE.lock() = Some(mode.to_string());
@@ -176,6 +198,25 @@ fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).map(|i| args[i + 1].clone())
 }
 
+/// Takes the mode, model and effort the flags give, refusing or ignoring what the real CLI would.
+fn start_as_launched(args: &[String]) {
+    // The real CLI's flag doesn't list `default`, although that's what it calls the mode once running.
+    let launch_mode = flag(args, "--permission-mode");
+    if launch_mode.as_deref() == Some("default") {
+        eprintln!("error: option '--permission-mode <mode>' argument 'default' is invalid.");
+        std::process::exit(1);
+    }
+    *LIVE_MODE.lock() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
+    *LIVE_MODEL.lock() = flag(args, "--model");
+    if let Some(level) = flag(args, "--effort") {
+        if EFFORTS.contains(&level.as_str()) {
+            *LIVE_EFFORT.lock() = Some(level);
+        } else {
+            eprintln!("Warning: Unknown --effort value '{level}' — ignoring it and using the default effort.");
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let state = PathBuf::from(std::env::var("FAKE_CLAUDE_STATE").expect("FAKE_CLAUDE_STATE"));
@@ -206,14 +247,7 @@ fn main() {
         id
     };
     std::fs::write(state.join("last-args"), args.join(" ")).unwrap();
-    // The real CLI's flag doesn't list `default`, although that's what it calls the mode once running.
-    let launch_mode = flag(&args, "--permission-mode");
-    if launch_mode.as_deref() == Some("default") {
-        eprintln!("error: option '--permission-mode <mode>' argument 'default' is invalid.");
-        std::process::exit(1);
-    }
-    *LIVE_MODE.lock() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
-    *LIVE_MODEL.lock() = flag(&args, "--model");
+    start_as_launched(&args);
     let (input_tx, input_rx) = mpsc::channel();
     let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
 
@@ -274,6 +308,16 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
                         *LIVE_MODEL.lock() = Some(model.to_string());
                         answer_control(&out, &value["request_id"], Ok(json!({"model":model})));
                     }
+                    continue;
+                }
+                Some("apply_flag_settings") => {
+                    apply_flag_settings(&value["request"]["settings"]);
+                    answer_control(&out, &value["request_id"], Ok(Value::Null));
+                    continue;
+                }
+                Some("get_settings") => {
+                    let applied = json!({"model": current_model(), "effort": current_effort()});
+                    answer_control(&out, &value["request_id"], Ok(json!({"applied": applied})));
                     continue;
                 }
                 other => panic!("unexpected control request {other:?}"),

@@ -261,9 +261,7 @@ async fn handle(
                 None => false,
             }))
         }
-        WorkerRequest::AgentConfigure { session_id, model, permission_mode } => {
-            configure_agent(state, &session_id, model.as_deref(), permission_mode.as_deref()).await
-        }
+        WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
         WorkerRequest::TitleFor { agent, prompt } => title_for(state, agent, &prompt).await,
     }

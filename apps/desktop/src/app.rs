@@ -11,6 +11,7 @@ use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::checkout::Checkout;
+use crate::new_workspace::NewWorkspaceDialog;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
@@ -70,6 +71,10 @@ pub struct AppView {
     pub busy: bool,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
     pub creating_in: Option<RepoId>,
+    /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
+    pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
+    /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
+    focus_after_dialog: Option<WorkspaceId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
     focus: FocusHandle,
@@ -124,6 +129,8 @@ impl AppView {
             sidebar_scroll: VirtualListScrollHandle::new(),
             busy: false,
             creating_in: None,
+            new_workspace: None,
+            focus_after_dialog: None,
             moving_window: false,
             focus,
             settings: None,
@@ -354,9 +361,7 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::catch_up);
         }
-        if let Some(pane) = self.panes.get(&id) {
-            pane.update(cx, |p, cx| p.focus_showing(window, cx));
-        }
+        self.focus_pane(id, window, cx);
         self.read_on_screen(window.is_window_active(), cx);
         cx.notify();
     }

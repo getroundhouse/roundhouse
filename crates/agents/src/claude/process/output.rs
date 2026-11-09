@@ -39,9 +39,9 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
         }
         let item = match normalizer.line(&line) {
             Parsed::Drop => continue,
-            Parsed::ControlReply { request_id, error } => {
+            Parsed::ControlReply { request_id, answer } => {
                 if let Some(waiting) = shared.pending_controls.lock().remove(&request_id) {
-                    let _ = waiting.send(error.map_or(Ok(()), Err));
+                    let _ = waiting.send(answer);
                 }
                 continue;
             }

@@ -1,0 +1,77 @@
+//! Making a workspace from what the new-workspace dialog held, then sending its first chat the prompt. It runs on the
+//! thread `Client::start` gives it, since each call blocks, and each step needs the one before.
+
+use client_core::{Client, ClientError, FileToSend};
+use protocol::model::{AgentKind, Session, SessionOptions, Workspace};
+
+use crate::new_workspace::Request;
+
+/// How far making a workspace got.
+pub(super) struct Made {
+    pub(super) workspace: Option<Workspace>,
+    /// Its first chat.
+    pub(super) session: Option<Session>,
+    /// The prompt, if a step failed before it was sent.
+    pub(super) unsent: Option<Unsent>,
+}
+
+pub(super) struct Unsent {
+    pub(super) text: String,
+    pub(super) files: Vec<FileToSend>,
+    pub(super) failed: Step,
+    pub(super) error: ClientError,
+}
+
+/// A step in making a workspace, each of which can fail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Step {
+    Workspace,
+    Chat,
+    /// Giving the chat the model and effort chosen. The prompt isn't sent without them.
+    Model,
+    Prompt,
+}
+
+impl Step {
+    /// What to say when this step failed.
+    pub(super) fn failed(self, e: &ClientError) -> String {
+        match self {
+            Step::Workspace => format!("couldn't create the workspace: {e}"),
+            Step::Chat => format!("couldn't start the workspace's chat: {e}"),
+            Step::Model => format!("couldn't give the chat its model and effort: {e}"),
+            Step::Prompt => format!("couldn't send that: {e}"),
+        }
+    }
+}
+
+pub(super) fn make(client: &Client, request: Request) -> Made {
+    let mut made = Made { workspace: None, session: None, unsent: None };
+    if let Err((failed, error)) = make_into(client, &request, &mut made) {
+        let Request { prompt, files, .. } = request;
+        made.unsent = Some(Unsent { text: prompt, files, failed, error });
+    }
+    made
+}
+
+/// Each step, recording in `made` what it made, until one fails.
+fn make_into(client: &Client, request: &Request, made: &mut Made) -> Result<(), (Step, ClientError)> {
+    let at = |step| move |error| (step, error);
+    let workspace = client
+        .workspace_create(&request.repo, None, None, Some(client_core::new_request_id()))
+        .map_err(at(Step::Workspace))?;
+    let id = workspace.id.clone();
+    made.workspace = Some(workspace);
+    // The workspace's first chat is found or made by the hub, so two clients opening it at once share one.
+    let session = client.session_ensure(&id, AgentKind::Claude).map_err(at(Step::Chat))?;
+    let chat = session.id.clone();
+    made.session = Some(session);
+    let options = SessionOptions { model: request.model.clone(), permission_mode: None, effort: request.effort };
+    if !options.is_empty() {
+        made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
+    }
+    if request.has_prompt() {
+        let id = Some(client_core::new_message_id());
+        client.send_prompt_carrying(&chat, &request.prompt, id, &request.files).map_err(at(Step::Prompt))?;
+    }
+    Ok(())
+}

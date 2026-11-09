@@ -178,12 +178,14 @@ fn a_list_of_background_tasks_it_cant_read_doesnt_say_theyre_done() {
 fn the_clis_answers_to_control_requests_are_matched_up() {
     let line =
         r#"{"type":"control_response","response":{"subtype":"success","request_id":"r","response":{"mode":"plan"}}}"#;
-    assert_eq!(parse_line(line), Parsed::ControlReply { request_id: "r".into(), error: None });
+    assert_eq!(parse_line(line), Parsed::ControlReply { request_id: "r".into(), answer: Ok(json!({"mode": "plan"})) });
+    let line = r#"{"type":"control_response","response":{"subtype":"success","request_id":"r"}}"#;
+    assert_eq!(parse_line(line), Parsed::ControlReply { request_id: "r".into(), answer: Ok(Value::Null) });
     let line =
         r#"{"type":"control_response","response":{"subtype":"error","request_id":"r","error":"Model 'x' not found"}}"#;
     assert_eq!(
         parse_line(line),
-        Parsed::ControlReply { request_id: "r".into(), error: Some("Model 'x' not found".into()) }
+        Parsed::ControlReply { request_id: "r".into(), answer: Err("Model 'x' not found".into()) }
     );
 }
 

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex, v_virtual_list,
+    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex, v_virtual_list,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -196,8 +196,7 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
                 .icon(IconName::Plus)
                 .tooltip("New workspace")
                 .loading(creating)
-                .disabled(app.busy)
-                .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
+                .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(repo_id.clone(), window, cx))),
         )
         .into_any_element()
 }
@@ -252,6 +251,7 @@ mod tests {
             agent: AgentKind::Claude,
             model: None,
             permission_mode: None,
+            effort: None,
             status,
             last_seq: 0,
             created_at_ms: 0,

@@ -174,25 +174,6 @@ impl Client {
         self.expect_ok(ClientRequest::CommentDelete { id: id.clone() })
     }
 
-    /// Sending the same `client_request_id` again returns the session the first request made.
-    pub fn session_create(
-        &self,
-        workspace_id: &WorkspaceId,
-        agent: AgentKind,
-        model: Option<String>,
-        permission_mode: Option<String>,
-        client_request_id: Option<ClientRequestId>,
-    ) -> Result<Session> {
-        let request = ClientRequest::SessionCreate {
-            workspace_id: workspace_id.clone(),
-            agent,
-            model,
-            permission_mode,
-            client_request_id,
-        };
-        self.expect_session(request)
-    }
-
     pub fn session_list(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>> {
         let reply = self.call(ClientRequest::SessionList { workspace_id: workspace_id.clone() })?;
         let ClientResponse::Sessions { sessions } = reply else {
@@ -310,15 +291,6 @@ impl Client {
 
     pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {
         self.expect_ok(ClientRequest::SessionApprove { id: id.clone(), approval_id: approval_id.clone(), decision })
-    }
-
-    pub fn session_configure(
-        &self,
-        id: &SessionId,
-        model: Option<String>,
-        permission_mode: Option<String>,
-    ) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionConfigure { id: id.clone(), model, permission_mode })
     }
 
     pub fn session_close(&self, id: &SessionId) -> Result<Session> {

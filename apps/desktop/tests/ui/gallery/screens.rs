@@ -7,8 +7,8 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, queue_held, queued,
-    setup_failed, streaming, titled, unread,
+    attachments, chat_tabs, chat_world, conversation, diff, effort_chosen, finishing_update, own_hub, queue_held,
+    queued, setup_failed, streaming, titled, unread,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -75,6 +75,10 @@ pub(crate) enum Target {
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";
+
+/// A task described in the new-workspace dialog.
+const NEW_WORKSPACE_PROMPT: &str = "When the sidebar is narrow, the PR badge runs over the workspace's name. Let the name \
+                                    shrink and end in an ellipsis, and keep the badge at its own width.";
 
 /// A log pasted into the composer, as a file.
 const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
@@ -205,6 +209,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
     },
     Screen {
+        name: "model-picker",
+        spec: "chats.md",
+        world: Some(effort_chosen),
+        steps: &[Step::Select(FOCUS), Step::Click("model-picker")],
+    },
+    Screen {
         name: "chat-tabs",
         spec: "chats.md",
         world: Some(chat_tabs),
@@ -241,6 +251,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(titled),
         // The screen's own workspace is the fourth.
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4"), Step::ClickItem("Rename…")],
+    },
+    Screen {
+        name: "new-workspace",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[Step::Select(FOCUS), Step::Click("new-in-repo-1")],
+    },
+    Screen {
+        name: "new-workspace-written",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("new-in-repo-1"),
+            Step::Click("new-workspace-model"),
+            Step::ClickItem("Opus"),
+            Step::Click("new-workspace-model"),
+            Step::ClickItem("Extra high"),
+            Step::PasteImage(pictures::overlapping_badge),
+            Step::Type(NEW_WORKSPACE_PROMPT),
+        ],
     },
     Screen {
         name: "update-ready",

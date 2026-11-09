@@ -4,7 +4,7 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, QueuedPrompt, Rev, SessionStatus,
+    AttachmentId, CommentId, DiffComment, DiffSide, Effort, GitDiff, PullRequest, QueuedPrompt, Rev, SessionStatus,
     SetupStatus, Title, WorkspaceId, WorkspaceStatus,
 };
 
@@ -53,6 +53,14 @@ pub(super) fn conversation() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     converse(&mut world, &focus);
+    world
+}
+
+/// The conversation, in a chat whose effort was chosen.
+pub(super) fn effort_chosen() -> World {
+    let mut world = conversation();
+    let chat = world.sessions.last_mut().unwrap();
+    chat.effort = Some(Effort::Xhigh);
     world
 }
 

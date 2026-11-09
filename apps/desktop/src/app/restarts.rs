@@ -183,8 +183,11 @@ impl AppView {
         cx.notify();
     }
 
-    /// How many chats and comments have something typed in them that isn't sent.
+    /// How many chats and comments have something typed in them that isn't sent. What's left in the new-workspace
+    /// dialog counts as a chat's, since it's for a workspace's first chat.
     fn unsent(&self, cx: &App) -> (usize, usize) {
-        self.panes.values().map(|pane| pane.read(cx).unsent(cx)).fold((0, 0), |(a, b), (c, d)| (a + c, b + d))
+        let dialog = self.new_workspace.as_ref().is_some_and(|dialog| dialog.read(cx).has_anything(cx));
+        let panes = self.panes.values().map(|pane| pane.read(cx).unsent(cx));
+        panes.fold((usize::from(dialog), 0), |(a, b), (c, d)| (a + c, b + d))
     }
 }

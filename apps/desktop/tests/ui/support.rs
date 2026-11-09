@@ -7,6 +7,7 @@ mod chats;
 mod diff;
 mod hub;
 mod labels;
+mod new_workspace;
 mod stand_in;
 
 use std::path::{Path, PathBuf};
@@ -27,7 +28,7 @@ use tempfile::TempDir;
 use transcript::Transcript;
 
 pub(crate) use diff::Diff;
-pub(crate) use labels::labelled;
+pub(crate) use labels::{labelled, menu_item};
 pub(crate) use stand_in::StandInHub;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -345,17 +346,6 @@ impl<'a> Ui<'a> {
 
     pub(crate) fn first_repo_id(&self) -> RepoId {
         self.view().repos[0].id.clone()
-    }
-
-    /// Clicks New for the first repository, and waits until the new workspace is on screen.
-    pub(crate) fn new_workspace(&mut self) -> WorkspaceId {
-        let before = self.view().workspaces.len();
-        let id = format!("new-in-{}", self.first_repo_id());
-        self.click(SharedString::from(id));
-        self.wait("the new workspace", |ui| {
-            ui.view().workspaces.len() > before && ui.transcript().is_some() && !ui.view().busy
-        });
-        self.view().selected.clone().unwrap()
     }
 
     pub(crate) fn worktree(&self, id: &WorkspaceId) -> PathBuf {

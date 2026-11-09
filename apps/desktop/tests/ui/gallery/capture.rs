@@ -10,6 +10,7 @@ use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
@@ -20,7 +21,7 @@ use image::RgbaImage;
 
 use super::fake_hub;
 use super::screens::{Screen, Step, Target};
-use crate::support::labelled;
+use crate::support::menu_item;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
 const TIMEOUT: Duration = Duration::from_secs(20);
@@ -173,7 +174,7 @@ impl Driver {
 
     fn click_item(&mut self, label: &str) {
         self.frame();
-        let id = self.cx.update_window(self.handle, |_, window, _| labelled(window, label)).unwrap();
+        let id = self.cx.update_window(self.handle, |_, window, _| menu_item(window, label)).unwrap();
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
     }
 
@@ -225,15 +226,16 @@ impl Driver {
         self.frame();
     }
 
-    /// As Cmd-V does, then waits for the composer to have one more file.
+    /// As Cmd-V does, then waits for where it was pasted to have one more file: the new-workspace dialog while it's
+    /// open, or else the composer showing.
     fn paste(&mut self, item: ClipboardItem) {
-        let had = self.attached();
+        let dialog = self.cx.update_window(self.handle, |_, window, cx| window.has_active_dialog(cx)).unwrap();
+        let view = self.view.clone();
+        let had = self.cx.update(|cx| attached(view.read(cx), dialog, cx));
         self.cx.update(|cx| cx.write_to_clipboard(item));
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.press("secondary-v", cx)).unwrap();
-        self.wait("the composer to take the paste", |view, cx| {
-            selected_pane(view).is_some_and(|pane| pane.read(cx).attached_names().len() > had)
-        });
+        self.wait("the paste to be taken", |view, cx| attached(view, dialog, cx) > had);
     }
 
     /// As copying a file in Finder and pasting it does.
@@ -242,11 +244,6 @@ impl Driver {
         std::fs::write(&path, text).unwrap();
         let copied = ExternalPaths(vec![path].into());
         self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
-    }
-
-    fn attached(&mut self) -> usize {
-        let view = self.view.clone();
-        self.cx.update(|cx| selected_pane(view.read(cx)).map_or(0, |pane| pane.read(cx).attached_names().len()))
     }
 
     /// Clicks the line with this label, then moves away from it, so the picture shows it open rather than hovered.
@@ -336,6 +333,14 @@ impl Driver {
         self.cx.update_window(self.handle, |_, window, _| window.remove_window()).unwrap();
         self.cx.run_until_parked();
     }
+}
+
+/// How many files are waiting in the new-workspace dialog, or with `dialog` false, in the composer showing.
+fn attached(view: &AppView, dialog: bool, cx: &App) -> usize {
+    if dialog {
+        return view.new_workspace.as_ref().map_or(0, |dialog| dialog.read(cx).attached_names().len());
+    }
+    selected_pane(view).map_or(0, |pane| pane.read(cx).attached_names().len())
 }
 
 fn selected_pane(view: &AppView) -> Option<Entity<WorkspacePane>> {

@@ -21,6 +21,7 @@ impl Render for AppView {
             window.focus(if self.settings_open() { &self.settings_focus } else { &self.focus }, cx);
         }
         self.keep_menus_current(cx);
+        self.keep_dialog_current(cx);
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
@@ -50,9 +51,9 @@ impl Render for AppView {
                     "Start a workspace",
                     "Pick a repository in the sidebar and press + to give an agent a branch of its own.",
                     Button::new("first-new-workspace").primary().label("New workspace").on_click(cx.listener(
-                        |t, _, _, cx| {
+                        |t, _, window, cx| {
                             if let Some(repo) = t.current_repo() {
-                                t.new_workspace(repo, cx);
+                                t.open_new_workspace(repo, window, cx);
                             }
                         },
                     )),

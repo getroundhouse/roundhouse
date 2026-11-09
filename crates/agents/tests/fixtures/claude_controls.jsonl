@@ -1,0 +1,14 @@
+{"type": "control_request", "request_id": "settings-1", "request": {"subtype": "get_settings"}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "settings-1", "response": {"effective": {}, "sources": [], "applied": {"model": "claude-haiku-5-5", "effort": "high", "advisor": null, "ultracode": false, "ultracodeRequested": false, "ultracodeAvailable": true, "ultrathinkAvailable": false}}}}
+{"type": "control_request", "request_id": "effort-1", "request": {"subtype": "apply_flag_settings", "settings": {"effortLevel": "low"}}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "effort-1"}}
+{"type": "control_request", "request_id": "settings-2", "request": {"subtype": "get_settings"}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "settings-2", "response": {"effective": {}, "sources": [], "applied": {"model": "claude-haiku-5-5", "effort": "low", "advisor": null, "ultracode": false, "ultracodeRequested": false, "ultracodeAvailable": true, "ultrathinkAvailable": false}}}}
+{"type": "control_request", "request_id": "effort-2", "request": {"subtype": "apply_flag_settings", "settings": {"effortLevel": "ultra"}}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "effort-2"}}
+{"type": "control_request", "request_id": "settings-3", "request": {"subtype": "get_settings"}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "settings-3", "response": {"effective": {}, "sources": [], "applied": {"model": "claude-haiku-5-5", "effort": "low", "advisor": null, "ultracode": false, "ultracodeRequested": false, "ultracodeAvailable": true, "ultrathinkAvailable": false}}}}
+{"type": "control_request", "request_id": "model-1", "request": {"subtype": "set_model", "model": "sonnet"}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "model-1", "response": {"model": "claude-sonnet-5-5"}}}
+{"type": "control_request", "request_id": "settings-4", "request": {"subtype": "get_settings"}}
+{"type": "control_response", "response": {"subtype": "success", "request_id": "settings-4", "response": {"effective": {}, "sources": [], "applied": {"model": "claude-sonnet-5-5", "effort": "low", "advisor": null, "ultracode": false, "ultracodeRequested": false, "ultracodeAvailable": true, "ultrathinkAvailable": false}}}}

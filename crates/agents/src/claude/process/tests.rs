@@ -56,8 +56,11 @@ fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
         cwd: "/tmp".into(),
         agent_session_id: "abc".into(),
         resume: false,
-        model: model.map(String::from),
-        permission_mode: mode.map(String::from),
+        options: SessionOptions {
+            model: model.map(String::from),
+            permission_mode: mode.map(String::from),
+            effort: None,
+        },
         env: vec![],
     }
 }
@@ -95,11 +98,25 @@ fn full_access_is_available_but_never_on_by_itself() {
 #[test]
 fn the_default_model_has_no_flag() {
     let mut default = spec(None, None);
-    default.model = Some("default".to_string());
+    default.options.model = Some("default".to_string());
     assert_eq!(flag_value(&build_args(&default, false), "--model"), None);
     let mut chosen = spec(None, None);
-    chosen.model = Some("opus".to_string());
+    chosen.options.model = Some("opus".to_string());
     assert_eq!(flag_value(&build_args(&chosen, false), "--model").as_deref(), Some("opus"));
+}
+
+#[test]
+fn an_effort_is_launched_with_and_none_leaves_it_to_the_users_settings() {
+    assert_eq!(flag_value(&build_args(&spec(None, None), false), "--effort"), None);
+    for effort in protocol::model::Effort::ALL {
+        let mut chosen = spec(None, None);
+        chosen.options.effort = Some(effort);
+        let level = crate::claude::effort::level(effort);
+        assert_eq!(flag_value(&build_args(&chosen, true), "--effort").as_deref(), level);
+    }
+    let mut unknown = spec(None, None);
+    unknown.options.effort = Some(protocol::model::Effort::Unknown);
+    assert_eq!(flag_value(&build_args(&unknown, false), "--effort"), None, "the CLI couldn't take it");
 }
 
 #[test]

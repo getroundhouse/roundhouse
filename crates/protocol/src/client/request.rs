@@ -10,7 +10,7 @@ use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, RepoId, Seq, SessionId,
-    WorkspaceId,
+    SessionOptions, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -114,8 +114,9 @@ pub enum ClientRequest {
     SessionCreate {
         workspace_id: WorkspaceId,
         agent: AgentKind,
-        model: Option<String>,
-        permission_mode: Option<String>,
+        /// What it starts with. A setting left out is left to the user's own agent settings.
+        #[serde(flatten)]
+        options: SessionOptions,
         #[serde(default)]
         client_request_id: Option<ClientRequestId>,
     },
@@ -221,13 +222,14 @@ pub enum ClientRequest {
     SessionCancel {
         id: SessionId,
     },
-    /// Changes the model or approval mode, on the running agent too if there is one. `None` leaves
-    /// that setting as it is. Fails, changing nothing, if the agent refuses. Sent again, it sets the same
-    /// again.
+    /// Changes the model, approval mode or effort, on the running agent too if there is one. A setting left out is left
+    /// as it is. Fails if the agent refuses, saving nothing, though a running agent may already have taken the
+    /// settings it was given before the one it refused. Sent again, it sets the same again. A hub from before effort
+    /// ignores it, and answers with a session that has none.
     SessionConfigure {
         id: SessionId,
-        model: Option<String>,
-        permission_mode: Option<String>,
+        #[serde(flatten)]
+        options: SessionOptions,
     },
     /// Stops its agent and hides it from the tabs. The history stays, and it can be reopened. Closing
     /// it again leaves it closed.

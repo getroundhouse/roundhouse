@@ -125,7 +125,7 @@ fn the_cli_answers_changes_and_says_why_it_refuses() {
     let replies: Vec<(String, Option<String>)> = parsed()
         .into_iter()
         .filter_map(|p| match p {
-            Parsed::ControlReply { request_id, error } => Some((request_id, error)),
+            Parsed::ControlReply { request_id, answer } => Some((request_id, answer.err())),
             _ => None,
         })
         .collect();
@@ -290,4 +290,75 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
     }
     assert!(compared.0 >= 2 && compared.1 >= 2 && compared.2 >= 3, "text, thinking and tool blocks: {compared:?}");
     assert!(tail.is_empty(), "nothing should stay open at the end: {tail:?}");
+}
+
+/// Control requests and the CLI's replies, from `../fixtures/claude_controls.jsonl`, by the same script with
+/// `--controls`. Its process was launched with the adapter's flags, which include `--effort high`.
+const CONTROLS: &str = include_str!("../fixtures/claude_controls.jsonl");
+
+/// Each request sent, with what the adapter makes of the CLI's reply to it.
+fn exchanges() -> Vec<(Value, Result<Value, String>)> {
+    let mut normalizer = Normalizer::default();
+    let lines: Vec<&str> = CONTROLS.lines().collect();
+    lines
+        .chunks(2)
+        .map(|pair| {
+            let sent: Value = serde_json::from_str(pair[0]).unwrap();
+            let Parsed::ControlReply { request_id, answer } = normalizer.line(pair[1]) else {
+                panic!("not a reply: {}", pair[1]);
+            };
+            assert_eq!(sent["request_id"], request_id.as_str());
+            (sent["request"].clone(), answer)
+        })
+        .collect()
+}
+
+/// The CLI's answer to `request`, and to the `get_settings` sent next.
+fn and_then_settings(request: &Value) -> (Result<Value, String>, Value) {
+    let exchanges = exchanges();
+    let at = exchanges.iter().position(|(sent, _)| sent == request).unwrap();
+    let (asked, settings) = &exchanges[at + 1];
+    assert_eq!(asked["subtype"], "get_settings");
+    (exchanges[at].1.clone(), settings.clone().unwrap())
+}
+
+#[test]
+fn the_effort_launched_with_is_the_one_reported_in_use() {
+    let (asked, settings) = exchanges().remove(0);
+
+    assert_eq!(asked["subtype"], "get_settings");
+    assert_eq!(agents::claude::applied_effort(&settings.unwrap()), Some("high"));
+}
+
+#[test]
+fn an_effort_the_cli_takes_is_the_one_it_then_reports_in_use() {
+    let request = serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "low"}});
+
+    let (answer, settings) = and_then_settings(&request);
+
+    assert!(answer.is_ok(), "{answer:?}");
+    assert_eq!(agents::claude::applied_effort(&settings), Some("low"));
+}
+
+/// Why the adapter reads the level back: success alone doesn't say the level took.
+#[test]
+fn an_effort_the_cli_doesnt_know_is_answered_success_and_changes_nothing() {
+    let request = serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "ultra"}});
+
+    let (answer, settings) = and_then_settings(&request);
+
+    assert!(answer.is_ok(), "{answer:?}");
+    assert_eq!(agents::claude::applied_effort(&settings), Some("low"));
+}
+
+/// The hub keeps a session's effort when only its model changes, which is right only while the CLI does too.
+#[test]
+fn a_new_model_keeps_the_effort_in_use() {
+    let request = serde_json::json!({"subtype": "set_model", "model": "sonnet"});
+
+    let (answer, settings) = and_then_settings(&request);
+
+    assert!(answer.unwrap()["model"].as_str().is_some_and(|model| model.contains("sonnet")));
+    assert!(settings["applied"]["model"].as_str().is_some_and(|model| model.contains("sonnet")), "{settings}");
+    assert_eq!(agents::claude::applied_effort(&settings), Some("low"));
 }

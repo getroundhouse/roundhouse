@@ -6,8 +6,8 @@ use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus,
-    TitleSource, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId,
+    SessionOptions, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
@@ -21,8 +21,7 @@ impl Hub {
         self: &Arc<Self>,
         workspace_id: WorkspaceId,
         agent: AgentKind,
-        model: Option<String>,
-        permission_mode: Option<String>,
+        options: SessionOptions,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Session, ApiError> {
         if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
@@ -31,12 +30,14 @@ impl Hub {
         if agent == AgentKind::Unknown {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that kind of agent"));
         }
+        known_effort(&options)?;
         let workspace = self.workspace(&workspace_id).await?;
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
         }
         let id = new_id();
         let now = now_ms();
+        let SessionOptions { model, permission_mode, effort } = options;
         let stored = StoredSession {
             session: Session {
                 id: id.clone().into(),
@@ -44,6 +45,7 @@ impl Hub {
                 agent,
                 model,
                 permission_mode,
+                effort,
                 status: SessionStatus::Idle,
                 last_seq: 0,
                 created_at_ms: now,
@@ -81,7 +83,7 @@ impl Hub {
         let sessions = self.session_list(workspace_id.clone()).await?;
         match sessions.into_iter().rfind(|s| s.closed_at_ms.is_none()) {
             Some(open) => Ok(open),
-            None => self.session_create(workspace_id, agent, None, None, None).await,
+            None => self.session_create(workspace_id, agent, SessionOptions::default(), None).await,
         }
     }
 
@@ -201,12 +203,12 @@ impl Hub {
     pub(crate) async fn session_configure(
         self: &Arc<Self>,
         id: SessionId,
-        model: Option<String>,
-        permission_mode: Option<String>,
+        options: SessionOptions,
     ) -> Result<Session, ApiError> {
+        known_effort(&options)?;
         // Not through the session's queue, because a prompt waiting on setup holds that. The choice
         // has to apply when that prompt finally starts the agent.
-        self.live_session(&id).await?.configure(model, permission_mode).await
+        self.live_session(&id).await?.configure(options).await
     }
 
     pub(crate) async fn session_close(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
@@ -246,5 +248,15 @@ impl Hub {
         let (reply, done) = oneshot::channel();
         session.command(Command::Cancel { reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?
+    }
+}
+
+/// A level from a newer client can't be passed on to the agent, which wouldn't know it either.
+fn known_effort(options: &SessionOptions) -> Result<(), ApiError> {
+    match options.effort {
+        Some(effort) if effort.known().is_none() => {
+            Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that effort"))
+        }
+        _ => Ok(()),
     }
 }

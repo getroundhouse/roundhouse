@@ -40,6 +40,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
 | Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
 | Approval mode | How much an agent may do without asking, such as "Ask first", "Plan" or "Full access" | `permission_mode` |
+| Effort | How hard an agent thinks before it answers, from Low to Max. `None` leaves it to the user's own Claude settings | `Effort`, `Session.effort`, `model_picker` |
 | Setup | What happens once a worktree exists: copying local files and running the repository's setup script | `SetupStatus`, `worker::setup` |
 | Diff comment | A comment on one line of a workspace's diff, which can be sent to the agent | `DiffComment` |
 

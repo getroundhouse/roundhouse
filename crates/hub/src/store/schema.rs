@@ -262,6 +262,20 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // How hard each session's agent thinks, as the CLI names the level. A session from before this has none, which
+    // leaves it to the user's own settings, as it always did. A Session record shows it, so the trigger names it.
+    r"
+    ALTER TABLE sessions ADD COLUMN effort TEXT;
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks, title_source, queued, queue_held, effort
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
@@ -282,6 +296,10 @@ pub(crate) const BEFORE_RUNS: usize = 4;
 /// How many migrations there were before workspaces had titles.
 #[cfg(test)]
 pub(crate) const BEFORE_TITLES: usize = 9;
+
+/// How many migrations there were before sessions had an effort.
+#[cfg(test)]
+pub(crate) const BEFORE_EFFORT: usize = 12;
 
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.

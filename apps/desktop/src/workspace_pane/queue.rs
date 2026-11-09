@@ -66,7 +66,7 @@ impl WorkspacePane {
                 }
                 Err(e) => {
                     if from_composer {
-                        t.give_back(&session_id, text, Vec::new(), cx);
+                        t.give_back(Some(&session_id), text, Vec::new(), cx);
                     }
                     cx.emit(PaneEvent::Error(format!("couldn't queue that: {e}")));
                 }
