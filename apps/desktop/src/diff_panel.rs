@@ -92,10 +92,10 @@ impl DiffPanel {
         this
     }
 
-    /// Carries on on a new connection to the hub, and loads the diff again on it.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
+    /// Carries on on a new connection to the hub, keeping a comment that's being written. The diff is loaded
+    /// again on it with the next [`Self::refresh`].
+    pub fn reconnect(&mut self, client: &Client) {
         self.client = client.clone();
-        self.refresh(cx);
     }
 
     /// Loads the diff again. Keeps showing the old one until the new one is ready.

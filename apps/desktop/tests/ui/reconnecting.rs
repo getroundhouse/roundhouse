@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 use client_core::Client;
 use desktop::app::Connection;
-use gpui_kit::{ElementId, SharedString, TestAppContext};
+use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
+use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, TIMEOUT, Ui};
@@ -42,6 +43,103 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
     ui.wait("the history", |ui| ui.assistant_text().contains("before"));
     ui.press("enter");
     ui.wait_idle_with("the next turn", |text| text.contains("after"));
+}
+
+/// What's typed in a composer, or in a comment on the diff, is only in the app until it's sent.
+#[gpui_kit::test]
+fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let id = ui.new_workspace();
+    let first = ui.active_chat();
+    let second = ui.new_chat();
+    ui.input("say:from the second chat");
+    ui.show_chat(&first);
+    ui.frame();
+    ui.input("say:from the first chat");
+    std::fs::write(ui.worktree(&id).join("a.txt"), "one\ntwo\n").unwrap();
+    start_comment(&mut ui, "a.txt", 2);
+    ui.input("Why");
+
+    let pid = stack.client().hub_status().unwrap().pid;
+    client_core::stop_hub(&stack.hub.paths.socket).unwrap();
+    ui.wait("a new hub", |ui| {
+        matches!(ui.view().connection, Connection::Ready(_))
+            && Client::connect(&stack.hub.paths.socket, "test")
+                .is_ok_and(|c| c.hub_status().is_ok_and(|s| s.pid != pid))
+            && ui.transcript().is_some()
+    });
+
+    // The comment still has the keys, so the rest of it doesn't go to the agent, and saves in the new hub.
+    ui.input(" two?");
+    ui.press("enter");
+    ui.wait("the comment to be saved", |_| {
+        stack.client().comment_list(&id).unwrap().iter().map(|c| c.text.clone()).collect::<Vec<_>>() == ["Why two?"]
+    });
+    assert_eq!(ui.composer_text(), "say:from the first chat");
+
+    // Each chat keeps its draft, and sends it on the new hub.
+    ui.show_chat(&second);
+    ui.frame();
+    assert_eq!(ui.composer_text(), "say:from the second chat");
+    ui.press("enter");
+    ui.wait_idle_with("the second chat's reply", |text| text.contains("from the second chat"));
+    ui.show_chat(&first);
+    ui.frame();
+    ui.press("enter");
+    ui.wait_idle_with("the first chat's reply", |text| text.contains("from the first chat"));
+}
+
+/// Opens the diff, and starts a comment on a line on its new side, as that line's add button would.
+fn start_comment(ui: &mut Ui<'_>, path: &str, line: usize) {
+    ui.click("toggle-diff");
+    let pane = ui.pane().unwrap();
+    ui.wait("the diff panel", |ui| ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
+    let diff = ui.cx.read_entity(&pane, |p, _| p.diff.clone()).unwrap();
+    ui.wait("the diff to load", |ui| ui.cx.read_entity(&diff, |d, _| d.state.is_some()));
+    let position = DiffLinePosition::new(path, DiffSide::Modified, line);
+    ui.cx
+        .update_window(ui.handle, |_, window, cx| diff.update(cx, |d, cx| d.start_comment(position, window, cx)))
+        .unwrap();
+    ui.frame();
+}
+
+#[gpui_kit::test]
+fn a_workspace_archived_while_the_app_was_away_takes_its_pane_and_the_rest_catch_up(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    // So the app can't start a hub of its own, and waits while this archives a workspace.
+    let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/roundhoused".into());
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let kept = ui.new_workspace();
+    ui.input("say:still here");
+    ui.click("toggle-diff");
+    let pane = ui.pane().unwrap();
+    let has_changes = |ui: &Ui| ui.cx.read_entity(&pane, |p, cx| p.diff.as_ref().map(|d| !d.read(cx).empty));
+    ui.wait("the diff, with nothing in it yet", |ui| has_changes(ui) == Some(false));
+    let archived = ui.new_workspace();
+    client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    // A kept pane does nothing until there's a connection for it, even when a shortcut reaches the window.
+    ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
+    ui.frame();
+    ui.press("cmd-shift-d");
+    assert!(!ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_open));
+    let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    client.workspace_archive(&archived, false).unwrap();
+    std::fs::write(ui.worktree(&kept).join("a.txt"), "one\nchanged while away\n").unwrap();
+
+    ui.click("try-hub-again");
+
+    ui.wait("the connection", |ui| matches!(ui.view().connection, Connection::Ready(_)) && ui.pane().is_some());
+    assert!(!ui.view().panes.contains_key(&archived));
+    assert_eq!(ui.view().selected, Some(kept));
+    assert_eq!(ui.composer_text(), "say:still here");
+    // It wasn't on screen when the app reconnected, and catches up now that it is.
+    ui.wait("its diff to catch up", |ui| has_changes(ui) == Some(true));
 }
 
 #[gpui_kit::test]

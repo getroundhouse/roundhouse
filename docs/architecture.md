@@ -133,7 +133,7 @@ Each piece of state has one owner, and every other copy is a cache.
 |---|---|---|
 | Session history | Agent events, prompts, approvals | The workspace's hub |
 | Workspace records | Branch, status, notes, diff comments | The workspace's hub |
-| Per-user workspace state | Unread, pinned, drafts | The workspace's hub, stored per user |
+| Per-user workspace state | Unread, pinned, drafts | The workspace's hub, stored per user. *Not built:* the hub stores none of it, and drafts stay in the app's memory, so they're lost when it quits |
 | Live processes | Running agents, terminals, run scripts | The worker |
 | Filesystem | Uncommitted files, dependencies, agent session files | The worker's machine, kept across sleep by the provider |
 | Code, PRs, CI | Git and GitHub data | Git and GitHub. The worker and hub only cache |

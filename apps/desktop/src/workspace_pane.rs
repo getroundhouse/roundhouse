@@ -62,6 +62,8 @@ pub struct WorkspacePane {
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
     setup_log_refresh: Option<Task<()>>,
+    /// Set on a new connection, until [`Self::catch_up`] reads again what it may have changed.
+    behind: bool,
     window: AnyWindowHandle,
     subscriptions: Vec<Subscription>,
 }
@@ -114,6 +116,7 @@ impl WorkspacePane {
             pull_request: None,
             setup_log: None,
             setup_log_refresh: None,
+            behind: false,
             window: window.window_handle(),
             subscriptions: vec![on_enter],
         };
@@ -154,16 +157,28 @@ impl WorkspacePane {
         .detach();
     }
 
-    /// Carries on on a new connection to the hub, keeping everything shown and typed.
+    /// Carries on on a new connection to the hub, keeping everything shown and typed. What the hub reads from
+    /// the worktree waits for [`Self::catch_up`], so a reconnect doesn't start a worker for every pane at once.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         for (transcript, _) in self.transcripts.values() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
         if let Some(diff) = &self.diff {
-            diff.update(cx, |d, cx| d.reconnect(client, cx));
+            diff.update(cx, |d, _| d.reconnect(client));
+        }
+        self.behind = true;
+    }
+
+    /// For when the pane is shown. After a reconnect, reads the pull request again, and the diff if it's open.
+    pub fn catch_up(&mut self, cx: &mut Context<Self>) {
+        if !std::mem::take(&mut self.behind) {
+            return;
         }
         self.refresh_pull_request(cx);
+        if let Some(diff) = self.diff.as_ref().filter(|_| self.diff_open) {
+            diff.update(cx, DiffPanel::refresh);
+        }
     }
 
     /// What client-core holds for this workspace now. Only what changed is passed on.

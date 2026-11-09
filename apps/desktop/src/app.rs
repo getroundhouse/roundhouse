@@ -233,6 +233,10 @@ impl AppView {
         if !still_there || !has_pane {
             self.show_selected(cx);
         }
+        // After a reconnect, the pane on screen catches up once the records have, and the rest when they're shown.
+        if let Some(pane) = self.selected_pane() {
+            pane.update(cx, WorkspacePane::catch_up);
+        }
         cx.notify();
     }
 
@@ -289,12 +293,19 @@ impl AppView {
             self.panes.insert(id.clone(), pane);
         }
         if let Some(pane) = self.panes.get(&id) {
-            pane.update(cx, |p, cx| p.focus_composer(window, cx));
+            pane.update(cx, |p, cx| {
+                p.catch_up(cx);
+                p.focus_composer(window, cx);
+            });
         }
         cx.notify();
     }
 
+    /// None without a connection, when panes are kept but neither shown nor used.
     fn selected_pane(&self) -> Option<Entity<WorkspacePane>> {
+        if !matches!(self.connection, Connection::Ready(_)) {
+            return None;
+        }
         self.selected.as_ref().and_then(|id| self.panes.get(id).cloned())
     }
 
