@@ -4,7 +4,7 @@ Where each kind of information goes. There are two places: markdown in this repo
 
 **The test:** would it still be true if nobody changed the code or the design? Then it goes in a doc. If it can be finished, closed or go out of date on its own, it goes on GitHub.
 
-Two things belong in neither place. Why a piece of code is the way it is goes in a comment beside it, and what a change did and how it was checked goes in its PR.
+Two things belong in neither place. Why a piece of code is the way it is goes in a comment beside it, and what a change did and how it was checked goes in its PR, written as `docs/pull-requests.md` says.
 
 ## Docs
 
@@ -13,7 +13,7 @@ Two things belong in neither place. Why a piece of code is the way it is goes in
 | Product | What this is, who it's for, and why it exists |
 | Spec | What the product does for the person using it, how fast, how it looks, and why |
 | Architecture | How the system fits together, and why it's built that way |
-| Standards | How code, tests and docs are written |
+| Standards | How code, tests, docs and pull requests are written |
 | Reference | Facts to look up: what words mean, how an outside system behaves, the bars to hit, what a person checks by hand |
 | Instructions | How to build, test, run and install |
 
@@ -29,6 +29,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `docs/rust.md` | Standards | Owner | How Rust is written, whatever the crate. A rule about one part of the system goes in that part's doc |
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
 | `docs/testing.md` | Standards | Owner | Where each kind of test goes |
+| `docs/pull-requests.md` | Standards | Owner | How a pull request and its commit are written |
 | `docs/manual-checks.md` | Reference | Owner | What a person has to judge by hand |
 | `docs/terms.md` | Reference | Agents | What the project's words mean, and which to write |
 | `docs/claude-cli.md` | Reference | Agents | How the Claude CLI behaves, and how the worker drives it |
