@@ -124,7 +124,7 @@ jobs:
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
-      FEED_PUBLIC_KEY: ${{ vars.FEED_PUBLIC_KEY }}
+      CONFIGURED_FEED_KEY: ${{ vars.FEED_PUBLIC_KEY }}
       NOTARY_PROFILE: roundhouse
       # How many releases the feed lists, and the bucket keeps packages for.
       KEEP: "10"

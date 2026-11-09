@@ -9,7 +9,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 - **You can restart an older hub yourself rather than wait.** While the hub is older than the app and wasn't started by hand, the app offers to restart it, and says how many agents and setup scripts that would stop. Each stopped agent picks up its conversation at its next prompt. *Not built.*
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
-- **A failed check or download says so under the build in the sidebar,** with the reason on hover, until a later check works. *Unconfirmed.*
+- **A problem updating says so under the build in the sidebar,** with the detail on hover, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
 
 ## When there's no hub
 

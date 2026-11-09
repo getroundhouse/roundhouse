@@ -1,13 +1,11 @@
-use std::io::{Read as _, Write as _};
-use std::net::TcpListener;
-
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 
 use super::*;
+use crate::updates::serving::{Reply, Server, serve};
 
 /// The shape `vpk` writes, with one release.
-const FEED: &str = r#"{"Assets":[{"PackageId":"Roundhouse","Version":"2026.1109.903","Type":"Full","FileName":"Roundhouse-2026.1109.903-osx-full.nupkg","SHA1":"AD4CF1813CB4589407AEEB7DA69063A25FF84566","SHA256":"0F568A995C5F5474207B3A3225F7B4059D2A268C35ED32310F1083E59CA286B7","Size":18889777}]}"#;
+const FEED: &str = r#"{"Assets":[{"PackageId":"Roundhouse","Version":"0.1.50","Type":"Full","FileName":"Roundhouse-0.1.50-osx-full.nupkg","SHA1":"AD4CF1813CB4589407AEEB7DA69063A25FF84566","SHA256":"0F568A995C5F5474207B3A3225F7B4059D2A268C35ED32310F1083E59CA286B7","Size":18889777}]}"#;
 
 fn key_pair() -> Ed25519KeyPair {
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
@@ -24,6 +22,28 @@ fn signed(feed: &str) -> (Vec<u8>, Vec<u8>, FeedKey) {
     (feed.as_bytes().to_vec(), pair.sign(feed.as_bytes()).as_ref().to_vec(), public(&pair))
 }
 
+/// Serves a feed and its signature, each as a list of replies in turn.
+fn serve_feed(feed: Vec<Reply>, signature: Vec<Reply>) -> Server {
+    serve(vec![("releases.osx.json".to_string(), feed), ("releases.osx.json.sig".to_string(), signature)])
+}
+
+/// Reads the feed through Velopack's interface, without waiting to read it again.
+fn read_feed(server: &Server, key: FeedKey) -> Result<VelopackAssetFeed, velopack::Error> {
+    SignedFeed::waiting(&server.base, key, Duration::ZERO).get_release_feed("osx", &Manifest::default(), "")
+}
+
+/// The feed's own error, which Velopack passes on inside its `Io` variant.
+fn feed_error<T: std::fmt::Debug>(result: Result<T, velopack::Error>) -> FeedError {
+    match result {
+        Err(velopack::Error::Io(io)) => *io.into_inner().unwrap().downcast::<FeedError>().unwrap(),
+        other => panic!("not the feed's error: {other:?}"),
+    }
+}
+
+fn asked_for_the_feed(server: &Server) -> usize {
+    server.asked().iter().filter(|path| *path == "releases.osx.json").count()
+}
+
 #[test]
 fn a_feed_signed_with_the_key_is_read() {
     let (feed, signature, key) = signed(FEED);
@@ -31,7 +51,7 @@ fn a_feed_signed_with_the_key_is_read() {
     let releases = verified(&feed, &signature, &key).unwrap();
 
     assert_eq!(releases.Assets.len(), 1);
-    assert_eq!(releases.Assets[0].Version, "2026.1109.903");
+    assert_eq!(releases.Assets[0].Version, "0.1.50");
 }
 
 #[test]
@@ -76,37 +96,103 @@ fn a_key_decodes_from_base64() {
     assert_eq!(FeedKey::from_base64("//////////////////////////////////////////8=").0, [255; 32]);
 }
 
-/// Serves `files` from a port on this Mac, and a 404 for anything else, until the test process ends.
-fn serve(files: Vec<(&'static str, Vec<u8>)>) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let mut stream = stream.unwrap();
-            let mut request = [0; 4096];
-            let read = stream.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..read]).to_string();
-            let path = request.split_whitespace().nth(1).unwrap_or_default().trim_start_matches('/');
-            let (status, body) = match files.iter().find(|(name, _)| *name == path) {
-                Some((_, body)) => ("200 OK", body.clone()),
-                None => ("404 Not Found", Vec::new()),
-            };
-            write!(stream, "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
-            stream.write_all(&body).unwrap();
-        }
-    });
-    base
+#[test]
+fn the_source_reads_a_feed_signed_with_the_key() {
+    let (feed, signature, key) = signed(FEED);
+    let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
+
+    assert_eq!(read_feed(&server, key).unwrap().Assets.len(), 1);
+    assert_eq!(server.asked(), ["releases.osx.json", "releases.osx.json.sig"]);
 }
 
 #[test]
-fn the_source_reads_a_signed_feed_and_refuses_one_without_its_signature() {
+fn the_source_refuses_a_feed_signed_with_another_key_after_reading_it_again() {
+    let (feed, signature, _) = signed(FEED);
+    let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
+
+    assert!(matches!(feed_error(read_feed(&server, public(&key_pair()))), FeedError::Unsigned));
+    assert_eq!(asked_for_the_feed(&server), 2);
+}
+
+#[test]
+fn the_source_refuses_a_feed_changed_after_it_was_signed() {
     let (feed, signature, key) = signed(FEED);
-    let both = serve(vec![("releases.osx.json", feed.clone()), ("releases.osx.json.sig", signature)]);
-    let feed_only = serve(vec![("releases.osx.json", feed)]);
+    let changed = String::from_utf8(feed).unwrap().replace("0.1.50", "9.1.50");
+    let server = serve_feed(vec![Reply::file(changed)], vec![Reply::file(signature)]);
 
-    let read = SignedFeed::new(&format!("{both}/"), key).get_release_feed("osx", &Manifest::default(), "");
-    let refused = SignedFeed::new(&feed_only, key).get_release_feed("osx", &Manifest::default(), "");
+    assert!(matches!(feed_error(read_feed(&server, key)), FeedError::Unsigned));
+}
 
-    assert_eq!(read.unwrap().Assets.len(), 1);
-    assert!(matches!(refused, Err(velopack::Error::Other(_))));
+/// The release workflow uploads the feed, then its signature, so a check can come between them.
+#[test]
+fn the_source_reads_again_a_feed_whose_signature_was_still_on_its_way() {
+    let pair = key_pair();
+    let new_feed = FEED.replace("0.1.50", "0.1.51");
+    let old_signature = pair.sign(FEED.as_bytes()).as_ref().to_vec();
+    let new_signature = pair.sign(new_feed.as_bytes()).as_ref().to_vec();
+    let server = serve_feed(vec![Reply::file(new_feed)], vec![Reply::file(old_signature), Reply::file(new_signature)]);
+
+    assert_eq!(read_feed(&server, public(&pair)).unwrap().Assets[0].Version, "0.1.51");
+    assert_eq!(asked_for_the_feed(&server), 2);
+}
+
+#[test]
+fn a_signature_is_checked_on_the_feed_as_decompressed() {
+    let (feed, signature, key) = signed(FEED);
+    let server = serve_feed(vec![Reply::gzipped(&feed)], vec![Reply::file(signature)]);
+
+    assert_eq!(read_feed(&server, key).unwrap().Assets.len(), 1);
+}
+
+#[test]
+fn a_feed_longer_than_the_limit_once_decompressed_is_refused() {
+    let (_, signature, key) = signed(FEED);
+    let long = vec![b' '; usize::try_from(FEED_LIMIT_BYTES).unwrap() + 1];
+    let server = serve_feed(vec![Reply::gzipped(&long)], vec![Reply::file(signature)]);
+
+    assert!(matches!(feed_error(read_feed(&server, key)), FeedError::TooLong { .. }));
+}
+
+#[test]
+fn a_redirect_is_not_followed() {
+    let (feed, signature, key) = signed(FEED);
+    let elsewhere = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
+    let server = serve_feed(vec![Reply::redirect(&format!("{}/releases.osx.json", elsewhere.base))], vec![]);
+
+    assert!(matches!(feed_error(read_feed(&server, key)), FeedError::Status { status: 302, .. }));
+    assert!(elsewhere.asked().is_empty());
+}
+
+/// A package the feed says is `size` bytes, served as `reply`, downloaded to a file of its own.
+fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::TempDir) {
+    let name = "Roundhouse-0.1.50-osx-full.nupkg";
+    let server = serve(vec![(name.to_string(), vec![reply])]);
+    let asset = VelopackAsset { FileName: name.to_string(), Size: size, ..VelopackAsset::default() };
+    let dir = tempfile::tempdir().unwrap();
+    let source = SignedFeed::new(&server.base, public(&key_pair()));
+    (source.download_release_entry(&asset, &dir.path().join("package.partial"), None), dir)
+}
+
+#[test]
+fn a_package_downloads_as_long_as_the_feed_says() {
+    let (downloaded, dir) = download(5, Reply::gzipped(b"12345"));
+
+    downloaded.unwrap();
+    assert_eq!(std::fs::read(dir.path().join("package.partial")).unwrap(), b"12345");
+}
+
+#[test]
+fn a_package_longer_than_the_feed_says_once_decompressed_is_refused_and_not_kept() {
+    let (downloaded, dir) = download(5, Reply::gzipped(&vec![b'0'; 10 * 1024 * 1024]));
+
+    assert!(matches!(feed_error(downloaded), FeedError::TooLong { limit: 5, .. }));
+    assert!(!dir.path().join("package.partial").exists());
+}
+
+#[test]
+fn a_package_cut_short_is_not_kept() {
+    let (downloaded, dir) = download(6, Reply::file("12345"));
+
+    assert!(matches!(feed_error(downloaded), FeedError::CutShort { expected: 6, got: 5, .. }));
+    assert!(!dir.path().join("package.partial").exists());
 }

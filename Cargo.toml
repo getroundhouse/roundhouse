@@ -53,6 +53,8 @@ anyhow = "1"
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 flume = "0.11"
+# Already under GPUI. Compresses what a test serves, as a web server would.
+flate2 = "1"
 # Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate.
 gpui-kit = { version = "=0.9.0", features = ["syntect"] }
 # Moves with gpui-kit: the version its GPUI uses. Only for drawing off the main thread, which tests run on.

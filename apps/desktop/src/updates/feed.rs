@@ -1,38 +1,72 @@
-//! The update feed, trusted only once its signature matches the key built into the app. Velopack checks each
-//! package against the checksum the feed gives, so whoever could change the feed could otherwise change the app.
-//! The release workflow signs the feed's exact bytes with Ed25519, and puts the raw signature beside it, in
-//! `releases.<channel>.json.sig`.
+//! Where the app gets updates: the feed, trusted only once its signature matches the key built into the app, and the
+//! packages it names. The release workflow signs the feed's exact bytes with Ed25519, and puts the raw signature beside
+//! it, in `releases.<channel>.json.sig`.
+//!
+//! Velopack checks a package's size and checksum against the feed once it has downloaded it, so a changed package is
+//! refused, and nothing longer than the feed says is downloaded at all. Velopack installs whatever is at the package's
+//! path when the app quits, without checking it again, so something running as this user could swap it, but it could
+//! as well change the app itself, which this user owns.
 
-use std::path::Path;
+use std::fs::File;
+use std::io::{self, Read as _, Write as _};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use ring::signature::{ED25519, UnparsedPublicKey};
 use velopack::bundle::Manifest;
-use velopack::sources::{HttpSource, UpdateSource};
-use velopack::{HttpOptions, VelopackAsset, VelopackAssetFeed};
+use velopack::sources::UpdateSource;
+use velopack::{VelopackAsset, VelopackAssetFeed};
+
+use super::{Kind, Step};
 
 /// Long enough for a slow connection, short enough that a stalled one doesn't hold up the next check.
 const FEED_TIMEOUT: Duration = Duration::from_secs(30);
-/// A full package is about 19 MB.
+/// A full package is about 20 MB.
 const PACKAGE_TIMEOUT: Duration = Duration::from_mins(15);
 /// Far more than a feed of the releases the workflow keeps, so a broken host can't fill memory.
 const FEED_LIMIT_BYTES: u64 = 1024 * 1024;
 const SIGNATURE_BYTES: u64 = 64;
+/// How long to wait before reading a feed again whose signature didn't match. The release workflow uploads the feed
+/// and its signature one after the other, so a check can land between them.
+const RETRY_AFTER: Duration = Duration::from_secs(5);
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum FeedError {
     #[error("couldn't fetch {url}: {source}")]
     Fetch { url: String, source: ureq::Error },
-    #[error("the update feed's signature doesn't match it")]
+    #[error("{url} answered {status} rather than the file")]
+    Status { url: String, status: u16 },
+    #[error("couldn't read {url}: {source}")]
+    Read { url: String, source: io::Error },
+    #[error("{url} ended after {got} of its {expected} bytes")]
+    CutShort { url: String, expected: u64, got: u64 },
+    #[error("{url} is longer than the {limit} bytes it should be")]
+    TooLong { url: String, limit: u64 },
+    #[error("the update feed's signature doesn't match it, so it may not come from Roundhouse's release workflow")]
     Unsigned,
     #[error("the update feed isn't one this app can read: {0}")]
     Unreadable(#[from] serde_json::Error),
+    #[error("couldn't save {path}: {source}")]
+    Save { path: PathBuf, source: io::Error },
 }
 
+impl FeedError {
+    /// What the sidebar makes of it.
+    pub(crate) fn kind(&self, step: Step) -> Kind {
+        match self {
+            Self::Fetch { .. } | Self::Status { .. } | Self::Read { .. } | Self::CutShort { .. } => Kind::Unreachable,
+            Self::TooLong { .. } => Kind::Refused("a download is longer than it should be"),
+            Self::Unsigned => Kind::Refused("the feed's signature doesn't match"),
+            Self::Unreadable(_) | Self::Save { .. } => Kind::Failed(step),
+        }
+    }
+}
+
+/// Velopack only passes on its own error type, so this goes in its `Io` variant, whole, for `super::problem` to find.
 impl From<FeedError> for velopack::Error {
     fn from(error: FeedError) -> Self {
-        velopack::Error::Other(error.to_string())
+        velopack::Error::Io(io::Error::other(error))
     }
 }
 
@@ -87,51 +121,107 @@ pub(crate) fn verified(feed: &[u8], signature: &[u8], key: &FeedKey) -> Result<V
 }
 
 /// Where Velopack gets updates: the feed only once its signature checks out, and the packages it names from beside
-/// it, which Velopack checks against the feed's checksums.
+/// it. Neither follows a redirect, so the feed and the packages come from where the app was built to look.
 pub(crate) struct SignedFeed {
     base: String,
     key: FeedKey,
-    agent: ureq::Agent,
-    packages: HttpSource,
+    feeds: ureq::Agent,
+    packages: ureq::Agent,
+    retry_after: Duration,
 }
 
 impl SignedFeed {
     pub(crate) fn new(base: &str, key: FeedKey) -> Self {
-        let base = base.trim_end_matches('/').to_string();
-        let agent = ureq::Agent::config_builder().timeout_global(Some(FEED_TIMEOUT)).build().into();
-        let timeout = u64::try_from(PACKAGE_TIMEOUT.as_millis()).unwrap_or(u64::MAX);
-        let packages =
-            HttpSource::new_with_options(&base, HttpOptions { TimeoutMilliseconds: timeout, ..Default::default() });
-        Self { base, key, agent, packages }
+        Self::waiting(base, key, RETRY_AFTER)
     }
 
+    /// A source that waits `retry_after` before reading again a feed whose signature didn't match.
+    pub(crate) fn waiting(base: &str, key: FeedKey, retry_after: Duration) -> Self {
+        let agent =
+            |timeout| ureq::Agent::config_builder().timeout_global(Some(timeout)).max_redirects(0).build().into();
+        let base = base.trim_end_matches('/').to_string();
+        Self { base, key, feeds: agent(FEED_TIMEOUT), packages: agent(PACKAGE_TIMEOUT), retry_after }
+    }
+
+    fn signed_feed(&self, name: &str) -> Result<VelopackAssetFeed, FeedError> {
+        let feed = self.fetch(name, FEED_LIMIT_BYTES)?;
+        let signature = self.fetch(&format!("{name}.sig"), SIGNATURE_BYTES)?;
+        verified(&feed, &signature, &self.key)
+    }
+
+    /// The file, which is an error if it's longer than `limit` once decompressed, rather than cut to fit.
     fn fetch(&self, name: &str, limit: u64) -> Result<Vec<u8>, FeedError> {
         let url = format!("{}/{name}", self.base);
-        // Anything longer is an error, rather than cut to fit. ureq also refuses a body exactly as long as its limit.
-        let fetched = self
-            .agent
-            .get(&url)
-            .call()
-            .and_then(|mut response| response.body_mut().with_config().limit(limit + 1).read_to_vec());
-        fetched.map_err(|source| FeedError::Fetch { url, source })
+        let response = call(&self.feeds, &url)?;
+        let mut body = Vec::new();
+        let read = response.into_body().into_reader().take(limit + 1).read_to_end(&mut body);
+        read.map_err(|source| FeedError::Read { url: url.clone(), source })?;
+        if body.len() as u64 > limit {
+            return Err(FeedError::TooLong { url, limit });
+        }
+        Ok(body)
+    }
+
+    /// Writes the package to `path`, refusing anything longer than the feed says it is once decompressed.
+    fn download(&self, asset: &VelopackAsset, path: &Path) -> Result<(), FeedError> {
+        let url = format!("{}/{}", self.base, asset.FileName);
+        let mut body = call(&self.packages, &url)?.into_body().into_reader().take(asset.Size + 1);
+        let saving = |source| FeedError::Save { path: path.to_path_buf(), source };
+        let mut file = File::create(path).map_err(saving)?;
+        let (mut buffer, mut got) = (vec![0; 1 << 16], 0);
+        loop {
+            let read = body.read(&mut buffer).map_err(|source| FeedError::Read { url: url.clone(), source })?;
+            if read == 0 {
+                break;
+            }
+            file.write_all(&buffer[..read]).map_err(saving)?;
+            got += read as u64;
+        }
+        if got > asset.Size {
+            return Err(FeedError::TooLong { url, limit: asset.Size });
+        }
+        if got < asset.Size {
+            return Err(FeedError::CutShort { url, expected: asset.Size, got });
+        }
+        Ok(())
+    }
+}
+
+/// The response, if it's the file. A redirect isn't followed, so it's an error like any other answer.
+fn call(agent: &ureq::Agent, url: &str) -> Result<ureq::http::Response<ureq::Body>, FeedError> {
+    let response = agent.get(url).call().map_err(|source| FeedError::Fetch { url: url.to_string(), source })?;
+    match response.status().as_u16() {
+        200 => Ok(response),
+        status => Err(FeedError::Status { url: url.to_string(), status }),
     }
 }
 
 impl UpdateSource for SignedFeed {
     fn get_release_feed(&self, channel: &str, _: &Manifest, _: &str) -> Result<VelopackAssetFeed, velopack::Error> {
         let name = format!("releases.{channel}.json");
-        let feed = self.fetch(&name, FEED_LIMIT_BYTES)?;
-        let signature = self.fetch(&format!("{name}.sig"), SIGNATURE_BYTES)?;
-        Ok(verified(&feed, &signature, &self.key)?)
+        match self.signed_feed(&name) {
+            Err(FeedError::Unsigned) => {
+                std::thread::sleep(self.retry_after);
+                Ok(self.signed_feed(&name)?)
+            }
+            read => Ok(read?),
+        }
     }
 
+    /// Velopack checks the package's checksum once this returns. Nothing shows a download's progress, so this doesn't
+    /// report it.
     fn download_release_entry(
         &self,
         asset: &VelopackAsset,
         local_file: &Path,
-        progress: Option<Sender<i16>>,
+        _: Option<Sender<i16>>,
     ) -> Result<(), velopack::Error> {
-        self.packages.download_release_entry(asset, local_file, progress)
+        let downloaded = self.download(asset, local_file);
+        if downloaded.is_err() {
+            // Velopack would otherwise leave it until the next download that works.
+            let _ = std::fs::remove_file(local_file);
+        }
+        Ok(downloaded?)
     }
 }
 

@@ -33,6 +33,7 @@ two-face = { workspace = true, features = ["syntect-onig"] }
 velopack.workspace = true
 ureq.workspace = true
 ring.workspace = true
+libc.workspace = true
 
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }
@@ -40,6 +41,8 @@ look = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
+flate2.workspace = true
+parking_lot.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple.workspace = true

@@ -4,13 +4,19 @@
 //! such as `cargo run` or `tools/install.sh`, doesn't update.
 
 mod feed;
+#[cfg(test)]
+mod serving;
 
-use std::time::Duration;
+use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt as _;
+use std::path::Path;
+use std::time::{Duration, Instant};
 
-use gpui_kit::{App, AppContext as _, Context, Global, Subscription};
-use velopack::{UpdateCheck, UpdateInfo, UpdateManager, VelopackApp};
+use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Context, Global, Subscription};
+use velopack::locator::{LocationContext, auto_locate_app_manifest};
+use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
 
-use feed::{FeedKey, SignedFeed};
+use feed::{FeedError, FeedKey, SignedFeed};
 
 /// Where updates come from. A build can name another in `ROUNDHOUSE_UPDATE_URL`, such as a server on this Mac.
 const FEED_URL: &str = match option_env!("ROUNDHOUSE_UPDATE_URL") {
@@ -18,8 +24,8 @@ const FEED_URL: &str = match option_env!("ROUNDHOUSE_UPDATE_URL") {
     None => "https://f001.backblazeb2.com/file/getroundhouse-releases",
 };
 
-/// The public half of the key the release workflow signs the feed with, the raw 32 bytes in base64. A build can name
-/// another in `ROUNDHOUSE_UPDATE_KEY`, such as one made for a test.
+/// The public half of the key the release workflow signs the feed with, the raw 32 bytes in base64. The workflow
+/// checks its key against this line. A build can name another in `ROUNDHOUSE_UPDATE_KEY`, such as one made for a test.
 const FEED_KEY: FeedKey = FeedKey::from_base64(match option_env!("ROUNDHOUSE_UPDATE_KEY") {
     Some(key) => key,
     None => "qF43VUP56iLRGkrpvzwDStkQtj+34JyWp5SgpUeisdc=",
@@ -29,33 +35,76 @@ const FEED_KEY: FeedKey = FeedKey::from_base64(match option_env!("ROUNDHOUSE_UPD
 /// mostly download versions that nobody runs.
 const CHECK_EVERY: Duration = Duration::from_hours(1);
 
+/// How long the update server can be out of reach before the sidebar says so. A laptop is often offline for an hour or
+/// two, which says nothing about updating.
+const QUIET_FOR: Duration = Duration::from_hours(24);
+
+/// Whether Velopack installs a downloaded update when the app launches, which would quit and relaunch it as it opens.
+const INSTALL_AT_LAUNCH: bool = false;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
     Check,
     Download,
 }
 
-/// Why the app couldn't update. The sidebar says so until a later look succeeds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// The update server couldn't be reached, or didn't send the file, for longer than [`QUIET_FOR`].
+    Unreachable,
+    /// The feed or a package wasn't what the release workflow signed, so nothing from it was used. Says what.
+    Refused(&'static str),
+    /// Anything else that stopped a check or a download.
+    Failed(Step),
+    /// macOS runs the app from a read-only copy, because it was opened where it was downloaded.
+    Translocated,
+    /// The app is somewhere this user can't change.
+    ReadOnly,
+}
+
+/// Why the app can't update. The sidebar says so until a later look succeeds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Problem {
-    pub step: Step,
-    /// Velopack's or the feed's own words, for whoever wants the detail.
-    pub reason: String,
+    pub kind: Kind,
+    /// Velopack's, the feed's or the system's own words, for whoever wants the detail.
+    pub detail: String,
 }
 
 impl Problem {
-    pub fn summary(&self) -> &'static str {
-        match self.step {
-            Step::Check => "Couldn't check for updates",
-            Step::Download => "Couldn't download an update",
+    pub fn summary(&self) -> String {
+        match self.kind {
+            Kind::Unreachable => "Couldn't reach the update server".to_string(),
+            Kind::Refused(what) => format!("Update refused: {what}"),
+            Kind::Failed(Step::Check) => "Couldn't check for updates".to_string(),
+            Kind::Failed(Step::Download) => "Couldn't download an update".to_string(),
+            Kind::Translocated => "Move Roundhouse to Applications to update it".to_string(),
+            Kind::ReadOnly => "Can't update Roundhouse where it is".to_string(),
         }
     }
 }
 
-/// The problem updating, if there is one, which is all the sidebar shows about updating.
-struct Shown(Option<Problem>);
+/// What the sidebar shows about updating, and when looking last worked.
+struct Shown {
+    problem: Option<Problem>,
+    last_worked: Instant,
+}
 
 impl Global for Shown {}
+
+impl Shown {
+    fn new(now: Instant) -> Self {
+        Self { problem: None, last_worked: now }
+    }
+
+    /// Takes in how a look went. Being out of reach only shows once it has lasted, and anything else at once.
+    fn record(&mut self, outcome: Result<(), Problem>, now: Instant) {
+        match outcome {
+            Ok(()) => *self = Self::new(now),
+            Err(problem) if problem.kind == Kind::Unreachable && now - self.last_worked < QUIET_FOR => {}
+            Err(problem) => self.problem = Some(problem),
+        }
+    }
+}
 
 /// Velopack, and the update it has downloaded, if any.
 struct Updater {
@@ -65,20 +114,30 @@ struct Updater {
 
 impl Global for Updater {}
 
-/// Velopack's hooks, which it runs through the app's own binary, so this comes first in `main`. It doesn't install a
-/// downloaded update at launch, which would quit and relaunch the app as it opens.
+/// Velopack's hooks, which it runs through the app's own binary, so this comes first in `main`.
 pub fn run_hooks() {
-    VelopackApp::build().set_auto_apply_on_startup(false).run();
+    VelopackApp::build().set_auto_apply_on_startup(INSTALL_AT_LAUNCH).run();
 }
 
-/// Starts looking for updates, if Velopack installed this app, and has the newest it downloads installed when the app
-/// quits.
+/// How Velopack chooses an update: only a newer version than this one, so a feed can't take the app back to a
+/// version with a bug that's since been fixed.
+fn options() -> UpdateOptions {
+    UpdateOptions { AllowVersionDowngrade: false, ..UpdateOptions::default() }
+}
+
+/// Starts looking for updates, if Velopack installed this app somewhere it can replace it, and has the newest it
+/// downloads installed when the app quits.
 pub fn start(cx: &mut App) {
-    let manager = match UpdateManager::new(SignedFeed::new(FEED_URL, FEED_KEY), None, None) {
+    let manager = match UpdateManager::new(SignedFeed::new(FEED_URL, FEED_KEY), Some(options()), None) {
         Ok(manager) => manager,
         Err(velopack::Error::NotInstalled(_)) => return,
-        Err(e) => return show(Some(Problem { step: Step::Check, reason: e.to_string() }), cx),
+        Err(e) => return show(problem(Step::Check, &e), cx),
     };
+    let bundle = auto_locate_app_manifest(LocationContext::FromCurrentExe).map(|locator| locator.get_root_dir());
+    if let Some(problem) = bundle.ok().and_then(|bundle| cant_install(&bundle)) {
+        return show(problem, cx);
+    }
+    cx.set_global(Shown::new(Instant::now()));
     cx.set_global(Updater { manager: manager.clone(), ready: None });
     cx.on_app_quit(|cx| {
         install(cx);
@@ -103,38 +162,75 @@ pub(crate) fn observe<V: 'static>(cx: &mut Context<V>) -> Subscription {
 }
 
 /// The problem updating, if there is one.
-pub(crate) fn problem(cx: &App) -> Option<&Problem> {
-    cx.try_global::<Shown>().and_then(|shown| shown.0.as_ref())
+pub(crate) fn problem_shown(cx: &App) -> Option<&Problem> {
+    cx.try_global::<Shown>().and_then(|shown| shown.problem.as_ref())
 }
 
 /// Shows a problem as if updating had failed, which only an installed app can do for real.
 #[cfg(feature = "testing")]
 pub fn show_problem(problem: Problem, cx: &mut App) {
-    show(Some(problem), cx);
+    show(problem, cx);
+}
+
+/// Why the app can't replace itself where it is, if it can't. Velopack replaces the whole bundle, so it has to be able
+/// to change the bundle and the folder it's in.
+fn cant_install(bundle: &Path) -> Option<Problem> {
+    if bundle.components().any(|part| part.as_os_str() == "AppTranslocation") {
+        let detail = format!(
+            "macOS runs this copy from {}, which can't be changed, because it was opened where it was downloaded. \
+             Moved to Applications, it can update.",
+            bundle.display()
+        );
+        return Some(Problem { kind: Kind::Translocated, detail });
+    }
+    let folder = bundle.parent()?;
+    [folder, bundle].into_iter().find(|path| !writable(path)).map(|path| Problem {
+        kind: Kind::ReadOnly,
+        detail: format!("This user can't change {}, so Roundhouse can't replace itself there.", path.display()),
+    })
+}
+
+fn writable(path: &Path) -> bool {
+    let Ok(path) = CString::new(path.as_os_str().as_bytes()) else { return false };
+    // SAFETY: `path` is a NUL-terminated string that outlives the call, which only reads it.
+    unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 }
 }
 
 /// Checks the feed, and downloads whatever is newer than this app.
 fn newest(manager: &UpdateManager) -> Result<Option<UpdateInfo>, Problem> {
-    let failed = |step| move |e: velopack::Error| Problem { step, reason: e.to_string() };
-    match manager.check_for_updates().map_err(failed(Step::Check))? {
+    match manager.check_for_updates().map_err(|e| problem(Step::Check, &e))? {
         UpdateCheck::UpdateAvailable(info) => {
-            manager.download_updates(&info, None).map_err(failed(Step::Download))?;
+            manager.download_updates(&info, None).map_err(|e| problem(Step::Download, &e))?;
             Ok(Some(*info))
         }
         UpdateCheck::NoUpdateAvailable | UpdateCheck::RemoteIsEmpty => Ok(None),
     }
 }
 
-fn record(found: Result<Option<UpdateInfo>, Problem>, cx: &mut App) {
-    match found {
-        Ok(found) => {
-            if let Some(info) = found {
-                cx.global_mut::<Updater>().ready = Some(info);
-            }
-            show(None, cx);
-        }
-        Err(problem) => show(Some(problem), cx),
+/// What a failure means for the person using the app. The feed's own errors come back from Velopack whole.
+fn problem(step: Step, error: &velopack::Error) -> Problem {
+    if let velopack::Error::Io(io) = error
+        && let Some(feed) = io.get_ref().and_then(|inner| inner.downcast_ref::<FeedError>())
+    {
+        return Problem { kind: feed.kind(step), detail: feed.to_string() };
     }
+    let kind = match error {
+        velopack::Error::ChecksumInvalid(..) | velopack::Error::SizeInvalid(..) => {
+            Kind::Refused("a download doesn't match the feed")
+        }
+        velopack::Error::Network(_) => Kind::Unreachable,
+        _ => Kind::Failed(step),
+    };
+    Problem { kind, detail: error.to_string() }
+}
+
+fn record(found: Result<Option<UpdateInfo>, Problem>, cx: &mut App) {
+    let outcome = found.map(|found| {
+        if let Some(info) = found {
+            cx.global_mut::<Updater>().ready = Some(info);
+        }
+    });
+    cx.update_global::<Shown, _>(|shown, _| shown.record(outcome, Instant::now()));
 }
 
 /// Hands the downloaded update to Velopack's updater, which waits for this process to exit, then replaces the app.
@@ -146,6 +242,10 @@ fn install(cx: &mut App) {
     }
 }
 
-fn show(problem: Option<Problem>, cx: &mut App) {
-    cx.set_global(Shown(problem));
+/// Shows a problem that no later look clears, since there won't be one.
+fn show(problem: Problem, cx: &mut App) {
+    cx.set_global(Shown { problem: Some(problem), last_worked: Instant::now() });
 }
+
+#[cfg(test)]
+mod tests;

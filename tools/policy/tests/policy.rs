@@ -20,8 +20,8 @@ const ALLOWED: &[&str] = &[
     "BSD-3-Clause",
     "BSL-1.0",
     "CC0-1.0",
-    // For data rather than code, such as Mozilla's root certificates in `webpki-roots`. Its one condition is
-    // shipping its text with the data, as MIT asks of its notice.
+    // A license for data, not code, which only `webpki-roots` uses here: Mozilla's root certificates, which the
+    // update feed's HTTPS client trusts. Its one condition is shipping the license's text with the data.
     "CDLA-Permissive-2.0",
     "ISC",
     "MIT",

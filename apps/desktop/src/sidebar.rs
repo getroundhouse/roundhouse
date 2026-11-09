@@ -137,16 +137,16 @@ fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button 
     Button::new(id).ghost().small().icon(icon).label(label)
 }
 
-/// What went wrong updating, under the build, with the reason in its own words on hover.
+/// What went wrong updating, under the build, with the detail in its own words on hover.
 fn update_problem(problem: &Problem, color: Hsla) -> impl IntoElement {
-    let reason = problem.reason.clone();
+    let detail = problem.detail.clone();
     div()
         .id("update-problem")
         .px_2()
         .text_xs()
         .text_color(color)
         .child(problem.summary())
-        .tooltip(move |window, cx| Tooltip::new(reason.clone()).build(window, cx))
+        .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
         .test_support()
 }
 
@@ -204,7 +204,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
                 .gap_4()
                 .children(groups),
         )
-        .child(footer(app.show_archived, app.build_label(), crate::updates::problem(cx).cloned(), cx))
+        .child(footer(app.show_archived, app.build_label(), crate::updates::problem_shown(cx).cloned(), cx))
 }
 
 #[cfg(test)]

@@ -22,8 +22,9 @@
 # package with uncommitted changes gets its commit's version, which is never published, since the release workflow
 # packages a clean checkout, and its build says when it was built after the version.
 #
-# The app updates from the published feed. To try updating against another, such as a local server and a key made for
-# the test, set ROUNDHOUSE_UPDATE_URL and ROUNDHOUSE_UPDATE_KEY, and publish to it with `publish.py`.
+# The app updates from the published feed. To try updating from another, such as a local server with a key made for
+# the test, package with ROUNDHOUSE_UPDATE_URL and ROUNDHOUSE_UPDATE_KEY set, which the build reads, and publish to it
+# with `publish.py`.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

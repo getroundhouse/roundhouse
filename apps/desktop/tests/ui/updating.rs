@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::updates::{Problem, Step};
+use desktop::updates::{Kind, Problem};
 use gpui_kit::TestAppContext;
 
 use crate::support::{Stack, Ui};
@@ -14,7 +14,7 @@ fn a_failed_update_shows_in_the_sidebar(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     assert!(!ui.has("update-problem"));
 
-    let problem = Problem { step: Step::Download, reason: "couldn't reach the feed".to_string() };
+    let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
     ui.cx.update(|cx| desktop::updates::show_problem(problem, cx));
 
     assert!(ui.has("update-problem"));
