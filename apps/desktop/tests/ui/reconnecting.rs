@@ -106,40 +106,55 @@ fn start_comment(ui: &mut Ui<'_>, path: &str, line: usize) {
     ui.frame();
 }
 
+/// After a reconnect, a pane reads the worktree again once it's on screen, so the hub doesn't start a worker for
+/// every pane at once.
 #[gpui_kit::test]
-fn a_workspace_archived_while_the_app_was_away_takes_its_pane_and_the_rest_catch_up(cx: &mut TestAppContext) {
+fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    // So the app can't start a hub of its own, and waits while this archives a workspace.
+    // So the app can't start a hub of its own, and waits while this changes things.
     let daemon = std::mem::replace(&mut stack.hub.daemon, "/nonexistent/roundhoused".into());
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
-    let kept = ui.new_workspace();
-    ui.input("say:still here");
-    ui.click("toggle-diff");
-    let pane = ui.pane().unwrap();
-    let has_changes = |ui: &Ui| ui.cx.read_entity(&pane, |p, cx| p.diff.as_ref().map(|d| !d.read(cx).empty));
-    ui.wait("the diff, with nothing in it yet", |ui| has_changes(ui) == Some(false));
     let archived = ui.new_workspace();
+    let hidden = ui.new_workspace();
+    ui.input("say:still here");
+    let hidden_has_changes = open_empty_diff(&mut ui);
+    let shown = ui.new_workspace();
+    let shown_has_changes = open_empty_diff(&mut ui);
     client_core::HubAdmin::connect(&stack.hub.paths.socket).unwrap().stop().unwrap();
     ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
     // A kept pane does nothing until there's a connection for it, even when a shortcut reaches the window.
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
     ui.press("cmd-shift-d");
-    assert!(!ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_open));
+    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_open));
     let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     client.workspace_archive(&archived, false).unwrap();
-    std::fs::write(ui.worktree(&kept).join("a.txt"), "one\nchanged while away\n").unwrap();
+    for id in [&hidden, &shown] {
+        std::fs::write(ui.worktree(id).join("a.txt"), "one\nchanged while away\n").unwrap();
+    }
 
     ui.click("try-hub-again");
 
-    ui.wait("the connection", |ui| matches!(ui.view().connection, Connection::Ready(_)) && ui.pane().is_some());
+    ui.wait("the pane on screen to catch up", |ui| {
+        matches!(ui.view().connection, Connection::Ready(_)) && shown_has_changes(ui) == Some(true)
+    });
     assert!(!ui.view().panes.contains_key(&archived));
-    assert_eq!(ui.view().selected, Some(kept));
+    assert_eq!(hidden_has_changes(&ui), Some(false), "it waits until it's shown");
+    ui.click(SharedString::from(format!("workspace-{hidden}")));
+    ui.wait("the other pane to catch up once shown", |ui| hidden_has_changes(ui) == Some(true));
     assert_eq!(ui.composer_text(), "say:still here");
-    // It wasn't on screen when the app reconnected, and catches up now that it is.
-    ui.wait("its diff to catch up", |ui| has_changes(ui) == Some(true));
+}
+
+/// Opens the selected workspace's diff, and waits for it to load with nothing in it. Returns whether it shows
+/// changes, or `None` if it has no diff.
+fn open_empty_diff(ui: &mut Ui<'_>) -> impl Fn(&Ui<'_>) -> Option<bool> + use<> {
+    ui.click("toggle-diff");
+    let pane = ui.pane().unwrap();
+    let has_changes = move |ui: &Ui<'_>| ui.cx.read_entity(&pane, |p, cx| p.diff.as_ref().map(|d| !d.read(cx).empty));
+    ui.wait("the diff, with nothing in it yet", |ui| has_changes(ui) == Some(false));
+    has_changes
 }
 
 #[gpui_kit::test]
