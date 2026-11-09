@@ -116,6 +116,29 @@ pub(super) fn chat_tabs() -> World {
     world
 }
 
+/// The conversation showing, and two chats in its workspace that were closed, one a few minutes ago and one hours ago.
+pub(super) fn closed_chats() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    for (prompt, reply, minutes_before_now) in [
+        (
+            "Why does the hub log a warning on every reconnect?",
+            "It logs one each time a client goes without saying goodbye.",
+            5 * 60,
+        ),
+        (
+            "Which colours does GitHub use for a PR's state?",
+            "Green for open, purple for merged, red for closed, and grey for a draft.",
+            9,
+        ),
+    ] {
+        let chat = world.chat(&focus, SessionStatus::Idle, chats::answered(prompt, reply));
+        world.close(&chat, minutes_before_now);
+    }
+    converse(&mut world, &focus);
+    world
+}
+
 /// The conversation, with every workspace titled from its first prompt.
 pub(super) fn titled() -> World {
     let mut world = conversation();

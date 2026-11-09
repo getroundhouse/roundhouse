@@ -18,6 +18,10 @@ use protocol::tail::Tail;
 const START_MS: i64 = 1_793_491_200_000;
 const RECORD_GAP_MS: i64 = 60_000;
 const EVENT_GAP_MS: i64 = 1_000;
+const MINUTE_MS: i64 = 60_000;
+/// What the app takes as the time now, in every picture: a day after the first record, so later than any record a
+/// world makes.
+pub(crate) const NOW_MS: i64 = START_MS + 24 * 60 * MINUTE_MS;
 
 #[derive(Default)]
 pub(crate) struct World {
@@ -162,6 +166,12 @@ impl World {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
         assert!(session.last_seq > 0, "a chat with nothing in it has no reply");
         (session.reply_seq, session.read_seq) = (session.last_seq, 0);
+    }
+
+    /// Closes a chat, this many minutes before [`NOW_MS`].
+    pub(crate) fn close(&mut self, id: &SessionId, minutes_before_now: i64) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        session.closed_at_ms = Some(NOW_MS - minutes_before_now * MINUTE_MS);
     }
 
     pub(crate) fn session(&self, id: &SessionId) -> Result<&Session, ApiError> {

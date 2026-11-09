@@ -20,6 +20,8 @@ gpui_kit::assets::icon_assets!(
         MessageSquarePlus,
         Pencil,
         Plug,
+        RotateCcw,
+        RotateCcwClock,
         SquareArrowRight,
         SquareDot,
         SquareMinus,

@@ -18,8 +18,8 @@ use gpui_kit::{
 };
 use image::RgbaImage;
 
-use super::fake_hub;
 use super::screens::{Screen, Step, Target};
+use super::{fake_hub, world};
 use crate::support::labelled;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
@@ -30,7 +30,8 @@ const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
-/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line.
+/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line or
+/// [`Step::MoveAway`].
 const AWAY: &str = "build-line";
 
 pub(crate) struct Picture {
@@ -56,6 +57,8 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     cx.allow_parking();
     cx.update(gpui_kit::init);
     cx.update(look::hold_still);
+    // So how long ago something was is the same on every run.
+    cx.update(|cx| desktop::fix_now(world::NOW_MS, cx));
     // The kit's own animations, such as a dialog's entrance, show as they end.
     cx.update(|cx| cx.set_reduce_motion(true));
     // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
@@ -117,6 +120,7 @@ impl Driver {
             Step::OpenFile(path) => self.open_file(path),
             Step::StartComment(line) => self.start_comment(*line),
             Step::Click(id) => self.click(*id),
+            Step::MoveAway => self.move_away(),
             Step::HoverTab(position) => self.hover_tab(*position),
             Step::Type(text) => {
                 self.frame();
@@ -253,6 +257,10 @@ impl Driver {
     fn open(&mut self, label: &'static str) {
         let id = self.find(Target::Label(label));
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.move_away();
+    }
+
+    fn move_away(&mut self) {
         self.cx.update_window(self.handle, |_, window, cx| window.hover(AWAY, cx)).unwrap();
     }
 
