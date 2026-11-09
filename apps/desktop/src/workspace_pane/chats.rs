@@ -83,6 +83,7 @@ impl WorkspacePane {
         }
         self.active = Some(id);
         self.show_draft(cx);
+        self.read_showing(cx);
         cx.notify();
     }
 
@@ -191,6 +192,7 @@ impl WorkspacePane {
         self.sessions = sessions;
         self.keep_active_valid(cx);
         self.show_next(cx);
+        self.read_showing(cx);
         cx.notify();
     }
 

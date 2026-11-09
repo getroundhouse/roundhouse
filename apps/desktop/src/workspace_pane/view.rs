@@ -2,7 +2,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -13,7 +13,7 @@ use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
 
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, PaneEvent, WorkspacePane, is_working};
+use super::{HEADER_HEIGHT, Mark, PaneEvent, WorkspacePane, is_working};
 use crate::StopAgent;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
@@ -35,10 +35,12 @@ impl WorkspacePane {
     fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id);
-        let mark = crate::sidebar::signal(Some(session.status));
+        let unread = self.shows_unread(session);
+        let mark = crate::sidebar::signal(Some(session.status), unread);
         let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
-        h_flex()
+        let tab = h_flex()
+            .id(ElementId::Name(format!("tab-{}", session.id).into()))
             .flex_none()
             .max_w(px(240.))
             .gap_0p5()
@@ -55,7 +57,9 @@ impl WorkspacePane {
                             .w_full()
                             .gap_1p5()
                             .text_sm()
-                            .when(!selected, |d| d.text_color(muted))
+                            // A reply that hasn't been read stands out as the selected chat's title does.
+                            .when(!selected && !unread, |d| d.text_color(muted))
+                            .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
                             .child(look::mark(mark, work, look::Size::Inline, cx))
                             .child(
                                 div()
@@ -76,8 +80,17 @@ impl WorkspacePane {
                     .tooltip("Close chat")
                     .when(!selected, Styled::invisible)
                     .on_click(cx.listener(move |t, _, window, cx| t.close_chat(to_close.clone(), window, cx))),
-            )
-            .into_any_element()
+            );
+        let marking = if unread { Some(Mark::Read) } else { (session.reply_seq > 0).then_some(Mark::Unread) };
+        let Some(marking) = marking else { return tab.into_any_element() };
+        let (this, session) = (cx.weak_entity(), session.clone());
+        tab.context_menu(move |menu, _, _| {
+            let (this, session) = (this.clone(), session.clone());
+            menu.item(PopupMenuItem::new(format!("Mark as {}", marking.word())).on_click(move |_, _, cx| {
+                let _ = this.update(cx, |t, cx| t.mark(&session, marking, cx));
+            }))
+        })
+        .into_any_element()
     }
 
     /// One tab for each open chat, then a way to start another, and any closed ones to go back to.

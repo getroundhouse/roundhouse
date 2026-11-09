@@ -61,6 +61,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
     },
     Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "update-ready",
         spec: "updates.md",
@@ -139,10 +140,16 @@ fn sidebar(world: &mut World) -> WorkspaceId {
 fn conversation() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    world.workspace_mut(&focus).branch = "sidebar-pr-state".to_string();
-    world.chat(&focus, SessionStatus::Idle, chats::finished());
+    converse(&mut world, &focus);
+    world
+}
+
+/// The finished turn in the screen's own workspace, on a branch with a pull request open.
+fn converse(world: &mut World, focus: &WorkspaceId) {
+    world.workspace_mut(focus).branch = "sidebar-pr-state".to_string();
+    world.chat(focus, SessionStatus::Idle, chats::finished());
     world.pull_requests.insert(
-        focus,
+        focus.clone(),
         PullRequest {
             number: 182,
             url: "https://example.com/pull/182".to_string(),
@@ -151,6 +158,28 @@ fn conversation() -> World {
             is_draft: false,
         },
     );
+}
+
+/// Replies nobody has read: in a workspace that isn't showing, and in the chat that isn't showing in this one. The chat
+/// showing is read, as it is on screen.
+fn unread() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let alder = world.workspaces.iter().find(|w| w.name == "alder").unwrap().id.clone();
+    let reply = chats::answered(
+        "Why does the hub log a warning on every reconnect?",
+        "It logs one each time a client goes without saying goodbye. That's ordinary, so it should be a debug line.",
+    );
+    let elsewhere = world.chat(&alder, SessionStatus::Idle, reply);
+    world.unread(&elsewhere);
+    // Older than the conversation, so the app opens the workspace on that instead, as it opens the chat last worked in.
+    let reply = chats::answered(
+        "Which colours does GitHub use for a PR's state?",
+        "Green for open, purple for merged, red for closed, and grey for a draft.",
+    );
+    let other_chat = world.chat(&focus, SessionStatus::Idle, reply);
+    world.unread(&other_chat);
+    converse(&mut world, &focus);
     world
 }
 

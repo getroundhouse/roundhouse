@@ -40,7 +40,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, and amber or red when it needs you. `docs/spec/look.md` has the rules | `look::mark` |
+| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, amber or red when it needs you, and all white for a reply you haven't read. `docs/spec/look.md` has the rules | `look::mark` |
 | Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 

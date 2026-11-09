@@ -66,7 +66,7 @@ fn a_moving_mark_asks_for_the_next_frame() {
 
 #[test]
 fn still_marks_ask_for_nothing() {
-    assert_eq!(frames_asked_for(&[Signal::Idle, Signal::NeedsYou, Signal::Failed], Motion::Allowed), 0);
+    assert_eq!(frames_asked_for(&[Signal::Idle, Signal::NeedsYou, Signal::Failed, Signal::Unread], Motion::Allowed), 0);
 }
 
 #[test]

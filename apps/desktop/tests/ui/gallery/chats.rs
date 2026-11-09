@@ -34,6 +34,22 @@ pub(crate) fn finished() -> Vec<EventBody> {
     events
 }
 
+/// A short turn that's over: a prompt and a reply, and nothing else.
+pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
+    vec![
+        EventBody::UserPrompt { text: prompt.to_string(), client_msg_id: None },
+        text("msg-1", reply),
+        EventBody::TurnEnded {
+            outcome: TurnOutcome::Success,
+            result: None,
+            errors: Vec::new(),
+            duration_ms: Some(9_000),
+            cost_usd: Some(0.04),
+            num_turns: Some(1),
+        },
+    ]
+}
+
 /// Partway through a turn, with a reply still being written. The rest of it is [`streaming_tail`].
 pub(crate) fn streaming() -> Vec<EventBody> {
     let mut events = looked_around();
