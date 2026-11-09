@@ -31,7 +31,7 @@ pub(super) fn may_restart(hub: &HubStatus, app_build: Option<u64>) -> bool {
 
 /// Whether to replace this hub with this app's own without asking: one it may restart, and only if nothing would
 /// notice. This app is the one client, and its request for the status is the one thing the hub is doing.
-fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
+pub(super) fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
     let idle = hub.running_sessions == 0 && hub.running_setups == 0 && hub.requests <= 1;
     may_restart(hub, app_build) && idle && hub.clients <= 1
 }

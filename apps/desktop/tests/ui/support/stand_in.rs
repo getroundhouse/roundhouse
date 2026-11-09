@@ -18,6 +18,11 @@ impl StandInHub {
         self.write("stand-in-running", agents);
     }
 
+    /// Has it say this many clients are connected from now on, as if some had come or gone.
+    pub(crate) fn set_clients(&self, clients: u32) {
+        self.write("stand-in-clients", clients);
+    }
+
     fn write(&self, file: &str, number: u32) {
         // Whole or not at all, since it may read it at any moment.
         let next = self.1.join(format!("{file}.next"));

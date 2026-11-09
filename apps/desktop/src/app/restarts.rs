@@ -1,11 +1,61 @@
 //! Restarting the hub, across a real break or to finish an update, and the app, to install one. Each can lose
 //! something, agents that stop or what's typed and not sent, so each says what first.
 
-use gpui_kit::{App, AppContext as _, Context, PromptButton, PromptLevel, Window};
+use std::time::Duration;
 
-use super::{AppView, Connection, view};
+use gpui_kit::{App, AppContext as _, Context, PromptButton, PromptLevel, Task, Window};
+
+use super::{AppView, Connection, hub_source, view};
+
+/// How often to look whether an older hub has gone idle, for what the records don't show, such as another client
+/// leaving it.
+pub(super) const LOOK_AGAIN: Duration = Duration::from_secs(30);
 
 impl AppView {
+    /// Finishes an update by itself, by restarting the older hub once nothing is running on it and nothing else is
+    /// using it, as when the app connects. Only while the window isn't in front, since the restart swaps what's on
+    /// screen for a moment, and that would interrupt someone using it. Only the hub knows about other clients and setup
+    /// scripts, so this asks it.
+    pub(super) fn finish_update_when_idle(&mut self, cx: &mut Context<Self>) {
+        let (Some(client), Some(pid), None) = (self.client(), self.restartable_hub, &self.looking) else { return };
+        let build = self.hub.build_number;
+        self.looking = Some(cx.spawn(async move |this, cx| {
+            let status = cx.background_spawn(async move { client.hub_status() }).await;
+            let _ = this.update(cx, |t, cx| {
+                t.looking = None;
+                let idle = status.is_ok_and(|s| s.pid == pid && hub_source::should_replace(&s, build));
+                // Not while someone is being asked whether to finish it now, or is back in the window.
+                if idle && t.asking.is_none() && !t.in_front(cx) && t.still_finishing(pid) {
+                    t.restart_hub(pid, cx);
+                }
+            });
+        }));
+    }
+
+    /// Whether the window is the one in front: the key window, which another app takes when it comes in front, unlike
+    /// the main window. Yes when it can't tell, so finishing waits.
+    fn in_front(&self, cx: &mut App) -> bool {
+        self.window.update(cx, |_, window, _| window.is_window_active()).unwrap_or(true)
+    }
+
+    /// Whether the app is still connected to the older hub with this `pid`: the connection may have gone, and another
+    /// hub started, while it asked or looked.
+    fn still_finishing(&self, pid: u32) -> bool {
+        self.client().is_some() && self.restartable_hub == Some(pid)
+    }
+
+    /// Looks every [`LOOK_AGAIN`] for whether the older hub has gone idle.
+    pub(super) fn keep_finishing(cx: &mut Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(LOOK_AGAIN).await;
+                if this.update(cx, Self::finish_update_when_idle).is_err() {
+                    return;
+                }
+            }
+        })
+    }
+
     /// For a hub across a real break, or an older one someone chose to restart to finish an update, so one that matches
     /// this app can start. This also stops its agents, which the app says first. Only the hub with this `pid`, the one
     /// the app asked about, so one that has started since stays.
@@ -51,9 +101,7 @@ impl AppView {
             };
             let _ = this.update(cx, |t, cx| {
                 t.asking = None;
-                // Only the hub it asked about, and only while connected to it: the connection may have gone, and
-                // another hub started, while it asked.
-                if finish && t.client().is_some() && t.restartable_hub == Some(pid) {
+                if finish && t.still_finishing(pid) {
                     t.restart_hub(pid, cx);
                 }
             });
