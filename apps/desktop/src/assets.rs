@@ -17,6 +17,8 @@ gpui_kit::assets::icon_assets!(
         FilePlus,
         House,
         ListTree,
+        Mail,
+        MailOpen,
         MessageSquarePlus,
         Pencil,
         Plug,

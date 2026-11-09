@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use client_core::Client;
 use desktop::app::Connection;
+use desktop::workspace_pane::Busy;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 
@@ -192,7 +193,7 @@ fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
     ui.click(SharedString::from(id));
     ui.wait("the error", |ui| ui.view().error.is_some());
     assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
-    assert!(!ui.view().busy, "the button works again");
+    assert_eq!(ui.view().busy, Busy::Free, "the button works again");
 }
 
 #[gpui_kit::test]

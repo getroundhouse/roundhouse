@@ -4,7 +4,7 @@
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
@@ -13,7 +13,7 @@ use gpui_kit::{
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
+use super::{Busy, HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
 use crate::right_click;
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -93,7 +93,8 @@ impl WorkspacePane {
             };
             (marking, mark)
         });
-        right_click::menu(marking, move |window, cx| {
+        // No key: the one for marking acts on the workspace showing, as its row's menu does.
+        right_click::menu(marking, None, move |window, cx| {
             let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
         })
     }
@@ -161,9 +162,13 @@ impl WorkspacePane {
                     .label(if self.changes_open { "Hide diff" } else { "Diff" })
                     .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
             )
-            .child(Button::new("archive").ghost().small().label("Archive").on_click(cx.listener(move |_, _, _, cx| {
-                cx.emit(PaneEvent::Archive(id.clone(), false));
-            })))
+            .child(
+                Button::new("archive").ghost().small().label("Archive").disabled(self.busy == Busy::Changing).on_click(
+                    cx.listener(move |_, _, _, cx| {
+                        cx.emit(PaneEvent::Archive(id.clone(), false));
+                    }),
+                ),
+            )
             .when_some(pr, |d, pr| {
                 let url = pr.url.clone();
                 d.child(

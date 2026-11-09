@@ -1,0 +1,127 @@
+//! A workspace's row in the sidebar: its mark and name, the button that archives it under the pointer, and what a
+//! right-click on it offers.
+
+use std::rc::Rc;
+
+use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    Action, AnyElement, App, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
+};
+use protocol::model::{Workspace, WorkspaceStatus};
+
+use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, standing};
+use crate::app::AppView;
+use crate::right_click;
+use crate::workspace_pane::Busy;
+use crate::{ArchiveWorkspace, MarkWorkspace};
+
+pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
+    // While Home shows, it's what's showing, rather than the workspace still selected under it.
+    let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
+    let archived = workspace.status == WorkspaceStatus::Archived;
+    let (id, pointed) = (workspace.id.clone(), workspace.id.clone());
+    let muted = cx.theme().muted_foreground;
+    let Standing { signal: mark, work, unread } = standing(app, workspace, cx);
+    let menu = row_menu(app, workspace, archived, cx);
+    let label = workspace.label().to_string();
+    let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
+    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
+        .accessibility_label(label.clone())
+        .ghost()
+        .w_full()
+        .h(ROW_HEIGHT)
+        .pl(ROW_INSET)
+        .pr_1p5()
+        .selected(selected)
+        .on_hover(cx.listener(move |t, hovered: &bool, _, cx| {
+            // Leaving one row and coming onto the next can be heard in either order.
+            if *hovered {
+                t.pointing_at = Some(pointed.clone());
+            } else if t.pointing_at.as_ref() == Some(&pointed) {
+                t.pointing_at = None;
+            } else {
+                return;
+            }
+            cx.notify();
+        }))
+        .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
+        .child(
+            h_flex()
+                .w_full()
+                .gap(MARK_GAP)
+                .text_sm()
+                .when(selected || unread, |d| d.font_weight(FontWeight::MEDIUM))
+                // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
+                .when(archived || !(selected || unread), |d| d.text_color(muted))
+                .child(look::mark(mark, work, look::Size::Row, cx))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
+                .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore")))
+                .when(!archived && pointing, |d| d.child(archive_button(app, workspace, cx))),
+        );
+    row.context_menu(menu).into_any_element()
+}
+
+/// Archives the workspace without opening it. Drawn only while the pointer is over the row, so no name is cut short
+/// to keep room for it. The size and colour of its repository's button for a new workspace, which the row's padding
+/// lines it up under.
+fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
+    let id = workspace.id.clone();
+    let button = Button::new(ElementId::Name(format!("archive-{}", workspace.id).into()))
+        .ghost()
+        .small()
+        .icon(Lucide::Archive)
+        .text_color(cx.theme().muted_foreground)
+        .tooltip("Archive")
+        // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
+        .disabled(app.busy == Busy::Changing)
+        .on_click(cx.listener(move |t, _, _, cx| {
+            // The row under it would take the click too, and open the workspace that's going.
+            cx.stop_propagation();
+            t.archive(id.clone(), false, cx);
+        }));
+    div().flex_none().child(button)
+}
+
+/// What a right-click on a workspace's row offers: what a tab's does, then archiving it. The keys act on the workspace
+/// showing, so only its row's menu shows them. Marking its chats needs one with a reply, and an archived workspace has
+/// none to show, nor can it be archived again.
+fn row_menu(
+    app: &AppView,
+    workspace: &Workspace,
+    archived: bool,
+    cx: &mut Context<AppView>,
+) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
+    let (this, id) = (cx.weak_entity(), workspace.id.clone());
+    let to_mark = this.clone();
+    let marking = marking.map(|(marking, chats)| {
+        let mark = move |cx: &mut App| {
+            let _ = to_mark.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
+        };
+        (marking, mark)
+    });
+    let to_archive = this.clone();
+    // Not while Home hides it, when its keys do nothing.
+    let showing = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
+    let marking_key = showing.then(|| Box::new(MarkWorkspace) as Box<dyn Action>);
+    let shared = right_click::menu(marking, marking_key, move |window, cx| {
+        let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
+    });
+    let (busy, id) = (app.busy == Busy::Changing, workspace.id.clone());
+    let archive = (!archived).then(|| {
+        Rc::new(move |cx: &mut App| {
+            let _ = to_archive.update(cx, |t, cx| t.archive(id.clone(), false, cx));
+        })
+    });
+    move |menu, window, cx| {
+        let menu = shared(menu, window, cx);
+        let Some(archive) = archive.clone() else { return menu };
+        let item = PopupMenuItem::new("Archive").icon(Lucide::Archive);
+        let item = item.when(showing, |item| item.action(Box::new(ArchiveWorkspace)));
+        menu.separator().item(item.disabled(busy).on_click(move |_, _, cx| archive(cx)))
+    }
+}

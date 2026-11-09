@@ -3,25 +3,22 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, IconNamed, Selectable as _, Sizable as _, h_flex, v_flex,
-    v_virtual_list,
+    ActiveTheme as _, Disableable as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list,
 };
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled,
-    Window, div, px, size,
+    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
+    px, size,
 };
 use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
-use crate::right_click;
-use crate::workspace_pane::HEADER_HEIGHT;
+use crate::workspace_pane::{Busy, HEADER_HEIGHT};
 
 mod footer;
 mod nav;
+mod row;
 
 /// Settings stands in for the sidebar at the same width.
 pub(crate) const WIDTH: f32 = 260.0;
@@ -98,7 +95,7 @@ fn line(app: &AppView, line: Line, cx: &mut Context<AppView>) -> AnyElement {
     match line {
         Line::Heading => heading(cx),
         Line::Repo(r) => repo_header(app, &app.repos[r], cx),
-        Line::Workspace(w) => workspace_row(app, &app.workspaces[w], cx),
+        Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], cx),
         Line::Creating => creating(cx),
     }
 }
@@ -150,61 +147,6 @@ pub(super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
     div().flex_none().size_4().flex().items_center().justify_center().child(icon)
 }
 
-fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
-    // While Home shows, it's what's showing, rather than the workspace still selected under it.
-    let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
-    let archived = workspace.status == WorkspaceStatus::Archived;
-    let id = workspace.id.clone();
-    let muted = cx.theme().muted_foreground;
-    let Standing { signal: mark, work, unread } = standing(app, workspace, cx);
-    let menu = row_menu(app, workspace, archived, cx);
-    let label = workspace.label().to_string();
-    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
-        .accessibility_label(label.clone())
-        .ghost()
-        .w_full()
-        .h(ROW_HEIGHT)
-        .pl(ROW_INSET)
-        .pr_1p5()
-        .selected(selected)
-        .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
-        .child(
-            h_flex()
-                .w_full()
-                .gap(MARK_GAP)
-                .text_sm()
-                .when(selected || unread, |d| d.font_weight(FontWeight::MEDIUM))
-                // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
-                .when(archived || !(selected || unread), |d| d.text_color(muted))
-                .child(look::mark(mark, work, look::Size::Row, cx))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
-                .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore"))),
-        );
-    row.context_menu(menu).into_any_element()
-}
-
-/// What a right-click on a workspace's row offers. Marking its chats needs one with a reply, and an archived
-/// workspace has none to show.
-fn row_menu(
-    app: &AppView,
-    workspace: &Workspace,
-    archived: bool,
-    cx: &mut Context<AppView>,
-) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
-    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
-    let (this, id) = (cx.weak_entity(), workspace.id.clone());
-    let to_mark = this.clone();
-    let marking = marking.map(|(marking, chats)| {
-        let mark = move |cx: &mut App| {
-            let _ = to_mark.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
-        };
-        (marking, mark)
-    });
-    right_click::menu(marking, move |window, cx| {
-        let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
-    })
-}
-
 fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let repo_id = repo.id.clone();
@@ -233,7 +175,7 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
                 .text_color(muted)
                 .tooltip("New workspace")
                 .loading(creating)
-                .disabled(app.busy)
+                .disabled(app.busy == Busy::Changing)
                 .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
         )
         .into_any_element()

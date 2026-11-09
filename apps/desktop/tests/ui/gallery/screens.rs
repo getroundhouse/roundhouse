@@ -40,6 +40,8 @@ pub(crate) enum Step {
     MoveAway,
     /// Moves the pointer over the tab of the open chat at this position in the workspace showing, and leaves it there.
     HoverTab(usize),
+    /// Moves the pointer over the element with this ID, and leaves it there, for what shows only under the pointer.
+    Point(&'static str),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
     /// Rests the pointer on an element, and waits for the one with the ID `shows`, such as its tooltip.
@@ -245,6 +247,33 @@ pub(crate) const SCREENS: &[Screen] = &[
     },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
     Screen { name: "home", spec: "home.md", world: Some(titled), steps: &[Step::Select(FOCUS), Step::Click("home")] },
+    Screen {
+        name: "workspace-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The screen's own workspace, the fourth, whose other chat has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4")],
+    },
+    Screen {
+        name: "other-workspace-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The first workspace, which isn't showing, and has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-1")],
+    },
+    Screen {
+        name: "chat-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The tab of the screen's other chat, the seventh made, which has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("chat-chat-7")],
+    },
+    Screen {
+        name: "archive-button",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1")],
+    },
     Screen {
         name: "rename",
         spec: "workspaces.md",

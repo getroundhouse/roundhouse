@@ -8,7 +8,7 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{SessionStatus, WorkspaceId, WorkspaceStatus};
 
-use desktop::workspace_pane::Showing;
+use desktop::workspace_pane::{Busy, Showing};
 
 use crate::support::{Stack, Ui, git};
 
@@ -106,7 +106,8 @@ fn the_core_loop(cx: &mut TestAppContext) {
     git(&worktree, &["commit", "-qm", "the agent's work"]);
     ui.click("archive");
     ui.wait("the workspace to be archived", |ui| {
-        ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived && !ui.view().busy
+        ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
+            && ui.view().busy == Busy::Free
     });
     assert!(!worktree.exists());
     assert!(ui.pane().is_none());
@@ -115,7 +116,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     // Restoring brings the worktree and the history back, and the conversation continues.
     ui.click("toggle-archived");
     ui.cx.update_entity(&ui.view.clone(), |v, cx| v.restore(id.clone(), cx));
-    ui.wait("the workspace to come back", |ui| ui.transcript().is_some() && !ui.view().busy);
+    ui.wait("the workspace to come back", |ui| ui.transcript().is_some() && ui.view().busy == Busy::Free);
     ui.wait("the history to load", |ui| !ui.events().is_empty());
     assert!(worktree.join("a.txt").exists());
     ui.input("recall");
@@ -176,7 +177,7 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
 
     let before = ui.view().workspaces.len();
     ui.press("cmd-n");
-    ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && !ui.view().busy);
+    ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && ui.view().busy == Busy::Free);
 }
 
 #[gpui_kit::test]

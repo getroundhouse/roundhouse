@@ -8,6 +8,7 @@ use protocol::model::{AgentKind, Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::rename::{self, Renaming};
+use crate::workspace_pane::Busy;
 
 impl AppView {
     /// The repository a new workspace goes in when nothing says which: the one Home's list shows, while Home shows,
@@ -42,12 +43,11 @@ impl AppView {
 
     pub fn new_workspace(&mut self, repo_id: RepoId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        if self.busy {
+        if self.busy == Busy::Changing {
             return;
         }
-        self.busy = true;
+        self.set_busy(Busy::Changing, cx);
         self.creating_in = Some(repo_id.clone());
-        cx.notify();
         let creating = client.start(move |client| {
             let workspace = client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
             // Leaves the model and approval mode to the user's own Claude settings.
@@ -57,7 +57,7 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let created = creating.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 t.creating_in = None;
                 match created {
                     Ok((workspace, session)) => {
@@ -118,17 +118,20 @@ impl AppView {
         .detach();
     }
 
-    /// Archives, and asks before losing uncommitted work.
+    /// Archives, and asks before losing uncommitted work. Does nothing while a workspace is being made, archived or
+    /// restored, so a key pressed twice archives once.
     pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
+        if self.busy == Busy::Changing {
+            return;
+        }
+        self.set_busy(Busy::Changing, cx);
         let target = id.clone();
         let archiving = client.start(move |client| client.workspace_archive(&target, force));
         cx.spawn(async move |this, cx| {
             let result = archiving.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 match result {
                     Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
@@ -162,15 +165,19 @@ impl AppView {
         .detach();
     }
 
+    /// Restores an archived workspace. Does nothing while a workspace is being made, archived or restored, as
+    /// [`AppView::archive`] doesn't.
     pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
+        if self.busy == Busy::Changing {
+            return;
+        }
+        self.set_busy(Busy::Changing, cx);
         let restoring = client.start(move |client| client.workspace_restore(&id));
         cx.spawn(async move |this, cx| {
             let result = restoring.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 match result {
                     Ok(workspace) => {
                         let id = workspace.id.clone();
@@ -183,5 +190,15 @@ impl AppView {
             });
         })
         .detach();
+    }
+
+    /// Says whether a workspace is being made, archived or restored, which every pane's header shows as well as the
+    /// sidebar.
+    fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
+        self.busy = busy;
+        for pane in self.panes.values() {
+            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
+        }
+        cx.notify();
     }
 }
