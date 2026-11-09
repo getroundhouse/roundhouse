@@ -92,6 +92,10 @@ pub enum Signal {
 const STILL_S: f64 = 0.9;
 const SWEEP_S: f64 = 2.4;
 const BUILD_S: f64 = 4.8;
+/// How far along the fan each row of a working mark trails the one inside it.
+const TRAIL: f32 = 0.06;
+/// How strongly the agent's light shows over the fan's colour, where it's brightest.
+pub(crate) const LIGHT: f32 = 0.92;
 
 /// The mark for one workspace or chat.
 pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
@@ -135,7 +139,7 @@ fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, light: Hsla, t: f6
         let (base, glow) = brightness(signal, &dot, t);
         fan::disc(window, dot.at, fan.dot, color.opacity(base));
         if glow > 0.01 {
-            fan::disc(window, dot.at, fan.dot, light.opacity(glow * 0.92));
+            fan::disc(window, dot.at, fan.dot, light.opacity(glow * LIGHT));
         }
     }
     let hub = color.opacity(0.6);
@@ -148,14 +152,17 @@ fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, light: Hsla, t: f6
 fn brightness(signal: Signal, dot: &Dot, t: f64) -> (f32, f32) {
     let row = as_f32(dot.row);
     match signal {
-        Signal::Working => {
-            let sweep = phase(t, SWEEP_S) * 1.5 - 0.25 - row * 0.06;
-            (1.0, (1.0 - (dot.along - sweep).abs() * 3.5).clamp(0.0, 1.0))
-        }
+        Signal::Working => (1.0, light_on(dot.along, dot.row, phase(t, SWEEP_S) * 1.5 - 0.25, TRAIL)),
         Signal::SettingUp if dot.along + row * 0.04 < phase(t, BUILD_S) * 1.25 => (1.0, 0.4),
         Signal::SettingUp => (0.2, 0.0),
         Signal::Idle | Signal::NeedsYou | Signal::Failed => (1.0, 0.0),
     }
+}
+
+/// How much of the agent's light is on a dot `along` the fan in `row`, from 0 to 1, when the light is at `sweep` along
+/// the inner row: full on the dot under it and fading out to either side, with each row out `trail` further behind.
+pub(crate) fn light_on(along: f32, row: usize, sweep: f32, trail: f32) -> f32 {
+    (1.0 - (along - (sweep - as_f32(row) * trail)).abs() * 3.5).clamp(0.0, 1.0)
 }
 
 /// How far through a motion that repeats every `period_s` seconds it is, from 0 to 1, at `t` seconds.
