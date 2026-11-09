@@ -55,9 +55,12 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ## The app icon
 
-The brand on a tile: the fan in copper, on a warm dark tile that fades from `#211d1b` at the top to the pane's `#151312`, with the thin edge colour around it.
+The brand on a tile, caught working: the fan in copper with the agent's white light partway across it, as a working mark draws it, on a warm dark tile that fades from `#211d1b` at the top to the pane's `#151312`, with the thin edge colour around it.
 
-![The app icon, at 1024 pixels](../../apps/desktop/AppIcon.iconset/icon_512x512@2x.png)
+![The app icon, at 1024 pixels](../../apps/desktop/icons/working.iconset/icon_512x512@2x.png)
+
+- **The light sits just right of the middle** of the inner row, with the outer row trailing as far behind as a four-row mark's, at every size. It's held still, so it doesn't say an agent is running. It's the fan as it looks at work, and says what the app is for: many jobs, one being worked on.
+- **The fan at rest is a second style,** [without the light](../../apps/desktop/icons/idle.iconset/icon_512x512@2x.png), drawn and checked the same way.
 
 - **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge.
 - **Smaller drawings have fewer rows,** so the dots stay big enough to see: four at 256 pixels, which the Dock shrinks to under half its size, three at 128 and 64, and two below that. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
@@ -74,4 +77,4 @@ The brand on a tile: the fan in copper, on a warm dark tile that fades from `#21
 | 32 | 16 points and under, such as a list | 5, 9 | On whole pixels, with dots two pixels square |
 | 16 | Only on a display that isn't Retina, at 16 points | 4, 8 | On whole pixels, with dots one pixel square. *Unconfirmed* |
 
-- **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws every size, and the gallery checks each against its file in `apps/desktop/AppIcon.iconset/`, which `iconutil` packs into the `.icns`. *Not built:* the app isn't packaged yet, so nothing shows the icon.
+- **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws each style at every size, and the gallery checks each against its file in the style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns`. *Not built:* the app isn't packaged yet, so nothing shows the icon.

@@ -1,5 +1,6 @@
-//! The app icon, drawn at every size macOS keeps a drawing for, and checked against its images in
-//! `apps/desktop/AppIcon.iconset/`, which `iconutil` packs into the `.icns` the app is packaged with.
+//! The app icon, in each style and at every size macOS keeps a drawing for, checked against its images in the
+//! style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns` the app
+//! is packaged with.
 
 #![cfg(test)]
 
@@ -13,7 +14,7 @@ use gpui_kit::{
     Render, Styled as _, Window, WindowBounds, WindowOptions, black, div, point, px, size, white,
 };
 use image::{Rgba, RgbaImage};
-use look::IconSize;
+use look::{IconSize, IconStyle};
 
 use super::UPDATE;
 use super::approved::{self, Verdict};
@@ -39,29 +40,32 @@ fn every_size_of_the_icon_looks_as_approved() {
     std::fs::create_dir_all(&out).unwrap();
     let mut cx = headless();
     let mut problems = Vec::new();
-    for size in IconSize::ALL {
-        let drawn = draw(&mut cx, size);
-        let pixels = u32::from(size.pixels());
-        assert_eq!(drawn.dimensions(), (pixels, pixels), "drawn at 2x, so each point is two pixels");
-        drawn.save(out.join(format!("icon-{pixels}.png"))).unwrap();
-        let files: Vec<&str> = FILES.iter().filter(|(_, s)| *s == size).map(|(name, _)| *name).collect();
-        if files.is_empty() {
-            problems.push(format!("the {pixels}px icon has no file"));
-        }
-        for name in files {
-            let path = iconset().join(name);
-            if update {
-                approved::accept_file(&path, &drawn);
-                continue;
+    for style in IconStyle::ALL {
+        for size in IconSize::ALL {
+            let drawn = draw(&mut cx, style, size);
+            let pixels = u32::from(size.pixels());
+            assert_eq!(drawn.dimensions(), (pixels, pixels), "drawn at 2x, so each point is two pixels");
+            drawn.save(out.join(format!("icon-{}-{pixels}.png", name(style)))).unwrap();
+            let files: Vec<&str> = FILES.iter().filter(|(_, s)| *s == size).map(|(file, _)| *file).collect();
+            if files.is_empty() {
+                problems.push(format!("the {pixels}px icon has no file"));
             }
-            match approved::compare_file(&path, &drawn) {
-                Verdict::Matches => {}
-                Verdict::Differs => problems.push(format!("{name} no longer matches the {pixels}px icon")),
-                Verdict::Missing => problems.push(format!("{name} is missing")),
+            for file in files {
+                let path = iconset(style).join(file);
+                let which = format!("{}.iconset/{file}", name(style));
+                if update {
+                    approved::accept_file(&path, &drawn);
+                    continue;
+                }
+                match approved::compare_file(&path, &drawn) {
+                    Verdict::Matches => {}
+                    Verdict::Differs => problems.push(format!("{which} no longer matches the {pixels}px icon")),
+                    Verdict::Missing => problems.push(format!("{which} is missing")),
+                }
             }
         }
     }
-    problems.extend(unknown_files().into_iter().map(|name| format!("{name} isn't one of the icon's files")));
+    problems.extend(unknown_files().into_iter().map(|path| format!("{path} isn't one of the icon's files")));
     assert!(
         problems.is_empty(),
         "{}\n\nWhat each size looks like now is in .context/gallery/. If a change is meant, {UPDATE}=1 accepts it.",
@@ -71,13 +75,14 @@ fn every_size_of_the_icon_looks_as_approved() {
 
 /// The icon over a backdrop of one colour.
 struct Icon {
+    style: IconStyle,
     size: IconSize,
     backdrop: Hsla,
 }
 
 impl Render for Icon {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().bg(self.backdrop).child(look::icon(self.size, cx))
+        div().size_full().bg(self.backdrop).child(look::icon(self.style, self.size, cx))
     }
 }
 
@@ -92,12 +97,12 @@ fn headless() -> HeadlessAppContext {
 
 /// Clear around its tile. The renderer only draws opaque pictures, so it's drawn over black and over white, and
 /// the two give back how much of each pixel the icon covers, and in what colour.
-fn draw(cx: &mut HeadlessAppContext, icon: IconSize) -> RgbaImage {
-    unblend(&over(cx, icon, black()), &over(cx, icon, white()))
+fn draw(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize) -> RgbaImage {
+    unblend(&over(cx, style, icon, black()), &over(cx, style, icon, white()))
 }
 
 /// In a window exactly as big as the icon.
-fn over(cx: &mut HeadlessAppContext, icon: IconSize, backdrop: Hsla) -> RgbaImage {
+fn over(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize, backdrop: Hsla) -> RgbaImage {
     let points = px(f32::from(icon.pixels()) / 2.0);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(0.), px(0.)), size(points, points)))),
@@ -105,7 +110,8 @@ fn over(cx: &mut HeadlessAppContext, icon: IconSize, backdrop: Hsla) -> RgbaImag
         show: false,
         ..Default::default()
     };
-    let handle = cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Icon { size: icon, backdrop }))).unwrap();
+    let handle =
+        cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Icon { style, size: icon, backdrop }))).unwrap();
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| window.render_frame(cx)).unwrap();
     let image = cx.capture_screenshot(handle.into()).unwrap();
@@ -134,15 +140,34 @@ fn byte(value: f32) -> u8 {
     value.round().clamp(0.0, 255.0) as u8
 }
 
-fn iconset() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("AppIcon.iconset")
+/// What a style's iconset is called.
+fn name(style: IconStyle) -> &'static str {
+    match style {
+        IconStyle::Idle => "idle",
+        IconStyle::Working => "working",
+    }
 }
 
-/// Files in the iconset that nothing draws, so nothing checks them.
+fn icons() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons")
+}
+
+fn iconset(style: IconStyle) -> PathBuf {
+    icons().join(format!("{}.iconset", name(style)))
+}
+
+/// Files in `icons/` that nothing draws, so nothing checks them: an iconset for no style, or a file in a style's
+/// iconset for no size.
 fn unknown_files() -> Vec<String> {
-    let entries = std::fs::read_dir(iconset()).into_iter().flatten().map(|entry| entry.unwrap().file_name());
-    entries
-        .map(|name| name.to_string_lossy().into_owned())
-        .filter(|name| !FILES.iter().any(|(known, _)| known == name))
-        .collect()
+    let names = |dir: PathBuf| -> Vec<String> {
+        let entries = std::fs::read_dir(dir).into_iter().flatten().map(|entry| entry.unwrap().file_name());
+        entries.map(|name| name.to_string_lossy().into_owned()).collect()
+    };
+    let styles: Vec<String> = IconStyle::ALL.iter().map(|style| format!("{}.iconset", name(*style))).collect();
+    let mut unknown: Vec<String> = names(icons()).into_iter().filter(|dir| !styles.contains(dir)).collect();
+    for style in IconStyle::ALL {
+        let files = names(iconset(style)).into_iter().filter(|file| !FILES.iter().any(|(known, _)| known == file));
+        unknown.extend(files.map(|file| format!("{}.iconset/{file}", name(style))));
+    }
+    unknown
 }

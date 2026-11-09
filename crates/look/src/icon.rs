@@ -1,5 +1,6 @@
 //! The app icon: the fan in copper on a warm dark tile, with a drawing of its own for each size macOS keeps one for.
-//! The gallery draws it into `apps/desktop/AppIcon.iconset/`, which the app is packaged with, and checks it there.
+//! It comes in two styles, and the gallery draws each into its own iconset in `apps/desktop/icons/`, and checks it
+//! there.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
@@ -8,7 +9,26 @@ use gpui_kit::{
 };
 
 use crate::fan::{self, ASPECT, Fan};
+use crate::mark::{LIGHT, light_on};
 use crate::palette::tile_top;
+
+mod pixels;
+
+use pixels::{Layout, OnPixels};
+
+/// The two ways the icon can look. The app's own is `Working`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IconStyle {
+    /// The fan at rest, as the brand is drawn in an empty state.
+    Idle,
+    /// The fan caught working, with the agent's white light partway across it, held still where a working mark has
+    /// it moving.
+    Working,
+}
+
+impl IconStyle {
+    pub const ALL: [IconStyle; 2] = [IconStyle::Idle, IconStyle::Working];
+}
 
 /// The sizes macOS keeps a drawing of the icon for. It mostly picks the smallest with the pixels it needs, so on a
 /// Retina display each is shown at up to half its pixels in points. The Dock is the exception, and uses the 256.
@@ -77,19 +97,6 @@ enum Drawing {
     OnPixels(OnPixels),
 }
 
-/// A fan laid out in the display's pixels, on a tile `inset` from the edge: `rows` rows of dots `dot` across, with
-/// every fan's counts, `spacing` apart along each row before they're moved onto whole pixels. The turntable is a hub
-/// `hub` across, in a ring of one pixel out to `ring`, if any. The tile's middle falls between two pixels, so the hub
-/// and the ring are an even number of pixels across, to centre on it.
-struct OnPixels {
-    inset: f32,
-    rows: usize,
-    dot: f32,
-    spacing: f32,
-    hub: f32,
-    ring: Option<f32>,
-}
-
 /// macOS's grid for an app icon: the tile is inset by this share of the canvas, and rounded by this share of itself.
 /// macOS masks the icon to its own shape anyway, so the tile only has to sit under that mask.
 const INSET: f32 = 100. / 1024.;
@@ -98,27 +105,40 @@ const CORNER: f32 = 0.225;
 const EDGE: f32 = 0.003;
 /// How much a turntable's hub and ring show, against the dots.
 const TURNTABLE: f32 = 0.6;
+/// Where a working icon has the agent's white light, as a working mark draws it: just right of the middle on the inner
+/// row, with the outer row trailing as far behind as a four-row mark's, whatever the rows.
+const SWEEP: f32 = 0.66;
+const TRAIL: f32 = 0.18;
 
-/// The icon at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has pixels.
-pub fn icon(size: IconSize, cx: &App) -> impl IntoElement {
+/// The icon in `style` at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has
+/// pixels.
+pub fn icon(style: IconStyle, size: IconSize, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let colors = Colors { copper: theme.ring, top: tile_top(), bottom: theme.background, edge: theme.border };
+    let colors = Colors {
+        copper: theme.ring,
+        light: theme.foreground,
+        top: tile_top(),
+        bottom: theme.background,
+        edge: theme.border,
+    };
     let width = px(f32::from(size.pixels()) / 2.0);
-    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, &size.drawing(), &colors, window))
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, style, &size.drawing(), &colors, window))
         .flex_none()
         .w(width)
         .h(width)
 }
 
-/// Copper is the theme's focus ring, as for the brand, and the tile fades down to the pane's colour.
+/// Copper is the theme's focus ring, as for the brand, the light is the mark's, and the tile fades down to the pane's
+/// colour.
 struct Colors {
     copper: Hsla,
+    light: Hsla,
     top: Hsla,
     bottom: Hsla,
     edge: Hsla,
 }
 
-fn paint(bounds: Bounds<Pixels>, drawing: &Drawing, colors: &Colors, window: &mut Window) {
+fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &Colors, window: &mut Window) {
     let scale = window.scale_factor();
     let side = bounds.size.width;
     let inset = match drawing {
@@ -133,195 +153,86 @@ fn paint(bounds: Bounds<Pixels>, drawing: &Drawing, colors: &Colors, window: &mu
     let corners = Corners::all(tile.size.width * CORNER);
     window.paint_quad(quad(tile, corners, fill, Edges::all(side * EDGE), colors.edge, BorderStyle::default()));
     match drawing {
-        Drawing::Scaled { rows, fan } => scaled(bounds, *rows, side * *fan, colors.copper, window),
-        Drawing::OnPixels(fan) => on_pixels(bounds, fan, colors.copper, window),
+        Drawing::Scaled { rows, fan } => scaled(bounds, style, *rows, side * *fan, colors, window),
+        Drawing::OnPixels(fan) => on_pixels(bounds, style, fan, colors, window),
     }
 }
 
 /// Centred on what it reaches rather than on its box, which leaves room under the turntable.
-fn scaled(bounds: Bounds<Pixels>, rows: usize, width: Pixels, copper: Hsla, window: &mut Window) {
+fn scaled(bounds: Bounds<Pixels>, style: IconStyle, rows: usize, width: Pixels, colors: &Colors, window: &mut Window) {
     let placed = Fan::with_rows(Bounds::new(point(px(0.), px(0.)), size(width, width * ASPECT)), rows);
     let (up, down) = placed.reach();
     let middle = bounds.center();
     let center = point(middle.x, middle.y + (up - down) * 0.5);
     let fan = Fan::with_rows(Bounds::new(center - placed.center, size(width, width * ASPECT)), rows);
     for dot in fan.dots() {
-        fan::disc(window, dot.at, fan.dot, copper);
+        fan::disc(window, dot.at, fan.dot, colors.copper);
+        let glow = light(style, dot.along, dot.row, rows);
+        if glow > 0.01 {
+            fan::disc(window, dot.at, fan.dot, colors.light.opacity(glow * LIGHT));
+        }
     }
     let turntable = fan.turntable();
-    fan::ring(window, fan.center, turntable.radius, turntable.line, copper.opacity(TURNTABLE));
-    fan::disc(window, fan.center, turntable.hub, copper.opacity(TURNTABLE));
+    let hub = colors.copper.opacity(TURNTABLE);
+    fan::ring(window, fan.center, turntable.radius, turntable.line, hub);
+    fan::disc(window, fan.center, turntable.hub, hub);
 }
 
 /// Each dot is a square of whole pixels, which at this size is sharper than a circle's soft edge.
-fn on_pixels(bounds: Bounds<Pixels>, fan: &OnPixels, copper: Hsla, window: &mut Window) {
+fn on_pixels(bounds: Bounds<Pixels>, style: IconStyle, fan: &OnPixels, colors: &Colors, window: &mut Window) {
     let scale = window.scale_factor();
     let layout = Layout::of(fan, bounds.size.width * scale / px(1.));
     let at = |(x, y): (f32, f32)| point(bounds.origin.x + px(x / scale), bounds.origin.y + px(y / scale));
     let side = px(fan.dot / scale);
     for dot in &layout.dots {
-        let corner = at(*dot);
-        let square = Bounds::new(point(corner.x - side * 0.5, corner.y - side * 0.5), size(side, side));
-        window.paint_quad(fill(square, copper));
+        let middle = at(dot.at);
+        let square = Bounds::new(point(middle.x - side * 0.5, middle.y - side * 0.5), size(side, side));
+        window.paint_quad(fill(square, colors.copper));
+        let glow = light(style, dot.along, dot.row, fan.rows);
+        if glow > 0.01 {
+            window.paint_quad(fill(square, colors.light.opacity(glow * LIGHT)));
+        }
     }
-    let turntable = copper.opacity(TURNTABLE);
+    let turntable = colors.copper.opacity(TURNTABLE);
     if let Some(ring) = fan.ring {
         fan::ring(window, at(layout.center), px(ring / scale), px(1. / scale), turntable);
     }
     fan::disc(window, at(layout.center), px(fan.hub / 2.0 / scale), turntable);
 }
 
-/// Where a fan on whole pixels goes, in pixels from the canvas's corner: its centre, and its dots' centres.
-struct Layout {
-    center: (f32, f32),
-    dots: Vec<(f32, f32)>,
-}
-
-impl Layout {
-    /// The left half is placed and the right mirrors it, so rounding can't make the two sides differ.
-    fn of(fan: &OnPixels, canvas: f32) -> Self {
-        // Every row has a dot on the middle line, as in every fan, except where dots are an odd number of pixels
-        // across: they sit on pixels' middles, so to mirror across the line between the tile's two middle pixels,
-        // none can sit on it, and every row has one dot fewer, with a gap there instead.
-        let first = fan::first_row(fan.rows) - usize::from(odd(fan.dot));
-        let around =
-            |center: (f32, f32)| fan::rows_of_dots(point(px(center.0), px(center.1)), px(fan.spacing), first, fan.rows);
-        let outer = around((0., 0.)).map(|dot| -dot.at.y / px(1.)).fold(0., f32::max);
-        let (up, down) = (outer + fan.dot / 2.0, (fan.hub / 2.0).max(fan.ring.unwrap_or(0.)));
-        // On the line between the tile's two middle pixels, and centred up and down on what it reaches.
-        let center = (canvas / 2.0, ((canvas + up - down) / 2.0).round());
-        let mut dots: Vec<(f32, f32)> = Vec::new();
-        for dot in around(center).filter(|d| d.along <= 0.5) {
-            let at = (on_whole_pixels(dot.at.x / px(1.), fan.dot), on_whole_pixels(dot.at.y / px(1.), fan.dot));
-            dots.push(at);
-            if dot.along < 0.5 {
-                dots.push((center.0 * 2.0 - at.0, at.1));
-            }
-        }
-        Layout { center, dots }
+/// How much of the agent's light is on a dot `along` the fan in `row`, of `rows`, in an icon in `style`.
+fn light(style: IconStyle, along: f32, row: usize, rows: usize) -> f32 {
+    match style {
+        IconStyle::Idle => 0.0,
+        IconStyle::Working => light_on(along, row, SWEEP, TRAIL / fan::as_f32(rows - 1)),
     }
-}
-
-/// Where something `across` pixels wide covers whole pixels: centred on a pixel's edge if it's an even number of
-/// pixels across, and on a pixel's middle if odd.
-fn on_whole_pixels(v: f32, across: f32) -> f32 {
-    if odd(across) { v.floor() + 0.5 } else { v.round() }
-}
-
-fn odd(pixels: f32) -> bool {
-    (pixels / 2.0).fract() > 0.25
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Drawing, IconSize, Layout, OnPixels, odd};
+    use super::{IconStyle, SWEEP, TRAIL, light};
 
-    fn on_pixels() -> Vec<(u16, OnPixels)> {
-        IconSize::ALL
-            .into_iter()
-            .filter_map(|size| match size.drawing() {
-                Drawing::OnPixels(fan) => Some((size.pixels(), fan)),
-                Drawing::Scaled { .. } => None,
-            })
-            .collect()
+    #[test]
+    fn the_working_icon_has_the_light_just_right_of_the_middle_with_the_outer_row_trailing() {
+        for rows in 2..=9 {
+            let outer = rows - 1;
+
+            let at = |along| light(IconStyle::Working, along, 0, rows);
+            assert!(at(0.5 + 0.1) > at(0.5), "{rows} rows: brighter just right of the middle");
+            assert!((light(IconStyle::Working, SWEEP, 0, rows) - 1.0).abs() < 1e-6, "{rows} rows: the inner row");
+            assert!((light(IconStyle::Working, SWEEP - TRAIL, outer, rows) - 1.0).abs() < 1e-6, "{rows} rows: outer");
+            assert!(light(IconStyle::Working, SWEEP, outer, rows) < 1.0, "{rows} rows: the outer row trails");
+            assert!(light(IconStyle::Working, 0.0, 0, rows) < 0.01, "{rows} rows: the left end is dark");
+        }
     }
 
     #[test]
-    fn the_smallest_sizes_are_drawn_on_whole_pixels() {
-        let sizes: Vec<u16> = on_pixels().into_iter().map(|(pixels, _)| pixels).collect();
-
-        assert_eq!(sizes, [16, 32, 64]);
-    }
-
-    #[test]
-    fn every_dot_on_whole_pixels_has_a_pixel_clear_around_it_and_sits_on_the_tile() {
-        for (pixels, fan) in on_pixels() {
-            let canvas = f32::from(pixels);
-            let layout = Layout::of(&fan, canvas);
-
-            assert!(layout.dots.len() > 8, "{pixels}: only {} dots", layout.dots.len());
-            for (i, a) in layout.dots.iter().enumerate() {
-                for b in &layout.dots[i + 1..] {
-                    let apart = (a.0 - b.0).abs().max((a.1 - b.1).abs());
-                    assert!(apart >= fan.dot + 1., "{pixels}: dots at {a:?} and {b:?} touch");
+    fn the_idle_icon_has_no_light() {
+        for rows in 2..=9 {
+            for along in [0.0, 0.25, 0.5, SWEEP, 1.0] {
+                for row in 0..rows {
+                    assert!(light(IconStyle::Idle, along, row, rows).abs() < f32::EPSILON, "{rows} rows, row {row}");
                 }
-                let reach = (a.0 - fan.dot / 2.0, a.0 + fan.dot / 2.0, a.1 - fan.dot / 2.0, a.1 + fan.dot / 2.0);
-                let tile = (fan.inset, canvas - fan.inset);
-                assert!(reach.0 >= tile.0 && reach.1 <= tile.1 && reach.2 >= tile.0 && reach.3 <= tile.1, "{pixels}");
-            }
-        }
-    }
-
-    #[test]
-    fn a_fan_on_whole_pixels_keeps_every_dot_of_its_rows() {
-        // Four more a row, as in every fan: 5 and 9, and 7, 11 and 15. Dots one pixel across have one fewer.
-        let expected = [(16, 4 + 8), (32, 5 + 9), (64, 7 + 11 + 15)];
-        for ((pixels, fan), (size, dots)) in on_pixels().into_iter().zip(expected) {
-            let layout = Layout::of(&fan, f32::from(pixels));
-
-            assert_eq!((pixels, layout.dots.len()), (size, dots));
-        }
-    }
-
-    #[test]
-    fn every_dot_on_whole_pixels_has_a_pixel_clear_of_the_turntable() {
-        for (pixels, fan) in on_pixels() {
-            let layout = Layout::of(&fan, f32::from(pixels));
-            let turntable = (fan.hub / 2.0).max(fan.ring.unwrap_or(0.));
-            let (cx, cy) = layout.center;
-
-            for (x, y) in &layout.dots {
-                let half = fan.dot / 2.0;
-                let nearest = (cx.clamp(x - half, x + half), cy.clamp(y - half, y + half));
-                let apart = (nearest.0 - cx).hypot(nearest.1 - cy);
-                assert!(apart >= turntable + 1.0, "{pixels}: the dot at {x}, {y} is {apart} from the centre");
-            }
-        }
-    }
-
-    #[test]
-    fn a_fan_on_whole_pixels_is_the_same_on_both_sides() {
-        for (pixels, fan) in on_pixels() {
-            let layout = Layout::of(&fan, f32::from(pixels));
-            let mirrored = |d: &(f32, f32)| (layout.center.0 * 2.0 - d.0, d.1);
-
-            for dot in &layout.dots {
-                assert!(layout.dots.contains(&mirrored(dot)), "{pixels}: {dot:?} has no twin");
-            }
-        }
-    }
-
-    #[test]
-    fn a_fan_on_whole_pixels_sits_in_the_middle_of_its_tile() {
-        for (pixels, fan) in on_pixels() {
-            let canvas = f32::from(pixels);
-            let layout = Layout::of(&fan, canvas);
-            let left = layout.dots.iter().map(|d| d.0 - fan.dot / 2.0).fold(f32::MAX, f32::min);
-            let right = layout.dots.iter().map(|d| d.0 + fan.dot / 2.0).fold(f32::MIN, f32::max);
-
-            let (space_left, space_right) = (left - fan.inset, canvas - fan.inset - right);
-            assert!((space_left - space_right).abs() < 0.01, "{pixels}: {space_left} on the left, {space_right} right");
-            assert!((layout.center.0 - canvas / 2.0).abs() < 0.01, "{pixels}: the turntable");
-        }
-    }
-
-    #[test]
-    fn every_row_of_a_fan_on_whole_pixels_has_the_same_middle() {
-        for (pixels, fan) in on_pixels() {
-            let layout = Layout::of(&fan, f32::from(pixels));
-            let on_the_line = layout.dots.iter().filter(|d| (d.0 - layout.center.0).abs() < 0.01).count();
-
-            let expected = if odd(fan.dot) { 0 } else { fan.rows };
-            assert_eq!(on_the_line, expected, "{pixels}: dots on the middle line");
-        }
-    }
-
-    #[test]
-    fn the_turntable_centres_on_the_line_between_two_pixels() {
-        for (pixels, fan) in on_pixels() {
-            assert!(!odd(fan.hub), "{pixels}: the hub is {} across", fan.hub);
-            if let Some(ring) = fan.ring {
-                assert!(!odd(ring * 2.0), "{pixels}: the ring is {} across", ring * 2.0);
             }
         }
     }
