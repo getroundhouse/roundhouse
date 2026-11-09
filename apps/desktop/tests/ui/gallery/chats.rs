@@ -3,10 +3,12 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{AgentRunState, AgentTask, ContentBlock, EventBody, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, EventBody, TurnOutcome};
 use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
+
+use super::events::{finished_turn, text, tool_result, tool_use, user_prompt};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 
@@ -24,14 +26,7 @@ pub(crate) fn finished() -> Vec<EventBody> {
          ```rust\npub struct Workspace {\n    // ...\n    /// As the hub last saw it. `None` if there isn't one.\n    \
          pub pull_request: Option<PullRequest>,\n}\n```",
     ));
-    events.push(EventBody::TurnEnded {
-        outcome: TurnOutcome::Success,
-        result: None,
-        errors: Vec::new(),
-        duration_ms: Some(48_000),
-        cost_usd: Some(0.21),
-        num_turns: Some(3),
-    });
+    events.push(finished_turn(48, 0.21));
     events
 }
 
@@ -55,31 +50,13 @@ pub(crate) fn background() -> Vec<EventBody> {
         "The full test suite is running in the background, since it takes a few minutes. I'll pick up again when it \
          finishes, or sooner if something fails.",
     ));
-    events.push(EventBody::TurnEnded {
-        outcome: TurnOutcome::Success,
-        result: None,
-        errors: Vec::new(),
-        duration_ms: Some(31_000),
-        cost_usd: Some(0.14),
-        num_turns: Some(4),
-    });
+    events.push(finished_turn(31, 0.14));
     events
 }
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
-    vec![
-        EventBody::UserPrompt { text: prompt.to_string(), client_msg_id: None, attachments: Vec::new() },
-        text("msg-1", reply),
-        EventBody::TurnEnded {
-            outcome: TurnOutcome::Success,
-            result: None,
-            errors: Vec::new(),
-            duration_ms: Some(9_000),
-            cost_usd: Some(0.04),
-            num_turns: Some(1),
-        },
-    ]
+    vec![user_prompt(prompt), text("msg-1", reply), finished_turn(9, 0.04)]
 }
 
 /// A prompt carrying a screenshot and a log, and the reply to it.
@@ -184,7 +161,7 @@ pub(crate) fn question() -> Vec<EventBody> {
 /// The start every chat here shares: the prompt, a search and a file read.
 fn looked_around() -> Vec<EventBody> {
     let mut events = vec![
-        EventBody::UserPrompt { text: ASK.to_string(), client_msg_id: None, attachments: Vec::new() },
+        user_prompt(ASK),
         EventBody::AgentInit {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),
@@ -213,38 +190,6 @@ fn looked_around() -> Vec<EventBody> {
     ));
     events.push(tool_result("toolu-2", "     1\t//! Workspaces grouped by repository, each with its status.\n     2\t\n     3\tuse gpui_kit::component::button::{Button, ButtonVariants as _};"));
     events
-}
-
-fn text(message: &str, text: &str) -> EventBody {
-    EventBody::Assistant {
-        message_id: Some(MessageId::from(message)),
-        parent_tool_use_id: None,
-        model: Some("claude-opus".to_string()),
-        blocks: vec![ContentBlock::Text { text: text.to_string() }],
-        first_index: None,
-    }
-}
-
-fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    EventBody::Assistant {
-        message_id: Some(MessageId::from(message)),
-        parent_tool_use_id: None,
-        model: Some("claude-opus".to_string()),
-        blocks: vec![ContentBlock::ToolUse { id: id.to_string(), name: name.to_string(), input }],
-        first_index: None,
-    }
-}
-
-fn tool_result(id: &str, text: &str) -> EventBody {
-    EventBody::AgentUser {
-        parent_tool_use_id: None,
-        blocks: vec![ContentBlock::ToolResult {
-            tool_use_id: ToolUseId::from(id),
-            is_error: false,
-            text: text.to_string(),
-            image_count: 0,
-        }],
-    }
 }
 
 pub(crate) const SETUP_LOG: &str = "\

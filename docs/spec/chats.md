@@ -40,6 +40,23 @@
 
 ![An attached image, opened](screens/attachment-opened.png)
 
+## Tool calls
+
+Every call is drawn the same way, as `look.md` says, and each kind fills in what its line says and what it opens to. A tool that has no drawing of its own still gets a readable line, so a new tool, or one from an MCP server, never shows as raw JSON until it's opened.
+
+- **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. Opened, the command comes first, highlighted as shell after a faint `$`, then what it printed. *Unconfirmed.*
+- **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. The output itself stays in muted text, so it's still easy to read. *Unconfirmed.*
+- **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
+- **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
+
+**Commands: one opened, one that failed, one the agent didn't describe, and one too long for its line.** *Unconfirmed.*
+
+![Commands, one opened with its output](screens/tool-commands.png)
+
+**Tools with no drawing of their own: one from an MCP server opened, one that failed, and a built-in one.** *Unconfirmed.*
+
+![Other tools, one opened to its input and output](screens/tool-any.png)
+
 ## Questions and approvals
 
 - **While the agent waits on a question, what's typed in the composer is the answer,** and the card says so. A plain Allow button would throw the question away. *Unconfirmed.*

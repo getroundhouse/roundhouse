@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, OwnedMenuItem, TestAppContext};
 
 use crate::support::{Stack, Ui, labelled};
@@ -32,28 +32,17 @@ fn flip_always_expand_thinking(ui: &mut Ui<'_>) {
 
 /// Whether each recorded thinking block in the chat is open, top to bottom, as its line tells assistive apps.
 fn thinking_open(ui: &mut Ui<'_>) -> Vec<bool> {
-    ui.frame();
-    let lines = ui.cx.update_window(ui.handle, |_, window, _| window.find_all_by_label("Thinking")).unwrap();
-    lines.iter().map(|line| line.expanded().unwrap()).collect()
+    ui.labelled("Thinking").iter().map(|line| line.expanded().unwrap()).collect()
 }
 
-/// The thinking shown in full, recorded or streaming, by element. The transcript gives each item's parts an ID of
-/// the part's name and the item's identity.
+/// The thinking shown in full, recorded or streaming, by element.
 fn thinking_shown(ui: &mut Ui<'_>) -> Vec<ElementId> {
-    ui.frame();
-    ui.cx
-        .update_window(ui.handle, |_, window, _| {
-            let ids = window.elements().into_iter().filter_map(|e| e.path().last().cloned());
-            ids.filter(|id| matches!(id, ElementId::Name(name) if name.starts_with("thinking/"))).collect()
-        })
-        .unwrap()
+    ui.shown("thinking/")
 }
 
 /// Opens or closes the thinking line at this position, top to bottom.
 fn click_thinking(ui: &mut Ui<'_>, position: usize) {
-    ui.frame();
-    let lines = ui.cx.update_window(ui.handle, |_, window, _| window.find_all_by_label("Thinking")).unwrap();
-    ui.click(lines[position].path().last().unwrap().clone());
+    ui.click_labelled("Thinking", position);
 }
 
 fn settings_file(stack: &Stack) -> PathBuf {

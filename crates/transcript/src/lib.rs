@@ -5,6 +5,9 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod attachments;
+mod calls;
+#[cfg(test)]
+mod fixtures;
 mod folds;
 mod item_key;
 mod log_block;

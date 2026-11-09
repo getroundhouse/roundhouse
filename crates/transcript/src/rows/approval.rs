@@ -11,7 +11,8 @@ use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
-use super::{row, summarize_input, waiting_card};
+use super::{row, waiting_card};
+use crate::calls::{self, summarize_input};
 use crate::item_key::ItemKey;
 use crate::transcript::Transcript;
 
@@ -31,7 +32,7 @@ pub(super) fn approval_card(
 ) -> AnyElement {
     use gpui_kit::component::button::{Button, ButtonVariants as _};
     let theme = cx.theme();
-    let summary = description.map_or_else(|| summarize_input(input).to_string(), str::to_string);
+    let summary = description.map_or_else(|| summarize_input(input), str::to_string);
     let answer = |decision: ApprovalDecision| {
         let (this, approval_id) = (this.clone(), approval_id.clone());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -42,7 +43,7 @@ pub(super) fn approval_card(
     let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
         Button::new(ElementId::NamedInteger(name.into(), seq)).label(label).on_click(answer(decision))
     };
-    let (title, content, buttons): (String, AnyElement, Div) = if tool_name == "ExitPlanMode" {
+    let (title, content, buttons): (String, AnyElement, Div) = if tool_name == calls::PLAN {
         let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
         let keep_planning = ApprovalDecision::Deny {
             message: "The user wants to keep planning. Ask them what to change.".to_string(),

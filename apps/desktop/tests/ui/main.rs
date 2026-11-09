@@ -28,5 +28,6 @@ mod streaming;
 mod support;
 mod title_strip;
 mod titles;
+mod tools;
 mod unread;
 mod updating;
