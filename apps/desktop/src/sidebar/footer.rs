@@ -1,4 +1,7 @@
-//! The bottom of the sidebar: adding a repository, the archive, and the build line, with where updating has got to.
+//! The bottom of the sidebar: adding a repository, the archive, and the build line, with where updating has got to, and
+//! which checkout a build from one is from.
+
+use std::path::Path;
 
 mod update_card;
 mod update_details;
@@ -8,12 +11,13 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled,
-    TestSupportExt as _, div,
+    AnyElement, App, Context, FontWeight, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+    Styled, TestSupportExt as _, div, px,
 };
 
-use crate::app::{AppView, BuildLine, UpdateQuestion};
-use crate::updates::{Answer, Kind, Problem};
+use crate::app::{AppView, BuildLine};
+use crate::checkout::Checkout;
+use crate::updates::{Kind, Problem};
 use update_card::update_card;
 
 fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button {
@@ -59,23 +63,45 @@ fn version(line: &BuildLine) -> AnyElement {
     }
 }
 
+/// Which checkout this build is from, and why it's open, so that several open at once can be told apart. Where it was
+/// built, and where its hub keeps its data, are on hover.
+fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    let built = format!("Built from {}. Its hub keeps its data in {}.", checkout.root().display(), data_dir.display());
+    let hover = checkout.note().map_or_else(|| built.clone(), |note| format!("{note}\n\n{built}"));
+    let note = checkout.note().map(|note| {
+        let text = div().id("checkout-note").text_xs().text_color(theme.muted_foreground).line_clamp(4);
+        text.child(note.to_string()).test_support()
+    });
+    v_flex()
+        .id("checkout-card")
+        .w_full()
+        .mt_2()
+        .p_2p5()
+        .gap_0p5()
+        .rounded(px(10.))
+        .bg(theme.secondary)
+        .border_1()
+        .border_color(theme.border)
+        .child(div().text_sm().font_weight(FontWeight::MEDIUM).truncate().child(checkout.name()))
+        .when_some(note, ParentElement::child)
+        .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
+        .test_support()
+        .into_any_element()
+}
+
 /// What a check for updates is doing or found, faint, under the build.
 fn check_line(id: &'static str, text: &'static str) -> AnyElement {
     div().id(id).px_2().text_xs().text_color(look::faint()).child(text).test_support().into_any_element()
 }
 
-pub(super) fn footer(
-    show_archived: bool,
-    build: &BuildLine,
-    question: Option<&UpdateQuestion>,
-    checking: bool,
-    answer: Option<Answer>,
-    update: Option<&Problem>,
-    cx: &mut Context<AppView>,
-) -> impl IntoElement {
+pub(super) fn footer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+    let (show_archived, build) = (app.show_archived, app.build_line(cx));
     let border = cx.theme().sidebar_border;
-    let card = update_card(build, question, cx);
-    let problem = update.map(|problem| update_problem(problem, cx));
+    let checkout = app.checkout.as_ref().map(|checkout| checkout_card(checkout, &app.hub.paths.data_dir, cx));
+    let card = update_card(&build, app.update_question.as_ref(), cx);
+    let problem = crate::updates::problem_shown(cx).cloned().map(|problem| update_problem(&problem, cx));
+    let (checking, answer) = (crate::updates::checking(cx), crate::updates::answered(cx));
     v_flex()
         .flex_none()
         .items_start()
@@ -94,7 +120,8 @@ pub(super) fn footer(
                     cx.notify();
                 })),
         )
-        .child(card.unwrap_or_else(|| version(build)))
+        .when_some(checkout, ParentElement::child)
+        .child(card.unwrap_or_else(|| version(&build)))
         .when(checking, |d| d.child(check_line("checking-for-updates", "Checking for updates…")))
         .when_some(answer, |d, answer| d.child(check_line("update-answer", answer.text())))
         .when_some(problem, ParentElement::child)

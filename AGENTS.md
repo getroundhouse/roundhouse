@@ -11,8 +11,8 @@ Start with `README.md`. `docs/documentation.md` lists every doc, and says what g
 ```sh
 cargo test                        # The backend, with a fake agent. Needs no GPUI, so it runs on Linux too
 cargo test --workspace            # Also the transcript and the desktop app's UI tests
-cargo run -p desktop --bin roundhouse-desktop   # The app
-cargo run -p desktop --example look -- <workspace> diff   # The app, opened on a view, for screenshots
+cargo run -p desktop --bin roundhouse-desktop -- --note "What to try"   # The app. Its sidebar and title name this checkout and say the note
+cargo run -p desktop --example look -- <workspace> diff --note "What it shows"   # The app, opened on a view, for screenshots
 cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens, and every size of both styles of the app icon. No hub, no window
 ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
@@ -22,6 +22,8 @@ tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.4
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
+
+Whenever you open the app, say why with `--note`, even if nobody is meant to look at it, since copies from several checkouts can be open at once.
 
 Roundhouse can be developed from inside Roundhouse, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `roundhouse-dev`, and only a release build uses the real data, which is what `tools/install.sh` installs. Set `ROUNDHOUSE_HOME` and `ROUNDHOUSE_WORKSPACES` to choose another.
 

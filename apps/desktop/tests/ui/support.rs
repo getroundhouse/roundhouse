@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, Daemon};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
+use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
@@ -71,6 +72,8 @@ pub(crate) fn point_daemons_at_the_fake_agent() {
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: HubSource,
+    /// What the app is told it was built from. None, as for a stamped build, unless a test is about it.
+    pub(crate) checkout: Option<Checkout>,
 }
 
 impl Stack {
@@ -96,7 +99,7 @@ impl Stack {
             build_number: None,
             build_version: protocol::BUILD_VERSION,
         };
-        Self { dir, hub }
+        Self { dir, hub, checkout: None }
     }
 
     pub(crate) fn repo(&self) -> PathBuf {
@@ -154,8 +157,8 @@ impl<'a> Ui<'a> {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
-        let hub = stack.hub.clone();
-        let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, cx)).unwrap();
+        let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
+        let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, checkout, cx)).unwrap();
         Self { cx, handle, view, seen_approval: 0 }
     }
 

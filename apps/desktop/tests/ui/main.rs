@@ -6,6 +6,7 @@
 #![cfg(test)]
 
 mod chats;
+mod checkout;
 mod core_loop;
 #[cfg(target_os = "macos")]
 mod gallery;

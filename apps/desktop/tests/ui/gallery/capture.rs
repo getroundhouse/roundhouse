@@ -49,7 +49,8 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     cx.allow_parking();
     cx.update(gpui_kit::init);
     cx.update(look::hold_still);
-    let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, cx)).unwrap();
+    // As people see it, so no checkout.
+    let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, None, cx)).unwrap();
     let mut app = Driver { cx, handle, view };
     app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
     for step in screen.steps {

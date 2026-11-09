@@ -10,6 +10,7 @@ use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, T
 use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus};
 
+use crate::checkout::Checkout;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
@@ -45,7 +46,9 @@ pub enum Connection {
 }
 
 pub struct AppView {
-    hub: HubSource,
+    pub(crate) hub: HubSource,
+    /// The checkout this build is from, which the sidebar names, with why it's open.
+    pub(crate) checkout: Option<Checkout>,
     pub connection: Connection,
     /// Client-core's copy of the hub's records. The lists below are what's shown of it.
     feed: Option<RecordsFeed>,
@@ -92,7 +95,7 @@ pub struct AppView {
 }
 
 impl AppView {
-    pub fn new(hub: HubSource, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(hub: HubSource, checkout: Option<Checkout>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
@@ -106,6 +109,7 @@ impl AppView {
         .detach();
         let mut this = Self {
             hub,
+            checkout,
             connection: Connection::Connecting,
             feed: None,
             joining: None,

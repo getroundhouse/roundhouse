@@ -2,6 +2,7 @@
 
 mod alert;
 pub mod app;
+pub mod checkout;
 pub mod diff_panel;
 mod highlight;
 mod menus;
@@ -10,6 +11,7 @@ mod sidebar;
 pub mod updates;
 pub mod workspace_pane;
 
+use checkout::Checkout;
 use gpui_kit::assets::Assets;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
@@ -43,8 +45,13 @@ actions!(
     ]
 );
 
-/// Opens the main window on an app that's already running, and returns its view.
-pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
+/// Opens the main window on an app that's already running, and returns its view. `checkout` is the one this build is
+/// from, which the window names, or `None` for a stamped build, or a picture of the app.
+pub fn open_main_window(
+    hub: app::HubSource,
+    checkout: Option<Checkout>,
+    cx: &mut App,
+) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     settings::load(&hub.paths.data_dir, cx);
     cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
@@ -74,7 +81,7 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
         // buttons sit in the sidebar's empty corner, level with the header. The title still names the
         // window in the Window menu and Mission Control.
         titlebar: Some(TitlebarOptions {
-            title: Some("Roundhouse".into()),
+            title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,
             traffic_light_position: Some(point(px(16.), px(16.))),
         }),
@@ -88,18 +95,18 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
     gpui_kit::open_window(options, cx, |window, cx| {
         look::apply(cx);
         window.activate_window();
-        cx.new(|cx| app::AppView::new(hub, window, cx))
+        cx.new(|cx| app::AppView::new(hub, checkout, window, cx))
     })
 }
 
-pub fn run() {
+pub fn run(checkout: Option<Checkout>) {
     gpui_kit::application().with_assets(Assets).run(|cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let opened = app::HubSource::default_local().and_then(|hub| {
             let data_dir = hub.paths.data_dir.clone();
-            open_main_window(hub, cx).map(|_| data_dir)
+            open_main_window(hub, checkout, cx).map(|_| data_dir)
         });
         match opened {
             Ok(data_dir) => updates::start(&data_dir, cx),
