@@ -16,7 +16,8 @@ pub enum Size {
 }
 
 impl Size {
-    fn width(self) -> Pixels {
+    /// How wide a mark of this size is drawn, for lining things up with it.
+    pub fn width(self) -> Pixels {
         match self {
             Size::Row => px(18.),
             Size::Inline => px(16.),

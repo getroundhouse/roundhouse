@@ -14,6 +14,7 @@ use crate::checkout::Checkout;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
+mod home;
 mod hub_source;
 mod quitting;
 mod reading;
@@ -61,6 +62,10 @@ pub struct AppView {
     pub workspaces: Vec<Workspace>,
     pub sessions: HashMap<WorkspaceId, Vec<Session>>,
     pub selected: Option<WorkspaceId>,
+    /// Whether the selected workspace shows, or Home in its place.
+    main: home::Main,
+    /// What Home shows, kept while it's put away.
+    pub(crate) home: crate::home::Home,
     pub panes: HashMap<WorkspaceId, Entity<WorkspacePane>>,
     pub error: Option<String>,
     pub show_archived: bool,
@@ -118,6 +123,8 @@ impl AppView {
             workspaces: Vec::new(),
             sessions: HashMap::new(),
             selected: None,
+            main: home::Main::default(),
+            home: crate::home::Home::new(window, cx),
             panes: HashMap::new(),
             error: None,
             show_archived: false,
@@ -304,6 +311,7 @@ impl AppView {
 
     pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         self.selected = Some(id);
+        self.close_home();
         self.show_selected(cx);
         cx.notify();
     }
@@ -354,7 +362,8 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::catch_up);
         }
-        if let Some(pane) = self.panes.get(&id) {
+        // While Home shows, as when the selection goes away under it, its search keeps the keys.
+        if let Some(pane) = self.panes.get(&id).filter(|_| !self.home_showing()) {
             pane.update(cx, |p, cx| p.focus_showing(window, cx));
         }
         self.read_on_screen(window.is_window_active(), cx);
@@ -367,12 +376,6 @@ impl AppView {
             return None;
         }
         self.selected.as_ref().and_then(|id| self.panes.get(id).cloned())
-    }
-
-    /// The repository to put a new workspace in: the selected workspace's, or the first.
-    pub fn current_repo(&self) -> Option<RepoId> {
-        let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
-        selected.map(|w| w.repo_id.clone()).or_else(|| self.repos.first().map(|r| r.id.clone()))
     }
 }
 

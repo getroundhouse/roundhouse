@@ -235,6 +235,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "home", spec: "home.md", world: Some(titled), steps: &[Step::Select(FOCUS), Step::Click("home")] },
     Screen {
         name: "rename",
         spec: "workspaces.md",
