@@ -1,0 +1,3 @@
+# Made by scripts/build.sh: xcodegen's project, and Xcode's build output.
+ios/*.xcodeproj/
+build/

@@ -4,7 +4,7 @@
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
-    App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill,
+    App, Background, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill,
     linear_color_stop, linear_gradient, point, px, quad, size,
 };
 
@@ -113,19 +113,31 @@ const TRAIL: f32 = 0.18;
 /// The icon in `style` at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has
 /// pixels.
 pub fn icon(style: IconStyle, size: IconSize, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
-    let colors = Colors {
-        copper: theme.ring,
-        light: theme.foreground,
-        top: tile_top(),
-        bottom: theme.background,
-        edge: theme.border,
-    };
+    let colors = colors(cx);
     let width = px(f32::from(size.pixels()) / 2.0);
     canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, style, &size.drawing(), &colors, window))
         .flex_none()
         .w(width)
         .h(width)
+}
+
+/// The iPhone's icon, at the 1024 pixels iOS draws every size from, so 512 points wide. iOS rounds an app's icon to
+/// its own shape and wants it opaque, so this is the working icon's tile filling the canvas, with no edge, and the fan
+/// as big against it as the 1024 drawing's is against its tile. iOS's corners are about macOS's, so it looks the same.
+pub fn phone_icon(cx: &App) -> impl IntoElement {
+    let colors = colors(cx);
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint_phone(bounds, &colors, window)).flex_none().size(px(512.))
+}
+
+fn colors(cx: &App) -> Colors {
+    let theme = cx.theme();
+    Colors {
+        copper: theme.ring,
+        light: theme.foreground,
+        top: tile_top(),
+        bottom: theme.background,
+        edge: theme.border,
+    }
 }
 
 /// Copper is the theme's focus ring, as for the brand, the light is the mark's, and the tile fades down to the pane's
@@ -149,13 +161,30 @@ fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &C
         point(bounds.origin.x + inset, bounds.origin.y + inset),
         size(side - inset * 2.0, side - inset * 2.0),
     );
-    let fill = linear_gradient(180., linear_color_stop(colors.top, 0.), linear_color_stop(colors.bottom, 1.));
     let corners = Corners::all(tile.size.width * CORNER);
-    window.paint_quad(quad(tile, corners, fill, Edges::all(side * EDGE), colors.edge, BorderStyle::default()));
+    window.paint_quad(quad(
+        tile,
+        corners,
+        tile_fill(colors),
+        Edges::all(side * EDGE),
+        colors.edge,
+        BorderStyle::default(),
+    ));
     match drawing {
         Drawing::Scaled { rows, fan } => scaled(bounds, style, *rows, side * *fan, colors, window),
         Drawing::OnPixels(fan) => on_pixels(bounds, style, fan, colors, window),
     }
+}
+
+fn paint_phone(bounds: Bounds<Pixels>, colors: &Colors, window: &mut Window) {
+    window.paint_quad(fill(bounds, tile_fill(colors)));
+    let Drawing::Scaled { rows, fan } = IconSize::Px1024.drawing() else { return };
+    let width = bounds.size.width * fan / (1. - 2. * INSET);
+    scaled(bounds, IconStyle::Working, rows, width, colors, window);
+}
+
+fn tile_fill(colors: &Colors) -> Background {
+    linear_gradient(180., linear_color_stop(colors.top, 0.), linear_color_stop(colors.bottom, 1.))
 }
 
 /// Centred on what it reaches rather than on its box, which leaves room under the turntable.

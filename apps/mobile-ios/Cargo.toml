@@ -1,0 +1,48 @@
+[package]
+name = "mobile-ios"
+description = "The iOS app. Its views also build on the Mac, where its tests draw them."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "roundhouse-ios"
+path = "src/main.rs"
+
+[lib]
+name = "mobile"
+path = "src/lib.rs"
+
+[features]
+testing = []
+
+[dependencies]
+anyhow.workspace = true
+protocol.workspace = true
+client-core.workspace = true
+transcript.workspace = true
+gpui-kit.workspace = true
+look.workspace = true
+flume.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "ios")'.dependencies]
+gpui_ios.workspace = true
+# The Keychain, for the token a hub gave this phone.
+security-framework.workspace = true
+
+[dev-dependencies]
+mobile-ios = { path = ".", features = ["testing"] }
+look = { workspace = true, features = ["testing"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
+image = { workspace = true, features = ["png"] }
+tempfile.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-pre-apple.workspace = true
+
+[lints]
+workspace = true

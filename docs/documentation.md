@@ -35,6 +35,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `docs/performance.md` | Reference | Agents | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/inspiration.md` | Reference | Agents | What Conductor does, as a source of ideas |
 | `AGENTS.md` | Instructions | Owner | How to build and test, and the rules for working here |
+| `apps/mobile-ios/README.md` | Instructions | Agents | How to build the iPhone app, run it on a phone, and pair it with a hub |
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
 

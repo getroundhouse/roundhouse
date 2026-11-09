@@ -70,12 +70,14 @@ apps/
   daemon/          One binary that runs as a hub or a worker
   cli/             Command-line client
   desktop/         GPUI and gpui-kit app, with its UI tests
-  mobile-ios/      iOS app, after the proof of concept. Not built
+  mobile-ios/      iPhone app, on GPUI's iOS backend, with its UI tests, and the Xcode packaging that signs it
 providers/
   incus/           First external adapter. Not built
 services/
   relay/           Lets phones reach hubs that aren't publicly reachable. Not built
   hosted/          Accounts and billing, only if a hosted service is run. Not built
+third_party/
+  gpui-pre-ios/    GPUI's iOS backend, with two fixes for the iPhone app: 120 Hz, and the keyboard for the kit's inputs. *Unconfirmed.*
 tools/
   policy/          Tests that enforce the license and dependency rules below
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
@@ -86,7 +88,7 @@ tools/
 .github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change. The release workflow publishes each merge to `main`
 ```
 
-The binaries are `roundhouse`, `roundhoused` and `roundhouse-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `roundhouse-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
+The binaries are `roundhouse`, `roundhoused`, `roundhouse-desktop` and the iPhone app's `roundhouse-ios`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `roundhouse-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
 
 ## Dependency rules
 
