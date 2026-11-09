@@ -11,6 +11,7 @@ mod core_loop;
 mod gallery;
 #[cfg(target_os = "macos")]
 mod marks;
+mod other_hubs;
 mod pickers;
 mod questions;
 mod reconnecting;

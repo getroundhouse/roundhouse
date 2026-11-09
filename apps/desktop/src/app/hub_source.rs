@@ -20,13 +20,20 @@ pub struct HubSource {
     pub build_version: &'static str,
 }
 
-/// Whether to replace this hub with this app's own. Only an older one, so two versions can't keep replacing
-/// each other's, and only one a client started, and only if nothing would notice: this app is the one client,
-/// and its request for the status is the one thing the hub is doing.
+/// Whether this app may restart this hub. Only one a client started, and only an older one, so two versions
+/// can't keep replacing each other's. A newer hub may have written what this app's own can't open. Older is by build
+/// number, which a build without one never is, or by protocol, which every build has. A hub only takes a client on
+/// its own protocol, so that only counts across a real break.
+pub(super) fn may_restart(hub: &HubStatus, app_build: Option<u64>) -> bool {
+    let older_build = matches!((hub.build_number, app_build), (Some(hub), Some(app)) if hub < app);
+    hub.on_demand && (older_build || hub.protocol_version < protocol::PROTOCOL_VERSION)
+}
+
+/// Whether to replace this hub with this app's own without asking: one it may restart, and only if nothing would
+/// notice. This app is the one client, and its request for the status is the one thing the hub is doing.
 fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
-    let older = matches!((hub.build_number, app_build), (Some(hub), Some(app)) if hub < app);
     let idle = hub.running_sessions == 0 && hub.running_setups == 0 && hub.requests <= 1;
-    older && hub.on_demand && idle && hub.clients <= 1
+    may_restart(hub, app_build) && idle && hub.clients <= 1
 }
 
 impl HubSource {
@@ -38,17 +45,19 @@ impl HubSource {
         Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
     }
 
-    /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to. Only here,
-    /// while connecting, and only an idle hub, so nothing running is lost. The panes stay, with what's typed in
-    /// them.
-    pub(super) fn connect(&self) -> Result<Client, ClientError> {
-        let client = self.connect_or_start()?;
-        if !should_replace(&client.hub_status()?, self.build_number) {
-            return Ok(client);
+    /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to, which is only an
+    /// idle one, so nothing running is lost. The panes stay, with what's typed in them. Also returns the hub's status
+    /// as it connected.
+    pub(super) fn connect(&self) -> Result<(Client, HubStatus), ClientError> {
+        let mut client = self.connect_or_start()?;
+        let mut status = client.hub_status()?;
+        if should_replace(&status, self.build_number) {
+            drop(client);
+            client_core::stop_hub_if_still(&self.paths.socket, status.pid)?;
+            client = self.connect_or_start()?;
+            status = client.hub_status()?;
         }
-        drop(client);
-        client_core::stop_hub(&self.paths.socket)?;
-        self.connect_or_start()
+        Ok((client, status))
     }
 
     fn connect_or_start(&self) -> Result<Client, ClientError> {
@@ -103,6 +112,32 @@ mod tests {
     #[test]
     fn a_hub_started_by_hand_is_left_alone() {
         assert!(!should_replace(&HubStatus { on_demand: false, ..older_idle_hub() }, Some(2)));
+    }
+
+    #[test]
+    fn a_busy_older_hub_can_still_be_restarted_by_asking() {
+        let busy = HubStatus { running_sessions: 2, running_setups: 1, clients: 3, requests: 2, ..older_idle_hub() };
+        assert!(!should_replace(&busy, Some(2)));
+        assert!(may_restart(&busy, Some(2)));
+    }
+
+    #[test]
+    fn a_hub_on_an_older_protocol_can_be_restarted_whatever_its_build() {
+        let across_a_break = HubStatus { protocol_version: protocol::PROTOCOL_VERSION - 1, ..older_idle_hub() };
+        assert!(may_restart(&HubStatus { build_number: None, ..across_a_break.clone() }, None));
+        assert!(!may_restart(&HubStatus { on_demand: false, ..across_a_break }, None));
+        let newer =
+            HubStatus { protocol_version: protocol::PROTOCOL_VERSION + 1, build_number: None, ..older_idle_hub() };
+        assert!(!may_restart(&newer, None));
+    }
+
+    #[test]
+    fn only_an_older_hub_a_client_started_can_be_restarted() {
+        assert!(!may_restart(&older_idle_hub(), Some(1)));
+        assert!(!may_restart(&HubStatus { build_number: Some(3), ..older_idle_hub() }, Some(2)));
+        assert!(!may_restart(&HubStatus { on_demand: false, ..older_idle_hub() }, Some(2)));
+        assert!(!may_restart(&older_idle_hub(), None));
+        assert!(!may_restart(&HubStatus { build_number: None, ..older_idle_hub() }, Some(2)));
     }
 
     #[test]

@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection};
+use super::{AppView, Connection, hub_source};
 use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
 use crate::{
     AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
@@ -29,7 +29,10 @@ impl Render for AppView {
         let main: AnyElement = match &self.connection {
             Connection::Connecting => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, danger, cx),
-            Connection::AcrossABreak(status) => across_a_break(status, self.hub.build_version, muted, cx),
+            Connection::AcrossABreak(status) => {
+                let may_restart = hub_source::may_restart(status, self.hub.build_number);
+                across_a_break(status, self.hub.build_version, may_restart, muted, cx)
+            }
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => empty_state(
@@ -191,25 +194,41 @@ pub(super) fn unsent_note(chats: usize, comments: usize) -> Option<String> {
     Some(format!("What's typed in {typed} hasn't been sent, and restarting loses it."))
 }
 
-/// What restarting would cost, since this is the one screen that can stop agents with one click.
-fn restart_note(agents: u32, setups: u32) -> String {
-    let count = |n: u32, what: &str| match n {
-        0 => None,
-        1 => Some(format!("1 {what}")),
-        n => Some(format!("{n} {what}s")),
-    };
-    let start = "Restarting it starts one that matches";
-    match (count(agents, "agent"), count(setups, "setup script")) {
-        (None, None) => format!("{start}. Nothing is running on it."),
-        (Some(both), None) | (None, Some(both)) => format!("{start}, and stops the {both} running on it."),
-        (Some(agents), Some(setups)) => format!("{start}, and stops the {agents} and {setups} running on it."),
+/// What's running on a hub, as "the 2 agents and 1 setup script", or `None` for nothing.
+fn running(status: &HubStatus) -> Option<String> {
+    let count = |n: u32| usize::try_from(n).unwrap_or(usize::MAX);
+    let agents = counted(count(status.running_sessions), "agent");
+    match (agents, counted(count(status.running_setups), "setup script")) {
+        (None, None) => None,
+        (Some(both), None) | (None, Some(both)) => Some(format!("the {both}")),
+        (Some(agents), Some(setups)) => Some(format!("the {agents} and {setups}")),
     }
 }
 
-/// Only a hub a client started, and only an older one. This app's own hub might not be able to open what a newer
-/// one has written, so restarting that would stop its agents and leave nothing running.
-fn can_restart(status: &HubStatus) -> bool {
-    status.on_demand && status.protocol_version < protocol::PROTOCOL_VERSION
+/// That a stopped agent carries on, for after saying what stops.
+fn picks_up(status: &HubStatus) -> &'static str {
+    match status.running_sessions {
+        0 => "",
+        1 => " The agent picks up its conversation at its next prompt.",
+        _ => " Each agent picks up its conversation at its next prompt.",
+    }
+}
+
+/// What restarting the hub across a break would cost, since that screen can stop agents with one click.
+fn restart_note(status: &HubStatus) -> String {
+    let start = "Restarting it starts one that matches";
+    match running(status) {
+        None => format!("{start}. Nothing is running on it."),
+        Some(running) => format!("{start}, and stops {running} running on it.{}", picks_up(status)),
+    }
+}
+
+/// What the app asks before finishing an update by restarting the older hub.
+pub(super) fn finish_question(status: &HubStatus) -> String {
+    match running(status) {
+        None => "Nothing is running on the previous version.".to_string(),
+        Some(running) => format!("This stops {running} still running on the previous version.{}", picks_up(status)),
+    }
 }
 
 fn try_again(cx: &mut Context<AppView>) -> Button {
@@ -229,10 +248,17 @@ fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
         .into_any_element()
 }
 
-fn across_a_break(status: &HubStatus, app_version: &str, muted: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+/// `may_restart` says whether this app may restart the hub, which is only one a client started, and an older one.
+fn across_a_break(
+    status: &HubStatus,
+    app_version: &str,
+    may_restart: bool,
+    muted: Hsla,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
     let versions = format!("The hub is version {}, and this app is {app_version}.", status.hub_version);
-    let next = if can_restart(status) {
-        restart_note(status.running_sessions, status.running_setups)
+    let next = if may_restart {
+        restart_note(status)
     } else if status.on_demand {
         "It's newer than this app, so the app needs updating.".to_string()
     } else {
@@ -240,11 +266,12 @@ fn across_a_break(status: &HubStatus, app_version: &str, muted: Hsla, cx: &mut C
             .to_string()
     };
     let note = |text: String| div().max_w(px(560.0)).text_center().text_sm().text_color(muted).child(text);
-    let action = if can_restart(status) {
+    let action = if may_restart {
+        let pid = status.pid;
         Button::new("restart-hub")
             .primary()
             .label("Restart the hub")
-            .on_click(cx.listener(|t, _, _, cx| t.restart_hub(cx)))
+            .on_click(cx.listener(move |t, _, _, cx| t.restart_hub(pid, cx)))
     } else {
         try_again(cx)
     };
@@ -306,12 +333,39 @@ mod tests {
         );
     }
 
+    /// What a hub reports with these running on it.
+    fn running_on(agents: u32, setups: u32) -> HubStatus {
+        HubStatus {
+            pid: 1,
+            hub_version: "older".to_string(),
+            protocol_version: protocol::PROTOCOL_VERSION,
+            started_at_ms: 0,
+            workers: agents,
+            running_sessions: agents,
+            clients: 1,
+            on_demand: true,
+            build_number: Some(1),
+            running_setups: setups,
+            requests: 1,
+        }
+    }
+
     #[test]
     fn the_restart_note_says_what_would_stop() {
-        assert!(restart_note(0, 0).ends_with("Nothing is running on it."));
-        assert!(restart_note(1, 0).ends_with("stops the 1 agent running on it."));
-        assert!(restart_note(2, 0).ends_with("stops the 2 agents running on it."));
-        assert!(restart_note(0, 2).ends_with("stops the 2 setup scripts running on it."));
-        assert!(restart_note(2, 1).ends_with("stops the 2 agents and 1 setup script running on it."));
+        assert!(restart_note(&running_on(0, 0)).ends_with("Nothing is running on it."));
+        assert!(restart_note(&running_on(1, 0)).contains("stops the 1 agent running on it. The agent picks up"));
+        assert!(restart_note(&running_on(2, 0)).contains("stops the 2 agents running on it. Each agent picks up"));
+        assert!(restart_note(&running_on(0, 2)).ends_with("stops the 2 setup scripts running on it."));
+        assert!(restart_note(&running_on(2, 1)).contains("stops the 2 agents and 1 setup script running on it. Each"));
+    }
+
+    #[test]
+    fn finishing_an_update_says_what_would_stop() {
+        assert_eq!(finish_question(&running_on(0, 0)), "Nothing is running on the previous version.");
+        assert_eq!(
+            finish_question(&running_on(2, 1)),
+            "This stops the 2 agents and 1 setup script still running on the previous version. Each agent picks up \
+             its conversation at its next prompt."
+        );
     }
 }

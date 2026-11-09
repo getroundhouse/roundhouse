@@ -16,5 +16,5 @@ mod client;
 
 pub use client::{
     Client, ClientError, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, Result, Subscription,
-    SubscriptionItem, new_message_id, new_request_id, stop_hub,
+    SubscriptionItem, new_message_id, new_request_id, stop_hub, stop_hub_if_still,
 };

@@ -1,7 +1,8 @@
 //! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real
 //! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. With
-//! `--speaks-this-protocol` it takes a hello, as an older build would, and refuses anything else. It holds the
-//! same lock as a real hub.
+//! `--speaks-this-protocol` it takes a hello, as an older build would, and serves a hub with nothing in it, so the
+//! app can use it, and refuses anything else. It holds the same lock as a real hub. A test can change how many agents
+//! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -13,11 +14,12 @@ use clap::Parser;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
+use protocol::model::Records;
 use protocol::paths::Paths;
 
 #[derive(Parser)]
 struct Args {
-    /// How many agents it says are running.
+    /// How many agents it says are running, until a test writes another number to [`RUNNING`].
     #[arg(long, default_value_t = 0)]
     running: u32,
     /// Say it was started by hand, so a client mustn't restart it.
@@ -38,6 +40,14 @@ fn reply(stream: &mut UnixStream, id: u64, outcome: ReplyOutcome) {
     let _ = stream.write_all(&protocol::frame::encode(&HubFrame::Reply { id, outcome }).unwrap());
 }
 
+/// The file in its data directory that says how many agents are running, once a test has written it.
+const RUNNING: &str = "stand-in-running";
+
+fn running(args: &Args, paths: &Paths) -> u32 {
+    let written = std::fs::read_to_string(paths.data_dir.join(RUNNING)).ok();
+    written.and_then(|n| n.trim().parse().ok()).unwrap_or(args.running)
+}
+
 fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
     for line in BufReader::new(stream.try_clone().unwrap()).lines() {
         let Ok(line) = line else { return };
@@ -50,7 +60,15 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
                 };
                 reply(&mut stream, request.id, ReplyOutcome::Response(hello));
             }
+            ClientRequest::FeedSubscribe { .. } if args.speaks_this_protocol => {
+                reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::Ok));
+            }
+            ClientRequest::RecordsList if args.speaks_this_protocol => {
+                let nothing = ClientResponse::Records(Records::default());
+                reply(&mut stream, request.id, ReplyOutcome::Response(nothing));
+            }
             ClientRequest::HubStatus => {
+                let running = running(args, paths);
                 let status = HubStatus {
                     pid: std::process::id(),
                     hub_version: "from-before-the-break".to_string(),
@@ -62,8 +80,8 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
                         protocol::PROTOCOL_VERSION - 1
                     },
                     started_at_ms: 0,
-                    workers: args.running,
-                    running_sessions: args.running,
+                    workers: running,
+                    running_sessions: running,
                     clients: 1,
                     on_demand: !args.not_on_demand,
                     build_number: args.build,

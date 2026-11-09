@@ -235,3 +235,16 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
     assert!(client.hub_status().is_ok());
     client.hub_shutdown().unwrap();
 }
+
+/// The app stops a hub it asked about only if that's still the hub there, since another may have started since.
+#[test]
+fn stopping_a_hub_by_its_pid_leaves_another_alone() {
+    let mut stack = Stack::start();
+    let pid = stack.client().hub_status().unwrap().pid;
+
+    client_core::stop_hub_if_still(&stack.socket(), pid + 1).unwrap();
+
+    assert_eq!(stack.client().hub_status().unwrap().pid, pid);
+    client_core::stop_hub_if_still(&stack.socket(), pid).unwrap();
+    assert!(stack.hub.take().unwrap().wait().unwrap().success());
+}

@@ -23,7 +23,7 @@ use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::tail::{StreamDelta, Tail};
 
-pub use admin::{HubAdmin, stop_hub};
+pub use admin::{HubAdmin, stop_hub, stop_hub_if_still};
 pub use api::{new_message_id, new_request_id};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;

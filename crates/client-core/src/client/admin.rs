@@ -49,3 +49,15 @@ pub fn stop_hub(socket: &Path) -> Result<()> {
         Err(e) => Err(e),
     }
 }
+
+/// Stops the hub at this socket only if it's still the one with this `pid`, such as one someone was asked about, and
+/// returns once it has exited. Another hub there, started since, is left alone, and one that has gone is what was
+/// wanted, so neither is an error.
+pub fn stop_hub_if_still(socket: &Path, pid: u32) -> Result<()> {
+    let hub = match HubAdmin::connect(socket) {
+        Ok(hub) => hub,
+        Err(e) if hub_is_missing(&e) => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    if hub.status()?.pid == pid { hub.stop() } else { Ok(()) }
+}
