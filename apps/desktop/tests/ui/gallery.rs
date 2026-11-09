@@ -14,6 +14,7 @@ mod fake_hub;
 mod file_chats;
 mod headless;
 mod icon;
+mod image_chats;
 mod patch;
 mod pictures;
 mod pull_requests;

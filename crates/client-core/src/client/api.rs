@@ -2,7 +2,6 @@
 
 use std::sync::atomic::Ordering;
 
-use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
@@ -275,37 +274,6 @@ impl Client {
             return unexpected(&reply);
         };
         Ok((seq, duplicate))
-    }
-
-    /// Adding the same `id` again returns what the first one added. A hub older than attachments refuses this, as
-    /// `is_unsupported` says, before anything is sent to the agent.
-    pub fn attachment_add(
-        &self,
-        session_id: &SessionId,
-        id: &AttachmentId,
-        name: &str,
-        media_type: MediaType,
-        data: Vec<u8>,
-    ) -> Result<Attachment> {
-        let reply = self.call(ClientRequest::AttachmentAdd {
-            session_id: session_id.clone(),
-            id: id.clone(),
-            name: name.to_string(),
-            media_type,
-            data: AttachmentBytes::new(data),
-        })?;
-        let ClientResponse::Attachment(attachment) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(attachment)
-    }
-
-    pub fn attachment_read(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Vec<u8>> {
-        let reply = self.call(ClientRequest::AttachmentRead { session_id: session_id.clone(), id: id.clone() })?;
-        let ClientResponse::AttachmentData { data } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(data.into_vec())
     }
 
     pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {

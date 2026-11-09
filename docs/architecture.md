@@ -38,7 +38,7 @@ The hub serves this API to the desktop app, mobile app, CLI and automation:
 - **Workspaces:** create, list, archive and restore.
 - **Sessions:** read history by range, subscribe to new events, send prompts and approvals, and cancel.
 - **Per-workspace data:** diff comments, unread, pinned and drafts.
-- **Live access:** attach to a terminal, and get diffs, git status and PR status. The hub fetches or proxies these from the worker.
+- **Live access:** attach to a terminal, and get diffs, git status, PR status and images in the worktree. The hub fetches or proxies these from the worker.
 
 The hub doesn't do the work itself. When a workspace is created, it records it and tells a worker to create the worktree and start the agent. The worker reports events back, and the hub saves them and passes them to clients.
 
@@ -193,6 +193,7 @@ Details are in `crates/protocol/`.
 - **A status change commits in the same transaction as its event,** so a client reading status after an event can't see an older value.
 - **Prompts carry an optional `client_msg_id`,** and the same ID is only recorded once, so a client can retry safely after a disconnect.
 - **A prompt's files go to the worktree, and the hub keeps only what the transcript draws.** A client adds each file to the session with an ID it chose, then sends the prompt naming them, so a retry sends nothing twice. The prompt's event records each file's name, kind and size. The hub keeps the bytes as files in its data directory rather than in the database, which it copies before every migration. Before the prompt reaches the agent, the worker writes each file into the worktree, and then the hub lets go of every one that isn't an image. A client reads an image with `attachment_read` when it draws one, so the transcript doesn't need the worker, and still has its images after the worktree is archived.
+- **An image in the worktree is read through the hub, and only an image inside the worktree.** The transcript draws an image the agent's text points to with `workspace_image_read`, which the hub passes to the worker. What an agent writes is untrusted, so the worker follows every link before checking the file is in the worktree, and refuses anything that isn't an image the transcript draws. *Unconfirmed.*
 
 ### Changing the protocol
 

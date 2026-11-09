@@ -192,6 +192,11 @@ impl AttachmentBytes {
     pub fn to_base64(&self) -> String {
         STANDARD.encode(&self.0)
     }
+
+    /// Bytes an agent sent as base64, such as an image a tool returned. `None` if it isn't base64.
+    pub fn from_base64(text: &str) -> Option<Self> {
+        STANDARD.decode(text).ok().map(Self)
+    }
 }
 
 /// Only its length, since a frame's debug output would otherwise be megabytes of numbers.

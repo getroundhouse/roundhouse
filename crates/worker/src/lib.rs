@@ -4,6 +4,7 @@
 
 pub mod attachments;
 pub mod git;
+mod images;
 mod serve;
 pub mod setup;
 

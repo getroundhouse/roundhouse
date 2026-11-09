@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::attachment::{Attachment, AttachmentBytes};
+use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::event::SessionEvent;
 use crate::model::{
     DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError, Workspace,
@@ -65,6 +65,11 @@ pub enum ClientResponse {
     },
     Attachment(Attachment),
     AttachmentData {
+        data: AttachmentBytes,
+    },
+    /// An image in a worktree, and what kind it is by its bytes.
+    Image {
+        media_type: MediaType,
         data: AttachmentBytes,
     },
 }

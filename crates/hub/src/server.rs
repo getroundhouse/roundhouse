@@ -188,6 +188,10 @@ async fn handle(
         R::WorkspaceRename { id, title } => C::Workspace(hub.workspace_rename(id, &title).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
+        R::WorkspaceImageRead { id, path } => {
+            let (media_type, data) = hub.workspace_image_read(id, path).await?;
+            C::Image { media_type, data }
+        }
         R::WorkspaceSetupLog { id } => C::SetupLog { text: hub.workspace_setup_log(id).await? },
         R::WorkspaceRerunSetup { id } => C::Workspace(hub.workspace_rerun_setup(id).await?),
         R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },

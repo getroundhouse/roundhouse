@@ -17,6 +17,12 @@
 
 ![A reply being written](screens/streaming.png)
 
+- **An image a reply points to shows in the reply, if it's in the workspace,** written as Markdown, such as `![The board after](docs/screens/board-after.png)`, by its path in full or from the workspace. One written into the reply as a `data:` address shows too. On a line of its own, it's as wide as it is, up to the column's, and among words it's the height of the text. It's the file as it was when the chat first showed it, and it's read from the worktree, so it shows nothing once the workspace is archived. One that isn't there yet is looked for again when the reply is next drawn, a few seconds on. One anywhere else on the machine or on the web shows nothing, since what the agent writes can't be trusted to point only where it should, and neither does anything in the workspace that isn't an image. *Unconfirmed.*
+
+**A reply that points to a screenshot in the workspace.** *Unconfirmed.*
+
+![A reply with an image in it](screens/reply-image.png)
+
 ## Titles
 
 - **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.

@@ -10,6 +10,7 @@ mod calls;
 mod fixtures;
 mod folds;
 mod item_key;
+mod linked_images;
 mod log_block;
 mod questions;
 mod rows;
