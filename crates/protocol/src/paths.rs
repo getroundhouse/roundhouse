@@ -1,5 +1,6 @@
-//! Where a hub keeps its files. Takes the environment as a function, to stay free of IO.
+//! Where a hub keeps its files, and where it listens. Takes the environment as a function, to stay free of IO.
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use crate::StampedBuild;
@@ -12,30 +13,17 @@ pub const ENV_WORKSPACES: &str = "ROUNDHOUSE_WORKSPACES";
 pub const ENV_DAEMON_BIN: &str = "ROUNDHOUSE_DAEMON_BIN";
 pub const ENV_CLAUDE_BIN: &str = "ROUNDHOUSE_CLAUDE_BIN";
 pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
-/// The TCP port for paired devices, in place of [`DEFAULT_PORT`]. 0 lets the OS choose, which tests use.
-pub const ENV_PORT: &str = "ROUNDHOUSE_PORT";
-/// How many milliseconds a pairing code works for, in place of ten minutes, so a test can watch one expire. Only a
-/// hub built with its `testing` feature reads it.
-pub const ENV_PAIRING_LIFE_MS: &str = "ROUNDHOUSE_PAIRING_LIFE_MS";
-/// Set to anything, a hub listens for devices on loopback only, so tests never have to get past a firewall. Only a
-/// hub built with its `testing` feature reads it.
-pub const ENV_LISTEN_ON_LOOPBACK: &str = "ROUNDHOUSE_LISTEN_ON_LOOPBACK";
+/// Where a hub listens for paired devices, as `port` or `ip:port`, in place of every interface on [`DEFAULT_PORT`].
+/// Port 0 lets the OS choose. Given an IP, a hub listens there only, and a pairing link offers only that address,
+/// which is how tests keep to loopback, where a Mac's firewall doesn't ask about each new build.
+pub const ENV_LISTEN: &str = "ROUNDHOUSE_LISTEN";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
 
 /// Which hub this is, what it runs and how it listens. Nothing a worker starts in a workspace gets these, because
 /// the code there can be another build of Roundhouse, and its commands would otherwise reach this hub.
-pub const HUB_ONLY_ENV: [&str; 8] = [
-    ENV_HOME,
-    ENV_WORKSPACES,
-    ENV_DAEMON_BIN,
-    ENV_CLAUDE_BIN,
-    ENV_LOG,
-    ENV_PORT,
-    ENV_PAIRING_LIFE_MS,
-    ENV_LISTEN_ON_LOOPBACK,
-];
+pub const HUB_ONLY_ENV: [&str; 6] = [ENV_HOME, ENV_WORKSPACES, ENV_DAEMON_BIN, ENV_CLAUDE_BIN, ENV_LOG, ENV_LISTEN];
 
 /// Where a hub listens for paired devices, while it does. A debug build uses the next port, for the same reason it
 /// has its own data: a hub run from a checkout that a phone pairs with listens from then on, and would otherwise
@@ -69,12 +57,16 @@ pub struct Paths {
     pub certificate_key: PathBuf,
 }
 
-/// The port a hub listens on for paired devices.
-pub fn network_port(env: impl Fn(&str) -> Option<String>) -> Result<u16, String> {
-    match env(ENV_PORT).filter(|v| !v.is_empty()) {
-        Some(port) => port.parse().map_err(|_| format!("{ENV_PORT} has to be a port number, not {port}")),
-        None => Ok(DEFAULT_PORT),
-    }
+/// Where a hub listens for paired devices. An unspecified IP means every interface.
+pub fn listen_address(env: impl Fn(&str) -> Option<String>) -> Result<SocketAddr, String> {
+    let every_interface = |port| SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
+    let Some(address) = env(ENV_LISTEN).filter(|v| !v.is_empty()) else {
+        return Ok(every_interface(DEFAULT_PORT));
+    };
+    address
+        .parse()
+        .or_else(|_| address.parse().map(every_interface))
+        .map_err(|_| format!("{ENV_LISTEN} has to be a port, or an IP address and a port, not {address}"))
 }
 
 impl Paths {
@@ -167,10 +159,17 @@ mod tests {
 
     #[test]
     fn a_debug_build_listens_apart_from_a_release_build_unless_told_where() {
+        let listen = |address| listen_address(env_of(&[(ENV_LISTEN, address)]));
+        let every_interface = |port| Ok(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)));
+
         assert_ne!(default_port(false), default_port(true));
-        assert_eq!(network_port(env_of(&[])), Ok(default_port(cfg!(debug_assertions))));
-        assert_eq!(network_port(env_of(&[(ENV_PORT, "0")])), Ok(0));
-        assert!(network_port(env_of(&[(ENV_PORT, "seventy")])).is_err());
+        assert_eq!(listen_address(env_of(&[])), every_interface(default_port(cfg!(debug_assertions))));
+        assert_eq!(listen("0"), every_interface(0));
+        assert_eq!(listen("127.0.0.1:0"), Ok(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))));
+        assert_eq!(listen("[::1]:7867"), Ok(SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, 7867))));
+        for wrong in ["seventy", "127.0.0.1", "localhost:0", "127.0.0.1:65536"] {
+            assert!(listen(wrong).is_err(), "{wrong}");
+        }
     }
 
     #[test]

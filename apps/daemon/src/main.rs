@@ -76,15 +76,22 @@ fn main() -> anyhow::Result<()> {
     match args.role {
         Role::Hub { on_demand } => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-            let network_port =
-                protocol::paths::network_port(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
+            let network_address =
+                protocol::paths::listen_address(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
             // Follows symlinks, so moving an install's `current` link can't change what later workers run.
             let worker_exe = std::env::current_exe()
                 .and_then(std::fs::canonicalize)
                 .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand, network_port }))?;
+            runtime.block_on(hub::run(hub::HubConfig {
+                paths,
+                worker_exe,
+                shell,
+                path,
+                on_demand,
+                network_address,
+            }))?;
             Ok(())
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {

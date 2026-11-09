@@ -7,7 +7,7 @@ pub(crate) mod codes;
 pub(crate) mod machine;
 
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,7 +19,7 @@ use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::DeviceId;
 use protocol::pairing::Fingerprint;
-use protocol::paths::ENV_PORT;
+use protocol::paths::ENV_LISTEN;
 use ring::rand::SecureRandom;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore, watch};
 use tokio::task::JoinHandle;
@@ -35,18 +35,17 @@ const PAIRING_LIFE: Duration = Duration::from_mins(10);
 
 /// How many connections from the network can be waiting to authenticate at once. A phone authenticates within a
 /// second of connecting, so this leaves room for several at once, and one more is closed straight away.
-pub const MAX_UNAUTHENTICATED: usize = 16;
+pub(crate) const MAX_UNAUTHENTICATED: usize = 16;
 
 pub(crate) struct RemoteConfig {
-    /// 0 lets the OS choose.
-    pub(crate) port: u16,
+    /// See `HubConfig::network_address`.
+    pub(crate) address: SocketAddr,
     pub(crate) certificate: PathBuf,
     pub(crate) certificate_key: PathBuf,
 }
 
 pub(crate) struct Remote {
     config: RemoteConfig,
-    ip: IpAddr,
     pub(crate) pairing_life: Duration,
     /// Loaded or made the first time the hub listens, and kept.
     identity: Mutex<Option<Arc<Identity>>>,
@@ -84,7 +83,6 @@ impl Remote {
     pub(crate) fn new(config: RemoteConfig) -> Remote {
         Remote {
             config,
-            ip: listen_ip(),
             pairing_life: pairing_life(),
             identity: Mutex::new(None),
             changing: AsyncMutex::new(()),
@@ -109,10 +107,9 @@ impl Remote {
             return Ok(port);
         }
         let identity = self.identity().await?;
-        let address = SocketAddr::new(self.ip, self.config.port);
+        let address = self.config.address;
         let listener = tokio::net::TcpListener::bind(address).await.map_err(|e| {
-            let message =
-                format!("couldn't listen for devices on port {}: {e}. {ENV_PORT} chooses another", address.port());
+            let message = format!("couldn't listen for devices at {address}: {e}. {ENV_LISTEN} chooses another port");
             ApiError::new(ErrorCode::Conflict, message)
         })?;
         let port = listener.local_addr().map_err(|e| internal(format!("reading the port listened on: {e}")))?.port();
@@ -131,6 +128,16 @@ impl Remote {
         // Finishes once the task, and the listener it owns, have been dropped.
         let _ = listening.accept.await;
         info!(port = listening.port, "stopped listening for devices");
+    }
+
+    /// The hosts a pairing link offers, without ports: the one IP the hub listens on, if it was given one, and
+    /// otherwise each of `machine_hosts`.
+    pub(crate) fn hosts(&self, machine_hosts: Vec<String>) -> Vec<String> {
+        match self.config.address.ip() {
+            ip if ip.is_unspecified() => machine_hosts,
+            IpAddr::V4(ip) => vec![ip.to_string()],
+            IpAddr::V6(ip) => vec![format!("[{ip}]")],
+        }
     }
 
     pub(crate) async fn fingerprint(&self) -> Result<Fingerprint, ApiError> {
@@ -190,18 +197,8 @@ pub(crate) fn random_text<const N: usize>() -> Result<String, ApiError> {
 /// [`PAIRING_LIFE`], unless a test has set `ENV_PAIRING_LIFE_MS`, which only a `testing` build reads.
 fn pairing_life() -> Duration {
     #[cfg(feature = "testing")]
-    if let Some(ms) = std::env::var(protocol::paths::ENV_PAIRING_LIFE_MS).ok().and_then(|ms| ms.parse().ok()) {
+    if let Some(ms) = std::env::var(crate::ENV_PAIRING_LIFE_MS).ok().and_then(|ms| ms.parse().ok()) {
         return Duration::from_millis(ms);
     }
     PAIRING_LIFE
-}
-
-/// Every interface, unless a test has set `ENV_LISTEN_ON_LOOPBACK`, which only a `testing` build reads. A Mac's
-/// firewall asks before a new binary accepts connections from the network, and tests build a new one each time.
-fn listen_ip() -> IpAddr {
-    #[cfg(feature = "testing")]
-    if std::env::var_os(protocol::paths::ENV_LISTEN_ON_LOOPBACK).is_some() {
-        return IpAddr::V4(Ipv4Addr::LOCALHOST);
-    }
-    IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 }

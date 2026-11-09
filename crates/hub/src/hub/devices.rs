@@ -58,7 +58,8 @@ impl Hub {
 
     pub(crate) async fn pairing_start(self: &Arc<Self>) -> Result<Pairing, ApiError> {
         let machine = tokio::task::spawn_blocking(this_machine).await.map_err(|e| internal(e.to_string()))?;
-        if machine.hosts.is_empty() {
+        let hosts = self.remote.hosts(machine.hosts);
+        if hosts.is_empty() {
             return Err(ApiError::new(ErrorCode::Conflict, "this machine has no address a phone could reach"));
         }
         let code = PairingCode::from(random_text::<16>()?);
@@ -74,7 +75,7 @@ impl Hub {
         });
         let link = PairingLink {
             hub_name: machine.name,
-            hosts: machine.hosts.iter().map(|host| format!("{host}:{port}")).collect(),
+            hosts: hosts.iter().map(|host| format!("{host}:{port}")).collect(),
             fingerprint,
             code: code.clone(),
         };

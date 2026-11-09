@@ -48,7 +48,7 @@ pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: Option<Child>,
     /// Set for every hub this starts, and so for its workers.
-    pub(crate) env: Vec<(&'static str, String)>,
+    env: Vec<(&'static str, String)>,
 }
 
 impl Stack {
@@ -110,8 +110,7 @@ impl Stack {
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
             // Any free port, and only on loopback, so tests can run side by side and never ask a firewall.
-            .env(protocol::paths::ENV_PORT, "0")
-            .env(protocol::paths::ENV_LISTEN_ON_LOOPBACK, "1")
+            .env(protocol::paths::ENV_LISTEN, "127.0.0.1:0")
             .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -335,15 +334,12 @@ impl Follower {
     }
 }
 
-/// A new pairing link from the hub, and its code. Its hosts are this machine's names and addresses, with the port
-/// the hub bound, but tests listen on loopback, so it points there instead.
+/// A new pairing link from the hub, and its code. Tests listen on loopback, so that's the one host it offers.
 pub(crate) fn pairing_link(client: &Client) -> (PairingLink, PairingCode) {
     let pairing = client.pairing_start().unwrap();
-    let mut link = pairing.link;
     let port = client.hub_status().unwrap().network_port.expect("listening once a code is made");
-    assert!(link.hosts.iter().all(|host| host.ends_with(&format!(":{port}"))), "{:?}", link.hosts);
-    link.hosts = vec![format!("127.0.0.1:{port}")];
-    (link, pairing.code)
+    assert_eq!(pairing.link.hosts, [format!("127.0.0.1:{port}")]);
+    (pairing.link, pairing.code)
 }
 
 pub(crate) fn pair_phone(client: &Client, name: &str) -> RemoteHub {

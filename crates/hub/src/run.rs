@@ -1,5 +1,6 @@
 //! Starting a hub, and running it until it's asked to stop.
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -25,9 +26,10 @@ pub struct HubConfig {
     pub path: Option<String>,
     /// A client started this hub because it needed one.
     pub on_demand: bool,
-    /// Where to listen for paired devices, while any device is paired or a pairing code is live. 0 lets the OS
-    /// choose.
-    pub network_port: u16,
+    /// Where to listen for paired devices, while any device is paired or a pairing code is live. Port 0 lets the OS
+    /// choose. An unspecified IP means every interface, and a pairing link offers each of the machine's names and
+    /// addresses. Any other IP is the only address a link offers.
+    pub network_address: SocketAddr,
 }
 
 /// Anything left mid-turn or half-made by the last run. Its workers exited when it went away.
@@ -144,7 +146,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let _ = provider.destroy(&workspace.instance_id).await;
     }
     let remote = Remote::new(RemoteConfig {
-        port: config.network_port,
+        address: config.network_address,
         certificate: paths.certificate.clone(),
         certificate_key: paths.certificate_key.clone(),
     });

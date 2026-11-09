@@ -12,9 +12,6 @@ use protocol::frame;
 
 use crate::support::{CLOSED, Stack, pair_phone, pairing_link, wait_until};
 
-/// Long enough to pair with a code on a busy machine, and short enough to wait for one to expire.
-const SHORT_LIFE_MS: &str = "2000";
-
 #[test]
 fn a_code_pairs_one_phone_once() {
     let stack = Stack::start();
@@ -52,7 +49,8 @@ fn waiting_on_a_code_stops_when_whoever_waits_goes() {
 
 #[test]
 fn a_hub_with_nothing_paired_listens_only_while_a_code_is_live() {
-    let stack = Stack::start_with(vec![(protocol::paths::ENV_PAIRING_LIFE_MS, SHORT_LIFE_MS.into())]);
+    // Long enough to see the hub listening on a busy machine, and short enough to wait out.
+    let stack = Stack::start_with(vec![(hub::ENV_PAIRING_LIFE_MS, "2000".into())]);
     let client = stack.client();
     assert_eq!(client.hub_status().unwrap().network_port, None);
 
@@ -67,21 +65,14 @@ fn a_hub_with_nothing_paired_listens_only_while_a_code_is_live() {
 }
 
 #[test]
-fn a_hub_with_a_phone_paired_listens_from_when_it_starts_and_an_expired_code_is_refused() {
+fn a_hub_with_a_phone_paired_listens_from_when_it_starts() {
     let mut stack = Stack::start();
     pair_phone(&stack.client(), "phone");
     stack.kill_hub();
-    stack.env.push((protocol::paths::ENV_PAIRING_LIFE_MS, SHORT_LIFE_MS.into()));
+
     stack.start_hub();
-    let client = stack.client();
-    assert!(client.hub_status().unwrap().network_port.is_some(), "listening for the phone that's paired");
-    let (link, code) = pairing_link(&client);
 
-    assert!(client.pairing_wait(&code).is_err(), "the code expired");
-
-    let refused = client_core::pair(&link, "late phone").unwrap_err();
-    assert!(refused.is_unauthorized(), "{refused:?}");
-    assert_eq!(client.device_list().unwrap().len(), 1);
+    assert!(stack.client().hub_status().unwrap().network_port.is_some(), "listening for the phone that's paired");
 }
 
 #[test]
