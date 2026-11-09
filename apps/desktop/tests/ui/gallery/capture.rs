@@ -172,28 +172,29 @@ impl Driver {
     fn open_diff(&mut self) {
         self.update_pane(WorkspacePane::toggle_changes);
         self.wait("the diff to load", |view, cx| {
-            let diff = selected_pane(view).and_then(|pane| pane.read(cx).diff.clone());
-            diff.is_some_and(|diff| diff.read(cx).files.is_some())
+            let pane = selected_pane(view);
+            pane.is_some_and(|pane| pane.read(cx).diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some()))
         });
     }
 
     fn open_file(&mut self, path: &str) {
         self.click(format!("file-{path}"));
         self.wait("the diff tab to show it", |view, cx| {
-            let diff = selected_pane(view).and_then(|pane| pane.read(cx).diff.clone());
-            diff.is_some_and(|diff| diff.read(cx).open_file().is_some_and(|file| file.path() == path))
+            let file = selected_pane(view).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()));
+            file.is_some_and(|file| file.read(cx).file(cx).is_some_and(|file| file.path() == path))
         });
     }
 
     fn start_comment(&mut self, line: usize) {
         let view = self.view.clone();
-        let diff =
-            self.cx.update(|cx| selected_pane(view.read(cx)).and_then(|pane| pane.read(cx).diff.clone())).unwrap();
+        let file = self.cx.update(|cx| {
+            selected_pane(view.read(cx)).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()))
+        });
         self.cx
             .update_window(self.handle, |_, window, cx| {
-                diff.update(cx, |d, cx| {
-                    let path = d.open.clone().unwrap();
-                    d.start_comment(DiffLinePosition::new(path, DiffSide::Modified, line), window, cx);
+                file.unwrap().update(cx, |f, cx| {
+                    let path = f.path.clone().unwrap();
+                    f.start_comment(DiffLinePosition::new(path, DiffSide::Modified, line), window, cx);
                 });
             })
             .unwrap();

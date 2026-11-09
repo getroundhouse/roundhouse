@@ -25,6 +25,7 @@ use protocol::model::{RepoId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
 use transcript::Transcript;
 
+pub(crate) use diff::Diff;
 pub(crate) use labels::labelled;
 pub(crate) use stand_in::StandInHub;
 

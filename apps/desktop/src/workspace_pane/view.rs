@@ -41,7 +41,7 @@ fn chat_title(session: &Session, number: usize) -> String {
 impl WorkspacePane {
     fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
-        let selected = self.active.as_ref() == Some(&session.id) && self.showing == Showing::Chat;
+        let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
         let mark = crate::sidebar::signal(Some(session.status), unread);
         let work = self.work();
@@ -345,10 +345,9 @@ impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let header = self.header(cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
-        let showing = match self.diff.clone().filter(|_| self.showing == Showing::Diff) {
-            Some(diff) => {
-                div().track_focus(&self.diff_focus).flex_1().min_h_0().w_full().child(diff).into_any_element()
-            }
+        let file = self.diff.as_ref().filter(|_| self.showing() == Showing::Diff).map(|diff| diff.file.clone());
+        let showing = match file {
+            Some(file) => div().flex_1().min_h_0().w_full().child(file).into_any_element(),
             None => self.chat(cx),
         };
         let changes = self.changes_sidebar(cx);

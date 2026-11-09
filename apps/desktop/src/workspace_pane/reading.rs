@@ -41,7 +41,7 @@ impl WorkspacePane {
     /// shown it with yet. For after anything that changes which chat is showing, or what it holds.
     pub(super) fn read_showing(&mut self, cx: &mut Context<Self>) {
         // The diff tab covers the chat while it shows.
-        let showing = self.session().filter(|_| self.reading.on_screen && self.showing == Showing::Chat).cloned();
+        let showing = self.session().filter(|_| self.reading.on_screen && self.showing() == Showing::Chat).cloned();
         let Some(session) = showing else {
             self.reading.shown = None;
             return;
