@@ -12,6 +12,10 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
+mod prompts;
+
+pub use prompts::PromptState;
+
 pub(crate) const PAGE_EVENTS: u64 = 250;
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
 pub const MAX_LOADED_EVENTS: usize = 2000;
@@ -119,6 +123,8 @@ impl SessionLog {
                     |e| !matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
                 ),
                 EventBody::UserPrompt { .. }
+                | EventBody::PromptTaken { .. }
+                | EventBody::PromptDropped { .. }
                 | EventBody::AgentStarted { .. }
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }
@@ -211,6 +217,12 @@ impl SessionLog {
         }
         // Its own row, and everything after it, which a prompt it recorded may have moved, up to the tail.
         self.touched(seq_index(event.seq) - 1..self.row_count() + 1);
+        // A prompt the agent dropped says so under it.
+        if let EventBody::PromptDropped { prompt } = &event.body
+            && *prompt > 0
+        {
+            self.touched(seq_index(*prompt) - 1..seq_index(*prompt));
+        }
         // Only the tail stays loaded from live events. Anything older is fetched when scrolled to.
         if page_of(event.seq) + 1 >= page_of(self.last_seq) {
             self.pages.insert(page_of(event.seq));

@@ -261,6 +261,8 @@ mod tests {
             reply_seq: 0,
             read_seq: 0,
             background_tasks: Vec::new(),
+            queued: Vec::new(),
+            queue_held: false,
             rev: protocol::model::Rev::default(),
             title_source: protocol::model::TitleSource::FirstLine,
         }

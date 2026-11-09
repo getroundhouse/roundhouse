@@ -240,10 +240,10 @@ async fn handle(
             Ok(WorkerResponse::AttachmentWritten { path: written.to_string_lossy().into_owned() })
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
-        WorkerRequest::AgentPrompt { session_id, text, attachments } => {
+        WorkerRequest::AgentPrompt { session_id, prompt, text, attachments } => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
-                Some(agent) => agent.send_prompt(&text, &attachments).await.is_ok(),
+                Some(agent) => agent.send_prompt(prompt, &text, &attachments).await.is_ok(),
                 None => false,
             }))
         }

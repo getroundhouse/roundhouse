@@ -40,6 +40,8 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         reply_seq: 0,
         read_seq: 0,
         background_tasks: Vec::new(),
+        queued: Vec::new(),
+        queue_held: false,
         rev: Rev::new(rev),
         title_source: TitleSource::FirstLine,
     }

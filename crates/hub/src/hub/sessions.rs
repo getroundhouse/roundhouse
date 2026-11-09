@@ -54,6 +54,8 @@ impl Hub {
                 reply_seq: 0,
                 read_seq: 0,
                 background_tasks: Vec::new(),
+                queued: Vec::new(),
+                queue_held: false,
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
@@ -140,6 +142,48 @@ impl Hub {
         let (reply, recorded) = oneshot::channel();
         session.command(Command::Prompt { text, client_msg_id, attachments, reply }).await?;
         recorded.await.map_err(|_| internal("the session has stopped"))?
+    }
+
+    pub(crate) async fn session_queue(
+        self: &Arc<Self>,
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+        text: String,
+    ) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.queue(client_msg_id, text).await
+    }
+
+    pub(crate) async fn session_unqueue(
+        self: &Arc<Self>,
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+    ) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.unqueue(client_msg_id).await
+    }
+
+    pub(crate) async fn session_send_queued(
+        self: &Arc<Self>,
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+    ) -> Result<Session, ApiError> {
+        let session = self.live_session(&id).await?;
+        let (reply, sent) = oneshot::channel();
+        session.command(Command::SendQueuedNow { client_msg_id, reply }).await?;
+        sent.await.map_err(|_| internal("the session has stopped"))?
+    }
+
+    /// At startup, starts each session with a queue, so a queue that was ready to send when the last hub went away is
+    /// sent now, rather than once someone opens its chat.
+    pub(crate) async fn start_queues(self: &Arc<Self>) {
+        let ids = match self.blocking(Store::sessions_with_queues).await {
+            Ok(ids) => ids,
+            Err(e) => return tracing::error!("couldn't read the queues: {e}"),
+        };
+        for id in ids {
+            if let Err(e) = self.live_session(&id).await {
+                tracing::error!(session = %id, "couldn't start a session with a queue: {e}");
+            }
+        }
     }
 
     pub(crate) async fn session_approve(

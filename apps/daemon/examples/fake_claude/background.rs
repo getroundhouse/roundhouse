@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use serde_json::json;
 
 use crate::turn::Turn;
-use crate::{Config, Input, Out, emit};
+use crate::{Config, Input, Out, Prompt, emit};
 
 /// How often a task looks for its file, and for SIGTERM.
 const POLL: Duration = Duration::from_millis(20);
@@ -37,7 +37,8 @@ pub(crate) fn start(turn: &mut Turn, file: &str) -> bool {
         notify(&config, &out, &id, "completed");
         list(&config, &out);
         // The real CLI tells the agent, which starts a turn of its own, or joins the one that's running.
-        let _ = config.input.send(Input::Resume(format!("say:finished {}", file.display())));
+        let _ =
+            config.input.send(Input::Resume(Prompt { text: format!("say:finished {}", file.display()), uuid: None }));
     });
     false
 }

@@ -9,7 +9,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, present_plan, run_tool};
-use crate::{Config, Input, Out, current_mode, current_model, emit, pause};
+use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
 use crate::{background, subagent};
 
 /// What a streamed block holds.
@@ -70,7 +70,7 @@ impl Turn<'_> {
         chunks: Vec<String>,
         gap: Duration,
         rx: &Receiver<Input>,
-        queued: &mut VecDeque<String>,
+        queued: &mut VecDeque<Prompt>,
         eof: &mut bool,
     ) -> bool {
         let id = message_id();
@@ -122,23 +122,28 @@ pub(crate) fn state_event(config: &Config, out: &Out, state: &str) {
     emit(out, json!({"type":"system","subtype":"session_state_changed","state":state,"session_id":config.session_id}));
 }
 
+/// Adds a prompt to what the conversation has seen, which `recall` says and a resume keeps.
+fn remember(config: &Config, prompt: &str) {
+    let mut seen = std::fs::read_to_string(&config.conversation).unwrap_or_default();
+    seen.push_str(prompt);
+    seen.push('\n');
+    std::fs::write(&config.conversation, &seen).unwrap();
+}
+
 pub(crate) fn run_turn(
     config: &Config,
     out: &Out,
-    script: String,
+    first: Prompt,
     by_itself: bool,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) {
-    let mut seen = std::fs::read_to_string(&config.conversation).unwrap_or_default();
-    seen.push_str(&script);
-    seen.push('\n');
-    std::fs::write(&config.conversation, &seen).unwrap();
-
+    remember(config, &first.text);
     if !by_itself {
         state_event(config, out, "running");
     }
+    lifecycle(out, &first, "started");
     emit(
         out,
         json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
@@ -147,7 +152,8 @@ pub(crate) fn run_turn(
 
     let mut turn = Turn { config, out, parent: None };
     let mut interrupted = false;
-    let mut pending: VecDeque<String> = VecDeque::from([script]);
+    let mut pending: VecDeque<String> = VecDeque::from([first.text.clone()]);
+    let mut taken = vec![first];
     while let Some(next) = pending.pop_front() {
         for command in next.split(';') {
             interrupted = run_command(&mut turn, command.trim(), rx, queued, eof);
@@ -160,15 +166,18 @@ pub(crate) fn run_turn(
             break;
         }
         while let Some(prompt) = queued.pop_front() {
-            let mut seen = std::fs::read_to_string(&config.conversation).unwrap_or_default();
-            seen.push_str(&prompt);
-            seen.push('\n');
-            std::fs::write(&config.conversation, &seen).unwrap();
-            pending.push_back(prompt);
+            remember(config, &prompt.text);
+            lifecycle(out, &prompt, "started");
+            pending.push_back(prompt.text.clone());
+            taken.push(prompt);
         }
     }
 
     if interrupted {
+        // Stop means stop, as the worker asks with `cancel_queued`: what hadn't been taken goes unread.
+        for prompt in queued.drain(..) {
+            lifecycle(out, &prompt, "cancelled");
+        }
         emit(
             out,
             json!({"type":"user","message":{"role":"user","content":[{"type":"text",
@@ -187,6 +196,10 @@ pub(crate) fn run_turn(
             "result":"done","duration_ms":1,"num_turns":1,"total_cost_usd":0.0,"session_id":config.session_id}),
         );
     }
+    let ended = if interrupted { "cancelled" } else { "completed" };
+    for prompt in &taken {
+        lifecycle(out, prompt, ended);
+    }
     state_event(config, out, "idle");
 }
 
@@ -195,7 +208,7 @@ pub(crate) fn hang(
     turn: &mut Turn,
     total_ms: u64,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use("hang");
@@ -229,7 +242,7 @@ pub(crate) fn run_command(
     turn: &mut Turn,
     command: &str,
     rx: &Receiver<Input>,
-    queued: &mut VecDeque<String>,
+    queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     if let Some(text) = answer(turn, command) {
@@ -279,7 +292,7 @@ pub(crate) fn run_command(
 
 /// The commands that do something rather than write: calls, questions, plans, subagents, work in the background,
 /// and ways to misbehave.
-fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeque<String>, eof: &mut bool) -> bool {
+fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
     }

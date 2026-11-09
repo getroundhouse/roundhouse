@@ -126,6 +126,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "steered",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, chats::steered())),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "tool-commands",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),

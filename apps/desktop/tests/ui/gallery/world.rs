@@ -149,6 +149,8 @@ impl World {
             reply_seq: 0,
             read_seq: 0,
             background_tasks,
+            queued: Vec::new(),
+            queue_held: false,
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);

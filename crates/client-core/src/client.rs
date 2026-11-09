@@ -6,6 +6,7 @@ mod commands;
 mod feed;
 mod follow;
 mod open_session;
+mod queue;
 mod start;
 
 use std::collections::{HashMap, HashSet};

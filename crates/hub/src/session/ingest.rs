@@ -36,6 +36,8 @@ async fn ingest_event(session: &Arc<LiveSession>, run: RunId, body: EventBody, r
             session.cancel_approvals(Some(run)).await;
         }
         EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
@@ -133,6 +135,11 @@ impl LiveSession {
         };
         if let Some(lost) = lost {
             self.cancel_approvals(None).await;
+            // Its agent went with its worker, so it can't say it dropped what it hadn't taken.
+            let untaken = self.state.lock().queue.untaken().to_vec();
+            for prompt in untaken {
+                self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt }).await;
+            }
             let body = EventBody::AgentExited { reason, code: None, signal: None, stderr_tail: vec![] };
             self.record_or_log(Origin::Run { run: lost.run, current: true }, body).await;
         }

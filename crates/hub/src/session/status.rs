@@ -18,11 +18,18 @@ pub(crate) struct Open {
 /// idle, in case a future CLI stops sending it, and any state event after that corrects it. Work left
 /// running in the background keeps the agent at work after its turn ends, since it picks up again by
 /// itself when that finishes. `AgentInit` starts every turn, and is the only sign of one the agent starts by
-/// itself, which comes with no prompt and no state event.
-pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open) -> SessionStatus {
+/// itself, which comes with no prompt and no state event. A prompt sent while the agent writes its last reply
+/// isn't folded in: the turn ends, and the agent takes the prompt as a turn of its own without saying it's running
+/// again, so taking a prompt says it. An `idle` that's `stale` comes from before a prompt the agent has yet to take,
+/// which it will, so it changes nothing.
+pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, stale: bool) -> SessionStatus {
     let at_rest = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
     match body {
+        EventBody::AgentState { state: AgentRunState::Idle } if stale => current,
         EventBody::UserPrompt { .. } => SessionStatus::Running,
+        EventBody::PromptTaken { .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
+            SessionStatus::Running
+        }
         EventBody::AgentState { state: AgentRunState::Running } | EventBody::AgentInit { .. } => {
             if open.approvals > 0 {
                 SessionStatus::WaitingApproval
@@ -48,6 +55,8 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open) 
         }
         EventBody::AgentExited { .. } if current.is_active() => SessionStatus::Interrupted,
         EventBody::AgentState { state: AgentRunState::Unknown }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::Assistant { .. }
@@ -85,6 +94,8 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
         EventBody::ApprovalRequested { approval_id, .. } if !pending.contains_key(approval_id) => pending.len() + 1,
         EventBody::ApprovalResolved { approval_id, .. } if pending.contains_key(approval_id) => pending.len() - 1,
         EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
@@ -109,6 +120,8 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         EventBody::AgentTasks { tasks, .. } => tasks.clone(),
         EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => Vec::new(),
         EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::Assistant { .. }

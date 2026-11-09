@@ -8,20 +8,21 @@ use tracing::error;
 use super::status::{ends_turn, next_status, open_after};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
-use crate::store::StatusChange;
+use crate::store::{Appended, SessionChange, StatusChange};
 
-/// The status and the work in the background once `body` is applied, and what of that has changed, to commit with it.
-/// Only the hub and the current agent speak for the session.
-fn after(state: &LiveState, origin: Origin, body: &EventBody) -> (SessionStatus, Option<StatusChange>, Vec<AgentTask>) {
+/// The status and the work in the background once `body` is applied, and what of that and the queue's hold has
+/// changed, to commit with it. Only the hub and the current agent speak for the session.
+fn after(state: &LiveState, origin: Origin, body: &EventBody) -> (SessionStatus, SessionChange, Vec<AgentTask>) {
     if !origin.speaks_for_session() {
-        return (state.status, None, state.background_tasks.clone());
+        return (state.status, SessionChange::default(), state.background_tasks.clone());
     }
     let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, body);
-    let next = next_status(state.status, body, open);
+    let next = next_status(state.status, body, open, state.queue.idle_is_stale());
     let ends_turn = ends_turn(state.status, next);
     let background_tasks = (tasks != state.background_tasks).then(|| tasks.clone());
     let changed = next != state.status || background_tasks.is_some();
-    (next, changed.then_some(StatusChange { status: next, ends_turn, background_tasks }), tasks)
+    let status = changed.then_some(StatusChange { status: next, ends_turn, background_tasks });
+    (next, SessionChange { status, queue_held: state.queue.held_after(body, state.status, next) }, tasks)
 }
 
 impl LiveSession {
@@ -38,46 +39,23 @@ impl LiveSession {
         let hub = self.hub()?;
         let run = origin.run();
         let (next, change, tasks) = after(&self.state.lock(), origin, &body);
-        let announce = change.is_some();
+        let (announce, held) = (!change.is_none(), change.queue_held);
         let id = self.id.clone();
         let for_store = body.clone();
         let appended = hub
-            .blocking(move |store| store.append(&id, run, &for_store, raw.as_deref(), client_msg_id.as_ref(), change))
+            .blocking(move |store| {
+                store.append(&id, run, &for_store, raw.as_deref(), client_msg_id.as_ref(), Some(change))
+            })
             .await?;
         if appended.duplicate {
             return Ok((appended.event, true));
         }
-        let seq = appended.event.seq;
-        {
-            let mut state = self.state.lock();
-            state.last_seq = seq;
-            state.tail.on_event(run, &body);
-            match &body {
-                EventBody::ApprovalRequested { approval_id, .. } => {
-                    state.pending_approvals.insert(approval_id.clone(), run);
-                }
-                EventBody::ApprovalResolved { approval_id, .. } => {
-                    state.pending_approvals.remove(approval_id);
-                }
-                EventBody::UserPrompt { .. }
-                | EventBody::AgentStarted { .. }
-                | EventBody::AgentInit { .. }
-                | EventBody::AgentState { .. }
-                | EventBody::AgentTasks { .. }
-                | EventBody::Assistant { .. }
-                | EventBody::AgentUser { .. }
-                | EventBody::TurnEnded { .. }
-                | EventBody::AgentExited { .. }
-                | EventBody::Notice { .. }
-                | EventBody::AgentMode { .. }
-                | EventBody::AgentOther { .. }
-                | EventBody::Unknown => {}
-            }
-            state.status = next;
-            state.background_tasks = tasks;
-            publish(&mut state, LiveItem::Appended(seq));
+        if apply(&mut self.state.lock(), origin, &appended, next, tasks, held) {
+            self.wake_queue();
         }
-        if announce && let Err(e) = self.announce(&hub).await {
+        if (announce || appended.dequeued)
+            && let Err(e) = self.announce(&hub).await
+        {
             error!(session = %self.id, "could not announce a change of status: {e}");
         }
         Ok((appended.event, false))
@@ -98,4 +76,54 @@ impl LiveSession {
             error!(session = %self.id, "could not record an event: {e}");
         }
     }
+}
+
+/// Updates live state for an event just recorded, and says whether that has just made the agent ready for the next
+/// queued prompt.
+fn apply(
+    state: &mut LiveState,
+    origin: Origin,
+    appended: &Appended,
+    next: SessionStatus,
+    tasks: Vec<AgentTask>,
+    held: Option<bool>,
+) -> bool {
+    let (seq, body) = (appended.event.seq, &appended.event.body);
+    let closed = state.closed_at_ms.is_some();
+    let was_ready = state.queue.ready(state.status, closed);
+    state.last_seq = seq;
+    state.tail.on_event(origin.run(), body);
+    match body {
+        EventBody::ApprovalRequested { approval_id, .. } => {
+            state.pending_approvals.insert(approval_id.clone(), origin.run());
+        }
+        EventBody::ApprovalResolved { approval_id, .. } => {
+            state.pending_approvals.remove(approval_id);
+        }
+        EventBody::UserPrompt { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentInit { .. }
+        | EventBody::AgentState { .. }
+        | EventBody::AgentTasks { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::TurnEnded { .. }
+        | EventBody::AgentExited { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::Unknown => {}
+    }
+    state.status = next;
+    state.background_tasks = tasks;
+    if let Some(untaken) = &appended.untaken {
+        state.queue.set_untaken(untaken.clone());
+    }
+    if let Some(held) = held {
+        state.queue.hold(held);
+    }
+    publish(state, LiveItem::Appended(seq));
+    !was_ready && state.queue.ready(state.status, closed)
 }

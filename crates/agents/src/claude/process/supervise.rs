@@ -105,6 +105,12 @@ async fn finish(
     for item in held {
         let _ = output.send(item).await;
     }
+    // The CLI never took these, and nothing will now.
+    let mut untaken: Vec<_> = shared.untaken.lock().drain().map(|(_, prompt)| prompt).collect();
+    untaken.sort_unstable();
+    for prompt in untaken {
+        let _ = output.send(AgentOutput::Event { body: EventBody::PromptDropped { prompt }, raw: None }).await;
+    }
     let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;

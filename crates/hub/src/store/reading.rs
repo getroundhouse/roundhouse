@@ -1,7 +1,7 @@
 //! How far each session has been read, which says whether its newest reply is unread.
 
 use protocol::model::{Seq, SessionId};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::sessions::{SESSION_COLUMNS, session_from_row};
 use super::{Store, StoreError, StoredSession, lock};
@@ -45,14 +45,17 @@ impl Store {
     ) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
         let changed = conn.execute(update, params)? > 0;
-        let session = conn
-            .query_row(
-                &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE id = ?"),
-                [id.as_str()],
-                session_from_row,
-            )
-            .optional()?
-            .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })?;
-        Ok(Reading { session, changed })
+        Ok(Reading { session: session_on(&conn, id)?, changed })
     }
+}
+
+/// The session as `conn` sees it, which on the writer is what its last change left.
+pub(super) fn session_on(conn: &Connection, id: &SessionId) -> Result<StoredSession, StoreError> {
+    conn.query_row(
+        &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE id = ?"),
+        [id.as_str()],
+        session_from_row,
+    )
+    .optional()?
+    .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
 }

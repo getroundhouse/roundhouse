@@ -40,6 +40,17 @@ pub enum EventBody {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
     },
+    /// The agent took the prompt recorded at `prompt` into its conversation. One sent mid-turn waits until the agent
+    /// can take it, such as when a running tool finishes. Every prompt gets this or `PromptDropped`, and until then the
+    /// agent hasn't got it.
+    PromptTaken {
+        prompt: Seq,
+    },
+    /// The prompt recorded at `prompt` never reached the agent's conversation, and won't: its turn was stopped first,
+    /// or the agent went away or couldn't be started. The agent says so, or the hub does when the agent can't.
+    PromptDropped {
+        prompt: Seq,
+    },
     /// The worker launched an agent process for this session.
     AgentStarted {
         pid: u32,
@@ -136,6 +147,8 @@ impl EventBody {
     pub fn kind(&self) -> &'static str {
         match self {
             EventBody::UserPrompt { .. } => "user_prompt",
+            EventBody::PromptTaken { .. } => "prompt_taken",
+            EventBody::PromptDropped { .. } => "prompt_dropped",
             EventBody::AgentStarted { .. } => "agent_started",
             EventBody::AgentInit { .. } => "agent_init",
             EventBody::AgentState { .. } => "agent_state",

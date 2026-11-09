@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use client_core::session_log::SessionLog;
+use client_core::session_log::{PromptState, SessionLog};
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::Seq;
 
@@ -31,6 +31,8 @@ pub(super) struct Around {
     pub(super) picks: BTreeMap<String, Vec<String>>,
     /// For a prompt: the files it carries.
     pub(super) carried: Vec<Carried>,
+    /// For a prompt: whether the agent has it.
+    pub(super) prompt: PromptState,
 }
 
 /// What drawing one block of an event needs.
@@ -79,9 +81,16 @@ impl Around {
             .enumerate()
             .map(|(position, block)| BlockAround::read(log, m, seq, block, block_key(seq, body, position)))
             .collect();
-        let mut around = Around { blocks, approval_open: false, picks: BTreeMap::new(), carried: Vec::new() };
+        let mut around = Around {
+            blocks,
+            approval_open: false,
+            picks: BTreeMap::new(),
+            carried: Vec::new(),
+            prompt: PromptState::Taken,
+        };
         if let EventBody::UserPrompt { attachments, .. } = body {
             around.carried = attachments::carried(m, attachments);
+            around.prompt = log.prompt_state(seq);
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log

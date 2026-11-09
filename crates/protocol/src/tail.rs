@@ -131,6 +131,8 @@ impl Tail {
             }
             EventBody::Assistant { message_id: None, .. }
             | EventBody::UserPrompt { .. }
+            | EventBody::PromptTaken { .. }
+            | EventBody::PromptDropped { .. }
             | EventBody::AgentStarted { .. }
             | EventBody::AgentInit { .. }
             | EventBody::AgentState { .. }

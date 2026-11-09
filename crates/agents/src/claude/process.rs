@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use protocol::attachment::AttachmentFile;
 use protocol::event::ApprovalDecision;
-use protocol::model::ApprovalId;
+use protocol::model::{ApprovalId, Seq};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -66,6 +66,8 @@ struct Shared {
     held_output: Mutex<Vec<AgentOutput>>,
     /// Each as the line that was written, ready to write again.
     unconfirmed_prompts: Mutex<Vec<Value>>,
+    /// Prompts the CLI hasn't taken yet, by the `uuid` each was sent with, and where each is recorded.
+    untaken: Mutex<HashMap<String, Seq>>,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
     pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
@@ -107,6 +109,7 @@ pub fn spawn_at(
         confirmed: AtomicBool::new(false),
         held_output: Mutex::new(Vec::new()),
         unconfirmed_prompts: Mutex::new(Vec::new()),
+        untaken: Mutex::new(HashMap::new()),
         pending_inputs: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
         stop_requested: AtomicBool::new(false),
@@ -173,8 +176,8 @@ impl AgentProcess for ClaudeProcess {
         self.shared.gone.load(Ordering::SeqCst)
     }
 
-    async fn send_prompt(&self, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError> {
-        let message = if attachments.is_empty() {
+    async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError> {
+        let mut message = if attachments.is_empty() {
             user_message(text, attachments)
         } else {
             let (text, attachments) = (text.to_string(), attachments.to_vec());
@@ -184,11 +187,16 @@ impl AgentProcess for ClaudeProcess {
                 Err(e) => std::panic::resume_unwind(e.into_panic()),
             }
         };
+        // With it, the CLI says when it takes the prompt, and when it drops one it never took.
+        let uuid = uuid::Uuid::new_v4().to_string();
+        message["uuid"] = json!(uuid);
         let mut stdin = self.shared.stdin.lock().await;
         let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
         if !confirmed {
             self.shared.unconfirmed_prompts.lock().push(message.clone());
         }
+        // Before writing, since the CLI can say it took the prompt before the write returns.
+        self.shared.untaken.lock().insert(uuid.clone(), prompt);
         match write_to(&mut stdin, &message).await {
             // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
             Err(e) if !confirmed => {
@@ -197,7 +205,9 @@ impl AgentProcess for ClaudeProcess {
             }
             Err(e) => {
                 // Its stdin is broken, so it can't be told anything more. If it's somehow still
-                // running, it mustn't be working alongside the replacement that's coming.
+                // running, it mustn't be working alongside the replacement that's coming. The prompt
+                // goes to that replacement, so this one mustn't say it dropped it.
+                self.shared.untaken.lock().remove(&uuid);
                 self.shared.gone.store(true, Ordering::SeqCst);
                 signal_group(self.pid(), Signal::Terminate);
                 Err(e)

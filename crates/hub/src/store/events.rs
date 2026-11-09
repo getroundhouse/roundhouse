@@ -2,8 +2,10 @@
 
 use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
-use rusqlite::{OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::prompts::note_prompts;
+use super::queue::take_out_recorded;
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
 /// What an event changes about where a session's agent has got to, which commits with the event that brings it.
@@ -22,6 +24,56 @@ impl From<SessionStatus> for StatusChange {
     }
 }
 
+/// What an event changes about its session, which commits with it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionChange {
+    pub status: Option<StatusChange>,
+    /// Whether the queue is held from here on.
+    pub queue_held: Option<bool>,
+}
+
+impl SessionChange {
+    pub fn is_none(&self) -> bool {
+        self.status.is_none() && self.queue_held.is_none()
+    }
+}
+
+impl From<StatusChange> for SessionChange {
+    fn from(status: StatusChange) -> Self {
+        Self { status: Some(status), queue_held: None }
+    }
+}
+
+impl From<SessionStatus> for SessionChange {
+    fn from(status: SessionStatus) -> Self {
+        StatusChange::from(status).into()
+    }
+}
+
+/// Makes `change` to the session, as part of the transaction that records the event at `seq`.
+fn change_session(tx: &Connection, session_id: &SessionId, seq: i64, change: SessionChange) -> Result<(), StoreError> {
+    if let Some(held) = change.queue_held {
+        tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, session_id.as_str()])?;
+    }
+    let Some(StatusChange { status, ends_turn, background_tasks }) = change.status else { return Ok(()) };
+    if let Some(tasks) = background_tasks {
+        tx.execute(
+            "UPDATE sessions SET background_tasks = ? WHERE id = ?",
+            params![serde_json::to_string(&tasks)?, session_id.as_str()],
+        )?;
+    }
+    let status = text_of(&status);
+    if ends_turn {
+        tx.execute(
+            "UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?",
+            params![status, seq, session_id.as_str()],
+        )?;
+    } else {
+        tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, session_id.as_str()])?;
+    }
+    Ok(())
+}
+
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
     EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled }
@@ -29,7 +81,8 @@ pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
 
 impl Store {
     /// `change` commits with the event, so nobody can see one without the other. A client that reads status after an
-    /// event gets at least that event's status, and the reply it made.
+    /// event gets at least that event's status, and the reply it made. A prompt recorded under the ID of one in the
+    /// queue comes out of the queue in the same commit, so no prompt is ever both sent and waiting to be.
     pub fn append(
         &self,
         session_id: &SessionId,
@@ -37,14 +90,14 @@ impl Store {
         body: &EventBody,
         raw: Option<&str>,
         client_msg_id: Option<&ClientMessageId>,
-        change: Option<StatusChange>,
+        change: Option<SessionChange>,
     ) -> Result<Appended, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if let Some(client_msg_id) = client_msg_id
             && let Some(event) = recorded_with(&tx, session_id, client_msg_id)?
         {
-            return Ok(Appended { event, duplicate: true });
+            return Ok(Appended { event, duplicate: true, dequeued: false, untaken: None });
         }
         let last_seq: Option<i64> = tx
             .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
@@ -71,23 +124,12 @@ impl Store {
             "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
             params![seq, ts_ms, session_id.as_str()],
         )?;
-        if let Some(StatusChange { status, ends_turn, background_tasks }) = change {
-            if let Some(tasks) = background_tasks {
-                tx.execute(
-                    "UPDATE sessions SET background_tasks = ? WHERE id = ?",
-                    params![serde_json::to_string(&tasks)?, session_id.as_str()],
-                )?;
-            }
-            let status = text_of(&status);
-            if ends_turn {
-                tx.execute(
-                    "UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?",
-                    params![status, seq, session_id.as_str()],
-                )?;
-            } else {
-                tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, session_id.as_str()])?;
-            }
-        }
+        change_session(&tx, session_id, seq, change.unwrap_or_default())?;
+        let dequeued = match (body, client_msg_id) {
+            (EventBody::UserPrompt { .. }, Some(client_msg_id)) => take_out_recorded(&tx, session_id, client_msg_id)?,
+            _ => false,
+        };
+        let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
         tx.commit()?;
         let event = SessionEvent {
             session_id: session_id.clone(),
@@ -97,7 +139,7 @@ impl Store {
             body: body.clone(),
             raw: None,
         };
-        Ok(Appended { event, duplicate: false })
+        Ok(Appended { event, duplicate: false, dequeued, untaken })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.
@@ -163,6 +205,8 @@ impl Store {
                 EventBody::ApprovalRequested { approval_id, .. } => open.push(approval_id),
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(|id| *id != approval_id),
                 EventBody::UserPrompt { .. }
+                | EventBody::PromptTaken { .. }
+                | EventBody::PromptDropped { .. }
                 | EventBody::AgentStarted { .. }
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }

@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, Rev, Session};
+use protocol::model::{AgentSessionId, Rev, Seq, Session};
 use rusqlite::{Connection, Row};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -19,6 +19,8 @@ mod comments;
 mod error;
 mod events;
 mod made;
+mod prompts;
+mod queue;
 mod reading;
 mod records;
 mod repos;
@@ -32,8 +34,9 @@ mod workspaces;
 use schema::{migrate, open_connection};
 
 pub use error::{BackupError, StoreError};
-pub use events::{StatusChange, cancelled_approval};
+pub use events::{SessionChange, StatusChange, cancelled_approval};
 pub use made::{Made, MadeByRequest};
+pub use queue::Queued;
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
 
@@ -57,6 +60,10 @@ pub struct Appended {
     pub event: SessionEvent,
     /// This `client_msg_id` was already recorded, and `event` is the original.
     pub duplicate: bool,
+    /// The event is a prompt that was waiting in the queue, and recording it took it out.
+    pub dequeued: bool,
+    /// The prompts the agent has yet to take, oldest first, if the event changed them.
+    pub untaken: Option<Vec<Seq>>,
 }
 
 pub fn now_ms() -> i64 {

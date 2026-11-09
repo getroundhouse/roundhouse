@@ -244,6 +244,24 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (session_id, id)
     );
 ",
+    // Each session's queue, as a JSON list, and whether it's held. A Session record shows both, so the trigger names
+    // them too. Also the prompts its agent hasn't taken or dropped yet, as a JSON list of where they're recorded, so a
+    // hub that starts again can drop those its last one's agents took with them. Only the hub reads that, so the
+    // trigger leaves it out.
+    r"
+    ALTER TABLE sessions ADD COLUMN queued TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE sessions ADD COLUMN queue_held INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN untaken TEXT NOT NULL DEFAULT '[]';
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks, title_source, queued, queue_held
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
