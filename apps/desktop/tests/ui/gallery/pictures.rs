@@ -43,6 +43,28 @@ pub(crate) fn terminal() -> Vec<u8> {
     encode(&image)
 }
 
+/// A page of signals in a browser, each a dot and a name, as the agent's screenshot of it would show it, with the fourth
+/// at stop showing red.
+pub(crate) fn signal_board() -> Vec<u8> {
+    const RED: Rgba<u8> = Rgba([0xd0, 0x4a, 0x4a, 0xff]);
+    const AMBER: Rgba<u8> = Rgba([0xd8, 0x9a, 0x3a, 0xff]);
+    let mut image = RgbaImage::from_pixel(600, 340, PANE);
+    fill(&mut image, (0, 0), (600, 36), SIDEBAR);
+    fill(&mut image, (0, 36), (600, 1), EDGE);
+    for (x, width) in [(16, 10), (34, 10), (52, 10), (90, 260)] {
+        fill(&mut image, (x, 13), (width, 10), FAINT);
+    }
+    for (row, (color, name)) in
+        [(GREEN, 140), (AMBER, 110), (GREEN, 160), (RED, 120), (RED, 130), (GREEN, 100)].into_iter().enumerate()
+    {
+        let y = 66 + 42 * u32::try_from(row).unwrap();
+        fill(&mut image, (32, y), (16, 16), color);
+        fill(&mut image, (64, y + 4), (name, 8), TEXT);
+        fill(&mut image, (440, y + 4), (120, 8), FAINT);
+    }
+    encode(&image)
+}
+
 fn fill(image: &mut RgbaImage, (x, y): (u32, u32), (width, height): (u32, u32), color: Rgba<u8>) {
     for py in y..(y + height).min(image.height()) {
         for px in x..(x + width).min(image.width()) {

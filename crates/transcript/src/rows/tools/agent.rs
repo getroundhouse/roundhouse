@@ -43,7 +43,7 @@ fn opened(call: &Agent, answer: Option<&Answer>, subagent: Option<&Subagent>, to
         let drawn = blocks_of(&event.body)
             .iter()
             .zip(&around.blocks)
-            .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.this, cx));
+            .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.this, toggle.linked, cx));
         work.extend(drawn);
     }
     // A subagent run in the foreground reports in its call's result. Its own words say the same, when they came.
@@ -61,6 +61,8 @@ fn opened(call: &Agent, answer: Option<&Answer>, subagent: Option<&Subagent>, to
         .border_color(theme.border)
         .children(prompt)
         .children(work)
-        .when_some(report, |d, report| d.child(agent_text(toggle.key, report)))
+        .when_some(report, |d, report| {
+            d.child(agent_text(toggle.key, report).image_source(toggle.linked.resolver(toggle.seq)))
+        })
         .into_any_element()
 }

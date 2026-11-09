@@ -67,6 +67,8 @@ libc = "0.2"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6"
 parking_lot = "0.12"
+# Already under GPUI, through `url`. Reads the address of an image the agent's text points to.
+percent-encoding = "2"
 proptest = "1"
 # Already under rustls. Checks the update feed's signature.
 ring = "0.17"

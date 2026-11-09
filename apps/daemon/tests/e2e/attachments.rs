@@ -1,4 +1,5 @@
-//! Files sent with a prompt, from the client to the agent, and back to anyone reading the chat.
+//! Files sent with a prompt, from the client to the agent, and back to anyone reading the chat, and the images in the
+//! worktree that the agent's replies point to.
 
 #![cfg(test)]
 
@@ -149,4 +150,22 @@ fn a_prompt_can_only_carry_what_was_added_to_its_own_chat() {
     assert_eq!(refused_with(too_many), ErrorCode::InvalidRequest);
     assert_eq!(refused_with(client.attachment_read(&session.id, &shot.id)), ErrorCode::NotFound);
     assert!(read_all(&client, &session.id).is_empty(), "nothing is recorded for a refused prompt");
+}
+
+#[test]
+fn a_client_reads_an_image_in_the_worktree_through_the_hub_and_nothing_else() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    let worktree = PathBuf::from(workspace.path.clone().unwrap());
+    std::fs::write(worktree.join("shot.png"), png(64)).unwrap();
+    std::fs::write(worktree.join("notes.txt"), "not an image").unwrap();
+
+    let read = |path: &str| client.workspace_image_read(&workspace.id, path);
+
+    assert_eq!(read("shot.png").unwrap(), (MediaType::Png, png(64)));
+    assert_eq!(read(worktree.join("shot.png").to_str().unwrap()).unwrap(), (MediaType::Png, png(64)));
+    assert_eq!(refused_with(read("notes.txt")), ErrorCode::InvalidRequest);
+    assert_eq!(refused_with(read("../../")), ErrorCode::InvalidRequest);
+    assert_eq!(refused_with(read("missing.png")), ErrorCode::NotFound);
 }

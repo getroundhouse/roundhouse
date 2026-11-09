@@ -7,8 +7,8 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, finishing_update, own_hub, queue_held,
-    queued, setup_failed, streaming, titled, unread,
+    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, finishing_update, own_hub, pointed,
+    queue_held, queued, setup_failed, streaming, titled, unread,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -183,6 +183,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Idle, file_chats::failures())),
         steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
     },
+    Screen { name: "reply-image", spec: "chats.md", world: Some(pointed), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "thinking",
         spec: "chats.md",

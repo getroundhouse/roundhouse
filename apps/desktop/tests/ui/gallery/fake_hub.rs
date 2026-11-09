@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use protocol::PROTOCOL_VERSION;
-use protocol::attachment::AttachmentBytes;
+use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
@@ -106,6 +106,11 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::AttachmentRead { id, .. } => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData { data: AttachmentBytes::new(data.clone()) })
+        }
+        R::WorkspaceImageRead { path, .. } => {
+            let data =
+                world.worktree_images.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such image"))?;
+            reply(C::Image { media_type: MediaType::sniff(data), data: AttachmentBytes::new(data.clone()) })
         }
         R::HubShutdown
         | R::RepoAdd { .. }

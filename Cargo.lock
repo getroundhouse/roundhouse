@@ -7855,6 +7855,8 @@ dependencies = [
  "gpui-kit",
  "image",
  "look",
+ "parking_lot",
+ "percent-encoding",
  "protocol",
  "serde_json",
  "similar",

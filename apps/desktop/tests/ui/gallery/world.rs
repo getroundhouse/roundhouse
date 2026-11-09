@@ -38,6 +38,8 @@ pub(crate) struct World {
     pub(crate) pull_requests: HashMap<WorkspaceId, PullRequest>,
     /// The bytes of the files prompts carry, by attachment.
     pub(crate) attachments: HashMap<AttachmentId, Vec<u8>>,
+    /// The images in the screen's worktree that the agent's text points to, by the path it gives.
+    pub(crate) worktree_images: HashMap<String, Vec<u8>>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     records: i64,

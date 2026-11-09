@@ -15,6 +15,7 @@ use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
+use crate::linked_images::LinkedImages;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -59,10 +60,11 @@ pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
-    let row = render_row_inner(model, session, this, ix, cx);
+    let row = render_row_inner(model, session, this, linked, ix, cx);
     column(row).into_any_element()
 }
 
@@ -81,6 +83,7 @@ fn render_row_inner(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
@@ -105,7 +108,7 @@ fn render_row_inner(
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
-            render_event(event.seq, &event.body, &around, this, cx)
+            render_event(event.seq, &event.body, &around, this, linked, cx)
         }
         Shown::Pending(prompt, carried) => {
             let carried = attachments::view(None, &carried, this, cx);
@@ -178,7 +181,14 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
     }
 }
 
-fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<Transcript>, cx: &App) -> AnyElement {
+fn render_event(
+    seq: Seq,
+    body: &EventBody,
+    around: &Around,
+    this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
+    cx: &App,
+) -> AnyElement {
     let approval_open = around.approval_open;
     match body {
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
@@ -194,7 +204,7 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, cx))
+                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, linked, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -250,12 +260,13 @@ fn render_block(
     block: &ContentBlock,
     drawing: &BlockAround,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     cx: &App,
 ) -> Option<AnyElement> {
     let (key, expanded) = (&drawing.key, drawing.open);
-    let toggle = Toggle { seq, key, open: expanded, this };
+    let toggle = Toggle { seq, key, open: expanded, this, linked };
     Some(match block {
-        ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
+        ContentBlock::Text { text } => agent_text(key, text).image_source(linked.resolver(seq)).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These show as cards when they ask, with everything in them.

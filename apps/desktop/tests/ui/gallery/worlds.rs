@@ -10,7 +10,7 @@ use protocol::model::{
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, World};
-use super::{chats, patch, pictures, pull_requests};
+use super::{chats, image_chats, patch, pictures, pull_requests};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {
@@ -223,6 +223,13 @@ pub(super) fn attachments() -> World {
         world.attachments.insert(AttachmentId::from(id), data);
     }
     world.chat(&focus, SessionStatus::Idle, chats::attached(carried));
+    world
+}
+
+/// The screen's chat, where the reply points to a screenshot in the worktree.
+pub(super) fn pointed() -> World {
+    let mut world = chat_world(SessionStatus::Idle, image_chats::pointed());
+    world.worktree_images.insert(image_chats::AFTER.to_string(), pictures::signal_board());
     world
 }
 

@@ -11,6 +11,7 @@ use serde_json::Value;
 use super::around::{Answer, Subagent};
 use crate::calls::{ToolCall, count};
 use crate::item_key::ItemKey;
+use crate::linked_images::LinkedImages;
 use crate::transcript::Transcript;
 
 mod agent;
@@ -31,6 +32,8 @@ pub(super) struct Toggle<'a> {
     pub(super) key: &'a ItemKey,
     pub(super) open: bool,
     pub(super) this: &'a WeakEntity<Transcript>,
+    /// The images text can point to, for a subagent's work, which is drawn in its call.
+    pub(super) linked: &'a LinkedImages,
 }
 
 /// A call's line, with its result under it once it's back, as its kind draws it.
