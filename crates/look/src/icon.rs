@@ -144,15 +144,14 @@ fn paint(bounds: Bounds<Pixels>, drawing: &Drawing, colors: &Colors, window: &mu
     }
 }
 
-/// Centred on what it reaches rather than on its box, which leaves room under the turntable. Every row has a dot on
-/// the middle line, so the rows line up down it rather than staggering.
+/// Centred on what it reaches rather than on its box, which leaves room under the turntable.
 fn scaled(bounds: Bounds<Pixels>, rows: usize, width: Pixels, copper: Hsla, window: &mut Window) {
     let placed = Fan::with_rows(Bounds::new(point(px(0.), px(0.)), size(width, width * ASPECT)), rows);
     let (up, down) = placed.reach();
     let middle = bounds.center();
     let center = point(middle.x, middle.y + (up - down) * 0.5);
     let fan = Fan::with_rows(Bounds::new(center - placed.center, size(width, width * ASPECT)), rows);
-    for dot in fan.dots_counted(Count::Odd) {
+    for dot in fan.dots() {
         fan::disc(window, dot.at, fan.dot, copper);
     }
     let turntable = fan.turntable();
@@ -191,7 +190,7 @@ impl Layout {
         let outer = fan.inner + fan.pitch * fan::as_f32(fan.rows - 1);
         let (up, down) = (outer + fan.dot / 2.0, (fan.hub / 2.0).max(fan.ring.unwrap_or(0.)));
         // On the line between the tile's two middle pixels, and centred up and down on what it reaches. Every row has
-        // a dot on that line, as in `scaled`, except where dots are an odd number of pixels across: they sit on
+        // a dot on that line, as in every fan, except where dots are an odd number of pixels across: they sit on
         // pixels' middles, so to mirror across the line, none can sit on it, and every row has a gap there instead.
         let center = (canvas / 2.0, ((canvas + up - down) / 2.0).round());
         let count = if odd(fan.dot) { Count::Even } else { Count::Odd };

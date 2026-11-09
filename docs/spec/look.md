@@ -35,7 +35,7 @@ Each colour means one thing.
 
 ## The status mark
 
-Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of dots, spaced evenly along each row, so outer rows have more of them and the edge stays as dense as the middle. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the size it is in a four-row fan.
+Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of dots, spaced evenly along each row, so outer rows have more of them and the edge stays as dense as the middle. Every row has an odd number of dots, so each has one on the middle line and the rows line up down it, rather than staggering between a dot and a gap. *Unconfirmed.* Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the size it is in a four-row fan.
 
 The mark has three layers, and each is about one thing, so several facts can show at once without competing:
 
@@ -61,7 +61,7 @@ The brand on a tile: the fan in copper, on a warm dark tile that fades from `#21
 
 - **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge.
 - **Smaller drawings have fewer rows,** so the dots stay big enough to see: four at 256 pixels, which the Dock shrinks to under half its size, three at 128 and 64, and two below that. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
-- **Every row has a dot on the middle line,** so the rows line up down it rather than staggering, which shows when a fan has few dots. The 16-pixel drawing has a gap there in every row instead, since its one-pixel dots can't sit on the line between two pixels. *Unconfirmed.*
+- **Every row has a dot on the middle line,** as in the status mark, so there's one geometry in the app and its icon. The 16-pixel drawing is the one exception, with a gap there in every row instead, since its one-pixel dots can't sit on the line between two pixels.
 - **Below 128 pixels it's drawn on whole pixels,** where the fan's own shape would blur: square dots with a pixel clear around each, mirrored across the line between the tile's two middle pixels so the fan sits in the middle, and a turntable that's only its hub where a ring would be too small to see. *Unconfirmed.*
 - **macOS mostly uses the smallest drawing with at least the pixels it needs,** and shrinks it to fit, so on a Retina display each drawing covers the sizes up to half its pixels in points. The Dock is the exception: at about 55 points it uses the 256-pixel drawing.
 

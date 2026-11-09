@@ -75,11 +75,7 @@ impl Fan {
     }
 
     pub(crate) fn dots(&self) -> impl Iterator<Item = Dot> + use<> {
-        self.dots_counted(Count::Fitting)
-    }
-
-    pub(crate) fn dots_counted(&self, count: Count) -> impl Iterator<Item = Dot> + use<> {
-        rows_of_dots(self.center, self.inner, self.pitch, self.rows, count)
+        rows_of_dots(self.center, self.inner, self.pitch, self.rows, Count::Odd)
     }
 
     /// Its line and hub keep a share of its size, so they don't thin out as the dots get finer.
@@ -94,17 +90,15 @@ impl Fan {
     }
 }
 
-/// How many dots a row gets.
+/// How many dots a row gets: the odd or even number nearest to how many fit `pitch` apart.
 #[derive(Clone, Copy)]
 pub(crate) enum Count {
-    /// As many as fit `pitch` apart.
-    Fitting,
-    /// The even number nearest that, so no dot sits on the middle line. A fan of dots an odd number of pixels across
-    /// needs it to centre on the line between two pixels.
-    Even,
-    /// The odd number nearest that, so every row has a dot on the middle line and the rows line up down it, rather
-    /// than staggering, which shows when a fan has few dots.
+    /// Every fan's, so every row has a dot on the middle line and the rows line up down it, rather than staggering
+    /// between a dot and a gap.
     Odd,
+    /// So no dot sits on the middle line. A fan of dots an odd number of pixels across needs it to centre on the
+    /// line between two pixels.
+    Even,
 }
 
 /// Rows of dots in a half circle over `center`, the first `inner` from it and each `pitch` further out. The dots in
@@ -120,9 +114,8 @@ pub(crate) fn rows_of_dots(
     (0..rows).flat_map(move |row| {
         let r = inner + pitch * as_f32(row);
         let count = match count {
-            Count::Fitting => dots_in((r * PI) / pitch) + 1,
-            Count::Even => 2 * dots_in((r * PI) / pitch / 2.0 + 0.5),
             Count::Odd => 2 * dots_in((r * PI) / pitch / 2.0) + 1,
+            Count::Even => 2 * dots_in((r * PI) / pitch / 2.0 + 0.5),
         };
         (0..count).map(move |j| {
             let along = as_f32(j) / as_f32(count - 1);
@@ -209,6 +202,19 @@ mod tests {
 
             assert!(middle(Count::Odd).into_iter().all(|on| on), "{rows} rows, odd");
             assert!(middle(Count::Even).into_iter().all(|on| !on), "{rows} rows, even");
+        }
+    }
+
+    #[test]
+    fn every_fan_has_a_dot_on_the_middle_line_of_every_row() {
+        for width in [16., 18., 72., 320.] {
+            let fan = fan(width);
+            let dots: Vec<_> = fan.dots().collect();
+
+            for row in 0..fan.rows {
+                let middle = dots.iter().filter(|d| d.row == row && (d.along - 0.5).abs() < 1e-6).count();
+                assert_eq!(middle, 1, "{width} wide, row {row}");
+            }
         }
     }
 
