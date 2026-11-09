@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the three binaries in release, stamped with which build they are. `tools/install.sh` and
-# `tools/package/package.sh` source this, so they build and stamp the same way. Needs `jq`, which macOS has.
+# `tools/package/package.sh` source this, so they build and stamp the same way, and the release workflow runs it. Needs
+# `jq`, which macOS has.
 #
 #   tools/build.sh DIR                  Build this commit, put the binaries in DIR, and print the build
 #   tools/build.sh --package DIR        The same, stamped as a package, with the version people download

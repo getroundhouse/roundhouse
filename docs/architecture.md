@@ -79,11 +79,11 @@ services/
 tools/
   policy/          Tests that enforce the license and dependency rules below
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
-  build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh` and `package/`
+  build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh`, `package/` and the release workflow
   install.sh       Installs this commit as a version of its own, outside `target/`
-  package/         Packages this commit as Roundhouse.app with Velopack, signed when given an identity, and notarized when also given a notary profile
+  package/         Packages this commit as Roundhouse.app with Velopack, signed and notarized when given the keys, and publishes it as an update
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
-.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change
+.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change. The release workflow publishes each merge to `main`
 ```
 
 The binaries are `roundhouse`, `roundhoused` and `roundhouse-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `roundhouse-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
@@ -241,8 +241,8 @@ What someone using the app sees during an update is in `docs/spec/updates.md`. W
 The app is signed and notarized, you download it, and it updates itself as changes land on `main`, so staying current needs no checkout or toolchain. *Not built:* `tools/install.sh` installs the app, as above.
 
 - **Velopack packages, installs and updates the app.** One tool packages the app and makes its updates for macOS, Windows and Linux, and an update downloads only what changed. Sparkle signs its updates but covers only the Mac, and an updater of our own would have to redo what Velopack does on Windows. *Not built.*
-- **CI builds, signs and publishes every merge to `main`.** The merge queue has already run the checks on Linux by then. *Not built.*
-- **A published build is versioned `0.1.<commits on main>`,** such as `0.1.50`, which is what Velopack orders updates by. It's short and readable, every merge adds one, it leaves 0.2 and 1.0 free to mean something later, and each part fits the 16 bits of a Windows version field. A count can't be the build number, because counts differ across branches, but only `main` publishes, and its history only grows. *Not built.*
+- **CI builds, signs and publishes every merge to `main`.** The merge queue has already run the checks on Linux by then.
+- **A published build is versioned `0.1.<commits on main>`,** such as `0.1.50`, which is what Velopack orders updates by. It's short and readable, every merge adds one, it leaves 0.2 and 1.0 free to mean something later, and each part fits the 16 bits of a Windows version field. A count can't be the build number, because counts differ across branches, but only `main` publishes, and its history only grows.
 - **The update feed is signed, and the app checks the signature before trusting anything in it.** Velopack only checks each package against a checksum in the update feed, so without a signature, whoever controls the host controls the app. *Not built.*
 - **A hub a client starts runs from its own copy for each build, outside the app's install directory.** An update replaces that directory, so a hub running from it would start its next workers from different code, and on Windows Velopack first kills everything running from it, which would stop the hub and its agents. *Unconfirmed.*
 - **The app decides when an update installs,** so an update doesn't interrupt what someone is doing. *Not built.*

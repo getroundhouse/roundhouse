@@ -1,7 +1,7 @@
-# The full checks from AGENTS.md, for every PR and the merge queue. They run on Linux, where everything passes but
-# the gallery: the window tests use GPUI's test platform, which draws nothing, and the gallery, whose images are
-# exact to the Mac that approved them, is compiled only on macOS. mac.yml covers what only a Mac catches. A change
-# to nothing but Markdown skips them.
+# The full checks from AGENTS.md, and the tests of the scripts that publish releases, for every PR and the merge
+# queue. They run on Linux, where everything passes but the gallery: the window tests use GPUI's test platform, which
+# draws nothing, and the gallery, whose images are exact to the Mac that approved them, is compiled only on macOS.
+# mac.yml covers what only a Mac catches. A change to nothing but Markdown skips them.
 name: CI
 
 on:
@@ -119,10 +119,21 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+  # release.yml publishes only after a merge, and nothing there can block one, so a PR that breaks publish.py or
+  # feed-signature.sh fails here instead. Ubuntu's Python and OpenSSL 3 are all they need.
+  publish:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m unittest discover -s tools/package -v
+
   # The one check the ruleset requires. It fails if any job failed or was cancelled, `changes` included, and passes
   # if the rest passed or were skipped. It runs even when they fail, since a skipped job would count as passing.
   checks:
-    needs: [changes, lint, test]
+    needs: [changes, lint, test, publish]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
