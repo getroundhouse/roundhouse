@@ -84,6 +84,7 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
             duration_ms: Some(21_000),
             cost_usd: Some(0.08),
             num_turns: Some(1),
+            started_at_ms: None,
         },
     ]
 }
@@ -160,6 +161,7 @@ pub(crate) fn stopped() -> Vec<EventBody> {
         duration_ms: Some(21_000),
         cost_usd: Some(0.09),
         num_turns: Some(2),
+        started_at_ms: None,
     });
     events
 }

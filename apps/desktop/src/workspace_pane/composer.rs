@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, Context, ExternalPaths, InteractiveElement, IntoElement, ParentElement, Styled, Window, div};
 use transcript::mode_label;
 
-use super::{WorkspacePane, in_turn};
+use super::WorkspacePane;
 use crate::StopAgent;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
@@ -89,7 +89,9 @@ impl WorkspacePane {
         let pickers = self.pickers(cx).into_any_element();
         let attached = self.attached_tiles(cx);
         let queue = self.queue_card(cx);
-        let working = self.session().is_some_and(in_turn);
+        // In a turn, which the composer offers to stop. Work left in the background isn't, since stopping a turn doesn't
+        // reach it.
+        let working = self.session().is_some_and(|s| s.status.in_turn());
         let theme = cx.theme();
         let (surface, border, ring) = (theme.muted, theme.input, theme.ring);
         let this = cx.weak_entity();

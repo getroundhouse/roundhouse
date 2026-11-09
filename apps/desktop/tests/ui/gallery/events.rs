@@ -74,6 +74,7 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
         duration_ms: Some(seconds * 1_000),
         cost_usd: Some(cost_usd),
         num_turns: None,
+        started_at_ms: None,
     }
 }
 

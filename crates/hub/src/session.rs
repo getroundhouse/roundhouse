@@ -145,6 +145,8 @@ struct LiveState {
     pending_approvals: HashMap<ApprovalId, Option<RunId>>,
     /// What the current agent is running in the background. None of it outlives the agent, so it starts empty.
     background_tasks: Vec<AgentTask>,
+    /// When the newest turn started, as the session's record says, for the turn's end to carry.
+    turn_started_at_ms: Option<i64>,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
     /// been replaced: they go in the log, but don't speak for the session's current state, and its
     /// deltas are dropped.
@@ -213,6 +215,7 @@ impl LiveSession {
                 version: 0,
                 pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
                 background_tasks: Vec::new(),
+                turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent: None,
                 agent_opened: stored.agent_opened,
                 model: stored.session.model.clone(),

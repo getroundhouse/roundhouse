@@ -99,9 +99,15 @@ pub enum EventBody {
         result: Option<String>,
         #[serde(default)]
         errors: Vec<String>,
+        /// How long the turn took, by the agent's own count.
         duration_ms: Option<u64>,
         cost_usd: Option<f64>,
         num_turns: Option<u64>,
+        /// When the turn started, by the hub's clock, which the hub adds as it records the end. So every turn is timed
+        /// the way the working line counts it, and a client needn't load the turn's start to time it. `None` from the
+        /// agent, which doesn't know it, and from a hub that doesn't add it.
+        #[serde(default)]
+        started_at_ms: Option<i64>,
     },
     ApprovalRequested {
         approval_id: ApprovalId,

@@ -192,6 +192,7 @@ fn changes_gather_into_one_range_until_a_view_looks() {
             duration_ms: None,
             cost_usd: None,
             num_turns: None,
+            started_at_ms: None,
         },
     ));
 

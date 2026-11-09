@@ -34,7 +34,7 @@ mod workspaces;
 use schema::{migrate, open_connection};
 
 pub use error::{BackupError, StoreError};
-pub use events::{SessionChange, StatusChange, cancelled_approval};
+pub use events::{SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use made::{Made, MadeByRequest};
 pub use queue::Queued;
 pub use reading::Reading;

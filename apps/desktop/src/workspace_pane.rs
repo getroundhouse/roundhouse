@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
     Subscription, Task, Window, px,
 };
-use protocol::model::{DiffComment, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{DiffComment, Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::changes::Changes;
@@ -31,12 +31,6 @@ mod setup;
 #[cfg(test)]
 mod tests;
 mod view;
-
-/// In a turn, which the composer offers to stop. Work left in the background isn't, since stopping a turn doesn't
-/// reach it.
-fn in_turn(session: &Session) -> bool {
-    matches!(session.status, SessionStatus::Running | SessionStatus::WaitingApproval)
-}
 
 /// What shows under the tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

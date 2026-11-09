@@ -1,7 +1,8 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TurnOutcome};
 
-use super::status::{Open, ends_turn, next_status};
+use super::status::{Open, next_status, turn_edge};
 use super::*;
+use crate::store::TurnEdge;
 
 const NOTHING: Open = Open { approvals: 0, tasks: 0 };
 const ONE_APPROVAL: Open = Open { approvals: 1, tasks: 0 };
@@ -15,6 +16,7 @@ fn turn_ended() -> EventBody {
         duration_ms: None,
         cost_usd: None,
         num_turns: None,
+        started_at_ms: None,
     }
 }
 
@@ -98,8 +100,8 @@ fn a_turn_that_leaves_work_in_the_background_keeps_the_agent_at_work() {
     assert_eq!(next_status(Running, &state(AgentRunState::Idle), ONE_TASK, false), Background);
     assert_eq!(next_status(Background, &state(AgentRunState::Idle), ONE_TASK, false), Background);
     // It's still the end of a turn, so what the agent said is its reply.
-    assert!(ends_turn(Running, Background));
-    assert!(!ends_turn(Background, Idle));
+    assert_eq!(turn_edge(Running, Background), TurnEdge::Ends);
+    assert_eq!(turn_edge(Background, Idle), TurnEdge::Neither);
 }
 
 #[test]
@@ -158,4 +160,26 @@ fn taking_a_prompt_after_the_turn_ended_is_running_again() {
 fn an_idle_from_before_a_prompt_the_agent_has_yet_to_take_changes_nothing() {
     assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, true), Running);
     assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, false), Idle);
+}
+
+#[test]
+fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() {
+    use TurnEdge::{Ends, Neither, Starts};
+
+    for from in [Idle, Interrupted, Unknown] {
+        assert_eq!(turn_edge(from, Running), Starts, "from {from:?}");
+    }
+    assert_eq!(turn_edge(Background, Running), Starts, "picking up again after work in the background is a new turn");
+    let taken = EventBody::PromptTaken { prompt: 3 };
+    assert_eq!(
+        turn_edge(Idle, next_status(Idle, &taken, NOTHING, false)),
+        Starts,
+        "a prompt taken after the turn it came in has ended starts its own"
+    );
+    assert_eq!(turn_edge(Idle, WaitingApproval), Starts);
+    assert_eq!(turn_edge(Running, Idle), Ends);
+    assert_eq!(turn_edge(WaitingApproval, Idle), Ends);
+    assert_eq!(turn_edge(Running, WaitingApproval), Neither, "asking is part of the turn");
+    assert_eq!(turn_edge(WaitingApproval, Running), Neither);
+    assert_eq!(turn_edge(Running, Interrupted), Neither, "a turn the agent was cut off from doesn't end");
 }
