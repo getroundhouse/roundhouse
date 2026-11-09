@@ -74,9 +74,10 @@ impl WorkspacePane {
     }
 
     pub fn rerun_setup(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        let id = self.workspace.id.clone();
+        let starting = self.client.start(move |client| client.workspace_rerun_setup(&id));
         cx.spawn(async move |this, cx| {
-            let started = cx.background_spawn(async move { client.workspace_rerun_setup(&id) }).await;
+            let started = starting.recv().await;
             let _ = this.update(cx, |t, cx| match started {
                 Ok(workspace) => t.records.take_reply(Record::Workspace(workspace)),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))),

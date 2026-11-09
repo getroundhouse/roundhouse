@@ -209,6 +209,7 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 
 - **A hub is a separate process that outlives its clients,** so closing the app doesn't stop its agents. A client connects, or starts a hub if there's none, and a lock keeps each data directory to one hub.
 - **A prompt is recorded before anything else is tried,** and the client gets its reply at that point. Later failures go in the log, where every client can see them.
+- **A client that quits finishes sending what it was asked to do first, and briefly waits for the replies.** The hub carries out each request it receives on its own, so one received runs to the end whether or not its client is still there, and a prompt sent just before quitting is still recorded. The app waits at most GPUI's 200 ms. *Unconfirmed.*
 - **A hub cleans up at startup.** Its workers exited with it, so it closes open approvals, marks active sessions `Interrupted`, fails setups that were cut off, and discards half-made workspaces.
 - **The worker buffers events on disk until the hub acknowledges them.** A worker has to keep going while its hub is unreachable, such as when a Mac running the hub goes to sleep. For now, a worker stops its agents when it loses its hub, so nothing runs unrecorded, and the next prompt resumes the conversation.
 - **When a worker goes, the hub stops its instance and tells its sessions,** which close their open approvals and record that the agent exited. The next prompt starts a new worker and agent.

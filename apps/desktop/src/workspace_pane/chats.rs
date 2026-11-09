@@ -27,9 +27,10 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        let id = self.workspace.id.clone();
+        let finding = self.client.start(move |client| client.session_ensure(&id, AgentKind::Claude));
         cx.spawn(async move |this, cx| {
-            let found = cx.background_spawn(async move { client.session_ensure(&id, AgentKind::Claude) }).await;
+            let found = finding.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(found, cx));
         })
         .detach();
@@ -41,15 +42,14 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        let id = self.workspace.id.clone();
         let model = self.session().and_then(|s| s.model.clone());
         let mode = inherited_mode(self.session().and_then(|s| s.permission_mode.as_deref()));
+        let creating = self.client.start(move |client| {
+            client.session_create(&id, AgentKind::Claude, model, mode, Some(client_core::new_request_id()))
+        });
         cx.spawn(async move |this, cx| {
-            let created = cx
-                .background_spawn(async move {
-                    client.session_create(&id, AgentKind::Claude, model, mode, Some(client_core::new_request_id()))
-                })
-                .await;
+            let created = creating.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(created, cx));
         })
         .detach();
@@ -156,9 +156,9 @@ impl WorkspacePane {
     }
 
     fn finish_closing(&mut self, id: SessionId, cx: &mut Context<Self>) {
-        let client = self.client.clone();
+        let closing = self.client.start(move |client| client.session_close(&id));
         cx.spawn(async move |this, cx| {
-            let closed = cx.background_spawn(async move { client.session_close(&id) }).await;
+            let closed = closing.recv().await;
             let _ = this.update(cx, |t, cx| match closed {
                 Ok(session) => t.took_reply(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't close the chat: {e}"))),
@@ -168,9 +168,9 @@ impl WorkspacePane {
     }
 
     pub fn reopen_chat(&mut self, id: SessionId, cx: &mut Context<Self>) {
-        let client = self.client.clone();
+        let reopening = self.client.start(move |client| client.session_reopen(&id));
         cx.spawn(async move |this, cx| {
-            let reopened = cx.background_spawn(async move { client.session_reopen(&id) }).await;
+            let reopened = reopening.recv().await;
             let _ = this.update(cx, |t, cx| match reopened {
                 Ok(session) => t.took_chat_to_show(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't reopen the chat: {e}"))),
