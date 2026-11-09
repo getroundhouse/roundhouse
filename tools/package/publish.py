@@ -22,8 +22,9 @@ the workflow signed, such as an older one, and can't get a feed of theirs signed
       cache can take a while to, so it tries for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
-without a bucket. KEY is the app's public key, in the form `feed-signature.sh` says. `test_publish.py` runs this
-against a directory, and serves it for `check`. Needs Python 3.9 or newer, and OpenSSL 3, as `feed-signature.sh` does.
+without a bucket. KEY is the app's public key, in the form `apps/desktop/src/updates/source.rs` says.
+`test_publish.py` runs this against a directory, and serves it for `check`. Needs Python 3.9 or newer, and OpenSSL 3,
+as `feed-signature.sh` does.
 
 The feed and its signature are two uploads, so a run that stops between them leaves a pair that doesn't match. Each
 run uploads the pair under `staging/` first, so whichever of the two matches its signature and is newer becomes the

@@ -14,8 +14,8 @@
 #   B2_RELEASES_KEY_ID, B2_RELEASES_KEY                      A Backblaze key that can read and write the bucket
 # The repository's variables:
 #   RELEASES_BUCKET, RELEASES_S3_ENDPOINT, RELEASES_REGION   The bucket, through its S3 API
-#   RELEASES_URL                                             Where apps read the update feed
-#   FEED_PUBLIC_KEY                                          The update feed's public key, as the app holds it
+# Where apps read the update feed, and its public key, are the ones the app builds in, from
+# apps/desktop/src/updates/update-feed.url and update-feed.key.
 name: Release
 
 on:
@@ -32,6 +32,7 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - apps/desktop/icons/**
+      - apps/desktop/src/updates/update-feed.*
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -124,7 +125,6 @@ jobs:
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
-      CONFIGURED_FEED_KEY: ${{ vars.FEED_PUBLIC_KEY }}
       NOTARY_PROFILE: roundhouse
       # How many releases the feed lists, and the bucket keeps packages for.
       KEEP: "10"
@@ -143,6 +143,11 @@ jobs:
           echo "KEYCHAIN=$RUNNER_TEMP/signing.keychain-db" >> "$GITHUB_ENV"
           version="$(tools/package/package.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
+          # So the feed is checked, signed and published for the apps this publishes.
+          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
+          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
 
@@ -238,6 +243,6 @@ jobs:
           tools/package/publish.py upload --store "$STORE" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
       - name: Check what apps read
-        env:
-          URL: ${{ vars.RELEASES_URL }}
-        run: tools/package/publish.py check --url "$URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" --work "$PACKAGE"
+        run: |
+          tools/package/publish.py check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
+            --work "$PACKAGE"

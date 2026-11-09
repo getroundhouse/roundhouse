@@ -32,6 +32,7 @@ syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
 velopack.workspace = true
 ureq.workspace = true
+flume.workspace = true
 ring.workspace = true
 libc.workspace = true
 

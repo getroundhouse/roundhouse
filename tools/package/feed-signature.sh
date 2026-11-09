@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Signs the update feed, or checks its signature, so the app can tell that a feed came from the release workflow.
 # Velopack only checks each package against the checksum the feed gives, so whoever could change the feed could
-# change the app. The signature is Ed25519 over the feed's exact bytes, kept beside it as `<feed>.sig`, raw 64 bytes.
+# change the app. `apps/desktop/src/updates/source.rs` defines the signature, and the form of the public key.
 #
 #   tools/package/feed-signature.sh sign FEED PRIVATE_KEY PUBLIC_KEY   Write FEED.sig, then check it as verify does
 #   tools/package/feed-signature.sh verify FEED PUBLIC_KEY             Check FEED.sig against the key the app holds
 #   tools/package/feed-signature.sh public PRIVATE_KEY                 Print the public key the way the app holds it
 #   tools/package/feed-signature.sh openssl                            Print the OpenSSL this uses
 #
-# PRIVATE_KEY is a PKCS#8 PEM file. PUBLIC_KEY is the form the app builds in: the raw 32-byte key, in base64. It needs
-# OpenSSL 3 or newer. macOS's own `openssl` is LibreSSL, which can't sign raw input with Ed25519. To make a key, or a
-# new one to replace it, run `"$(tools/package/feed-signature.sh openssl)" genpkey -algorithm ed25519 -out KEY.pem`,
-# then `public` on it gives what the app builds in.
+# PRIVATE_KEY is a PKCS#8 PEM file, and PUBLIC_KEY is in the form the app builds in. It needs OpenSSL 3 or newer.
+# macOS's own `openssl` is LibreSSL, which can't sign raw input with Ed25519. To make a key, or a new one to replace
+# it, run `"$(tools/package/feed-signature.sh openssl)" genpkey -algorithm ed25519 -out KEY.pem`, then `public` on it
+# gives what the app builds in.
 set -euo pipefail
 
 die() { echo "error: $1" >&2; exit 1; }
