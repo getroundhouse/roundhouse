@@ -19,7 +19,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
 ## The diff tab
 
-- **Clicking a file shows its diff in the workspace's diff tab,** after its chats. A workspace has at most one: clicking another file shows that one in the same tab, so reviewing a branch doesn't leave a tab for every file.
+- **Clicking a file shows its diff in the workspace's diff tab, which is always the leftmost tab,** so it's in the same place however many chats are open. A workspace has at most one: clicking another file shows that one in the same tab, so reviewing a branch doesn't leave a tab for every file.
 - **The diff tab's name is in italics,** as a tab that's replaced rather than added to usually is. *Unconfirmed.*
 - **The diff tab covers the chat and its composer until a chat's tab is clicked,** and stays open behind the chats until it's closed. `Cmd-W` closes it while it shows, rather than the chat behind it, and `Ctrl-Tab` comes to it after the last chat. A reply that comes in the chat it covers is read once that chat shows. *Unconfirmed.*
 - **To comment, hover a changed line and click its add button.** The line stays marked, with its add button showing, while its comment is written below it, on a raised band that fills the diff from edge to edge. The box is wide, with a thin copper edge the whole time rather than a focus ring. Enter saves it. *Unconfirmed:* the copper.

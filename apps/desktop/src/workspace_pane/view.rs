@@ -98,17 +98,18 @@ impl WorkspacePane {
         })
     }
 
-    /// One tab for each open chat, then the diff tab if there is one, then a way to start another chat, and any closed
+    /// The diff tab if there is one, then one tab for each open chat, then a way to start another chat, and any closed
     /// ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
-        let mut tabs: Vec<AnyElement> = numbered
-            .iter()
-            .filter(|(_, s)| s.closed_at_ms.is_none())
-            .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx))
-            .collect();
-        tabs.extend(self.diff_tab_element(cx));
+        let mut tabs: Vec<AnyElement> = self.diff_tab_element(cx).into_iter().collect();
+        tabs.extend(
+            numbered
+                .iter()
+                .filter(|(_, s)| s.closed_at_ms.is_none())
+                .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx)),
+        );
         let closed: Vec<(SessionId, String)> = numbered
             .iter()
             .filter(|(_, s)| s.closed_at_ms.is_some())

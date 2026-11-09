@@ -121,7 +121,7 @@ impl WorkspacePane {
         Some(column.bg(theme.sidebar).child(changes).into_any_element())
     }
 
-    /// The diff tab, after the chats, named for the file it shows. Its name is in italics, because it's replaced rather
+    /// The diff tab, before the chats, named for the file it shows. Its name is in italics, because it's replaced rather
     /// than added to. It's built as a chat's tab is, with the same width, underline and close button, so the row reads
     /// as one row of tabs.
     pub(super) fn diff_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
