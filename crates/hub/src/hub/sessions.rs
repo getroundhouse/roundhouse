@@ -166,7 +166,7 @@ impl Hub {
     pub(crate) async fn session_cancel(self: &Arc<Self>, id: SessionId) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
         // A prompt waiting on setup holds this session's commands, so stopping has to reach setup directly.
-        self.cancel_setup(&session.workspace_id).await;
+        self.cancel_setup(&session.workspace_id);
         let (reply, done) = oneshot::channel();
         session.command(Command::Cancel { reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?

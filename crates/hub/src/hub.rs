@@ -1,5 +1,6 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
+use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
 mod comments;
@@ -22,7 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot, watch};
+use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
 use tracing::warn;
 
 const LOCAL_PROVIDER: &str = "local";
@@ -44,7 +45,7 @@ pub(crate) struct Hub {
     ensuring_session: AsyncMutex<()>,
     sessions: Mutex<HashMap<SessionId, Arc<LiveSession>>>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
-    setup_gates: Mutex<HashMap<WorkspaceId, watch::Sender<bool>>>,
+    setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     feed: broadcast::Sender<HubNotice>,
     on_demand: bool,
     started_at_ms: i64,

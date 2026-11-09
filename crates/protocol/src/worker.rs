@@ -57,7 +57,8 @@ pub enum WorkerRequest {
         path: String,
         env: Vec<(String, String)>,
     },
-    /// Stops a running setup script. Harmless if there isn't one.
+    /// Stops the setup script, including one asked for just before this that hasn't started yet. Harmless if
+    /// there isn't one.
     CancelSetup,
     SetupLog {
         path: String,

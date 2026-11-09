@@ -24,7 +24,7 @@ mod agent;
 mod scripts;
 
 use agent::{configure_agent, start_agent, stop_agent};
-use scripts::{run_archive_script, run_setup, stop_setup_script};
+use scripts::{Setup, run_archive_script, run_setup, setup_requested, stop_setup_script};
 
 /// Enough to see what went wrong, without sending a whole install log across.
 const SETUP_LOG_TAIL_BYTES: u64 = 256 * 1024;
@@ -54,8 +54,8 @@ struct State {
     /// Set under `start_lock` once the hub has gone, so a start still in flight can't add an agent
     /// after the worker has decided what to stop.
     shutting_down: AtomicBool,
-    /// The running setup script, so it can be stopped.
-    setup_pid: Arc<Mutex<Option<u32>>>,
+    /// The setup script, so it can be stopped.
+    setup: Arc<Mutex<Setup>>,
     frames: mpsc::Sender<WorkerFrame>,
 }
 
@@ -84,7 +84,7 @@ where
         agents: Mutex::new(HashMap::new()),
         start_lock: tokio::sync::Mutex::new(()),
         shutting_down: AtomicBool::new(false),
-        setup_pid: Arc::new(Mutex::new(None)),
+        setup: Arc::new(Mutex::new(Setup::Idle)),
         frames: frames.clone(),
     });
     let forwarders = Arc::new(tokio::sync::Mutex::new(JoinSet::new()));
@@ -113,6 +113,11 @@ where
                 continue;
             }
         };
+        // Each request runs on a task of its own, so a stop read after this could otherwise be handled
+        // before the setup it's for has begun.
+        if matches!(call.request, WorkerRequest::SetupWorkspace { .. }) {
+            setup_requested(&state);
+        }
         let state = state.clone();
         let forwarders = forwarders.clone();
         tokio::spawn(async move {
