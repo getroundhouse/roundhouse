@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod attachments;
 mod chats;
 mod diff;
 mod hub;
@@ -324,18 +325,6 @@ impl<'a> Ui<'a> {
 
     pub(crate) fn wait_idle_with(&mut self, what: &str, mut text: impl FnMut(&str) -> bool) {
         self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
-    }
-
-    /// Puts this on the clipboard and pastes it where focus is, as Cmd-V does.
-    pub(crate) fn paste(&mut self, item: gpui_kit::ClipboardItem) {
-        self.cx.write_to_clipboard(item);
-        // The platform's own paste: cmd-v on a Mac, ctrl-v on Linux.
-        self.press("secondary-v");
-    }
-
-    pub(crate) fn attached(&self) -> Vec<String> {
-        let pane = self.pane().unwrap();
-        self.cx.read_entity(&pane, |p, _| p.attached_names())
     }
 
     pub(crate) fn composer_text(&self) -> String {

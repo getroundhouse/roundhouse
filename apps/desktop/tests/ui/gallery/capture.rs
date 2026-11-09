@@ -118,12 +118,7 @@ impl Driver {
             }
             Step::Hover { on, shows } => self.hover(on, shows),
             Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
-            Step::PasteFile(name, text) => {
-                let path = self.dir.join(name);
-                std::fs::write(&path, text).unwrap();
-                let copied = ExternalPaths(vec![path].into());
-                self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
-            }
+            Step::PasteFile(name, text) => self.paste_file(name, text),
             Step::AskToFinish => {
                 self.step(&Step::Click("finish-update"));
                 self.wait("the question", |view, _| view.update_question.is_some());
@@ -232,6 +227,14 @@ impl Driver {
         self.wait("the composer to take the paste", |view, cx| {
             selected_pane(view).is_some_and(|pane| pane.read(cx).attached_names().len() > had)
         });
+    }
+
+    /// As copying a file in Finder and pasting it does.
+    fn paste_file(&mut self, name: &str, text: &str) {
+        let path = self.dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        let copied = ExternalPaths(vec![path].into());
+        self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
     }
 
     fn attached(&mut self) -> usize {
