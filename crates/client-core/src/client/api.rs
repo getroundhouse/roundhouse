@@ -2,11 +2,12 @@
 
 use std::sync::atomic::Ordering;
 
+use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus,
-    PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
+    GitStatus, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -256,12 +257,55 @@ impl Client {
         text: &str,
         client_msg_id: Option<ClientMessageId>,
     ) -> Result<(Seq, bool)> {
-        let request = ClientRequest::SessionPrompt { id: id.clone(), text: text.to_string(), client_msg_id };
+        self.session_prompt_with(id, text, client_msg_id, Vec::new())
+    }
+
+    /// A prompt that carries files, each added first with [`Client::attachment_add`]. With any, `text` can be empty.
+    pub fn session_prompt_with(
+        &self,
+        id: &SessionId,
+        text: &str,
+        client_msg_id: Option<ClientMessageId>,
+        attachments: Vec<AttachmentId>,
+    ) -> Result<(Seq, bool)> {
+        let request =
+            ClientRequest::SessionPrompt { id: id.clone(), text: text.to_string(), client_msg_id, attachments };
         let reply = self.call(request)?;
         let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
             return unexpected(&reply);
         };
         Ok((seq, duplicate))
+    }
+
+    /// Adding the same `id` again returns what the first one added. A hub older than attachments refuses this, as
+    /// `is_unsupported` says, before anything is sent to the agent.
+    pub fn attachment_add(
+        &self,
+        session_id: &SessionId,
+        id: &AttachmentId,
+        name: &str,
+        media_type: MediaType,
+        data: Vec<u8>,
+    ) -> Result<Attachment> {
+        let reply = self.call(ClientRequest::AttachmentAdd {
+            session_id: session_id.clone(),
+            id: id.clone(),
+            name: name.to_string(),
+            media_type,
+            data: AttachmentBytes::new(data),
+        })?;
+        let ClientResponse::Attachment(attachment) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(attachment)
+    }
+
+    pub fn attachment_read(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Vec<u8>> {
+        let reply = self.call(ClientRequest::AttachmentRead { session_id: session_id.clone(), id: id.clone() })?;
+        let ClientResponse::AttachmentData { data } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(data.into_vec())
     }
 
     pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {
@@ -338,4 +382,9 @@ pub fn new_request_id() -> ClientRequestId {
 /// A new ID for a prompt. A retry sends the same one, so the hub records the prompt once.
 pub fn new_message_id() -> ClientMessageId {
     ClientMessageId::from(uuid::Uuid::new_v4().to_string())
+}
+
+/// A new ID for a file to attach, chosen before it's added, so a view can show it at once and a retry adds it once.
+pub fn new_attachment_id() -> AttachmentId {
+    AttachmentId::from(uuid::Uuid::new_v4().to_string())
 }

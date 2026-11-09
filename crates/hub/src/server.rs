@@ -72,7 +72,7 @@ async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
     let mut line = Vec::new();
     let mut greeted = false;
     loop {
-        line.clear();
+        frame::clear_buffer(&mut line);
         let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
         match read {
             Ok(0) | Err(_) => break,
@@ -231,10 +231,14 @@ async fn handle(
             }
             C::Ok
         }
-        R::SessionPrompt { id, text, client_msg_id } => {
-            let (seq, duplicate) = hub.session_prompt(id, text, client_msg_id).await?;
+        R::SessionPrompt { id, text, client_msg_id, attachments } => {
+            let (seq, duplicate) = hub.session_prompt(id, text, client_msg_id, attachments).await?;
             C::PromptRecorded { seq, duplicate }
         }
+        R::AttachmentAdd { session_id, id, name, media_type, data } => {
+            C::Attachment(hub.attachment_add(session_id, id, name, media_type, data).await?)
+        }
+        R::AttachmentRead { session_id, id } => C::AttachmentData { data: hub.attachment_read(session_id, id).await? },
         R::SessionApprove { id, approval_id, decision } => {
             hub.session_approve(id, approval_id, decision).await?;
             C::Ok

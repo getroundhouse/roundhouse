@@ -1,5 +1,7 @@
 //! What the command line accepts.
 
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use protocol::model::{ApprovalId, ClientMessageId, Seq};
 
@@ -33,6 +35,10 @@ pub(crate) enum Cmd {
         /// Makes retrying safe: the same ID is only ever recorded once.
         #[arg(long)]
         client_msg_id: Option<ClientMessageId>,
+        /// A file to send with the prompt, of any kind, which the agent finds in its worktree. Can be given more
+        /// than once, and with any, the prompt can be "".
+        #[arg(long, value_name = "PATH")]
+        attach: Vec<PathBuf>,
     },
     /// Follow a session's events from any point in its history.
     Attach {

@@ -9,6 +9,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+pub mod attachment;
 mod build;
 pub mod client;
 pub mod event;

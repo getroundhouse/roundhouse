@@ -12,7 +12,8 @@ use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, ClientMessageId, RunId, Seq, Session, SessionId, SessionStatus, WorkspaceId,
+    AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session, SessionId,
+    SessionStatus, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -56,6 +57,7 @@ pub(crate) enum Command {
     Prompt {
         text: String,
         client_msg_id: Option<ClientMessageId>,
+        attachments: Vec<AttachmentId>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     },
     Approve {

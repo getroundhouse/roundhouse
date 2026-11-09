@@ -58,7 +58,7 @@ use SessionStatus::*;
 
 #[test]
 fn a_prompt_starts_running_from_any_state() {
-    let prompt = EventBody::UserPrompt { text: "x".into(), client_msg_id: None };
+    let prompt = EventBody::UserPrompt { text: "x".into(), client_msg_id: None, attachments: Vec::new() };
     for from in [Idle, Running, WaitingApproval, Interrupted, Background] {
         assert_eq!(next_status(from, &prompt, NOTHING), Running);
     }
@@ -120,7 +120,7 @@ fn background_work_changing_mid_turn_leaves_the_turn_alone() {
 
 #[test]
 fn a_prompt_or_the_agent_picking_up_again_starts_a_turn_over_background_work() {
-    let prompt = EventBody::UserPrompt { text: "x".into(), client_msg_id: None };
+    let prompt = EventBody::UserPrompt { text: "x".into(), client_msg_id: None, attachments: Vec::new() };
     assert_eq!(next_status(Background, &prompt, ONE_TASK), Running);
     assert_eq!(next_status(Background, &state(AgentRunState::Running), ONE_TASK), Running);
 }

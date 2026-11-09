@@ -3,6 +3,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod attachment_files;
 mod error;
 mod hub;
 mod names;

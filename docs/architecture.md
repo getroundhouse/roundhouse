@@ -167,6 +167,7 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 | `seq`, run | The hub | A session |
 | Revision | The hub | A hub |
 | `client_msg_id` | A client | A session |
+| Attachment | A client | A session |
 | `client_request_id` | A client | A hub |
 | Subscription | A client | A connection |
 | Message, tool use, approval | The agent | A session. Nothing promises an agent won't reuse one elsewhere, so they're never keys outside it |
@@ -189,6 +190,7 @@ Details are in `crates/protocol/`.
 - **Subscribers read from the log, and live updates only say that it moved.** A slow client can fall behind and catch up without losing anything, and it holds back only itself.
 - **A status change commits in the same transaction as its event,** so a client reading status after an event can't see an older value.
 - **Prompts carry an optional `client_msg_id`,** and the same ID is only recorded once, so a client can retry safely after a disconnect.
+- **A prompt's files go to the worktree, and the hub keeps only what the transcript draws.** A client adds each file to the session with an ID it chose, then sends the prompt naming them, so a retry sends nothing twice. The prompt's event records each file's name, kind and size. The hub keeps the bytes as files in its data directory rather than in the database, which it copies before every migration. Before the prompt reaches the agent, the worker writes each file into the worktree, and then the hub lets go of every one that isn't an image. A client reads an image with `attachment_read` when it draws one, so the transcript doesn't need the worker, and still has its images after the worktree is archived.
 
 ### Changing the protocol
 

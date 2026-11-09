@@ -114,6 +114,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::CommentDelete { .. }
         | R::SessionCreate { .. }
         | R::SessionPrompt { .. }
+        | R::AttachmentAdd { .. }
+        | R::AttachmentRead { .. }
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
         | R::SessionConfigure { .. }

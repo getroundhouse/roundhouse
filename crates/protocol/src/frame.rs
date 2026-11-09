@@ -17,6 +17,19 @@ pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
     serde_json::from_slice(line)
 }
 
+/// The most a buffer for reading frames keeps between them.
+const KEPT_BUFFER_BYTES: usize = 1024 * 1024;
+
+/// Empties a buffer that frames are read into, for the next. One that grew to take a large frame, such as a file a
+/// prompt carries, is let go, or the connection would hold that much for as long as it lasts.
+pub fn clear_buffer(buffer: &mut Vec<u8>) {
+    if buffer.capacity() > KEPT_BUFFER_BYTES {
+        *buffer = Vec::new();
+    } else {
+        buffer.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24,8 +37,21 @@ mod tests {
     use crate::model::{AgentKind, DiffSide, RepoId, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
     #[test]
+    fn a_buffer_that_took_a_large_frame_is_let_go() {
+        let (mut small, mut large) = (Vec::with_capacity(64), vec![0; KEPT_BUFFER_BYTES + 1]);
+        small.push(1);
+
+        clear_buffer(&mut small);
+        clear_buffer(&mut large);
+
+        assert!(small.is_empty() && small.capacity() >= 64, "a small one is kept to use again");
+        assert_eq!(large.capacity(), 0);
+    }
+
+    #[test]
     fn a_frame_is_exactly_one_line() {
-        let body = EventBody::UserPrompt { text: "line one\nline two".into(), client_msg_id: None };
+        let body =
+            EventBody::UserPrompt { text: "line one\nline two".into(), client_msg_id: None, attachments: Vec::new() };
         let line = encode(&body).unwrap();
         assert_eq!(line.iter().position(|b| *b == b'\n'), Some(line.len() - 1));
         assert_eq!(line.last(), Some(&b'\n'));
@@ -48,7 +74,7 @@ mod tests {
         assert_eq!(block, ContentBlock::Unknown);
         let body: EventBody =
             decode(br#"{"type":"user_prompt","text":"hi","client_msg_id":null,"later":true}"#).unwrap();
-        assert_eq!(body, EventBody::UserPrompt { text: "hi".into(), client_msg_id: None });
+        assert_eq!(body, EventBody::UserPrompt { text: "hi".into(), client_msg_id: None, attachments: Vec::new() });
         assert_eq!(decode::<WorkspaceStatus>(br#""from_the_future""#).unwrap(), WorkspaceStatus::Unknown);
         assert_eq!(decode::<SessionStatus>(br#""from_the_future""#).unwrap(), SessionStatus::Unknown);
         assert_eq!(decode::<AgentKind>(br#""from_the_future""#).unwrap(), AgentKind::Unknown);

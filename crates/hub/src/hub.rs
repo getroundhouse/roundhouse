@@ -3,6 +3,7 @@
 use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
+mod attachments;
 mod comments;
 mod repos;
 mod sessions;
@@ -10,6 +11,7 @@ mod setup;
 mod titles;
 mod workspaces;
 
+use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::session::{Item, LiveSession};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
@@ -21,6 +23,7 @@ use protocol::model::{ClientRequestId, InstanceId, Records, SessionId, Workspace
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
@@ -36,6 +39,7 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
 
 pub(crate) struct Hub {
     store: Arc<Store>,
+    attachment_files: AttachmentFiles,
     providers: HashMap<String, Arc<dyn Provider>>,
     default_provider: String,
     workers: Mutex<HashMap<WorkspaceId, Arc<WorkerLink>>>,
@@ -66,9 +70,15 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 }
 
 impl Hub {
-    pub(crate) fn new(store: Arc<Store>, provider: Arc<dyn Provider>, on_demand: bool) -> Self {
+    pub(crate) fn new(
+        store: Arc<Store>,
+        attachments_dir: PathBuf,
+        provider: Arc<dyn Provider>,
+        on_demand: bool,
+    ) -> Self {
         Self {
             store,
+            attachment_files: AttachmentFiles::new(attachments_dir),
             on_demand,
             providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
             default_provider: LOCAL_PROVIDER.to_string(),

@@ -13,6 +13,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+mod attachments;
 mod backup;
 mod comments;
 mod error;

@@ -32,6 +32,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Background task | Work an agent started that carries on after its turn ends, such as a command or a subagent. The agent is still at work until it finishes | `AgentTasks`, `SessionStatus::Background` |
 | Reply | What the agent said in a turn, as of the event that ended it. A turn the agent was cut off from isn't one | `Session.reply_seq` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
+| Attachment | A file a prompt carries, of any kind. The worker puts it in the worktree's `.context/attachments/`, and the hub keeps it too if it's an image. The interface says "file" or "image" | `Attachment`, `AttachmentId`, `AttachmentFile`, the `attachments` table |
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
 | Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
 | Approval mode | How much an agent may do without asking, such as "Ask first", "Plan" or "Full access" | `permission_mode` |

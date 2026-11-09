@@ -32,6 +32,8 @@ pub struct Paths {
     pub database: PathBuf,
     /// Copies of the database from before each migration, so an older build has one it can open.
     pub backups_dir: PathBuf,
+    /// The files prompts carry, one directory per session, kept out of the database so it stays small to copy.
+    pub attachments_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
     /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
@@ -80,6 +82,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         lock: data_dir.join("hub.lock"),
         database: data_dir.join("hub.db"),
         backups_dir: data_dir.join("backups"),
+        attachments_dir: data_dir.join("attachments"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         daemons_dir: data_dir.join("daemons"),

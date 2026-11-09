@@ -38,7 +38,12 @@ impl Printer {
 
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
-            EventBody::UserPrompt { text, .. } => self.line(event.seq, &format!("you: {text}")),
+            EventBody::UserPrompt { text, attachments, .. } => {
+                let names: Vec<&str> = attachments.iter().map(|a| a.name.as_str()).collect();
+                let carried =
+                    if names.is_empty() { String::new() } else { format!(" [attached: {}]", names.join(", ")) };
+                self.line(event.seq, &format!("you: {text}{carried}"));
+            }
             EventBody::AgentStarted { pid, resumed } => {
                 let how = if *resumed { "resumed" } else { "started" };
                 self.line(event.seq, &format!("agent {how}, pid {pid}"));

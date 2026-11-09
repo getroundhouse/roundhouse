@@ -12,6 +12,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use process::{Signal, signal_group};
+use protocol::attachment::AttachmentFile;
 use protocol::event::ApprovalDecision;
 use protocol::model::ApprovalId;
 use protocol::worker::AgentSpec;
@@ -25,6 +26,7 @@ use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
 mod launch;
 mod output;
+mod prompt;
 mod supervise;
 #[cfg(test)]
 mod tests;
@@ -32,6 +34,7 @@ mod tests;
 use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
+use prompt::user_message;
 use supervise::supervise;
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
@@ -61,7 +64,8 @@ struct Shared {
     /// is held back and prompts are kept, because the launch may still need retrying.
     confirmed: AtomicBool,
     held_output: Mutex<Vec<AgentOutput>>,
-    unconfirmed_prompts: Mutex<Vec<String>>,
+    /// Each as the line that was written, ready to write again.
+    unconfirmed_prompts: Mutex<Vec<Value>>,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
     pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
@@ -122,15 +126,6 @@ pub fn spawn_at(
     Ok(Arc::new(ClaudeProcess { shared }))
 }
 
-fn user_message(text: &str) -> Value {
-    json!({
-        "type": "user",
-        "session_id": "",
-        "parent_tool_use_id": null,
-        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
-    })
-}
-
 async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
     let mut line = serde_json::to_vec(value)?;
     line.push(b'\n');
@@ -178,13 +173,23 @@ impl AgentProcess for ClaudeProcess {
         self.shared.gone.load(Ordering::SeqCst)
     }
 
-    async fn send_prompt(&self, text: &str) -> Result<(), AgentError> {
+    async fn send_prompt(&self, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError> {
+        let message = if attachments.is_empty() {
+            user_message(text, attachments)
+        } else {
+            let (text, attachments) = (text.to_string(), attachments.to_vec());
+            match tokio::task::spawn_blocking(move || user_message(&text, &attachments)).await {
+                Ok(message) => message,
+                // As if it had run here.
+                Err(e) => std::panic::resume_unwind(e.into_panic()),
+            }
+        };
         let mut stdin = self.shared.stdin.lock().await;
         let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
         if !confirmed {
-            self.shared.unconfirmed_prompts.lock().push(text.to_string());
+            self.shared.unconfirmed_prompts.lock().push(message.clone());
         }
-        match write_to(&mut stdin, &user_message(text)).await {
+        match write_to(&mut stdin, &message).await {
             // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
             Err(e) if !confirmed => {
                 tracing::debug!("prompt not delivered before the agent opened: {e:#}");

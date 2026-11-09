@@ -51,6 +51,8 @@ desktop = { path = "apps/desktop" }
 
 anyhow = "1"
 async-trait = "0.1"
+# Already under GPUI. Carries an attachment's bytes as text, the way JSON has to.
+base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 flume = "0.11"
 # Already under GPUI. Compresses what a test serves, as a web server would.

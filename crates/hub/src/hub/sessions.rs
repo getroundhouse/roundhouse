@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
+use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus, TitleSource,
-    WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus,
+    TitleSource, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
@@ -126,13 +127,18 @@ impl Hub {
         id: SessionId,
         text: String,
         client_msg_id: Option<ClientMessageId>,
+        attachments: Vec<AttachmentId>,
     ) -> Result<(Seq, bool), ApiError> {
-        if text.trim().is_empty() {
+        if text.trim().is_empty() && attachments.is_empty() {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "a prompt can't be empty"));
+        }
+        if attachments.len() > MAX_PER_PROMPT {
+            let message = format!("a prompt can carry at most {MAX_PER_PROMPT} files");
+            return Err(ApiError::new(ErrorCode::InvalidRequest, message));
         }
         let session = self.live_session(&id).await?;
         let (reply, recorded) = oneshot::channel();
-        session.command(Command::Prompt { text, client_msg_id, reply }).await?;
+        session.command(Command::Prompt { text, client_msg_id, attachments, reply }).await?;
         recorded.await.map_err(|_| internal("the session has stopped"))?
     }
 

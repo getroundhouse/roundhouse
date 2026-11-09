@@ -101,11 +101,14 @@ fn live_events_never_build_up_past_the_limit() {
 #[test]
 fn a_prompt_shows_at_once_then_becomes_the_recorded_event() {
     let mut log = SessionLog::new(5);
-    log.add_pending("m1".into(), "hello".into());
+    log.add_pending("m1".into(), "hello".into(), Vec::new());
     assert_eq!(log.row_count(), 6);
     assert!(matches!(log.row(5), Row::Pending(p) if p.text == "hello"));
 
-    log.apply_event(event(6, EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()) }));
+    log.apply_event(event(
+        6,
+        EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()), attachments: Vec::new() },
+    ));
     assert_eq!(log.row_count(), 6, "it swapped in place");
     assert!(matches!(log.row(5), Row::Event(_)));
 }
@@ -113,7 +116,7 @@ fn a_prompt_shows_at_once_then_becomes_the_recorded_event() {
 #[test]
 fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
     let mut log = SessionLog::new(0);
-    log.add_pending("m1".into(), "hello".into());
+    log.add_pending("m1".into(), "hello".into(), Vec::new());
     assert_eq!(log.remove_pending(&"m1".into()).unwrap().text, "hello");
     assert_eq!(log.row_count(), 0);
     assert_eq!(log.remove_pending(&"m1".into()), None);
@@ -175,8 +178,11 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
 #[test]
 fn changes_gather_into_one_range_until_a_view_looks() {
     let mut log = SessionLog::new(0);
-    log.add_pending("p".into(), "hi".into());
-    log.apply_event(event(1, EventBody::UserPrompt { text: "hi".into(), client_msg_id: Some("p".into()) }));
+    log.add_pending("p".into(), "hi".into(), Vec::new());
+    log.apply_event(event(
+        1,
+        EventBody::UserPrompt { text: "hi".into(), client_msg_id: Some("p".into()), attachments: Vec::new() },
+    ));
     log.apply_event(event(
         2,
         EventBody::TurnEnded {

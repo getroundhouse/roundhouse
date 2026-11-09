@@ -2,6 +2,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+pub mod attachments;
 pub mod git;
 mod serve;
 pub mod setup;

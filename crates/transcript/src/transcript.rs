@@ -244,7 +244,7 @@ impl Transcript {
             return false;
         }
         let client_msg_id = client_core::new_message_id();
-        self.session.add_pending(client_msg_id.clone(), text.clone());
+        self.session.add_pending(client_msg_id.clone(), text.clone(), Vec::new());
         self.catch_up(cx);
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);
         cx.notify();

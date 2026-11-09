@@ -15,7 +15,7 @@ use tracing::warn;
 
 use super::launch::launch;
 use super::output::{read_stderr, read_stdout};
-use super::{Shared, drain_grace, user_message, write_to};
+use super::{Shared, drain_grace, write_to};
 use crate::{AgentOptions, AgentOutput};
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -78,7 +78,7 @@ pub(super) async fn supervise(
         *stdin = Some(launched.stdin);
         let prompts = shared.unconfirmed_prompts.lock().clone();
         for prompt in prompts {
-            if let Err(e) = write_to(&mut stdin, &user_message(&prompt)).await {
+            if let Err(e) = write_to(&mut stdin, &prompt).await {
                 warn!("could not replay a prompt after relaunching: {e:#}");
             }
         }

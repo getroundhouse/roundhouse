@@ -1,6 +1,7 @@
 //! One session's log, kept current so a view only reads it: a window of its history and its live tail.
 
 use parking_lot::Mutex;
+use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
 use protocol::model::{ClientMessageId, Seq, Session, SessionId};
 
@@ -44,9 +45,9 @@ impl OpenSession {
         self.follow.wake();
     }
 
-    /// Shows a prompt on its way.
-    pub fn add_pending(&self, client_msg_id: ClientMessageId, text: String) {
-        self.follow.update(|log| log.add_pending(client_msg_id, text));
+    /// Shows a prompt on its way, with what it carries.
+    pub fn add_pending(&self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
+        self.follow.update(|log| log.add_pending(client_msg_id, text, attachments));
     }
 
     /// Takes back a prompt that couldn't be sent.
