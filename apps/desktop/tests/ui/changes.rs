@@ -100,7 +100,7 @@ fn the_files_show_in_folders_that_close(cx: &mut TestAppContext) {
     assert!(ui.has("folder-src") && ui.has("file-a.txt"));
 }
 
-/// Leaves a comment on line 2 of `a.txt`, and returns it as the hub keeps it.
+/// Leaves a comment on line 2 of `a.txt`, and returns it as the hub keeps it, once the diff shows it.
 fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> DiffComment {
     let workspace = ui.view().selected.clone().unwrap();
     ui.open_file(diff, "a.txt");
@@ -112,7 +112,10 @@ fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> 
         saved = stack.client().comment_list(&workspace).unwrap();
         !saved.is_empty()
     });
-    saved.remove(0)
+    let comment = saved.remove(0);
+    // The hub has it before the app does, and the diff draws it only once the app has it.
+    ui.wait("the comment to show", |ui| ui.has(SharedString::from(format!("edit-{}", comment.id))));
+    comment
 }
 
 #[gpui_kit::test]
@@ -155,7 +158,6 @@ fn add_to_chat_copies_a_comment_into_the_composer(cx: &mut TestAppContext) {
     let workspace = ui.view().selected.clone().unwrap();
     ui.input("Keep it short.");
     let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
-    ui.wait("it to show", |ui| ui.comments(&diff).len() == 1);
 
     ui.click(SharedString::from(format!("add-to-chat-{}", comment.id)));
 
