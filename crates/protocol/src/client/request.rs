@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, CommentId, DiffSide, RepoId, Seq, SessionId, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffSide, RepoId, Seq, SessionId,
+    WorkspaceId,
 };
+use crate::pairing::{DeviceToken, PairingCode};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
@@ -20,10 +22,41 @@ pub enum ClientRequest {
         client: String,
     },
     /// Works without a hello, and so does `HubShutdown`, so a client of any version can see a hub and
-    /// stop it. Neither can change form, even in a real break.
+    /// stop it. Neither can change form, even in a real break. Both are only from the hub's own machine.
     HubStatus,
     /// Stops the hub and its workers. Agents are stopped and resume on the next prompt.
     HubShutdown,
+
+    /// Pairs a device using a code from a pairing link, as the first request on a connection from the network.
+    /// The reply carries the device's token, and the connection carries on as that device, with its hello next.
+    /// A code works once, so this isn't safe to send again: after a lost reply, pair again with a new code, and
+    /// revoke the device the first try made. Like `Authenticate`, it can't change form, even in a real break,
+    /// because it comes before the hello.
+    Pair {
+        code: PairingCode,
+        device_name: String,
+    },
+    /// Proves a paired device's token, as the first request on a connection from the network. Anything else
+    /// first, or a token the hub doesn't know, closes the connection.
+    Authenticate {
+        token: DeviceToken,
+    },
+    /// Only from the hub's own machine. Makes a new pairing code, and listens on the network from now until no
+    /// code is live and no device is paired. Each call makes a new code, and earlier ones work until they're used
+    /// or expire.
+    PairingStart,
+    /// Only from the hub's own machine. Replies with the device once a device pairs with this code, which it may
+    /// already have done, and fails with `NotFound` once the code has expired.
+    PairingWait {
+        code: PairingCode,
+    },
+    /// Only from the hub's own machine.
+    DeviceList,
+    /// Only from the hub's own machine. Forgets the device and closes its connections, so its token stops
+    /// working. Revoking one that's already gone does nothing.
+    DeviceRevoke {
+        id: DeviceId,
+    },
 
     /// Adding the same repository again returns the first record.
     RepoAdd {

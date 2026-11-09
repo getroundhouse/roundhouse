@@ -1,6 +1,7 @@
 //! Command-line client. It only talks to the hub, the same way the desktop app will.
 
 mod args;
+mod phone;
 mod render;
 mod run;
 mod session;

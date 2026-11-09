@@ -2,8 +2,8 @@
 //! depend on this crate, including a future mobile client.
 //!
 //! The wire format is newline-delimited JSON over any byte stream: a Unix socket between client
-//! and hub, stdio between hub and worker. Both sides say hello first and compare
-//! [`PROTOCOL_VERSION`]. Fields, enum variants and requests can all be added without a version bump,
+//! and hub, TLS over TCP between a paired device and hub, stdio between hub and worker. Both sides say
+//! hello first and compare [`PROTOCOL_VERSION`], after a device has authenticated, as [`pairing`] says. Fields, enum variants and requests can all be added without a version bump,
 //! because unknown fields are ignored, unknown variants decode as `Unknown`, and a hub answers a
 //! request it doesn't know with [`client::ErrorCode::Unsupported`]. A bump means a real break.
 
@@ -14,6 +14,7 @@ pub mod client;
 pub mod event;
 pub mod frame;
 pub mod model;
+pub mod pairing;
 pub mod paths;
 pub mod tail;
 pub mod worker;

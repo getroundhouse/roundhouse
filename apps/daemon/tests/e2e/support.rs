@@ -7,14 +7,20 @@ use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use client_core::{Client, Subscription, SubscriptionItem};
+use client_core::session_log::{Row, SessionLog};
+use client_core::{Client, PairingLink, RemoteHub, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::pairing::PairingCode;
 use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Where nothing answers. Hubs and listeners in these tests all ask for port 0, and the system never hands out port
+/// 1 for that, so unlike a port another test freed, no other test's hub can be listening there.
+pub(crate) const CLOSED: &str = "127.0.0.1:1";
 
 /// Returns what `kill` did. Signal 0 only checks that the process exists.
 pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
@@ -104,6 +110,8 @@ impl Stack {
             .env("FAKE_CLAUDE_STATE", self.agent_state())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
+            // Any free port, and only on loopback, so tests can run side by side and never ask a firewall.
+            .env(protocol::paths::ENV_LISTEN, "127.0.0.1:0")
             .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -325,6 +333,28 @@ impl Follower {
     pub(crate) fn tail_text(&self) -> String {
         self.tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
     }
+}
+
+/// A new pairing link from the hub, and its code. Tests listen on loopback, so that's the one host it offers.
+pub(crate) fn pairing_link(client: &Client) -> (PairingLink, PairingCode) {
+    let pairing = client.pairing_start().unwrap();
+    let port = client.hub_status().unwrap().network_port.expect("listening once a code is made");
+    assert_eq!(pairing.link.hosts, [format!("127.0.0.1:{port}")]);
+    (pairing.link, pairing.code)
+}
+
+pub(crate) fn pair_phone(client: &Client, name: &str) -> RemoteHub {
+    client_core::pair(&pairing_link(client).0, name).unwrap()
+}
+
+/// Every event the open session holds, if it holds all of them, in order.
+pub(crate) fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
+    (0..log.row_count())
+        .map(|row| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded | Row::Pending(_) => None,
+        })
+        .collect()
 }
 
 /// Commits Conductor-style settings to the test repository.

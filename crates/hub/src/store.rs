@@ -15,6 +15,7 @@ use serde_json::Value;
 
 mod backup;
 mod comments;
+mod devices;
 mod error;
 mod events;
 mod made;
@@ -28,6 +29,7 @@ mod workspaces;
 
 use schema::{migrate, open_connection};
 
+pub use devices::TokenHash;
 pub use error::{BackupError, StoreError};
 pub use events::cancelled_approval;
 pub use made::{Made, MadeByRequest};

@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, Workspace,
+    DeviceId, DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, Workspace,
 };
+use crate::pairing::{Device, DeviceToken, Pairing};
 use crate::tail::{StreamDelta, Tail};
 
 mod request;
@@ -62,6 +63,16 @@ pub enum ClientResponse {
         seq: Seq,
         duplicate: bool,
     },
+    /// What a device needs to connect again. The token isn't shown again.
+    Paired {
+        device_id: DeviceId,
+        token: DeviceToken,
+    },
+    Pairing(Pairing),
+    Device(Device),
+    Devices {
+        devices: Vec<Device>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -88,6 +99,10 @@ pub struct HubStatus {
     /// such as creating or archiving a workspace.
     #[serde(default)]
     pub requests: u32,
+    /// The port it listens on for paired devices, while it does: from when a pairing code is made for as long as
+    /// a code is live or a device is paired.
+    #[serde(default)]
+    pub network_port: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -115,6 +130,12 @@ pub enum ErrorCode {
     /// This hub doesn't know the request, usually because it's older than the client. The client
     /// hides or disables whatever needed it.
     Unsupported,
+    /// A connection from the network didn't pair or authenticate first, or its pairing code or token isn't
+    /// valid. The hub closes the connection after saying so. A device that was paired has been revoked, and
+    /// needs pairing again.
+    Unauthorized,
+    /// Only a client on the hub's own machine can ask this, and this connection came from the network.
+    LocalOnly,
     #[serde(other)]
     Unknown,
 }

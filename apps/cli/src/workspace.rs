@@ -1,11 +1,11 @@
 //! The workspace commands.
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use client_core::Client;
 use protocol::model::Workspace;
 
 use crate::args::WorkspaceCmd;
-use crate::run::short;
+use crate::run::{find_one, short};
 
 pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyhow::Result<()> {
     match command {
@@ -65,13 +65,5 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
 
 pub(crate) fn find_workspace(client: &Client, query: &str) -> anyhow::Result<Workspace> {
     let workspaces = client.workspace_list(true)?;
-    let mut matches: Vec<_> = workspaces.iter().filter(|w| w.name == query || w.id.as_str() == query).collect();
-    if matches.is_empty() {
-        matches = workspaces.iter().filter(|w| w.id.as_str().starts_with(query)).collect();
-    }
-    match matches.as_slice() {
-        [one] => Ok((*one).clone()),
-        [] => bail!("no workspace matches {query}"),
-        many => bail!("{query} matches {} workspaces. Use more of the ID", many.len()),
-    }
+    find_one(&workspaces, query, "workspace", |w| &w.name, |w| w.id.as_str()).cloned()
 }

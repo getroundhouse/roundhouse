@@ -2,12 +2,13 @@
 
 use std::path::PathBuf;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use client_core::{Client, Daemon, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
 use crate::args::{Args, Cmd, HubCmd, RepoCmd};
+use crate::phone::phone_command;
 use crate::session::{find_session, follow, print_log, session_command};
 use crate::workspace::workspace_command;
 
@@ -26,6 +27,7 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
     let client = connect(&paths)?;
     match args.command {
         Cmd::Hub(_) => unreachable!("handled above"),
+        Cmd::Phone(command) => phone_command(&client, command)?,
         Cmd::Repo(command) => repo_command(&client, command)?,
         Cmd::Workspace(command) => workspace_command(&client, command)?,
         Cmd::Session(command) => session_command(&client, command)?,
@@ -108,6 +110,9 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
                 status.clients,
                 if status.on_demand { "started on demand" } else { "started by hand" }
             );
+            if let Some(port) = status.network_port {
+                println!("listening for phones on port {port}");
+            }
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }
@@ -125,4 +130,42 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
 
 pub(crate) fn short(id: &str) -> &str {
     &id[..id.len().min(8)]
+}
+
+/// The one item with `query` as its name or ID, or else the one whose ID starts with it. `kind` is what an error
+/// calls an item.
+pub(crate) fn find_one<'a, T>(
+    items: &'a [T],
+    query: &str,
+    kind: &str,
+    name_of: impl Fn(&T) -> &str,
+    id_of: impl Fn(&T) -> &str,
+) -> anyhow::Result<&'a T> {
+    let mut matches: Vec<_> = items.iter().filter(|item| name_of(item) == query || id_of(item) == query).collect();
+    if matches.is_empty() {
+        matches = items.iter().filter(|item| id_of(item).starts_with(query)).collect();
+    }
+    match matches.as_slice() {
+        [one] => Ok(one),
+        [] => bail!("no {kind} matches {query}"),
+        many => bail!("{query} matches {} {kind}s. Use more of the ID", many.len()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_item_is_found_by_its_name_its_id_or_the_start_of_its_id_and_an_exact_match_comes_first() {
+        let items = [("ada", "a1b2"), ("a1", "c3d4"), ("bob", "a1b9")];
+        let find = |query| find_one(&items, query, "thing", |item| item.0, |item| item.1).map(|item| item.0);
+
+        assert_eq!(find("bob").unwrap(), "bob");
+        assert_eq!(find("c3d4").unwrap(), "a1");
+        assert_eq!(find("c3").unwrap(), "a1");
+        assert_eq!(find("a1").unwrap(), "a1", "a name before the start of an ID");
+        assert_eq!(find("a1b").unwrap_err().to_string(), "a1b matches 2 things. Use more of the ID");
+        assert_eq!(find("eve").unwrap_err().to_string(), "no thing matches eve");
+    }
 }

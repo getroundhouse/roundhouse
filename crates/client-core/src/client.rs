@@ -2,14 +2,16 @@
 
 mod admin;
 mod api;
+mod devices;
 mod feed;
 mod follow;
 mod open_session;
+mod remote;
 mod start;
+mod transport;
 
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -28,7 +30,11 @@ pub use api::{new_message_id, new_request_id};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub use open_session::OpenSession;
+#[cfg(feature = "testing")]
+pub use remote::WriteOnly;
+pub use remote::{RemoteHub, pair};
 pub use start::Daemon;
+use transport::{Closer, Transport};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -40,6 +46,30 @@ pub enum ClientError {
     Disconnected,
     #[error("unexpected reply from the hub: {0}")]
     Unexpected(String),
+    /// A remote hub didn't answer with its key at any of its hosts, and some didn't answer at all, as when its
+    /// machine is asleep or this device is on another network.
+    #[error("couldn't reach the hub at {}{}", hosts.join(", "), answered_with_another_key(not_pinned))]
+    Unreachable {
+        hosts: Vec<String>,
+        #[source]
+        last: Option<std::io::Error>,
+        /// Hosts that did answer, but with a key other than the hub's, such as another machine that now has an
+        /// address the hub had.
+        not_pinned: Vec<String>,
+    },
+    /// Every host of a remote hub answered with a key other than the one this device pinned when it paired. Either
+    /// the hub made a new certificate, and the device needs pairing again, or it isn't the hub.
+    #[error(
+        "the hub at {host} isn't the one this device paired with, because its key doesn't match. If the hub made a new certificate, pair again"
+    )]
+    FingerprintMismatch { host: String },
+}
+
+fn answered_with_another_key(not_pinned: &[String]) -> String {
+    if not_pinned.is_empty() {
+        return String::new();
+    }
+    format!(". {} answered, but with another key", not_pinned.join(", "))
 }
 
 impl ClientError {
@@ -51,6 +81,12 @@ impl ClientError {
     /// There's a real break between this client and the hub, so only [`HubAdmin`] can reach it.
     pub fn is_version_mismatch(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::VersionMismatch)
+    }
+
+    /// A remote hub refused this device's pairing code or token. A device that was paired has been revoked, and
+    /// needs pairing again.
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unauthorized)
     }
 }
 
@@ -114,7 +150,7 @@ impl Drop for Subscription {
 type PendingReply = flume::Sender<std::result::Result<ClientResponse, ClientError>>;
 
 struct Inner {
-    writer: Mutex<UnixStream>,
+    writer: Mutex<Box<dyn Write + Send>>,
     pending: Mutex<HashMap<u64, PendingReply>>,
     subscriptions: Mutex<HashMap<u64, flume::Sender<SubscriptionItem>>>,
     /// Subscriptions ended because their readers fell behind.
@@ -135,43 +171,44 @@ impl Inner {
     }
 }
 
-/// Closes the socket when the last `Client` clone goes away. The reader thread can't be what keeps
-/// this alive, or it would wait forever on a socket that only it was holding open.
-struct Closer(UnixStream);
-
-impl Drop for Closer {
-    fn drop(&mut self) {
-        let _ = self.0.shutdown(std::net::Shutdown::Both);
-    }
-}
-
-/// Dropping the last clone disconnects, which also ends its subscriptions.
+/// Dropping the last clone disconnects, which also ends its subscriptions. A connection to a hub on this machine
+/// and one to a hub over the network behave the same.
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<Inner>,
+    /// Closes the connection when the last clone goes away. The reader thread can't be what keeps this alive, or
+    /// it would wait forever on a socket that only it was holding open.
     _closer: Arc<Closer>,
 }
 
 impl Client {
-    /// Connects and checks the protocol version.
+    /// Connects to the hub on this machine, and checks the protocol version.
     pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
         let client = Client::open(socket)?;
-        let reply = client
-            .call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
-        let ClientResponse::Hello { hub_version, .. } = reply else {
-            return unexpected(&reply);
-        };
-        let _ = client.inner.hub_version.set(hub_version);
+        client.hello(client_name)?;
         Ok(client)
     }
 
     /// A connection that hasn't said hello, which a hub only answers a little on. See [`HubAdmin`].
     fn open(socket: &Path) -> Result<Client> {
-        let stream = UnixStream::connect(socket)?;
-        let reader = stream.try_clone()?;
-        let closer = Arc::new(Closer(stream.try_clone()?));
+        Client::start(Transport::unix(socket)?)
+    }
+
+    fn hello(&self, client_name: &str) -> Result<()> {
+        let reply =
+            self.call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
+        let ClientResponse::Hello { hub_version, .. } = reply else {
+            return unexpected(&reply);
+        };
+        let _ = self.inner.hub_version.set(hub_version);
+        Ok(())
+    }
+
+    /// Starts reading what the hub sends on its own thread.
+    fn start(transport: Transport) -> Result<Client> {
+        let Transport { reader, writer, closer } = transport;
         let inner = Arc::new(Inner {
-            writer: Mutex::new(stream),
+            writer: Mutex::new(writer),
             pending: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             lagged: Mutex::new(HashSet::new()),
@@ -183,7 +220,7 @@ impl Client {
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
-        Ok(Client { inner, _closer: closer })
+        Ok(Client { inner, _closer: Arc::new(closer) })
     }
 
     /// Which build the hub is, as it said when this connected.
@@ -213,7 +250,7 @@ fn unexpected<T>(response: &ClientResponse) -> Result<T> {
     Err(ClientError::Unexpected(format!("{response:?}")))
 }
 
-fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
+fn read_frames(inner: &Arc<Inner>, stream: impl Read) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
@@ -296,7 +333,7 @@ fn subscription_channel() -> (flume::Sender<SubscriptionItem>, flume::Receiver<S
 /// connection and then drop it, and so can one that loses the race with another starting at once.
 fn hub_is_missing(error: &ClientError) -> bool {
     match error {
-        ClientError::Disconnected => true,
+        ClientError::Disconnected | ClientError::Unreachable { .. } => true,
         ClientError::Io(e) => matches!(
             e.kind(),
             std::io::ErrorKind::NotFound
@@ -304,89 +341,9 @@ fn hub_is_missing(error: &ClientError) -> bool {
                 | std::io::ErrorKind::ConnectionReset
                 | std::io::ErrorKind::BrokenPipe
         ),
-        ClientError::Api(_) | ClientError::Unexpected(_) => false,
+        ClientError::Api(_) | ClientError::Unexpected(_) | ClientError::FingerprintMismatch { .. } => false,
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use super::*;
-
-    /// Answers a hello, then answers the next request with a reply no build of this client can read.
-    fn start_hub_with_an_unreadable_reply(socket: &Path) {
-        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-            requests.next();
-            let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "older".to_string() };
-            let outcome = ReplyOutcome::Response(hello);
-            stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
-            requests.next();
-            stream
-                .write_all(b"{\"frame\":\"reply\",\"id\":2,\"response\":{\"result\":\"from_a_newer_hub\"}}\n")
-                .unwrap();
-            // Stays connected, so that only the reply can end the call.
-            requests.next();
-        });
-    }
-
-    #[test]
-    fn a_reply_this_client_cannot_read_fails_the_call_rather_than_hanging() {
-        let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("hub.sock");
-        start_hub_with_an_unreadable_reply(&socket);
-        let client = Client::connect(&socket, "test").unwrap();
-
-        let (finished, outcome) = flume::bounded(1);
-        std::thread::spawn(move || finished.send(client.hub_status()));
-        let outcome = outcome.recv_timeout(Duration::from_secs(10)).expect("the call hung");
-
-        assert!(matches!(outcome, Err(ClientError::Unexpected(_))), "{outcome:?}");
-    }
-
-    /// Answers a hello and a feed subscription, then sends more notices than a subscription holds before
-    /// anyone reads them, and reports what the client asks next.
-    fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<ClientRequest> {
-        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-        let (asked, next) = flume::unbounded();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-            let mut reply = |id, response| {
-                let outcome = ReplyOutcome::Response(response);
-                stream.write_all(&frame::encode(&HubFrame::Reply { id, outcome }).unwrap()).unwrap();
-            };
-            let mut read = || frame::decode::<ClientFrame>(requests.next().unwrap().unwrap().as_bytes()).unwrap();
-            let hello = read();
-            reply(hello.id, ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".into() });
-            let subscribe = read();
-            let ClientRequest::FeedSubscribe { subscription_id } = subscribe.request else { panic!() };
-            reply(subscribe.id, ClientResponse::Ok);
-            for _ in 0..SUBSCRIPTION_CAPACITY + 10 {
-                let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
-                stream.write_all(&frame::encode(&notice).unwrap()).unwrap();
-            }
-            asked.send(read().request).unwrap();
-        });
-        next
-    }
-
-    #[test]
-    fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_limit() {
-        let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("hub.sock");
-        let asked = start_hub_that_floods_a_subscription(&socket);
-        let client = Client::connect(&socket, "test").unwrap();
-        let subscription = client.feed_subscribe().unwrap();
-
-        let next = asked.recv_timeout(Duration::from_secs(10)).unwrap();
-
-        assert_eq!(next, ClientRequest::SessionUnsubscribe { subscription_id: subscription.id });
-        assert_eq!(subscription.items.drain().count(), SUBSCRIPTION_CAPACITY);
-        assert!(subscription.items.recv().is_err(), "it ended");
-        assert_eq!(subscription.ended(), Some(Ended::FellBehind));
-    }
-}
+mod tests;
