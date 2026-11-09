@@ -9,8 +9,8 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
+    SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::tail::Tail;
 
@@ -32,6 +32,8 @@ pub(crate) struct World {
     pub(crate) comments: HashMap<WorkspaceId, Vec<DiffComment>>,
     pub(crate) setup_logs: HashMap<WorkspaceId, String>,
     pub(crate) pull_requests: HashMap<WorkspaceId, PullRequest>,
+    /// The bytes of the files prompts carry, by attachment.
+    pub(crate) attachments: HashMap<AttachmentId, Vec<u8>>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     records: i64,

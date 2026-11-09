@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod attachments;
 mod chats;
 mod diff;
 mod hub;

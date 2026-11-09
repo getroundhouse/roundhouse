@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,10 @@ use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AnyWindowHandle, App, Entity, HeadlessAppContext, PlatformTextSystem};
+use gpui_kit::{
+    AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
+    PlatformTextSystem,
+};
 use image::RgbaImage;
 
 use super::fake_hub;
@@ -54,7 +57,7 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     cx.update(|cx| cx.set_reduce_motion(true));
     // As people see it, so no checkout.
     let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, None, cx)).unwrap();
-    let mut app = Driver { cx, handle, view };
+    let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf() };
     app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
     for step in screen.steps {
         app.step(step);
@@ -81,6 +84,8 @@ struct Driver {
     cx: HeadlessAppContext,
     handle: AnyWindowHandle,
     view: Entity<AppView>,
+    /// The screen's own directory, for files it pastes.
+    dir: PathBuf,
 }
 
 impl Driver {
@@ -112,6 +117,8 @@ impl Driver {
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
             }
             Step::Hover { on, shows } => self.hover(on, shows),
+            Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
+            Step::PasteFile(name, text) => self.paste_file(name, text),
             Step::AskToFinish => {
                 self.step(&Step::Click("finish-update"));
                 self.wait("the question", |view, _| view.update_question.is_some());
@@ -163,9 +170,19 @@ impl Driver {
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
     }
 
+    /// Something drawn from what's still loading, such as an image, can't be clicked until it's there.
     fn click(&mut self, id: impl Into<gpui_kit::SharedString>) {
-        self.frame();
-        let id = id.into();
+        let id = gpui_kit::ElementId::from(id.into());
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            self.frame();
+            let found = id.clone();
+            if self.cx.update_window(self.handle, |_, window, _| window.try_find(found).is_some()).unwrap() {
+                break;
+            }
+            assert!(Instant::now() < deadline, "timed out waiting for {id:?} to be drawn");
+            std::thread::sleep(Duration::from_millis(10));
+        }
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
     }
 
@@ -199,6 +216,30 @@ impl Driver {
             })
             .unwrap();
         self.frame();
+    }
+
+    /// As Cmd-V does, then waits for the composer to have one more file.
+    fn paste(&mut self, item: ClipboardItem) {
+        let had = self.attached();
+        self.cx.update(|cx| cx.write_to_clipboard(item));
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.press("secondary-v", cx)).unwrap();
+        self.wait("the composer to take the paste", |view, cx| {
+            selected_pane(view).is_some_and(|pane| pane.read(cx).attached_names().len() > had)
+        });
+    }
+
+    /// As copying a file in Finder and pasting it does.
+    fn paste_file(&mut self, name: &str, text: &str) {
+        let path = self.dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        let copied = ExternalPaths(vec![path].into());
+        self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
+    }
+
+    fn attached(&mut self) -> usize {
+        let view = self.view.clone();
+        self.cx.update(|cx| selected_pane(view.read(cx)).map_or(0, |pane| pane.read(cx).attached_names().len()))
     }
 
     fn update_pane(&mut self, change: impl FnOnce(&mut WorkspacePane, &mut gpui_kit::Context<WorkspacePane>)) {

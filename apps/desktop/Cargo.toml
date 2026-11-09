@@ -36,6 +36,8 @@ ureq.workspace = true
 flume.workspace = true
 ring.workspace = true
 libc.workspace = true
+# Turns a pasted image an agent can't be given, such as a TIFF, into a PNG. GPUI already builds these.
+image = { workspace = true, features = ["bmp", "png", "tiff"] }
 
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }

@@ -7852,6 +7852,7 @@ version = "0.1.0"
 dependencies = [
  "client-core",
  "gpui-kit",
+ "image",
  "look",
  "protocol",
  "serde_json",

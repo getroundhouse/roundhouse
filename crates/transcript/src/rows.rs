@@ -17,16 +17,19 @@ use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, Noti
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
+use crate::attachments::{self, Carried};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::questions;
 use crate::transcript::{Model, Transcript};
 
 mod approval;
+mod prompt;
 mod tail;
 mod tools;
 
 use approval::approval_card;
+use prompt::prompt_bubble;
 use tail::{first_line, render_tail};
 use tools::Answer;
 pub(crate) use tools::summarize_input;
@@ -50,7 +53,7 @@ pub(crate) fn render_row(
 enum Shown {
     Tail(Tail),
     Event(SessionEvent, Around),
-    Pending(PendingPrompt),
+    Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
 }
 
@@ -69,7 +72,7 @@ fn render_row_inner(
             }
             match log.row(ix) {
                 Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
-                Row::Pending(prompt) => Shown::Pending(prompt.clone()),
+                Row::Pending(prompt) => Shown::Pending(prompt.clone(), attachments::carried(&m, &prompt.attachments)),
                 Row::Unloaded => Shown::Unloaded,
             }
         })
@@ -79,8 +82,14 @@ fn render_row_inner(
             let model = model.borrow();
             render_tail(&tail, &model.background, model.folds.thinking_open(), cx)
         }
-        Shown::Event(event, around) => render_event(event.seq, &event.body, &around, this, cx),
-        Shown::Pending(prompt) => prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, true, cx),
+        Shown::Event(event, around) => {
+            attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
+            render_event(event.seq, &event.body, &around, this, cx)
+        }
+        Shown::Pending(prompt, carried) => {
+            let carried = attachments::view(None, &carried, this, cx);
+            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, true, cx)
+        }
         Shown::Unloaded => {
             session.want(ix);
             // A guess at the height. The list keeps its anchor when the real one arrives.
@@ -102,6 +111,8 @@ struct Around {
     answers: Vec<Option<Answer>>,
     /// For a result: whether it's drawn with its call instead, by the result's position.
     with_call: Vec<bool>,
+    /// For a prompt: the files it carries.
+    carried: Vec<Carried>,
 }
 
 impl Around {
@@ -116,7 +127,11 @@ impl Around {
             picks: BTreeMap::new(),
             answers: Vec::new(),
             with_call: Vec::new(),
+            carried: Vec::new(),
         };
+        if let EventBody::UserPrompt { attachments, .. } = body {
+            around.carried = attachments::carried(m, attachments);
+        }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log
                 .open_approvals()
@@ -196,24 +211,6 @@ fn empty() -> AnyElement {
     div().into_any_element()
 }
 
-fn prompt_bubble(key: &ItemKey, text: String, pending: bool, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    row()
-        .child(
-            div()
-                .w_full()
-                .px_3p5()
-                .py_2p5()
-                .rounded_lg()
-                .border_1()
-                .border_color(theme.border)
-                .bg(theme.secondary)
-                .when(pending, |d| d.opacity(0.6))
-                .child(TextView::markdown(key.element("prompt"), SharedString::from(text)).selectable(true)),
-        )
-        .into_any_element()
-}
-
 fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
@@ -253,7 +250,8 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
-            prompt_bubble(&ItemKey::prompt(seq, client_msg_id.as_ref()), text.clone(), false, cx)
+            let carried = attachments::view(Some(seq), &around.carried, this, cx);
+            prompt_bubble(&ItemKey::prompt(seq, client_msg_id.as_ref()), text.clone(), carried, false, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks

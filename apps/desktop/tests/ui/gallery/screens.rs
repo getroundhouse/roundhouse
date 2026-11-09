@@ -2,13 +2,14 @@
 
 #![cfg(test)]
 
+use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, Title, WorkspaceId,
-    WorkspaceStatus,
+    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, Title,
+    WorkspaceId, WorkspaceStatus,
 };
 
 use super::world::{HubBuild, World};
-use super::{chats, patch};
+use super::{chats, patch, pictures};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -42,6 +43,10 @@ pub(crate) enum Step {
         on: &'static str,
         shows: &'static str,
     },
+    /// Pastes an image where focus is, and waits for the composer to take it.
+    PasteImage(fn() -> Vec<u8>),
+    /// Pastes a copied file with this name and text, and waits for the composer to take it.
+    PasteFile(&'static str, &'static str),
     /// Presses Finish now in the update's card, and waits for what it asks.
     AskToFinish,
     /// Right-clicks something by its ID, which opens its menu.
@@ -70,6 +75,23 @@ pub(crate) const SCREENS: &[Screen] = &[
     },
     Screen { name: "conversation", spec: "chats.md", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
     Screen { name: "streaming", spec: "chats.md", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "attachments",
+        spec: "chats.md",
+        world: Some(attachments),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::PasteImage(pictures::terminal),
+            Step::PasteFile("hub.log", HUB_LOG),
+            Step::Type("And it happens here too"),
+        ],
+    },
+    Screen {
+        name: "attachment-opened",
+        spec: "chats.md",
+        world: Some(attachments),
+        steps: &[Step::Select(FOCUS), Step::Click("picture/attachment/shot-1")],
+    },
     Screen { name: "approval", spec: "chats.md", world: Some(approval), steps: &[Step::Select(FOCUS)] },
     Screen { name: "background", spec: "chats.md", world: Some(background), steps: &[Step::Select(FOCUS)] },
     Screen { name: "question", spec: "chats.md", world: Some(question), steps: &[Step::Select(FOCUS)] },
@@ -302,6 +324,27 @@ fn background() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     world.chat(&focus, SessionStatus::Background, chats::background());
+    world
+}
+
+const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
+
+/// The screen's chat, with a prompt that carried a screenshot and a log.
+fn attachments() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let shot = pictures::overlapping_badge();
+    let attached = [
+        ("shot-1", "Screenshot 2026-11-01 at 10.24.png", MediaType::Png, shot),
+        ("log-1", "layout.log", MediaType::Text, chats::LAYOUT_LOG.as_bytes().to_vec()),
+    ];
+    let mut carried = Vec::new();
+    for (id, name, media_type, data) in attached {
+        let size_bytes = u64::try_from(data.len()).unwrap();
+        carried.push(Attachment { id: AttachmentId::from(id), name: name.to_string(), media_type, size_bytes });
+        world.attachments.insert(AttachmentId::from(id), data);
+    }
+    world.chat(&focus, SessionStatus::Idle, chats::attached(carried));
     world
 }
 

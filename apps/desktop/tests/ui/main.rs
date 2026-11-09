@@ -5,6 +5,7 @@
 
 #![cfg(test)]
 
+mod attachments;
 mod changes;
 mod chats;
 mod checkout;

@@ -4,6 +4,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod attachments;
 mod folds;
 mod item_key;
 mod log_block;
@@ -11,4 +12,5 @@ mod questions;
 mod rows;
 mod transcript;
 
+pub use attachments::{file_card, image_format};
 pub use transcript::{Transcript, TranscriptEvent, mode_label};

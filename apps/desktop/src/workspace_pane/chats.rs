@@ -4,6 +4,7 @@ use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::model::{AgentKind, Session, SessionId};
 use transcript::{Transcript, TranscriptEvent};
 
+use super::attaching::Draft;
 use super::{PaneEvent, Showing, WorkspacePane};
 use crate::rename::{self, Renaming};
 use crate::review::Review;
@@ -71,8 +72,9 @@ impl WorkspacePane {
             return;
         }
         if let Some(current) = self.active.take() {
-            let draft = self.composer.read(cx).text().to_string();
-            if draft.is_empty() {
+            let text = self.composer.read(cx).text().to_string();
+            let draft = Draft { text, files: std::mem::take(&mut self.attached) };
+            if draft.text.is_empty() && draft.files.is_empty() {
                 self.drafts.remove(&current);
             } else {
                 self.drafts.insert(current, draft);
@@ -96,10 +98,11 @@ impl WorkspacePane {
     /// Puts the active chat's draft in the composer, once there's the window to do it with.
     fn show_draft(&mut self, cx: &mut Context<Self>) {
         self.with_window(cx, |t, window, cx| {
-            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id)).unwrap_or_default();
-            let end = draft.len();
+            let Draft { text, files } = t.active.as_ref().and_then(|id| t.drafts.remove(id)).unwrap_or_default();
+            t.attached = files;
+            let end = text.len();
             t.composer.update(cx, |c, cx| {
-                c.set_value(draft, window, cx);
+                c.set_value(text, window, cx);
                 c.set_selected_range(end..end, cx);
             });
         });
@@ -112,8 +115,13 @@ impl WorkspacePane {
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
             transcript
         });
-        let events = cx.subscribe(&view, |this, _, event: &TranscriptEvent, cx| match event {
+        let chat = session.id.clone();
+        let events = cx.subscribe(&view, move |this, _, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
+            TranscriptEvent::NotSent { message, text, files } => {
+                this.give_back(&chat, text.clone(), files.clone(), cx);
+                cx.emit(PaneEvent::Error(message.clone()));
+            }
             TranscriptEvent::TurnEnded => {
                 this.refresh_pull_request(cx);
                 if let Some(diff) = &this.diff {

@@ -5,15 +5,17 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use client_core::session_log::{Row, SessionLog};
-use client_core::{Client, OpenSession};
+use client_core::{Client, FileToSend, OpenSession};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
 use gpui_kit::{
     AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, StyleRefinement, Styled, Task, Window,
     px,
 };
+use protocol::attachment::Attachment;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
+use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
 
+use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
 
@@ -22,6 +24,8 @@ use crate::item_key::ItemKey;
 pub enum TranscriptEvent {
     /// Something failed that the user should hear about.
     Error(String),
+    /// A prompt couldn't be sent, so what was typed and attached is handed back, to be offered again.
+    NotSent { message: String, text: String, files: Vec<FileToSend> },
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
 }
@@ -33,6 +37,8 @@ pub(crate) struct Model {
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
     /// What the agent is running in the background, as its session's record says, drawn where the conversation ends.
     pub background: Vec<AgentTask>,
+    /// The images prompts carry, by attachment, from the first time a row drew each.
+    pub pictures: HashMap<AttachmentId, Picture>,
 }
 
 pub struct Transcript {
@@ -57,6 +63,7 @@ impl Transcript {
             folds: Folds::default(),
             picks: HashMap::new(),
             background: session.background_tasks.clone(),
+            pictures: HashMap::new(),
         }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
@@ -81,6 +88,8 @@ impl Transcript {
     pub fn reconnect(&mut self, client: &Client) {
         self.session.reconnect(client);
         self.client = client.clone();
+        // Asked for again the next time they're drawn, in case the connection was what failed.
+        self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
     }
 
     /// Follows the session's record, which says what the agent is running in the background.
@@ -240,29 +249,77 @@ impl Transcript {
 
     /// Shows the prompt at once, and takes it back if it can't be sent. Returns false if it's empty.
     pub fn send_prompt(&mut self, text: String, cx: &mut Context<Self>) -> bool {
-        if text.trim().is_empty() {
+        self.send_prompt_with(text, Vec::new(), cx)
+    }
+
+    /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt. If any
+    /// of that fails, it takes the prompt back and hands its text and files back with [`TranscriptEvent::NotSent`].
+    /// Returns false if there's nothing to send.
+    pub fn send_prompt_with(&mut self, text: String, files: Vec<FileToSend>, cx: &mut Context<Self>) -> bool {
+        if text.trim().is_empty() && files.is_empty() {
             return false;
         }
         let client_msg_id = client_core::new_message_id();
-        self.session.add_pending(client_msg_id.clone(), text.clone(), Vec::new());
+        {
+            let mut m = self.model.borrow_mut();
+            for file in files.iter().filter(|file| file.attachment.media_type.is_image()) {
+                let picture = Picture::read(file.attachment.media_type, file.data.clone());
+                m.pictures.insert(file.attachment.id.clone(), picture);
+            }
+        }
+        let carried = files.iter().map(|file| file.attachment.clone()).collect();
+        self.session.add_pending(client_msg_id.clone(), text.clone(), carried);
         self.catch_up(cx);
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);
         cx.notify();
 
-        let (id, msg_id) = (self.session_id.clone(), client_msg_id.clone());
-        let sending = self.client.start(move |client| client.session_prompt(&id, &text, Some(msg_id)));
+        // Started on a thread of its own, so it finishes even if the app quits, and hands back what it was given.
+        let (id, msg_id, typed) = (self.session_id.clone(), client_msg_id.clone(), text.clone());
+        let sending = self.client.start(move |client| {
+            let sent = client.send_prompt_carrying(&id, &text, Some(msg_id), &files);
+            Ok((sent, text, files))
+        });
         cx.spawn(async move |this, cx| {
-            if let Err(e) = sending.recv().await {
-                let _ = this.update(cx, |t, cx| {
-                    t.session.remove_pending(&client_msg_id);
-                    t.catch_up(cx);
-                    cx.emit(TranscriptEvent::Error(format!("couldn't send that: {e}")));
-                    cx.notify();
-                });
-            }
+            let (message, text, files) = match sending.recv().await {
+                Ok((Ok(_), ..)) => return,
+                Ok((Err(e), text, files)) => (not_sent(&e), text, files),
+                // Only a call that never ran ends here, and its files went with it.
+                Err(e) => (not_sent(&e), typed, Vec::new()),
+            };
+            let _ = this.update(cx, |t, cx| {
+                t.session.remove_pending(&client_msg_id);
+                t.catch_up(cx);
+                cx.emit(TranscriptEvent::NotSent { message, text, files });
+                cx.notify();
+            });
         })
         .detach();
         true
+    }
+
+    /// Fetches an image a row is drawing, and measures the row again once it's here, since an opened image is as tall
+    /// as its shape makes it.
+    pub(crate) fn load_picture(&mut self, seq: Option<Seq>, attachment: Attachment, cx: &mut Context<Self>) {
+        let (client, session) = (self.client.clone(), self.session_id.clone());
+        cx.spawn(async move |this, cx| {
+            let id = attachment.id.clone();
+            let picture = cx
+                .background_spawn(async move {
+                    client
+                        .attachment_read(&session, &attachment.id)
+                        .map_or(Picture::Unreadable, |bytes| Picture::read(attachment.media_type, bytes))
+                })
+                .await;
+            let _ = this.update(cx, |t, cx| {
+                t.model.borrow_mut().pictures.insert(id, picture);
+                if let Some(seq) = seq {
+                    let row = seq_index(seq) - 1;
+                    t.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {
@@ -301,6 +358,15 @@ impl Render for Transcript {
         // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
         .with_row_style(StyleRefinement::default().pb(px(0.)))
         .with_jump_button_label("Jump to latest")
+    }
+}
+
+/// What to tell someone whose prompt didn't go. A hub from before attachments is the one failure they can fix.
+fn not_sent(error: &client_core::ClientError) -> String {
+    if error.is_unsupported() {
+        "couldn't send that: the hub is older than the app, and can't take attachments until it's updated".to_string()
+    } else {
+        format!("couldn't send that: {error}")
     }
 }
 
