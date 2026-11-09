@@ -6,7 +6,7 @@ use desktop::new_workspace::Request;
 use desktop::workspace_pane::Busy;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
-use protocol::model::Effort;
+use protocol::model::{AgentKind, Effort, WorkspaceStatus};
 
 use super::{open_with_a_repo, prompts};
 use crate::support::Stack;
@@ -120,21 +120,28 @@ fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_t
     assert!(ui.view().error.clone().is_some_and(|e| e.contains(&last)), "it says which file didn't fit");
 }
 
+/// Made elsewhere, so the app has no pane for it until it's selected, as with a workspace made while the dialog is
+/// open. A new pane brings its chat to the front, which would focus its composer.
 #[gpui_kit::test]
 fn typing_in_the_dialog_stays_there_when_another_workspace_shows_behind_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    let first = ui.new_workspace();
     ui.new_workspace();
+    let client = stack.client();
+    let other = client.workspace_create(&ui.first_repo_id(), None, None, None).unwrap().id;
+    client.session_ensure(&other, AgentKind::Claude).unwrap();
+    ui.wait("the other workspace, ready", |ui| {
+        ui.view().workspaces.iter().any(|w| w.id == other && w.status == WorkspaceStatus::Ready)
+    });
 
     ui.open_new_workspace();
     ui.input("next");
     // As a workspace being made is selected once it's ready.
     let view = ui.view.clone();
-    ui.cx.update_entity(&view, |v, cx| v.select(first.clone(), cx));
+    ui.cx.update_entity(&view, |v, cx| v.select(other.clone(), cx));
+    ui.wait("its pane", |ui| ui.transcript().is_some() && ui.view().selected.as_ref() == Some(&other));
     ui.input(" task");
 
-    assert_eq!(ui.view().selected.as_ref(), Some(&first));
     assert_eq!(ui.dialog_text(), "next task");
     assert_eq!(ui.composer_text(), "");
     ui.press("escape");

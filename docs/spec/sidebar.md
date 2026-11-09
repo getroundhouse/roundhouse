@@ -1,6 +1,6 @@
 # Sidebar
 
-- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create makes a workspace in the selected workspace's repository, or in the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
+- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's repository, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
 - **Search is only a place for searching.** *Not built:* it does nothing when pressed, and what it searches isn't decided.
 - **The workspaces are listed by repository, under a small faint heading.** A repository's row has its folder, its name in medium weight, and a button for a new workspace in it. Its workspaces are set in below it, so they read as its, each with its mark and its name at body size. Rows are 36px, 4px apart. *Unconfirmed.*
 - **A workspace's mark speaks for its open chat that most needs attention,** so a chat waiting on approval is visible from anywhere. *Unconfirmed.*

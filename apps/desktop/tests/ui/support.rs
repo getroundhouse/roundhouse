@@ -29,7 +29,10 @@ use tempfile::TempDir;
 use transcript::Transcript;
 
 pub(crate) use diff::Diff;
-pub(crate) use labels::{labelled, menu_item};
+pub(crate) use labels::labelled;
+/// For the gallery, which only a Mac draws.
+#[cfg(target_os = "macos")]
+pub(crate) use labels::menu_item;
 pub(crate) use stand_in::StandInHub;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);

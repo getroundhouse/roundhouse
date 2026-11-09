@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
@@ -335,7 +336,13 @@ impl WorkspacePane {
         }
         // The chat is read only while it's in front.
         self.read_showing(cx);
-        self.with_window(cx, |t, window, cx| t.focus_showing(window, cx));
+        // Not behind a dialog, where typing meant for it would come here unseen. The app focuses the pane showing once
+        // the dialog closes.
+        self.with_window(cx, |t, window, cx| {
+            if !window.has_active_dialog(cx) {
+                t.focus_showing(window, cx);
+            }
+        });
         cx.notify();
     }
 
