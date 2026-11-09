@@ -14,7 +14,7 @@ use look::{IconSize, IconStyle, Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::{AppView, BuildLine};
-use crate::updates::{Kind, Problem};
+use crate::updates::{Answer, Kind, Problem};
 use crate::workspace_pane::HEADER_HEIGHT;
 
 const WIDTH: f32 = 260.0;
@@ -252,6 +252,11 @@ fn waiting_on(agents: usize) -> String {
     }
 }
 
+/// What a check for updates is doing or found, faint, under the build.
+fn check_line(id: &'static str, text: &'static str) -> AnyElement {
+    div().id(id).px_2().text_xs().text_color(look::faint()).child(text).test_support().into_any_element()
+}
+
 /// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
 fn finish_now(cx: &mut Context<AppView>) -> Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
@@ -262,6 +267,7 @@ fn footer(
     show_archived: bool,
     build: &BuildLine,
     checking: bool,
+    answer: Option<Answer>,
     update: Option<&Problem>,
     cx: &mut Context<AppView>,
 ) -> impl IntoElement {
@@ -287,17 +293,8 @@ fn footer(
                 })),
         )
         .child(card.unwrap_or_else(|| version(build)))
-        .when(checking, |d| {
-            d.child(
-                div()
-                    .id("checking-for-updates")
-                    .px_2()
-                    .text_xs()
-                    .text_color(look::faint())
-                    .child("Checking for updates…")
-                    .test_support(),
-            )
-        })
+        .when(checking, |d| d.child(check_line("checking-for-updates", "Checking for updates…")))
+        .when_some(answer, |d, answer| d.child(check_line("update-answer", answer.text())))
         .when_some(problem, ParentElement::child)
 }
 
@@ -321,6 +318,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
             app.show_archived,
             &app.build_line(cx),
             crate::updates::checking(cx),
+            crate::updates::answered(cx),
             crate::updates::problem_shown(cx).cloned().as_ref(),
             cx,
         ))

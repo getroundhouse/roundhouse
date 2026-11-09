@@ -20,7 +20,7 @@ use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
 
-use answer::Answer;
+pub(crate) use answer::Answer;
 pub use problem::{Kind, Problem, Refusal, Step};
 use problem::{OutOfReach, Shown, problem};
 use source::{SignedSource, UpdateFeedKey};
@@ -88,15 +88,21 @@ pub fn start(data_dir: &Path, cx: &mut App) {
     keep_up_to_date(manager, OutOfReach::in_dir(data_dir), cx);
 }
 
-/// Looks for an update now, rather than at the end of the hour, and says what it found in an alert. A build that
-/// doesn't update says why at once.
+/// Looks for an update now, rather than at the end of the hour, and says what it found in the sidebar, never in an
+/// alert. A build that doesn't update says so at once, and one that can't update where it is already says why.
 pub fn check_now(cx: &mut App) {
     let Some(updater) = cx.try_global::<Updater>() else {
-        return problem_shown(cx).cloned().map_or(Answer::NotUpdating, Answer::Failed).show(cx);
+        if problem_shown(cx).is_none() {
+            say(Answer::NotUpdating, cx);
+        }
+        return;
     };
     // Full only when a look is already waiting to start, which answers this too.
     let _ = updater.look_now.try_send(());
-    cx.update_global::<Shown, _>(|shown, _| shown.checking = true);
+    cx.update_global::<Shown, _>(|shown, _| {
+        shown.checking = true;
+        shown.answer = None;
+    });
 }
 
 /// Looks on launch, every hour and whenever someone checks, and keeps what each look finds.
@@ -137,6 +143,28 @@ pub(crate) fn ready(cx: &App) -> Option<&str> {
     cx.try_global::<Shown>().and_then(|shown| shown.ready.as_deref())
 }
 
+/// What a check someone asked for found, while it's shown, when it isn't an update or a problem.
+pub(crate) fn answered(cx: &App) -> Option<Answer> {
+    cx.try_global::<Shown>().and_then(|shown| shown.answer)
+}
+
+/// Shows what a check found for a few seconds, or until the next check.
+fn say(found: Answer, cx: &mut App) {
+    let shown = cx.default_global::<Shown>();
+    shown.answer = Some(found);
+    shown.answers += 1;
+    let this = shown.answers;
+    cx.spawn(async move |cx| {
+        cx.background_executor().timer(answer::SHOWN_FOR).await;
+        cx.update(|cx| {
+            if cx.global::<Shown>().answers == this {
+                cx.global_mut::<Shown>().answer = None;
+            }
+        });
+    })
+    .detach();
+}
+
 /// Shows a problem as if updating had failed, which only an installed app can do for real.
 #[cfg(feature = "testing")]
 pub fn show_problem(problem: Problem, cx: &mut App) {
@@ -146,13 +174,13 @@ pub fn show_problem(problem: Problem, cx: &mut App) {
 /// Shows a check as under way, which only an installed app can start for real.
 #[cfg(feature = "testing")]
 pub fn show_checking(cx: &mut App) {
-    cx.set_global(Shown { problem: None, checking: true, ready: None });
+    cx.set_global(Shown { checking: true, ..Shown::default() });
 }
 
 /// Shows an update as downloaded, which only an installed app can do for real.
 #[cfg(feature = "testing")]
 pub fn show_ready(version: &str, cx: &mut App) {
-    cx.set_global(Shown { problem: None, checking: false, ready: Some(version.to_string()) });
+    cx.set_global(Shown { ready: Some(version.to_string()), ..Shown::default() });
 }
 
 /// Looks, then waits an hour or until someone asks, for as long as the app takes what it finds.
@@ -196,18 +224,17 @@ fn record((found, out_of_reach): Look, cx: &mut App) {
             cx.global_mut::<Updater>().ready = Some(info);
         }
     });
-    let answer = cx.global::<Shown>().checking.then(|| {
-        let updater = cx.global::<Updater>();
-        Answer::after(&outcome, updater.ready.as_ref(), updater.manager.get_current_version_as_string())
-    });
+    // An update an earlier look downloaded answers too, as its card, since it's what installs. So does a problem, as
+    // itself.
+    let up_to_date = cx.global::<Shown>().checking && outcome.is_ok() && cx.global::<Updater>().ready.is_none();
     cx.update_global::<Shown, _>(|shown, _| {
         shown.record(outcome, out_of_reach);
         if downloaded.is_some() {
             shown.ready = downloaded;
         }
     });
-    if let Some(answer) = answer {
-        answer.show(cx);
+    if up_to_date {
+        say(Answer::UpToDate, cx);
     }
 }
 
@@ -247,7 +274,7 @@ fn apply(restart: bool, cx: &App) -> Option<Result<(), velopack::Error>> {
 
 /// Shows a problem that no later look clears, since there won't be one.
 fn show(problem: Problem, cx: &mut App) {
-    cx.set_global(Shown { problem: Some(problem), checking: false, ready: None });
+    cx.set_global(Shown { problem: Some(problem), ..Shown::default() });
 }
 
 #[cfg(test)]

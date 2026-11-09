@@ -183,7 +183,7 @@ fn asking_looks_again_without_waiting_for_the_hour() {
     assert_eq!(feeds_read(&server), 2);
 }
 
-/// The app's window, which an answer shows over.
+/// The app's window, where an alert would show.
 struct Blank;
 
 impl Render for Blank {
@@ -210,26 +210,25 @@ fn app_looking_at(
     state
 }
 
-/// Checks for updates, and returns the alert that answers, once it's closed.
-fn check(cx: &mut TestAppContext) -> (String, String) {
+/// Checks for updates, and waits for the look that answers.
+fn check(cx: &mut TestAppContext) {
     cx.update(check_now);
-    answer(cx)
+    answered_by_the_look(cx);
 }
 
-fn answer(cx: &mut TestAppContext) -> (String, String) {
+fn answered_by_the_look(cx: &mut TestAppContext) {
     let deadline = Instant::now() + LOOK_TIMEOUT;
-    while !cx.has_pending_prompt() {
+    while cx.read(checking) {
         assert!(Instant::now() < deadline, "no answer");
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(10));
     }
-    let answer = cx.pending_prompt().unwrap();
-    cx.simulate_prompt_answer("OK");
-    answer
+    cx.run_until_parked();
+    assert!(!cx.has_pending_prompt(), "the sidebar answers, never an alert");
 }
 
 #[gpui_kit::test]
-fn checking_looks_again_and_says_an_update_is_ready(cx: &mut TestAppContext) {
+fn checking_looks_again_and_answers_with_the_updates_card(cx: &mut TestAppContext) {
     let (_dir, installed) = installed();
     let pair = key_pair();
     let new = b"0.1.6, packaged".as_slice();
@@ -240,39 +239,55 @@ fn checking_looks_again_and_says_an_update_is_ready(cx: &mut TestAppContext) {
 
     cx.update(check_now);
     assert!(cx.read(checking));
-    let (message, detail) = answer(cx);
+    answered_by_the_look(cx);
 
-    assert_eq!(message, "Roundhouse 0.1.6 is ready");
-    assert!(detail.ends_with("Otherwise it installs when you quit."), "{detail}");
+    assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), Some("0.1.6"));
+    assert_eq!(cx.read(answered), None);
     assert!(feeds_read(&server) > looks_before);
-    assert!(!cx.read(checking));
 }
 
 #[gpui_kit::test]
-fn checking_says_when_nothing_is_newer(cx: &mut TestAppContext) {
+fn checking_says_its_up_to_date_for_a_few_seconds(cx: &mut TestAppContext) {
     let (_dir, installed) = installed();
     let pair = key_pair();
     let server = publish(&[("0.1.5", b"", Reply::file(""))], &pair);
     let _state = app_looking_at(&server.base, public(&pair), &installed, cx);
 
-    let (message, detail) = check(cx);
+    check(cx);
 
-    assert_eq!(message, "Roundhouse is up to date");
-    assert_eq!(detail, "0.1.5 is the newest version.");
+    assert_eq!(cx.read(answered), Some(Answer::UpToDate));
+    cx.executor().advance_clock(answer::SHOWN_FOR);
+    assert_eq!(cx.read(answered), None);
+}
+
+/// Each answer is shown for its own few seconds, even when the one before hasn't gone yet.
+#[gpui_kit::test]
+fn checking_again_shows_the_new_answer_for_as_long(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let server = publish(&[("0.1.5", b"", Reply::file(""))], &pair);
+    let _state = app_looking_at(&server.base, public(&pair), &installed, cx);
+    check(cx);
+    cx.executor().advance_clock(answer::SHOWN_FOR / 2);
+
+    check(cx);
+    cx.executor().advance_clock(answer::SHOWN_FOR * 3 / 4);
+
+    assert_eq!(cx.read(answered), Some(Answer::UpToDate));
 }
 
 /// The sidebar waits a day before it says so, but someone who asked hears at once.
 #[gpui_kit::test]
-fn checking_says_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestAppContext) {
+fn checking_shows_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestAppContext) {
     let (_dir, installed) = installed();
     // Bound and closed again, so nothing listens there.
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let _state = app_looking_at(&format!("http://127.0.0.1:{port}"), public(&key_pair()), &installed, cx);
 
-    let (message, _) = check(cx);
+    check(cx);
 
-    assert_eq!(message, "Couldn't reach the update server");
-    assert!(cx.read(|cx| problem_shown(cx).is_none()));
+    assert_eq!(cx.read(|cx| problem_shown(cx).map(|p| p.kind)), Some(Kind::Unreachable));
+    assert_eq!(cx.read(answered), None);
 }
 
 /// Has the stand-in for Velopack's updater write down what it was asked to do, and returns where.

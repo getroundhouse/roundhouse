@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::Global;
 
+use super::answer::Answer;
 use super::source::SourceError;
 
 /// How long the update server can be out of reach before the sidebar says so. A laptop is often offline for an hour or
@@ -103,18 +104,22 @@ pub(super) struct Shown {
     pub(super) checking: bool,
     /// The version of the update that's downloaded, which installs when the app restarts or quits.
     pub(super) ready: Option<String>,
+    /// What a check someone asked for found, for a few seconds, when nothing else here says it.
+    pub(super) answer: Option<Answer>,
+    /// How many answers there have been, so the end of one answer's few seconds doesn't clear a later one.
+    pub(super) answers: u64,
 }
 
 impl Global for Shown {}
 
 impl Shown {
     /// Takes in how a look went, and how long the update server has been out of reach. Being out of reach only shows
-    /// once it has lasted, and anything else at once. Whoever checked has their answer.
+    /// once it has lasted, unless someone checked, and anything else at once. Whoever checked has their answer.
     pub(super) fn record(&mut self, outcome: Result<(), Problem>, out_of_reach: Duration) {
-        self.checking = false;
+        let asked = std::mem::take(&mut self.checking);
         match outcome {
             Ok(()) => self.problem = None,
-            Err(problem) if problem.kind == Kind::Unreachable && out_of_reach < QUIET_FOR => {}
+            Err(problem) if problem.kind == Kind::Unreachable && out_of_reach < QUIET_FOR && !asked => {}
             Err(problem) => self.problem = Some(problem),
         }
     }
