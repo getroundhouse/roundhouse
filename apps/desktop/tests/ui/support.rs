@@ -236,6 +236,13 @@ impl<'a> Ui<'a> {
         self.frame();
     }
 
+    pub(crate) fn right_click(&mut self, id: impl Into<ElementId>) {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.right_click(id, cx)).unwrap();
+        self.frame();
+    }
+
     pub(crate) fn input(&mut self, text: &str) {
         self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
     }

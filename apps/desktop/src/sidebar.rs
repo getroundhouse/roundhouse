@@ -1,6 +1,7 @@
 //! Workspaces grouped by repository, each with its status.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex,
 };
@@ -30,25 +31,30 @@ pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
     sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
 }
 
-pub(crate) fn signal(status: Option<SessionStatus>) -> Signal {
+/// A chat's or workspace's mark. A reply nobody has read only shows once nothing more pressing does: an agent at work
+/// will reply again, and amber or red needs dealing with first.
+pub(crate) fn signal(status: Option<SessionStatus>, unread: bool) -> Signal {
     match status {
         Some(SessionStatus::Running) => Signal::Working,
         Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
         Some(SessionStatus::Interrupted) => Signal::Failed,
+        None | Some(SessionStatus::Idle | SessionStatus::Unknown) if unread => Signal::Unread,
         None | Some(SessionStatus::Idle | SessionStatus::Unknown) => Signal::Idle,
     }
 }
 
-fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
+fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     let selected = app.selected.as_ref() == Some(&workspace.id);
     let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
     let archived = workspace.status == WorkspaceStatus::Archived;
     let id = workspace.id.clone();
     let muted = cx.theme().muted_foreground;
-    let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status) };
+    let unread = !archived && !app.unread_chats(&workspace.id, cx).is_empty();
+    let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
     // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
     let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
-    Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
+    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
+    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .ghost()
         .small()
         .w_full()
@@ -66,8 +72,9 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
                 .w_full()
                 .gap_2()
                 .text_sm()
-                .when(selected, |d| d.font_weight(FontWeight::MEDIUM))
-                .when(archived, |d| d.text_color(muted))
+                .when(selected || unread, |d| d.font_weight(FontWeight::MEDIUM))
+                // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
+                .when(archived || !(selected || unread), |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
                 .child(
                     div()
@@ -79,15 +86,23 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>
                         .child(workspace.name.clone()),
                 )
                 .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore"))),
-        )
+        );
+    let Some((marking, chats)) = marking else { return row.into_any_element() };
+    let this = cx.weak_entity();
+    row.context_menu(move |menu, _, _| {
+        let (this, chats) = (this.clone(), chats.clone());
+        menu.item(PopupMenuItem::new(format!("Mark as {}", marking.word())).on_click(move |_, _, cx| {
+            let _ = this.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
+        }))
+    })
+    .into_any_element()
 }
 
 fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Context<AppView>) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let repo_id = repo.id.clone();
     let creating = app.creating_in.as_ref() == Some(&repo.id);
-    let rows: Vec<_> =
-        visible.iter().filter(|w| w.repo_id == repo.id).map(|w| workspace_row(app, w, cx).into_any_element()).collect();
+    let rows: Vec<_> = visible.iter().filter(|w| w.repo_id == repo.id).map(|w| workspace_row(app, w, cx)).collect();
     v_flex()
         .w_full()
         .gap_px()
@@ -162,7 +177,8 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
 
 #[cfg(test)]
 mod tests {
-    use super::workspace_status;
+    use super::{signal, workspace_status};
+    use look::Signal;
     use protocol::model::{AgentKind, Session, SessionStatus};
 
     fn session(status: SessionStatus, closed: bool) -> Session {
@@ -198,5 +214,16 @@ mod tests {
         use SessionStatus::*;
         assert_eq!(workspace_status(&[session(Running, true), session(Idle, false)]), Some(Idle));
         assert_eq!(workspace_status(&[session(Running, true)]), None);
+    }
+
+    #[test]
+    fn a_reply_nobody_has_read_shows_only_once_nothing_more_pressing_does() {
+        use SessionStatus::*;
+        assert_eq!(signal(Some(Idle), true), Signal::Unread);
+        assert_eq!(signal(None, true), Signal::Unread);
+        assert_eq!(signal(Some(Running), true), Signal::Working);
+        assert_eq!(signal(Some(WaitingApproval), true), Signal::NeedsYou);
+        assert_eq!(signal(Some(Interrupted), true), Signal::Failed);
+        assert_eq!(signal(Some(Idle), false), Signal::Idle);
     }
 }

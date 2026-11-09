@@ -1,7 +1,7 @@
 //! The status mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has three
 //! layers, each about one thing. The fan's colour is the work, where its pull request stands. A white light over
-//! it is the agent, while it's doing something. And when you're needed, or the agent stopped short, the whole fan
-//! turns amber or red.
+//! it is the agent, while it's doing something. And when you're needed, the agent stopped short, or it replied and you
+//! haven't read it, the whole fan turns amber, red or white.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
@@ -86,6 +86,9 @@ pub enum Signal {
     NeedsYou,
     /// Stopped short. The whole fan turns red.
     Failed,
+    /// Replied, and you haven't read it. The whole fan turns white and holds still, where it's otherwise faint grey
+    /// or a pull request's colour.
+    Unread,
 }
 
 /// The moment, in seconds, a mark that isn't moving is drawn at. It catches a working mark with its light on the fan.
@@ -103,6 +106,7 @@ pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElemen
     let color = match signal {
         Signal::NeedsYou => theme.warning,
         Signal::Failed => theme.danger,
+        Signal::Unread => theme.foreground,
         Signal::Idle | Signal::SettingUp | Signal::Working => work.color(),
     };
     let moves = matches!(signal, Signal::Working | Signal::SettingUp) && clock::moving(cx);
@@ -155,7 +159,7 @@ fn brightness(signal: Signal, dot: &Dot, t: f64) -> (f32, f32) {
         Signal::Working => (1.0, light_on(dot.along, dot.row, phase(t, SWEEP_S) * 1.5 - 0.25, TRAIL)),
         Signal::SettingUp if dot.along + row * 0.04 < phase(t, BUILD_S) * 1.25 => (1.0, 0.4),
         Signal::SettingUp => (0.2, 0.0),
-        Signal::Idle | Signal::NeedsYou | Signal::Failed => (1.0, 0.0),
+        Signal::Idle | Signal::NeedsYou | Signal::Failed | Signal::Unread => (1.0, 0.0),
     }
 }
 
@@ -191,7 +195,7 @@ mod tests {
         let fan = Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(60.), px(37.2))));
         let at = |signal, t| fan.dots().map(|dot| brightness(signal, &dot, t)).collect::<Vec<_>>();
 
-        for still in [Signal::Idle, Signal::NeedsYou, Signal::Failed] {
+        for still in [Signal::Idle, Signal::NeedsYou, Signal::Failed, Signal::Unread] {
             assert_eq!(at(still, 0.3), at(still, 1.7), "{still:?} moved");
         }
         for moving in [Signal::Working, Signal::SettingUp] {

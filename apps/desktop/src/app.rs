@@ -13,6 +13,7 @@ use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
 mod hub_source;
+mod reading;
 mod restarts;
 mod view;
 mod workspaces;
@@ -83,8 +84,13 @@ impl AppView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
-        // Someone going to another app is the moment to finish an update without interrupting them.
-        cx.observe_window_activation(window, |t, _, cx| t.finish_update_when_idle(cx)).detach();
+        // Someone going to another app is the moment to finish an update without interrupting them, and coming back is
+        // when they read the chat showing.
+        cx.observe_window_activation(window, |t, window, cx| {
+            t.finish_update_when_idle(cx);
+            t.read_on_screen(window.is_window_active(), cx);
+        })
+        .detach();
         let mut this = Self {
             hub,
             connection: Connection::Connecting,
@@ -263,6 +269,8 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::catch_up);
         }
+        // A new connection, or a selection gone, can change which pane is on screen.
+        self.read_on_screen_now(cx);
         // An agent finishing is usually what lets an update finish.
         self.finish_update_when_idle(cx);
         cx.notify();
@@ -327,6 +335,7 @@ impl AppView {
         if let Some(pane) = self.panes.get(&id) {
             pane.update(cx, |p, cx| p.focus_composer(window, cx));
         }
+        self.read_on_screen(window.is_window_active(), cx);
         cx.notify();
     }
 

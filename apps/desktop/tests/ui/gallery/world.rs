@@ -140,6 +140,13 @@ impl World {
         id
     }
 
+    /// Makes the end of a chat's log a reply nobody has read.
+    pub(crate) fn unread(&mut self, id: &SessionId) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        assert!(session.last_seq > 0, "a chat with nothing in it has no reply");
+        (session.reply_seq, session.read_seq) = (session.last_seq, 0);
+    }
+
     pub(crate) fn session(&self, id: &SessionId) -> Result<&Session, ApiError> {
         self.sessions.iter().find(|s| &s.id == id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such chat"))
     }

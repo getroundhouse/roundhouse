@@ -54,9 +54,10 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.looking = None;
                 let idle = status.is_ok_and(|s| s.pid == pid && hub_source::should_replace(&s, build));
-                // Not while someone is back in the window. The card asking whether to finish it now doesn't hold it
-                // up, since finishing an idle hub stops nothing, and the question goes with the card.
-                if idle && !t.in_front(cx) && t.still_finishing(pid) {
+                // Not while someone is back in the window, which it takes as so when it can't tell, so finishing waits.
+                // The card asking whether to finish it now doesn't hold it up, since finishing an idle hub stops
+                // nothing, and the question goes with the card.
+                if idle && !t.in_front(cx).unwrap_or(true) && t.still_finishing(pid) {
                     t.restart_hub(pid, cx);
                 }
             });
@@ -64,9 +65,9 @@ impl AppView {
     }
 
     /// Whether the window is the one in front: the key window, which another app takes when it comes in front, unlike
-    /// the main window. Yes when it can't tell, so finishing waits.
-    fn in_front(&self, cx: &mut App) -> bool {
-        self.window.update(cx, |_, window, _| window.is_window_active()).unwrap_or(true)
+    /// the main window. `None` when it can't tell, such as in the middle of updating the window.
+    pub(super) fn in_front(&self, cx: &mut App) -> Option<bool> {
+        self.window.update(cx, |_, window, _| window.is_window_active()).ok()
     }
 
     /// Whether the app is still connected to the older hub with this `pid`: the connection may have gone, and another

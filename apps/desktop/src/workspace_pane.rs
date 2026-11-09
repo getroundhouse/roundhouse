@@ -11,8 +11,11 @@ use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatu
 use transcript::Transcript;
 
 use crate::diff_panel::{DiffEvent, DiffPanel};
+pub use reading::Mark;
+use reading::Reading;
 
 mod chats;
+mod reading;
 mod setup;
 #[cfg(test)]
 mod tests;
@@ -57,6 +60,7 @@ pub struct WorkspacePane {
     drafts: HashMap<SessionId, String>,
     /// A new chat is on its way, so another press doesn't make a second.
     creating_chat: bool,
+    reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Entity<DiffPanel>>,
     pub diff_open: bool,
@@ -126,6 +130,7 @@ impl WorkspacePane {
             transcripts: HashMap::new(),
             drafts: HashMap::new(),
             creating_chat: false,
+            reading: Reading::default(),
             composer,
             diff: None,
             diff_open: false,
