@@ -97,11 +97,9 @@ fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppCon
         items(&ui, "Roundhouse"),
         [
             "About Roundhouse",
-            "-",
             "Check for Updates…",
             "-",
             "Settings…",
-            "-",
             "Services",
             "-",
             "Hide Roundhouse",
