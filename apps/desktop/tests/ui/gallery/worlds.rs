@@ -10,7 +10,7 @@ use protocol::model::{
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, World};
-use super::{chats, image_chats, patch, pictures, pull_requests};
+use super::{chats, file_chats, image_chats, patch, pictures, pull_requests};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {
@@ -248,7 +248,7 @@ pub(super) fn chat_world(status: SessionStatus, events: Vec<protocol::event::Eve
 pub(super) fn attachments() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let shot = pictures::overlapping_badge();
+    let shot = pictures::overlapping_badge(450);
     let attached = [
         ("shot-1", "Screenshot 2026-11-01 at 10.24.png", MediaType::Png, shot),
         ("log-1", "layout.log", MediaType::Text, chats::LAYOUT_LOG.as_bytes().to_vec()),
@@ -267,6 +267,24 @@ pub(super) fn attachments() -> World {
 pub(super) fn pointed() -> World {
     let mut world = chat_world(SessionStatus::Idle, image_chats::pointed());
     world.worktree_images.insert(image_chats::AFTER.to_string(), pictures::signal_board());
+    world
+}
+
+/// The screen's chat, with the agent reading a screenshot, which the hub keeps.
+pub(super) fn read_image() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    // Short enough that the call it opens from stays in sight above it, under the composer.
+    let shot = pictures::overlapping_badge(300);
+    let size_bytes = u64::try_from(shot.len()).unwrap();
+    let image = Attachment {
+        id: AttachmentId::from("read-1"),
+        name: "image".to_string(),
+        media_type: MediaType::Png,
+        size_bytes,
+    };
+    world.attachments.insert(image.id.clone(), shot);
+    world.chat(&focus, SessionStatus::Idle, file_chats::read_image(image));
     world
 }
 

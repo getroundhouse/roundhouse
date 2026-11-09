@@ -3,11 +3,12 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use serde_json::json;
 
 use super::events::{
-    finished_turn, replied, taken, text, tool_changed, tool_failed, tool_result, tool_use, user_prompt,
+    finished_turn, replied, taken, text, tool_changed, tool_failed, tool_images, tool_result, tool_use, user_prompt,
 };
 use super::tool_chats::ASK;
 const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
@@ -135,6 +136,21 @@ pub(crate) fn file_contents() -> Vec<EventBody> {
         ),
         tool_changed("toolu-2", "File created successfully.", FileChange::Created),
         finished_turn(12, 0.06),
+    ]
+}
+
+/// The agent reading a screenshot, which the hub keeps as `image`.
+pub(crate) fn read_image(image: Attachment) -> Vec<EventBody> {
+    let shot = "/workspaces/aspen/.context/attachments/narrow-sidebar.png";
+    vec![
+        user_prompt(
+            "Is the badge still over the name? I saved how it looks in .context/attachments/narrow-sidebar.png",
+        ),
+        taken(1),
+        tool_use("msg-1", "toolu-1", "Read", json!({ "file_path": shot })),
+        tool_images("toolu-1", vec![image]),
+        text("msg-2", "It is: the badge still sits over the end of the second workspace's name."),
+        finished_turn(9, 0.04),
     ]
 }
 

@@ -1,10 +1,12 @@
-//! Files a person adds to a session, for its prompts to carry. What each is goes in the database, and its bytes in
-//! `attachment_files`. Before a prompt reaches its agent, the worker puts each of its files in the worktree, and then
-//! the hub keeps the bytes only of an image, since that's all the transcript draws.
+//! Files a person adds to a session, for its prompts to carry, and images a tool sends its agent. What each is goes in
+//! the database, and its bytes in `attachment_files`. Before a prompt reaches its agent, the worker puts each of its
+//! files in the worktree, and then the hub keeps the bytes only of an image, since that's all the transcript draws.
 
 use std::sync::Arc;
 
-use protocol::attachment::{Attachment, AttachmentBytes, AttachmentFile, AttachmentProblem, MediaType, file_name};
+use protocol::attachment::{
+    Attachment, AttachmentBytes, AttachmentFile, AttachmentProblem, MediaType, NewAttachment, file_name,
+};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -51,6 +53,21 @@ impl Hub {
         let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
         self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
         self.blocking(move |store| store.add_attachment(&session_id, &attachment)).await
+    }
+
+    /// Keeps the images an event from the agent names, before the event is recorded, so a client never asks for one
+    /// before the hub has it. Each is added as a client's file is, with the same checks, and only an image is kept. One
+    /// that can't be is logged, and the transcript says it couldn't show it.
+    pub(crate) async fn keep_from_agent(&self, session_id: &SessionId, attachments: Vec<NewAttachment>) {
+        for NewAttachment { attachment: Attachment { id, name, media_type, .. }, data } in attachments {
+            if !media_type.is_image() {
+                warn!(session = %session_id, attachment = %id, "the agent sent {} as an image", media_type.mime());
+                continue;
+            }
+            if let Err(e) = self.attachment_add(session_id.clone(), id.clone(), name, media_type, data).await {
+                warn!(session = %session_id, attachment = %id, "couldn't keep an image from the agent: {e}");
+            }
+        }
     }
 
     /// An image's bytes, for drawing it. Any other file's are gone once a prompt has put it in the worktree.

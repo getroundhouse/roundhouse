@@ -1,5 +1,6 @@
-//! What a prompt carries: each image drawn small until it's opened, and each other file as a chip. An image's bytes
-//! come from the hub the first time a row draws it, and stay for as long as the transcript does.
+//! What a prompt carries: each image drawn small until it's opened, and each other file as a chip. An image a tool
+//! sent back is drawn whole, in what its call opens to. An image's bytes come from the hub the first time a row draws
+//! it, and stay for as long as the transcript does.
 
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -12,8 +13,8 @@ use gpui_kit::component::attachment::{
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ElementId, Image, ImageFormat, InteractiveElement, IntoElement, ObjectFit, ParentElement,
-    StatefulInteractiveElement, Styled, StyledImage as _, TestSupportExt as _, WeakEntity, div, img, px,
+    AnyElement, App, Div, ElementId, Image, ImageFormat, InteractiveElement, IntoElement, ObjectFit, ParentElement,
+    Stateful, StatefulInteractiveElement, Styled, StyledImage as _, TestSupportExt as _, WeakEntity, div, img, px,
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
@@ -101,16 +102,17 @@ pub(crate) fn carried(m: &Model, attachments: &[Attachment]) -> Vec<Carried> {
         .collect()
 }
 
-/// Asks the hub for each image here it hasn't been asked for, once drawing has finished. `seq` is the prompt's, to
-/// measure its row again when one arrives, and `None` while it's pending, when every image is already here.
-pub(crate) fn fetch_missing(
+/// Asks the hub for each image here it hasn't been asked for, once drawing has finished. `seq` is the row's, to
+/// measure it again when one arrives, and `None` for a prompt that's pending, when every image is already here.
+pub(crate) fn fetch_missing<'a>(
     model: &Rc<RefCell<Model>>,
     this: &WeakEntity<Transcript>,
     seq: Option<Seq>,
-    carried: &[Carried],
+    carried: impl IntoIterator<Item = &'a Carried>,
     cx: &mut App,
 ) {
-    for file in carried.iter().filter(|file| file.attachment.media_type.is_image() && file.picture.is_none()) {
+    let missing = carried.into_iter().filter(|file| file.attachment.media_type.is_image() && file.picture.is_none());
+    for file in missing {
         model.borrow_mut().pictures.insert(file.attachment.id.clone(), Picture::Loading);
         let (this, attachment) = (this.clone(), file.attachment.clone());
         cx.defer(move |cx| {
@@ -136,33 +138,25 @@ pub(crate) fn view(
     Some(h_flex().w_full().flex_wrap().items_start().gap_2().children(images).children(files).into_any_element())
 }
 
+/// An image drawn whole, as wide as it is, up to the column, at its own shape, with nothing to click. For an image a
+/// tool sent back, which opens with its call.
+pub(crate) fn whole(file: &Carried, cx: &App) -> AnyElement {
+    let Some((image, width, height)) = ready(file) else { return not_ready(file, cx) };
+    let (width, height) = (pixels(width), pixels(height));
+    let shown = frame(file, cx)
+        .w_full()
+        .max_w(px(width))
+        .aspect_ratio(width / height)
+        .child(img(image).size_full().object_fit(ObjectFit::Contain))
+        .test_support();
+    // In a row, since in a column the layout takes its height from the column's width rather than its own, which
+    // leaves a gap under an image narrower than the column.
+    h_flex().w_full().child(shown).into_any_element()
+}
+
 fn picture(seq: Option<Seq>, file: &Carried, this: &WeakEntity<Transcript>, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let frame = div()
-        .id(file.key.element("picture"))
-        .flex_none()
-        .rounded(px(6.))
-        .overflow_hidden()
-        .border_1()
-        .border_color(theme.border)
-        .bg(theme.muted);
-    let ready = match &file.picture {
-        Some(Picture::Ready { image, width, height }) => Some((image.clone(), *width, *height)),
-        Some(Picture::Loading | Picture::Unreadable) | None => None,
-    };
-    let Some((image, width, height)) = ready else {
-        let unreadable = matches!(file.picture, Some(Picture::Unreadable));
-        return frame
-            .h(px(THUMBNAIL_HEIGHT))
-            .w(px(THUMBNAIL_GUESSED_WIDTH))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_xs()
-            .text_color(look::faint())
-            .when(unreadable, |d| d.child(format!("Couldn't show {}", file.attachment.name)))
-            .into_any_element();
-    };
+    let Some((image, width, height)) = ready(file) else { return not_ready(file, cx) };
+    let frame = frame(file, cx);
     let (width, height) = (pixels(width), pixels(height));
     let frame = match seq {
         Some(seq) => {
@@ -183,6 +177,40 @@ fn picture(seq: Option<Seq>, file: &Carried, this: &WeakEntity<Transcript>, cx: 
     let frame =
         frame.h(px(THUMBNAIL_HEIGHT)).w(px((THUMBNAIL_HEIGHT * width / height).clamp(32., THUMBNAIL_MAX_WIDTH)));
     frame.child(img(image).size_full().object_fit(ObjectFit::Cover)).test_support().into_any_element()
+}
+
+fn frame(file: &Carried, cx: &App) -> Stateful<Div> {
+    let theme = cx.theme();
+    div()
+        .id(file.key.element("picture"))
+        .flex_none()
+        .rounded(px(6.))
+        .overflow_hidden()
+        .border_1()
+        .border_color(theme.border)
+        .bg(theme.muted)
+}
+
+fn ready(file: &Carried) -> Option<(Arc<Image>, u32, u32)> {
+    match &file.picture {
+        Some(Picture::Ready { image, width, height }) => Some((image.clone(), *width, *height)),
+        Some(Picture::Loading | Picture::Unreadable) | None => None,
+    }
+}
+
+/// Where an image will be, the size of a thumbnail, saying so if it can't be shown.
+fn not_ready(file: &Carried, cx: &App) -> AnyElement {
+    let unreadable = matches!(file.picture, Some(Picture::Unreadable));
+    frame(file, cx)
+        .h(px(THUMBNAIL_HEIGHT))
+        .w(px(THUMBNAIL_GUESSED_WIDTH))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_xs()
+        .text_color(look::faint())
+        .when(unreadable, |d| d.child(format!("Couldn't show {}", file.attachment.name)))
+        .into_any_element()
 }
 
 /// A file that isn't drawn, as its name and size, the same in the transcript and the composer.

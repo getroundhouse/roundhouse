@@ -6,9 +6,9 @@
 use std::path::PathBuf;
 
 use client_core::{Client, ClientError};
-use protocol::attachment::{Attachment, MediaType};
+use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
-use protocol::event::EventBody;
+use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{AttachmentId, SessionId};
 
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
@@ -168,4 +168,33 @@ fn a_client_reads_an_image_in_the_worktree_through_the_hub_and_nothing_else() {
     assert_eq!(refused_with(read("notes.txt")), ErrorCode::InvalidRequest);
     assert_eq!(refused_with(read("../../")), ErrorCode::InvalidRequest);
     assert_eq!(refused_with(read("missing.png")), ErrorCode::NotFound);
+}
+
+#[test]
+fn an_image_a_tool_sends_back_is_kept_as_a_prompt_s_is_and_left_out_of_the_log() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    std::fs::write(PathBuf::from(workspace.path.unwrap()).join("shot.png"), png(300)).unwrap();
+
+    client.session_prompt_with(&session.id, "read:shot.png", None, Vec::new()).unwrap();
+
+    wait_for_turn_end(&client, &session.id, 1);
+    let (events, _) = client.session_read(&session.id, 1, 100, true).unwrap();
+    let result = events.iter().find_map(|e| match &e.body {
+        EventBody::AgentUser { blocks, .. } => match blocks.as_slice() {
+            [ContentBlock::ToolResult { images, .. }] => Some((images.clone(), e.raw.clone().unwrap())),
+            _ => None,
+        },
+        _ => None,
+    });
+    let Some((images, raw)) = result else { panic!("{events:?}") };
+    let [image] = images.as_slice() else { panic!("{images:?}") };
+    assert_eq!((image.media_type, image.size_bytes), (MediaType::Png, 300));
+    assert_eq!(client.attachment_read(&session.id, &image.id).unwrap(), png(300));
+    let bytes = AttachmentBytes::new(png(300)).to_base64();
+    assert!(
+        raw.contains(image.id.as_str()) && !raw.contains(&bytes),
+        "the line names it rather than holding it: {raw}"
+    );
 }

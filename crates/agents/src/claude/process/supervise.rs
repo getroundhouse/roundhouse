@@ -61,7 +61,7 @@ pub(super) async fn supervise(
                           The history here is intact, but the agent can't see it."
                     .to_string(),
             };
-            let _ = output.send(AgentOutput::Event { body: notice, raw: None }).await;
+            let _ = output.send(AgentOutput::event(notice, None)).await;
         }
         let launched = match launch(&bin, &spec, resume, &options) {
             Ok(launched) => launched,
@@ -109,7 +109,7 @@ async fn finish(
     let mut untaken: Vec<_> = shared.untaken.lock().drain().map(|(_, prompt)| prompt).collect();
     untaken.sort_unstable();
     for prompt in untaken {
-        let _ = output.send(AgentOutput::Event { body: EventBody::PromptDropped { prompt }, raw: None }).await;
+        let _ = output.send(AgentOutput::event(EventBody::PromptDropped { prompt }, None)).await;
     }
     let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
     let requested = shared.stop_requested.load(Ordering::SeqCst);

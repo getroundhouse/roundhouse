@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{MessageId, Seq, ToolUseId};
 
@@ -42,6 +43,17 @@ pub(crate) fn tool_result(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, false, None)
 }
 
+/// A result that's only images, as a read of one is.
+pub(crate) fn tool_images(id: &str, images: Vec<Attachment>) -> EventBody {
+    let mut event = tool_answer(id, "", false, None);
+    if let EventBody::AgentUser { blocks, .. } = &mut event
+        && let [ContentBlock::ToolResult { images: shown, .. }] = blocks.as_mut_slice()
+    {
+        *shown = images;
+    }
+    event
+}
+
 /// A result that says the call failed.
 pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, true, None)
@@ -59,7 +71,7 @@ fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>)
             tool_use_id: ToolUseId::from(id),
             is_error,
             text: text.to_string(),
-            image_count: 0,
+            images: Vec::new(),
             change,
         }],
     }

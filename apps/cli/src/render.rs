@@ -127,10 +127,17 @@ impl Printer {
             ContentBlock::ToolUse { name, input, .. } => {
                 self.line(seq, &format!("tool {name}: {}", summarize_input(input)));
             }
-            ContentBlock::ToolResult { is_error, text, .. } => {
+            ContentBlock::ToolResult { is_error, text, images, .. } => {
                 let label = if *is_error { "tool error" } else { "tool result" };
                 let lines: Vec<&str> = text.lines().collect();
-                self.line(seq, &format!("{label}: {}", lines.first().copied().unwrap_or("")));
+                let first = lines.first().copied().unwrap_or("");
+                let shown = match images.len() {
+                    0 => String::new(),
+                    1 => "[1 image]".to_string(),
+                    n => format!("[{n} images]"),
+                };
+                let gap = if first.is_empty() || shown.is_empty() { "" } else { " " };
+                self.line(seq, &format!("{label}: {first}{gap}{shown}"));
                 for line in lines.iter().skip(1).take(RESULT_PREVIEW_LINES - 1) {
                     self.line(seq, &format!("  {line}"));
                 }

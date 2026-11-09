@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType};
+use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType, NewAttachment};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId};
@@ -198,9 +198,12 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         body: EventBody,
-        /// The agent's original line, kept by the hub beside the event.
+        /// The agent's original line, kept by the hub beside the event, without the bytes of any of `attachments`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         raw: Option<String>,
+        /// Images the event names, such as one a tool sent back, for the hub to keep before it records the event.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<NewAttachment>,
     },
     AgentDelta {
         session_id: SessionId,

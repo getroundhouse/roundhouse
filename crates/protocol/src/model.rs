@@ -60,8 +60,8 @@ ids!(
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
     ClientMessageId,
-    /// Chosen by a client before it adds the file, so it can show the file at once and adding it again can't add it
-    /// twice. Unique within its session.
+    /// Chosen by whoever has the file first, as a UUID: a client before it adds the file, so it can show it at once
+    /// and adding it again can't add it twice, or the worker for an image a tool sent back. Unique within its session.
     AttachmentId,
     /// Chosen by a client, so that retrying a request that creates something can't create it twice.
     ClientRequestId,
