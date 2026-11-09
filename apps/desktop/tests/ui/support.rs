@@ -15,7 +15,7 @@ use client_core::{Client, Daemon};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{RepoId, SessionId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
@@ -205,9 +205,10 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Lets the app catch up. In a test, GPUI draws a window as soon as something in it has changed, so what's checked
+    /// next is what the app drew for that change. Nothing here redraws the whole window, as the kit's `render_frame`
+    /// would, since that would also redraw a view that never said it changed, and hide that it forgot to `notify`.
     pub(crate) fn frame(&mut self) {
-        self.cx.run_until_parked();
-        let _ = self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx));
         self.cx.run_until_parked();
     }
 
@@ -233,6 +234,14 @@ impl<'a> Ui<'a> {
         let id = id.into();
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Turns the mouse wheel over the element, by `delta`. Down the page is a negative `y`.
+    pub(crate) fn scroll(&mut self, id: impl Into<ElementId>, delta: ScrollDelta) {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.scroll(id, delta, cx)).unwrap();
         self.frame();
     }
 

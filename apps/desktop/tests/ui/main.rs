@@ -19,6 +19,7 @@ mod quitting;
 mod reconnecting;
 mod settings;
 mod setup;
+mod sidebar;
 mod streaming;
 #[cfg(test)]
 mod support;

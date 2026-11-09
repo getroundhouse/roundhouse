@@ -61,7 +61,7 @@ impl Render for AppView {
             },
         };
         let root = self.with_shortcuts(h_flex(), cx);
-        self.root(root, cx).child(crate::sidebar::render(self, cx)).child(
+        self.root(root, cx).child(crate::sidebar::render(self, window, cx)).child(
             v_flex()
                 .flex_1()
                 .min_w_0()
