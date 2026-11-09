@@ -1,29 +1,28 @@
 #!/usr/bin/env bash
-# Packages this checkout as Roundhouse.app with Velopack's `vpk`: the three binaries, built in release and stamped as
-# `tools/install.sh` stamps them, in one bundle with Velopack's updater. It makes the portable zip people download,
-# and the update package and feed the release workflow publishes. Unsigned unless it's given an identity. It's macOS
-# on Apple silicon only, like the app, and needs the .NET SDK 8, 9 or 10, which runs `vpk`.
+# Packages this checkout as Roundhouse.app with Velopack's `vpk`: the three binaries, which `tools/build.sh` builds and
+# stamps, in one bundle with Velopack's updater. It makes the portable zip people download, and the update package and
+# feed the release workflow publishes. Unsigned unless it's given an identity. It's macOS on Apple silicon only, like
+# the app, and needs `jq` and the .NET SDK 8, 9 or 10, which runs `vpk`.
 #
 #   tools/package/package.sh                  Package this commit, unsigned
 #   tools/package/package.sh --allow-dirty    The same, with uncommitted changes in the build
 #   tools/package/package.sh --out DIR        Write to DIR rather than target/package
-#   tools/package/package.sh --keep-releases  Keep what an earlier run left in target/package/releases
 #   tools/package/package.sh --sign IDENTITY [--keychain PATH] [--notary-profile NAME]
 #       Sign with a Developer ID, named as `codesign -s` takes it, or `-` for ad hoc, and given a notarytool profile,
 #       notarize and staple
 #
 # Writes `releases/`, which holds the portable zip, the full package and the feed, and `Roundhouse.app`, unzipped from
-# the portable zip, to check or run. A package from an earlier version in `releases/` gets a delta to this one, and vpk
-# refuses a version that isn't newer than every one there, so this stops before building if it isn't. The default
-# directory's `releases/` starts empty unless --keep-releases says otherwise.
+# the portable zip, to check or run. The default directory's `releases/` starts empty. Another directory's keeps what's
+# there, and a package from an earlier version gets a delta to this one.
 #
 # The version is `0.1.<commits>`, as `docs/architecture.md` says. A package with uncommitted changes gets its commit's
 # version, which is never published, since the release workflow packages a clean checkout.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-BINARIES=(roundhouse-desktop roundhoused roundhouse)
+# BINARIES, ROOT, stamp, target_dir and build_release.
+# shellcheck source=SCRIPTDIR/../build.sh
+source "$HERE/../build.sh"
 # Velopack's name for the app, which names its packages and its cache directory. The bundle identifier is in
 # Info.plist.
 PACK_ID=Roundhouse
@@ -32,37 +31,22 @@ ICONSET="$ROOT/apps/desktop/icons/working.iconset"
 
 die() { echo "error: $1" >&2; exit 1; }
 
-# A Unix time in UTC, in a `date` format. macOS's own `date`, since GNU's, which some put first on PATH, reads `-r` as a
-# file.
-utc() { /bin/date -u -r "$1" "+$2"; }
-
 # Runs .NET from the directory that holds dotnet-tools.json, which is how it finds the vpk that file pins.
 dotnet_here() {
   (cd "$HERE" && DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet "$@")
 }
 
-# Where cargo puts what it builds, which `build.target-dir` or CARGO_TARGET_DIR can move.
-target_dir() {
-  (cd "$ROOT" && cargo metadata --no-deps --format-version 1 --locked) | jq -r .target_directory
-}
-
-# Sets BUILD and NUMBER the way `tools/install.sh` does, so a packaged hub and an installed one can tell which is
-# older, and VERSION from how many commits lead to this one. A shallow clone would count only what it fetched.
-stamp() {
-  local allow_dirty=$1
+# The version, `0.1.<commits>`, as `docs/architecture.md` says. It refuses a shallow clone, which would count only the
+# commits it fetched.
+version() {
   [ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" = false ] \
     || die "this is a shallow clone, so its commits can't be counted for the version. Fetch the whole history"
-  VERSION="0.1.$(git -C "$ROOT" rev-list --count HEAD)"
-  BUILD="$(git -C "$ROOT" rev-parse --short=12 HEAD)"
-  NUMBER="$(git -C "$ROOT" log -1 --format=%ct)"
-  if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
-    [ "$allow_dirty" = yes ] || die "this checkout has uncommitted changes. Commit them, or use --allow-dirty"
-    NUMBER="$(date +%s)"
-    BUILD="$BUILD-dirty-$(utc "$NUMBER" %Y%m%d%H%M%S)"
-  fi
+  echo "0.1.$(git -C "$ROOT" rev-list --count HEAD)"
 }
 
-# Stops before the build if `releases/` has this version or a newer one, which vpk would refuse after it.
+# Stops before the build if `releases/` has this version or a newer one, since vpk refuses a version that isn't newer
+# than every one there, but only after the build. This is the check for packaging into an --out that holds earlier
+# releases.
 check_newer() {
   local releases=$1 newer
   [ -f "$releases/releases.osx.json" ] || return 0
@@ -70,19 +54,13 @@ check_newer() {
     def parts: split("-")[0] | split(".") | map(tonumber);
     [.Assets[].Version | select(parts >= ($version | parts))] | first // empty' "$releases/releases.osx.json")"
   [ -z "$newer" ] || die "$releases already has version $newer, and vpk only adds a newer one than every one there.
-Package into another --out, or leave out --keep-releases"
+Package into another --out"
 }
 
 # Puts the binaries in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of their own.
 stage() {
-  local staging=$1 target bin
-  target="$(target_dir)"
-  (cd "$ROOT" && ROUNDHOUSE_BUILD="$BUILD" ROUNDHOUSE_BUILD_NUMBER="$NUMBER" \
-    cargo build --release --locked -p desktop -p daemon -p cli --bins)
-  mkdir "$staging/bins"
-  for bin in "${BINARIES[@]}"; do
-    cp "$target/release/$bin" "$staging/bins/$bin"
-  done
+  local staging=$1
+  build_release "$staging/bins"
   iconutil -c icns "$ICONSET" -o "$staging/AppIcon.icns"
   cp "$HERE/Info.plist" "$staging/Info.plist"
   plutil -replace CFBundleShortVersionString -string "$VERSION" "$staging/Info.plist"
@@ -122,15 +100,15 @@ check() {
 }
 
 package() {
-  local allow_dirty=$1 out=$2 keep=$3 sign=$4 keychain=$5 notary=$6 vpk_vars signing=()
+  local allow_dirty=$1 out=$2 sign=$3 keychain=$4 notary=$5 vpk_vars signing=()
   command -v dotnet > /dev/null || die "vpk needs the .NET SDK 8, 9 or 10, such as from \`brew install dotnet\`"
   # vpk also reads each option from a VPK_ variable, which would override this script, such as signing with vpk's
   # default entitlements, which are .NET's exceptions to the hardened runtime.
   vpk_vars="$(compgen -e | grep '^VPK_' || true)"
   [ -z "$vpk_vars" ] || die "unset $(echo "$vpk_vars" | tr '\n' ' ')first, since vpk would take them over this script"
   dotnet_here tool restore > /dev/null
+  VERSION="$(version)"
   stamp "$allow_dirty"
-  [ "$keep" = yes ] || rm -rf "$out/releases"
   mkdir -p "$out/releases"
   check_newer "$out/releases"
   # Not local, because the trap outlives this function if anything fails.
@@ -162,12 +140,11 @@ package() {
 }
 
 [ "$(uname)" = Darwin ] || die "packaging is macOS only"
-allow_dirty=no out="" keep=no sign="" keychain="" notary=""
+allow_dirty=no out="" sign="" keychain="" notary=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --allow-dirty) allow_dirty=yes ;;
     --out) out="${2:?--out needs a directory}"; shift ;;
-    --keep-releases) keep=yes ;;
     --sign) sign="${2:?--sign needs an identity}"; shift ;;
     --keychain) keychain="${2:?--keychain needs a path}"; shift ;;
     --notary-profile) notary="${2:?--notary-profile needs a name}"; shift ;;
@@ -176,11 +153,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$sign" ] || [ -z "$keychain$notary" ] || die "--keychain and --notary-profile are for signing, so they need --sign"
-# Only the default directory starts empty, since another might hold an earlier release to make a delta from.
 if [ -z "$out" ]; then
   out="$(target_dir)/package"
-else
-  keep=yes
+  rm -rf "$out/releases"
 fi
 mkdir -p "$out"
-package "$allow_dirty" "$(cd "$out" && pwd)" "$keep" "$sign" "$keychain" "$notary"
+package "$allow_dirty" "$(cd "$out" && pwd)" "$sign" "$keychain" "$notary"

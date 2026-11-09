@@ -79,6 +79,7 @@ services/
 tools/
   policy/          Tests that enforce the license and dependency rules below
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
+  build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh` and `package/`
   install.sh       Installs this commit as a version of its own, outside `target/`
   package/         Packages this commit as Roundhouse.app with Velopack, signed when given an identity, and notarized when also given a notary profile
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
@@ -232,7 +233,6 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **`tools/install.sh` copies release binaries into `roundhouse-builds/<version>/`,** and a `current` link names the one to start. Keeping versions gives rollback by moving the link, and past a migration, the database goes back to the copy the hub saved before it, as the README says. A client resolves the link when it starts, so it stays on its version when the link moves, and rebuilding or archiving the worktree it was built in can't touch it. Its hub stays on one build through its own copy, as "Updating the app" says.
 - **An install or a package stamps its commit through `ROUNDHOUSE_BUILD`,** and any other build says `0.1.0-dev`. The app and `roundhouse hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
 - **An install or a package also stamps an order through `ROUNDHOUSE_BUILD_NUMBER`:** when its commit was made, or when it was built if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
-- **A published build is versioned `0.1.<commits on main>`,** such as `0.1.50`, which is what Velopack orders updates by. It's short and readable, every merge adds one, it leaves 0.2 and 1.0 free to mean something later, and each part fits the 16 bits of a Windows version field. A count can't be the build number, because counts differ across branches, but only `main` publishes, and its history only grows. `tools/package/package.sh` refuses a shallow clone, whose count would come up short.
 
 What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without stopping its agents, as "When a process dies" describes.
 

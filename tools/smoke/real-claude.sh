@@ -6,8 +6,10 @@
 #   cargo build --workspace && tools/smoke/real-claude.sh
 set -u
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BIN="${BIN:-$ROOT/target/debug}"
+# For target_dir, since cargo builds wherever `build.target-dir` or CARGO_TARGET_DIR says.
+# shellcheck source=SCRIPTDIR/../build.sh
+source "$(dirname "$0")/../build.sh"
+BIN="${BIN:-$(target_dir)/debug}"
 # Cleanup deletes by this name, so an empty one would match every conversation the CLI has.
 WORK="$(mktemp -d /tmp/ahsmoke-XXXXXX)" || exit 1
 export ROUNDHOUSE_HOME="$WORK/home"

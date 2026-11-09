@@ -2,7 +2,7 @@
 # Installs this checkout as the Roundhouse you use every day, outside `target/`, so that rebuilding or archiving
 # a worktree can't touch what's running. Each version gets its own directory, and `current` names the one to
 # start. A running hub starts its workers from the version it came from, so moving `current` doesn't affect it.
-# Run this by hand. It's macOS only, like the desktop app.
+# Run this by hand. It's macOS only, like the desktop app. `tools/build.sh` builds and stamps it, so it needs `jq` too.
 #
 #   tools/install.sh                 Build this commit in release, and make it current
 #   tools/install.sh --allow-dirty   The same, with uncommitted changes in the build
@@ -12,9 +12,9 @@
 # Installs to ROUNDHOUSE_INSTALL_ROOT, or ~/Library/Application Support/roundhouse-builds.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALL_ROOT="${ROUNDHOUSE_INSTALL_ROOT:-$HOME/Library/Application Support/roundhouse-builds}"
-BINARIES=(roundhouse-desktop roundhoused roundhouse)
+# shellcheck source=SCRIPTDIR/build.sh
+source "$(dirname "$0")/build.sh"
 
 die() { echo "error: $1" >&2; exit 1; }
 
@@ -52,35 +52,19 @@ make_current() {
 }
 
 install_this_commit() {
-  local allow_dirty=$1 version number target bin
-  cd "$ROOT"
-  version="$(git rev-parse --short=12 HEAD)"
-  # When the commit was made, so installing an older one can't replace a newer hub, whose database it might not
-  # be able to open.
-  number="$(git log -1 --format=%ct)"
-  if [ -n "$(git status --porcelain)" ]; then
-    [ "$allow_dirty" = yes ] || die "this checkout has uncommitted changes. Commit them, or use --allow-dirty"
-    number="$(date +%s)"
-    # Timestamped, because the same commit can be installed with different changes. In UTC, from the same time as
-    # the number, as tools/package/package.sh does it. macOS's own `date`, since GNU's reads `-r` as a file.
-    version="$version-dirty-$(/bin/date -u -r "$number" +%Y%m%d%H%M%S)"
-  fi
-  if [ ! -d "$INSTALL_ROOT/$version" ]; then
-    ROUNDHOUSE_BUILD="$version" ROUNDHOUSE_BUILD_NUMBER="$number" cargo build --release --locked -p desktop -p daemon -p cli --bins
+  local allow_dirty=$1
+  stamp "$allow_dirty"
+  if [ ! -d "$INSTALL_ROOT/$BUILD" ]; then
     mkdir -p "$INSTALL_ROOT"
     # Not local, because the trap outlives this function if anything fails.
     tmp="$(mktemp -d "$INSTALL_ROOT/.installing.XXXXXX")"
     trap 'rm -rf "$tmp"' EXIT
-    # Where cargo put them, which `build.target-dir` or CARGO_TARGET_DIR can move.
-    target="$(cargo metadata --no-deps --format-version 1 --locked | jq -r .target_directory)"
-    for bin in "${BINARIES[@]}"; do
-      cp "$target/release/$bin" "$tmp/$bin"
-    done
+    build_release "$tmp"
     chmod 755 "$tmp"
-    mv "$tmp" "$INSTALL_ROOT/$version"
+    mv "$tmp" "$INSTALL_ROOT/$BUILD"
     trap - EXIT
   fi
-  make_current "$version"
+  make_current "$BUILD"
 }
 
 [ "$(uname)" = Darwin ] || die "installing is macOS only for now"
