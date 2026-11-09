@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::tools::{ask_questions, present_plan, run_tool};
+use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
 use crate::{background, subagent};
 
@@ -295,6 +295,9 @@ pub(crate) fn run_command(
 fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
+    }
+    if let Some(lines) = command.strip_prefix("edit:") {
+        return edit_file(turn, lines.parse().unwrap());
     }
     if let Some(ms) = command.strip_prefix("hang:") {
         return hang(turn, ms.parse().unwrap(), rx, queued, eof);
