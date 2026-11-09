@@ -7,17 +7,17 @@ pub mod claude;
 mod error;
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentKind, ApprovalId};
+use protocol::model::{AgentKind, ApprovalId, Title};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
 
-pub use error::AgentError;
+pub use error::{AgentError, NoTitle};
 
 #[derive(Debug)]
 pub enum AgentOutput {
@@ -86,6 +86,20 @@ pub fn spawn(
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options),
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
+    }
+}
+
+/// A short title for a prompt, from a one-off call to `kind`'s CLI that runs in an empty directory made inside
+/// `scratch_dir`. `options.pid_file` records it while it runs.
+pub async fn title_for(
+    kind: AgentKind,
+    prompt: &str,
+    options: &AgentOptions,
+    scratch_dir: &Path,
+) -> Result<Title, AgentError> {
+    match kind {
+        AgentKind::Claude => claude::title_for(prompt, options, scratch_dir).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

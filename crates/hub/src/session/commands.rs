@@ -138,7 +138,7 @@ impl LiveSession {
     /// Returns the prompt's place in the log, and whether it had already been recorded.
     async fn record_prompt(
         &self,
-        hub: &Hub,
+        hub: &Arc<Hub>,
         text: &str,
         client_msg_id: Option<ClientMessageId>,
     ) -> Result<(Seq, bool), ApiError> {

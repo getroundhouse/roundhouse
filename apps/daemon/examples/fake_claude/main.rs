@@ -25,6 +25,8 @@
 //!
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
+//!
+//! With `--output-format json`, it's the one-off call that titles a prompt instead. See `title.rs`.
 
 #![expect(
     clippy::unwrap_used,
@@ -44,6 +46,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 mod background;
+mod title;
 mod tools;
 mod turn;
 
@@ -109,6 +112,10 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let state = PathBuf::from(std::env::var("FAKE_CLAUDE_STATE").expect("FAKE_CLAUDE_STATE"));
     std::fs::create_dir_all(&state).unwrap();
+    if flag(&args, "--output-format").as_deref() == Some("json") {
+        title::answer(&state);
+        return;
+    }
     let out: Out = Arc::new(Mutex::new(std::io::stdout()));
 
     let session_id = if let Some(id) = flag(&args, "--resume") {

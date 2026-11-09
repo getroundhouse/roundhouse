@@ -15,12 +15,11 @@ protocol.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
+# An empty directory for a one-off call, so the CLI loads no project's instructions.
+tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

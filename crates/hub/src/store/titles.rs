@@ -15,6 +15,8 @@ mod tests;
 pub enum Retitle {
     /// From a prompt's first line, only where there's no title yet.
     FirstLine,
+    /// From a model asked for one, only over a first line, so a title typed meanwhile stays.
+    Generated,
     /// Typed by someone, over any title.
     ByHand,
 }
@@ -23,6 +25,7 @@ impl Retitle {
     fn source(self) -> TitleSource {
         match self {
             Retitle::FirstLine => TitleSource::FirstLine,
+            Retitle::Generated => TitleSource::Generated,
             Retitle::ByHand => TitleSource::ByHand,
         }
     }
@@ -31,6 +34,7 @@ impl Retitle {
     fn replaces(self) -> &'static str {
         match self {
             Retitle::FirstLine => "title IS NULL",
+            Retitle::Generated => "title IS NOT NULL AND title_source = 'first_line'",
             Retitle::ByHand => "TRUE",
         }
     }

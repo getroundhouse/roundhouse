@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use agents::AgentProcess;
 use parking_lot::Mutex;
@@ -14,7 +14,7 @@ use protocol::frame;
 use protocol::model::{RunId, SessionId};
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
@@ -23,7 +23,7 @@ use crate::{git, setup};
 mod agent;
 mod scripts;
 
-use agent::{configure_agent, start_agent, stop_agent};
+use agent::{configure_agent, start_agent, stop_agent, title_for};
 use scripts::{Setup, run_archive_script, run_setup, setup_requested, stop_setup_script};
 
 /// Enough to see what went wrong, without sending a whole install log across.
@@ -39,6 +39,9 @@ pub struct Config {
     pub path: Option<OsString>,
     /// An agent CLI to use without searching.
     pub claude_bin: Option<PathBuf>,
+    /// Where a one-off call to an agent runs, each in an empty directory of its own. The system's temporary
+    /// directory suits, since no project's instructions are above it.
+    pub scratch_dir: PathBuf,
 }
 
 struct RunningAgent {
@@ -56,6 +59,10 @@ struct State {
     shutting_down: AtomicBool,
     /// The setup script, so it can be stopped.
     setup: Arc<Mutex<Setup>>,
+    /// Set once the worker is stopping, so a one-off call under way gives up rather than keep it running.
+    stopping: watch::Sender<bool>,
+    /// How many one-off calls have started, which numbers their records.
+    calls: AtomicU64,
     frames: mpsc::Sender<WorkerFrame>,
 }
 
@@ -85,6 +92,8 @@ where
         start_lock: tokio::sync::Mutex::new(()),
         shutting_down: AtomicBool::new(false),
         setup: Arc::new(Mutex::new(Setup::Idle)),
+        stopping: watch::Sender::new(false),
+        calls: AtomicU64::new(0),
         frames: frames.clone(),
     });
     let forwarders = Arc::new(tokio::sync::Mutex::new(JoinSet::new()));
@@ -142,6 +151,7 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
         let _no_more_starts = state.start_lock.lock().await;
         state.shutting_down.store(true, Ordering::SeqCst);
     }
+    state.stopping.send_replace(true);
     stop_setup_script(state);
     let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
@@ -247,6 +257,7 @@ async fn handle(
             configure_agent(state, &session_id, model.as_deref(), permission_mode.as_deref()).await
         }
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
+        WorkerRequest::TitleFor { agent, prompt } => title_for(state, agent, &prompt).await,
     }
 }
 

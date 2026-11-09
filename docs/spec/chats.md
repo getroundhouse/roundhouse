@@ -20,7 +20,8 @@
 ## Titles
 
 - **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.
-- **A chat's title is generated from its first prompt,** by the same rules as a workspace's. *Not built.* For now it's the first prompt's first line, cut at a word after 48 characters.
+- **A chat's title is generated from its first prompt,** by the same rules as a workspace's.
+- **A workspace's first chat gets the same title as the workspace,** from the same call, since they come from the same prompt. *Unconfirmed.*
 
 ## Questions and approvals
 

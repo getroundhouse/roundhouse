@@ -30,6 +30,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
             home: None,
             path: None,
             claude_bin: Some(cli.clone()),
+            scratch_dir: dir.path().to_path_buf(),
         };
         let running = tokio::spawn(serve(worker_read, worker_write, config));
         tokio::spawn(async move {
@@ -75,8 +76,14 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
     let (worker_read, worker_write) = tokio::io::split(worker_end);
     let (hub_read, mut hub_write) = tokio::io::split(hub_end);
-    let config =
-        Config { workspaces_root: dir.path().to_path_buf(), state_dir: None, home: None, path: None, claude_bin: None };
+    let config = Config {
+        workspaces_root: dir.path().to_path_buf(),
+        state_dir: None,
+        home: None,
+        path: None,
+        claude_bin: None,
+        scratch_dir: dir.path().to_path_buf(),
+    };
     tokio::spawn(serve(worker_read, worker_write, config));
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
