@@ -38,6 +38,25 @@ fn a_failed_setup_is_shown_with_its_log_and_can_be_run_again(cx: &mut TestAppCon
     assert!(gone);
 }
 
+/// A hub that stops cleanly says first that it stopped the setup, so only a crash leaves it for the next hub.
+#[gpui_kit::test]
+fn a_setup_cut_off_by_the_hub_crashing_shows_as_failed_after_it_comes_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    commit_settings(&stack, "[scripts]\nsetup = \"sleep 60\"\n");
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let pane = ui.pane().unwrap();
+    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
+
+    stack.crash_hub();
+
+    ui.wait("the new hub to say setup didn't finish", |ui| {
+        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace.setup, SetupStatus::Failed { code: None }))
+    });
+}
+
 #[gpui_kit::test]
 fn setup_can_be_stopped_from_the_app(cx: &mut TestAppContext) {
     let stack = Stack::new();

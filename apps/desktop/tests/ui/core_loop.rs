@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use gpui_kit::component::Theme;
-use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{SessionStatus, WorkspaceId, WorkspaceStatus};
@@ -35,21 +34,10 @@ fn says_which_build_is_running(cx: &mut TestAppContext) {
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     // Review the diff.
-    ui.click("toggle-diff");
-    let pane = ui.pane().unwrap();
-    ui.wait("the diff panel", |ui| ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
-    let diff = ui.cx.read_entity(&pane, |p, _| p.diff.clone()).unwrap();
-    ui.wait("the diff to load", |ui| ui.cx.read_entity(&diff, |d, _| d.state.is_some()));
+    let diff = ui.open_diff();
 
     // Comment on a line. Enter saves it, and the hub keeps it.
-    ui.cx
-        .update_window(ui.handle, |_, window, cx| {
-            diff.update(cx, |d, cx| {
-                d.start_comment(DiffLinePosition::new("a.txt", DiffSide::Modified, 2), window, cx);
-            });
-        })
-        .unwrap();
-    ui.frame();
+    ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why this word?");
     ui.press("enter");
     ui.wait("the comment to be saved", |ui| ui.cx.read_entity(&diff, |d, _| d.comments.len() == 1));
