@@ -1,13 +1,14 @@
 //! How a workspace looks: its header, tabs, composer and pickers.
 
+use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Window, div, px,
+    Anchor, AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
+    StatefulInteractiveElement, Styled, Window, div, px, relative,
 };
 use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
@@ -27,6 +28,11 @@ pub(super) fn model_label(model: Option<&str>) -> String {
     MODELS.iter().find(|(id, _)| *id == model).map_or(model, |(_, label)| label).to_string()
 }
 
+/// Every tab is the same width, so the row doesn't shift when a chat gets its title.
+const TAB_WIDTH: Pixels = px(200.);
+/// Each tab's, so a tab's close button shows only while the pointer is over that tab.
+const TAB_GROUP: &str = "chat-tab";
+
 fn chat_title(session: &Session, number: usize) -> String {
     session.title.clone().unwrap_or_else(|| format!("Chat {number}"))
 }
@@ -39,48 +45,46 @@ impl WorkspacePane {
         let mark = crate::sidebar::signal(Some(session.status), unread);
         let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
-        let tab = h_flex()
+        let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
+            .ghost()
+            .xsmall()
+            .icon(IconName::Close)
+            .tooltip("Close chat")
+            .on_click(cx.listener(move |t, _, window, cx| {
+                // The tab under it would take the click too, and show the chat that's closing.
+                cx.stop_propagation();
+                t.close_chat(to_close.clone(), window, cx);
+            }));
+        let tab = div()
             .id(ElementId::Name(format!("tab-{}", session.id).into()))
+            .group(TAB_GROUP)
+            .relative()
             .flex_none()
-            .max_w(px(240.))
-            .gap_0p5()
+            .w(TAB_WIDTH)
+            .h_full()
             .child(
-                Button::new(ElementId::Name(format!("chat-{}", session.id).into()))
-                    .ghost()
-                    .small()
-                    .flex_1()
-                    .min_w_0()
+                Tab::new(ElementId::Name(format!("chat-{}", session.id).into()))
                     .selected(selected)
+                    .accessibility_label(title.clone())
+                    .size_full()
+                    .justify_start()
+                    .gap_2()
+                    .pl_3()
+                    .pr_1p5()
+                    .text_sm()
+                    .line_height(relative(1.25))
+                    // A reply that hasn't been read stands out as the selected chat's title does.
+                    .when(!selected && !unread, |d| d.text_color(muted))
+                    .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .gap_1p5()
-                            .text_sm()
-                            // A reply that hasn't been read stands out as the selected chat's title does.
-                            .when(!selected && !unread, |d| d.text_color(muted))
-                            .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
-                            .child(look::mark(mark, work, look::Size::Inline, cx))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(title),
-                            ),
-                    ),
+                    .child(look::mark(mark, work, look::Size::Inline, cx))
+                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
+                    // Hidden rather than left out, so the title doesn't move when it shows.
+                    .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .child(
-                Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
-                    .ghost()
-                    .xsmall()
-                    .icon(IconName::Close)
-                    .tooltip("Close chat")
-                    .when(!selected, Styled::invisible)
-                    .on_click(cx.listener(move |t, _, window, cx| t.close_chat(to_close.clone(), window, cx))),
-            );
+            .when(selected, |d| {
+                d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
+            });
         let marking = if unread { Some(Mark::Read) } else { (session.reply_seq > 0).then_some(Mark::Unread) };
         let Some(marking) = marking else { return tab.into_any_element() };
         let (this, session) = (cx.weak_entity(), session.clone());
@@ -95,8 +99,7 @@ impl WorkspacePane {
 
     /// One tab for each open chat, then a way to start another, and any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let border = theme.border;
+        let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
         let tabs: Vec<AnyElement> = numbered
             .iter()
@@ -109,43 +112,48 @@ impl WorkspacePane {
             .map(|(index, s)| (s.id.clone(), chat_title(s, index + 1)))
             .collect();
         let this = cx.weak_entity();
-        h_flex()
-            .id("chat-tabs")
+        div()
+            .relative()
             .flex_none()
             .w_full()
             .h(px(40.))
-            .items_center()
-            .px_3()
-            .gap_1()
-            .border_b_1()
-            .border_color(border)
-            .overflow_x_scroll()
-            .children(tabs)
+            // The bar's bottom edge, drawn under the tabs rather than as a border, so the line under the chat showing
+            // can cover it. GPUI draws a border over what's inside it.
+            .child(div().absolute().left_0().right_0().bottom_0().h(px(1.)).bg(border))
             .child(
-                Button::new("new-chat")
-                    .ghost()
-                    .xsmall()
-                    .icon(IconName::Plus)
-                    .tooltip("New chat")
-                    .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
+                h_flex()
+                    .size_full()
+                    .pl_1()
+                    .pr_3()
+                    .gap_1()
+                    .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
+                    .child(
+                        Button::new("new-chat")
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Plus)
+                            .tooltip("New chat")
+                            .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
+                    )
+                    .when(!closed.is_empty(), |d| {
+                        d.child(
+                            Button::new("closed-chats")
+                                .ghost()
+                                .xsmall()
+                                .label(format!("Closed ({})", closed.len()))
+                                .dropdown_menu(move |mut menu, _, _| {
+                                    for (id, title) in &closed {
+                                        let (this, id) = (this.clone(), id.clone());
+                                        menu =
+                                            menu.item(PopupMenuItem::new(title.clone()).on_click(move |_, _, cx| {
+                                                let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
+                                            }));
+                                    }
+                                    menu
+                                }),
+                        )
+                    }),
             )
-            .when(!closed.is_empty(), |d| {
-                d.child(
-                    Button::new("closed-chats")
-                        .ghost()
-                        .xsmall()
-                        .label(format!("Closed ({})", closed.len()))
-                        .dropdown_menu(move |mut menu, _, _| {
-                            for (id, title) in &closed {
-                                let (this, id) = (this.clone(), id.clone());
-                                menu = menu.item(PopupMenuItem::new(title.clone()).on_click(move |_, _, cx| {
-                                    let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
-                                }));
-                            }
-                            menu
-                        }),
-                )
-            })
     }
 
     /// The model and approval mode of the chat showing.

@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
-use protocol::model::SessionStatus;
+use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Stack, Ui};
 
@@ -118,7 +118,7 @@ fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppCo
     ui.wait_idle_with("the answer", |text| text.contains("keep this"));
 
     // Closing the only chat leaves a new, empty one rather than nothing.
-    ui.click(SharedString::from(format!("close-chat-{first}")));
+    ui.close_from_tab(&first);
     ui.wait("a replacement", |ui| ui.open_chats().len() == 1 && ui.open_chats()[0] != first);
     let replacement = ui.open_chats()[0].clone();
     ui.wait("it to show", |ui| ui.active_chat() == replacement && ui.transcript().is_some());
@@ -148,17 +148,46 @@ fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
     ui.press("enter");
     ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
 
-    let close = format!("close-chat-{working}");
-    ui.click(SharedString::from(close.clone()));
+    ui.close_from_tab(&working);
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Cancel");
     ui.frame();
     assert_eq!(ui.open_chats().len(), 2, "cancelling leaves it alone");
     assert_eq!(ui.session_status(), Some(SessionStatus::Running));
 
-    ui.click(SharedString::from(close));
+    ui.close_from_tab(&working);
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Close chat");
     ui.wait("it to close", |ui| ui.open_chats() == [first.clone()]);
     ui.wait("the other chat to show", |ui| ui.active_chat() == first);
+}
+
+#[gpui_kit::test]
+fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    // Working, so closing it asks first, which holds it open long enough to see which chat is showing.
+    let working = ui.active_chat();
+    ui.input("slow:200:still going");
+    ui.press("enter");
+    ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
+    let showing = ui.new_chat();
+    let close = |chat: &SessionId| SharedString::from(format!("close-chat-{chat}"));
+    // The new tab came where the new chat button was, under the pointer.
+    assert!(ui.visible(close(&showing)), "the pointer is over the new tab");
+    ui.hover("send");
+    assert!(!ui.visible(close(&working)) && !ui.visible(close(&showing)), "not even the chat showing has one");
+    ui.hover(SharedString::from(format!("chat-{working}")));
+    assert!(ui.visible(close(&working)), "the pointer is over its tab");
+    assert!(!ui.visible(close(&showing)), "only the tab under the pointer has one");
+
+    ui.click(close(&working));
+    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    assert_eq!(ui.active_chat(), showing, "pressing a tab's close button doesn't also show its chat");
+    ui.cx.simulate_prompt_answer("Close chat");
+    ui.wait("it to close", |ui| ui.open_chats() == [showing.clone()]);
+    assert_eq!(ui.active_chat(), showing);
 }

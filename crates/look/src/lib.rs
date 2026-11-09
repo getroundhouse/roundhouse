@@ -14,5 +14,5 @@ mod theme;
 pub use clock::hold_still;
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, Work, brand, mark};
-pub use palette::faint;
+pub use palette::{faint, tab_underline};
 pub use theme::apply;

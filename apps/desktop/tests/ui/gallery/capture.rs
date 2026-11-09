@@ -108,6 +108,7 @@ impl Driver {
                 let id = gpui_kit::SharedString::from(*id);
                 self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
             }
+            Step::HoverTab(position) => self.hover_tab(*position),
             Step::Type(text) => {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
@@ -133,6 +134,18 @@ impl Driver {
                 });
             }
         }
+    }
+
+    fn hover_tab(&mut self, position: usize) {
+        self.frame();
+        let view = self.view.clone();
+        let chat = self.cx.update(|cx| {
+            let pane = selected_pane(view.read(cx)).unwrap();
+            let open: Vec<_> = pane.read(cx).sessions.iter().filter(|s| s.closed_at_ms.is_none()).collect();
+            open[position].id.clone()
+        });
+        let id = gpui_kit::SharedString::from(format!("chat-{chat}"));
+        self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
     }
 
     fn update_pane(&mut self, change: impl FnOnce(&mut WorkspacePane, &mut gpui_kit::Context<WorkspacePane>)) {

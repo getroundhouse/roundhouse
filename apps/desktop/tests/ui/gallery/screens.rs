@@ -28,6 +28,8 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button by its ID, such as one that opens a menu.
     Click(&'static str),
+    /// Moves the pointer over the tab of the open chat at this position in the workspace showing, and leaves it there.
+    HoverTab(usize),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
     /// Presses Finish now in the update's card, and waits for what it asks.
@@ -61,6 +63,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(conversation),
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
+    },
+    Screen {
+        name: "chat-tabs",
+        spec: "chats.md",
+        world: Some(chat_tabs),
+        steps: &[Step::Select(FOCUS), Step::HoverTab(1)],
     },
     Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
@@ -187,6 +195,27 @@ fn unread() -> World {
     );
     let other_chat = world.chat(&focus, SessionStatus::Idle, reply);
     world.unread(&other_chat);
+    converse(&mut world, &focus);
+    world
+}
+
+/// Three chats in the screen's own workspace, the conversation showing, all of them read.
+fn chat_tabs() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    // Older than the conversation, so the app opens the workspace on that, as it opens the chat last worked in.
+    for (prompt, reply) in [
+        (
+            "Which colours does GitHub use for a PR's state?",
+            "Green for open, purple for merged, red for closed, and grey for a draft.",
+        ),
+        (
+            "Why does the hub log a warning on every reconnect?",
+            "It logs one each time a client goes without saying goodbye.",
+        ),
+    ] {
+        world.chat(&focus, SessionStatus::Idle, chats::answered(prompt, reply));
+    }
     converse(&mut world, &focus);
     world
 }

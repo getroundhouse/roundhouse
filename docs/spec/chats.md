@@ -31,6 +31,16 @@
 
 ![The approval mode's menu](screens/mode-picker.png)
 
+## Tabs
+
+- **The chat showing is underlined, not filled.** A 2px pale copper line runs under its tab, over the bar's bottom edge, and its title is in the foreground colour while the others' are muted. A fill would make the tab one more raised thing on the pane.
+- **A tab's close button shows only while the pointer is over the tab,** the one showing included, so the row reads as a row of titles. `Cmd-W` closes the chat showing without it.
+- **Every tab is 200px wide,** with its mark and as much of its title as fits, so the row doesn't shift when a chat gets its title. *Unconfirmed.*
+
+**Three chats, with the pointer over one that isn't showing.** *Unconfirmed.*
+
+![Chat tabs](screens/chat-tabs.png)
+
 ## Closing chats, and keys
 
 - **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. *Unconfirmed.*
