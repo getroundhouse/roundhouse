@@ -176,6 +176,20 @@ const MIGRATIONS: &[&str] = &[
     CREATE UNIQUE INDEX diff_comments_by_request ON diff_comments (client_request_id)
         WHERE client_request_id IS NOT NULL;
 ",
+    // Each session's newest reply, and how far it's been read. A session from before this has no reply, so nothing
+    // turns unread by updating. Both are columns a Session record shows, so the trigger names them.
+    r"
+    ALTER TABLE sessions ADD COLUMN reply_seq INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN read_seq INTEGER NOT NULL DEFAULT 0;
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

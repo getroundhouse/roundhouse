@@ -132,6 +132,8 @@ impl World {
             updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq).unwrap(),
             title,
             closed_at_ms: None,
+            reply_seq: 0,
+            read_seq: 0,
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);

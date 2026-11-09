@@ -181,6 +181,18 @@ pub enum ClientRequest {
     SessionReopen {
         id: SessionId,
     },
+    /// Marks the session read through `through_seq`, so only a reply after it is unread. It never reaches past the
+    /// newest event, so a reply still to come stays unread. Marking read what already is changes nothing, so sending
+    /// it again does nothing more.
+    SessionMarkRead {
+        id: SessionId,
+        through_seq: Seq,
+    },
+    /// Marks the newest reply unread again. With no reply, or one that's already unread, it changes nothing, so sending
+    /// it again does nothing more.
+    SessionMarkUnread {
+        id: SessionId,
+    },
     /// Any request this build doesn't know, from a client newer than it. A hub answers with
     /// [`super::ErrorCode::Unsupported`] and carries on.
     #[serde(other)]

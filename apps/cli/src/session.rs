@@ -29,8 +29,9 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
             let workspace = find_workspace(client, &workspace)?;
             for session in client.session_list(&workspace.id)? {
                 let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
+                let unread = if session.unread() { "  unread" } else { "" };
                 println!(
-                    "{}  {:?}{closed}  {} events  model={} mode={}  {}",
+                    "{}  {:?}{closed}{unread}  {} events  model={} mode={}  {}",
                     short(session.id.as_str()),
                     session.status,
                     session.last_seq,

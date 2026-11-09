@@ -18,6 +18,7 @@ mod comments;
 mod error;
 mod events;
 mod made;
+mod reading;
 mod records;
 mod repos;
 mod schema;
@@ -29,8 +30,9 @@ mod workspaces;
 use schema::{migrate, open_connection};
 
 pub use error::{BackupError, StoreError};
-pub use events::cancelled_approval;
+pub use events::{StatusChange, cancelled_approval};
 pub use made::{Made, MadeByRequest};
+pub use reading::Reading;
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.

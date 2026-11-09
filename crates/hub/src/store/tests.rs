@@ -11,7 +11,8 @@ fn open_in(dir: &Path) -> Store {
     Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap()
 }
 
-fn store_with_session(dir: &Path) -> Store {
+/// A repository with one workspace, `w`, and one idle session in it, `s`.
+pub(super) fn store_with_session(dir: &Path) -> Store {
     let store = open_in(dir);
     let now = now_ms();
     let repo =
@@ -49,6 +50,8 @@ fn store_with_session(dir: &Path) -> Store {
                     permission_mode: None,
                     title: None,
                     closed_at_ms: None,
+                    reply_seq: 0,
+                    read_seq: 0,
                     rev: Rev::default(),
                     status: SessionStatus::Idle,
                     last_seq: 0,
@@ -64,7 +67,7 @@ fn store_with_session(dir: &Path) -> Store {
     store
 }
 
-fn notice(text: &str) -> EventBody {
+pub(super) fn notice(text: &str) -> EventBody {
     EventBody::Notice { level: NoticeLevel::Info, message: text.into() }
 }
 
@@ -84,7 +87,7 @@ fn sequence_numbers_start_at_one_with_no_gaps() {
 fn a_status_change_commits_with_its_event() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
+    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running.into())).unwrap();
     assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
     store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
     assert_eq!(store.get_session(&"s".into()).unwrap().session.status, SessionStatus::Running);
@@ -224,7 +227,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     let session = |store: &Store| store.get_session(&"s".into()).unwrap().session.rev;
     let workspace = |store: &Store| store.get_workspace(&"w".into()).unwrap().rev;
 
-    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running)).unwrap();
+    store.append(&"s".into(), None, &notice("x"), None, None, Some(SessionStatus::Running.into())).unwrap();
     let status_changed = session(&store);
     newer(status_changed, "a change of status");
     store.append(&"s".into(), None, &notice("y"), None, None, None).unwrap();

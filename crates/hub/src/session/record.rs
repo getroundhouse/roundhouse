@@ -5,9 +5,10 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Session};
 use tracing::{error, warn};
 
-use super::status::{approvals_after, next_status};
+use super::status::{approvals_after, ends_turn, next_status};
 use super::{LiveItem, LiveSession, Origin, publish};
 use crate::hub::Hub;
+use crate::store::StatusChange;
 
 /// The first line of a prompt, cut at a word if it's long.
 pub(crate) fn title_from_prompt(prompt: &str) -> Option<String> {
@@ -34,11 +35,12 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let (next, new_status) = {
+        let (next, change) = {
             let state = self.state.lock();
             if origin.speaks_for_session() {
                 let next = next_status(state.status, &body, approvals_after(&state.pending_approvals, &body));
-                (next, (next != state.status).then_some(next))
+                let ends_turn = ends_turn(state.status, next);
+                (next, (next != state.status).then_some(StatusChange { status: next, ends_turn }))
             } else {
                 (state.status, None)
             }
@@ -46,9 +48,7 @@ impl LiveSession {
         let id = self.id.clone();
         let for_store = body.clone();
         let appended = hub
-            .blocking(move |store| {
-                store.append(&id, run, &for_store, raw.as_deref(), client_msg_id.as_ref(), new_status)
-            })
+            .blocking(move |store| store.append(&id, run, &for_store, raw.as_deref(), client_msg_id.as_ref(), change))
             .await?;
         if appended.duplicate {
             return Ok((appended.event, true));
@@ -81,7 +81,7 @@ impl LiveSession {
             state.status = next;
             publish(&mut state, LiveItem::Appended(seq));
         }
-        if new_status.is_some()
+        if change.is_some()
             && let Err(e) = self.announce(&hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");

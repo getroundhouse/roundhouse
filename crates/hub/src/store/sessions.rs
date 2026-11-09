@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, Row, params};
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq";
 
 pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     Ok(StoredSession {
@@ -23,7 +23,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             updated_at_ms: row.get(8)?,
             title: row.get(11)?,
             closed_at_ms: row.get(12)?,
-            rev: rev_of(row, 13)?,
+            reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
+            read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
+            rev: rev_of(row, 15)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -45,7 +47,7 @@ impl Store {
         conn.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -61,6 +63,8 @@ impl Store {
                 stored.agent_opened,
                 session.title,
                 session.closed_at_ms,
+                session.reply_seq.cast_signed(),
+                session.read_seq.cast_signed(),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

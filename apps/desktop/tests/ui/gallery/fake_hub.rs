@@ -58,6 +58,7 @@ fn serve_connection(world: &World, stream: UnixStream) {
 /// The reply, and any frames that go after it.
 type Answer = Result<(ClientResponse, Vec<HubFrame>), ApiError>;
 
+#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 fn answer(world: &World, request: ClientRequest) -> Answer {
     use ClientRequest as R;
     use ClientResponse as C;
@@ -115,7 +116,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCancel { .. }
         | R::SessionConfigure { .. }
         | R::SessionClose { .. }
-        | R::SessionReopen { .. } => Err(read_only("change anything")),
+        | R::SessionReopen { .. }
+        | R::SessionMarkRead { .. }
+        | R::SessionMarkUnread { .. } => Err(read_only("change anything")),
         R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
     }
 }
