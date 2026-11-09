@@ -17,7 +17,7 @@ use gpui_kit::{
 };
 use mobile::{MemoryVault, MobileApp, Services, Vault as _};
 use parking_lot::Mutex;
-use protocol::event::{ContentBlock, EventBody};
+use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use tempfile::TempDir;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -231,15 +231,26 @@ impl<'a> Phone<'a> {
         approvals.iter().map(|event| event.seq).max()
     }
 
+    pub(crate) fn transcript_shown(&self) -> bool {
+        self.cx.read_entity(&self.app, MobileApp::transcript).is_some()
+    }
+
+    pub(crate) fn pairing_failed(&self) -> bool {
+        self.cx.read_entity(&self.app, |app, _| app.pairing_failed())
+    }
+
+    pub(crate) fn confirming_pairing(&self) -> bool {
+        self.cx.read_entity(&self.app, |app, _| app.confirming_pairing())
+    }
+
+    fn events(&self) -> Vec<SessionEvent> {
+        let Some(transcript) = self.cx.read_entity(&self.app, MobileApp::transcript) else { return Vec::new() };
+        self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect())
+    }
+
     pub(crate) fn assistant_text(&self) -> String {
-        let Some(transcript) = self.cx.read_entity(&self.app, MobileApp::transcript) else {
-            return String::new();
-        };
-        let events = self
-            .cx
-            .read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect::<Vec<_>>());
         let mut text = String::new();
-        for event in events {
+        for event in self.events() {
             if let EventBody::Assistant { blocks, .. } = &event.body {
                 for block in blocks {
                     if let ContentBlock::Text { text: t } = block {
@@ -249,5 +260,20 @@ impl<'a> Phone<'a> {
             }
         }
         text
+    }
+
+    /// What the agent was told its tools gave back, such as the answer to its question.
+    pub(crate) fn told_to_agent(&self) -> String {
+        let mut told = String::new();
+        for event in self.events() {
+            if let EventBody::AgentUser { blocks, .. } = &event.body {
+                for block in blocks {
+                    if let ContentBlock::ToolResult { text, .. } = block {
+                        told.push_str(text);
+                    }
+                }
+            }
+        }
+        told
     }
 }

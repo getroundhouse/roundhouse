@@ -6,10 +6,10 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, ElementId, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, px,
+    AnyElement, AppContext as _, Context, ElementId, EntityId, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
-use protocol::model::{AgentKind, Repo, RepoId};
+use protocol::model::{AgentKind, Repo, RepoId, Session, Workspace};
 
 use super::{MobileApp, Screen};
 use crate::chat::ChatView;
@@ -72,17 +72,18 @@ impl MobileApp {
         div().border_b_1().border_color(cx.theme().border).child(button).into_any_element()
     }
 
-    /// Makes a workspace with the hub's own choice of name and branch, as the desktop app does, and opens its chat.
+    /// Makes a workspace with the hub's own choice of name and branch, as the desktop app does, and opens its chat
+    /// if this screen is still showing. Otherwise the workspace waits in the list.
     fn create_workspace(&mut self, repo_id: RepoId, window: &mut Window, cx: &mut Context<Self>) {
         if self.creating_in.is_some() {
             return;
         }
-        let Some(client) = self.link().and_then(|link| link.read(cx).client()) else { return };
+        let Some(link) = self.link() else { return };
+        let (asked_of, Some(client)) = (link.entity_id(), link.read(cx).client()) else { return };
         self.creating_in = Some(repo_id.clone());
         self.error = None;
         cx.notify();
-        self.working = Some(cx.spawn_in(window, async move |this, cx| {
-            let for_chat = client.clone();
+        self.creating = Some(cx.spawn_in(window, async move |this, cx| {
             let created = cx
                 .background_spawn(async move {
                     let workspace =
@@ -92,24 +93,35 @@ impl MobileApp {
                     Ok::<_, ClientError>((workspace, session))
                 })
                 .await;
-            let _ = this.update_in(cx, |app, window, cx| {
-                app.creating_in = None;
-                app.working = None;
-                match created {
-                    Ok((workspace, session)) => {
-                        if let Some(link) = app.link() {
-                            link.read(cx).take_reply(Record::Workspace(workspace.clone()));
-                            link.read(cx).take_reply(Record::Session(session.clone()));
-                        }
-                        let chat = cx.new(|cx| ChatView::new(workspace, &[session], for_chat, window, cx));
-                        app.show_chat(chat, cx);
-                    }
-                    Err(e) => {
-                        app.error = Some(format!("Couldn't create the workspace: {e}").into());
-                        cx.notify();
-                    }
-                }
-            });
+            let _ = this.update_in(cx, |app, window, cx| app.created(asked_of, created, window, cx));
         }));
+    }
+
+    fn created(
+        &mut self,
+        asked_of: EntityId,
+        created: Result<(Workspace, Session), ClientError>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.stop_creating();
+        cx.notify();
+        // Forgetting or replacing the hub stops this, but a result can arrive between the two.
+        let Some(link) = self.link().filter(|link| link.entity_id() == asked_of).cloned() else { return };
+        let (workspace, session) = match created {
+            Ok(created) => created,
+            Err(e) => {
+                self.error = Some(format!("Couldn't create the workspace: {e}").into());
+                return;
+            }
+        };
+        link.read(cx).take_reply(Record::Workspace(workspace.clone()));
+        link.read(cx).take_reply(Record::Session(session.clone()));
+        // The connection it was made on may have been replaced since.
+        let client = link.read(cx).client();
+        if let (Screen::NewWorkspace, Some(client)) = (&self.screen, client) {
+            let chat = cx.new(|cx| ChatView::new(workspace, &[session], client, window, cx));
+            self.show_chat(chat, cx);
+        }
     }
 }

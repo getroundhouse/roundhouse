@@ -6,7 +6,7 @@ mod pairing;
 mod workspaces;
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use client_core::{Client, ClientError};
 use gpui_kit::component::input::InputState;
@@ -85,6 +85,9 @@ enum Screen {
 /// Where pairing has got to.
 enum Pairing {
     Idle,
+    /// A link to another hub, waiting for a yes, since pairing with it replaces the hub this phone has. Any app can
+    /// open a link, so one arriving isn't enough.
+    Confirm(PairingLink),
     Busy(SharedString),
     Failed(SharedString),
 }
@@ -103,13 +106,15 @@ pub struct MobileApp {
     screen: Screen,
     pairing: Pairing,
     link_input: Entity<InputState>,
-    /// The repository a new workspace is being made in.
+    /// The repository a new workspace is being made in, and the task making it.
     creating_in: Option<RepoId>,
+    creating: Option<Task<()>>,
+    pairing_task: Option<Task<()>>,
     error: Option<SharedString>,
-    left_at: Option<Instant>,
+    /// By the wall clock, since an `Instant` on Apple's platforms stops while the phone sleeps.
+    left_at: Option<SystemTime>,
     _activation: Subscription,
     _links: Task<()>,
-    working: Option<Task<()>>,
 }
 
 impl MobileApp {
@@ -137,11 +142,12 @@ impl MobileApp {
             pairing: Pairing::Idle,
             link_input,
             creating_in: None,
+            creating: None,
+            pairing_task: None,
             error: None,
             left_at: None,
             _activation: activation,
             _links: opened,
-            working: None,
         };
         if let Some(hub) = app.services.vault.load() {
             app.follow(hub, cx);
@@ -164,14 +170,23 @@ impl MobileApp {
             }),
         ];
         self.followed = Some(Followed { link, hub, _events: events });
+        self.stop_creating();
         self.screen = Screen::Workspaces;
         cx.notify();
+    }
+
+    /// A workspace being made belongs to the hub it was asked of, so it stops when that hub goes.
+    fn stop_creating(&mut self) {
+        self.creating = None;
+        self.creating_in = None;
     }
 
     /// Stops following the hub and forgets it, so the phone can pair again.
     fn forget(&mut self, cx: &mut Context<Self>) {
         self.services.vault.forget();
         self.followed = None;
+        self.stop_creating();
+        self.pairing_task = None;
         self.pairing = Pairing::Idle;
         self.screen = Screen::Pairing;
         cx.notify();
@@ -179,10 +194,12 @@ impl MobileApp {
 
     fn activation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !window.is_window_active() {
-            self.left_at = Some(Instant::now());
+            self.left_at = Some(SystemTime::now());
             return;
         }
-        let away = self.left_at.take().is_some_and(|left| left.elapsed() >= AWAY_BEFORE_RECONNECT);
+        // A clock set back counts as away, since how long isn't known.
+        let away =
+            self.left_at.take().is_some_and(|left| !left.elapsed().is_ok_and(|away| away < AWAY_BEFORE_RECONNECT));
         if away && let Some(link) = self.link() {
             link.update(cx, HubLink::connect_now);
         }
@@ -220,7 +237,10 @@ impl MobileApp {
     }
 
     fn show_chat(&mut self, chat: Entity<ChatView>, cx: &mut Context<Self>) {
-        let events = cx.subscribe(&chat, |app, _, ChatEvent::Back, cx| app.show(Screen::Workspaces, cx));
+        let events = cx.subscribe(&chat, |app, _, ChatEvent::Back, cx| {
+            let home = if app.followed.is_some() { Screen::Workspaces } else { Screen::Pairing };
+            app.show(home, cx);
+        });
         self.show(Screen::Chat { chat, _events: events }, cx);
     }
 

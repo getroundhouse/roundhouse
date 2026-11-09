@@ -60,7 +60,9 @@ impl ChatView {
         self.client = client.clone();
         if let Some(shown) = &self.shown {
             shown.transcript.update(cx, |transcript, _| transcript.reconnect(client));
-        } else if self.ensuring.is_none() {
+        } else {
+            // Asked again on the new connection, since one asked on the old would fail with it.
+            self.error = None;
             self.ensure_chat(cx);
         }
     }
@@ -106,7 +108,10 @@ impl ChatView {
         if text.is_empty() {
             return;
         }
-        if transcript.update(cx, |transcript, cx| transcript.send_prompt(text, cx)) {
+        // While the agent waits on a question, what's typed is the answer to it.
+        let taken = transcript
+            .update(cx, |transcript, cx| transcript.answer_with_text(&text, cx) || transcript.send_prompt(text, cx));
+        if taken {
             self.error = None;
             self.composer.update(cx, |composer, cx| composer.set_value("", window, cx));
         }

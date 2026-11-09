@@ -60,8 +60,10 @@ mod device {
     use super::{Vault, VaultError};
     use client_core::RemoteHub;
 
-    /// The Keychain service the token is kept under. The account is the device ID the hub gave this phone.
+    /// Where in the Keychain the token is kept. There's one, so pairing again replaces it. Keychain items outlive
+    /// the app, so a fixed name also means a reinstall's next pairing replaces a token left from before.
     const SERVICE: &str = "hub-token";
+    const ACCOUNT: &str = "hub";
 
     /// The app's own data directory on the phone, and its Keychain.
     pub struct DeviceVault {
@@ -86,29 +88,26 @@ mod device {
     impl Vault for DeviceVault {
         fn load(&self) -> Option<RemoteHub> {
             let hub: RemoteHub = serde_json::from_slice(&std::fs::read(&self.file).ok()?).ok()?;
-            let token = String::from_utf8(get_generic_password(SERVICE, &hub.device_id).ok()?).ok()?;
+            let token = String::from_utf8(get_generic_password(SERVICE, ACCOUNT).ok()?).ok()?;
             Some(RemoteHub { token, ..hub })
         }
 
         fn save(&self, hub: &RemoteHub) -> Result<(), VaultError> {
-            if let Some(old) = self.load() {
-                let _ = delete_generic_password(SERVICE, &old.device_id);
-            }
+            // Gone first, since a new item's access can't be set on one that's already there.
+            let _ = delete_generic_password(SERVICE, ACCOUNT);
             let keychain = |e: security_framework::base::Error| VaultError::Keychain(e.to_string());
             // A token is this phone's alone, so it stays out of backups that could restore it onto another.
             let access =
                 SecAccessControl::create_with_protection(Some(ProtectionMode::AccessibleWhenUnlockedThisDeviceOnly), 0)
                     .map_err(keychain)?;
-            let mut options = PasswordOptions::new_generic_password(SERVICE, &hub.device_id);
+            let mut options = PasswordOptions::new_generic_password(SERVICE, ACCOUNT);
             options.set_access_control(access);
             set_generic_password_options(hub.token.as_bytes(), options).map_err(keychain)?;
             self.write(hub)
         }
 
         fn forget(&self) {
-            if let Some(hub) = self.load() {
-                let _ = delete_generic_password(SERVICE, &hub.device_id);
-            }
+            let _ = delete_generic_password(SERVICE, ACCOUNT);
             let _ = std::fs::remove_file(&self.file);
         }
     }

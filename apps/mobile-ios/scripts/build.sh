@@ -38,8 +38,11 @@ built="$app_dir/build/DerivedData/Build/Products/$config-iphoneos/roundhouse-ios
 rm -rf "$built"
 
 (cd "$app_dir/ios" && BUNDLE_ID="$BUNDLE_ID" xcodegen generate --quiet)
-# Each build's number has to be higher than the last one uploaded, and the count of commits always is.
-build_number="$(git -C "$repo" rev-list --count HEAD)"
+# Each build's number has to be higher than the last one uploaded. A commit count isn't, from a branch that has
+# more commits than main, so it's the time, in UTC, as year-month-day.hour-minute.
+# Each part is read as a number, so the time loses its leading zero.
+stamp="$(date -u +%Y%m%d.%H%M)"
+build_number="${stamp%%.*}.$((10#${stamp#*.}))"
 version="$(cargo metadata --format-version 1 --no-deps --manifest-path "$repo/Cargo.toml" \
   | jq -r '.packages[] | select(.name == "mobile-ios") | .version')"
 # Building for the phone itself, rather than any iOS device, is what lets Xcode add it to the profile.

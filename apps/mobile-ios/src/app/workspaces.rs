@@ -60,7 +60,10 @@ impl MobileApp {
             }
             Some(listing) => Self::list(&listing, ready, insets.safe_area.bottom, cx),
         };
-        v_flex().size_full().child(header).child(body).into_any_element()
+        // Such as the vault failing to keep the hub just paired with.
+        let error =
+            self.error.clone().map(|error| div().px_4().py_2().text_sm().text_color(cx.theme().danger).child(error));
+        v_flex().size_full().child(header).when_some(error, ParentElement::child).child(body).into_any_element()
     }
 
     fn list(listing: &Listing, ready: bool, bottom: gpui_kit::Pixels, cx: &mut Context<Self>) -> AnyElement {

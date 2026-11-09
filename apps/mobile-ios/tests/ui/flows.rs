@@ -17,7 +17,8 @@ fn opens_on_pairing_and_pairs_from_a_link_the_phone_opens(cx: &mut TestAppContex
     assert!(phone.has("pair"));
 
     phone.links.send("roundhouse://pair?not-a-real-link".into()).unwrap();
-    phone.wait("pairing to fail", |phone| phone.showing() == "pairing" && phone.vault.load().is_none());
+    phone.wait("pairing to fail", |phone| phone.pairing_failed());
+    assert!(phone.vault.load().is_none());
 
     // What the Camera app opens.
     let link = stack.pairing_link();
@@ -27,6 +28,28 @@ fn opens_on_pairing_and_pairs_from_a_link_the_phone_opens(cx: &mut TestAppContex
     let devices = stack.client().device_list().unwrap();
     assert_eq!(devices.iter().map(|d| d.id.to_string()).collect::<Vec<_>>(), [paired.device_id]);
     assert_eq!(devices[0].name, "iPhone");
+}
+
+#[gpui_kit::test]
+fn a_link_opened_while_paired_asks_before_replacing_the_hub(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut phone = Phone::open(cx, &stack, true);
+    phone.wait("the connection", |phone| phone.is_connected());
+    let first = phone.vault.load().unwrap().device_id;
+
+    // Any app can open a link, so one arriving changes nothing until it's confirmed.
+    phone.links.send(stack.pairing_link()).unwrap();
+    phone.wait("the question", |phone| phone.confirming_pairing());
+    assert_eq!(phone.showing(), "pairing");
+    phone.tap("keep-hub");
+    assert_eq!(phone.showing(), "workspaces");
+    assert_eq!(phone.vault.load().unwrap().device_id, first);
+
+    phone.links.send(stack.pairing_link()).unwrap();
+    phone.wait("the question", |phone| phone.confirming_pairing());
+    phone.tap("confirm-pair");
+    phone.wait("the new pairing", |phone| phone.vault.load().is_some_and(|hub| hub.device_id != first));
+    phone.wait("its workspaces", |phone| phone.showing() == "workspaces" && phone.is_connected());
 }
 
 #[gpui_kit::test]
@@ -91,6 +114,51 @@ fn answers_an_approval_in_the_chat(cx: &mut TestAppContext) {
 
     phone.wait("the turn to finish", |phone| phone.assistant_text().contains("finished"));
     assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\nchanged\n");
+}
+
+#[gpui_kit::test]
+fn typing_while_the_agent_asks_answers_its_question(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
+    let mut phone = Phone::open(cx, &stack, true);
+    let row = SharedString::from(format!("workspace-{}", workspace.id));
+    phone.wait("the workspace", |phone| phone.has(row.clone()));
+    phone.tap(row);
+    phone.wait("its chat", |phone| phone.has("composer"));
+    phone.type_into("composer", "ask:Which day?=Monday/Tuesday");
+    phone.tap("send");
+    phone.wait("the question", |phone| phone.open_approval().is_some());
+
+    phone.type_into("composer", "Friday, if that works");
+    phone.tap("send");
+
+    phone.wait("the typed answer", |phone| phone.told_to_agent().contains(r#""Which day?"=Friday, if that works"#));
+}
+
+#[gpui_kit::test]
+fn a_chat_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
+    drop(client);
+    let mut phone = Phone::open(cx, &stack, true);
+    let row = SharedString::from(format!("workspace-{}", workspace.id));
+    phone.wait("the workspace", |phone| phone.has(row.clone()));
+    phone.tap(row);
+    phone.wait("its chat", |phone| phone.has("composer") && phone.transcript_shown());
+
+    stack.stop_hub();
+    phone.wait("the connection to go", |phone| !phone.is_connected());
+    stack.start_hub();
+    phone.wait("the connection to come back", |phone| phone.is_connected());
+    phone.type_into("composer", "say:after the restart");
+    phone.tap("send");
+
+    phone.wait("the agent's answer", |phone| phone.assistant_text().contains("after the restart"));
+    assert_eq!(phone.showing(), "chat");
 }
 
 #[gpui_kit::test]

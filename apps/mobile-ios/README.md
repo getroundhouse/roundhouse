@@ -14,7 +14,7 @@ The UI tests tap what someone would tap. The app pairs and connects as it does o
 
 ## Running it on a phone
 
-It needs Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), the iOS target (`rustup target add aarch64-apple-ios`), and a phone with Developer Mode on, connected to this Mac by cable or on its network.
+It needs Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), `jq`, the iOS target (`rustup target add aarch64-apple-ios`), and a phone with Developer Mode on, connected to this Mac by cable or on its network.
 
 ```sh
 TEAM_ID=<team> BUNDLE_ID=<id> DEVICE=<udid> apps/mobile-ios/scripts/build.sh
