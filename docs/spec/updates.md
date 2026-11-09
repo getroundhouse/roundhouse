@@ -4,7 +4,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 
 - **Updating never stops running agents unless you choose to.** An update looks like this:
   1. The app downloads an update in the background and installs it when you quit, without relaunching. Everything shows as before, and running agents keep going on the old hub. *Unconfirmed:* `Restart to update` installs it sooner, and opens the app again.
-  2. If nothing is running and no other client is connected, the app replaces the hub right away. Otherwise it waits until the next launch. *Not built:* the app only replaces a hub when it connects.
+  2. If nothing is running and no other client is connected, the app replaces the hub right away. Otherwise it waits until that's true, then replaces it once its window isn't in front, so it doesn't interrupt anyone, or at the next launch. It looks again whenever an agent finishes, when you go to another app, and every half a minute. *Unconfirmed:* waiting while the app stays open, rather than only until the next launch.
   3. Only a real protocol break shows a screen, with how many agents are running and a way to restart the hub.
 - **You can restart an older hub yourself rather than wait.** While the hub is older than the app and wasn't started by hand, the app offers to restart it, and says how many agents and setup scripts that would stop. Each stopped agent picks up its conversation at its next prompt. *Unconfirmed:* `Finish now`, at the bottom of the sidebar, does it, as "The build line" below shows.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
@@ -20,7 +20,7 @@ The bottom of the sidebar shows which build is running, faint, and only brings u
 
 ![Update ready](screens/update-ready.png)
 
-**The app has updated, and agents are still running on the previous version.** The card says "Finishing update" and how many agents it's waiting on, or "Waiting on other work" when what's left is a setup script or something else connected to it, such as the command line, and the app restarts the hub once that's done. `Finish now` is a quiet button, since it stops them: it asks "Finish the update now?" and says what it stops, such as "This stops the 1 agent still running on the previous version. The agent picks up its conversation at its next prompt." `Not now` and Escape leave it running. *Not built:* the app only restarts the hub by itself when it connects.
+**The app has updated, and agents are still running on the previous version.** The card says "Finishing update" and how many agents it's waiting on, or "Waiting on other work" when what's left is a setup script or something else connected to it, such as the command line, and the app restarts the hub once that's done and its window isn't in front. `Finish now` is a quiet button, since it stops them: it asks "Finish the update now?" and says what it stops, such as "This stops the 1 agent still running on the previous version. The agent picks up its conversation at its next prompt." `Not now` and Escape leave it running.
 
 ![Finishing the update](screens/finishing-update.png)
 

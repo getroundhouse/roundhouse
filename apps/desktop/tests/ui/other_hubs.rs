@@ -6,7 +6,7 @@
 use desktop::app::{BuildLine, Connection};
 use gpui_kit::TestAppContext;
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, StandInHub, Ui};
 
 #[gpui_kit::test]
 fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppContext) {
@@ -45,9 +45,86 @@ fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
     stack.hub.build_number = Some(2);
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
 
-    let _ui = Ui::open(cx, &stack);
+    let mut ui = Ui::open(cx, &stack);
+    // Nor when the app looks again, with the window in the back.
+    ui.send_to_back();
+    ui.wait_out_a_look();
 
     assert!(older.0.try_wait().unwrap().is_none());
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+}
+
+/// An agent finishing is usually what lets an update finish, and the app hears of that at once.
+#[gpui_kit::test]
+fn an_update_finishes_by_itself_once_the_agents_on_the_older_hub_are_done(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
+    let mut ui = Ui::open(cx, &stack);
+    ui.send_to_back();
+
+    older.set_running(0);
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+    assert!(stack.client().hub_status().unwrap().on_demand, "the app started this one because it needed it");
+}
+
+/// The records don't show another client leaving, so the app looks every so often.
+#[gpui_kit::test]
+fn an_update_finishes_by_itself_once_nothing_else_is_using_the_older_hub(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
+    let mut ui = Ui::open(cx, &stack);
+    ui.send_to_back();
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { agents: 0, .. }));
+
+    older.set_clients(1);
+    ui.wait_out_a_look();
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+}
+
+/// Finishing swaps what's on screen for a moment, so it waits for someone to go to another app.
+#[gpui_kit::test]
+fn an_update_waits_to_finish_by_itself_until_the_window_is_not_in_front(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
+    let mut ui = Ui::open(cx, &stack);
+    ui.bring_to_front();
+    older.set_clients(1);
+
+    ui.wait_out_a_look();
+
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+    ui.send_to_back();
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+}
+
+#[gpui_kit::test]
+fn an_update_waits_to_finish_by_itself_while_asking_whether_to_finish_it_now(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
+    let mut ui = Ui::open(cx, &stack);
+    ui.send_to_back();
+    ask_to_finish(&mut ui);
+    older.set_clients(1);
+
+    ui.wait_out_a_look();
+
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+    // Once it isn't asking, the next look finishes it.
+    ui.cx.simulate_prompt_answer("Not now");
+    ui.wait_out_a_look();
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+}
+
+fn wait_for_the_apps_own_hub(ui: &mut Ui<'_>, older: &mut StandInHub) {
+    ui.wait("the app's own hub", |ui| {
+        older.0.try_wait().unwrap().is_some() && matches!(ui.build_line(), BuildLine::Current { .. })
+    });
 }
 
 /// Rather than wait for it to be idle, which a busy hub may not be for a long time. The app says what's running then,

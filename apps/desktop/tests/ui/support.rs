@@ -21,6 +21,8 @@ use protocol::model::{RepoId, SessionId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
 use transcript::Transcript;
 
+pub(crate) use stand_in::StandInHub;
+
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them.
@@ -207,6 +209,24 @@ impl<'a> Ui<'a> {
         self.cx.run_until_parked();
         let _ = self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx));
         self.cx.run_until_parked();
+    }
+
+    /// Makes the window the one in front, as going back to the app does.
+    pub(crate) fn bring_to_front(&mut self) {
+        self.cx.update_window(self.handle, |_, window, _| window.activate_window()).unwrap();
+        self.frame();
+    }
+
+    /// Makes another app the one in front.
+    pub(crate) fn send_to_back(&mut self) {
+        gpui_kit::VisualTestContext::from_window(self.handle, self.cx).deactivate_window();
+        self.frame();
+    }
+
+    /// Lets the time pass after which the app looks again whether an older hub has gone idle, and lets it look.
+    pub(crate) fn wait_out_a_look(&mut self) {
+        self.cx.executor().advance_clock(desktop::app::LOOK_AGAIN);
+        self.frame();
     }
 
     pub(crate) fn click(&mut self, id: impl Into<ElementId>) {

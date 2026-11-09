@@ -2,19 +2,22 @@
 //! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. With
 //! `--speaks-this-protocol` it takes a hello, as an older build would, and serves a hub with nothing in it, so the
 //! app can use it, and refuses anything else. It holds the same lock as a real hub. A test can change how many agents
-//! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory.
+//! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory,
+//! and how many clients are connected to it, by writing to [`CLIENTS`].
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
+use std::time::Duration;
 
 use clap::Parser;
+use parking_lot::Mutex;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
 };
-use protocol::model::Records;
+use protocol::model::{Records, Repo, RepoId, Rev};
 use protocol::paths::Paths;
 
 #[derive(Parser)]
@@ -22,6 +25,9 @@ struct Args {
     /// How many agents it says are running, until a test writes another number to [`RUNNING`].
     #[arg(long, default_value_t = 0)]
     running: u32,
+    /// How many clients it says are connected, until a test writes another number to [`CLIENTS`].
+    #[arg(long, default_value_t = 1)]
+    clients: u32,
     /// Say it was started by hand, so a client mustn't restart it.
     #[arg(long)]
     not_on_demand: bool,
@@ -36,20 +42,80 @@ struct Args {
     build: Option<u64>,
 }
 
-fn reply(stream: &mut UnixStream, id: u64, outcome: ReplyOutcome) {
-    let _ = stream.write_all(&protocol::frame::encode(&HubFrame::Reply { id, outcome }).unwrap());
-}
-
-/// The file in its data directory that says how many agents are running, once a test has written it.
+/// The files in its data directory that say how many agents are running and how many clients are connected, once a
+/// test has written them.
 const RUNNING: &str = "stand-in-running";
+const CLIENTS: &str = "stand-in-clients";
 
-fn running(args: &Args, paths: &Paths) -> u32 {
-    let written = std::fs::read_to_string(paths.data_dir.join(RUNNING)).ok();
-    written.and_then(|n| n.trim().parse().ok()).unwrap_or(args.running)
+/// What a test has written to this file, or else `otherwise`.
+fn written(paths: &Paths, file: &str, otherwise: u32) -> u32 {
+    let written = std::fs::read_to_string(paths.data_dir.join(file)).ok();
+    written.and_then(|n| n.trim().parse().ok()).unwrap_or(otherwise)
 }
 
-fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
-    for line in BufReader::new(stream.try_clone().unwrap()).lines() {
+/// One connection's way back to its client, which replies and notices share.
+type Writer = Arc<Mutex<UnixStream>>;
+
+fn send(writer: &Writer, frame: &HubFrame) -> bool {
+    writer.lock().write_all(&protocol::frame::encode(frame).unwrap()).is_ok()
+}
+
+fn reply(writer: &Writer, id: u64, outcome: ReplyOutcome) {
+    send(writer, &HubFrame::Reply { id, outcome });
+}
+
+/// Tells a client following its records that one has changed whenever a test changes how many agents are running, as
+/// a real hub sends the session that started or finished. The record is a repository, which is simpler to make.
+fn notice_agents(writer: &Writer, subscription_id: u64, args: &Args, paths: &Paths) {
+    let mut said = written(paths, RUNNING, args.running);
+    for rev in 1.. {
+        let running = loop {
+            std::thread::sleep(Duration::from_millis(10));
+            let running = written(paths, RUNNING, args.running);
+            if running != said {
+                break running;
+            }
+        };
+        said = running;
+        let repo = Repo {
+            id: RepoId::from("stand-in"),
+            name: "stand-in".to_string(),
+            path: "/stand-in".to_string(),
+            created_at_ms: 0,
+            rev: Rev::new(rev),
+        };
+        if !send(writer, &HubFrame::Notice { subscription_id, notice: HubNotice::Repo(repo) }) {
+            return;
+        }
+    }
+}
+
+fn status(args: &Args, paths: &Paths) -> HubStatus {
+    let running = written(paths, RUNNING, args.running);
+    HubStatus {
+        pid: std::process::id(),
+        hub_version: "from-before-the-break".to_string(),
+        protocol_version: if args.speaks_this_protocol {
+            protocol::PROTOCOL_VERSION
+        } else if args.newer {
+            protocol::PROTOCOL_VERSION + 1
+        } else {
+            protocol::PROTOCOL_VERSION - 1
+        },
+        started_at_ms: 0,
+        workers: running,
+        running_sessions: running,
+        clients: written(paths, CLIENTS, args.clients),
+        on_demand: !args.not_on_demand,
+        build_number: args.build,
+        running_setups: 0,
+        requests: 1,
+    }
+}
+
+fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
+    let writer = Arc::new(Mutex::new(stream.try_clone().unwrap()));
+    for line in BufReader::new(stream).lines() {
         let Ok(line) = line else { return };
         let request: ClientFrame = protocol::frame::decode(line.as_bytes()).unwrap();
         match request.request {
@@ -58,46 +124,29 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
                     protocol_version: protocol::PROTOCOL_VERSION,
                     hub_version: "stand-in".to_string(),
                 };
-                reply(&mut stream, request.id, ReplyOutcome::Response(hello));
+                reply(&writer, request.id, ReplyOutcome::Response(hello));
             }
-            ClientRequest::FeedSubscribe { .. } if args.speaks_this_protocol => {
-                reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::Ok));
+            ClientRequest::FeedSubscribe { subscription_id } if args.speaks_this_protocol => {
+                reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
+                let (writer, args, paths) = (writer.clone(), args.clone(), paths.clone());
+                std::thread::spawn(move || notice_agents(&writer, subscription_id, &args, &paths));
             }
             ClientRequest::RecordsList if args.speaks_this_protocol => {
                 let nothing = ClientResponse::Records(Records::default());
-                reply(&mut stream, request.id, ReplyOutcome::Response(nothing));
+                reply(&writer, request.id, ReplyOutcome::Response(nothing));
             }
             ClientRequest::HubStatus => {
-                let running = running(args, paths);
-                let status = HubStatus {
-                    pid: std::process::id(),
-                    hub_version: "from-before-the-break".to_string(),
-                    protocol_version: if args.speaks_this_protocol {
-                        protocol::PROTOCOL_VERSION
-                    } else if args.newer {
-                        protocol::PROTOCOL_VERSION + 1
-                    } else {
-                        protocol::PROTOCOL_VERSION - 1
-                    },
-                    started_at_ms: 0,
-                    workers: running,
-                    running_sessions: running,
-                    clients: 1,
-                    on_demand: !args.not_on_demand,
-                    build_number: args.build,
-                    running_setups: 0,
-                    requests: 1,
-                };
-                reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::HubStatus(status)));
+                let status = ClientResponse::HubStatus(status(args, paths));
+                reply(&writer, request.id, ReplyOutcome::Response(status));
             }
             ClientRequest::HubShutdown => {
-                reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::Ok));
+                reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
                 let _ = std::fs::remove_file(&paths.socket);
                 std::process::exit(0);
             }
             _ => {
                 let refused = ApiError::new(ErrorCode::VersionMismatch, "this hub is from before a real break");
-                reply(&mut stream, request.id, ReplyOutcome::Error(refused));
+                reply(&writer, request.id, ReplyOutcome::Error(refused));
                 return;
             }
         }

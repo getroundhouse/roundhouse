@@ -20,6 +20,10 @@ mod workspaces;
 pub use build_line::BuildLine;
 pub use hub_source::HubSource;
 
+/// How often the app looks whether an older hub has gone idle, which a test can wait out.
+#[cfg(feature = "testing")]
+pub const LOOK_AGAIN: std::time::Duration = restarts::LOOK_AGAIN;
+
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
 /// and `by` no bigger than the list.
 pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
@@ -64,6 +68,10 @@ pub struct AppView {
     following: Option<Task<()>>,
     /// Asking whether to finish an update now, so pressing again doesn't ask twice.
     asking: Option<Task<()>>,
+    /// Looks every so often, while connected to an older hub, for whether it has gone idle, so the update can finish.
+    finishing: Option<Task<()>>,
+    /// Asking the older hub whether it's idle.
+    looking: Option<Task<()>>,
 }
 
 impl AppView {
@@ -71,6 +79,8 @@ impl AppView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
+        // Someone going to another app is the moment to finish an update without interrupting them.
+        cx.observe_window_activation(window, |t, _, cx| t.finish_update_when_idle(cx)).detach();
         let mut this = Self {
             hub,
             connection: Connection::Connecting,
@@ -92,6 +102,8 @@ impl AppView {
             connecting: None,
             following: None,
             asking: None,
+            finishing: None,
+            looking: None,
         };
         this.connect(cx);
         this
@@ -126,6 +138,8 @@ impl AppView {
     /// starts following the hub's records. Comes back here if the connection goes, which starts a new hub.
     pub fn connect(&mut self, cx: &mut Context<Self>) {
         self.connection = Connection::Connecting;
+        // What it was connected to says nothing about what it connects to next.
+        (self.restartable_hub, self.finishing, self.looking) = (None, None, None);
         cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
@@ -168,6 +182,7 @@ impl AppView {
         }
         self.joining = Some(client);
         self.restartable_hub = hub_source::may_restart(status, self.hub.build_number).then_some(status.pid);
+        self.finishing = self.restartable_hub.map(|_| Self::keep_finishing(cx));
     }
 
     /// Shows what client-core holds whenever it changes, and connects again when its connection goes.
@@ -240,6 +255,8 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::catch_up);
         }
+        // An agent finishing is usually what lets an update finish.
+        self.finish_update_when_idle(cx);
         cx.notify();
     }
 
