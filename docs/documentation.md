@@ -24,7 +24,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `README.md` | Product | Owner | What this is, why it exists, and how to try it |
 | `docs/spec/` | Spec | Owner | What the product does for the person using it, how fast, how it looks, and why, one file per area |
 | `docs/architecture.md` | Architecture | Owner | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format, what happens when a process dies, managing a hub, and providers |
-| `docs/ui.md` | Architecture | Owner | Why the desktop app is built on GPUI and gpui-kit, and its transcript on the kit's views |
+| `docs/ui.md` | Architecture | Owner | Why the apps are built on GPUI and gpui-kit, the transcript on the kit's views, and the iOS app on Zed's iOS backend |
 | `docs/documentation.md` | Standards | Owner | Where each kind of information goes, and who decides it |
 | `docs/rust.md` | Standards | Owner | How Rust is written, whatever the crate. A rule about one part of the system goes in that part's doc |
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
