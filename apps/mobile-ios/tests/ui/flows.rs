@@ -26,8 +26,7 @@ fn opens_on_pairing_and_pairs_from_a_link_the_phone_opens(cx: &mut TestAppContex
     phone.wait("the hub's workspaces", |phone| phone.has("hub-info") && phone.is_connected());
     let paired = phone.vault.load().unwrap();
     let devices = stack.client().device_list().unwrap();
-    assert_eq!(devices.iter().map(|d| d.id.to_string()).collect::<Vec<_>>(), [paired.device_id]);
-    assert_eq!(devices[0].name, "iPhone");
+    assert_eq!(devices.iter().map(|d| (&d.id, d.name.as_str())).collect::<Vec<_>>(), [(&paired.device_id, "iPhone")]);
 }
 
 #[gpui_kit::test]

@@ -58,7 +58,7 @@ mod device {
     use security_framework::passwords_options::PasswordOptions;
 
     use super::{Vault, VaultError};
-    use client_core::RemoteHub;
+    use client_core::{DeviceToken, RemoteHub};
 
     /// Where in the Keychain the token is kept. There's one, so pairing again replaces it. Keychain items outlive
     /// the app, so a fixed name also means a reinstall's next pairing replaces a token left from before.
@@ -80,7 +80,7 @@ mod device {
             if let Some(dir) = self.file.parent() {
                 std::fs::create_dir_all(dir).map_err(failed)?;
             }
-            let without_token = RemoteHub { token: String::new(), ..hub.clone() };
+            let without_token = RemoteHub { token: DeviceToken::from(""), ..hub.clone() };
             std::fs::write(&self.file, serde_json::to_vec(&without_token)?).map_err(failed)
         }
     }
@@ -89,7 +89,7 @@ mod device {
         fn load(&self) -> Option<RemoteHub> {
             let hub: RemoteHub = serde_json::from_slice(&std::fs::read(&self.file).ok()?).ok()?;
             let token = String::from_utf8(get_generic_password(SERVICE, ACCOUNT).ok()?).ok()?;
-            Some(RemoteHub { token, ..hub })
+            Some(RemoteHub { token: token.into(), ..hub })
         }
 
         fn save(&self, hub: &RemoteHub) -> Result<(), VaultError> {
@@ -102,7 +102,7 @@ mod device {
                     .map_err(keychain)?;
             let mut options = PasswordOptions::new_generic_password(SERVICE, ACCOUNT);
             options.set_access_control(access);
-            set_generic_password_options(hub.token.as_bytes(), options).map_err(keychain)?;
+            set_generic_password_options(hub.token.as_str().as_bytes(), options).map_err(keychain)?;
             self.write(hub)
         }
 

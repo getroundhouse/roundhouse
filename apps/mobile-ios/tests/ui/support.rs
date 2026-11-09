@@ -88,8 +88,7 @@ impl Stack {
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", path("user-home"))
             // Only on loopback, so no firewall asks.
-            .env(protocol::paths::ENV_PORT, self.port.to_string())
-            .env(protocol::paths::ENV_LISTEN_ON_LOOPBACK, "1")
+            .env(protocol::paths::ENV_LISTEN, format!("127.0.0.1:{}", self.port))
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -120,13 +119,10 @@ impl Stack {
         Client::connect(&self.socket(), "test").unwrap()
     }
 
-    /// What the hub's QR code holds now. Its hosts are this machine's names and addresses, but the hub listens
-    /// only on loopback, so it points there.
+    /// What the hub's QR code holds now, which points only at loopback, where the hub listens.
     pub(crate) fn pairing_link(&self) -> String {
-        let pairing = self.client().pairing_start().unwrap();
-        let mut link = PairingLink::parse(&pairing.link).unwrap();
-        assert!(link.hosts.iter().all(|host| host.ends_with(&format!(":{}", self.port))), "{:?}", link.hosts);
-        link.hosts = vec![format!("127.0.0.1:{}", self.port)];
+        let link = self.client().pairing_start().unwrap().link;
+        assert_eq!(link.hosts, [format!("127.0.0.1:{}", self.port)]);
         link.to_string()
     }
 }
