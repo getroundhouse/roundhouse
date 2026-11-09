@@ -241,7 +241,7 @@ The app is signed and notarized, you download it, and it updates itself as chang
 - **CI builds, signs and publishes every merge to `main`.** The merge queue has already run the checks on Linux by then.
 - **CI stamps each build as an install does,** so the app can tell whether a hub is older. *Unconfirmed.*
 - **The update feed is signed, and the app checks the signature before trusting anything in it.** Velopack only checks each package against a checksum in the update feed, so without a signature, whoever controls the host controls the app.
-- **The hub the app starts runs from its own copy for each build, outside the app's install directory.** An update replaces that directory, so a hub running from it would start its next workers from different code, and on Windows Velopack first kills everything running from it, which would stop the hub and its agents. *Unconfirmed.*
+- **A hub a client starts runs from its own copy for each build, outside the app's install directory.** An update replaces that directory, so a hub running from it would start its next workers from different code, and on Windows Velopack first kills everything running from it, which would stop the hub and its agents. *Unconfirmed.*
 - **The app decides when an update installs,** so an update doesn't interrupt what someone is doing.
 
 ## Providers
