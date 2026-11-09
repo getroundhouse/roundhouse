@@ -7,7 +7,7 @@ const VERSION: &str = "abc123";
 
 /// Stands in for a daemon of build `version`, and runs `body` when started as anything else.
 fn daemon_script(version: &str, body: &str) -> String {
-    format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo \"{DAEMON} {version}\"; exit; fi\n{body}\n")
+    format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo \"{DAEMON_NAME} {version}\"; exit; fi\n{body}\n")
 }
 
 /// Writes down which file it was started from.
@@ -28,16 +28,21 @@ fn install(dir: &Path, name: &str, script: &str) -> PathBuf {
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(app.join("new"), script).unwrap();
     std::fs::set_permissions(app.join("new"), Permissions::from_mode(0o755)).unwrap();
-    std::fs::rename(app.join("new"), app.join(DAEMON)).unwrap();
-    app.join(DAEMON)
+    std::fs::rename(app.join("new"), app.join(DAEMON_NAME)).unwrap();
+    app.join(DAEMON_NAME)
+}
+
+fn build(number: u64) -> StampedBuild {
+    StampedBuild::new(VERSION, number).unwrap()
 }
 
 fn stamped(original: &Path, number: u64) -> Daemon {
-    Daemon { path: original.to_path_buf(), build: StampedBuild::from_stamp(Some(VERSION), Some(number)) }
+    Daemon { path: original.to_path_buf(), build: Some(build(number)) }
 }
 
+/// Where build 1's copy goes, with any temporary files beside it.
 fn build_dir(paths: &Paths) -> PathBuf {
-    paths.hubs_dir.join(format!("{VERSION}-1"))
+    paths.hub_copy(&build(1)).parent().unwrap().to_path_buf()
 }
 
 fn files_in(dir: &Path) -> Vec<String> {
@@ -109,7 +114,7 @@ fn a_stamped_build_starts_its_hub_from_a_copy_of_its_own() {
 
     start_hub(&paths, &stamped(&original, 1)).unwrap();
 
-    let copy = paths.hubs_dir.join("abc123-1").join(DAEMON);
+    let copy = paths.hub_copy(&build(1));
     assert_eq!(started_from(&paths), copy.to_str().unwrap());
     assert_eq!(std::fs::read_to_string(&copy).unwrap(), script);
 }
@@ -123,7 +128,7 @@ fn any_other_build_starts_the_daemon_where_it_is() {
     start_hub(&paths, &Daemon::in_place(&original)).unwrap();
 
     assert_eq!(started_from(&paths), original.to_str().unwrap());
-    assert!(!paths.hubs_dir.exists());
+    assert!(!paths.daemons_dir.exists());
 }
 
 #[test]
@@ -132,7 +137,7 @@ fn a_build_whose_copy_cannot_be_made_is_not_started_at_all() {
     let paths = paths_in(dir.path());
     let original = install(dir.path(), "app", &daemon_script(VERSION, SAYS_WHERE_IT_RAN));
     std::fs::create_dir_all(&paths.data_dir).unwrap();
-    std::fs::write(&paths.hubs_dir, "not a directory").unwrap();
+    std::fs::write(&paths.daemons_dir, "not a directory").unwrap();
 
     let started = start_hub(&paths, &stamped(&original, 1));
 
@@ -176,7 +181,7 @@ fn a_copy_only_appears_once_it_is_whole() {
     let script = daemon_script(VERSION, "# from a pipe");
     let copying = CopyFromPipe::start(dir.path(), &paths, &script.as_bytes()[..4]);
 
-    let in_place_halfway = build_dir(&paths).join(DAEMON).exists();
+    let in_place_halfway = paths.hub_copy(&build(1)).exists();
     let copy = copying.finish(&script.as_bytes()[4..]).unwrap();
 
     assert!(!in_place_halfway, "a half-written copy was in place");
@@ -200,7 +205,7 @@ fn a_copy_another_client_put_in_place_first_is_never_replaced() {
     assert_eq!(also, copy);
     assert_eq!(std::fs::metadata(&copy).unwrap().ino(), published, "replaced");
     assert_eq!(std::fs::read_to_string(&copy).unwrap(), first);
-    assert_eq!(files_in(&build_dir(&paths)), [DAEMON], "a temporary file was left behind");
+    assert_eq!(files_in(&build_dir(&paths)), [DAEMON_NAME], "a temporary file was left behind");
 }
 
 /// Each writes under a temporary name of its own, so none can move another's into place, whole or not.
@@ -225,7 +230,7 @@ fn clients_copying_at_once_each_get_a_whole_copy() {
     for copy in copies {
         assert!(copy.join().unwrap() == script, "a copy that wasn't whole");
     }
-    assert_eq!(files_in(&build_dir(&paths)), [DAEMON], "a temporary file was left behind");
+    assert_eq!(files_in(&build_dir(&paths)), [DAEMON_NAME], "a temporary file was left behind");
 }
 
 /// Files a process writes aren't quarantined unless it asks for that, so the copy runs without a check from
@@ -246,16 +251,6 @@ fn a_quarantine_mark_on_the_original_does_not_follow_the_copy() {
 }
 
 #[test]
-fn a_build_is_stamped_only_with_both_a_version_and_a_number() {
-    assert!(StampedBuild::from_stamp(Some(VERSION), Some(1)).is_some());
-
-    assert_eq!(StampedBuild::from_stamp(None, Some(1)), None);
-    assert_eq!(StampedBuild::from_stamp(Some(VERSION), None), None);
-    assert_eq!(StampedBuild::from_stamp(None, None), None);
-    assert_eq!(StampedBuild::from_stamp(Some("../abc123"), Some(1)), None);
-}
-
-#[test]
 fn builds_with_the_same_version_and_another_number_get_copies_of_their_own() {
     let dir = tempfile::tempdir().unwrap();
     let paths = paths_in(dir.path());
@@ -265,7 +260,21 @@ fn builds_with_the_same_version_and_another_number_get_copies_of_their_own() {
     let two = stamped(&original, 2).to_start(&paths).unwrap();
 
     assert_ne!(one, two);
-    assert_eq!(two, paths.hubs_dir.join("abc123-2").join(DAEMON));
+    assert_eq!(two, paths.hub_copy(&build(2)));
+}
+
+#[test]
+fn a_daemon_named_by_hand_is_started_where_it_is_and_any_other_is_the_one_beside_this_binary() {
+    assert_eq!(
+        Daemon::find(Some("/elsewhere/roundhoused".into())).unwrap(),
+        Daemon::in_place("/elsewhere/roundhoused")
+    );
+
+    let beside = Daemon::find(None).unwrap();
+
+    let this_binary = std::env::current_exe().unwrap().canonicalize().unwrap();
+    assert_eq!(beside.path, this_binary.with_file_name(DAEMON_NAME));
+    assert_eq!(beside.build, protocol::STAMPED_BUILD);
 }
 
 #[test]
@@ -278,5 +287,5 @@ fn the_daemon_beside_a_linked_binary_is_in_the_version_the_link_named() {
 
     let daemon = Daemon::beside(&dir.path().join("current/roundhouse")).unwrap();
 
-    assert_eq!(daemon.path, version.join(DAEMON));
+    assert_eq!(daemon.path, version.join(DAEMON_NAME));
 }

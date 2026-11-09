@@ -1,5 +1,7 @@
 //! Where the app finds its hub.
 
+use std::path::PathBuf;
+
 use anyhow::Context as _;
 use client_core::{Client, ClientError, Daemon};
 use gpui_kit::Result;
@@ -31,12 +33,8 @@ impl HubSource {
     /// The default hub for this user, with the daemon next to this binary.
     pub fn default_local() -> anyhow::Result<Self> {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-        let daemon = match std::env::var_os(protocol::paths::ENV_DAEMON_BIN) {
-            Some(path) => Daemon::in_place(path),
-            None => std::env::current_exe()
-                .and_then(|exe| Daemon::beside(&exe))
-                .context("finding the daemon next to this binary")?,
-        };
+        let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
+        let daemon = Daemon::find(named).context("finding the daemon next to this binary")?;
         Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
     }
 

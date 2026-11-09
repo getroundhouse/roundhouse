@@ -1,10 +1,6 @@
 //! Starting a hub when there's none, which a client does so its user never has to: which daemon it runs, and running
-//! it apart from this client.
-//!
-//! A stamped build runs its hubs from a copy of its daemon, outside the app's install directory. An update replaces
-//! that directory, and a hub starts every worker from the file it's running, so without the copy an old hub would
-//! start new workers from the new build, and the worker protocol has no versions to catch that. Any other build
-//! starts the daemon where it is.
+//! it apart from this client. A stamped build's hubs run from its own copy of the daemon, for the reason "Updating
+//! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is.
 
 use std::fs::{File, OpenOptions, Permissions};
 use std::io;
@@ -14,19 +10,17 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use protocol::paths::Paths;
+use protocol::StampedBuild;
+use protocol::paths::{DAEMON_NAME, Paths};
 
 use super::{Client, Result, hub_is_missing};
-
-const DAEMON: &str = "roundhoused";
 
 /// Far longer than a forked child takes to exec, which is all a busy copy waits for. See [`waiting_out_busy`].
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl Client {
     /// Connects, starting a hub first if none is running. The hub is a separate process that
-    /// outlives this client, which is why closing a client doesn't stop its agents. A stamped
-    /// build's hub runs from that build's own copy of the daemon, as [`Daemon`] says.
+    /// outlives this client, which is why closing a client doesn't stop its agents.
     pub fn connect_or_start(paths: &Paths, daemon: &Daemon, client_name: &str) -> Result<Client> {
         match Client::connect(&paths.socket, client_name) {
             Ok(client) => return Ok(client),
@@ -51,21 +45,30 @@ impl Client {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Daemon {
     pub path: PathBuf,
-    /// Which build it is, if an install stamped it, so that its hubs run from a copy kept for that build. Only the
-    /// daemon beside a client is known to be the client's build, so one named any other way has none.
+    /// Which build it is, if it's stamped. Only the daemon beside a client is known to be the client's build, so one
+    /// named any other way has none.
     pub build: Option<StampedBuild>,
 }
 
 impl Daemon {
-    /// The one that ships next to `exe`, which is this build. Follows symlinks first, so a hub started through an
-    /// install's `current` link stays on that version, whichever one the link names later.
-    pub fn beside(exe: &Path) -> io::Result<Self> {
-        Ok(Self { path: exe.canonicalize()?.with_file_name(DAEMON), build: StampedBuild::this() })
+    /// The one `named` by `ROUNDHOUSE_DAEMON_BIN`, started where it is, or else the one that ships next to this
+    /// binary.
+    pub fn find(named: Option<PathBuf>) -> io::Result<Self> {
+        match named {
+            Some(path) => Ok(Self::in_place(path)),
+            None => Self::beside(&std::env::current_exe()?),
+        }
     }
 
-    /// One started where it is, such as one named by `ROUNDHOUSE_DAEMON_BIN`.
+    /// One started where it is.
     pub fn in_place(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into(), build: None }
+    }
+
+    /// The one that ships next to `exe`, which is this build. Follows symlinks first, so a hub started through an
+    /// install's `current` link stays on that version, whichever one the link names later.
+    fn beside(exe: &Path) -> io::Result<Self> {
+        Ok(Self { path: exe.canonicalize()?.with_file_name(DAEMON_NAME), build: protocol::STAMPED_BUILD })
     }
 
     /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.
@@ -73,40 +76,14 @@ impl Daemon {
         let Some(build) = &self.build else {
             return Ok(self.path.clone());
         };
-        let dir = paths.hubs_dir.join(format!("{}-{}", build.version, build.number));
-        let copy = dir.join(DAEMON);
+        let copy = paths.hub_copy(build);
         // A copy only appears once it's whole and checked, and nothing replaces it, so one that's there is ready.
         if !copy.exists() {
-            publish_copy(&self.path, build, &dir, &copy).map_err(|e| {
+            publish_copy(&self.path, build, &copy).map_err(|e| {
                 io::Error::new(e.kind(), format!("copying {} to {}: {e}", self.path.display(), copy.display()))
             })?;
         }
         Ok(copy)
-    }
-}
-
-/// A build an install stamped with both a build version and a build number. Only these get a copy of the daemon,
-/// because any other build says `0.1.0-dev` whatever its code, so a copy kept under that would go stale with the next
-/// rebuild. Its copy is named for both, so two builds share one only if both match.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StampedBuild {
-    version: String,
-    number: u64,
-}
-
-impl StampedBuild {
-    /// This build, if an install stamped it.
-    pub fn this() -> Option<Self> {
-        Self::from_stamp(protocol::STAMPED_VERSION, protocol::BUILD_NUMBER)
-    }
-
-    /// Neither part alone is a stamp. Nor is a version that can't name a directory, though `protocol` won't build
-    /// with one.
-    pub fn from_stamp(version: Option<&str>, number: Option<u64>) -> Option<Self> {
-        let (Some(version), Some(number)) = (version, number) else {
-            return None;
-        };
-        protocol::paths::is_plain_name(version).then(|| Self { version: version.to_string(), number })
     }
 }
 
@@ -155,12 +132,14 @@ fn waiting_out_busy<T>(mut run: impl FnMut() -> io::Result<T>) -> io::Result<T> 
     }
 }
 
-/// Writes the copy under a temporary name in `dir`, checks that it's `build`, and only then links it in as `copy`, so
-/// a half-written or wrong copy never runs. A link fails rather than replace a copy that another client published
+/// Writes the copy under a temporary name beside it, checks that it's `build`, and only then links it in as `copy`,
+/// so a half-written or wrong copy never runs. A link fails rather than replace a copy that another client published
 /// first, which a hub may have just started from.
-fn publish_copy(original: &Path, build: &StampedBuild, dir: &Path, copy: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    let (temporary, file) = create_temporary(dir)?;
+fn publish_copy(original: &Path, build: &StampedBuild, copy: &Path) -> io::Result<()> {
+    if let Some(dir) = copy.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let (temporary, file) = create_temporary(copy)?;
     let published = write_executable(original, file).and_then(|()| check_build(&temporary, build)).and_then(|()| {
         match std::fs::hard_link(&temporary, copy) {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
@@ -176,10 +155,10 @@ static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 /// Never opens a file that's there already. One with the same name was left by a client that was killed mid-copy, and
 /// whose process ID this one now has.
-fn create_temporary(dir: &Path) -> io::Result<(PathBuf, File)> {
+fn create_temporary(copy: &Path) -> io::Result<(PathBuf, File)> {
     loop {
         let n = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
-        let temporary = dir.join(format!(".{DAEMON}.{}.{n}", std::process::id()));
+        let temporary = copy.with_file_name(format!(".{DAEMON_NAME}.{}.{n}", std::process::id()));
         match OpenOptions::new().write(true).create_new(true).open(&temporary) {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             opened => return opened.map(|file| (temporary, file)),
@@ -200,7 +179,7 @@ fn write_executable(original: &Path, mut file: File) -> io::Result<()> {
 /// would find the new build's daemon there.
 fn check_build(file: &Path, build: &StampedBuild) -> io::Result<()> {
     let output = waiting_out_busy(|| Command::new(file).arg("--version").stderr(Stdio::null()).output())?;
-    let expected = format!("{DAEMON} {}", build.version);
+    let expected = format!("{DAEMON_NAME} {}", build.version());
     let reported = String::from_utf8_lossy(&output.stdout);
     if output.status.success() && reported.trim_end() == expected {
         return Ok(());

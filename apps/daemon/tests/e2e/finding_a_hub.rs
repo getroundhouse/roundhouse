@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use client_core::{Client, Daemon, HubAdmin, StampedBuild};
+use client_core::{Client, Daemon, HubAdmin};
+use protocol::StampedBuild;
 use protocol::model::{AgentKind, WorkspaceStatus};
 
 use crate::support::{
@@ -134,9 +135,9 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     std::fs::create_dir_all(&app).unwrap();
     install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
     // The version this daemon gives, which its copy is checked against.
-    let build = StampedBuild::from_stamp(Some(protocol::BUILD_VERSION), Some(1));
-    let daemon = Daemon { path: app.join("roundhoused"), build };
-    let copy = stack.paths().hubs_dir.join(format!("{}-1/roundhoused", protocol::BUILD_VERSION));
+    let build = StampedBuild::new(protocol::BUILD_VERSION, 1).unwrap();
+    let daemon = Daemon { path: app.join("roundhoused"), build: Some(build) };
+    let copy = stack.paths().hub_copy(&build);
 
     let started = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
     let command = started.map(|status| command_line(status.pid));

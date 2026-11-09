@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::StampedBuild;
+
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.
 pub const DIR_NAME: &str = dir_name(cfg!(debug_assertions));
@@ -11,28 +13,15 @@ pub const ENV_DAEMON_BIN: &str = "ROUNDHOUSE_DAEMON_BIN";
 pub const ENV_CLAUDE_BIN: &str = "ROUNDHOUSE_CLAUDE_BIN";
 pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
 
+/// The binary that runs as a hub or a worker. It gives this name in `--version` too.
+pub const DAEMON_NAME: &str = "roundhoused";
+
 /// Which hub this is and what it runs. Nothing a worker starts in a workspace gets these, because the
 /// code there can be another build of Roundhouse, and its commands would otherwise reach this hub.
 pub const HUB_ONLY_ENV: [&str; 5] = [ENV_HOME, ENV_WORKSPACES, ENV_DAEMON_BIN, ENV_CLAUDE_BIN, ENV_LOG];
 
 const fn dir_name(debug_build: bool) -> &'static str {
     if debug_build { "roundhouse-dev" } else { "roundhouse" }
-}
-
-/// Whether `name` can name a directory on its own: not empty, not `.` or `..`, and without a `/`. A build version names
-/// the directory of its hubs' copy of the daemon.
-pub const fn is_plain_name(name: &str) -> bool {
-    let mut rest = name.as_bytes();
-    if matches!(rest, [] | [b'.'] | [b'.', b'.']) {
-        return false;
-    }
-    while let [first, others @ ..] = rest {
-        if *first == b'/' {
-            return false;
-        }
-        rest = others;
-    }
-    true
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,11 +34,16 @@ pub struct Paths {
     pub backups_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
-    /// A copy of the daemon for each stamped build that started a hub here, in a directory named for the build. Its
-    /// hubs run from that, because an update replaces the app's files, and a hub starts its workers from the file it
-    /// runs.
-    pub hubs_dir: PathBuf,
+    /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
+    pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
+}
+
+impl Paths {
+    /// The copy of the daemon that `build`'s hubs run from, in a directory named for the build.
+    pub fn hub_copy(&self, build: &StampedBuild) -> PathBuf {
+        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(DAEMON_NAME)
+    }
 }
 
 /// macOS limits a socket path to 103 bytes.
@@ -88,7 +82,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         backups_dir: data_dir.join("backups"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
-        hubs_dir: data_dir.join("hubs"),
+        daemons_dir: data_dir.join("daemons"),
         workspaces_root,
         data_dir,
     })
@@ -123,13 +117,12 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_name_is_one_directory_and_nothing_else() {
-        for name in ["abc123def456", "abc123def456-dirty-20261108120000", "0.1.0-dev", "..a", "a.."] {
-            assert!(is_plain_name(name), "{name}");
-        }
-        for name in ["", ".", "..", "a/b", "/abc", "abc/", "../abc"] {
-            assert!(!is_plain_name(name), "{name}");
-        }
+    fn a_hub_copy_is_named_for_its_build_version_and_number() {
+        let paths = resolve(env_of(&[("HOME", "/h"), (ENV_HOME, "/d")])).unwrap();
+
+        let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
+
+        assert_eq!(copy, PathBuf::from("/d/daemons/abc123-7/roundhoused"));
     }
 
     #[test]

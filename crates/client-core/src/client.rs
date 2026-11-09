@@ -28,7 +28,7 @@ pub use api::{new_message_id, new_request_id};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub use open_session::OpenSession;
-pub use start::{Daemon, StampedBuild};
+pub use start::Daemon;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
