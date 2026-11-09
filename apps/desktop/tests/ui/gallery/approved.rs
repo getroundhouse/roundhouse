@@ -1,8 +1,9 @@
-//! The screens' approved images, which the spec keeps in `docs/spec/screens/`, each shown in its area's file.
+//! The screens' approved images, which the spec keeps in `docs/spec/screens/`, each shown in its area's file, and
+//! how any drawing is checked against its approved image.
 
 #![cfg(test)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use image::RgbaImage;
 
@@ -12,18 +13,25 @@ pub(crate) enum Verdict {
     Missing,
 }
 
-/// Exact, because the same screen draws the same pixels every time on one machine, so any difference is a change.
 pub(crate) fn compare(name: &str, drawn: &RgbaImage) -> Verdict {
-    let path = path(name);
-    if !path.exists() {
-        return Verdict::Missing;
-    }
-    if image::open(&path).unwrap().to_rgba8() == *drawn { Verdict::Matches } else { Verdict::Differs }
+    compare_file(&path(name), drawn)
 }
 
 pub(crate) fn accept(name: &str, drawn: &RgbaImage) {
-    std::fs::create_dir_all(dir()).unwrap();
-    drawn.save(path(name)).unwrap();
+    accept_file(&path(name), drawn);
+}
+
+/// Exact, because the same screen draws the same pixels every time on one machine, so any difference is a change.
+pub(crate) fn compare_file(path: &Path, drawn: &RgbaImage) -> Verdict {
+    if !path.exists() {
+        return Verdict::Missing;
+    }
+    if image::open(path).unwrap().to_rgba8() == *drawn { Verdict::Matches } else { Verdict::Differs }
+}
+
+pub(crate) fn accept_file(path: &Path, drawn: &RgbaImage) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    drawn.save(path).unwrap();
 }
 
 /// Images with no screen to draw them, so nothing checks them any more.

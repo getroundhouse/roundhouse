@@ -1,7 +1,8 @@
 //! Every screen of the app, drawn from made-up data, with no real hub and no window on screen, and checked against
 //! its approved image in the spec. Each screen gets a fake hub that answers from fixed data, in
 //! `gallery/screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. What each
-//! screen looks like now goes in `.context/gallery/` at the repo's root, for looking at.
+//! screen looks like now goes in `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and
+//! checked the same way, in `gallery/icon.rs`.
 
 #![cfg(test)]
 
@@ -9,6 +10,7 @@ mod approved;
 mod capture;
 mod chats;
 mod fake_hub;
+mod icon;
 mod screens;
 mod world;
 

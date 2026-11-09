@@ -1,6 +1,6 @@
 [package]
 name = "look"
-description = "How the app looks: its theme, the colours the kit has no name for, and the status mark."
+description = "How the app looks: its theme, the colours the kit has no name for, the status mark and the app icon."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

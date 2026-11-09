@@ -64,7 +64,7 @@ crates/
   providers/       Provider contract, local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
-  look/            How the app looks: its theme, the colours the kit has no name for, and the status mark
+  look/            How the app looks: its theme, the colours the kit has no name for, the status mark and the app icon
   terminal-view/   GPUI terminal element. Not built
 apps/
   daemon/          One binary that runs as a hub or a worker
