@@ -15,6 +15,7 @@ mod build_line;
 mod hub_source;
 mod reading;
 mod restarts;
+mod shortcuts;
 mod view;
 mod workspaces;
 
@@ -77,6 +78,8 @@ pub struct AppView {
     finishing: Option<Task<()>>,
     /// Asking the older hub whether it's idle.
     looking: Option<Task<()>>,
+    /// What the menu bar was last given to say.
+    menus_say: crate::menus::Says,
 }
 
 impl AppView {
@@ -115,6 +118,7 @@ impl AppView {
             asking: None,
             finishing: None,
             looking: None,
+            menus_say: crate::menus::Says::default(),
         };
         this.connect(cx);
         this

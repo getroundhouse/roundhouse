@@ -20,7 +20,12 @@ actions!(
     [
         About,
         CheckForUpdates,
+        Hide,
+        HideOthers,
+        ShowAll,
         Quit,
+        Minimize,
+        Zoom,
         NewWorkspace,
         AddRepository,
         ToggleDiff,
@@ -38,7 +43,10 @@ actions!(
 /// Opens the main window on an app that's already running, and returns its view.
 pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     cx.bind_keys([
+        KeyBinding::new("cmd-h", Hide, None),
+        KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-m", Minimize, None),
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
