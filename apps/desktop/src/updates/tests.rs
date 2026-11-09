@@ -1,6 +1,8 @@
 use std::fmt::Write as _;
 use std::path::Path;
+use std::time::Instant;
 
+use gpui_kit::{IntoElement, Render, TestAppContext, Window};
 use ring::digest::{SHA1_FOR_LEGACY_USE_ONLY, SHA256, digest};
 use ring::signature::Ed25519KeyPair;
 use velopack::locator::VelopackLocatorConfig;
@@ -8,6 +10,9 @@ use velopack::locator::VelopackLocatorConfig;
 use super::*;
 use crate::updates::serving::{Reply, Server, serve};
 use crate::updates::signing::{key_pair, public};
+
+/// Long enough for a look at a server on this Mac.
+const LOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What `vpk` puts in an app it packages, as this test's app at 0.1.5.
 const MANIFEST: &str = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -151,4 +156,121 @@ fn a_server_that_isnt_there_is_out_of_reach() {
     let problem = newest(&manager(&format!("http://127.0.0.1:{port}"), public(&key_pair()), &installed)).unwrap_err();
 
     assert_eq!(problem.kind, Kind::Unreachable);
+}
+
+/// How many times the server was asked for the update feed, which is once a look.
+fn feeds_read(server: &Server) -> usize {
+    server.asked().iter().filter(|path| *path == "releases.osx.json").count()
+}
+
+#[test]
+fn asking_looks_again_without_waiting_for_the_hour() {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let server = publish(&[("0.1.5", b"", Reply::file(""))], &pair);
+    let manager = manager(&server.base, public(&pair), &installed);
+    let state = tempfile::tempdir().unwrap();
+    let (look_now, asked) = flume::bounded(1);
+    let (looks, looked) = flume::unbounded();
+    std::thread::spawn(move || keep_looking(&manager, &asked, &looks, &OutOfReach::in_dir(state.path())));
+    let (on_launch, _) = looked.recv_timeout(LOOK_TIMEOUT).unwrap();
+    assert!(on_launch.unwrap().is_none());
+
+    look_now.send(()).unwrap();
+
+    let (asked_for, _) = looked.recv_timeout(LOOK_TIMEOUT).unwrap();
+    assert!(asked_for.unwrap().is_none());
+    assert_eq!(feeds_read(&server), 2);
+}
+
+/// The app's window, which an answer shows over.
+struct Blank;
+
+impl Render for Blank {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui_kit::Empty
+    }
+}
+
+/// An app that looks for updates at `base`, as `start` has it look, with its window open, and the directory where it
+/// notes how long the server has been out of reach.
+fn app_looking_at(
+    base: &str,
+    key: UpdateFeedKey,
+    installed: &VelopackLocatorConfig,
+    cx: &mut TestAppContext,
+) -> tempfile::TempDir {
+    // The look runs on a real thread, against a real server.
+    cx.executor().allow_parking();
+    cx.add_window(|_, _| Blank);
+    let state = tempfile::tempdir().unwrap();
+    let out_of_reach = OutOfReach::in_dir(state.path());
+    let manager = manager(base, key, installed);
+    cx.update(|cx| keep_up_to_date(manager, out_of_reach, cx));
+    state
+}
+
+/// Checks for updates, and returns the alert that answers, once it's closed.
+fn check(cx: &mut TestAppContext) -> (String, String) {
+    cx.update(check_now);
+    answer(cx)
+}
+
+fn answer(cx: &mut TestAppContext) -> (String, String) {
+    let deadline = Instant::now() + LOOK_TIMEOUT;
+    while !cx.has_pending_prompt() {
+        assert!(Instant::now() < deadline, "no answer");
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let answer = cx.pending_prompt().unwrap();
+    cx.simulate_prompt_answer("OK");
+    answer
+}
+
+#[gpui_kit::test]
+fn checking_looks_again_and_says_an_update_is_ready(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let new = b"0.1.6, packaged".as_slice();
+    let server = publish(&[("0.1.6", new, Reply::file(new))], &pair);
+    let _state = app_looking_at(&server.base, public(&pair), &installed, cx);
+    check(cx);
+    let looks_before = feeds_read(&server);
+
+    cx.update(check_now);
+    assert!(cx.read(checking));
+    let (message, detail) = answer(cx);
+
+    assert_eq!(message, "Roundhouse 0.1.6 is ready");
+    assert_eq!(detail, "It installs when you quit.");
+    assert!(feeds_read(&server) > looks_before);
+    assert!(!cx.read(checking));
+}
+
+#[gpui_kit::test]
+fn checking_says_when_nothing_is_newer(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let server = publish(&[("0.1.5", b"", Reply::file(""))], &pair);
+    let _state = app_looking_at(&server.base, public(&pair), &installed, cx);
+
+    let (message, detail) = check(cx);
+
+    assert_eq!(message, "Roundhouse is up to date");
+    assert_eq!(detail, "0.1.5 is the newest version.");
+}
+
+/// The sidebar waits a day before it says so, but someone who asked hears at once.
+#[gpui_kit::test]
+fn checking_says_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    // Bound and closed again, so nothing listens there.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _state = app_looking_at(&format!("http://127.0.0.1:{port}"), public(&key_pair()), &installed, cx);
+
+    let (message, _) = check(cx);
+
+    assert_eq!(message, "Couldn't reach the update server");
+    assert!(cx.read(|cx| problem_shown(cx).is_none()));
 }

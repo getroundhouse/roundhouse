@@ -97,14 +97,17 @@ pub(super) fn problem(step: Step, error: &velopack::Error) -> Problem {
 #[derive(Default)]
 pub(super) struct Shown {
     pub(super) problem: Option<Problem>,
+    /// Someone checked for updates, and the look that answers them hasn't finished.
+    pub(super) checking: bool,
 }
 
 impl Global for Shown {}
 
 impl Shown {
     /// Takes in how a look went, and how long the update server has been out of reach. Being out of reach only shows
-    /// once it has lasted, and anything else at once.
+    /// once it has lasted, and anything else at once. Whoever checked has their answer.
     pub(super) fn record(&mut self, outcome: Result<(), Problem>, out_of_reach: Duration) {
+        self.checking = false;
         match outcome {
             Ok(()) => self.problem = None,
             Err(problem) if problem.kind == Kind::Unreachable && out_of_reach < QUIET_FOR => {}

@@ -1,8 +1,10 @@
 //! The desktop app. It only talks to a hub, through `client-core`, the same way the CLI does.
 
+mod alert;
 pub mod app;
 pub mod diff_panel;
 mod highlight;
+mod menus;
 mod sidebar;
 pub mod updates;
 pub mod workspace_pane;
@@ -16,6 +18,8 @@ use gpui_kit::{
 actions!(
     roundhouse,
     [
+        About,
+        CheckForUpdates,
         Quit,
         NewWorkspace,
         AddRepository,
@@ -46,7 +50,7 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
         KeyBinding::new("ctrl-tab", NextChat, None),
         KeyBinding::new("ctrl-shift-tab", PreviousChat, None),
     ]);
-    cx.on_action(|_: &Quit, cx| cx.quit());
+    menus::set(cx);
     std::thread::spawn(highlight::preload);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),

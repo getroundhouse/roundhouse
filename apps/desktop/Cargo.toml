@@ -14,7 +14,7 @@ name = "desktop"
 path = "src/lib.rs"
 
 [features]
-# What only tests use: showing that updating failed, without an installed app.
+# What only tests use: showing that updating failed, or that a check is under way, without an installed app.
 testing = []
 
 [dependencies]
