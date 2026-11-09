@@ -4,7 +4,7 @@ An open source app for running many coding agents in parallel, each in its own w
 
 ## Docs
 
-Start with `README.md`. `docs/documentation.md` lists every doc, and says what goes in a doc and what goes on GitHub, so read it before writing either. Read `docs/rust.md` before writing Rust, `docs/gpui.md` before writing UI code, and `docs/performance.md` before running a timing test.
+Start with `README.md`. `docs/documentation.md` lists every doc, and says what goes in a doc and what goes on GitHub, so read it before writing either. Read `docs/rust.md` before writing Rust, `docs/gpui.md` before writing UI code, `docs/performance.md` before running a timing test, and `docs/pull-requests.md` before opening a PR or writing its commit.
 
 ## Building and testing
 
