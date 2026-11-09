@@ -1,4 +1,4 @@
-//! How the app looks, and the shortcuts it answers.
+//! How the app looks.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
@@ -10,11 +10,8 @@ use gpui_kit::{
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, hub_source};
-use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
-use crate::{
-    AddRepository, CloseChat, CloseSettings, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace,
-    OpenSettings, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
-};
+use crate::workspace_pane::HEADER_HEIGHT;
+use crate::{CloseSettings, OpenSettings};
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -23,6 +20,7 @@ impl Render for AppView {
         if window.focused(cx).is_none() {
             window.focus(if self.settings_open() { &self.settings_focus } else { &self.focus }, cx);
         }
+        self.keep_menus_current(cx);
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
@@ -62,7 +60,7 @@ impl Render for AppView {
                 ),
             },
         };
-        let root = with_actions(h_flex(), cx);
+        let root = self.with_shortcuts(h_flex(), cx);
         self.root(root, cx).child(crate::sidebar::render(self, window, cx)).child(
             v_flex()
                 .flex_1()
@@ -87,56 +85,6 @@ impl AppView {
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
     }
-}
-
-fn with_actions(root: Div, cx: &mut Context<AppView>) -> Div {
-    root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
-        if let Some(repo) = t.current_repo() {
-            t.new_workspace(repo, cx);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
-    .on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
-    .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
-    .on_action(cx.listener(|t, _: &ToggleDiff, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::toggle_diff);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::create_pull_request);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &NewChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::new_chat);
-        }
-    }))
-    .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| {
-                if let Some(id) = p.active.clone() {
-                    p.close_chat(id, window, cx);
-                }
-            });
-        }
-    }))
-    .on_action(cx.listener(|t, _: &NextChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| p.step_chat(1, cx));
-        }
-    }))
-    .on_action(cx.listener(|t, _: &PreviousChat, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, |p, cx| p.step_chat(-1, cx));
-        }
-    }))
-    .on_action(cx.listener(|t, _: &StopAgent, _, cx| {
-        if let Some(pane) = t.selected_pane() {
-            pane.update(cx, WorkspacePane::stop_agent);
-        }
-    }))
 }
 
 /// The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:

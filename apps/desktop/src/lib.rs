@@ -21,9 +21,14 @@ actions!(
     [
         About,
         CheckForUpdates,
+        Hide,
+        HideOthers,
+        ShowAll,
         OpenSettings,
         CloseSettings,
         Quit,
+        Minimize,
+        Zoom,
         NewWorkspace,
         AddRepository,
         ToggleDiff,
@@ -42,7 +47,10 @@ actions!(
 pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     settings::load(&hub.paths.data_dir, cx);
     cx.bind_keys([
+        KeyBinding::new("cmd-h", Hide, None),
+        KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-m", Minimize, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         // Only while Settings shows. Otherwise Cmd-W closes a chat.
         KeyBinding::new("escape", CloseSettings, Some(settings::KEY_CONTEXT)),
