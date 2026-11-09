@@ -1,8 +1,21 @@
 # Builds the app from each merge to main and publishes it as an update: signed, notarized, and listed in a feed signed
-# so the app can check it. The build job has no secrets. On a PR that changes how the app is packaged or released, it
-# packages the app signed ad hoc and runs the checks a release gets, so the PR shows packaging still works. The keys
-# are in the `release` environment, which only main can use, so signing, notarizing and publishing only run after a
-# merge. The merge queue has already run the checks by then.
+# so the app can check it. The build job has no secrets. On a PR that changes how the app is built, packaged or
+# released, it packages the app signed ad hoc and runs the checks a release gets, so the PR shows packaging still
+# works. Nothing here can block a merge, since the ruleset requires only ci.yml's `checks`, which runs publish.py's
+# tests. The keys are in the `release` environment, which only main can use, so signing, notarizing and publishing
+# only run after a merge. The merge queue has already run the checks by then.
+#
+# The `release` environment's secrets:
+#   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
+#                                                            in base64, and its password
+#   APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER_ID  The App Store Connect key notarytool uses, the .p8 file's
+#                                                            text, and its IDs
+#   FEED_SIGNING_KEY                                         The update feed's private key, a PKCS#8 PEM file's text
+#   B2_RELEASES_KEY_ID, B2_RELEASES_KEY                      A Backblaze key that can read and write the bucket
+# The repository's variables:
+#   RELEASES_BUCKET, RELEASES_S3_ENDPOINT, RELEASES_REGION   The bucket, through its S3 API
+#   RELEASES_URL                                             Where apps read the update feed
+#   FEED_PUBLIC_KEY                                          The update feed's public key, as the app holds it
 name: Release
 
 on:
@@ -15,6 +28,10 @@ on:
   pull_request:
     paths:
       - tools/package/**
+      - tools/build.sh
+      - Cargo.lock
+      - rust-toolchain.toml
+      - apps/desktop/icons/**
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -31,10 +48,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  DOTNET_NOLOGO: "1"
-  # .NET on macOS skips checking NuGet packages' signatures unless asked to, and vpk comes from NuGet.
-  DOTNET_NUGET_SIGNATURE_VERIFICATION: "true"
 
 jobs:
   # Compiles every dependency, so it runs where no key is.
@@ -58,15 +71,18 @@ jobs:
           # Not mac-, which mac.yml restores from, since this target/ holds release builds.
           key: release-mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: release-mac-
-      - name: Test publishing
-        run: python3 -m unittest discover -s tools/package -v
-      # The runner image has .NET's SDKs, and tools/package/dotnet-tools.json pins vpk.
-      - working-directory: tools/package
-        run: dotnet --version && dotnet tool restore
-      # Signed ad hoc, so package.sh also checks the signature, the hardened runtime and the entitlements.
-      - name: Build and package, signed ad hoc
-        run: tools/package/package.sh --out "$RUNNER_TEMP/package" --sign -
+      - name: Build
+        id: build
+        run: |
+          build="$(tools/build.sh "$RUNNER_TEMP/binaries")"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      # From the binaries, as the release job packages them. Signed ad hoc, so package.sh also checks the signature,
+      # the hardened runtime and the entitlements. The runner image has .NET's SDKs.
+      - name: Package, signed ad hoc
+        run: tools/package/package.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package" --sign -
       - name: Run the packaged CLI and a hub from the package
+        env:
+          BUILD: ${{ steps.build.outputs.build }}
         run: |
           cli="$RUNNER_TEMP/package/Roundhouse.app/Contents/MacOS/roundhouse"
           export ROUNDHOUSE_HOME="$RUNNER_TEMP/smoke/home" ROUNDHOUSE_WORKSPACES="$RUNNER_TEMP/smoke/workspaces"
@@ -74,11 +90,11 @@ jobs:
           "$cli" repo list
           "$cli" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
           "$cli" hub stop
-          grep -q " version $(git rev-parse --short=12 HEAD) " "$RUNNER_TEMP/smoke/status.txt"
+          grep -q " version $BUILD " "$RUNNER_TEMP/smoke/status.txt"
       - name: Keep the binaries for the release job
-        if: github.event_name != 'pull_request'
-        run: tar -cf "$RUNNER_TEMP/binaries.tar" -C target/release roundhouse-desktop roundhoused roundhouse
-      - if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
+        run: tar -cf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries" .
+      - if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries
@@ -96,10 +112,11 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   # Signs, notarizes and publishes the build job's binaries. It compiles nothing, and each key is only in the steps
-  # that use it. Running it again is safe: it finishes a release that stopped partway, and leaves a finished one be.
+  # that use it, which remove what they wrote. Running it again is safe: it finishes a release that stopped partway,
+  # and leaves a finished one be.
   release:
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     environment: release
     runs-on: macos-26
     timeout-minutes: 60
@@ -128,10 +145,10 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
-      - working-directory: tools/package
-        run: dotnet --version && dotnet tool restore
 
-      # Only once the published feed matches its signature, so nothing in the bucket gets into the feed this signs.
+      # Before any key is set up, so a version no app would take, one that isn't newer than every published release,
+      # stops here. Only once the published feed matches its signature, so nothing in the bucket gets into the feed
+      # this signs.
       - name: Read the published feed
         id: feed
         env:
@@ -149,23 +166,21 @@ jobs:
           P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
           P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
         run: |
+          trap 'rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/developer-id.pem"' EXIT
           password="$(openssl rand -hex 24)"
           echo "::add-mask::$password"
           security create-keychain -p "$password" "$KEYCHAIN"
           security set-keychain-settings -lut 3600 "$KEYCHAIN"
           security unlock-keychain -p "$password" "$KEYCHAIN"
-          # Decrypted with the password from the environment, since a command line is visible to every process, and
-          # imported as the key and certificate it holds, which needs none. A .p12 that macOS exported uses RC2,
-          # which OpenSSL 3 keeps in its legacy provider.
-          openssl="$(brew --prefix openssl@3)/bin/openssl"
+          # Decrypted with OpenSSL 3, not macOS's LibreSSL, and the password from the environment, since a command
+          # line is visible to every process. -legacy reads the RC2 a .p12 that macOS exported uses, as well as AES.
+          # Then imported as the key and certificate it holds, which need no password.
+          openssl="$(tools/package/feed-signature.sh openssl)"
           (umask 077 && printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12")
-          (umask 077 && { "$openssl" pkcs12 -in "$RUNNER_TEMP/developer-id.p12" -passin env:P12_PASSWORD -nodes \
-            -out "$RUNNER_TEMP/developer-id.pem" 2> /dev/null || "$openssl" pkcs12 -legacy \
-            -in "$RUNNER_TEMP/developer-id.p12" -passin env:P12_PASSWORD -nodes -out "$RUNNER_TEMP/developer-id.pem"; })
-          rm "$RUNNER_TEMP/developer-id.p12"
+          (umask 077 && "$openssl" pkcs12 -legacy -in "$RUNNER_TEMP/developer-id.p12" -passin env:P12_PASSWORD -nodes \
+            -out "$RUNNER_TEMP/developer-id.pem")
           # -x leaves the private key unexportable.
           security import "$RUNNER_TEMP/developer-id.pem" -k "$KEYCHAIN" -f pemseq -t agg -x -T /usr/bin/codesign
-          rm "$RUNNER_TEMP/developer-id.pem"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$KEYCHAIN" > /dev/null
           # codesign only finds an identity in a keychain on the search list, which keeps the ones already on it.
           keychains=()
@@ -186,13 +201,15 @@ jobs:
           ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           trap 'rm -f "$RUNNER_TEMP/notary.p8"' EXIT
-          # The .p8 file's text, or that text in base64.
-          (umask 077 && printf '%s\n' "$KEY" > "$RUNNER_TEMP/notary.p8")
-          grep -q 'BEGIN PRIVATE KEY' "$RUNNER_TEMP/notary.p8" \
-            || (umask 077 && printf '%s' "$KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8")
+          # The .p8 file's text. The file ends in one newline, whether the secret ends in one or not.
+          key="${KEY%$'\n'}"
+          [[ "$key" == "-----BEGIN PRIVATE KEY-----"$'\n'* ]] \
+            || { echo "::error::APPLE_API_KEY_P8 isn't the text of a .p8 file"; exit 1; }
+          (umask 077 && printf '%s\n' "$key" > "$RUNNER_TEMP/notary.p8")
           xcrun notarytool store-credentials "$NOTARY_PROFILE" --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" \
             --issuer "$ISSUER" --keychain "$KEYCHAIN"
-      # vpk makes a delta from the newest full package, which the last step put in releases/.
+      # vpk makes a delta from the newest full package, which prepare put in releases/. package.sh checks Gatekeeper
+      # takes the app as notarized, and that the ticket is stapled.
       - name: Package, sign and notarize
         if: steps.feed.outputs.state == 'new'
         run: |
@@ -201,29 +218,17 @@ jobs:
       - name: Remove the signing keychain
         if: always()
         run: security delete-keychain "$KEYCHAIN" 2> /dev/null || true
-      - name: Check the notarization
-        if: steps.feed.outputs.state == 'new'
-        run: |
-          app="$PACKAGE/Roundhouse.app"
-          # Only its verdict and source, since the rest names whose certificate it is.
-          spctl --assess --type execute -vv "$app" > "$RUNNER_TEMP/spctl.txt" 2>&1 \
-            || { grep -v '^origin=' "$RUNNER_TEMP/spctl.txt"; exit 1; }
-          grep -v '^origin=' "$RUNNER_TEMP/spctl.txt"
-          grep -qx 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl.txt"
-          xcrun stapler validate "$app"
-          ls -l "$app/Contents/MacOS" "$PACKAGE/releases"
 
       - name: Sign the new feed
         if: steps.feed.outputs.state == 'new'
         env:
           FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
         run: |
-          tools/package/publish.py merge --version "$VERSION" --keep "$KEEP" --work "$PACKAGE"
+          feed="$(tools/package/publish.py merge --version "$VERSION" --keep "$KEEP" --work "$PACKAGE")"
           trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
           (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
           # Checks the signature against the app's key too, since a feed signed with another, every app refuses.
-          tools/package/feed-signature.sh sign "$PACKAGE/feed/releases.osx.json" "$RUNNER_TEMP/feed.pem" \
-            "$FEED_PUBLIC_KEY"
+          tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
       - name: Publish
         if: steps.feed.outputs.state == 'new'
         env:
@@ -232,36 +237,7 @@ jobs:
         run: |
           tools/package/publish.py upload --store "$STORE" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
-      - name: Check the feed apps read
+      - name: Check what apps read
         env:
           URL: ${{ vars.RELEASES_URL }}
-        run: |
-          public="$RUNNER_TEMP/public"
-          signed="$PACKAGE/feed/releases.osx.json"
-          mkdir "$public"
-          for attempt in 1 2 3 4 5 6; do
-            if curl -fsS -H 'Cache-Control: no-cache' -o "$public/releases.osx.json" "$URL/releases.osx.json" \
-              && curl -fsS -H 'Cache-Control: no-cache' -o "$public/releases.osx.json.sig" "$URL/releases.osx.json.sig" \
-              && cmp -s "$public/releases.osx.json" "$signed" && cmp -s "$public/releases.osx.json.sig" "$signed.sig"
-            then
-              break
-            fi
-            [ "$attempt" -lt 6 ] || { echo "::error::The public feed isn't the one this run signed"; exit 1; }
-            sleep 10
-          done
-          tools/package/feed-signature.sh verify "$public/releases.osx.json" "$FEED_PUBLIC_KEY"
-          full="$(jq -r --arg version "$VERSION" \
-            '.Assets[] | select(.Version == $version and .Type == "Full") | "\(.FileName) \(.Size)"' \
-            "$public/releases.osx.json")"
-          [ -n "$full" ] || { echo "::error::The public feed doesn't list $VERSION"; exit 1; }
-          read -r name size <<< "$full"
-          length="$(curl -fsSI "$URL/$name" | awk 'tolower($1) == "content-length:" { print $2 }' | tr -d '\r')"
-          [ "$length" = "$size" ] || { echo "::error::$name is $length bytes at $URL, not $size"; exit 1; }
-          jq -r '.Assets[] | "\(.Version) \(.Type) \(.FileName) \(.Size)"' "$public/releases.osx.json"
-
-      - name: Remove the keys
-        if: always()
-        run: |
-          security delete-keychain "$KEYCHAIN" 2> /dev/null || true
-          rm -f "$RUNNER_TEMP/feed.pem" "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/developer-id.p12" \
-            "$RUNNER_TEMP/developer-id.pem"
+        run: tools/package/publish.py check --url "$URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" --work "$PACKAGE"

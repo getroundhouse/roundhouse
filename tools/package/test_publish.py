@@ -1,18 +1,21 @@
-"""Tests for publish.py, against a directory standing in for the bucket and packages standing in for vpk's.
+"""Tests for publish.py and feed-signature.sh, against a directory standing in for the bucket, served over HTTP for
+`check`, and packages standing in for vpk's.
 
     python3 -m unittest discover -s tools/package
 
-Needs OpenSSL 3, as feed-signature.sh does.
+Needs OpenSSL 3, as feed-signature.sh does, and fails without it.
 """
 
 from __future__ import annotations
 
-import base64
+import functools
 import hashlib
+import http.server
 import json
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -20,26 +23,22 @@ import publish
 from publish import FEED, PORTABLE, STAGED_FEED, DirStore, Refused
 
 HERE = Path(__file__).resolve().parent
+# A throwaway key, and a feed it signed, which the app's tests check too, so the two sides can't disagree on the form.
+FIXTURE = HERE.parent.parent / "apps" / "desktop" / "src" / "updates" / "source" / "fixture"
+THROWAWAY_KEY = FIXTURE / "throwaway-key.pem"
 
 
-def openssl() -> str:
-    for candidate in ("openssl", "/opt/homebrew/opt/openssl@3/bin/openssl", "/usr/local/opt/openssl@3/bin/openssl"):
-        try:
-            done = subprocess.run([candidate, "version"], capture_output=True, text=True, check=False)
-        except FileNotFoundError:
-            continue
-        if done.stdout.startswith("OpenSSL ") and int(done.stdout.split()[1].split(".")[0]) >= 3:
-            return candidate
-    raise unittest.SkipTest("needs OpenSSL 3")
+def feed_signature(*args: str) -> str:
+    """Runs feed-signature.sh, and returns what it printed."""
+    return subprocess.run([str(HERE / "feed-signature.sh"), *args], capture_output=True, text=True,
+                          check=True).stdout.strip()
 
 
 def make_key(directory: Path) -> tuple[Path, str]:
-    """A private key file, and its public key the way the app holds it."""
+    """A new private key file, and its public key the way the app holds it."""
     private = directory / "feed.pem"
-    subprocess.run([openssl(), "genpkey", "-algorithm", "ed25519", "-out", str(private)], check=True)
-    der = subprocess.run([openssl(), "pkey", "-in", str(private), "-pubout", "-outform", "DER"], capture_output=True,
-                         check=True).stdout
-    return private, base64.b64encode(der[-32:]).decode()
+    subprocess.run([feed_signature("openssl"), "genpkey", "-algorithm", "ed25519", "-out", str(private)], check=True)
+    return private, feed_signature("public", str(private))
 
 
 def asset(version: str, kind: str, content: bytes) -> dict:
@@ -67,6 +66,38 @@ class FailingStore(DirStore):
         super().put(key, source, content_type)
 
 
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002, which is the name the base class gives it
+        del format, args
+
+
+class Signature(unittest.TestCase):
+    def test_openssl_signs_the_fixture_as_the_app_expects(self) -> None:
+        key = (FIXTURE / "throwaway-key.pub").read_text().strip()
+        self.assertEqual(feed_signature("public", str(THROWAWAY_KEY)), key)
+        feed_signature("verify", str(FIXTURE / FEED), key)
+
+        # Ed25519 signs the same bytes the same way every time, so signing again gives the committed signature.
+        with tempfile.TemporaryDirectory() as work:
+            feed = Path(work) / FEED
+            shutil.copyfile(FIXTURE / FEED, feed)
+            feed_signature("sign", str(feed), str(THROWAWAY_KEY), key)
+            self.assertEqual(Path(str(feed) + ".sig").read_bytes(), (FIXTURE / (FEED + ".sig")).read_bytes())
+
+    def test_a_changed_feed_or_another_key_fails_to_verify(self) -> None:
+        key = (FIXTURE / "throwaway-key.pub").read_text().strip()
+        with tempfile.TemporaryDirectory() as work:
+            feed = Path(work) / FEED
+            feed.write_bytes((FIXTURE / FEED).read_bytes() + b" ")
+            shutil.copyfile(FIXTURE / (FEED + ".sig"), Path(str(feed) + ".sig"))
+            with self.assertRaises(subprocess.CalledProcessError):
+                feed_signature("verify", str(feed), key)
+
+            _, other = make_key(Path(work))
+            with self.assertRaises(subprocess.CalledProcessError):
+                feed_signature("verify", str(FIXTURE / FEED), other)
+
+
 class Publishing(unittest.TestCase):
     def setUp(self) -> None:
         self.dir = Path(tempfile.mkdtemp())
@@ -74,7 +105,7 @@ class Publishing(unittest.TestCase):
         self.bucket = self.dir / "bucket"
         self.bucket.mkdir()
         self.store = DirStore(str(self.bucket))
-        self.private, self.key = make_key(self.dir)
+        self.private, self.key = THROWAWAY_KEY, feed_signature("public", str(THROWAWAY_KEY))
         self.runs = 0
 
     def work(self) -> Path:
@@ -105,10 +136,18 @@ class Publishing(unittest.TestCase):
         work = self.work()
         if publish.prepare(store, self.key, version, work) == "new":
             self.pack(work, version)
-            publish.merge(version, keep, work)
+            self.assertEqual(publish.merge(version, keep, work), work / "feed" / FEED)
             self.sign(work)
             publish.upload(store, self.key, version, work)
         return work
+
+    def serve(self) -> str:
+        """The bucket's URL, served the way apps read it."""
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(self.bucket)))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}"
 
     def published(self) -> list[tuple[str, str]]:
         feed, signature = self.store.get(FEED), self.store.get(FEED + ".sig")
@@ -231,10 +270,12 @@ class Publishing(unittest.TestCase):
             self.assertIn((version, "Full"), self.published())
             self.assert_packages_match()
 
-    def test_a_version_older_than_one_published_is_refused(self) -> None:
+    def test_a_version_older_than_one_published_is_refused_before_anything_is_built(self) -> None:
         self.release("0.1.5")
+        work = self.work()
         with self.assertRaisesRegex(Refused, "isn't newer than every published release"):
-            self.release("0.1.4")
+            publish.prepare(self.store, self.key, "0.1.4", work)
+        self.assertFalse((work / "releases").exists())
 
     def test_a_package_that_isnt_what_vpk_made_is_refused(self) -> None:
         work = self.work()
@@ -270,6 +311,37 @@ class Publishing(unittest.TestCase):
         work = self.release("0.1.1")
         with self.assertRaisesRegex(Refused, "start from an empty directory"):
             publish.prepare(self.store, self.key, "0.1.2", work)
+
+    def test_the_check_reads_what_apps_read(self) -> None:
+        self.release("0.1.1")
+        work = self.release("0.1.2")
+
+        self.assertEqual(publish.check(self.serve(), self.key, "0.1.2", work, wait=0), [
+            "0.1.1 Full Roundhouse-0.1.1-osx-full.nupkg 19",
+            "0.1.2 Full Roundhouse-0.1.2-osx-full.nupkg 19",
+            "0.1.2 Delta Roundhouse-0.1.2-osx-delta.nupkg 20",
+        ])
+
+    def test_the_check_refuses_a_feed_or_package_apps_wouldnt_get(self) -> None:
+        first = self.release("0.1.1")
+        work = self.release("0.1.2")
+        url = self.serve()
+
+        # Such as a cache still serving the last feed.
+        for name in (FEED, FEED + ".sig"):
+            shutil.copyfile(first / "feed" / name, self.bucket / name)
+        with self.assertRaisesRegex(Refused, "doesn't serve the feed this run published"):
+            publish.check(url, self.key, "0.1.2", work, attempts=2, wait=0)
+
+        for name in (FEED, FEED + ".sig"):
+            shutil.copyfile(work / "feed" / name, self.bucket / name)
+        (self.bucket / "Roundhouse-0.1.2-osx-full.nupkg").unlink()
+        with self.assertRaisesRegex(Refused, "Roundhouse-0.1.2-osx-full.nupkg is missing"):
+            publish.check(url, self.key, "0.1.2", work, wait=0)
+
+        _, other = make_key(self.dir)
+        with self.assertRaisesRegex(Refused, "doesn't match the app's key"):
+            publish.check(url, other, "0.1.2", work, wait=0)
 
 
 if __name__ == "__main__":

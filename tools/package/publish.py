@@ -8,18 +8,22 @@ the workflow signed, such as an older one, and can't get a feed of theirs signed
 
   publish.py prepare --store STORE --key KEY --version VERSION --work DIR
       Reads the published feed and checks its signature. If it lists VERSION, a run already published it: this makes
-      sure apps get that feed, and prints `published`. Otherwise it puts the feed in DIR/base, and in DIR/releases
-      with its newest full package, checked against it, for vpk to make a delta from, and prints `new`.
+      sure apps get that feed, and prints `published`. Otherwise it refuses a VERSION that isn't newer than every
+      published release, which no app would take. It puts the feed in DIR/base, and in DIR/releases with its newest
+      full package, checked against it, for vpk to make a delta from, and prints `new`.
   publish.py merge --version VERSION --keep COUNT --work DIR
-      Writes DIR/feed/releases.osx.json: the feed in DIR/base and the packages vpk made for VERSION in DIR/releases,
-      checked against their files, without releases older than the newest COUNT. The workflow signs it next.
+      Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
+      DIR/releases, checked against their files, without releases older than the newest COUNT.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
       Uploads the new packages and the portable zip, then the signed feed, reads the feed back, and then deletes the
       packages that left it.
+  publish.py check --url URL --key KEY --version VERSION --work DIR
+      Checks that URL, where apps read the feed, serves the one in DIR/feed, and VERSION's full package. A host with a
+      cache can take a while to, so it tries for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
-without a bucket. KEY is the app's public key: the raw 32 bytes, in base64. `test_publish.py` runs it against a
-directory.
+without a bucket. KEY is the app's public key, in the form `feed-signature.sh` says. `test_publish.py` runs this
+against a directory, and serves it for `check`. Needs Python 3.9 or newer, and OpenSSL 3, as `feed-signature.sh` does.
 
 The feed and its signature are two uploads, so a run that stops between them leaves a pair that doesn't match. Each
 run uploads the pair under `staging/` first, so whichever of the two matches its signature and is newer becomes the
@@ -37,7 +41,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
+
+if sys.version_info < (3, 9):
+    sys.exit("error: publish.py needs Python 3.9 or newer")
 
 HERE = Path(__file__).resolve().parent
 PACK_ID = "Roundhouse"
@@ -143,11 +153,14 @@ def signed(feed: bytes, signature: bytes, key: str) -> bool:
         return done.returncode == 0
 
 
-def version_of(asset: dict) -> tuple[int, ...]:
-    version = asset["Version"]
+def parse_version(version: str) -> tuple[int, ...]:
     if not VERSION.match(version):
         raise Refused(f"{version} isn't a version this publishes, which is three numbers")
     return tuple(int(part) for part in version.split("."))
+
+
+def version_of(asset: dict) -> tuple[int, ...]:
+    return parse_version(asset["Version"])
 
 
 def newest(assets: list[dict]) -> tuple[int, ...]:
@@ -206,6 +219,16 @@ def put_pair(store: DirStore | S3Store, name: str, directory: Path) -> None:
     store.put(name + ".sig", directory / (FEED + ".sig"), "application/octet-stream")
 
 
+def fetch(url: str, method: str = "GET") -> tuple[bytes, int] | None:
+    """The body and length at `url`, past any cache, or None if it can't be read."""
+    request = urllib.request.Request(url, method=method, headers={"Cache-Control": "no-cache"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.read(), int(response.headers.get("Content-Length", -1))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 # The steps.
 
 
@@ -224,6 +247,10 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
             if asset["Version"] == version and store.size(asset["FileName"]) != asset["Size"]:
                 raise Refused(f"{asset['FileName']} is published in the feed but missing from the bucket")
         return "published"
+    # Publishing's one check that the version is newer, before the job builds anything or sets up a key. package.sh
+    # has its own for a local --out, and vpk checks too, but only after a build.
+    if assets and parse_version(version) <= newest(assets):
+        raise Refused(f"{version} isn't newer than every published release, so no app would take it")
     releases = work / "releases"
     releases.mkdir(parents=True, exist_ok=True)
     if base is None:
@@ -243,9 +270,8 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
     return "new"
 
 
-def merge(version: str, keep: int, work: Path) -> None:
-    if not VERSION.match(version):
-        raise Refused(f"{version} isn't a version this publishes, which is three numbers")
+def merge(version: str, keep: int, work: Path) -> Path:
+    parse_version(version)
     if keep < 1:
         raise Refused("the feed has to keep at least the release it publishes")
     base = read_pair(work / "base")
@@ -256,13 +282,13 @@ def merge(version: str, keep: int, work: Path) -> None:
     for asset in made:
         if asset["PackageId"] != PACK_ID or not file_matches(work / "releases" / asset["FileName"], asset):
             raise Refused(f"{asset['FileName']} doesn't match what vpk's feed says of it")
-    if assets and version_of(made[0]) <= newest(assets):
-        raise Refused(f"{version} isn't newer than every published release, so no app would take it")
     every = assets + made
     kept = sorted({version_of(asset) for asset in every}, reverse=True)[:keep]
     feed = {"Assets": [asset for asset in every if version_of(asset) in kept]}
-    (work / "feed").mkdir(parents=True, exist_ok=True)
-    (work / "feed" / FEED).write_text(json.dumps(feed, separators=(",", ":")))
+    path = work / "feed" / FEED
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(feed, separators=(",", ":")))
+    return path
 
 
 def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> None:
@@ -292,22 +318,53 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
         store.delete(name)
 
 
+def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait: float = 10) -> list[str]:
+    """Checks what apps read at `url`, and returns a line for each release it lists."""
+    pair = read_pair(work / "feed")
+    if pair is None:
+        raise Refused(f"{work / 'feed'} has no feed, so this run published nothing to check")
+    for attempt in range(attempts):
+        feed, signature = fetch(f"{url}/{FEED}"), fetch(f"{url}/{FEED}.sig")
+        if feed and signature and (feed[0], signature[0]) == pair:
+            break
+        if attempt + 1 == attempts:
+            raise Refused(f"{url} doesn't serve the feed this run published")
+        time.sleep(wait)
+    if not signed(*pair, key):
+        raise Refused("the published feed doesn't match the app's key")
+    assets = assets_of(pair[0])
+    fulls = [asset for asset in assets if asset["Version"] == version and asset["Type"] == "Full"]
+    if not fulls:
+        raise Refused(f"the published feed doesn't list {version}")
+    package = fetch(f"{url}/{fulls[0]['FileName']}", method="HEAD")
+    if package is None or package[1] != fulls[0]["Size"]:
+        size = "missing" if package is None else f"{package[1]} bytes"
+        raise Refused(f"{fulls[0]['FileName']} is {size} at {url}, not {fulls[0]['Size']} bytes")
+    return [f"{asset['Version']} {asset['Type']} {asset['FileName']} {asset['Size']}" for asset in assets]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("step", choices=["prepare", "merge", "upload"])
-    parser.add_argument("--store")
-    parser.add_argument("--key")
-    parser.add_argument("--version", required=True)
-    parser.add_argument("--keep", type=int)
-    parser.add_argument("--work", type=Path, required=True)
+    steps = parser.add_subparsers(dest="step", required=True)
+    for name, options in {
+        "prepare": ("--store", "--key", "--version", "--work"),
+        "merge": ("--version", "--keep", "--work"),
+        "upload": ("--store", "--key", "--version", "--work"),
+        "check": ("--url", "--key", "--version", "--work"),
+    }.items():
+        step = steps.add_parser(name)
+        for option in options:
+            step.add_argument(option, required=True, type={"--keep": int, "--work": Path}.get(option, str))
     args = parser.parse_args()
     try:
         if args.step == "prepare":
             print(prepare(open_store(args.store), args.key, args.version, args.work))
         elif args.step == "merge":
-            merge(args.version, args.keep or 0, args.work)
-        else:
+            print(merge(args.version, args.keep, args.work))
+        elif args.step == "upload":
             upload(open_store(args.store), args.key, args.version, args.work)
+        else:
+            print("\n".join(check(args.url.rstrip("/"), args.key, args.version, args.work)))
     except Refused as refused:
         print(f"error: {refused}", file=sys.stderr)
         return 1

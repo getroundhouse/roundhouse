@@ -10,6 +10,7 @@ Where each kind of test goes. How to write a test is in `docs/rust.md`, the comm
 | The window | Clicking and typing through to what's shown | `apps/desktop/tests/` |
 | How each screen looks, and the app icon | That each still matches its approved image | `apps/desktop/tests/ui/gallery/` |
 | The repo's rules | Dependencies, licenses, file length and lint inheritance, against the real dependency graph | `tools/policy/` |
+| Publishing updates | That a release signs only a feed it computed, finishes after stopping partway, and reads back as apps would, against a directory standing in for the bucket | `tools/package/test_publish.py` |
 | The real CLI | That the fake agent is still honest. By hand, since it costs money | `tools/smoke/` |
 
 The window is tested through its real UI, by clicking and typing in the kit's headless windows, against a real hub process and real git, with only the agent faked. That keeps test code out of the product and windows off the screen, and it catches what a screenshot can't, such as a click that silently does nothing.
