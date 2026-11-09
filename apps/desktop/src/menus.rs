@@ -37,16 +37,15 @@ pub(crate) fn show(says: Says, cx: &mut App) {
     cx.set_menus([app_menu(), file_menu(says), edit_menu(), view_menu(says), window_menu()]);
 }
 
-/// The items every Mac app has, in the same order and groups, with the app's own after About.
+/// The items every Mac app has, in the same order, with the app's own after About. Check for Updates… goes with About,
+/// and Services with Settings…, so the menu has fewer lines across it.
 fn app_menu() -> Menu {
     // macOS names the first menu after the app, whatever it's called here.
     Menu::new("Roundhouse").items([
         MenuItem::action("About Roundhouse", About),
-        MenuItem::separator(),
         MenuItem::action("Check for Updates…", CheckForUpdates),
         MenuItem::separator(),
         MenuItem::action("Settings…", OpenSettings),
-        MenuItem::separator(),
         MenuItem::os_submenu("Services", SystemMenuType::Services),
         MenuItem::separator(),
         MenuItem::action("Hide Roundhouse", Hide),
