@@ -17,8 +17,6 @@ use crate::calls::lines::Counts;
 use crate::calls::{Failure, failure};
 use crate::rows::around::Answer;
 
-/// How far what a line opens to sits in from it, so it lines up under the title.
-pub(super) const INDENT: f32 = 24.0;
 const ICON: f32 = 15.0;
 /// As tall as a line of body text and a little room, so calls in a row read as a list.
 pub(super) const HEIGHT: f32 = 28.0;

@@ -97,7 +97,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![A web search and a fetch, opened](screens/tool-web.png)
 
-- **What the agent thought is a line like a call's,** saying `Thinking`, with the start of the thought, faint, cut off where the line ends. Opened, the whole thought is at body size in muted text, under the title, and the line drops the start, so it isn't shown twice. While it streams, its line says `Thinking…` at the same size. *Unconfirmed.*
+- **What the agent thought is a line like a call's,** saying `Thinking`, with the start of the thought, faint, cut off where the line ends. Opened, the whole thought is at body size in muted text, under its line and on the column's left edge, and the line drops the start, so it isn't shown twice. While it streams, its line says `Thinking…` at the same size. *Unconfirmed.*
 
 **Thinking among calls: a long thought opened, and a short one closed.** *Unconfirmed.*
 
