@@ -3,7 +3,10 @@
 //! This has to survive the CLI changing underneath it, so it reads loosely typed JSON and never
 //! fails. Anything it doesn't recognize still reaches the log as `AgentOther` with the raw line.
 
+use std::collections::HashMap;
+
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
+use protocol::model::MessageId;
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
@@ -25,7 +28,47 @@ pub enum Parsed {
     ControlReply { request_id: String, error: Option<String> },
 }
 
-pub fn parse_line(line: &str) -> Parsed {
+/// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
+/// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
+/// message, as its deltas did.
+#[derive(Debug, Default)]
+pub struct Normalizer {
+    streaming: HashMap<MessageId, u32>,
+}
+
+impl Normalizer {
+    pub fn line(&mut self, line: &str) -> Parsed {
+        let mut parsed = parse_line(line);
+        if let Parsed::Delta(delta) = &parsed {
+            match delta.change {
+                DeltaChange::BlockStart { index, .. }
+                | DeltaChange::Text { index, .. }
+                | DeltaChange::Thinking { index, .. }
+                | DeltaChange::ToolInput { index, .. } => {
+                    self.streaming.insert(delta.message_id.clone(), index);
+                }
+                DeltaChange::MessageStop => {
+                    self.streaming.remove(&delta.message_id);
+                }
+                DeltaChange::Unknown => {}
+            }
+        }
+        if let Parsed::Event(EventBody::Assistant { message_id: Some(id), blocks, first_index, .. }) = &mut parsed {
+            // The block that streamed is this one, so no later block can take its place. Claude sends one block
+            // per event, and if several come at once, which of them streamed can't be told.
+            let streamed = self.streaming.remove(id);
+            *first_index = streamed.filter(|_| blocks.len() == 1);
+        }
+        // Whatever a turn left streaming, such as when it was cancelled, is over.
+        if let Parsed::Event(EventBody::TurnEnded { .. }) = &parsed {
+            self.streaming.clear();
+        }
+        parsed
+    }
+}
+
+/// One line on its own. A [`Normalizer`] also says where a finished block sits in its message.
+fn parse_line(line: &str) -> Parsed {
     let parsed = serde_json::from_str::<Value>(line)
         // JavaScript strings can hold half of a surrogate pair, and JSON.stringify writes it as an
         // escape. That's rare, and it can land in a line that matters, such as an approval.
@@ -162,6 +205,8 @@ fn assistant(value: &Value) -> EventBody {
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
         model: string_of(message, "model"),
         blocks: blocks(message.get("content")),
+        // A Normalizer knows it from the deltas before.
+        first_index: None,
     }
 }
 

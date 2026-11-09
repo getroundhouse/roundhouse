@@ -59,6 +59,11 @@ pub enum EventBody {
         parent_tool_use_id: Option<ToolUseId>,
         model: Option<String>,
         blocks: Vec<ContentBlock>,
+        /// Where the first of `blocks` sits in its message, as the deltas that streamed it numbered it,
+        /// with the rest after it in order. A block keeps the identity it had while streaming. `None`
+        /// when nothing streamed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        first_index: Option<u32>,
     },
     /// Content the agent itself added on the user's side: tool results and interruption notes.
     AgentUser {

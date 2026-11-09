@@ -132,11 +132,15 @@ fn block_keys(seq: Seq, body: &EventBody) -> Vec<ItemKey> {
     } else {
         0
     };
-    (0..count).map(|position| block_key(seq, position)).collect()
+    (0..count).map(|position| block_key(seq, body, position)).collect()
 }
 
-/// What the block at `position` in the event at `seq` is, wherever it's drawn.
-fn block_key(seq: Seq, position: usize) -> ItemKey {
+/// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
+/// while it streamed.
+fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
+    if let EventBody::Assistant { message_id, first_index, .. } = body {
+        return ItemKey::recorded_block(seq, position, message_id.as_ref(), *first_index);
+    }
     ItemKey::Event(seq, position)
 }
 
@@ -341,4 +345,26 @@ pub(super) fn disclosure(
             .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(label.to_string())))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into())),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::event::{ContentBlock, EventBody};
+
+    use super::block_keys;
+    use crate::item_key::ItemKey;
+
+    #[test]
+    fn a_recorded_block_is_known_by_its_place_in_its_message() {
+        let finished = |first_index| EventBody::Assistant {
+            message_id: Some("m".into()),
+            parent_tool_use_id: None,
+            model: None,
+            blocks: vec![ContentBlock::Text { text: "a".into() }],
+            first_index,
+        };
+
+        assert_eq!(block_keys(7, &finished(Some(2))), [ItemKey::Block("m".into(), 2)]);
+        assert_eq!(block_keys(7, &finished(None)), [ItemKey::Event(7, 0)], "nothing streamed");
+    }
 }

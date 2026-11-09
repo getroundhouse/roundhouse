@@ -51,7 +51,7 @@ fn result_in(m: &Model, ix: usize, call: &str) -> Option<Answer> {
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
     blocks.iter().enumerate().find_map(|(block, content)| {
         let ContentBlock::ToolResult { tool_use_id, is_error, text, .. } = content else { return None };
-        let key = block_key(event.seq, block);
+        let key = block_key(event.seq, &event.body, block);
         (tool_use_id.as_str() == call).then(|| Answer {
             is_error: *is_error,
             text: text.clone(),
@@ -189,7 +189,7 @@ mod tests {
             .iter()
             .map(|id| ContentBlock::ToolUse { id: (*id).to_string(), name: "Bash".into(), input: json!({}) })
             .collect();
-        EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks }
+        EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
     }
 
     fn result(id: &str) -> EventBody {
