@@ -33,7 +33,7 @@ pub fn clear_buffer(buffer: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{ContentBlock, EventBody};
+    use crate::event::{ContentBlock, EventBody, FileChange, LineMark};
     use crate::model::{AgentKind, DiffSide, RepoId, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
     #[test]
@@ -79,5 +79,7 @@ mod tests {
         assert_eq!(decode::<SessionStatus>(br#""from_the_future""#).unwrap(), SessionStatus::Unknown);
         assert_eq!(decode::<AgentKind>(br#""from_the_future""#).unwrap(), AgentKind::Unknown);
         assert_eq!(decode::<DiffSide>(br#""from_the_future""#).unwrap(), DiffSide::Unknown);
+        assert_eq!(decode::<FileChange>(br#"{"kind":"renamed","to":"b.rs"}"#).unwrap(), FileChange::Unknown);
+        assert_eq!(decode::<LineMark>(br#""moved""#).unwrap(), LineMark::Unknown);
     }
 }

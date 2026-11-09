@@ -1,4 +1,4 @@
-use protocol::event::AgentTask;
+use protocol::event::{AgentTask, FileChange};
 use protocol::model::TaskId;
 use serde_json::json;
 
@@ -90,9 +90,28 @@ fn tool_results_flatten_text_and_count_images() {
             tool_use_id: "t1".into(),
             is_error: false,
             text: "a\nb".into(),
-            image_count: 1
+            image_count: 1,
+            change: None,
         }]
     );
+}
+
+#[test]
+fn an_edit_s_result_carries_what_it_changed() {
+    let line = json!({"type":"user","message":{"role":"user","content":[{
+        "type":"tool_result","tool_use_id":"t1","content":"The file has been updated."
+    }]},"tool_use_result":{"filePath":"/w/a.rs","structuredPatch":[
+        {"oldStart":3,"oldLines":1,"newStart":3,"newLines":1,"lines":["-old","+new"]}
+    ]}})
+    .to_string();
+
+    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!() };
+
+    let [ContentBlock::ToolResult { change: Some(FileChange::Changed { hunks }), .. }] = blocks.as_slice() else {
+        panic!("{blocks:?}")
+    };
+    assert_eq!(hunks[0].new_start, 3);
+    assert_eq!(hunks[0].lines.len(), 2);
 }
 
 #[test]
