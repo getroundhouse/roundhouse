@@ -74,7 +74,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          build="$(tools/build.sh "$RUNNER_TEMP/binaries")"
+          build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
       # From the binaries, as the release job packages them. Signed ad hoc, so package.sh also checks the signature,
       # the hardened runtime and the entitlements. The runner image has .NET's SDKs.

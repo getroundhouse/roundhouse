@@ -7,7 +7,8 @@
 #   tools/package/package.sh                  Package this commit, unsigned
 #   tools/package/package.sh --allow-dirty    The same, with uncommitted changes in the build
 #   tools/package/package.sh --out DIR        Write to DIR rather than target/package
-#   tools/package/package.sh --prebuilt DIR   Package the binaries in DIR, which `tools/build.sh` built from this commit
+#   tools/package/package.sh --prebuilt DIR   Package the binaries in DIR, which `tools/build.sh --package` built
+#                                             from this commit
 #   tools/package/package.sh --print-version  Print the version this commit packages as, and stop
 #   tools/package/package.sh --sign IDENTITY [--keychain PATH] [--notary-profile NAME]
 #       Sign with a Developer ID, named as `codesign -s` takes it, or `-` for ad hoc, and given a notarytool profile,
