@@ -39,8 +39,8 @@ A PR gets the `needs/owner` label when it changes an owner doc or a file that en
 
 ## The commit
 
-GitHub squashes each PR into one commit on `main`, and builds that commit's message from the branch. If the branch has one commit, its title and message become the commit on `main`. If it has several, GitHub lists every commit's message under the PR's title, review fixes and all. So once the owner asks for a PR to be queued, make the branch a single commit, by amending as you go or squashing it then, and push it with `--force-with-lease`.
+GitHub squashes each PR into one commit on `main`, and builds that commit's message from the branch.
 
-- **Its title is the PR's title,** since with one commit GitHub takes the commit's title.
+- **Its title is the PR's title.**
 - **Its message says what changed and why,** in a few short paragraphs of plain text, with no Markdown, wrapped at 72 columns. It condenses parts 2 and 3 of the description, since it's what `git log` and `git blame` show. How it was checked, the pictures, and what needs the owner stay in the PR.
 - **It ends with `Closes #N` or `Fixes #N`** when the PR does.
