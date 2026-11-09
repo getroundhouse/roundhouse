@@ -42,6 +42,7 @@ fn session(workspace: &str, updated_at_ms: i64) -> Session {
         background_tasks: Vec::new(),
         queued: Vec::new(),
         queue_held: false,
+        turn_started_at_ms: None,
         rev: Rev::default(),
         title_source: TitleSource::FirstLine,
     }

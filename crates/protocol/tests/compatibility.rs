@@ -6,7 +6,7 @@
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
 };
-use protocol::event::SessionEvent;
+use protocol::event::{EventBody, SessionEvent};
 use protocol::frame;
 use protocol::model::{RecordKey, Rev};
 use protocol::tail::StreamDelta;
@@ -105,4 +105,24 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
     assert_eq!((session.reply_seq, session.read_seq), (0, 0));
     assert!(!session.unread());
+}
+
+#[test]
+fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+
+    let notice: HubNotice = frame::decode(line).unwrap();
+
+    let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
+    assert_eq!(session.turn_started_at_ms, None);
+}
+
+#[test]
+fn a_turns_end_from_a_hub_that_doesnt_add_its_start_has_none() {
+    let event: SessionEvent =
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":9,"cost_usd":null,"num_turns":null}}"#)
+            .unwrap();
+
+    let EventBody::TurnEnded { started_at_ms, .. } = event.body else { panic!("{event:?}") };
+    assert_eq!(started_at_ms, None);
 }

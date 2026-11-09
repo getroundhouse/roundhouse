@@ -12,15 +12,25 @@ use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StatusChange {
     pub status: SessionStatus,
-    /// The event ends a turn, so it becomes the session's newest reply.
-    pub ends_turn: bool,
+    pub turn: TurnEdge,
     /// What it's running in the background now, if the event changes that.
     pub background_tasks: Option<Vec<AgentTask>>,
 }
 
+/// What a change of status does to the session's turns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TurnEdge {
+    /// The event starts a turn, so its time becomes when the newest turn started.
+    Starts,
+    /// The event ends a turn, so it becomes the session's newest reply.
+    Ends,
+    /// It does neither, such as the agent stopping to ask, or going away mid-turn.
+    Neither,
+}
+
 impl From<SessionStatus> for StatusChange {
     fn from(status: SessionStatus) -> Self {
-        Self { status, ends_turn: false, background_tasks: None }
+        Self { status, turn: TurnEdge::Neither, background_tasks: None }
     }
 }
 
@@ -50,27 +60,36 @@ impl From<SessionStatus> for SessionChange {
     }
 }
 
-/// Makes `change` to the session, as part of the transaction that records the event at `seq`.
-fn change_session(tx: &Connection, session_id: &SessionId, seq: i64, change: SessionChange) -> Result<(), StoreError> {
+/// Makes `change` to the session, as part of the transaction that records the event at `seq`, at `ts_ms`.
+fn change_session(
+    tx: &Connection,
+    session_id: &SessionId,
+    seq: i64,
+    ts_ms: i64,
+    change: SessionChange,
+) -> Result<(), StoreError> {
+    let id = session_id.as_str();
     if let Some(held) = change.queue_held {
-        tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, session_id.as_str()])?;
+        tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;
     }
-    let Some(StatusChange { status, ends_turn, background_tasks }) = change.status else { return Ok(()) };
+    let Some(StatusChange { status, turn, background_tasks }) = change.status else { return Ok(()) };
     if let Some(tasks) = background_tasks {
         tx.execute(
             "UPDATE sessions SET background_tasks = ? WHERE id = ?",
-            params![serde_json::to_string(&tasks)?, session_id.as_str()],
+            params![serde_json::to_string(&tasks)?, id],
         )?;
     }
     let status = text_of(&status);
-    if ends_turn {
-        tx.execute(
-            "UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?",
-            params![status, seq, session_id.as_str()],
-        )?;
-    } else {
-        tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, session_id.as_str()])?;
-    }
+    match turn {
+        TurnEdge::Starts => tx.execute(
+            "UPDATE sessions SET status = ?, turn_started_at_ms = ? WHERE id = ?",
+            params![status, ts_ms, id],
+        )?,
+        TurnEdge::Ends => {
+            tx.execute("UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?", params![status, seq, id])?
+        }
+        TurnEdge::Neither => tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, id])?,
+    };
     Ok(())
 }
 
@@ -124,7 +143,7 @@ impl Store {
             "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
             params![seq, ts_ms, session_id.as_str()],
         )?;
-        change_session(&tx, session_id, seq, change.unwrap_or_default())?;
+        change_session(&tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
         let dequeued = match (body, client_msg_id) {
             (EventBody::UserPrompt { .. }, Some(client_msg_id)) => take_out_recorded(&tx, session_id, client_msg_id)?,
             _ => false,
@@ -248,3 +267,6 @@ fn recorded_with(
 fn run_of(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Result<Option<RunId>> {
     Ok(row.get::<_, Option<i64>>(column)?.map(|run| RunId::new(run.cast_unsigned())))
 }
+
+#[cfg(test)]
+mod tests;

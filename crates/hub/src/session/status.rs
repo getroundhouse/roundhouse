@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use protocol::event::{AgentRunState, AgentTask, EventBody};
 use protocol::model::{ApprovalId, RunId, SessionStatus};
 
+use crate::store::TurnEdge;
+
 /// What the agent has left open once an event is applied.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Open {
@@ -70,11 +72,16 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
     }
 }
 
-/// Whether going from `current` to `next` ends a turn, which makes what the agent said its newest reply. A turn the
-/// agent was cut off from isn't one, since the session shows it as interrupted instead.
-pub(crate) fn ends_turn(current: SessionStatus, next: SessionStatus) -> bool {
-    matches!(next, SessionStatus::Idle | SessionStatus::Background)
-        && matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval)
+/// What going from `current` to `next` does to the session's turns. A turn starts when the agent starts working from
+/// anything else, including picking up again by itself after work in the background. It ends when the agent comes to
+/// rest, idle or with that work still going, which makes what it said its newest reply. A turn the agent was cut off
+/// from doesn't end, since the session shows it as interrupted instead.
+pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus) -> TurnEdge {
+    match (current.in_turn(), next.in_turn()) {
+        (false, true) => TurnEdge::Starts,
+        (true, false) if matches!(next, SessionStatus::Idle | SessionStatus::Background) => TurnEdge::Ends,
+        _ => TurnEdge::Neither,
+    }
 }
 
 /// What stays open once this event is applied, from what was open before it, and what's then running in the

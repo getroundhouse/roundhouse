@@ -330,6 +330,7 @@ fn turn_ended(value: &Value) -> EventBody {
         duration_ms: value.get("duration_ms").and_then(Value::as_u64),
         cost_usd: value.get("total_cost_usd").and_then(Value::as_f64),
         num_turns: value.get("num_turns").and_then(Value::as_u64),
+        started_at_ms: None,
     }
 }
 

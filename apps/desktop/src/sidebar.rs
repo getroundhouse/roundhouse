@@ -256,6 +256,7 @@ mod tests {
             closed_at_ms: closed.then_some(1),
             reply_seq: 0,
             read_seq: 0,
+            turn_started_at_ms: None,
             background_tasks: Vec::new(),
             queued: Vec::new(),
             queue_held: false,
