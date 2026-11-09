@@ -3,10 +3,15 @@
 ## A turn
 
 - **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, the agent counts as working: its mark moves, an update waits for it, and closing its chat asks first. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
+- **What's running in the background shows where the conversation ends,** one working line for each task, with its mark moving and what the agent said it's for. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
 
 **A finished turn,** with tools, a list and code, and a pull request open for the branch. *Unconfirmed.*
 
 ![A finished turn](screens/conversation.png)
+
+**A turn that ended with the test suite running in the background, and a watch on it for failures.** *Unconfirmed.*
+
+![Work in the background](screens/background.png)
 
 **The agent partway through writing a reply.** *Unconfirmed.*
 

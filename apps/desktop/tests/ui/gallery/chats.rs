@@ -2,8 +2,8 @@
 
 #![cfg(test)]
 
-use protocol::event::{AgentRunState, ContentBlock, EventBody, TurnOutcome};
-use protocol::model::{ApprovalId, MessageId, ToolUseId};
+use protocol::event::{AgentRunState, AgentTask, ContentBlock, EventBody, TurnOutcome};
+use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
@@ -30,6 +30,37 @@ pub(crate) fn finished() -> Vec<EventBody> {
         duration_ms: Some(48_000),
         cost_usd: Some(0.21),
         num_turns: Some(3),
+    });
+    events
+}
+
+/// A turn that's over with the test run it started still going in the background, which the agent comes back to.
+pub(crate) fn background() -> Vec<EventBody> {
+    let mut events = looked_around();
+    let command = json!({ "command": "cargo test --workspace", "description": "Run the full test suite",
+        "run_in_background": true });
+    events.push(tool_use("msg-3", "toolu-3", "Bash", command));
+    let suite = AgentTask { id: TaskId::from("b1"), description: Some("Run the full test suite".to_string()) };
+    events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
+    events.push(tool_result("toolu-3", "Command running in background with ID: b1"));
+    let watch = json!({ "command": "tail -f target/test.log | grep --line-buffered FAILED",
+        "description": "Watch the run for failures", "run_in_background": true });
+    events.push(tool_use("msg-4", "toolu-4", "Bash", watch));
+    let watcher = AgentTask { id: TaskId::from("b2"), description: Some("Watch the run for failures".to_string()) };
+    events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
+    events.push(tool_result("toolu-4", "Command running in background with ID: b2"));
+    events.push(text(
+        "msg-5",
+        "The full test suite is running in the background, since it takes a few minutes. I'll pick up again when it \
+         finishes, or sooner if something fails.",
+    ));
+    events.push(EventBody::TurnEnded {
+        outcome: TurnOutcome::Success,
+        result: None,
+        errors: Vec::new(),
+        duration_ms: Some(31_000),
+        cost_usd: Some(0.14),
+        num_turns: Some(4),
     });
     events
 }

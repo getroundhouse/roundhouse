@@ -1,17 +1,22 @@
-//! Text the agent is still writing.
+//! Text the agent is still writing, and what it's running in the background.
 
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement, Styled, div, px};
+use gpui_kit::{
+    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
+    div, px,
+};
 use look::{Signal, Work};
+use protocol::event::AgentTask;
 use protocol::tail::{BlockKind, Tail};
 
 use super::{agent_text, empty, row, thinking_text};
 use crate::item_key::ItemKey;
 
-/// Text the agent is still writing. Tool input is hidden until it's complete, because it's partial JSON. Thinking
-/// shows its latest line, or all of it when `thinking_open`, the way it will once it's recorded.
-pub(super) fn render_tail(tail: &Tail, thinking_open: bool, cx: &App) -> AnyElement {
-    if tail.is_empty() {
+/// Text the agent is still writing, and what it's running in the background. Tool input is hidden until it's
+/// complete, because it's partial JSON. Thinking shows its latest line, or all of it when `thinking_open`, the way it
+/// will once it's recorded.
+pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: bool, cx: &App) -> AnyElement {
+    if tail.is_empty() && background.is_empty() {
         return empty();
     }
     let mut out = row();
@@ -30,6 +35,12 @@ pub(super) fn render_tail(tail: &Tail, thinking_open: bool, cx: &App) -> AnyElem
                 BlockKind::Unknown => out,
             };
         }
+    }
+    // Left going by a turn, or started during one, and still the agent's work.
+    for task in background {
+        let text = format!("In the background · {}", task.description.as_deref().unwrap_or("a task"));
+        let id = ElementId::Name(format!("background-{}", task.id).into());
+        out = out.child(working(text, cx).id(id).test_support());
     }
     out.into_any_element()
 }

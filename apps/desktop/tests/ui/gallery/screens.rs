@@ -62,6 +62,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen { name: "conversation", spec: "chats.md", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
     Screen { name: "streaming", spec: "chats.md", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
     Screen { name: "approval", spec: "chats.md", world: Some(approval), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "background", spec: "chats.md", world: Some(background), steps: &[Step::Select(FOCUS)] },
     Screen { name: "question", spec: "chats.md", world: Some(question), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "mode-picker",
@@ -236,6 +237,14 @@ fn streaming() -> World {
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Running, chats::streaming());
     world.tails.insert(chat, chats::streaming_tail());
+    world
+}
+
+/// A turn that's over, with what it started still going in the background.
+fn background() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    world.chat(&focus, SessionStatus::Background, chats::background());
     world
 }
 

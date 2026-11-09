@@ -75,7 +75,10 @@ fn render_row_inner(
         })
     };
     match shown {
-        Shown::Tail(tail) => render_tail(&tail, model.borrow().folds.thinking_open(), cx),
+        Shown::Tail(tail) => {
+            let model = model.borrow();
+            render_tail(&tail, &model.background, model.folds.thinking_open(), cx)
+        }
         Shown::Event(event, around) => render_event(event.seq, &event.body, &around, this, cx),
         Shown::Pending(prompt) => prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, true, cx),
         Shown::Unloaded => {

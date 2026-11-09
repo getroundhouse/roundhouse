@@ -194,6 +194,11 @@ impl WorkspacePane {
 
     pub(super) fn set_sessions(&mut self, sessions: Vec<Session>, cx: &mut Context<Self>) {
         self.sessions = sessions;
+        for session in &self.sessions {
+            if let Some((transcript, _)) = self.transcripts.get(&session.id) {
+                transcript.update(cx, |t, cx| t.show_background(&session.background_tasks, cx));
+            }
+        }
         self.keep_active_valid(cx);
         self.show_next(cx);
         self.read_showing(cx);

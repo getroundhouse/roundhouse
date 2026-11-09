@@ -39,6 +39,7 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         closed_at_ms: None,
         reply_seq: 0,
         read_seq: 0,
+        background_tasks: Vec::new(),
         rev: Rev::new(rev),
     }
 }

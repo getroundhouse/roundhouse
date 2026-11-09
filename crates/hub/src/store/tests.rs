@@ -52,6 +52,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
                     closed_at_ms: None,
                     reply_seq: 0,
                     read_seq: 0,
+                    background_tasks: Vec::new(),
                     rev: Rev::default(),
                     status: SessionStatus::Idle,
                     last_seq: 0,

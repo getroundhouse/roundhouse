@@ -190,6 +190,21 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // What each session's agent is running in the background, as JSON. A session from before this had nothing
+    // running that's still going, since a new hub's agents are all new. The Session record shows it, so the trigger
+    // names it.
+    r"
+    ALTER TABLE sessions ADD COLUMN background_tasks TEXT NOT NULL DEFAULT '[]';
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

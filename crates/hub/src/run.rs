@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::error::HubError;
 use crate::hub::Hub;
-use crate::store::{Store, StoreError, cancelled_approval};
+use crate::store::{StatusChange, Store, StoreError, cancelled_approval};
 
 pub struct HubConfig {
     pub paths: Paths,
@@ -39,7 +39,8 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
             &EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] },
             None,
             None,
-            Some(SessionStatus::Interrupted.into()),
+            // Its agent took what it was running in the background with it.
+            Some(StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }),
         )?;
     }
     store.take_unfinished_workspaces()

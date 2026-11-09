@@ -11,7 +11,7 @@ use gpui_kit::{
     AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, StyleRefinement, Styled, Task, Window,
     px,
 };
-use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
+use protocol::event::{AgentTask, ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
 
 use crate::folds::Folds;
@@ -31,6 +31,8 @@ pub(crate) struct Model {
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
+    /// What the agent is running in the background, as its session's record says, drawn where the conversation ends.
+    pub background: Vec<AgentTask>,
 }
 
 pub struct Transcript {
@@ -51,7 +53,11 @@ impl Transcript {
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
-        let model = Rc::new(RefCell::new(Model { folds: Folds::default(), picks: HashMap::new() }));
+        let model = Rc::new(RefCell::new(Model {
+            folds: Folds::default(),
+            picks: HashMap::new(),
+            background: session.background_tasks.clone(),
+        }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -75,6 +81,20 @@ impl Transcript {
     pub fn reconnect(&mut self, client: &Client) {
         self.session.reconnect(client);
         self.client = client.clone();
+    }
+
+    /// Follows the session's record, which says what the agent is running in the background.
+    pub fn show_background(&mut self, tasks: &[AgentTask], cx: &mut Context<Self>) {
+        if self.model.borrow().background == tasks {
+            return;
+        }
+        self.model.borrow_mut().background = tasks.to_vec();
+        // They're drawn in the last row, with the streaming tail.
+        self.scroller.update(cx, |list, cx| {
+            let rows = list.item_count();
+            list.remeasure_items(rows.saturating_sub(1)..rows, cx);
+        });
+        cx.notify();
     }
 
     /// The approvals waiting on an answer, newest last.

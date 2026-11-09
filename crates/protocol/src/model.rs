@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::event::AgentTask;
+
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
 /// can't be passed as another. They're plain strings on the wire and in storage.
 macro_rules! ids {
@@ -271,6 +273,10 @@ pub struct Session {
     /// hub with several people would keep for each.
     #[serde(default)]
     pub read_seq: Seq,
+    /// What the agent is running in the background, as its newest list says. Empty once the agent has gone, since it
+    /// takes that work with it.
+    #[serde(default)]
+    pub background_tasks: Vec<AgentTask>,
     #[serde(default)]
     pub rev: Rev,
 }

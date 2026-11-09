@@ -4,7 +4,7 @@ use super::*;
 use crate::store::StatusChange;
 use crate::store::tests::{notice, store_with_session};
 
-const TURN_ENDS: StatusChange = StatusChange { status: SessionStatus::Idle, ends_turn: true };
+const TURN_ENDS: StatusChange = StatusChange { status: SessionStatus::Idle, ends_turn: true, background_tasks: None };
 
 /// A prompt, then the event that ends its turn. Returns that event's `seq`.
 fn turn(store: &Store) -> Seq {
