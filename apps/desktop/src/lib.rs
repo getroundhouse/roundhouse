@@ -10,7 +10,7 @@ pub mod workspace_pane;
 use gpui_kit::assets::Assets;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
-    actions, px, size,
+    actions, point, px, size,
 };
 
 actions!(
@@ -50,7 +50,17 @@ pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(An
     std::thread::spawn(highlight::preload);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),
-        titlebar: Some(TitlebarOptions { title: Some("Roundhouse".into()), ..Default::default() }),
+        // No title bar of its own: the sidebar and the workspace header run to the top edge, and the window's
+        // buttons sit in the sidebar's empty corner, level with the header. The title still names the
+        // window in the Window menu and Mission Control.
+        titlebar: Some(TitlebarOptions {
+            title: Some("Roundhouse".into()),
+            appears_transparent: true,
+            traffic_light_position: Some(point(px(16.), px(16.))),
+        }),
+        // The app moves the window itself, from the strip along the top. GPUI says AppKit's own handling
+        // there holds back each click while it waits for a double click, from macOS 27 on.
+        app_owns_titlebar_drag: true,
         focus: true,
         show: true,
         ..Default::default()

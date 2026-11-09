@@ -4,13 +4,13 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement,
-    Styled, Window, div, px,
+    AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    ParentElement, Render, Stateful, StatefulInteractiveElement, Styled, Window, div, px,
 };
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection};
-use crate::workspace_pane::WorkspacePane;
+use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
 use crate::{
     AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
     PreviousWorkspace, StopAgent, ToggleDiff,
@@ -56,8 +56,7 @@ impl Render for AppView {
                 ),
             },
         };
-        with_actions(h_flex(), cx)
-            .id("app")
+        moves_window(with_actions(h_flex(), cx).id("app"), cx)
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
@@ -124,6 +123,34 @@ fn with_actions(root: Div, cx: &mut Context<AppView>) -> Div {
     }))
 }
 
+/// The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
+/// dragging it moves the window, and double-clicking it does what the system's setting says. A press there that
+/// a control took, such as a button in the header, is the control's. Every one of the kit's buttons, and anything
+/// that takes focus, marks its press as taken before it gets here, since this is the outermost element.
+fn moves_window(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
+    root.on_mouse_down(
+        MouseButton::Left,
+        cx.listener(|t, event: &MouseDownEvent, window, _| {
+            t.moving_window = event.position.y < HEADER_HEIGHT && !window.default_prevented();
+            if !t.moving_window {
+                return;
+            }
+            // Pressing a title bar leaves focus where it was.
+            window.prevent_default();
+            if event.click_count == 2 {
+                t.moving_window = false;
+                window.titlebar_double_click();
+            }
+        }),
+    )
+    .on_mouse_move(cx.listener(|t, event: &MouseMoveEvent, window, _| {
+        if std::mem::take(&mut t.moving_window) && event.pressed_button == Some(MouseButton::Left) {
+            window.start_window_move();
+        }
+    }))
+    .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.moving_window = false))
+}
+
 fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
     h_flex()
         .id("error-bar")
@@ -135,6 +162,8 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         .text_sm()
         .text_color(danger)
         .cursor_pointer()
+        // It can sit in the strip that moves the window, and it's a button, so a press here is its own.
+        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
         .on_click(cx.listener(|t, _, _, cx| {
             t.error = None;
             cx.notify();

@@ -20,4 +20,5 @@ Start with trackpad feel, then IME, then selection and copy.
 - Font rendering next to native apps at your usual size
 - Status marks: a working agent's light sweeps smoothly at the display's rate, nothing else moves, Reduce Motion holds it still, and with every agent idle the window draws nothing, which Activity Monitor shows as no CPU
 - Resize and window snapping stay smooth during streaming
+- The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen
 - Overall: does it feel like an app you want to live in all day?
