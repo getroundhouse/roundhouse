@@ -63,30 +63,29 @@ impl Store {
         Ok(queue.into_iter().find(|queued| queued.client_msg_id == *client_msg_id))
     }
 
-    /// Takes out of every queue what has been sent, which a hub that went away between recording a queued prompt and
-    /// taking it out leaves behind, and says which sessions still have a queue.
-    pub fn tidy_queues(&self) -> Result<Vec<SessionId>, StoreError> {
-        let conn = lock(&self.writer);
-        let queues: Vec<(SessionId, String)> = conn
-            .prepare("SELECT id, queued FROM sessions WHERE queued <> '[]'")?
-            .query_map([], |row| Ok((SessionId::from(row.get::<_, String>(0)?), row.get(1)?)))?
-            .collect::<rusqlite::Result<_>>()?;
-        let mut left = Vec::new();
-        let mut sent = conn.prepare_cached("SELECT 1 FROM events WHERE session_id = ? AND client_msg_id = ?")?;
-        for (id, json) in queues {
-            let mut queue = Vec::new();
-            for queued in queue_from(&json)? {
-                if !sent.exists(params![id.as_str(), queued.client_msg_id.as_str()])? {
-                    queue.push(queued);
-                }
-            }
-            write_queue(&conn, &id, &queue)?;
-            if !queue.is_empty() {
-                left.push(id);
-            }
-        }
-        Ok(left)
+    /// Every session with a prompt in its queue.
+    pub fn sessions_with_queues(&self) -> Result<Vec<SessionId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare("SELECT id FROM sessions WHERE queued <> '[]'")?;
+        let ids = statement.query_map([], |row| Ok(SessionId::from(row.get::<_, String>(0)?)))?;
+        Ok(ids.collect::<rusqlite::Result<_>>()?)
     }
+}
+
+/// Takes the prompt with this ID out of the session's queue, as part of the transaction that records it, and says
+/// whether it was there.
+pub(super) fn take_out_recorded(
+    conn: &Connection,
+    id: &SessionId,
+    client_msg_id: &ClientMessageId,
+) -> Result<bool, StoreError> {
+    let queue = read_queue(conn, id)?;
+    let left: Vec<&QueuedPrompt> = queue.iter().filter(|queued| queued.client_msg_id != *client_msg_id).collect();
+    if left.len() == queue.len() {
+        return Ok(false);
+    }
+    conn.execute("UPDATE sessions SET queued = ? WHERE id = ?", params![serde_json::to_string(&left)?, id.as_str()])?;
+    Ok(true)
 }
 
 fn read_queue(conn: &Connection, id: &SessionId) -> Result<Vec<QueuedPrompt>, StoreError> {

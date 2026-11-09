@@ -4,6 +4,7 @@ use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::queue::take_out_recorded;
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
 /// What an event changes about where a session's agent has got to, which commits with the event that brings it.
@@ -79,7 +80,8 @@ pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
 
 impl Store {
     /// `change` commits with the event, so nobody can see one without the other. A client that reads status after an
-    /// event gets at least that event's status, and the reply it made.
+    /// event gets at least that event's status, and the reply it made. A prompt recorded under the ID of one in the
+    /// queue comes out of the queue in the same commit, so no prompt is ever both sent and waiting to be.
     pub fn append(
         &self,
         session_id: &SessionId,
@@ -94,7 +96,7 @@ impl Store {
         if let Some(client_msg_id) = client_msg_id
             && let Some(event) = recorded_with(&tx, session_id, client_msg_id)?
         {
-            return Ok(Appended { event, duplicate: true });
+            return Ok(Appended { event, duplicate: true, dequeued: false });
         }
         let last_seq: Option<i64> = tx
             .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
@@ -122,6 +124,10 @@ impl Store {
             params![seq, ts_ms, session_id.as_str()],
         )?;
         change_session(&tx, session_id, seq, change.unwrap_or_default())?;
+        let dequeued = match (body, client_msg_id) {
+            (EventBody::UserPrompt { .. }, Some(client_msg_id)) => take_out_recorded(&tx, session_id, client_msg_id)?,
+            _ => false,
+        };
         tx.commit()?;
         let event = SessionEvent {
             session_id: session_id.clone(),
@@ -131,7 +137,7 @@ impl Store {
             body: body.clone(),
             raw: None,
         };
-        Ok(Appended { event, duplicate: false })
+        Ok(Appended { event, duplicate: false, dequeued })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.

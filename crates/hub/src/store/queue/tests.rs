@@ -75,7 +75,7 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
     let refused = store.queue_prompt(&"s".into(), &queued("a", "changed too late")).unwrap();
 
     assert!(matches!(refused, Queued::AlreadySent));
-    assert_eq!(session(&store).queued, [queued("a", "first")], "left as it was");
+    assert!(session(&store).queued.is_empty(), "not put back");
 }
 
 #[test]
@@ -106,19 +106,25 @@ fn a_queued_prompt_can_be_found_by_its_id_until_its_taken_out() {
 }
 
 #[test]
-fn tidying_takes_out_what_was_sent_and_names_what_still_has_a_queue() {
+fn recording_a_queued_prompt_takes_it_out_of_the_queue_in_the_same_commit() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    queue(&store, &queued("a", "sent before the hub went away"));
+    queue(&store, &queued("a", "sent"));
     queue(&store, &queued("b", "still waiting"));
-    let prompt =
-        EventBody::UserPrompt { text: "sent".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
-    store.append(&"s".into(), None, &prompt, None, Some(&"a".into()), None).unwrap();
+    let before = session(&store).rev;
+    let prompt = |id: &str| EventBody::UserPrompt {
+        text: "sent".into(),
+        client_msg_id: Some(id.into()),
+        attachments: Vec::new(),
+    };
 
-    let left = store.tidy_queues().unwrap();
+    let sent = store.append(&"s".into(), None, &prompt("a"), None, Some(&"a".into()), None).unwrap();
+    let typed = store.append(&"s".into(), None, &prompt("c"), None, Some(&"c".into()), None).unwrap();
 
+    assert!(sent.dequeued && !typed.dequeued, "only a prompt that was queued comes out");
     assert_eq!(session(&store).queued, [queued("b", "still waiting")]);
-    assert_eq!(left, [SessionId::from("s")]);
+    assert!(session(&store).rev > before, "the record changed, so clients hear of it");
+    assert_eq!(store.sessions_with_queues().unwrap(), [SessionId::from("s")]);
     store.unqueue_prompt(&"s".into(), &"b".into()).unwrap();
-    assert!(store.tidy_queues().unwrap().is_empty());
+    assert!(store.sessions_with_queues().unwrap().is_empty());
 }

@@ -54,7 +54,9 @@ impl LiveSession {
         if apply(&mut self.state.lock(), origin, seq, &body, next, tasks, held) {
             self.wake_queue();
         }
-        if announce && let Err(e) = self.announce(&hub).await {
+        if (announce || appended.dequeued)
+            && let Err(e) = self.announce(&hub).await
+        {
             error!(session = %self.id, "could not announce a change of status: {e}");
         }
         Ok((appended.event, false))

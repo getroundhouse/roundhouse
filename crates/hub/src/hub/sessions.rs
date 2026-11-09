@@ -172,10 +172,10 @@ impl Hub {
         sent.await.map_err(|_| internal("the session has stopped"))?
     }
 
-    /// At startup, tidies every queue and starts each session that still has one, so a queue that was ready to send
-    /// when the last hub went away is sent now, rather than once someone opens its chat.
+    /// At startup, starts each session with a queue, so a queue that was ready to send when the last hub went away is
+    /// sent now, rather than once someone opens its chat.
     pub(crate) async fn start_queues(self: &Arc<Self>) {
-        let ids = match self.blocking(Store::tidy_queues).await {
+        let ids = match self.blocking(Store::sessions_with_queues).await {
             Ok(ids) => ids,
             Err(e) => return tracing::error!("couldn't read the queues: {e}"),
         };

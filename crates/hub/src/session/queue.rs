@@ -155,36 +155,28 @@ impl LiveSession {
         }
     }
 
-    /// Sends the first queued prompt, if the agent is ready for it. A hub that stopped between recording one and taking
-    /// it out of the queue finds it recorded already, takes it out, and goes on to the next.
+    /// Sends the first queued prompt, if the agent is ready for it.
     pub(super) async fn send_queued(&self) {
         let Ok(hub) = self.hub() else { return };
-        let (seq, text, attachments) = {
+        let to_deliver = {
             let _no_changes_meanwhile = self.queue_lock.lock().await;
-            loop {
-                if !self.ready_for_queue() {
-                    return;
-                }
-                let id = self.id.clone();
-                let next = match hub.blocking(move |store| store.first_queued(&id)).await {
-                    Ok(Some(next)) => next,
-                    Ok(None) => return,
-                    Err(e) => {
-                        error!(session = %self.id, "couldn't read the queue: {e}");
-                        return;
-                    }
-                };
-                match self.send_from_queue(&hub, next).await {
-                    Ok((_, Some(to_deliver))) => break to_deliver,
-                    Ok((_, None)) => {}
-                    Err(e) => {
-                        warn!(session = %self.id, "couldn't send a queued prompt: {}", e.message);
-                        return;
-                    }
-                }
+            if !self.ready_for_queue() {
+                return;
+            }
+            let id = self.id.clone();
+            let next = match hub.blocking(move |store| store.first_queued(&id)).await {
+                Ok(Some(next)) => next,
+                Ok(None) => return,
+                Err(e) => return error!(session = %self.id, "couldn't read the queue: {e}"),
+            };
+            match self.send_from_queue(&hub, next).await {
+                Ok(to_deliver) => to_deliver,
+                Err(e) => return warn!(session = %self.id, "couldn't send a queued prompt: {}", e.message),
             }
         };
-        self.deliver_prompt(&hub, seq, text, attachments).await;
+        if let Some((seq, text, attachments)) = to_deliver {
+            self.deliver_prompt(&hub, seq, text, attachments).await;
+        }
     }
 
     /// Sends the queued prompt with this ID now, whether or not the agent is ready for it: into the turn it's working on,
@@ -204,39 +196,34 @@ impl LiveSession {
         let sent = {
             let _no_changes_meanwhile = self.queue_lock.lock().await;
             let (id, wanted) = (self.id.clone(), client_msg_id);
-            match hub.blocking(move |store| Ok((store.queued_prompt(&id, &wanted)?, store.get_session(&id)?))).await {
-                Ok((Some(prompt), _)) => self.send_from_queue(&hub, prompt).await,
-                Ok((None, stored)) => Ok((stored.session, None)),
+            match hub.blocking(move |store| store.queued_prompt(&id, &wanted)).await {
+                Ok(Some(prompt)) => self.send_from_queue(&hub, prompt).await,
+                // Sent already, or taken out.
+                Ok(None) => Ok(None),
                 Err(e) => Err(e),
             }
         };
-        match sent {
-            Ok((session, to_deliver)) => {
-                let _ = reply.send(Ok(session));
-                if let Some((seq, text, attachments)) = to_deliver {
-                    self.deliver_prompt(&hub, seq, text, attachments).await;
-                }
-            }
+        let to_deliver = match sent {
+            Ok(to_deliver) => to_deliver,
             Err(e) => {
                 let _ = reply.send(Err(e));
+                return;
             }
+        };
+        let id = self.id.clone();
+        let _ = reply.send(hub.blocking(move |store| store.get_session(&id)).await.map(|stored| stored.session));
+        if let Some((seq, text, attachments)) = to_deliver {
+            self.deliver_prompt(&hub, seq, text, attachments).await;
         }
     }
 
-    /// Records a queued prompt as a prompt, under its own ID, then takes it out of the queue. Changing the queue waits
-    /// until both are done, so a change can't land between them and be lost, which is why the caller holds
-    /// `queue_lock`. Returns the session as that leaves it, and what to deliver, which is nothing if the prompt was
-    /// recorded already.
-    async fn send_from_queue(
-        &self,
-        hub: &Arc<Hub>,
-        prompt: QueuedPrompt,
-    ) -> Result<(Session, Option<Delivery>), ApiError> {
-        let recorded = self.record_prompt(hub, &prompt.text, Some(prompt.client_msg_id.clone()), &[]).await?;
+    /// Records a queued prompt as a prompt, under its own ID, which takes it out of the queue in the same commit. The
+    /// caller holds `queue_lock`, so a change can't land between reading the prompt and recording it, and be lost.
+    /// Returns what to deliver, which is nothing if the prompt was recorded already.
+    async fn send_from_queue(&self, hub: &Arc<Hub>, prompt: QueuedPrompt) -> Result<Option<Delivery>, ApiError> {
+        let recorded = self.record_prompt(hub, &prompt.text, Some(prompt.client_msg_id), &[]).await?;
         let (seq, duplicate, attachments) = recorded;
-        let (id, client_msg_id) = (self.id.clone(), prompt.client_msg_id);
-        let reading = hub.blocking(move |store| store.unqueue_prompt(&id, &client_msg_id)).await?;
-        Ok((self.changed_queue(reading), (!duplicate).then_some((seq, prompt.text, attachments))))
+        Ok((!duplicate).then_some((seq, prompt.text, attachments)))
     }
 
     /// Tells everyone following the feed, if the queue changed.

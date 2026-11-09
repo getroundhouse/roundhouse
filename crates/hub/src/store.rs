@@ -59,6 +59,8 @@ pub struct Appended {
     pub event: SessionEvent,
     /// This `client_msg_id` was already recorded, and `event` is the original.
     pub duplicate: bool,
+    /// The event is a prompt that was waiting in the queue, and recording it took it out.
+    pub dequeued: bool,
 }
 
 pub fn now_ms() -> i64 {

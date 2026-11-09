@@ -163,31 +163,25 @@ fn a_queue_whose_agent_went_away_mid_turn_is_held_and_sending_from_it_resumes_th
 }
 
 #[test]
-fn a_new_hub_sends_a_queue_the_last_one_left_ready_and_drops_what_it_had_sent() {
+fn a_new_hub_sends_a_queue_the_last_one_left_ready() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     stack.kill_hub();
-    // As a hub that went away just after sending q1, and before taking it out of the queue, leaves it.
+    // As a hub that went away with the agent idle, and before the queue went, leaves it.
     let store = hub::store::Store::open(&stack.paths().database, &stack.paths().backups_dir).unwrap();
-    for (id, text) in [("q1", "say:sent already"), ("q2", "say:left to send")] {
+    for (id, text) in [("q1", "say:first"), ("q2", "say:second")] {
         let prompt = QueuedPrompt { client_msg_id: id.into(), text: text.into() };
         assert!(matches!(store.queue_prompt(&session.id, &prompt).unwrap(), hub::store::Queued::Done(_)));
     }
-    let sent = EventBody::UserPrompt {
-        text: "say:sent already".into(),
-        client_msg_id: Some("q1".into()),
-        attachments: Vec::new(),
-    };
-    store.append(&session.id, None, &sent, None, Some(&"q1".into()), None).unwrap();
     drop(store);
 
     stack.start_hub();
 
     let client = stack.client();
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(sent_at(&events, "q2").is_some());
-    assert_eq!(assistant_text(&events), "left to send");
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    assert!(sent_at(&events, "q1").unwrap() < sent_at(&events, "q2").unwrap(), "in order");
+    assert_eq!(assistant_text(&events), "firstsecond");
     wait_until("the queue to empty", || client.session_get(&session.id).unwrap().queued.is_empty());
 }
 
