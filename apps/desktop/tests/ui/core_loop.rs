@@ -9,7 +9,7 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
-use desktop::workspace_pane::Showing;
+use desktop::workspace_pane::{Busy, Showing};
 
 use crate::support::{Stack, Ui, git};
 
@@ -86,8 +86,9 @@ fn the_core_loop(cx: &mut TestAppContext) {
 
     review_and_comment(&mut ui, &stack, &id);
 
-    // Open a PR, which is the agent's job.
-    ui.click("create-pr");
+    // Open a PR, which is the agent's job, once the app knows there isn't one.
+    ui.wait("the offer to create a PR", |ui| ui.has("pull-request-action"));
+    ui.click("pull-request-action");
     ui.wait("the PR request to reach the agent", |ui| {
         ui.events()
             .iter()
@@ -107,7 +108,8 @@ fn the_core_loop(cx: &mut TestAppContext) {
     git(&worktree, &["commit", "-qm", "the agent's work"]);
     ui.click("archive");
     ui.wait("the workspace to be archived", |ui| {
-        ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived && !ui.view().busy
+        ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
+            && ui.view().busy == Busy::Free
     });
     assert!(!worktree.exists());
     assert!(ui.pane().is_none());
@@ -116,7 +118,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     // Restoring brings the worktree and the history back, and the conversation continues.
     ui.click("toggle-archived");
     ui.cx.update_entity(&ui.view.clone(), |v, cx| v.restore(id.clone(), cx));
-    ui.wait("the workspace to come back", |ui| ui.transcript().is_some() && !ui.view().busy);
+    ui.wait("the workspace to come back", |ui| ui.transcript().is_some() && ui.view().busy == Busy::Free);
     ui.wait("the history to load", |ui| !ui.events().is_empty());
     assert!(worktree.join("a.txt").exists());
     ui.input("recall");
@@ -169,9 +171,11 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     ui.wait("wrapping around", |ui| ui.view().selected.as_ref() == Some(&first));
 
     ui.wait("the pane", |ui| ui.pane().is_some());
-    ui.press("cmd-shift-d");
     let pane = ui.pane().unwrap();
-    ui.wait("the sidebar of changes", |ui| ui.cx.read_entity(&pane, |p, _| p.changes_open && p.diff.is_some()));
+    ui.press("cmd-shift-d");
+    assert!(!ui.changes_open(), "it starts open, so this hides it");
+    ui.press("cmd-shift-d");
+    ui.wait("the sidebar of changes", |ui| ui.changes_open() && ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
     let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
     ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));
 
@@ -179,7 +183,7 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     ui.press("cmd-n");
     ui.wait("the new-workspace dialog", Ui::has_dialog);
     ui.press("enter");
-    ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && !ui.view().busy);
+    ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && ui.view().busy == Busy::Free);
 }
 
 #[gpui_kit::test]

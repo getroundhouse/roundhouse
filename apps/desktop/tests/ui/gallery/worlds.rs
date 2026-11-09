@@ -4,13 +4,13 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, CommentId, DiffComment, DiffSide, Effort, GitDiff, PullRequest, QueuedPrompt, Rev, SessionStatus,
-    SetupStatus, Title, WorkspaceId, WorkspaceStatus,
+    AttachmentId, Checks, CommentId, DiffComment, DiffSide, Effort, GitDiff, MergeState, PullRequest, QueuedPrompt,
+    Rev, SessionStatus, SetupStatus, Title, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, World};
-use super::{chats, patch, pictures};
+use super::{chats, file_chats, image_chats, patch, pictures, pull_requests};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {
@@ -64,18 +64,27 @@ pub(super) fn effort_chosen() -> World {
     world
 }
 
+/// A chat whose one turn is over. It took a little longer as the hub saw it than the agent counted, and the hub's count
+/// is the one shown.
+fn finished_chat(world: &mut World, workspace: &WorkspaceId) {
+    let chat = world.chat(workspace, SessionStatus::Idle, chats::finished());
+    world.last_turn_took(&chat, 108_000);
+}
+
 /// The finished turn in the screen's own workspace, on a branch with a pull request open.
 fn converse(world: &mut World, focus: &WorkspaceId) {
     world.workspace_mut(focus).branch = "sidebar-pr-state".to_string();
-    world.chat(focus, SessionStatus::Idle, chats::finished());
+    finished_chat(world, focus);
     world.pull_requests.insert(
         focus.clone(),
         PullRequest {
             number: 182,
             url: "https://example.com/pull/182".to_string(),
             title: "Show PR state in the sidebar".to_string(),
-            state: "OPEN".to_string(),
-            is_draft: false,
+            base: Some("main".to_string()),
+            merge_state: MergeState::Clean,
+            checks: Checks { passed: 5, failed: 0, pending: 0 },
+            ..pull_requests::open()
         },
     );
 }
@@ -124,6 +133,29 @@ pub(super) fn chat_tabs() -> World {
     world
 }
 
+/// The conversation showing, and two chats in its workspace that were closed, one a few minutes ago and one hours ago.
+pub(super) fn closed_chats() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    for (prompt, reply, minutes_before_now) in [
+        (
+            "Why does the hub log a warning on every reconnect?",
+            "It logs one each time a client goes without saying goodbye.",
+            5 * 60,
+        ),
+        (
+            "Which colours does GitHub use for a PR's state?",
+            "Green for open, purple for merged, red for closed, and grey for a draft.",
+            9,
+        ),
+    ] {
+        let chat = world.chat(&focus, SessionStatus::Idle, chats::answered(prompt, reply));
+        world.close(&chat, minutes_before_now);
+    }
+    converse(&mut world, &focus);
+    world
+}
+
 /// The conversation, with every workspace titled from its first prompt.
 pub(super) fn titled() -> World {
     let mut world = conversation();
@@ -146,7 +178,37 @@ pub(super) fn streaming() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Running, chats::streaming());
-    world.tails.insert(chat, chats::streaming_tail());
+    world.tails.insert(chat.clone(), chats::streaming_tail());
+    world.working_for(&chat, 72_400);
+    world
+}
+
+/// Still working, with a prompt sent meanwhile that it hasn't taken yet.
+pub(super) fn steered() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::steered());
+    world.working_for(&chat, 31_600);
+    world
+}
+
+/// Still working on a turn, with what it started going in the background, and writing its next call.
+pub(super) fn working_background() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::started_in_background());
+    world.tails.insert(chat.clone(), chats::calling_tail());
+    world.working_for(&chat, 48_300);
+    world
+}
+
+/// Partway through a thought.
+pub(super) fn thinking_streaming() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::thinking_so_far());
+    world.tails.insert(chat.clone(), chats::thinking_tail());
+    world.working_for(&chat, 12_700);
     world
 }
 
@@ -194,7 +256,7 @@ pub(super) fn chat_world(status: SessionStatus, events: Vec<protocol::event::Eve
 pub(super) fn attachments() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let shot = pictures::overlapping_badge();
+    let shot = pictures::overlapping_badge(450);
     let attached = [
         ("shot-1", "Screenshot 2026-11-01 at 10.24.png", MediaType::Png, shot),
         ("log-1", "layout.log", MediaType::Text, chats::LAYOUT_LOG.as_bytes().to_vec()),
@@ -209,10 +271,35 @@ pub(super) fn attachments() -> World {
     world
 }
 
+/// The screen's chat, where the reply points to a screenshot in the worktree.
+pub(super) fn pointed() -> World {
+    let mut world = chat_world(SessionStatus::Idle, image_chats::pointed());
+    world.worktree_images.insert(image_chats::AFTER.to_string(), pictures::signal_board());
+    world
+}
+
+/// The screen's chat, with the agent reading a screenshot, which the hub keeps.
+pub(super) fn read_image() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    // Short enough that the call it opens from stays in sight above it, under the composer.
+    let shot = pictures::overlapping_badge(300);
+    let size_bytes = u64::try_from(shot.len()).unwrap();
+    let image = Attachment {
+        id: AttachmentId::from("read-1"),
+        name: "image".to_string(),
+        media_type: MediaType::Png,
+        size_bytes,
+    };
+    world.attachments.insert(image.id.clone(), shot);
+    world.chat(&focus, SessionStatus::Idle, file_chats::read_image(image));
+    world
+}
+
 pub(super) fn diff() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::Idle, chats::finished());
+    finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
         GitDiff { base_commit: Some("3f4c19c".to_string()), patch: patch::PATCH.to_string(), truncated: false },

@@ -30,7 +30,12 @@ fn opened(input: &Value, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> 
         .child(block::code(toggle.key.element("input"), "json", "", &json, cx))
         .when_some(answer, |d, answer| {
             let color = if answer.is_error { cx.theme().danger } else { cx.theme().foreground };
-            let output = block::output(toggle.key.element("output"), &answer.text, color, cx);
-            d.child(block::separator(cx)).child(block::label("Output", cx)).child(output)
+            let images = answer.images();
+            d.child(block::separator(cx))
+                .child(block::label("Output", cx))
+                .when_some(answer.text_beside_images(), |d, text| {
+                    d.child(block::output(toggle.key.element("output"), text, color, cx))
+                })
+                .when(!images.is_empty(), |d| d.child(block::images(images, cx)))
         })
 }

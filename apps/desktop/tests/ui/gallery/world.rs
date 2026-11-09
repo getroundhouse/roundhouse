@@ -14,10 +14,15 @@ use protocol::model::{
 };
 use protocol::tail::Tail;
 
-/// When the first record was made: 1 November 2026. Each one after it is a minute later, and each event a second.
-const START_MS: i64 = 1_793_491_200_000;
+/// When the first record was made: 1 November 2026, at 2 PM in UTC, which pictures show times in. Each one after it is
+/// a minute later, and each event a second.
+const START_MS: i64 = 1_793_541_600_000;
 const RECORD_GAP_MS: i64 = 60_000;
 const EVENT_GAP_MS: i64 = 1_000;
+const MINUTE_MS: i64 = 60_000;
+/// What the app takes as the time now, in every picture: an hour after the first record, so later than any record a
+/// world makes, and on the same day, so a turn that ended says only its time.
+pub(crate) const NOW_MS: i64 = START_MS + 60 * MINUTE_MS;
 
 #[derive(Default)]
 pub(crate) struct World {
@@ -34,6 +39,8 @@ pub(crate) struct World {
     pub(crate) pull_requests: HashMap<WorkspaceId, PullRequest>,
     /// The bytes of the files prompts carry, by attachment.
     pub(crate) attachments: HashMap<AttachmentId, Vec<u8>>,
+    /// The images in the screen's worktree that the agent's text points to, by the path it gives.
+    pub(crate) worktree_images: HashMap<String, Vec<u8>>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     records: i64,
@@ -149,6 +156,7 @@ impl World {
             closed_at_ms: None,
             reply_seq: 0,
             read_seq: 0,
+            turn_started_at_ms: None,
             background_tasks,
             queued: Vec::new(),
             queue_held: false,
@@ -158,11 +166,34 @@ impl World {
         id
     }
 
+    /// Has the agent been working on the chat's turn for this long when the picture is taken.
+    pub(crate) fn working_for(&mut self, id: &SessionId, so_far_ms: i64) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        assert_eq!(session.status, SessionStatus::Running, "only a running chat has a turn going");
+        session.turn_started_at_ms = Some(NOW_MS - so_far_ms);
+    }
+
+    /// Has the turn that ends a chat's log taken this long by the hub's clock, as the hub says on its end and on the
+    /// chat's record.
+    pub(crate) fn last_turn_took(&mut self, id: &SessionId, took_ms: i64) {
+        let ended = self.logs.get_mut(id).and_then(|log| log.last_mut()).unwrap();
+        let EventBody::TurnEnded { started_at_ms, .. } = &mut ended.body else { panic!("the log ends mid-turn") };
+        *started_at_ms = Some(ended.ts_ms - took_ms);
+        let started = *started_at_ms;
+        self.sessions.iter_mut().find(|s| &s.id == id).unwrap().turn_started_at_ms = started;
+    }
+
     /// Makes the end of a chat's log a reply nobody has read.
     pub(crate) fn unread(&mut self, id: &SessionId) {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
         assert!(session.last_seq > 0, "a chat with nothing in it has no reply");
         (session.reply_seq, session.read_seq) = (session.last_seq, 0);
+    }
+
+    /// Closes a chat, this many minutes before [`NOW_MS`].
+    pub(crate) fn close(&mut self, id: &SessionId, minutes_before_now: i64) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        session.closed_at_ms = Some(NOW_MS - minutes_before_now * MINUTE_MS);
     }
 
     pub(crate) fn session(&self, id: &SessionId) -> Result<&Session, ApiError> {

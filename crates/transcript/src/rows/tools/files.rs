@@ -1,42 +1,52 @@
 //! Reading, writing and editing a file: what the call did and to which file, with how many lines where that helps.
-//! Opened, the file's lines with their numbers, and a change as a diff. Hovering an edit shows its diff.
+//! Opened, the file's lines with their numbers, and a change as a diff. Hovering an edit shows its diff, which scrolls.
 
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement, Render,
-    SharedString, Styled, TestSupportExt as _, Window, div, px,
+    SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 
 use super::line::{Line, Part, Preview};
-use super::{Answer, Toggle, block, line, numbered};
+use super::{Answer, Toggle, amount, block, line, numbered};
 use crate::calls::diff;
 use crate::calls::files::{file_name, language, numbered_lines};
 use crate::calls::lines::{Mark, NumberedLine, Section};
 use crate::calls::{EditFile, ReadFile, WriteFile, count};
 
 const PREVIEW_WIDTH: f32 = 560.0;
-/// About a dozen lines, so a preview never covers much of the transcript.
+/// A dozen lines and half of the next, so a preview never covers much of the transcript, and a longer diff shows that
+/// it scrolls.
 const PREVIEW_HEIGHT: f32 = 260.0;
 
 pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let lines = answer.and_then(Answer::success).map(numbered_lines).unwrap_or_default();
-    let title =
-        if lines.is_empty() { "Read".to_string() } else { format!("Read {}", count(lines.len(), "line", "lines")) };
+    let images = answer.map(Answer::images).unwrap_or_default();
+    let title = amount(lines.len(), images.len()).map_or_else(|| "Read".to_string(), |amount| format!("Read {amount}"));
     let line = Line::new(IconName::FileText, title).part(chip(file.path));
+    // What came back that isn't the file's lines, if it isn't blank. A read with nothing to show opens to nothing, as
+    // one of an image recorded before the hub kept a tool's images does. A failure is shown under the line.
+    let text = answer.and_then(Answer::success).filter(|text| lines.is_empty() && !text.trim().is_empty());
+    let output = |text| block::output(toggle.key.element("output"), text, cx.theme().muted_foreground, cx);
     let opened = if !toggle.open {
         None
-    } else if lines.is_empty() {
-        // What came back instead of lines. A failure is shown under the line, as for any call.
-        answer.and_then(Answer::success).map(|text| {
-            let output = block::output(toggle.key.element("output"), text, cx.theme().muted_foreground, cx);
-            block::frame(cx).child(output).into_any_element()
-        })
+    } else if lines.is_empty() && images.is_empty() {
+        text.map(|text| block::frame(cx).child(output(text)).into_any_element())
     } else {
-        let section = lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
-        Some(shown_file(toggle, file.path, &[section], cx))
+        // Its lines, or what else came back, then any images, such as a notebook's.
+        let section: Section = lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
+        let shown = block::frame(cx)
+            .child(block::label(file.path.to_string(), cx))
+            .when(!lines.is_empty(), |d| {
+                d.child(numbered::lines(toggle.key.element("file"), language(file.path), &[section], cx))
+            })
+            .when_some(text, |d, text| d.child(output(text)))
+            .when(!images.is_empty(), |d| d.child(block::images(images, cx)));
+        Some(shown.into_any_element())
     };
     line::drawn(line, answer, opened, toggle, cx)
 }
@@ -94,7 +104,7 @@ fn preview(language: &str, sections: Rc<Vec<Section>>) -> Preview {
     })
 }
 
-/// An edit's diff, shown while its line is hovered.
+/// An edit's diff, shown while its line or the diff itself is hovered.
 struct DiffPreview {
     language: SharedString,
     sections: Rc<Vec<Section>>,
@@ -109,14 +119,16 @@ impl Render for DiffPreview {
             .w(px(PREVIEW_WIDTH))
             .max_h(px(PREVIEW_HEIGHT))
             .py_1()
-            .overflow_hidden()
+            .overflow_y_scroll()
+            // The wheel scrolls the diff and not the transcript under it, which would carry the line away from it.
+            .occlude()
             .rounded(px(10.))
             .border_1()
             .border_color(theme.input)
             .bg(theme.popover)
             .font_family(theme.mono_font_family.clone())
             .text_size(theme.mono_font_size)
-            .children(rows.collect::<Vec<_>>())
+            .child(div().id("edit-preview-lines").children(rows.collect::<Vec<_>>()).test_support())
             .test_support()
     }
 }

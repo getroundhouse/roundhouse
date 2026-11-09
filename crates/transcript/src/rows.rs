@@ -9,12 +9,13 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px};
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
+use crate::linked_images::LinkedImages;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -25,6 +26,8 @@ mod prompt;
 mod tail;
 mod thinking;
 mod tools;
+mod turn_end;
+mod turn_times;
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
@@ -34,17 +37,37 @@ use tail::render_tail;
 use tools::Toggle;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
-const COLUMN: f32 = 780.0;
+const COLUMN: f32 = 848.0;
+/// How far the composer reaches past the column on each side, so the transcript's text sits inside its edges.
+const COMPOSER_REACH: f32 = 24.0;
+
+/// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
+/// width. It's inset as the scroller insets each row, and then as the row is.
+pub fn in_column(content: impl IntoElement) -> Div {
+    div().w_full().px_3().child(column(content))
+}
+
+/// The composer under the transcript, centred under the column and wider than it on each side. In a pane too narrow
+/// for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
+pub fn around_column(content: impl IntoElement) -> Div {
+    let width = px(COLUMN + 2. * COMPOSER_REACH);
+    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(width).child(content))
+}
+
+fn column(content: impl IntoElement) -> Div {
+    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(content))
+}
 
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
-    let row = render_row_inner(model, session, this, ix, cx);
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(row)).into_any_element()
+    let row = render_row_inner(model, session, this, linked, ix, cx);
+    column(row).into_any_element()
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
@@ -62,6 +85,7 @@ fn render_row_inner(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
@@ -81,16 +105,15 @@ fn render_row_inner(
     };
     match shown {
         Shown::Tail(tail) => {
-            let model = model.borrow();
-            render_tail(&tail, &model.background, model.folds.thinking_open(), cx)
+            let m = model.borrow();
+            render_tail(&tail, &m.at_work, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
-            attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
-            render_event(event.seq, &event.body, &around, this, cx)
+            attachments::fetch_missing(model, this, Some(event.seq), around.images(), cx);
+            render_event(&event, &around, this, linked, cx)
         }
         Shown::Pending(prompt, carried) => {
-            let carried = attachments::view(None, &carried, this, cx);
-            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, Progress::Sending, cx)
+            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, &carried, Progress::Sending, this, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => {
@@ -131,21 +154,6 @@ fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
-fn turn_ended(outcome: TurnOutcome, duration_ms: u64, cost: f64, errors: &[String], cx: &App) -> AnyElement {
-    let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
-    match outcome {
-        TurnOutcome::Cancelled => muted_line("Stopped"),
-        TurnOutcome::Error => {
-            let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
-            colored_line(detail, cx.theme().danger)
-        }
-        TurnOutcome::Success | TurnOutcome::Unknown if cost >= 0.01 => {
-            muted_line(format!("Finished in {seconds:.1}s · ${cost:.2}"))
-        }
-        TurnOutcome::Success | TurnOutcome::Unknown => muted_line(format!("Finished in {seconds:.1}s")),
-    }
-}
-
 fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElement {
     match reason {
         ExitReason::Requested => empty(),
@@ -159,23 +167,30 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
     }
 }
 
-fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<Transcript>, cx: &App) -> AnyElement {
+fn render_event(
+    event: &SessionEvent,
+    around: &Around,
+    this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
+    cx: &App,
+) -> AnyElement {
+    let (seq, body) = (event.seq, &event.body);
     let approval_open = around.approval_open;
     match body {
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
             questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
-            let carried = attachments::view(Some(seq), &around.carried, this, cx);
-            let (key, progress) = (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(around.prompt));
-            prompt_bubble(&key, text.clone(), carried, progress, cx)
+            let (key, progress) =
+                (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
+            prompt_bubble(&key, text.clone(), &around.carried, progress, this, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, cx))
+                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, linked, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -189,9 +204,7 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             });
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
-            turn_ended(*outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors, cx)
-        }
+        EventBody::TurnEnded { .. } => turn_end::line(event, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
         }
@@ -231,12 +244,13 @@ fn render_block(
     block: &ContentBlock,
     drawing: &BlockAround,
     this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
     cx: &App,
 ) -> Option<AnyElement> {
     let (key, expanded) = (&drawing.key, drawing.open);
-    let toggle = Toggle { seq, key, open: expanded, this };
+    let toggle = Toggle { seq, key, open: expanded, this, linked };
     Some(match block {
-        ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
+        ContentBlock::Text { text } => agent_text(key, text).image_source(linked.resolver(seq)).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These show as cards when they ask, with everything in them.
@@ -245,7 +259,7 @@ fn render_block(
             tools::call(&toggle, name, input, drawing.answer.as_ref(), drawing.subagent.as_ref(), cx)
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { is_error, text, .. } => tools::result(&toggle, *is_error, text, cx),
+        ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.answer.as_ref()?, cx),
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
         }

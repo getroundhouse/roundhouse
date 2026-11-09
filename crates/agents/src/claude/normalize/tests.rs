@@ -1,3 +1,4 @@
+use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::{AgentTask, FileChange};
 use protocol::model::TaskId;
 use serde_json::json;
@@ -73,27 +74,73 @@ fn control_requests_other_than_approval_ask_for_an_error_reply() {
     );
 }
 
-#[test]
-fn tool_results_flatten_text_and_count_images() {
-    let line = json!({"type":"user","message":{"role":"user","content":[{
+/// The start of a PNG, which is enough for its bytes to say what it is.
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+/// A read of an image, as the CLI sends it: in the result, and again in its own record of the read.
+fn read_an_image(base64: &str) -> String {
+    json!({"type":"user","message":{"role":"user","content":[{
         "type":"tool_result","tool_use_id":"t1","content":[
             {"type":"text","text":"a"},
-            {"type":"image","source":{"data":"…"}},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":base64}},
             {"type":"text","text":"b"}
         ]
-    }]}})
-    .to_string();
-    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!() };
-    assert_eq!(
-        blocks,
-        vec![ContentBlock::ToolResult {
-            tool_use_id: "t1".into(),
-            is_error: false,
-            text: "a\nb".into(),
-            image_count: 1,
-            change: None,
-        }]
-    );
+    }]},"tool_use_result":{"type":"image","file":{"base64":base64,"type":"image/png"}}})
+    .to_string()
+}
+
+#[test]
+fn a_tool_result_s_images_become_attachments_kept_apart_from_the_line() {
+    let base64 = AttachmentBytes::new(PNG.to_vec()).to_base64();
+
+    let Parsed::EventWithImages { body: EventBody::AgentUser { blocks, .. }, images, raw } =
+        parse_line(&read_an_image(&base64))
+    else {
+        panic!()
+    };
+
+    let [ContentBlock::ToolResult { text, images: named, .. }] = blocks.as_slice() else { panic!("{blocks:?}") };
+    assert_eq!(text, "a\nb");
+    let [kept] = images.as_slice() else { panic!("{images:?}") };
+    assert_eq!(named, std::slice::from_ref(&kept.attachment), "the result names what's kept");
+    assert_eq!(kept.attachment.media_type, MediaType::Png);
+    assert_eq!(kept.data.as_slice(), PNG);
+    assert!(!raw.contains(&base64), "the line keeps none of the image's bytes");
+    let raw: Value = serde_json::from_str(&raw).unwrap();
+    let marker = images::marker(&kept.attachment.id);
+    assert_eq!(raw["message"]["content"][0]["content"][1]["source"]["data"], marker);
+    assert_eq!(raw["tool_use_result"]["file"]["base64"], marker);
+}
+
+#[test]
+fn an_image_block_that_isn_t_an_image_stays_in_the_line() {
+    let not_an_image = AttachmentBytes::new(b"plain text".to_vec()).to_base64();
+
+    for line in [read_an_image(&not_an_image), read_an_image("not base64!")] {
+        let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!("{line}") };
+        assert!(matches!(blocks.as_slice(), [ContentBlock::ToolResult { images, .. }] if images.is_empty()));
+    }
+}
+
+#[test]
+fn a_line_written_for_the_model_isn_t_shown() {
+    let note =
+        "[Image: original 2640x1720, displayed at 2000x1303. Multiply coordinates by 1.32 to map to original image.]";
+    let line =
+        json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":note}]},"isSynthetic":true});
+
+    assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into() }));
+}
+
+#[test]
+fn a_result_written_for_the_model_is_still_its_call_s_result() {
+    let line = json!({"type":"user","message":{"role":"user","content":[{
+        "type":"tool_result","tool_use_id":"t1","content":"Interrupted","is_error":true
+    }]},"isSynthetic":true});
+
+    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line.to_string()) else { panic!() };
+
+    assert!(matches!(blocks.as_slice(), [ContentBlock::ToolResult { is_error: true, .. }]), "{blocks:?}");
 }
 
 #[test]

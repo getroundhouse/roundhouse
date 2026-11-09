@@ -1,10 +1,14 @@
-//! Files a person sends with a prompt, such as a screenshot, a log or a dataset.
+//! Files a person sends with a prompt, such as a screenshot, a log or a dataset, and images a tool sends the agent.
 //!
 //! A client adds each file to its session with `AttachmentAdd`, then names them in the prompt that carries them. The
 //! prompt's event only says what they are, so reading a log stays as light as it was. Before the prompt reaches the
 //! agent, the worker writes each file into the worktree, where the agent can open it, and the agent is also given in
 //! the prompt itself whatever it can take there. The hub keeps only what the transcript draws, an image, and a client
 //! fetches it with `AttachmentRead`.
+//!
+//! An image a tool sends back, such as a screenshot the agent reads, is an attachment of the session too. The worker
+//! sends its bytes beside the event, as a [`NewAttachment`], and the event's result names it, so it's kept and read the
+//! same way as a prompt's, and the log stays as light.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -153,7 +157,8 @@ pub fn describe_size(bytes: u64) -> String {
     }
 }
 
-/// What a prompt says it carries. An image's bytes are kept apart, and read with `AttachmentRead`.
+/// What a prompt says it carries, or a tool's result says it sent back. An image's bytes are kept apart, and read with
+/// `AttachmentRead`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Attachment {
     pub id: AttachmentId,
@@ -192,6 +197,11 @@ impl AttachmentBytes {
     pub fn to_base64(&self) -> String {
         STANDARD.encode(&self.0)
     }
+
+    /// Bytes an agent sent as base64, such as an image a tool returned. `None` if it isn't base64.
+    pub fn from_base64(text: &str) -> Option<Self> {
+        STANDARD.decode(text).ok().map(Self)
+    }
 }
 
 /// Only its length, since a frame's debug output would otherwise be megabytes of numbers.
@@ -226,6 +236,14 @@ impl serde::de::Visitor<'_> for Base64Visitor {
     fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<AttachmentBytes, E> {
         STANDARD.decode(text).map(AttachmentBytes).map_err(E::custom)
     }
+}
+
+/// An attachment and its bytes, for the hub to keep: an image a tool sent the agent, as the worker sends it beside the
+/// event that names it. The worker gives it a new ID, as a client does a file it adds.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct NewAttachment {
+    pub attachment: Attachment,
+    pub data: AttachmentBytes,
 }
 
 /// An attachment once its worker has written it into the worktree, as an agent is given it.

@@ -3,39 +3,44 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex, v_virtual_list,
-};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, FontWeight, IntoElement, ParentElement, Pixels, Rems, Size, Styled, Window,
-    div, px, rems, size,
+    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
+    px, size,
 };
 use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
-use crate::right_click;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 mod footer;
+mod nav;
+mod row;
 
 /// Settings stands in for the sidebar at the same width.
 pub(crate) const WIDTH: f32 = 260.0;
-const REPO_HEIGHT: Pixels = px(26.);
+const HEADING_HEIGHT: Pixels = px(28.);
+const REPO_HEIGHT: Pixels = px(32.);
 /// A workspace's row, and the note in its place while one is on its way.
-const ROW_HEIGHT: Pixels = px(30.);
-/// The space below a line, before another line of the same repository.
-const LINE_GAP: Pixels = px(1.);
-/// The space below a repository's last line, before the next repository. In rems, as the rest of the sidebar's spacing
-/// is, so it follows the theme's text size.
-const GROUP_GAP: Rems = rems(1.);
+const ROW_HEIGHT: Pixels = px(36.);
+/// How far a workspace's row sets its mark in from a repository's, so the rows read as the repository's.
+const ROW_INSET: Pixels = px(20.);
+/// The space between a mark and the name beside it.
+const MARK_GAP: Pixels = px(6.);
+/// The space between lines of one repository.
+const LINE_GAP: Pixels = px(4.);
+/// The space between a repository's name and its first workspace.
+const UNDER_REPO: Pixels = px(6.);
+/// The space between one repository's last line and the next repository.
+const GROUP_GAP: Pixels = px(8.);
 
 /// One line of the list, by where its record is in the app's lists. The lines are made and drawn in the same frame,
 /// and those lists can't change in between.
 #[derive(Clone, Copy)]
 enum Line {
+    /// What the list is, above the first repository.
+    Heading,
     /// A repository's name, with the button for a new workspace in it.
     Repo(usize),
     Workspace(usize),
@@ -46,15 +51,26 @@ enum Line {
 impl Line {
     fn height(self) -> Pixels {
         match self {
+            Line::Heading => HEADING_HEIGHT,
             Line::Repo(_) => REPO_HEIGHT,
             Line::Workspace(_) | Line::Creating => ROW_HEIGHT,
         }
     }
+
+    /// The space between this line and the one after it.
+    fn gap_before(self, next: Line) -> Pixels {
+        match (self, next) {
+            (Line::Heading, _) | (Line::Workspace(_) | Line::Creating, Line::Workspace(_) | Line::Creating) => LINE_GAP,
+            (_, Line::Repo(_) | Line::Heading) => GROUP_GAP,
+            (Line::Repo(_), Line::Workspace(_) | Line::Creating) => UNDER_REPO,
+        }
+    }
 }
 
-/// Every line, repository by repository, each one's workspaces in the order the hub lists them.
+/// Every line, repository by repository, each one's workspaces in the order the hub lists them, under a heading once
+/// there's a repository for it to be over.
 fn lines(app: &AppView) -> Vec<Line> {
-    let mut lines = Vec::new();
+    let mut lines = if app.repos.is_empty() { Vec::new() } else { vec![Line::Heading] };
     for (r, repo) in app.repos.iter().enumerate() {
         lines.push(Line::Repo(r));
         let listed = app.workspaces.iter().enumerate().filter(|(_, w)| w.repo_id == repo.id && app.lists(w));
@@ -66,20 +82,18 @@ fn lines(app: &AppView) -> Vec<Line> {
     lines
 }
 
-/// The space each line takes: its height and the gap below it, with `group_gap` before each repository after the
-/// first. Only the height is used, since the list is as wide as the sidebar.
-fn sizes(lines: &[Line], group_gap: Pixels) -> Vec<Size<Pixels>> {
-    let gaps = lines.iter().skip(1).map(|next| match next {
-        Line::Repo(_) => group_gap,
-        Line::Workspace(_) | Line::Creating => LINE_GAP,
-    });
+/// The space each line takes: its height and the gap below it. Only the height is used, since the list is as wide as
+/// the sidebar.
+fn sizes(lines: &[Line]) -> Vec<Size<Pixels>> {
+    let gaps = lines.windows(2).map(|pair| pair[0].gap_before(pair[1]));
     lines.iter().zip(gaps.chain([px(0.)])).map(|(line, gap)| size(px(0.), line.height() + gap)).collect()
 }
 
 fn line(app: &AppView, line: Line, cx: &mut Context<AppView>) -> AnyElement {
     match line {
+        Line::Heading => heading(cx),
         Line::Repo(r) => repo_header(app, &app.repos[r], cx),
-        Line::Workspace(w) => workspace_row(app, &app.workspaces[w], cx),
+        Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], cx),
         Line::Creating => creating(cx),
     }
 }
@@ -108,67 +122,27 @@ pub(crate) fn signal(status: Option<SessionStatus>, unread: bool) -> Signal {
     }
 }
 
-fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
-    let selected = app.selected.as_ref() == Some(&workspace.id);
-    let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
-    let archived = workspace.status == WorkspaceStatus::Archived;
-    let id = workspace.id.clone();
-    let muted = cx.theme().muted_foreground;
-    let unread = !archived && !app.unread_chats(&workspace.id, cx).is_empty();
-    let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
-    // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
-    let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
-    let menu = row_menu(app, workspace, archived, cx);
-    let label = workspace.label().to_string();
-    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
-        .accessibility_label(label.clone())
-        .ghost()
-        .small()
-        .w_full()
-        .h(ROW_HEIGHT)
-        .selected(selected)
-        .on_click(cx.listener(move |t, _, _, cx| {
-            if archived {
-                t.restore(id.clone(), cx);
-            } else {
-                t.select(id.clone(), cx);
-            }
-        }))
-        .child(
-            h_flex()
-                .w_full()
-                .gap_2()
-                .text_sm()
-                .when(selected || unread, |d| d.font_weight(FontWeight::MEDIUM))
-                // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
-                .when(archived || !(selected || unread), |d| d.text_color(muted))
-                .child(look::mark(mark, work, look::Size::Row, cx))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
-                .when(archived, |d| d.child(div().flex_none().text_xs().text_color(look::faint()).child("Restore"))),
-        );
-    row.context_menu(menu).into_any_element()
+/// Where a workspace stands, as its row shows it, in the sidebar or in Home.
+pub(crate) struct Standing {
+    pub(crate) signal: Signal,
+    pub(crate) work: Work,
+    /// It has a reply nobody has read, so its name stands out.
+    pub(crate) unread: bool,
 }
 
-/// What a right-click on a workspace's row offers. Marking its chats needs one with a reply, and an archived
-/// workspace has none to show.
-fn row_menu(
-    app: &AppView,
-    workspace: &Workspace,
-    archived: bool,
-    cx: &mut Context<AppView>,
-) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
-    let marking = if archived { None } else { app.workspace_marking(&workspace.id, cx) };
-    let (this, id) = (cx.weak_entity(), workspace.id.clone());
-    let to_mark = this.clone();
-    let marking = marking.map(|(marking, chats)| {
-        let mark = move |cx: &mut App| {
-            let _ = to_mark.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
-        };
-        (marking, mark)
-    });
-    right_click::menu(marking, move |window, cx| {
-        let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
-    })
+pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standing {
+    let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
+    let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
+    let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
+    // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
+    let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
+    Standing { signal, work, unread }
+}
+
+/// An icon centred in a box as wide as a line of body text is tall, as the sidebar's items and repositories have.
+pub(super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
+    let icon = Icon::new(icon).size_3p5().text_color(color);
+    div().flex_none().size_4().flex().items_center().justify_center().child(icon)
 }
 
 fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElement {
@@ -178,22 +152,25 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
     h_flex()
         .w_full()
         .h(REPO_HEIGHT)
-        .pl_2()
-        .justify_between()
+        .px_1p5()
+        .gap_2()
+        .child(icon_box(IconName::Folder, look::faint()))
         .child(
-            h_flex()
-                .gap_1p5()
-                .text_xs()
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_sm()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(muted)
-                .child(Icon::new(IconName::Folder).xsmall().text_color(look::faint()))
                 .child(repo.name.clone()),
         )
         .child(
             Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
                 .ghost()
-                .xsmall()
+                .small()
                 .icon(IconName::Plus)
+                .text_color(muted)
                 .tooltip("New workspace")
                 .loading(creating)
                 .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(repo_id.clone(), window, cx))),
@@ -201,25 +178,41 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
         .into_any_element()
 }
 
-fn creating(cx: &mut Context<AppView>) -> AnyElement {
+/// What the list is, small and faint, as a section's label.
+fn heading(cx: &mut Context<AppView>) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
     div()
-        .px_2()
-        .h(ROW_HEIGHT)
+        .h(HEADING_HEIGHT)
+        .px_1p5()
         .flex()
         .items_center()
         .text_xs()
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(muted.opacity(0.7))
+        .child("Workspaces")
+        .into_any_element()
+}
+
+/// Level with the names of the workspaces above it.
+fn creating(cx: &mut Context<AppView>) -> AnyElement {
+    div()
+        .pl(ROW_INSET + look::Size::Row.width() + MARK_GAP)
+        .h(ROW_HEIGHT)
+        .flex()
+        .items_center()
+        .text_sm()
         .text_color(cx.theme().muted_foreground)
         .child("Creating a workspace…")
         .into_any_element()
 }
 
-pub(crate) fn render(app: &AppView, window: &Window, cx: &mut Context<AppView>) -> impl IntoElement {
+pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (background, border) = (theme.sidebar, theme.sidebar_border);
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
     let lines: Rc<[Line]> = lines(app).into();
-    let sizes = Rc::new(sizes(&lines, GROUP_GAP.to_pixels(window.rem_size())));
+    let sizes = Rc::new(sizes(&lines));
     let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, _, cx| {
         range.map(|ix| line(app, lines[ix], cx)).collect::<Vec<_>>()
     });
@@ -233,7 +226,8 @@ pub(crate) fn render(app: &AppView, window: &Window, cx: &mut Context<AppView>) 
         // Where the window's buttons sit, level with the workspace header. It stays put, so the list scrolls
         // under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
-        .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_2())
+        .child(nav::nav(app, cx))
+        .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5())
         .child(footer::footer(app, cx))
 }
 
@@ -260,6 +254,7 @@ mod tests {
             closed_at_ms: closed.then_some(1),
             reply_seq: 0,
             read_seq: 0,
+            turn_started_at_ms: None,
             background_tasks: Vec::new(),
             queued: Vec::new(),
             queue_held: false,
@@ -270,12 +265,20 @@ mod tests {
 
     #[test]
     fn each_line_takes_its_height_and_the_gap_below_it() {
-        let lines =
-            [Line::Repo(0), Line::Workspace(0), Line::Workspace(1), Line::Creating, Line::Repo(1), Line::Workspace(2)];
+        let lines = [
+            Line::Heading,
+            Line::Repo(0),
+            Line::Workspace(0),
+            Line::Workspace(1),
+            Line::Creating,
+            Line::Repo(1),
+            Line::Repo(2),
+            Line::Workspace(2),
+        ];
 
-        let heights: Vec<_> = sizes(&lines, px(14.)).iter().map(|s| s.height).collect();
+        let heights: Vec<_> = sizes(&lines).iter().map(|s| s.height).collect();
 
-        assert_eq!(heights, [px(27.), px(31.), px(31.), px(44.), px(27.), px(30.)]);
+        assert_eq!(heights, [px(32.), px(38.), px(40.), px(40.), px(44.), px(40.), px(38.), px(36.)]);
     }
 
     #[test]

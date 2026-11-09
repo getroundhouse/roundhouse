@@ -38,7 +38,7 @@ fn frames_asked_for(signals: &[Signal], motion: Motion) -> usize {
     match motion {
         Motion::Allowed => {}
         Motion::Reduced => cx.update(|cx| cx.set_reduce_motion(true)),
-        Motion::HeldStill => cx.update(look::hold_still),
+        Motion::HeldStill => cx.update(|cx| look::hold_still(0, cx)),
     }
     let signals = signals.to_vec();
     let options = |cx: &mut gpui_kit::App| WindowOptions {

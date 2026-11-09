@@ -20,3 +20,9 @@ pub(crate) fn tile_top() -> Hsla {
 pub fn tab_underline() -> Hsla {
     hex(0x00d8_c2b3)
 }
+
+/// A prompt's bubble: a wash of the brand's copper over the pane, so what was asked is easy to find when scrolling past
+/// the agent's work.
+pub fn prompt() -> Hsla {
+    hex(0x0037_281f)
+}

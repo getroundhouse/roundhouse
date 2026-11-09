@@ -162,6 +162,16 @@ pub(crate) fn run_tool(
     execute(turn, &tool_use_id, command)
 }
 
+pub(crate) fn edit_file(turn: &mut Turn, lines: u32) -> bool {
+    let text = |word: &str| (1..=lines).map(|n| format!("{word} line {n}")).collect::<Vec<_>>().join("\n");
+    let path = std::env::current_dir().unwrap().join("notes.txt");
+    let input = json!({"file_path":path,"old_string":text("old"),"new_string":text("new")});
+    let tool_use_id = turn.named_tool_use("Edit", input);
+    let said = format!("The file {} has been updated successfully.", path.display());
+    turn.tool_result(&tool_use_id, &said, false);
+    false
+}
+
 pub(crate) fn execute(turn: &mut Turn, tool_use_id: &str, command: &str) -> bool {
     let output = std::process::Command::new("sh").args(["-c", command]).output().unwrap();
     let text = String::from_utf8_lossy(&output.stdout).into_owned();

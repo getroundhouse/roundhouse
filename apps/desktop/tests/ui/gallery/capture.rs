@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::pull_request::Lookup;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
@@ -19,8 +20,8 @@ use gpui_kit::{
 };
 use image::RgbaImage;
 
-use super::fake_hub;
 use super::screens::{Screen, Step, Target};
+use super::{fake_hub, world};
 use crate::support::menu_item;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
@@ -31,7 +32,8 @@ const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
-/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line.
+/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line or
+/// [`Step::MoveAway`].
 const AWAY: &str = "build-line";
 
 pub(crate) struct Picture {
@@ -56,7 +58,9 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     // The hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
     cx.allow_parking();
     cx.update(gpui_kit::init);
-    cx.update(look::hold_still);
+    // Marks hold still, and so does the time, so how long something took or how long ago it was is the same on every
+    // run.
+    cx.update(|cx| look::hold_still(world::NOW_MS, cx));
     // The kit's own animations, such as a dialog's entrance, show as they end.
     cx.update(|cx| cx.set_reduce_motion(true));
     // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
@@ -106,19 +110,22 @@ impl Driver {
                         v.select(id, cx);
                     });
                 });
-                self.wait("the chat to load", |view, cx| {
+                self.wait("the chat, the diff and the pull request to load", |view, cx| {
                     selected_pane(view).is_some_and(|pane| {
                         let pane = pane.read(cx);
                         let wanted = pane.session().map_or(0, |s| s.last_seq);
-                        pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted)
+                        let chat = pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted);
+                        let diff = pane.diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some());
+                        chat && diff && pane.pull_request != Lookup::Looking
                     })
                 });
             }
-            Step::OpenDiff => self.open_diff(),
             Step::OpenFile(path) => self.open_file(path),
             Step::StartComment(line) => self.start_comment(*line),
             Step::Click(id) => self.click(*id),
+            Step::MoveAway => self.move_away(),
             Step::HoverTab(position) => self.hover_tab(*position),
+            Step::Point(id) => self.point(*id),
             Step::Type(text) => {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
@@ -160,7 +167,12 @@ impl Driver {
             let open: Vec<_> = pane.read(cx).sessions.iter().filter(|s| s.closed_at_ms.is_none()).collect();
             open[position].id.clone()
         });
-        let id = gpui_kit::SharedString::from(format!("chat-{chat}"));
+        self.point(format!("chat-{chat}"));
+    }
+
+    fn point(&mut self, id: impl Into<gpui_kit::SharedString>) {
+        self.frame();
+        let id = id.into();
         self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
     }
 
@@ -192,14 +204,6 @@ impl Driver {
             std::thread::sleep(Duration::from_millis(10));
         }
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
-    }
-
-    fn open_diff(&mut self) {
-        self.update_pane(WorkspacePane::toggle_changes);
-        self.wait("the diff to load", |view, cx| {
-            let pane = selected_pane(view);
-            pane.is_some_and(|pane| pane.read(cx).diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some()))
-        });
     }
 
     fn open_file(&mut self, path: &str) {
@@ -250,6 +254,10 @@ impl Driver {
     fn open(&mut self, label: &'static str) {
         let id = self.find(Target::Label(label));
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.move_away();
+    }
+
+    fn move_away(&mut self) {
         self.cx.update_window(self.handle, |_, window, cx| window.hover(AWAY, cx)).unwrap();
     }
 

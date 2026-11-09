@@ -43,14 +43,14 @@ fn show_diff_is_hide_diff_while_the_diff_is_open(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = with_a_repository(cx, &stack);
     ui.new_workspace();
+    assert_eq!(items(&ui, "View")[0], "Hide Diff", "it starts open");
+
+    choose(&mut ui, "View", "Hide Diff");
+
+    assert!(!ui.changes_open());
     assert_eq!(items(&ui, "View")[0], "Show Diff");
-
-    choose(&mut ui, "View", "Show Diff");
-
-    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.changes_open));
-    assert_eq!(items(&ui, "View")[0], "Hide Diff");
     ui.click("toggle-diff");
-    assert_eq!(items(&ui, "View")[0], "Show Diff");
+    assert_eq!(items(&ui, "View")[0], "Hide Diff");
 }
 
 /// ⌘W closes the diff tab while it shows, rather than the chat behind it, so the item says what it'll close.
@@ -92,6 +92,8 @@ fn file_and_view_items_are_greyed_out_until_they_can_act(cx: &mut TestAppContext
     ui.new_workspace();
 
     for (menu, item) in needs_a_workspace {
+        // The sidebar of changes starts open, so its item offers to hide it.
+        let item = if item == "Show Diff" { "Hide Diff" } else { item };
         assert!(enabled(&mut ui, menu, item), "{item} in a workspace");
     }
 }

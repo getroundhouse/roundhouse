@@ -150,3 +150,43 @@ fn raw_agent_lines_are_kept_so_the_log_can_be_rebuilt() {
     // The prompt was the hub's own record, so it has no raw line.
     assert!(events[0].raw.is_none());
 }
+
+#[test]
+fn a_session_says_when_its_newest_turn_started() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+
+    let (seq, _) = client.session_prompt(&session.id, "say:hello", None).unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 1);
+
+    let prompt = events.iter().find(|e| e.seq == seq).unwrap();
+    assert_eq!(client.session_get(&session.id).unwrap().turn_started_at_ms, Some(prompt.ts_ms));
+}
+
+#[test]
+fn each_turn_ends_saying_when_it_started() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+
+    let mut prompts = Vec::new();
+    for turn in 1..=2 {
+        let (seq, _) = client.session_prompt(&session.id, "say:hello", None).unwrap();
+        prompts.push(seq);
+        wait_for_turn_end(&client, &session.id, turn);
+    }
+    let events = read_all(&client, &session.id);
+
+    let started: Vec<Option<i64>> =
+        prompts.iter().map(|seq| events.iter().find(|e| e.seq == *seq).map(|prompt| prompt.ts_ms)).collect();
+    let ends: Vec<Option<i64>> = events
+        .iter()
+        .filter_map(|e| match e.body {
+            EventBody::TurnEnded { started_at_ms, .. } => Some(started_at_ms),
+            _ => None,
+        })
+        .collect();
+    assert_ne!(started[0], started[1], "the turns have to start apart to tell them apart");
+    assert_eq!(ends, started);
+}

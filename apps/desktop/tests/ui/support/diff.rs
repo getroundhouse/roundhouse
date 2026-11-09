@@ -2,8 +2,12 @@
 
 #![cfg(test)]
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use desktop::file_diff::FileDiff;
-use desktop::review::Review;
+use desktop::review::{Review, ReviewEvent};
+use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::{AppContext as _, Entity, SharedString};
 
@@ -17,16 +21,44 @@ pub(crate) struct Diff {
 }
 
 impl Ui<'_> {
-    /// Opens the selected workspace's sidebar of changes, and waits for the diff to load.
+    /// Whether the sidebar of changes shows, which it does in every workspace or none.
+    pub(crate) fn changes_open(&self) -> bool {
+        self.cx.read_entity(&self.pane().unwrap(), WorkspacePane::changes_open)
+    }
+
+    /// Shows the selected workspace's sidebar of changes, hiding it first if it shows, and waits for it to load the
+    /// diff as it is now. It's open from the start, so what's changed since needs loading again to show, as hiding
+    /// and showing it does.
     pub(crate) fn open_diff(&mut self) -> Diff {
-        self.click("toggle-diff");
         let pane = self.pane().unwrap();
+        if self.changes_open() {
+            self.click("toggle-diff");
+        }
+        let before = self.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|diff| diff.review.clone()));
+        let loaded = Rc::new(Cell::new(false));
+        let _watching = before.as_ref().map(|review| {
+            let loaded = loaded.clone();
+            self.cx.update(|cx| {
+                cx.subscribe(review, move |_, event: &ReviewEvent, _| {
+                    if matches!(event, ReviewEvent::Loaded) {
+                        loaded.set(true);
+                    }
+                })
+            })
+        });
+
+        self.click("toggle-diff");
+
         self.wait("the diff", |ui| ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
         let diff = self.cx.read_entity(&pane, |p, _| {
             p.diff.as_ref().map(|diff| Diff { review: diff.review.clone(), file: diff.file.clone() })
         });
         let diff = diff.unwrap();
-        self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.files.is_some()));
+        // A diff made just now loads what's there now. One made before loads again, and only that load is new.
+        match before {
+            Some(_) => self.wait("the diff to load again", |_| loaded.get()),
+            None => self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.files.is_some())),
+        }
         diff
     }
 

@@ -99,9 +99,15 @@ pub enum EventBody {
         result: Option<String>,
         #[serde(default)]
         errors: Vec<String>,
+        /// How long the turn took, by the agent's own count.
         duration_ms: Option<u64>,
         cost_usd: Option<f64>,
         num_turns: Option<u64>,
+        /// When the turn started, by the hub's clock, which the hub adds as it records the end. So every turn is timed
+        /// the way the working line counts it, and a client needn't load the turn's start to time it. `None` from the
+        /// agent, which doesn't know it, and from a hub that doesn't add it.
+        #[serde(default)]
+        started_at_ms: Option<i64>,
     },
     ApprovalRequested {
         approval_id: ApprovalId,
@@ -195,9 +201,11 @@ pub enum ContentBlock {
         tool_use_id: ToolUseId,
         is_error: bool,
         text: String,
-        /// Images aren't copied into the normalized event. They stay in the raw line.
-        #[serde(default)]
-        image_count: u32,
+        /// Images the tool sent back, such as a screenshot the agent read. Each is an attachment of the session, which
+        /// the hub keeps, so a client reads its bytes with `AttachmentRead`, as it does a prompt's. A result recorded
+        /// before the hub kept them names none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<Attachment>,
         /// What the tool changed in a file, when the agent says, as with Claude's edits and writes.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         change: Option<FileChange>,

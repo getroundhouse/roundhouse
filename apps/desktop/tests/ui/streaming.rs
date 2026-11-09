@@ -128,3 +128,26 @@ fn a_sent_prompt_shows_once_and_becomes_the_recorded_event(cx: &mut TestAppConte
     let prompts = ui.events().iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).count();
     assert_eq!(prompts, 1);
 }
+
+#[gpui_kit::test]
+fn a_turn_says_how_long_its_taken_until_it_ends_and_then_copies_its_reply(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input("slow:20:word");
+    ui.press("enter");
+
+    ui.wait("the working line", |ui| ui.has("working-line"));
+    assert_eq!(ui.session_status(), Some(SessionStatus::Running));
+    ui.wait_idle_with("the finished message", |text| text.contains("word19"));
+    assert!(!ui.has("working-line"), "it goes with the turn");
+    // The session's status and its log arrive separately, in either order.
+    let ended = |ui: &Ui| ui.events().iter().find(|e| matches!(e.body, EventBody::TurnEnded { .. })).map(|e| e.seq);
+    ui.wait("the end of the turn in the log", |ui| ended(ui).is_some());
+    ui.click(gpui_kit::SharedString::from(format!("copy-reply/event/{}/0", ended(&ui).unwrap())));
+
+    let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
+    assert_eq!(copied.as_deref(), Some("done"), "what the fake agent says its turn came to");
+}

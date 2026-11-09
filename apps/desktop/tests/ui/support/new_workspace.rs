@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use desktop::new_workspace::NewWorkspaceDialog;
+use desktop::workspace_pane::Busy;
 use gpui_kit::{AppContext as _, Entity, SharedString};
 use protocol::model::WorkspaceId;
 
@@ -32,7 +33,7 @@ impl Ui<'_> {
     /// Waits until there's one more workspace than `before`, with its chat on screen.
     pub(crate) fn wait_for_a_new_workspace(&mut self, before: usize) -> WorkspaceId {
         self.wait("the new workspace", |ui| {
-            ui.view().workspaces.len() > before && ui.transcript().is_some() && !ui.view().busy
+            ui.view().workspaces.len() > before && ui.transcript().is_some() && ui.view().busy == Busy::Free
         });
         self.view().selected.clone().unwrap()
     }

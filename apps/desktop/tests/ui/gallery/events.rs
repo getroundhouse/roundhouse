@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{MessageId, Seq, ToolUseId};
 
@@ -42,6 +43,17 @@ pub(crate) fn tool_result(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, false, None)
 }
 
+/// A result that's only images, as a read of one is.
+pub(crate) fn tool_images(id: &str, images: Vec<Attachment>) -> EventBody {
+    let mut event = tool_answer(id, "", false, None);
+    if let EventBody::AgentUser { blocks, .. } = &mut event
+        && let [ContentBlock::ToolResult { images: shown, .. }] = blocks.as_mut_slice()
+    {
+        *shown = images;
+    }
+    event
+}
+
 /// A result that says the call failed.
 pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, true, None)
@@ -59,7 +71,7 @@ fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>)
             tool_use_id: ToolUseId::from(id),
             is_error,
             text: text.to_string(),
-            image_count: 0,
+            images: Vec::new(),
             change,
         }],
     }
@@ -74,7 +86,17 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
         duration_ms: Some(seconds * 1_000),
         cost_usd: Some(cost_usd),
         num_turns: None,
+        started_at_ms: None,
     }
+}
+
+/// A turn that finished saying `reply`, as the CLI ends one, so its copy button has something to copy.
+pub(crate) fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
+    let mut ended = finished_turn(seconds, cost_usd);
+    if let EventBody::TurnEnded { result, .. } = &mut ended {
+        *result = Some(reply.to_string());
+    }
+    ended
 }
 
 /// `event` as the subagent started by the call `parent` sends it.

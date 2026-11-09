@@ -53,6 +53,8 @@ anyhow = "1"
 async-trait = "0.1"
 # Already under GPUI. Carries an attachment's bytes as text, the way JSON has to.
 base64 = "0.22"
+# Already under GPUI. Says when something happened in the local time zone.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 flume = "0.11"
 # Already under GPUI. Compresses what a test serves, as a web server would.
@@ -64,7 +66,11 @@ gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25", default-features = false }
 libc = "0.2"
+# Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
+objc2 = "0.6"
 parking_lot = "0.12"
+# Already under GPUI, through `url`. Reads the address of an image the agent's text points to.
+percent-encoding = "2"
 proptest = "1"
 # Already under rustls. Checks the update feed's signature.
 ring = "0.17"

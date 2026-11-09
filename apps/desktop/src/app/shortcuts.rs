@@ -9,8 +9,8 @@ use super::AppView;
 use crate::menus;
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
-    AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
-    PreviousWorkspace, StopAgent, ToggleDiff,
+    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, MarkWorkspace, NewChat, NewWorkspace, NextChat,
+    NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
 };
 
 impl AppView {
@@ -18,18 +18,15 @@ impl AppView {
     pub(super) fn with_shortcuts(&self, root: Div, cx: &mut Context<Self>) -> Div {
         let connected = self.client().is_some();
         root.when(connected && self.current_repo().is_some(), |root| {
-            root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| {
-                if let Some(repo) = t.current_repo() {
-                    t.open_new_workspace(repo, window, cx);
-                }
-            }))
+            root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| t.new_workspace_here(window, cx)))
         })
         .when(connected, |root| root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx))))
         .when(!self.visible_workspaces().is_empty(), |root| {
             root.on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
                 .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
         })
-        .when(self.selected_pane().is_some(), |root| with_workspace_shortcuts(root, cx))
+        // Home hides the selected workspace, so nothing acts on it unseen.
+        .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
     }
 
     /// Gives the menu bar again when what it says about the selected workspace changes, such as Show Diff becoming
@@ -38,7 +35,7 @@ impl AppView {
     pub(super) fn keep_menus_current(&mut self, cx: &mut Context<Self>) {
         let pane = self.selected_pane().map(|pane| pane.read(cx));
         let says = menus::Says {
-            diff_open: pane.is_some_and(|pane| pane.changes_open),
+            diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
             diff_tab_showing: pane.is_some_and(|pane| pane.showing() == Showing::Diff),
         };
         if says != self.menus_say {
@@ -74,4 +71,15 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
             cx.listener(|t, _: &PreviousChat, _, cx| t.update_selected_pane(cx, |pane, cx| pane.step_chat(-1, cx))),
         )
         .on_action(cx.listener(|t, _: &StopAgent, _, cx| t.update_selected_pane(cx, WorkspacePane::stop_agent)))
+        // As the selected workspace's row offers them, for the row of the workspace showing.
+        .on_action(cx.listener(|t, _: &ArchiveWorkspace, _, cx| {
+            if let Some(id) = t.selected.clone() {
+                t.archive(id, false, cx);
+            }
+        }))
+        .on_action(cx.listener(|t, _: &MarkWorkspace, _, cx| {
+            if let Some((mark, chats)) = t.selected.as_ref().and_then(|id| t.workspace_marking(id, cx)) {
+                t.mark_chats(mark, chats, cx);
+            }
+        }))
 }

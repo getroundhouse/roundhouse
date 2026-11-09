@@ -5,24 +5,40 @@ use protocol::event::{AgentTask, EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Session, SessionStatus};
 use tracing::error;
 
-use super::status::{ends_turn, next_status, open_after};
+use super::status::{next_status, open_after, turn_edge};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
-use crate::store::{Appended, SessionChange, StatusChange};
+use crate::store::{Appended, SessionChange, StatusChange, TurnEdge};
 
-/// The status and the work in the background once `body` is applied, and what of that and the queue's hold has
-/// changed, to commit with it. Only the hub and the current agent speak for the session.
-fn after(state: &LiveState, origin: Origin, body: &EventBody) -> (SessionStatus, SessionChange, Vec<AgentTask>) {
+/// What recording an event does.
+struct After {
+    /// The event as it's recorded.
+    body: EventBody,
+    status: SessionStatus,
+    /// What of the status, the work in the background and the queue's hold has changed, to commit with it.
+    change: SessionChange,
+    tasks: Vec<AgentTask>,
+}
+
+/// The status and the work in the background once `body` is applied, and what has changed, to commit with it. Only
+/// the hub and the current agent speak for the session. A turn's end from the agent says when the hub recorded that
+/// turn's start, which the agent can't know, so anything it said is replaced.
+fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
     if !origin.speaks_for_session() {
-        return (state.status, SessionChange::default(), state.background_tasks.clone());
+        let (status, tasks) = (state.status, state.background_tasks.clone());
+        return After { body, status, change: SessionChange::default(), tasks };
     }
-    let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, body);
-    let next = next_status(state.status, body, open, state.queue.idle_is_stale());
-    let ends_turn = ends_turn(state.status, next);
+    if let EventBody::TurnEnded { started_at_ms, .. } = &mut body {
+        *started_at_ms = state.turn_started_at_ms;
+    }
+    let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, &body);
+    let next = next_status(state.status, &body, open, state.queue.idle_is_stale());
+    let turn = turn_edge(state.status, next);
     let background_tasks = (tasks != state.background_tasks).then(|| tasks.clone());
     let changed = next != state.status || background_tasks.is_some();
-    let status = changed.then_some(StatusChange { status: next, ends_turn, background_tasks });
-    (next, SessionChange { status, queue_held: state.queue.held_after(body, state.status, next) }, tasks)
+    let status = changed.then_some(StatusChange { status: next, turn, background_tasks });
+    let queue_held = state.queue.held_after(&body, state.status, next);
+    After { body, status: next, change: SessionChange { status, queue_held }, tasks }
 }
 
 impl LiveSession {
@@ -38,7 +54,7 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let (next, change, tasks) = after(&self.state.lock(), origin, &body);
+        let After { body, status: next, change, tasks } = after(&self.state.lock(), origin, body);
         let (announce, held) = (!change.is_none(), change.queue_held);
         let id = self.id.clone();
         let for_store = body.clone();
@@ -115,6 +131,10 @@ fn apply(
         | EventBody::AgentMode { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => {}
+    }
+    // The same rule decided what was committed, so this is the start the record now has.
+    if turn_edge(state.status, next) == TurnEdge::Starts {
+        state.turn_started_at_ms = Some(appended.event.ts_ms);
     }
     state.status = next;
     state.background_tasks = tasks;

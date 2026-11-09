@@ -1,4 +1,4 @@
-//! A session: one conversation with an agent in a workspace, and what it runs with.
+//! A chat's record: which agent it runs, where that agent has got to, and what the person has read.
 
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +39,17 @@ pub enum SessionStatus {
 }
 
 impl SessionStatus {
+    /// Whether the agent is on a turn: working, or waiting on someone to answer or approve. Work it left in the
+    /// background isn't one, and when that finishes and it picks up again by itself, that's a new turn.
+    pub fn in_turn(self) -> bool {
+        match self {
+            SessionStatus::Running | SessionStatus::WaitingApproval => true,
+            SessionStatus::Idle | SessionStatus::Interrupted | SessionStatus::Background | SessionStatus::Unknown => {
+                false
+            }
+        }
+    }
+
     /// Whether the agent is at work, in a turn or in the background, so stopping it would cut something short.
     pub fn is_active(self) -> bool {
         match self {
@@ -74,6 +85,10 @@ pub struct Session {
     /// ended. It moves with a change of status, so the feed announces it.
     #[serde(default)]
     pub reply_seq: Seq,
+    /// When the newest turn started, by the hub's clock. `None` until one has, and from a hub that doesn't keep it.
+    /// It moves with a change of status, so the feed announces it.
+    #[serde(default)]
+    pub turn_started_at_ms: Option<i64>,
     /// How far the person has read, so a reply past it is unread. It's theirs rather than the session's, which a
     /// hub with several people would keep for each.
     #[serde(default)]

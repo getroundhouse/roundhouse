@@ -21,7 +21,9 @@ impl Render for NewWorkspaceDialog {
         let target = v_flex().id("new-workspace").w_full().rounded(RADIUS).border_1().border_color(transparent_black());
         attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
             .child(self.header(cx))
-            .children(self.attached.tiles("new-workspace-attachments", cx, Self::remove_attached))
+            .children(
+                self.attached.tiles("new-workspace-attachments", cx, Self::remove_attached).map(|t| t.px_2().pt_2()),
+            )
             .child(self.prompt_field(cx))
             .child(self.footer(cx))
     }

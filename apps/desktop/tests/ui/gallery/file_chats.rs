@@ -3,10 +3,13 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use serde_json::json;
 
-use super::events::{finished_turn, taken, text, tool_changed, tool_failed, tool_result, tool_use, user_prompt};
+use super::events::{
+    finished_turn, replied, taken, text, tool_changed, tool_failed, tool_images, tool_result, tool_use, user_prompt,
+};
 use super::tool_chats::ASK;
 const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
 
@@ -55,6 +58,7 @@ fn clear_and_caution_may_pass() {
 
 /// Each kind of file call closed, and an edit opened, with the file's own line numbers.
 pub(crate) fn files() -> Vec<EventBody> {
+    let reply = "The signal can say whether a train may pass, with a test.";
     let mut events = vec![
         user_prompt(ASK),
         taken(1),
@@ -85,8 +89,7 @@ pub(crate) fn files() -> Vec<EventBody> {
         tool_failed("toolu-4", "<tool_use_error>String to replace not found in file.</tool_use_error>"),
     ]);
     events.extend(changelog_write("msg-7", "toolu-5"));
-    events
-        .extend([text("msg-8", "The signal can say whether a train may pass, with a test."), finished_turn(52, 0.24)]);
+    events.extend([text("msg-8", reply), replied(reply, 52, 0.24)]);
     events
 }
 
@@ -136,8 +139,24 @@ pub(crate) fn file_contents() -> Vec<EventBody> {
     ]
 }
 
+/// The agent reading a screenshot, which the hub keeps as `image`.
+pub(crate) fn read_image(image: Attachment) -> Vec<EventBody> {
+    let shot = "/workspaces/aspen/.context/attachments/narrow-sidebar.png";
+    vec![
+        user_prompt(
+            "Is the badge still over the name? I saved how it looks in .context/attachments/narrow-sidebar.png",
+        ),
+        taken(1),
+        tool_use("msg-1", "toolu-1", "Read", json!({ "file_path": shot })),
+        tool_images("toolu-1", vec![image]),
+        text("msg-2", "It is: the badge still sits over the end of the second workspace's name."),
+        finished_turn(9, 0.04),
+    ]
+}
+
 /// Searches: by what's in files, listing files and then lines, and by name.
 pub(crate) fn searches() -> Vec<EventBody> {
+    let reply = "Only the train and the depot check for it, and the signal itself.";
     let found = "/workspaces/aspen/crates/signals/src/signal.rs:16:            Self::Caution => Self::Stop,\n\
                  /workspaces/aspen/crates/signals/src/signal.rs:17:            Self::Stop => Self::Stop,\n\
                  /workspaces/aspen/crates/signals/src/train.rs:53:        if signal == Aspect::Stop {\n\
@@ -157,8 +176,8 @@ pub(crate) fn searches() -> Vec<EventBody> {
             "toolu-3",
             "/workspaces/aspen/crates/signals/src/signal_test.rs\n/workspaces/aspen/crates/signals/src/depot_test.rs",
         ),
-        text("msg-4", "Only the train and the depot check for it, and the signal itself."),
-        finished_turn(9, 0.03),
+        text("msg-4", reply),
+        replied(reply, 9, 0.03),
     ]
 }
 

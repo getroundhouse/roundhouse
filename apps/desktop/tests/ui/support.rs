@@ -9,6 +9,7 @@ mod hub;
 mod labels;
 mod new_workspace;
 mod stand_in;
+mod stand_in_gh;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

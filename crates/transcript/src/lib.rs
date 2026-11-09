@@ -10,10 +10,12 @@ mod calls;
 mod fixtures;
 mod folds;
 mod item_key;
+mod linked_images;
 mod log_block;
 mod questions;
 mod rows;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
+pub use rows::{around_column, in_column};
 pub use transcript::{Transcript, TranscriptEvent, mode_label};

@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, Row, params};
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, effort";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
@@ -36,8 +36,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             title_source: from_text(row.get(16)?)?,
             queued: queue_from(&row.get::<_, String>(17)?)?,
             queue_held: row.get(18)?,
-            effort: row.get::<_, Option<String>>(19)?.map(from_text).transpose()?,
-            rev: rev_of(row, 20)?,
+            turn_started_at_ms: row.get(19)?,
+            effort: row.get::<_, Option<String>>(20)?.map(from_text).transpose()?,
+            rev: rev_of(row, 21)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -59,7 +60,7 @@ impl Store {
         conn.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -81,6 +82,7 @@ impl Store {
                 text_of(&session.title_source),
                 serde_json::to_string(&session.queued)?,
                 session.queue_held,
+                session.turn_started_at_ms,
                 session.effort.as_ref().map(text_of),
                 client_request_id.map(ClientRequestId::as_str),
             ],

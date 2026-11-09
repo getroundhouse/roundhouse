@@ -165,5 +165,6 @@ fn turn_ended() -> EventBody {
         duration_ms: None,
         cost_usd: None,
         num_turns: None,
+        started_at_ms: None,
     }
 }

@@ -109,6 +109,22 @@ fn a_reply_while_settings_shows_waits_until_you_go_back(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
+fn a_reply_while_home_shows_waits_until_its_workspace_does(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.click("home");
+    ui.wait("Home", |ui| ui.has("home-page"));
+
+    stack.client().session_prompt(&chat, "say:while you were in Home", None).unwrap();
+
+    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+    assert!(replied(&stack, &chat).unread());
+    ui.click(SharedString::from(format!("home-{workspace}")));
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
+}
+
+#[gpui_kit::test]
 fn a_reply_while_the_diff_tab_shows_waits_until_the_chat_does(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
@@ -207,4 +223,24 @@ fn mark_as_read_leaves_a_reply_that_came_while_the_menu_was_open(cx: &mut TestAp
     ui.wait("the first reply to be read", |_| stack.client().session_get(&chat).unwrap().read_seq >= first);
     let session = stack.client().session_get(&chat).unwrap();
     assert!(session.unread() && session.reply_seq == second, "the second reply was read unseen");
+}
+
+#[gpui_kit::test]
+fn the_key_marks_the_workspace_showing_unread_and_read_again(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.input("say:already read");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("already read"));
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+
+    ui.press("cmd-shift-u");
+
+    ui.wait("it to be unread", |ui| row_unread(ui, &workspace));
+    assert!(stack.client().session_get(&chat).unwrap().unread(), "the hub has it unread too");
+
+    ui.press("cmd-shift-u");
+
+    ui.wait("it to be read again", |ui| !row_unread(ui, &workspace));
+    ui.wait("the hub to have it read again", |_| read_at_the_hub(&stack, &chat));
 }

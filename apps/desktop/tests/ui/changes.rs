@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use desktop::workspace_pane::Showing;
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::model::DiffComment;
 
@@ -54,10 +55,6 @@ fn the_diff_tab_stays_behind_a_chat_until_its_closed(cx: &mut TestAppContext) {
 
     ui.click(SharedString::from(format!("chat-{}", chats[0])));
     assert_eq!((showing(&ui), diff_tab(&ui).as_deref()), (Showing::Chat, Some("a.txt")));
-    ui.press("ctrl-tab");
-    assert_eq!(showing(&ui), Showing::Diff, "it comes after the chats");
-    ui.press("ctrl-tab");
-    assert_eq!(showing(&ui), Showing::Chat);
     ui.click("show-diff-tab");
     assert_eq!(showing(&ui), Showing::Diff);
 
@@ -66,6 +63,35 @@ fn the_diff_tab_stays_behind_a_chat_until_its_closed(cx: &mut TestAppContext) {
     assert_eq!((showing(&ui), diff_tab(&ui)), (Showing::Chat, None));
     assert!(!ui.has("show-diff-tab"));
     assert_eq!(ui.open_chats(), chats, "Cmd-W closed the diff tab rather than the chat behind it");
+}
+
+/// The diff tab is the leftmost tab, so it's in the same place however many chats are open, and Ctrl-Tab comes to it
+/// there.
+#[gpui_kit::test]
+fn the_diff_tab_comes_before_the_chats(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, diff) = reviewing(cx, &stack);
+    ui.new_chat();
+    let chats = ui.open_chats();
+    ui.open_file(&diff, "a.txt");
+
+    let left = |ui: &mut Ui<'_>, id: SharedString| {
+        ui.frame();
+        ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds().left()).unwrap()
+    };
+    let diff_tab = left(&mut ui, "show-diff-tab".into());
+    for chat in &chats {
+        let chat_tab = left(&mut ui, format!("chat-{chat}").into());
+        assert!(diff_tab < chat_tab, "the diff tab, at {diff_tab:?}, is left of chat {chat}, at {chat_tab:?}");
+    }
+
+    ui.press("ctrl-tab");
+    assert_eq!((showing(&ui), ui.active_chat()), (Showing::Chat, chats[0].clone()), "the first chat follows it");
+    ui.press("ctrl-shift-tab");
+    assert_eq!(showing(&ui), Showing::Diff, "and goes back to it");
+    ui.show_chat(&chats[1]);
+    ui.press("ctrl-tab");
+    assert_eq!(showing(&ui), Showing::Diff, "the last chat wraps around to it");
 }
 
 /// The composer isn't drawn while the diff tab shows, so coming back to the workspace gives the diff the focus instead,
@@ -168,4 +194,20 @@ fn add_to_chat_copies_a_comment_into_the_composer(cx: &mut TestAppContext) {
     let shown: Vec<_> = ui.comments(&diff).into_iter().map(|c| c.id).collect();
     assert_eq!(shown, std::slice::from_ref(&comment.id), "it stays on the diff");
     assert_eq!(stack.client().comment_list(&workspace).unwrap(), [comment], "and in the hub");
+}
+
+#[gpui_kit::test]
+fn hiding_the_sidebar_of_changes_hides_it_in_every_workspace(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _) = reviewing(cx, &stack);
+    let first = ui.view().selected.clone().unwrap();
+    ui.new_workspace();
+    assert!(ui.changes_open(), "open in the first, so open in the second");
+
+    ui.click("toggle-diff");
+    ui.press("cmd-[");
+
+    ui.wait("the first workspace", |ui| ui.view().selected.as_ref() == Some(&first));
+    assert!(!ui.changes_open());
+    assert!(!ui.has("changed-files"), "the first workspace's changes aren't drawn either");
 }

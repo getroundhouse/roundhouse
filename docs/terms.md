@@ -29,11 +29,11 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
-| Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded` |
+| Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded`, `Session.turn_started_at_ms`, `SessionStatus::in_turn` |
 | Background task | Work an agent started that carries on after its turn ends, such as a command or a subagent. The agent is still at work until it finishes | `AgentTasks`, `SessionStatus::Background` |
 | Reply | What the agent said in a turn, as of the event that ended it. A turn the agent was cut off from isn't one | `Session.reply_seq` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
-| Attachment | A file a prompt carries, of any kind. The worker puts it in the worktree's `.context/attachments/`, and the hub keeps it too if it's an image. The interface says "file" or "image" | `Attachment`, `AttachmentId`, `AttachmentFile`, the `attachments` table |
+| Attachment | A file a prompt carries, of any kind, or an image a tool sent the agent, such as a screenshot it read. The worker puts a prompt's files in the worktree's `.context/attachments/`, and the hub keeps every image. The interface says "file" or "image" | `Attachment`, `AttachmentId`, `AttachmentFile`, `NewAttachment`, the `attachments` table |
 | Tool call | An agent using one of its tools, such as running a command or editing a file, and the result it got back. They arrive as two events, and the transcript draws them as one line that opens to what the call did | `ContentBlock::ToolUse`, `ContentBlock::ToolResult`, `transcript::calls` |
 | Steer | Send a prompt while the agent works, which it reads at its next chance, such as when a running tool finishes. Until then the prompt is waiting, and a stop drops it | `PromptTaken`, `PromptDropped`, `PromptState` |
 | Queue | Prompts waiting for the agent to finish, on the session's record. The hub sends each as a turn of its own. It's held, waiting for the person, after a stop or once the agent goes away mid-turn | `Session.queued`, `Session.queue_held`, `QueuedPrompt`, `SessionQueue`, `SessionSendQueued` |
@@ -51,7 +51,10 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, amber or red when it needs you, and all white for a reply you haven't read. `docs/spec/look.md` has the rules | `look::mark` |
 | Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
 | Sidebar of changes | The sidebar on the right that lists the files a workspace changes against its base. `docs/spec/diff.md` has the rules | `Changes` |
-| Diff tab | A workspace's one tab for a changed file's diff, after its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
+| Home | Every workspace in one list, which shows in place of the workspace from the top of the sidebar. `docs/spec/home.md` has the rules | `home::Home`, `AppView::open_home` |
+| Pull request's bar, standing | The strip at the top of the sidebar of changes, in the pull request's colour. It says the workspace's standing, the first thing in the way of merging its pull request, and offers the one thing to do about it. `docs/spec/workspaces.md` has the rules | `desktop::pull_request::bar`, `Standing` |
+| Diff tab | A workspace's one tab for a changed file's diff, before its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
+| Working line | The line a chat ends with while its agent works: the mark with its light sweeping, and how long the turn has taken so far | `working_line` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery

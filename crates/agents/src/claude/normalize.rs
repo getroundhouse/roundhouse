@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
 use protocol::model::MessageId;
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
@@ -14,15 +15,20 @@ pub(crate) use prompt::PromptProgress;
 use tasks::StoppedTasks;
 
 mod file_change;
+mod images;
 mod prompt;
 mod tasks;
 #[cfg(test)]
 mod tests;
+mod user;
 
 #[derive(Debug, PartialEq)]
 pub enum Parsed {
     /// Goes in the log, with the raw line.
     Event(EventBody),
+    /// Goes in the log like an `Event`, which names images a tool sent back. Their bytes go to the hub beside it, and
+    /// `raw` is the line without them.
+    EventWithImages { body: EventBody, images: Vec<NewAttachment>, raw: String },
     /// Live only. The finished message replaces these.
     Delta(StreamDelta),
     /// The CLI is waiting on an answer the adapter doesn't support. It needs an error reply, or
@@ -106,7 +112,7 @@ fn parse_value(value: &Value) -> Parsed {
     let kind = str_of(value, "type").unwrap_or("unknown");
     match kind {
         "assistant" => Parsed::Event(assistant(value)),
-        "user" => Parsed::Event(user(value)),
+        "user" => user::line(value),
         "result" => Parsed::Event(turn_ended(value)),
         "system" => system(value),
         "stream_event" => stream_event(value),
@@ -242,16 +248,6 @@ fn assistant(value: &Value) -> EventBody {
     }
 }
 
-fn user(value: &Value) -> EventBody {
-    let message = value.get("message").unwrap_or(&Value::Null);
-    let mut blocks = blocks(message.get("content"));
-    // Claude says what an edit changed beside the line's one result, rather than in it.
-    if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
-        *change = file_change::read(value);
-    }
-    EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks }
-}
-
 fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {
     match content {
         Some(Value::String(text)) => vec![ContentBlock::Text { text: text.clone() }],
@@ -269,16 +265,14 @@ fn block(value: &Value) -> ContentBlock {
             name: string_of(value, "name").unwrap_or_default(),
             input: value.get("input").cloned().unwrap_or(Value::Null),
         },
-        Some("tool_result") => {
-            let (text, image_count) = tool_result_content(value.get("content"));
-            ContentBlock::ToolResult {
-                tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
-                is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-                text,
-                image_count,
-                change: None,
-            }
-        }
+        Some("tool_result") => ContentBlock::ToolResult {
+            tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
+            is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
+            text: tool_result_text(value.get("content")),
+            // Only a user line's results have images, and `images` takes them from it.
+            images: Vec::new(),
+            change: None,
+        },
         Some("image") => {
             ContentBlock::Image { media_type: value.get("source").and_then(|s| string_of(s, "media_type")) }
         }
@@ -287,27 +281,20 @@ fn block(value: &Value) -> ContentBlock {
 }
 
 /// A tool result's content is a string, or an array of text and image blocks.
-fn tool_result_content(content: Option<&Value>) -> (String, u32) {
+fn tool_result_text(content: Option<&Value>) -> String {
     match content {
-        Some(Value::String(text)) => (text.clone(), 0),
+        Some(Value::String(text)) => text.clone(),
         Some(Value::Array(items)) => {
             let mut text = String::new();
-            let mut images = 0;
-            for item in items {
-                match str_of(item, "type") {
-                    Some("text") => {
-                        if !text.is_empty() {
-                            text.push('\n');
-                        }
-                        text.push_str(str_of(item, "text").unwrap_or_default());
-                    }
-                    Some("image") => images += 1,
-                    _ => {}
+            for item in items.iter().filter(|item| str_of(item, "type") == Some("text")) {
+                if !text.is_empty() {
+                    text.push('\n');
                 }
+                text.push_str(str_of(item, "text").unwrap_or_default());
             }
-            (text, images)
+            text
         }
-        _ => (String::new(), 0),
+        _ => String::new(),
     }
 }
 
@@ -333,6 +320,7 @@ fn turn_ended(value: &Value) -> EventBody {
         duration_ms: value.get("duration_ms").and_then(Value::as_u64),
         cost_usd: value.get("total_cost_usd").and_then(Value::as_f64),
         num_turns: value.get("num_turns").and_then(Value::as_u64),
+        started_at_ms: None,
     }
 }
 

@@ -13,11 +13,12 @@ const TEXT: Rgba<u8> = Rgba([0x8a, 0x84, 0x7f, 0xff]);
 const FAINT: Rgba<u8> = Rgba([0x4a, 0x45, 0x41, 0xff]);
 const GREEN: Rgba<u8> = Rgba([0x3f, 0xb9, 0x50, 0xff]);
 
-/// A narrow sidebar where a pull request's badge runs over a workspace's name, as someone might paste to show a bug.
-pub(crate) fn overlapping_badge() -> Vec<u8> {
-    let mut image = RgbaImage::from_pixel(720, 450, PANE);
-    fill(&mut image, (0, 0), (250, 450), SIDEBAR);
-    fill(&mut image, (250, 0), (1, 450), EDGE);
+/// A narrow sidebar where a pull request's badge runs over a workspace's name, as someone might paste to show a bug,
+/// `height` pixels tall. Its rows end above 240.
+pub(crate) fn overlapping_badge(height: u32) -> Vec<u8> {
+    let mut image = RgbaImage::from_pixel(720, height, PANE);
+    fill(&mut image, (0, 0), (250, height), SIDEBAR);
+    fill(&mut image, (250, 0), (1, height), EDGE);
     for (row, name) in [120, 96, 150, 104, 130].into_iter().enumerate() {
         let y = 60 + 40 * u32::try_from(row).unwrap();
         fill(&mut image, (22, y), (12, 12), FAINT);
@@ -39,6 +40,28 @@ pub(crate) fn terminal() -> Vec<u8> {
         [(300, TEXT), (420, TEXT), (260, TEXT), (480, Rgba([0xd0, 0x4a, 0x4a, 0xff]))].into_iter().enumerate()
     {
         fill(&mut image, (24, 30 + 26 * u32::try_from(line).unwrap()), (width, 9), color);
+    }
+    encode(&image)
+}
+
+/// A page of signals in a browser, each a dot and a name, as the agent's screenshot of it would show it, with the fourth
+/// at stop showing red.
+pub(crate) fn signal_board() -> Vec<u8> {
+    const RED: Rgba<u8> = Rgba([0xd0, 0x4a, 0x4a, 0xff]);
+    const AMBER: Rgba<u8> = Rgba([0xd8, 0x9a, 0x3a, 0xff]);
+    let mut image = RgbaImage::from_pixel(600, 340, PANE);
+    fill(&mut image, (0, 0), (600, 36), SIDEBAR);
+    fill(&mut image, (0, 36), (600, 1), EDGE);
+    for (x, width) in [(16, 10), (34, 10), (52, 10), (90, 260)] {
+        fill(&mut image, (x, 13), (width, 10), FAINT);
+    }
+    for (row, (color, name)) in
+        [(GREEN, 140), (AMBER, 110), (GREEN, 160), (RED, 120), (RED, 130), (GREEN, 100)].into_iter().enumerate()
+    {
+        let y = 66 + 42 * u32::try_from(row).unwrap();
+        fill(&mut image, (32, y), (16, 16), color);
+        fill(&mut image, (64, y + 4), (name, 8), TEXT);
+        fill(&mut image, (440, y + 4), (120, 8), FAINT);
     }
     encode(&image)
 }

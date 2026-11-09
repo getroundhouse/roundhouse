@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use client_core::FileToSend;
-use gpui_kit::{AnyElement, ClipboardItem, Context};
+use gpui_kit::{AnyElement, ClipboardItem, Context, IntoElement as _, Styled as _};
 use protocol::model::{AttachmentId, SessionId};
 
 use super::{PaneEvent, WorkspacePane};
@@ -113,6 +113,7 @@ impl WorkspacePane {
 
     /// The tiles above what's typed.
     pub(crate) fn attached_tiles(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        self.attached.tiles("composer-attachments", cx, Self::remove_attached)
+        let tiles = self.attached.tiles("composer-attachments", cx, Self::remove_attached)?;
+        Some(tiles.px_3().pt_3().into_any_element())
     }
 }

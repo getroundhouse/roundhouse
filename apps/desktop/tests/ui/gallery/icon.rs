@@ -7,17 +7,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gpui_kit::assets::Assets;
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, Context, HeadlessAppContext, Hsla, IntoElement, ParentElement as _, PlatformTextSystem,
-    Render, Styled as _, Window, WindowBounds, WindowOptions, black, div, point, px, size, white,
+    Context, HeadlessAppContext, Hsla, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _,
+    Window, black, div, px, size, white,
 };
 use image::{Rgba, RgbaImage};
 use look::{IconSize, IconStyle};
 
-use super::UPDATE;
 use super::approved::{self, Verdict};
+use super::{UPDATE, headless};
 
 /// The iconset's files, and the drawing each holds. macOS names them by points and scale, so some share a drawing.
 const FILES: [(&str, IconSize); 10] = [
@@ -38,7 +36,8 @@ fn every_size_of_the_icon_looks_as_approved() {
     let update = std::env::var_os(UPDATE).is_some();
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.context/gallery");
     std::fs::create_dir_all(&out).unwrap();
-    let mut cx = headless();
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+    let mut cx = headless::app(&text_system);
     let mut problems = Vec::new();
     for style in IconStyle::ALL {
         for size in IconSize::ALL {
@@ -86,15 +85,6 @@ impl Render for Icon {
     }
 }
 
-fn headless() -> HeadlessAppContext {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-    let mut cx =
-        HeadlessAppContext::with_platform(text_system, Arc::new(Assets), gpui_kit::platform::current_headless_renderer);
-    cx.update(gpui_kit::init);
-    cx.update(look::apply);
-    cx
-}
-
 /// Clear around its tile. The renderer only draws opaque pictures, so it's drawn over black and over white, and
 /// the two give back how much of each pixel the icon covers, and in what colour.
 fn draw(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize) -> RgbaImage {
@@ -104,20 +94,9 @@ fn draw(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize) -> RgbaIm
 /// In a window exactly as big as the icon.
 fn over(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize, backdrop: Hsla) -> RgbaImage {
     let points = px(f32::from(icon.pixels()) / 2.0);
-    let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(0.), px(0.)), size(points, points)))),
-        focus: false,
-        show: false,
-        ..Default::default()
-    };
-    let handle =
-        cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Icon { style, size: icon, backdrop }))).unwrap();
-    cx.run_until_parked();
-    cx.update_window(handle.into(), |_, window, cx| window.render_frame(cx)).unwrap();
-    let image = cx.capture_screenshot(handle.into()).unwrap();
-    cx.update_window(handle.into(), |_, window, _| window.remove_window()).unwrap();
-    cx.run_until_parked();
-    image
+    let picture = headless::draw(cx, size(points, points), move |_| Icon { style, size: icon, backdrop });
+    assert!(picture.settled, "the {}px {} icon keeps changing", icon.pixels(), name(style));
+    picture.image
 }
 
 /// A pixel the icon covers by `a` comes out as `a × colour` over black, and `a × colour + 1 − a` over white. So the

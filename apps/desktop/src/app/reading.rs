@@ -10,9 +10,10 @@ use crate::workspace_pane::Mark;
 
 impl AppView {
     /// Tells each pane whether it's the one being read: the selected one, with a connection, in the window in front,
-    /// and not hidden by Settings. For after anything that changes one of those.
+    /// and not hidden by Settings or Home. For after anything that changes one of those.
     pub(super) fn read_on_screen(&mut self, in_front: bool, cx: &mut Context<Self>) {
-        let showing = self.selected_pane().filter(|_| in_front && !self.settings_open()).map(|pane| pane.entity_id());
+        let hidden = self.settings_open() || self.home_showing();
+        let showing = self.selected_pane().filter(|_| in_front && !hidden).map(|pane| pane.entity_id());
         for pane in self.panes.values() {
             let on_screen = Some(pane.entity_id()) == showing;
             pane.update(cx, |p, cx| p.set_on_screen(on_screen, cx));

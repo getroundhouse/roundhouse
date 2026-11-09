@@ -9,6 +9,8 @@
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
 //!   tool:COMMAND    Ask for approval if the mode requires it, then run COMMAND with `sh -c`.
+//!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result
+//!                   comes back without a patch, so the edit is drawn from what it replaced.
 //!   hang:MS         A tool that takes MS milliseconds. Cancelling stops it.
 //!   partial:TEXT    Start a message and leave it unfinished, so a crash can cut it off.
 //!   late:FILE:TEXT  Leave a process holding stdout open until FILE exists, so an exit takes time to notice,
@@ -28,6 +30,8 @@
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
 //!                   SIGTERM stops it, and lists none left.
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
+//!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
+//!                   record of the read, and then a line for the model saying how it shrank it.
 //!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
@@ -56,6 +60,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 mod background;
+mod read;
 mod subagent;
 mod title;
 mod tools;

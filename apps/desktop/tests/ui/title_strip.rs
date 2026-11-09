@@ -41,15 +41,14 @@ fn a_drag_from_a_button_in_the_strip_is_the_buttons(cx: &mut gpui_kit::TestAppCo
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
     ui.new_workspace();
-    let pane = ui.pane().unwrap();
 
     // Let go off the button, so it isn't a click either.
     let from = ui.cx.update_window(ui.handle, |_, window, _| window.find("toggle-diff").bounds().center()).unwrap();
     let to = point(from.x, from.y + px(200.));
     ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
     ui.frame();
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open));
+    assert!(ui.changes_open(), "the sidebar of changes is still open");
 
     ui.click("toggle-diff");
-    assert!(ui.cx.read_entity(&pane, |p, _| p.changes_open));
+    assert!(!ui.changes_open());
 }

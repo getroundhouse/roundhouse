@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, Context, InteractiveElement, IntoElement, ParentElement, Styled, Window, div};
 use transcript::mode_label;
 
-use super::{WorkspacePane, in_turn};
+use super::WorkspacePane;
 use crate::StopAgent;
 use crate::attached;
 use crate::model_picker::{Picked, model_picker};
@@ -67,14 +67,18 @@ impl WorkspacePane {
     }
 
     /// What's attached, what's typed, and below them the attach button, the pickers and Send. Files dropped anywhere on
-    /// it are attached, and so is a paste that holds images or files.
+    /// it are attached, and so is a paste that holds images or files. It's centred under the transcript's column and a
+    /// little wider, so the transcript's text sits inside its edges.
     pub(super) fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let pickers = self.pickers(cx).into_any_element();
         let attached = self.attached_tiles(cx);
         let queue = self.queue_card(cx);
-        let working = self.session().is_some_and(in_turn);
+        // In a turn, which the composer offers to stop. Work left in the background isn't, since stopping a turn doesn't
+        // reach it.
+        let working = self.session().is_some_and(|s| s.status.in_turn());
         let theme = cx.theme();
         let (surface, border) = (theme.muted, theme.input);
+        let stop_mark = theme.button_primary_foreground;
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
@@ -82,27 +86,30 @@ impl WorkspacePane {
         let attach =
             attached::attach_button("attach", cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx)).xsmall();
         let composer = v_flex().id("composer").w_full().rounded_lg().border_1().border_color(border).bg(surface);
-        div().flex_none().w_full().px_4().pb_4().pt_1().children(queue).child(
-            attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
-                .children(attached)
-                .child(div().w_full().px_1().pt_1().child(textarea))
-                .child(h_flex().w_full().px_2().pb_2().gap_2().child(attach).child(pickers).child(if working {
-                    Button::new("stop")
-                        .small()
-                        .icon(IconName::Square)
-                        .label("Stop")
-                        .tooltip_with_action("Stop", &StopAgent, None)
-                        .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
-                        .into_any_element()
-                } else {
-                    Button::new("send")
-                        .primary()
-                        .small()
-                        .icon(IconName::ArrowUp)
-                        .tooltip("Send")
-                        .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
-                        .into_any_element()
-                })),
-        )
+        let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
+            .children(attached)
+            .child(div().w_full().px_2().pt_2().child(textarea))
+            .child(h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(pickers).child(if working {
+                // The same square as Send, with a filled square rather than an icon, which would only be outlined.
+                Button::new("stop")
+                    .primary()
+                    .small()
+                    .size_6()
+                    .p_0()
+                    .child(div().size_2p5().rounded_xs().bg(stop_mark))
+                    .accessibility_label("Stop")
+                    .tooltip_with_action("Stop", &StopAgent, None)
+                    .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
+                    .into_any_element()
+            } else {
+                Button::new("send")
+                    .primary()
+                    .small()
+                    .icon(IconName::ArrowUp)
+                    .tooltip("Send")
+                    .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
+                    .into_any_element()
+            }));
+        transcript::around_column(v_flex().w_full().children(queue).child(composer)).flex_none().pb_4().pt_1()
     }
 }

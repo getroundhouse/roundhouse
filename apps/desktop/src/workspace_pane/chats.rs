@@ -141,7 +141,8 @@ impl WorkspacePane {
         self.transcripts.insert(session.id, (view, events));
     }
 
-    /// Moves to the tab before or after this one, wrapping around. The diff tab comes after the chats.
+    /// Moves to the tab before or after this one, wrapping around. The diff tab is counted after the chats, which in a
+    /// ring is the same as before them, where it's drawn.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
         let tabs = open.len() + usize::from(self.diff_tab().is_some());
@@ -240,7 +241,7 @@ impl WorkspacePane {
         self.sessions = sessions;
         for session in &self.sessions {
             if let Some((transcript, _)) = self.transcripts.get(&session.id) {
-                transcript.update(cx, |t, cx| t.show_background(&session.background_tasks, cx));
+                transcript.update(cx, |t, cx| t.set_session(session, cx));
             }
         }
         self.keep_active_valid(cx);

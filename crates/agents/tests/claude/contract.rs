@@ -21,7 +21,7 @@ fn events() -> Vec<EventBody> {
     parsed()
         .into_iter()
         .filter_map(|p| match p {
-            Parsed::Event(body) => Some(body),
+            Parsed::Event(body) | Parsed::EventWithImages { body, .. } => Some(body),
             _ => None,
         })
         .collect()

@@ -3,17 +3,18 @@
 
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use protocol::model::{Session, SessionId, SessionStatus};
+use protocol::model::{Session, SessionStatus};
 
+use super::diff_tab::Sidebar;
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
+use super::{Busy, HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
 use crate::right_click;
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -21,7 +22,7 @@ pub(super) const TAB_WIDTH: Pixels = px(200.);
 /// Each tab's, so a tab's close button shows only while the pointer is over that tab.
 pub(super) const TAB_GROUP: &str = "chat-tab";
 
-fn chat_title(session: &Session, number: usize) -> String {
+pub(super) fn chat_title(session: &Session, number: usize) -> String {
     session.title.as_deref().map_or_else(|| format!("Chat {number}"), str::to_string)
 }
 
@@ -93,28 +94,25 @@ impl WorkspacePane {
             };
             (marking, mark)
         });
-        right_click::menu(marking, move |window, cx| {
+        // No key: the one for marking acts on the workspace showing, as its row's menu does.
+        right_click::menu(marking, None, move |window, cx| {
             let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
         })
     }
 
-    /// One tab for each open chat, then the diff tab if there is one, then a way to start another chat, and any closed
-    /// ones to go back to.
+    /// The diff tab if there is one, then one tab for each open chat, and a way to start another chat. At the far end
+    /// are any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
-        let mut tabs: Vec<AnyElement> = numbered
-            .iter()
-            .filter(|(_, s)| s.closed_at_ms.is_none())
-            .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx))
-            .collect();
-        tabs.extend(self.diff_tab_element(cx));
-        let closed: Vec<(SessionId, String)> = numbered
-            .iter()
-            .filter(|(_, s)| s.closed_at_ms.is_some())
-            .map(|(index, s)| (s.id.clone(), chat_title(s, index + 1)))
-            .collect();
-        let this = cx.weak_entity();
+        let mut tabs: Vec<AnyElement> = self.diff_tab_element(cx).into_iter().collect();
+        tabs.extend(
+            numbered
+                .iter()
+                .filter(|(_, s)| s.closed_at_ms.is_none())
+                .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx)),
+        );
+        let closed = self.closed_chats(cx);
         div()
             .relative()
             .flex_none()
@@ -138,70 +136,53 @@ impl WorkspacePane {
                             .tooltip("New chat")
                             .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
                     )
-                    .when(!closed.is_empty(), |d| {
-                        d.child(
-                            Button::new("closed-chats")
-                                .ghost()
-                                .xsmall()
-                                .label(format!("Closed ({})", closed.len()))
-                                .dropdown_menu(move |mut menu, _, _| {
-                                    for (id, title) in &closed {
-                                        let (this, id) = (this.clone(), id.clone());
-                                        menu =
-                                            menu.item(PopupMenuItem::new(title.clone()).on_click(move |_, _, cx| {
-                                                let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
-                                            }));
-                                    }
-                                    menu
-                                }),
-                        )
-                    }),
+                    // Kept to the end of the row, so it stays put as chats open and close.
+                    .child(div().flex_1())
+                    .children(closed),
             )
     }
 
-    fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
+    /// its bar's action instead.
+    fn header(&self, sidebar: Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let id = self.workspace.id.clone();
-        let pr = self.pull_request.clone();
+        let controls = match sidebar {
+            Sidebar::Open => None,
+            Sidebar::Hidden => {
+                let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
+                crate::pull_request::controls(&self.pull_request, on_action, cx)
+            }
+        };
         h_flex()
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
-            .px_4()
+            .pl_4()
+            .pr_3()
             .gap_2()
             .border_b_1()
             .border_color(border)
             .child(self.heading(cx))
             .child(
+                Button::new("archive").ghost().small().label("Archive").disabled(self.busy == Busy::Changing).on_click(
+                    cx.listener(move |_, _, _, cx| {
+                        cx.emit(PaneEvent::Archive(id.clone(), false));
+                    }),
+                ),
+            )
+            .children(controls)
+            .child(
                 Button::new("toggle-diff")
                     .ghost()
                     .small()
                     .icon(IconName::PanelRight)
-                    .label(if self.changes_open { "Hide diff" } else { "Diff" })
+                    .tooltip(match sidebar {
+                        Sidebar::Open => "Hide diff",
+                        Sidebar::Hidden => "Show diff",
+                    })
                     .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
             )
-            .child(Button::new("archive").ghost().small().label("Archive").on_click(cx.listener(move |_, _, _, cx| {
-                cx.emit(PaneEvent::Archive(id.clone(), false));
-            })))
-            .when_some(pr, |d, pr| {
-                let url = pr.url.clone();
-                d.child(
-                    Button::new("pull-request")
-                        .small()
-                        .icon(IconName::Github)
-                        .label(format!("#{} · {}", pr.number, self.work().name()))
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                )
-            })
-            .when(self.pull_request.is_none(), |d| {
-                d.child(
-                    Button::new("create-pr")
-                        .primary()
-                        .small()
-                        .label("Create PR")
-                        .on_click(cx.listener(|t, _, _, cx| t.create_pull_request(cx))),
-                )
-            })
     }
 
     /// What the workspace is called, and the branch it's on and where that started.
@@ -238,22 +219,20 @@ impl WorkspacePane {
 
 impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let header = self.header(cx).into_any_element();
+        let changes = self.changes_sidebar(cx);
+        // Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
+        let sidebar = if changes.is_some() { Sidebar::Open } else { Sidebar::Hidden };
+        let header = self.header(sidebar, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let file = self.diff.as_ref().filter(|_| self.showing() == Showing::Diff).map(|diff| diff.file.clone());
         let showing = match file {
             Some(file) => div().flex_1().min_h_0().w_full().child(file).into_any_element(),
             None => self.chat(cx),
         };
-        let changes = self.changes_sidebar(cx);
-        v_flex().size_full().child(header).child(
-            h_flex()
-                .flex_1()
-                .min_h_0()
-                .w_full()
-                .child(v_flex().flex_1().min_w_0().h_full().child(tabs).child(showing))
-                .children(changes),
-        )
+        h_flex()
+            .size_full()
+            .child(v_flex().flex_1().min_w_0().h_full().child(header).child(tabs).child(showing))
+            .children(changes)
     }
 }
 
@@ -273,16 +252,16 @@ impl WorkspacePane {
             .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
+            // In the transcript's column, so it starts where the rows above it do.
             .when(interrupted, |d| {
                 d.child(
-                    div()
-                        .flex_none()
-                        .w_full()
-                        .px_4()
-                        .py_1()
-                        .text_xs()
-                        .text_color(muted)
-                        .child("The agent stopped before it finished. Send a message to pick up where it left off."),
+                    transcript::in_column(
+                        "The agent stopped before it finished. Send a message to pick up where it left off.",
+                    )
+                    .flex_none()
+                    .py_1()
+                    .text_xs()
+                    .text_color(muted),
                 )
             })
             .child(composer)

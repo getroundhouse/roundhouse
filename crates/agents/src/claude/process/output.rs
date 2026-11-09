@@ -46,20 +46,20 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 continue;
             }
             Parsed::Delta(delta) => AgentOutput::Delta(delta),
+            Parsed::EventWithImages { body, images, raw } => {
+                AgentOutput::Event { body, raw: Some(raw), attachments: images }
+            }
             Parsed::Prompt { uuid, progress } => {
-                AgentOutput::Event { body: prompt_progress(&shared, &uuid, progress), raw: Some(line) }
+                AgentOutput::event(prompt_progress(&shared, &uuid, progress), Some(line))
             }
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
-                AgentOutput::Event {
-                    body: EventBody::AgentOther { kind: format!("control_request/{subtype}") },
-                    raw: Some(line),
-                }
+                AgentOutput::event(EventBody::AgentOther { kind: format!("control_request/{subtype}") }, Some(line))
             }
             Parsed::Event(body) => {
                 track_approval(&shared, &body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
-                let item = AgentOutput::Event { body, raw: Some(line) };
+                let item = AgentOutput::event(body, Some(line));
                 if opened && !shared.confirmed.swap(true, Ordering::SeqCst) {
                     shared.unconfirmed_prompts.lock().clear();
                     let held: Vec<_> = shared.held_output.lock().drain(..).collect();

@@ -4,12 +4,14 @@ use serde::{Deserialize, Serialize};
 
 mod effort;
 mod options;
+mod pull_request;
 mod queue;
 mod session;
 mod title;
 
 pub use effort::Effort;
 pub use options::SessionOptions;
+pub use pull_request::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
 pub use title::{Title, TitleError, TitleSource};
@@ -62,8 +64,8 @@ ids!(
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
     ClientMessageId,
-    /// Chosen by a client before it adds the file, so it can show the file at once and adding it again can't add it
-    /// twice. Unique within its session.
+    /// Chosen by whoever has the file first, as a UUID: a client before it adds the file, so it can show it at once
+    /// and adding it again can't add it twice, or the worker for an image a tool sent back. Unique within its session.
     AttachmentId,
     /// Chosen by a client, so that retrying a request that creates something can't create it twice.
     ClientRequestId,
@@ -298,14 +300,4 @@ pub struct DiffComment {
     pub created_at_ms: i64,
     #[serde(default)]
     pub rev: Rev,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct PullRequest {
-    pub number: u64,
-    pub url: String,
-    pub title: String,
-    /// As GitHub reports it: `OPEN`, `CLOSED` or `MERGED`.
-    pub state: String,
-    pub is_draft: bool,
 }

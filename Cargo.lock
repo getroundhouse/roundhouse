@@ -1548,6 +1548,7 @@ dependencies = [
  "image",
  "libc",
  "look",
+ "objc2 0.6.5",
  "parking_lot",
  "protocol",
  "ring",
@@ -4294,6 +4295,7 @@ dependencies = [
 name = "look"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "gpui-kit",
  "serde_json",
  "syntect",
@@ -7850,10 +7852,13 @@ dependencies = [
 name = "transcript"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "client-core",
  "gpui-kit",
  "image",
  "look",
+ "parking_lot",
+ "percent-encoding",
  "protocol",
  "serde_json",
  "similar",

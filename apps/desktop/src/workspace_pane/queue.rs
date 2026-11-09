@@ -13,7 +13,7 @@ use gpui_kit::{
 use protocol::client::ErrorCode;
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
 
-use super::{PaneEvent, WorkspacePane, in_turn};
+use super::{PaneEvent, WorkspacePane};
 
 /// About five prompts of a line each.
 const QUEUE_MOST_HEIGHT: f32 = 200.;
@@ -162,7 +162,7 @@ impl WorkspacePane {
     /// The showing chat's queue, oldest first, or nothing when it's empty. A held queue says so.
     pub(super) fn queue_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let session = self.session()?;
-        let (queued, held, working) = (session.queued.clone(), session.queue_held, in_turn(session));
+        let (queued, held, working) = (session.queued.clone(), session.queue_held, session.status.in_turn());
         if queued.is_empty() {
             return None;
         }

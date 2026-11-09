@@ -4,6 +4,7 @@ mod admin;
 mod api;
 mod commands;
 mod feed;
+mod files;
 mod follow;
 mod open_session;
 mod options;

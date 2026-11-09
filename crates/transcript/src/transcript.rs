@@ -12,13 +12,20 @@ use gpui_kit::{
     px,
 };
 use protocol::attachment::Attachment;
-use protocol::event::{AgentTask, ApprovalDecision, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
+use crate::linked_images::LinkedImages;
 use crate::rows::SubagentCalls;
+
+mod answers;
+mod record;
+
+pub(crate) use record::AtWork;
+use record::tick;
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -37,12 +44,12 @@ pub(crate) struct Model {
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
-    /// What the agent is running in the background, as its session's record says, drawn where the conversation ends.
-    pub background: Vec<AgentTask>,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
     /// Where the calls that started subagents are, as rows have looked for them.
     pub subagent_calls: RefCell<SubagentCalls>,
+    /// What the agent is at, as the session's record says, which the transcript's last row draws.
+    pub at_work: AtWork,
 }
 
 pub struct Transcript {
@@ -51,8 +58,12 @@ pub struct Transcript {
     /// Client-core's copy of the session, which this only reads.
     session: OpenSession,
     model: Rc<RefCell<Model>>,
+    /// The images the agent's text points to.
+    linked: LinkedImages,
     scroller: Entity<MessageScrollerState>,
     _changes: Task<()>,
+    /// Draws the time so far again while the agent works.
+    ticking: Option<Task<()>>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -63,7 +74,10 @@ impl Transcript {
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
-        let model = Rc::new(RefCell::new(Model { background: session.background_tasks.clone(), ..Model::default() }));
+        let linked = LinkedImages::new(client.clone(), session.workspace_id.clone(), cx.weak_entity());
+        let at_work = AtWork::of(session);
+        let ticking = at_work.working.then(|| tick(cx));
+        let model = Rc::new(RefCell::new(Model { at_work, ..Model::default() }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -72,7 +86,16 @@ impl Transcript {
                 }
             }
         });
-        Self { client, session_id: session.id.clone(), session: open, model, scroller, _changes: following }
+        Self {
+            client,
+            session_id: session.id.clone(),
+            session: open,
+            model,
+            linked,
+            scroller,
+            _changes: following,
+            ticking,
+        }
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -89,20 +112,7 @@ impl Transcript {
         self.client = client.clone();
         // Asked for again the next time they're drawn, in case the connection was what failed.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
-    }
-
-    /// Follows the session's record, which says what the agent is running in the background.
-    pub fn show_background(&mut self, tasks: &[AgentTask], cx: &mut Context<Self>) {
-        if self.model.borrow().background == tasks {
-            return;
-        }
-        self.model.borrow_mut().background = tasks.to_vec();
-        // They're drawn in the last row, with the streaming tail.
-        self.scroller.update(cx, |list, cx| {
-            let rows = list.item_count();
-            list.remeasure_items(rows.saturating_sub(1)..rows, cx);
-        });
-        cx.notify();
+        self.linked.reconnect(client);
     }
 
     /// The approvals waiting on an answer, newest last.
@@ -168,76 +178,14 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Records a choice on a question card, and answers once nothing else is needed.
-    pub(crate) fn pick_answer(
-        &mut self,
-        seq: Seq,
-        approval_id: ApprovalId,
-        question: &crate::questions::Question,
-        label: String,
-        only_question: bool,
-        cx: &mut Context<Self>,
-    ) {
-        if only_question && !question.multiple {
-            let answers = std::iter::once((question.text.clone(), label)).collect();
-            self.answer_approval(approval_id, ApprovalDecision::Answer { answers }, cx);
-            return;
-        }
-        {
-            let mut m = self.model.borrow_mut();
-            let picks = m.picks.entry(approval_id).or_default().entry(question.text.clone()).or_default();
-            crate::questions::toggle_pick(picks, label, question.multiple);
-        }
-        let row = seq_index(seq) - 1;
-        self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
-        cx.notify();
-    }
-
-    /// Sends what's been chosen on a card with more than one thing to choose.
-    pub(crate) fn send_answers(&mut self, approval_id: ApprovalId, cx: &mut Context<Self>) {
-        let picks = self.model.borrow_mut().picks.remove(&approval_id).unwrap_or_default();
-        self.answer_approval(
-            approval_id,
-            ApprovalDecision::Answer { answers: crate::questions::answers_from(&picks) },
-            cx,
-        );
-    }
-
-    /// Takes text typed in the composer as the answer to an open question, if there is one: the first
-    /// question on it without an answer yet. Returns false if there's nothing to answer.
-    pub fn answer_with_text(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
-        let text = text.trim();
-        if text.is_empty() {
-            return false;
-        }
-        let open = self.open_approvals().into_iter().find_map(|event| {
-            let EventBody::ApprovalRequested { approval_id, tool_name, input, .. } = event.body else {
-                return None;
-            };
-            (tool_name == crate::questions::TOOL_NAME)
-                .then(|| (event.seq, approval_id, crate::questions::parse(&input)))
-        });
-        let Some((seq, approval_id, asked)) = open else { return false };
-        let done = {
-            let mut m = self.model.borrow_mut();
-            let picks = m.picks.entry(approval_id.clone()).or_default();
-            let Some(unanswered) = crate::questions::first_unanswered(&asked, picks) else { return false };
-            picks.insert(unanswered.text.clone(), vec![text.to_string()]);
-            crate::questions::first_unanswered(&asked, picks).is_none()
-        };
-        if done {
-            self.send_answers(approval_id, cx);
-        } else {
-            let row = seq_index(seq) - 1;
-            self.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
-            cx.notify();
-        }
-        true
-    }
-
     /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, open);
+        self.remeasure(seq, cx);
+    }
+
+    /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
+    pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| {
             list.remeasure_items(row..row + 1, cx);
@@ -321,23 +269,11 @@ impl Transcript {
                 .await;
             let _ = this.update(cx, |t, cx| {
                 t.model.borrow_mut().pictures.insert(id, picture);
-                if let Some(seq) = seq {
-                    let row = seq_index(seq) - 1;
-                    t.scroller.update(cx, |list, cx| list.remeasure_items(row..row + 1, cx));
+                match seq {
+                    Some(seq) => t.remeasure(seq, cx),
+                    None => cx.notify(),
                 }
-                cx.notify();
             });
-        })
-        .detach();
-    }
-
-    pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {
-        let id = self.session_id.clone();
-        let answering = self.client.start(move |client| client.session_approve(&id, &approval_id, decision));
-        cx.spawn(async move |this, cx| {
-            if let Err(e) = answering.recv().await {
-                let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("couldn't answer that: {e}"))));
-            }
         })
         .detach();
     }
@@ -357,12 +293,12 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (model, session) = (self.model.clone(), self.session.clone());
+        let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
         let this = cx.weak_entity();
         MessageScroller::new(
             ElementId::Name(self.session_id.to_string().into()),
             self.scroller.clone(),
-            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, ix, cx),
+            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, &linked, ix, cx),
         )
         // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
         .with_row_style(StyleRefinement::default().pb(px(0.)))

@@ -8,14 +8,13 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
     Subscription, Task, Window, px,
 };
-use protocol::model::{
-    DiffComment, Effort, PullRequest, Session, SessionId, SessionOptions, SessionStatus, Workspace, WorkspaceId,
-};
+use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::attached::Attachments;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
+use crate::pull_request::Lookup;
 use crate::review::Review;
 use attaching::Draft;
 pub use reading::Mark;
@@ -23,20 +22,16 @@ use reading::Reading;
 
 mod attaching;
 mod chats;
+mod closed;
 mod composer;
 mod diff_tab;
+mod pull_request;
 mod queue;
 mod reading;
 mod setup;
 #[cfg(test)]
 mod tests;
 mod view;
-
-/// In a turn, which the composer offers to stop. Work left in the background isn't, since stopping a turn doesn't
-/// reach it.
-fn in_turn(session: &Session) -> bool {
-    matches!(session.status, SessionStatus::Running | SessionStatus::WaitingApproval)
-}
 
 /// What shows under the tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -65,21 +60,19 @@ struct DiffTab {
     in_front: bool,
 }
 
+/// Whether the app is waiting on the hub to make, archive or restore a workspace. None of those can start while
+/// another is under way, so a button or key pressed twice does it once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Busy {
+    Free,
+    /// Making, archiving or restoring a workspace.
+    Changing,
+}
+
 #[derive(Clone, Debug)]
 pub enum PaneEvent {
     Error(String),
     Archive(WorkspaceId, bool),
-}
-
-/// What `Create PR` asks of the agent. The agent writes it, because it knows why the changes were made.
-fn pull_request_prompt(workspace: &Workspace) -> String {
-    let base = workspace.base_ref.as_deref().unwrap_or("the default branch");
-    let base = base.strip_prefix("origin/").unwrap_or(base);
-    format!(
-        "Create a pull request for this branch. Commit any uncommitted work that belongs in it, push the branch, \
-         and open the PR against `{base}` with `gh pr create`. Write the title and description from the diff and \
-         what we did here. Reply with the PR's URL."
-    )
 }
 
 pub struct WorkspacePane {
@@ -106,12 +99,14 @@ pub struct WorkspacePane {
     creating_chat: bool,
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
+    closed_menu: closed::Menu,
+    busy: Busy,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
-    /// The sidebar of changes is open.
-    pub changes_open: bool,
-    pub pull_request: Option<PullRequest>,
+    pub pull_request: Lookup,
+    /// How many times the pull request has been asked for, so only the newest answer is shown.
+    pull_request_asks: u64,
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
     setup_log_refresh: Option<Task<()>>,
@@ -125,7 +120,7 @@ impl EventEmitter<PaneEvent> for WorkspacePane {}
 
 /// The workspace header's height, which is also the strip along the window's top that moves it. The window's buttons
 /// sit in the sidebar's part of the strip, and the sidebar's list starts level with its bottom edge, so the two line up.
-pub(crate) const HEADER_HEIGHT: Pixels = px(48.);
+pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 impl WorkspacePane {
     /// What's typed here and not sent, which goes when the app quits: how many chats have something in their
@@ -140,9 +135,15 @@ impl WorkspacePane {
         (showing + others, usize::from(comment))
     }
 
-    /// Where the workspace's work stands, as its mark and header show it.
+    /// Whether the app is making, archiving or restoring a workspace, which the header's Archive waits for.
+    pub(crate) fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
+        self.busy = busy;
+        cx.notify();
+    }
+
+    /// Where the workspace's work stands, as its mark and the pull request's bar show it.
     pub(crate) fn work(&self) -> look::Work {
-        self.pull_request.as_ref().map_or(look::Work::NoPr, |pr| look::Work::from_github(&pr.state, pr.is_draft))
+        self.pull_request.work()
     }
 
     pub fn new(
@@ -156,7 +157,8 @@ impl WorkspacePane {
     ) -> Self {
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .auto_grow(2, 12)
+                // Room for a paragraph before it grows, so a longer prompt doesn't start out cramped.
+                .auto_grow(4, 12)
                 .submit_on_enter(true)
                 .placeholder("Ask the agent to do something")
         });
@@ -189,11 +191,13 @@ impl WorkspacePane {
             waiting: None,
             creating_chat: false,
             queue_edit: None,
+            closed_menu: closed::Menu::Shut,
+            busy: Busy::Free,
             reading: Reading::default(),
             composer,
             diff: None,
-            changes_open: false,
-            pull_request: None,
+            pull_request: Lookup::Looking,
+            pull_request_asks: 0,
             setup_log: None,
             setup_log_refresh: None,
             behind: false,
@@ -206,7 +210,6 @@ impl WorkspacePane {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
         }
-        this.refresh_pull_request(cx);
         this
     }
 
@@ -257,16 +260,19 @@ impl WorkspacePane {
         self.behind = true;
     }
 
-    /// For when the pane is shown. After a reconnect, reads the pull request again, and the diff if it shows.
+    /// For when the pane is shown after a reconnect, to read again what it may have changed.
     pub fn catch_up(&mut self, cx: &mut Context<Self>) {
-        if !std::mem::take(&mut self.behind) {
-            return;
+        if std::mem::take(&mut self.behind) {
+            self.shown(cx);
         }
+    }
+
+    /// For each time the pane is shown. Reads the pull request again, since it changes on GitHub while nobody's
+    /// looking, and the diff, if the sidebar of changes or the diff tab shows it.
+    pub fn shown(&mut self, cx: &mut Context<Self>) {
+        self.behind = false;
         self.refresh_pull_request(cx);
-        let shown = self.changes_open || self.diff_tab().is_some();
-        if let Some(diff) = self.diff.as_ref().filter(|_| shown) {
-            diff.review.update(cx, Review::refresh);
-        }
+        self.load_changes(cx);
     }
 
     /// What client-core holds for this workspace now. Only what changed is passed on.
@@ -366,26 +372,5 @@ impl WorkspacePane {
         if let Some(transcript) = self.transcript() {
             transcript.update(cx, Transcript::cancel);
         }
-    }
-
-    pub fn create_pull_request(&mut self, cx: &mut Context<Self>) {
-        let prompt = pull_request_prompt(&self.workspace);
-        if let Some(transcript) = self.transcript() {
-            transcript.update(cx, |t, cx| t.send_prompt(prompt, cx));
-        }
-        self.show_chat(cx);
-    }
-
-    pub fn refresh_pull_request(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.workspace.id.clone());
-        cx.spawn(async move |this, cx| {
-            let found = cx.background_spawn(async move { client.workspace_pull_request(&id) }).await;
-            let _ = this.update(cx, |t, cx| {
-                // A failure here only means no badge, and it's not worth interrupting anyone over.
-                t.pull_request = found.unwrap_or(None);
-                cx.notify();
-            });
-        })
-        .detach();
     }
 }

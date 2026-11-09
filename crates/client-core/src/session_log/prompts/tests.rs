@@ -47,6 +47,7 @@ fn only_what_the_log_says_about_the_prompt_settles_it() {
         duration_ms: None,
         cost_usd: None,
         num_turns: None,
+        started_at_ms: None,
     };
     let exited =
         EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };

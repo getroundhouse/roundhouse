@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::attachment::{AttachmentBytes, AttachmentFile};
+use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType, NewAttachment};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
@@ -79,6 +79,13 @@ pub enum WorkerRequest {
         path: String,
         name: String,
         data: AttachmentBytes,
+    },
+    /// The image at `image` in the worktree at `path`, where `image` is in full or relative to the worktree, as the
+    /// agent wrote it. Refused unless it's in the worktree once every link is followed, and is an image the transcript
+    /// draws, since what an agent writes can point anywhere.
+    ImageRead {
+        path: String,
+        image: String,
     },
     AgentStart(AgentSpec),
     /// Each of `attachments` has been written into the worktree first. `prompt` is where it's recorded, which the
@@ -165,6 +172,11 @@ pub enum WorkerResponse {
     AttachmentWritten {
         path: String,
     },
+    /// An image, and what kind it is by its bytes.
+    Image {
+        media_type: MediaType,
+        data: AttachmentBytes,
+    },
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {
         pid: u32,
@@ -190,9 +202,12 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         body: EventBody,
-        /// The agent's original line, kept by the hub beside the event.
+        /// The agent's original line, kept by the hub beside the event, without the bytes of any of `attachments`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         raw: Option<String>,
+        /// Images the event names, such as one a tool sent back, for the hub to keep before it records the event.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<NewAttachment>,
     },
     AgentDelta {
         session_id: SessionId,

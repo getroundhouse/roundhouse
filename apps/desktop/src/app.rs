@@ -12,10 +12,12 @@ use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceSt
 
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
-use crate::workspace_pane::{PaneEvent, WorkspacePane};
+use crate::workspace_pane::{Busy, PaneEvent, WorkspacePane};
 
 mod build_line;
+mod home;
 mod hub_source;
+mod pull_requests;
 mod quitting;
 mod reading;
 mod restarts;
@@ -62,13 +64,18 @@ pub struct AppView {
     pub workspaces: Vec<Workspace>,
     pub sessions: HashMap<WorkspaceId, Vec<Session>>,
     pub selected: Option<WorkspaceId>,
+    /// Whether the selected workspace shows, or Home in its place.
+    main: home::Main,
+    /// What Home shows, kept while it's put away.
+    pub(crate) home: crate::home::Home,
     pub panes: HashMap<WorkspaceId, Entity<WorkspacePane>>,
     pub error: Option<String>,
     pub show_archived: bool,
     /// Where the sidebar's list is scrolled to. The list is made again each frame, so it can't keep that itself.
     pub(crate) sidebar_scroll: VirtualListScrollHandle,
-    /// Workspaces being created or archived, so their buttons can't be pressed twice.
-    pub busy: bool,
+    /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
+    pub(crate) pointing_at: Option<WorkspaceId>,
+    pub busy: Busy,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
     pub creating_in: Option<RepoId>,
     /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
@@ -95,6 +102,7 @@ pub struct AppView {
     finishing: Option<Task<()>>,
     /// Asking the older hub whether it's idle.
     looking: Option<Task<()>>,
+    _watching_pull_requests: Task<()>,
     /// What the menu bar was last given to say.
     menus_say: crate::menus::Says,
 }
@@ -123,11 +131,14 @@ impl AppView {
             workspaces: Vec::new(),
             sessions: HashMap::new(),
             selected: None,
+            main: home::Main::default(),
+            home: crate::home::Home::new(window, cx),
             panes: HashMap::new(),
             error: None,
             show_archived: false,
             sidebar_scroll: VirtualListScrollHandle::new(),
-            busy: false,
+            pointing_at: None,
+            busy: Busy::Free,
             creating_in: None,
             new_workspace: None,
             focus_after_dialog: None,
@@ -142,6 +153,7 @@ impl AppView {
             asking: None,
             finishing: None,
             looking: None,
+            _watching_pull_requests: Self::watch_pull_requests(cx),
             menus_say: crate::menus::Says::default(),
         };
         this.connect(cx);
@@ -311,6 +323,7 @@ impl AppView {
 
     pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         self.selected = Some(id);
+        self.close_home();
         self.show_selected(cx);
         cx.notify();
     }
@@ -350,6 +363,8 @@ impl AppView {
             let Some(records) = self.feed.clone() else { return };
             let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
             let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
+            let busy = self.busy;
+            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
@@ -359,7 +374,7 @@ impl AppView {
         }
         // Only with a connection. Without one, `refresh` catches it up once there is one.
         if let Some(pane) = self.selected_pane() {
-            pane.update(cx, WorkspacePane::catch_up);
+            pane.update(cx, WorkspacePane::shown);
         }
         self.focus_pane(id, window, cx);
         self.read_on_screen(window.is_window_active(), cx);
@@ -372,12 +387,6 @@ impl AppView {
             return None;
         }
         self.selected.as_ref().and_then(|id| self.panes.get(id).cloned())
-    }
-
-    /// The repository to put a new workspace in: the selected workspace's, or the first.
-    pub fn current_repo(&self) -> Option<RepoId> {
-        let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
-        selected.map(|w| w.repo_id.clone()).or_else(|| self.repos.first().map(|r| r.id.clone()))
     }
 }
 

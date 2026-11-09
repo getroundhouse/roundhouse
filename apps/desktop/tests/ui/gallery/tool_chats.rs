@@ -6,7 +6,7 @@
 use protocol::event::EventBody;
 use serde_json::json;
 
-use super::events::{finished_turn, taken, text, tool_failed, tool_result, tool_use, user_prompt};
+use super::events::{replied, taken, text, tool_failed, tool_result, tool_use, user_prompt};
 
 /// What the chats about the signalling crate were asked.
 pub(crate) const ASK: &str = "Make signals say whether a train may pass, and add a test for it.";
@@ -31,6 +31,7 @@ Diff in /workspaces/aspen/crates/signals/src/signal_test.rs:4:
 
 /// Commands: one opened with its output, one that failed, one with no description, and one too long for its line.
 pub(crate) fn commands() -> Vec<EventBody> {
+    let reply = "The tests pass, and the formatting passes once `cargo fmt` has run.";
     vec![
         user_prompt(ASK),
         taken(1),
@@ -61,13 +62,14 @@ pub(crate) fn commands() -> Vec<EventBody> {
             }),
         ),
         tool_result("toolu-4", "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s"),
-        text("msg-6", "The tests pass, and the formatting passes once `cargo fmt` has run."),
-        finished_turn(31, 0.12),
+        text("msg-6", reply),
+        replied(reply, 31, 0.12),
     ]
 }
 
 /// Tools without a drawing of their own: one from an MCP server opened, one that failed, and a built-in one.
 pub(crate) fn any_tool() -> Vec<EventBody> {
+    let reply = "Filed as #271.";
     vec![
         user_prompt("File the idea about saying why a train stopped."),
         taken(1),
@@ -97,13 +99,14 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
             }),
         ),
         tool_result("toolu-3", "Created issue #271: https://github.com/example/signals/issues/271"),
-        text("msg-5", "Filed as #271."),
-        finished_turn(14, 0.05),
+        text("msg-5", reply),
+        replied(reply, 14, 0.05),
     ]
 }
 
 /// A web search, a fetch of a page it found, and a fetch a site refused.
 pub(crate) fn web() -> Vec<EventBody> {
+    let reply = "A flashing yellow means the train may go on, but should be ready to stop at the next signal.";
     let query = "flashing yellow railway signal meaning";
     let links = json!([
         { "title": "Railway signal", "url": "https://en.wikipedia.org/wiki/Railway_signal" },
@@ -141,7 +144,7 @@ pub(crate) fn web() -> Vec<EventBody> {
             json!({ "url": "https://signals.example.com/guide", "prompt": "What does a flashing yellow mean here?" }),
         ),
         tool_failed("toolu-3", "The server returned HTTP 403 Forbidden."),
-        text("msg-4", "A flashing yellow means the train may go on, but should be ready to stop at the next signal."),
-        finished_turn(21, 0.08),
+        text("msg-4", reply),
+        replied(reply, 21, 0.08),
     ]
 }

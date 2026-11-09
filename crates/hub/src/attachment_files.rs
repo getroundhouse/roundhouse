@@ -1,6 +1,7 @@
-//! Where the hub keeps the bytes of the files prompts carry: a file each, at `<session>/<attachment>` in the
-//! attachments directory, outside the database so copying it before a migration stays quick. Each ID is checked as
-//! it's turned into a path, so nothing a client sends can name a file anywhere else.
+//! Where the hub keeps the bytes of the files prompts carry, and of the images an agent's tools send: a file each, at
+//! `<session>/<attachment>` in the attachments directory, outside the database so copying it before a migration stays
+//! quick. Each ID is checked as it's turned into a path, so nothing a client or worker sends can name a file anywhere
+//! else.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use protocol::model::{AttachmentId, SessionId};
 
 use crate::error::internal;
 
-/// Longer than any ID a client makes, which is a UUID.
+/// Longer than any ID a client or worker makes, which is a UUID.
 const MAX_ID_CHARS: usize = 64;
 
 pub(crate) struct AttachmentFiles {

@@ -11,8 +11,7 @@ use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, Attac
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _};
 use gpui_kit::{
-    AnyElement, Axis, Context, Div, ElementId, ExternalPaths, Image, InteractiveElement as _, IntoElement,
-    ParentElement, Stateful, Styled,
+    Axis, Context, Div, ElementId, ExternalPaths, Image, InteractiveElement as _, ParentElement, Stateful, Styled,
 };
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
@@ -93,13 +92,13 @@ impl Attachments {
     }
 
     /// A row of tiles above what's typed: an image as itself, any other file as its name and size. Each tile's remove
-    /// button calls `remove` with its file's ID.
+    /// button calls `remove` with its file's ID. The caller pads it, to line up with what's typed under it.
     pub(crate) fn tiles<T: 'static>(
         &self,
         group: &'static str,
         cx: &mut Context<T>,
         remove: impl Fn(&mut T, &AttachmentId, &mut Context<T>) + Clone + 'static,
-    ) -> Option<AnyElement> {
+    ) -> Option<AttachmentGroup> {
         if self.0.is_empty() {
             return None;
         }
@@ -119,7 +118,7 @@ impl Attachments {
                 None => transcript::file_card(element, attachment).on_remove(remove),
             }
         });
-        Some(AttachmentGroup::new(group).px_2().pt_2().children(tiles).into_any_element())
+        Some(AttachmentGroup::new(group).children(tiles))
     }
 }
 

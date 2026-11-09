@@ -35,6 +35,7 @@ impl Render for AppView {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
             }
+            Connection::Ready(_) if self.home_showing() => crate::home::page(self, cx).into_any_element(),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => empty_state(
@@ -50,19 +51,16 @@ impl Render for AppView {
                 None => empty_state(
                     "Start a workspace",
                     "Pick a repository in the sidebar and press + to give an agent a branch of its own.",
-                    Button::new("first-new-workspace").primary().label("New workspace").on_click(cx.listener(
-                        |t, _, window, cx| {
-                            if let Some(repo) = t.current_repo() {
-                                t.open_new_workspace(repo, window, cx);
-                            }
-                        },
-                    )),
+                    Button::new("first-new-workspace")
+                        .primary()
+                        .label("New workspace")
+                        .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
                     cx,
                 ),
             },
         };
         let root = self.with_shortcuts(h_flex(), cx);
-        self.root(root, cx).child(crate::sidebar::render(self, window, cx)).child(
+        self.root(root, cx).child(crate::sidebar::render(self, cx)).child(
             v_flex()
                 .flex_1()
                 .min_w_0()
@@ -78,11 +76,14 @@ impl AppView {
     fn root(&self, root: Div, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = cx.theme();
         let (background, foreground) = (theme.background, theme.foreground);
+        // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
+        // sizes and its spacing come out as the web's do.
         moves_window(root.id("app"), cx)
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
             .text_color(foreground)
+            .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
     }

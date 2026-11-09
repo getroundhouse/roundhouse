@@ -81,11 +81,12 @@ impl AppView {
     }
 
     /// Focuses the workspace's pane, unless a dialog is open, where typing meant for the dialog would go to the pane
-    /// unseen. Then it's focused once the dialog closes.
+    /// unseen. Then it's focused once the dialog closes. While Home shows, as when the selection goes away under it,
+    /// its search keeps the keys.
     pub(in crate::app) fn focus_pane(&mut self, id: WorkspaceId, window: &mut Window, cx: &mut App) {
         if window.has_active_dialog(cx) {
             self.focus_after_dialog = Some(id);
-        } else if let Some(pane) = self.panes.get(&id) {
+        } else if let Some(pane) = self.panes.get(&id).filter(|_| !self.home_showing()) {
             pane.update(cx, |pane, cx| pane.focus_showing(window, cx));
         }
     }

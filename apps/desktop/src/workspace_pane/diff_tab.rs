@@ -4,10 +4,10 @@
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    AnyElement, App, AppContext as _, Context, Global, InteractiveElement as _, IntoElement as _, ParentElement as _,
     SharedString, StatefulInteractiveElement as _, Styled, Window, div, px, relative,
 };
 
@@ -17,17 +17,49 @@ use crate::changes::{Changes, ChangesEvent};
 use crate::file_diff::{FileDiff, FileDiffEvent};
 use crate::review::{Review, ReviewEvent};
 
+/// Whether the sidebar of changes shows.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(super) enum Sidebar {
+    /// It starts open, so a workspace's changes and where its pull request stands are in view from the start.
+    #[default]
+    Open,
+    Hidden,
+}
+
+/// The sidebar chosen, which every workspace shares until the app quits.
+struct Chosen(Sidebar);
+
+impl Global for Chosen {}
+
+fn sidebar(cx: &App) -> Sidebar {
+    cx.try_global::<Chosen>().map(|chosen| chosen.0).unwrap_or_default()
+}
+
 impl WorkspacePane {
-    /// Shows or hides the sidebar of changes, loading the diff again as it opens.
+    /// The sidebar of changes shows, in every workspace.
+    pub fn changes_open(&self, cx: &App) -> bool {
+        sidebar(cx) == Sidebar::Open
+    }
+
+    /// Shows or hides the sidebar of changes, in every workspace, loading the diff again as it opens.
     pub fn toggle_changes(&mut self, cx: &mut Context<Self>) {
-        self.changes_open = !self.changes_open;
-        if self.changes_open {
-            match &self.diff {
-                Some(diff) => diff.review.update(cx, Review::refresh),
-                None => self.make_diff(cx),
-            }
-        }
+        let next = match sidebar(cx) {
+            Sidebar::Open => Sidebar::Hidden,
+            Sidebar::Hidden => Sidebar::Open,
+        };
+        cx.set_global(Chosen(next));
+        self.load_changes(cx);
         cx.notify();
+    }
+
+    /// Loads the diff, or loads it again, if the sidebar of changes or the diff tab shows it.
+    pub(super) fn load_changes(&mut self, cx: &mut Context<Self>) {
+        let open = self.changes_open(cx);
+        match &self.diff {
+            Some(diff) if open || diff.tab.is_some() => diff.review.update(cx, Review::refresh),
+            None if open => self.make_diff(cx),
+            Some(_) | None => {}
+        }
     }
 
     /// The file the diff tab shows, if it's open.
@@ -113,15 +145,17 @@ impl WorkspacePane {
         self.diff = Some(Diff { review, file, changes, tab: None });
     }
 
-    /// The sidebar of changes, beside the chat and the diff tab, while it's open.
-    pub(super) fn changes_sidebar(&self, cx: &App) -> Option<AnyElement> {
-        let changes = self.diff.as_ref().filter(|_| self.changes_open)?.changes.clone();
+    /// The sidebar of changes, beside the chat and the diff tab, while it's open, with the pull request's bar at its
+    /// top, level with the workspace's header.
+    pub(super) fn changes_sidebar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let changes = self.diff.as_ref().filter(|_| self.changes_open(cx))?.changes.clone();
+        let bar = crate::pull_request::bar(&self.pull_request, cx.listener(|t, action, _, cx| t.act(*action, cx)), cx);
         let theme = cx.theme();
-        let column = div().flex_none().w(crate::changes::WIDTH).h_full().border_l_1().border_color(theme.border);
-        Some(column.bg(theme.sidebar).child(changes).into_any_element())
+        let column = v_flex().flex_none().w(crate::changes::WIDTH).h_full().border_l_1().border_color(theme.border);
+        Some(column.bg(theme.sidebar).child(bar).child(div().flex_1().min_h_0().child(changes)).into_any_element())
     }
 
-    /// The diff tab, after the chats, named for the file it shows. Its name is in italics, because it's replaced rather
+    /// The diff tab, before the chats, named for the file it shows. Its name is in italics, because it's replaced rather
     /// than added to. It's built as a chat's tab is, with the same width, underline and close button, so the row reads
     /// as one row of tabs.
     pub(super) fn diff_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {

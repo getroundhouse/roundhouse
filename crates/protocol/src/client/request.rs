@@ -188,6 +188,13 @@ pub enum ClientRequest {
         session_id: SessionId,
         id: AttachmentId,
     },
+    /// The image at `path` in the workspace's worktree, for drawing one the agent's text points to. `path` is in full
+    /// or relative to the worktree, as the agent wrote it. Refused unless it's an image the transcript draws inside the
+    /// worktree, links followed. A hub older than this refuses it as unsupported.
+    WorkspaceImageRead {
+        id: WorkspaceId,
+        path: String,
+    },
     /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
     /// place. So sending it again changes nothing more. Refused with `Conflict` once that prompt has been sent, since
     /// the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the queue is

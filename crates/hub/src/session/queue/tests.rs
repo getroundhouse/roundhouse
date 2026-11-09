@@ -19,6 +19,7 @@ fn ended(outcome: TurnOutcome) -> EventBody {
         duration_ms: None,
         cost_usd: None,
         num_turns: None,
+        started_at_ms: None,
     }
 }
 

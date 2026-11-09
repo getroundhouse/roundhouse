@@ -1,5 +1,8 @@
 //! The desktop app. It only talks to a hub, through `client-core`, the same way the CLI does.
 
+#[cfg(target_os = "macos")]
+mod accessibility_focus;
+mod ago;
 mod alert;
 pub mod app;
 mod assets;
@@ -7,9 +10,11 @@ mod attached;
 pub mod changes;
 pub mod checkout;
 pub mod file_diff;
+mod home;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
+pub mod pull_request;
 mod rename;
 pub mod review;
 mod right_click;
@@ -40,6 +45,8 @@ actions!(
         Zoom,
         NewWorkspace,
         AddRepository,
+        ArchiveWorkspace,
+        MarkWorkspace,
         ToggleDiff,
         CreatePullRequest,
         StopAgent,
@@ -60,6 +67,8 @@ pub fn open_main_window(
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     settings::load(&hub.paths.data_dir, cx);
+    #[cfg(target_os = "macos")]
+    accessibility_focus::install();
     cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
@@ -72,6 +81,8 @@ pub fn open_main_window(
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
+        KeyBinding::new("cmd-shift-a", ArchiveWorkspace, None),
+        KeyBinding::new("cmd-shift-u", MarkWorkspace, None),
         KeyBinding::new("cmd-.", StopAgent, None),
         KeyBinding::new("cmd-]", NextWorkspace, None),
         KeyBinding::new("cmd-[", PreviousWorkspace, None),
@@ -90,7 +101,7 @@ pub fn open_main_window(
         titlebar: Some(TitlebarOptions {
             title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(16.), px(16.))),
+            traffic_light_position: Some(point(px(12.), px(12.))),
         }),
         // The app moves the window itself, from the strip along the top. GPUI says AppKit's own handling
         // there holds back each click while it waits for a double click, from macOS 27 on.

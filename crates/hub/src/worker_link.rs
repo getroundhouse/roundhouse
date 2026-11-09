@@ -180,8 +180,8 @@ async fn read_frames(
                     });
                 }
             }
-            WorkerFrame::AgentEvent { session_id, run, body, raw } => {
-                hub.route(&session_id, Item::Event { run, body, raw }).await;
+            WorkerFrame::AgentEvent { session_id, run, body, raw, attachments } => {
+                hub.route(&session_id, Item::Event { run, body, raw, attachments }).await;
             }
             WorkerFrame::AgentDelta { session_id, run, delta } => {
                 hub.route(&session_id, Item::Delta { run, delta }).await;

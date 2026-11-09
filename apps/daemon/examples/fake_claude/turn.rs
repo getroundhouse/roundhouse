@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::tools::{ask_questions, present_plan, run_tool};
+use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{background, subagent};
+use crate::{background, read, subagent};
 
 /// What a streamed block holds.
 #[derive(Clone, Copy)]
@@ -303,6 +303,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
     }
+    if let Some(lines) = command.strip_prefix("edit:") {
+        return edit_file(turn, lines.parse().unwrap());
+    }
     if let Some(ms) = command.strip_prefix("hang:") {
         return hang(turn, ms.parse().unwrap(), rx, queued, eof);
     }
@@ -320,6 +323,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(file) = command.strip_prefix("background:") {
         return background::start(turn, file);
+    }
+    if let Some(file) = command.strip_prefix("read:") {
+        read::image(turn, file);
     }
     false
 }

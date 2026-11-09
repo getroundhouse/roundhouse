@@ -4,19 +4,51 @@ use client_core::ClientError;
 use client_core::records::Record;
 use gpui_kit::{Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::WorkspaceId;
+use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::new_workspace::Request;
 use crate::rename::{self, Renaming};
+use crate::workspace_pane::Busy;
 
 mod dialog;
 mod made;
 
 impl AppView {
+    /// The repository a new workspace goes in when nothing says which: the one Home's list shows, while Home shows,
+    /// or else the selected workspace's, or the first.
+    pub fn current_repo(&self) -> Option<RepoId> {
+        let home = self.home_repo().filter(|_| self.home_showing());
+        let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
+        let selected = selected.map(|w| &w.repo_id);
+        home.or(selected).or_else(|| self.repos.first().map(|r| &r.id)).cloned()
+    }
+
+    /// Opens the new-workspace dialog where nothing else says which repository, as `Cmd-N` and Home's and the
+    /// sidebar's New do.
+    pub(crate) fn new_workspace_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(repo) = self.current_repo() {
+            self.open_new_workspace(repo, window, cx);
+        }
+    }
+
+    pub(crate) fn repo(&self, id: &RepoId) -> Option<&Repo> {
+        self.repos.iter().find(|r| &r.id == id)
+    }
+
+    /// Shows the workspace, or brings it back first if it's archived, as clicking its row does.
+    pub(crate) fn open_workspace(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
+        let archived = self.workspaces.iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived);
+        if archived {
+            self.restore(id, cx);
+        } else {
+            self.select(id, cx);
+        }
+    }
+
     /// Whether a workspace can be made now: there's a hub, and nothing else is being made, archived or restored.
     fn can_create(&self) -> bool {
-        self.client().is_some() && !self.busy
+        self.client().is_some() && self.busy == Busy::Free
     }
 
     /// Makes a workspace from what the dialog held, and sends its first chat the prompt, if there is one, with the
@@ -25,7 +57,7 @@ impl AppView {
     /// goes to the chat's composer. Returns the request, untouched, when a workspace can't be made now.
     pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
         let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
-        self.busy = true;
+        self.set_busy(Busy::Changing, cx);
         self.creating_in = Some(request.repo.clone());
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it.
@@ -34,7 +66,7 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let made = creating.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 t.creating_in = None;
                 match made {
                     Ok(made) => t.made(made, cx),
@@ -126,17 +158,20 @@ impl AppView {
         .detach();
     }
 
-    /// Archives, and asks before losing uncommitted work.
+    /// Archives, and asks before losing uncommitted work. Does nothing while a workspace is being made, archived or
+    /// restored, so a key pressed twice archives once.
     pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
+        if self.busy == Busy::Changing {
+            return;
+        }
+        self.set_busy(Busy::Changing, cx);
         let target = id.clone();
         let archiving = client.start(move |client| client.workspace_archive(&target, force));
         cx.spawn(async move |this, cx| {
             let result = archiving.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 match result {
                     Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
@@ -170,15 +205,19 @@ impl AppView {
         .detach();
     }
 
+    /// Restores an archived workspace. Does nothing while a workspace is being made, archived or restored, as
+    /// [`AppView::archive`] doesn't.
     pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        self.busy = true;
-        cx.notify();
+        if self.busy == Busy::Changing {
+            return;
+        }
+        self.set_busy(Busy::Changing, cx);
         let restoring = client.start(move |client| client.workspace_restore(&id));
         cx.spawn(async move |this, cx| {
             let result = restoring.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.busy = false;
+                t.set_busy(Busy::Free, cx);
                 match result {
                     Ok(workspace) => {
                         let id = workspace.id.clone();
@@ -191,5 +230,15 @@ impl AppView {
             });
         })
         .detach();
+    }
+
+    /// Says whether a workspace is being made, archived or restored, which every pane's header shows as well as the
+    /// sidebar.
+    fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
+        self.busy = busy;
+        for pane in self.panes.values() {
+            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
+        }
+        cx.notify();
     }
 }

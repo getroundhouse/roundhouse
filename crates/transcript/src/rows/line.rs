@@ -32,7 +32,8 @@ pub(super) struct Line {
     shows_output: bool,
 }
 
-/// What shows while a closed line is hovered, on a device that has hover, such as a change's diff.
+/// What shows while a closed line is hovered, on a device that has hover, such as a change's diff. It stays while the
+/// pointer is on it, so what it holds can be scrolled.
 pub(super) type Preview = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 /// A detail after the title.
@@ -96,7 +97,9 @@ impl Line {
             .on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !open, cx));
             })
-            .when_some(self.preview.filter(|_| !open), |d, preview| d.tooltip(move |window, cx| preview(window, cx)))
+            .when_some(self.preview.filter(|_| !open), |d, preview| {
+                d.hoverable_tooltip(move |window, cx| preview(window, cx))
+            })
             .child(icon(self.icon, open, cx))
             .child(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title))
             .children(parts)
@@ -157,17 +160,22 @@ fn icon(kind: IconName, open: bool, cx: &App) -> Div {
         .relative()
         .flex_none()
         .size(px(ICON))
-        .child(
-            layer()
-                .group_hover(GROUP, Styled::invisible)
-                .child(Icon::new(kind).size(px(ICON)).text_color(look::faint())),
-        )
+        .child(layer().group_hover(GROUP, Styled::invisible).child(glyph(kind)))
         .child(
             layer()
                 .invisible()
                 .group_hover(GROUP, Styled::visible)
                 .child(Icon::new(chevron).size(px(ICON)).text_color(cx.theme().foreground)),
         )
+}
+
+/// The kind's icon as a line starts with it, for a line that doesn't open, such as one that's still streaming.
+pub(super) fn still_icon(kind: IconName) -> Div {
+    div().flex_none().size(px(ICON)).child(glyph(kind))
+}
+
+fn glyph(kind: IconName) -> Icon {
+    Icon::new(kind).size(px(ICON)).text_color(look::faint())
 }
 
 /// Code on a pill, cut off with an ellipsis when it doesn't fit.

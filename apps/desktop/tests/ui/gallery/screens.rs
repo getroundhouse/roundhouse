@@ -7,8 +7,9 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, conversation, diff, effort_chosen, finishing_update, own_hub, queue_held,
-    queued, setup_failed, streaming, titled, unread,
+    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, effort_chosen, finishing_update, own_hub,
+    pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled, unread,
+    working_background,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -24,10 +25,8 @@ pub(crate) struct Screen {
 
 /// Something to do in the app once it has connected, each done once the one before it has finished.
 pub(crate) enum Step {
-    /// Selects the workspace with this name, and waits for its chat to load.
+    /// Selects the workspace with this name, and waits for its chat, its diff and its pull request to load.
     Select(&'static str),
-    /// Opens the sidebar of changes, and waits for the diff to load.
-    OpenDiff,
     /// Clicks this file in the sidebar of changes, and waits for the diff tab to show it.
     OpenFile(&'static str),
     /// Starts a comment on this line of the open file's new side, as the line's add button would.
@@ -35,8 +34,13 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button, such as one that opens a menu.
     Click(&'static str),
+    /// Moves the pointer somewhere with no hover of its own, so the picture shows what's open rather than what's
+    /// under the pointer.
+    MoveAway,
     /// Moves the pointer over the tab of the open chat at this position in the workspace showing, and leaves it there.
     HoverTab(usize),
+    /// Moves the pointer over the element with this ID, and leaves it there, for what shows only under the pointer.
+    Point(&'static str),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
     /// Rests the pointer on an element, and waits for the one with the ID `shows`, such as its tooltip.
@@ -124,17 +128,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "working-background",
+        spec: "chats.md",
+        world: Some(working_background),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "question",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::question())),
         steps: &[Step::Select(FOCUS)],
     },
-    Screen {
-        name: "steered",
-        spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::Running, chats::steered())),
-        steps: &[Step::Select(FOCUS)],
-    },
+    Screen { name: "steered", spec: "chats.md", world: Some(steered), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "queued",
         spec: "chats.md",
@@ -173,6 +178,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open("Read 10 lines"), Step::Open("Write 12 lines")],
     },
     Screen {
+        name: "tool-read-image",
+        spec: "chats.md",
+        world: Some(read_image),
+        steps: &[Step::Select(FOCUS), Step::Open("Read 1 image")],
+    },
+    Screen {
         name: "tool-search",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, file_chats::searches())),
@@ -184,11 +195,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Idle, file_chats::failures())),
         steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
     },
+    Screen { name: "reply-image", spec: "chats.md", world: Some(pointed), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "thinking",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, chats::thinking())),
         steps: &[Step::Select(FOCUS), Step::Open("Thinking")],
+    },
+    Screen {
+        name: "thinking-streaming",
+        spec: "chats.md",
+        world: Some(thinking_streaming),
+        steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "tool-subagent",
@@ -220,31 +238,66 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(chat_tabs),
         steps: &[Step::Select(FOCUS), Step::HoverTab(1)],
     },
-    Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen {
+        name: "closed-chats",
+        spec: "chats.md",
+        world: Some(closed_chats),
+        steps: &[Step::Select(FOCUS), Step::Click("closed-chats"), Step::MoveAway],
+    },
+    Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "changes-hidden",
+        spec: "diff.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Click("toggle-diff")],
+    },
     Screen {
         name: "changes-tree",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::Click("changes-layout")],
+        steps: &[Step::Select(FOCUS), Step::Click("changes-layout")],
     },
     Screen {
         name: "diff",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::OpenFile("crates/protocol/src/model.rs")],
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs")],
     },
     Screen {
         name: "writing-a-comment",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[
-            Step::Select(FOCUS),
-            Step::OpenDiff,
-            Step::OpenFile("crates/protocol/src/model.rs"),
-            Step::StartComment(99),
-        ],
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::StartComment(99)],
     },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
+    Screen { name: "home", spec: "home.md", world: Some(titled), steps: &[Step::Select(FOCUS), Step::Click("home")] },
+    Screen {
+        name: "workspace-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The screen's own workspace, the fourth, whose other chat has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4")],
+    },
+    Screen {
+        name: "other-workspace-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The first workspace, which isn't showing, and has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-1")],
+    },
+    Screen {
+        name: "chat-menu",
+        spec: "sidebar.md",
+        world: Some(unread),
+        // The tab of the screen's other chat, the seventh made, which has a reply nobody has read.
+        steps: &[Step::Select(FOCUS), Step::RightClick("chat-chat-7")],
+    },
+    Screen {
+        name: "archive-button",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1")],
+    },
     Screen {
         name: "rename",
         spec: "workspaces.md",
@@ -269,7 +322,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::ClickItem("Opus"),
             Step::Click("new-workspace-model"),
             Step::ClickItem("Extra high"),
-            Step::PasteImage(pictures::overlapping_badge),
+            Step::PasteImage(badge_to_paste),
             Step::Type(NEW_WORKSPACE_PROMPT),
         ],
     },
@@ -322,3 +375,8 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings],
     },
 ];
+
+/// A screenshot of a bug, pasted into the new-workspace dialog.
+fn badge_to_paste() -> Vec<u8> {
+    pictures::overlapping_badge(450)
+}

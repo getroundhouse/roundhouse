@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
     ClientRequestId, GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
@@ -309,6 +310,20 @@ impl Hub {
             return Err(unexpected(&reply));
         };
         Ok(diff)
+    }
+
+    /// An image in the workspace's worktree, as the worker finds it, for the transcript to draw.
+    pub(crate) async fn workspace_image_read(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+        image: String,
+    ) -> Result<(MediaType, AttachmentBytes), ApiError> {
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        let reply = link.call(WorkerRequest::ImageRead { path, image }).await?;
+        let WorkerResponse::Image { media_type, data } = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok((media_type, data))
     }
 
     pub(crate) async fn workspace_pull_request(

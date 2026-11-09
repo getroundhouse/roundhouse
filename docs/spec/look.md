@@ -6,41 +6,45 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Surfaces and type
 
-- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a message, a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`.
+- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
-- **The system font, at 14px for body text.** Secondary text uses the kit's small size, 12.25px, and small details its extra-small size, 10.5px, both scaled from the body text. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
+- **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
 - **Code is Menlo at 12px,** set once in the theme.
 
 ## Space and shape
 
-- **A 4px grid.** Controls are 28px tall, sidebar rows 30px, the workspace header 48px, and the chat tabs 40px.
+- **A 4px grid.** Controls are 32px tall, or 24px for small ones, sidebar rows 36px, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.*
 - **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what the system's setting for a title bar says, except where a button takes the press, and pressing it leaves focus where it was.
 - **Corners are 6px on controls, and 10px on cards and the composer.**
-- **The transcript is a centred column, at most 780px wide,** so lines stay short enough to read in a wide window.
-- **Everything in the transcript starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a prompt, a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
+- **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
+- **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
+- **A prompt sits at the right of the column, on a bubble only as wide as what it says,** so what was asked stands apart from the agent's work, which starts at the left. The bubble has no edge, a control's 6px corners, 16px of room beside its text and 12px above and below. It's at most 80% of the column wide, so it never reaches across the column the way the agent's work does, even with an image open in it. *Unconfirmed.*
+- **The composer is centred under the transcript, 24px wider than its column on each side, and at most 896px wide,** so the transcript's text sits inside the composer's edges. It has room for four lines before it grows, so a longer prompt doesn't start out cramped, and empty it's about 150px tall. *Unconfirmed.*
 - **A tool call is one line:** an icon for its kind, what it did in a few words, and the detail that matters, such as the command on a raised pill or an MCP server in an outlined chip. Hovering the line turns its icon into a chevron, and clicking it opens what the call did in a block underneath, which scrolls once it's taller than a dozen lines or so. Calls in a row sit 36px apart, as one list. `chats.md` has how each kind of call reads. *Unconfirmed.*
 
 ## Buttons
 
 - **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add repository or Send to agent. With one obvious next step per area, nothing competes with it.
 - **Every other button is borderless until hovered.** A button with an outline opens something, like the pull request.
+- **The pull request's bar fills its main action with the pull request's colour,** still with dark text, so the action reads as part of the bar it's on. One with no colour of its own, such as Create PR, is the light main button. *Unconfirmed.*
 
 ## Colour
 
 Each colour means one thing.
 
-- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus and the edge of a comment being written, and never a status.
+- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written and the wash behind a prompt, and never a status.
 - **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
 - **Amber means it's your turn, and red means the agent stopped short,** wherever the app shows where things stand. A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
+- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan, which is too small for words, stays green for every open pull request, so amber on it only ever means you. `look::Work` holds these colours, so the fan and the bar can't disagree. *Unconfirmed.*
 
 ## The status mark
 
-Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
+Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards, the working line and Home. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
 
 The mark has three layers, and each is about one thing, so several facts can show at once without competing:
 
