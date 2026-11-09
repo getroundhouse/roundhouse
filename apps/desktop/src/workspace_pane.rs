@@ -120,7 +120,7 @@ impl EventEmitter<PaneEvent> for WorkspacePane {}
 
 /// The workspace header's height, which is also the strip along the window's top that moves it. The window's buttons
 /// sit in the sidebar's part of the strip, and the sidebar's list starts level with its bottom edge, so the two line up.
-pub(crate) const HEADER_HEIGHT: Pixels = px(48.);
+pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 impl WorkspacePane {
     /// What's typed here and not sent, which goes when the app quits: how many chats have something in their

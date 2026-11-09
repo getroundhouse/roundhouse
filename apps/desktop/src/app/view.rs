@@ -77,11 +77,14 @@ impl AppView {
     fn root(&self, root: Div, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = cx.theme();
         let (background, foreground) = (theme.background, theme.foreground);
+        // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
+        // sizes and its spacing come out as the web's do.
         moves_window(root.id("app"), cx)
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
             .text_color(foreground)
+            .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
     }
