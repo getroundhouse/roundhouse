@@ -15,7 +15,7 @@ use client_core::{Client, Daemon};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{RepoId, SessionId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
@@ -234,6 +234,14 @@ impl<'a> Ui<'a> {
         let id = id.into();
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Turns the mouse wheel over the element, by `delta`. Down the page is a negative `y`.
+    pub(crate) fn scroll(&mut self, id: impl Into<ElementId>, delta: ScrollDelta) {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.scroll(id, delta, cx)).unwrap();
         self.frame();
     }
 
