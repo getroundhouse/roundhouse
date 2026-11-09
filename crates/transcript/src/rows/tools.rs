@@ -1,6 +1,6 @@
 //! A tool call, and the result it got back, drawn together. They arrive as separate events, often with other calls
 //! in between when the agent runs several at once, so each call's result is found in the log by [`super::around`].
-//! What each kind of call looks like is in the modules below, all on the same [`line`].
+//! What each kind of call looks like is in the modules below, all on the same [`super::line`].
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
@@ -14,17 +14,16 @@ use crate::item_key::ItemKey;
 use crate::transcript::Transcript;
 
 mod agent;
-mod block;
+pub(super) mod block;
 mod command;
 mod files;
 mod highlight;
-mod line;
 mod numbered;
 mod other;
 mod search;
 mod web;
 
-use line::{Line, Part};
+use super::line::{self, Line, Part};
 
 /// Where a call is drawn and whether it's open, which its line needs to open and close it.
 pub(super) struct Toggle<'a> {

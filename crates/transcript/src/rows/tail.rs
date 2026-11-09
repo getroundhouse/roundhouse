@@ -9,7 +9,9 @@ use look::{Signal, Work};
 use protocol::event::AgentTask;
 use protocol::tail::{BlockKind, Tail};
 
-use super::{agent_text, empty, row, thinking_text};
+use super::line::HEIGHT;
+use super::thinking;
+use super::{agent_text, empty, row};
 use crate::item_key::ItemKey;
 
 /// Text the agent is still writing, and what it's running in the background. Tool input is hidden until it's
@@ -28,7 +30,7 @@ pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: 
             out = match block.kind {
                 BlockKind::Text => out.child(agent_text(&key, &block.text)),
                 BlockKind::Thinking if thinking_open => {
-                    out.child(working("Thinking…".to_string(), cx)).child(thinking_text(&key, &block.text, cx))
+                    out.child(working("Thinking…".to_string(), cx)).child(thinking::text(&key, &block.text, cx))
                 }
                 BlockKind::Thinking => out.child(working(format!("Thinking… {}", last_line(&block.text)), cx)),
                 BlockKind::ToolUse => {
@@ -47,21 +49,17 @@ pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: 
     out.into_any_element()
 }
 
-/// What the agent is doing, beside its mark with the light sweeping.
+/// What the agent is doing, beside its mark with the light sweeping. As tall as a call's line, at body size, so it
+/// doesn't jump when what it's writing is recorded.
 fn working(text: String, cx: &App) -> Div {
     div()
         .flex()
         .items_center()
         .gap_2()
-        .h(px(22.))
-        .text_xs()
+        .h(px(HEIGHT))
         .text_color(cx.theme().muted_foreground)
         .child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx))
         .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
-}
-
-pub(super) fn first_line(text: &str) -> String {
-    text.lines().next().unwrap_or("").chars().take(160).collect()
 }
 
 fn last_line(text: &str) -> String {

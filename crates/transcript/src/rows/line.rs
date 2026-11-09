@@ -12,7 +12,7 @@ use gpui_kit::{
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 
-use super::{Toggle, block};
+use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
 use crate::calls::{Failure, failure};
 use crate::rows::around::Answer;
@@ -20,7 +20,8 @@ use crate::rows::around::Answer;
 /// How far what a line opens to sits in from it, so it lines up under the title.
 pub(super) const INDENT: f32 = 24.0;
 const ICON: f32 = 15.0;
-const HEIGHT: f32 = 28.0;
+/// As tall as a line of body text and a little room, so calls in a row read as a list.
+pub(super) const HEIGHT: f32 = 28.0;
 /// The hover group of one line, which turns its icon into the way to open it.
 const GROUP: &str = "tool-line";
 
@@ -46,6 +47,9 @@ pub(super) enum Part {
     Code(SharedString),
     /// A quiet word or two, such as the tool's name.
     Note(SharedString),
+    /// A line of prose, faint, cut off with an ellipsis where the line ends, such as the start of what the agent
+    /// thought.
+    Summary(SharedString),
     /// How many lines a change added and removed.
     Counts(Counts),
 }
@@ -128,6 +132,13 @@ impl Part {
                 .child(text)
                 .into_any_element(),
             Part::Note(text) => div().flex_none().text_color(look::faint()).child(text).into_any_element(),
+            Part::Summary(text) => div()
+                .min_w_0()
+                .overflow_hidden()
+                .text_ellipsis()
+                .text_color(look::faint())
+                .child(text)
+                .into_any_element(),
             Part::Counts(Counts { added, removed }) => h_flex()
                 .flex_none()
                 .gap_1()

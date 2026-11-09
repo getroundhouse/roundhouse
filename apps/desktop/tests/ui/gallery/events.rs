@@ -18,6 +18,11 @@ pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::V
     from_the_agent(message, ContentBlock::ToolUse { id: id.to_string(), name: name.to_string(), input })
 }
 
+/// What the agent thought, as its own message.
+pub(crate) fn thought(message: &str, text: &str) -> EventBody {
+    from_the_agent(message, ContentBlock::Thinking { text: text.to_string() })
+}
+
 fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
     EventBody::Assistant {
         message_id: Some(MessageId::from(message)),
