@@ -132,7 +132,7 @@ fn the_workspaces_keys_do_nothing_while_settings_shows(cx: &mut TestAppContext) 
     ui.press("cmd-shift-d");
     ui.press("escape");
 
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.diff_open));
+    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open));
 }
 
 #[gpui_kit::test]

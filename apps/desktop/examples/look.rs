@@ -17,13 +17,12 @@ use desktop::app::{AppView, Connection, HubSource};
 use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::SharedString;
-use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let checkout = Checkout::of_this_build(desktop::checkout::take_note(&mut args));
-    gpui_kit::application().with_assets(Assets).run(move |cx| {
+    gpui_kit::application().with_assets(desktop::Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         let (handle, view) = desktop::open_main_window(HubSource::default_local().expect("find the hub"), checkout, cx)
@@ -77,7 +76,7 @@ fn main() {
                         .unwrap();
                 }
             }
-            pane.update(cx, WorkspacePane::toggle_diff);
+            pane.update(cx, WorkspacePane::toggle_changes);
         })
         .detach();
     });

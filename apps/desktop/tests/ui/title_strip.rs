@@ -48,8 +48,8 @@ fn a_drag_from_a_button_in_the_strip_is_the_buttons(cx: &mut gpui_kit::TestAppCo
     let to = point(from.x, from.y + px(200.));
     ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
     ui.frame();
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.diff_open));
+    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open));
 
     ui.click("toggle-diff");
-    assert!(ui.cx.read_entity(&pane, |p, _| p.diff_open));
+    assert!(ui.cx.read_entity(&pane, |p, _| p.changes_open));
 }

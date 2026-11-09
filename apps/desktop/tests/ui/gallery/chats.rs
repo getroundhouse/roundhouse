@@ -214,43 +214,6 @@ fn tool_result(id: &str, text: &str) -> EventBody {
     }
 }
 
-pub(crate) const PATCH: &str = "\
-diff --git a/crates/protocol/src/model.rs b/crates/protocol/src/model.rs
-index 1a2b3c4..5d6e7f8 100644
---- a/crates/protocol/src/model.rs
-+++ b/crates/protocol/src/model.rs
-@@ -96,6 +96,9 @@ pub struct Workspace {
-     pub setup: SetupStatus,
-     /// The first of ten ports set aside for this workspace, so workspaces don't collide.
-     pub port_base: u16,
-+    /// The pull request for its branch, as the hub last saw it. `None` if there isn't one.
-+    #[serde(default)]
-+    pub pull_request: Option<PullRequest>,
- }
-
- /// Where a workspace's setup has got to. Copying local files counts, even with no script to run.
-diff --git a/apps/desktop/src/sidebar.rs b/apps/desktop/src/sidebar.rs
-index 9f8e7d6..c5b4a39 100644
---- a/apps/desktop/src/sidebar.rs
-+++ b/apps/desktop/src/sidebar.rs
-@@ -37,6 +37,7 @@ pub(crate) fn status_color(status: Option<SessionStatus>, cx: &App) -> Hsla {
- fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
-     let selected = app.selected.as_ref() == Some(&workspace.id);
-     let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
-+    let pull_request = workspace.pull_request.as_ref().map(|pr| format!(\"#{}\", pr.number));
-     let archived = workspace.status == WorkspaceStatus::Archived;
-     let id = workspace.id.clone();
-     let muted = cx.theme().muted_foreground;
-@@ -59,6 +60,7 @@ fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
-                 .when(archived, |d| d.text_color(muted))
-                 .child(div().flex_none().size_2().rounded_full().bg(dot))
-                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(workspace.name.clone()))
-+                .children(pull_request.map(|pr| div().flex_none().text_xs().text_color(muted).child(pr)))
-                 .when(archived, |d| d.child(div().flex_none().text_xs().child(\"Restore\"))),
-         )
- }
-";
-
 pub(crate) const SETUP_LOG: &str = "\
 $ cp ../.env.example .env
 $ pnpm install --frozen-lockfile

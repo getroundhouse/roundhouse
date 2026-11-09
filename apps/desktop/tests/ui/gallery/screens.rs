@@ -7,8 +7,8 @@ use protocol::model::{
     WorkspaceStatus,
 };
 
-use super::chats;
 use super::world::{HubBuild, World};
+use super::{chats, patch};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -24,7 +24,12 @@ pub(crate) struct Screen {
 pub(crate) enum Step {
     /// Selects the workspace with this name, and waits for its chat to load.
     Select(&'static str),
+    /// Opens the sidebar of changes, and waits for the diff to load.
     OpenDiff,
+    /// Clicks this file in the sidebar of changes, and waits for the diff tab to show it.
+    OpenFile(&'static str),
+    /// Starts a comment on this line of the open file's new side, as the line's add button would.
+    StartComment(usize),
     OpenSetupLog,
     /// Presses a button by its ID, such as one that opens a menu.
     Click(&'static str),
@@ -80,7 +85,30 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(chat_tabs),
         steps: &[Step::Select(FOCUS), Step::HoverTab(1)],
     },
-    Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen {
+        name: "changes-tree",
+        spec: "diff.md",
+        world: Some(diff),
+        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::Click("changes-layout")],
+    },
+    Screen {
+        name: "diff",
+        spec: "diff.md",
+        world: Some(diff),
+        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::OpenFile("crates/protocol/src/model.rs")],
+    },
+    Screen {
+        name: "writing-a-comment",
+        spec: "diff.md",
+        world: Some(diff),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenDiff,
+            Step::OpenFile("crates/protocol/src/model.rs"),
+            Step::StartComment(99),
+        ],
+    },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "rename",
@@ -297,7 +325,7 @@ fn diff() -> World {
     world.chat(&focus, SessionStatus::Idle, chats::finished());
     world.diffs.insert(
         focus.clone(),
-        GitDiff { base_commit: Some("3f4c19c".to_string()), patch: chats::PATCH.to_string(), truncated: false },
+        GitDiff { base_commit: Some("3f4c19c".to_string()), patch: patch::PATCH.to_string(), truncated: false },
     );
     world.comments.insert(
         focus.clone(),

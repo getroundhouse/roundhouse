@@ -12,8 +12,10 @@ use crate::{
 /// it the bar again when this changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Says {
-    /// The diff is open, so View has Hide Diff rather than Show Diff.
+    /// The sidebar of changes is open, so View has Hide Diff rather than Show Diff.
     pub(crate) diff_open: bool,
+    /// The diff tab is showing, so ⌘W closes it rather than the chat behind it.
+    pub(crate) diff_tab_showing: bool,
 }
 
 /// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
@@ -32,7 +34,7 @@ pub(crate) fn set(cx: &mut App) {
 
 /// Gives macOS the menu bar, saying this.
 pub(crate) fn show(says: Says, cx: &mut App) {
-    cx.set_menus([app_menu(), file_menu(), edit_menu(), view_menu(says), window_menu()]);
+    cx.set_menus([app_menu(), file_menu(says), edit_menu(), view_menu(says), window_menu()]);
 }
 
 /// The items every Mac app has, in the same order and groups, with the app's own after About.
@@ -55,14 +57,16 @@ fn app_menu() -> Menu {
     ])
 }
 
-/// Making things, and closing a chat, as a File menu makes and closes documents. The window handles these.
-fn file_menu() -> Menu {
+/// Making things, and closing a chat, as a File menu makes and closes documents. The window handles these. ⌘W closes
+/// the diff tab while it shows, so the item says so then.
+fn file_menu(says: Says) -> Menu {
+    let close = if says.diff_tab_showing { "Close Diff Tab" } else { "Close Chat" };
     Menu::new("File").items([
         MenuItem::action("New Workspace", NewWorkspace),
         MenuItem::action("New Chat", NewChat),
         MenuItem::action("Add Repository…", AddRepository),
         MenuItem::separator(),
-        MenuItem::action("Close Chat", CloseChat),
+        MenuItem::action(close, CloseChat),
     ])
 }
 

@@ -1,18 +1,17 @@
-//! The diff against the workspace's base, on the kit's `Diff`, with review comments the hub keeps.
+//! The diff against the workspace's base, and the review comments the hub keeps on it. It loads every changed file,
+//! which the sidebar on the right lists, and shows one at a time, on the kit's `Diff`, in the workspace's diff tab.
 
 use std::collections::HashSet;
 
 use client_core::{Client, RecordsFeed};
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
 };
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext, Context, ElementId, Entity, EventEmitter, HighlightStyle, Hsla, IntoElement, ParentElement,
-    Render, Styled, Subscription, Window, div, px,
+    Render, SharedString, Styled, Subscription, Window, div,
 };
 use protocol::model::{CommentId, DiffComment, DiffSide, WorkspaceId};
 
@@ -21,12 +20,14 @@ use annotations::{comment_card, draft_card};
 mod annotations;
 mod comments;
 
-pub use comments::comments_prompt;
+pub use comments::{comment_line, comments_prompt};
 
 #[derive(Clone, Debug)]
 pub enum DiffEvent {
     Error(String),
     SendToAgent(String),
+    /// Put this in the chat's composer.
+    AddToChat(String),
 }
 
 fn kit_side(side: DiffSide) -> KitSide {
@@ -41,9 +42,13 @@ pub struct DiffPanel {
     /// Client-core's copy of the hub's records, which replies go into.
     records: RecordsFeed,
     workspace_id: WorkspaceId,
-    pub state: Option<Entity<DiffState>>,
-    pub empty: bool,
+    /// Every changed file, in order of path, or `None` until the diff has loaded.
+    pub files: Option<Vec<DiffFile>>,
     pub truncated: bool,
+    /// The file the diff tab shows.
+    pub open: Option<SharedString>,
+    /// The kit's view of the open file, once there's been one.
+    pub state: Option<Entity<DiffState>>,
     /// What's shown: client-core's copy, less what's being deleted here.
     pub comments: Vec<DiffComment>,
     /// Client-core's copy.
@@ -52,6 +57,8 @@ pub struct DiffPanel {
     deleting: HashSet<CommentId>,
     /// The line being commented on, if any.
     pub draft: Option<DiffLinePosition>,
+    /// The comment being written is this one, edited, rather than a new one.
+    editing: Option<CommentId>,
     pub draft_input: Entity<TextareaState>,
     _subscriptions: Vec<Subscription>,
 }
@@ -67,24 +74,30 @@ impl DiffPanel {
         cx: &mut Context<Self>,
     ) -> Self {
         let draft_input = cx.new(|cx| {
-            TextareaState::new(window, cx).auto_grow(2, 6).submit_on_enter(true).placeholder("Leave a comment")
+            TextareaState::new(window, cx)
+                .auto_grow(2, 6)
+                .submit_on_enter(true)
+                .placeholder("Add a comment for the agent")
         });
-        let on_enter = cx.subscribe_in(&draft_input, window, |this, _, event: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { shift: false, .. } = event {
-                this.save_draft(window, cx);
-            }
+        let on_enter = cx.subscribe_in(&draft_input, window, |this, _, event: &InputEvent, window, cx| match event {
+            InputEvent::PressEnter { shift: false, .. } => this.save_draft(window, cx),
+            // So Comment can say whether there's anything to save.
+            InputEvent::Change => cx.notify(),
+            _ => {}
         });
         let mut this = Self {
             client,
             records,
             workspace_id,
-            state: None,
-            empty: false,
+            files: None,
             truncated: false,
+            open: None,
+            state: None,
             comments: Vec::new(),
             held: Vec::new(),
             deleting: HashSet::new(),
             draft: None,
+            editing: None,
             draft_input,
             _subscriptions: vec![on_enter],
         };
@@ -110,15 +123,21 @@ impl DiffPanel {
                     return;
                 }
             };
-            let empty = diff.patch.trim().is_empty();
             let truncated = diff.truncated;
-            let parsed =
-                cx.background_spawn(async move { DiffFile::parse(&diff.patch).map_err(|e| e.to_string()) }).await;
+            let parsed = cx
+                .background_spawn(async move {
+                    let mut files = DiffFile::parse(&diff.patch).map_err(|e| e.to_string())?;
+                    files.sort_by(|a, b| a.path().cmp(b.path()));
+                    Ok::<_, String>(files)
+                })
+                .await;
             let _ = this.update(cx, |t, cx| {
-                t.empty = empty;
                 t.truncated = truncated;
                 match parsed {
-                    Ok(files) => t.show_files(files, cx),
+                    Ok(files) => {
+                        t.files = Some(files);
+                        t.show_open(cx);
+                    }
                     Err(e) => cx.emit(DiffEvent::Error(format!("couldn't read the diff: {e}"))),
                 }
                 cx.notify();
@@ -127,12 +146,43 @@ impl DiffPanel {
         .detach();
     }
 
-    fn show_files(&mut self, files: Vec<DiffFile>, cx: &mut Context<Self>) {
+    /// Whether the diff has loaded, with nothing changed.
+    pub fn has_no_changes(&self) -> bool {
+        self.files.as_ref().is_some_and(Vec::is_empty)
+    }
+
+    /// Shows a file in the diff tab, in place of the one it showed. A comment being written on that one is kept, and
+    /// shows again with it.
+    pub fn open(&mut self, path: SharedString, cx: &mut Context<Self>) {
+        if self.open.as_ref() != Some(&path) {
+            self.open = Some(path);
+            self.show_open(cx);
+        }
+        cx.notify();
+    }
+
+    /// Closes the diff tab. A comment being written in it is kept, and shows again when its file does.
+    pub fn close(&mut self, cx: &mut Context<Self>) {
+        self.open = None;
+        cx.notify();
+    }
+
+    /// The open file, as the diff last loaded has it. `None` once it no longer changes anything.
+    pub fn open_file(&self) -> Option<&DiffFile> {
+        let open = self.open.as_ref()?;
+        self.files.as_ref()?.iter().find(|file| file.path() == open)
+    }
+
+    /// Gives the kit the open file's diff as it is now.
+    fn show_open(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.open_file().cloned() else { return };
         if let Some(state) = &self.state {
-            state.update(cx, |s, cx| s.set_files(files, cx));
+            state.update(cx, |s, cx| s.set_files([file], cx));
+            // New files clear the selection, which is what marks the line being commented on.
+            self.select_draft_line(cx);
         } else {
             let state = cx.new(|cx| {
-                DiffState::new(files, cx).with_mode(DiffMode::Unified).with_syntax_highlighter(|language, text| {
+                DiffState::new([file], cx).with_mode(DiffMode::Unified).with_syntax_highlighter(|language, text| {
                     crate::highlight::highlight(language, text)
                         .into_iter()
                         .map(|span| {
@@ -147,15 +197,17 @@ impl DiffPanel {
     }
 
     fn annotations(&self) -> Vec<DiffAnnotation> {
+        let showing = |path: &str| self.open.as_ref().is_some_and(|open| open.as_ref() == path);
         let mut out: Vec<DiffAnnotation> = self
             .comments
             .iter()
+            .filter(|c| showing(&c.path) && self.editing.as_ref() != Some(&c.id))
             .map(|c| {
                 let position = DiffLinePosition::new(c.path.clone(), kit_side(c.side), c.line as usize);
                 DiffAnnotation::line(ElementId::Name(c.id.to_string().into()), position)
             })
             .collect();
-        if let Some(position) = &self.draft {
+        if let Some(position) = self.draft.as_ref().filter(|position| showing(position.path())) {
             out.push(DiffAnnotation::line(ElementId::Name("draft".into()), position.clone()));
         }
         out
@@ -166,7 +218,7 @@ impl DiffPanel {
     fn diff_view(&self, state: &Entity<DiffState>, cx: &mut Context<Self>) -> AnyElement {
         let (on_add, for_annotations) = (cx.weak_entity(), cx.weak_entity());
         let comments = self.comments.clone();
-        let draft_input = self.draft_input.clone();
+        let (draft_input, editing) = (self.draft_input.clone(), self.editing.is_some());
         Diff::new(state)
             .line_number(true)
             .syntax_highlight(true)
@@ -178,39 +230,13 @@ impl DiffPanel {
             .render_annotation(move |annotation, _, cx| {
                 let id = annotation.id().clone();
                 if id == ElementId::Name("draft".into()) {
-                    return draft_card(&draft_input, for_annotations.clone(), cx);
+                    return draft_card(&draft_input, editing, for_annotations.clone(), cx);
                 }
                 let text = comments.iter().find(|c| ElementId::Name(c.id.to_string().into()) == id);
                 let Some(comment) = text.cloned() else { return div().into_any_element() };
                 comment_card(comment, for_annotations.clone(), cx)
             })
             .into_any_element()
-    }
-
-    fn comments_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let count = self.comments.len();
-        h_flex()
-            .flex_none()
-            .w_full()
-            .h(px(40.))
-            .px_3()
-            .gap_2()
-            .justify_between()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                    .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
-            )
-            .child(
-                Button::new("send-comments")
-                    .primary()
-                    .small()
-                    .label("Send to agent")
-                    .on_click(cx.listener(|t, _, _, cx| t.send_comments(cx))),
-            )
     }
 }
 
@@ -220,22 +246,13 @@ fn placeholder(text: &'static str, color: Hsla) -> AnyElement {
 
 impl Render for DiffPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (muted, secondary) = (cx.theme().muted_foreground, cx.theme().secondary);
-        let content = if self.empty {
-            placeholder("No changes yet", muted)
-        } else if let Some(state) = self.state.clone() {
-            self.diff_view(&state, cx)
-        } else {
-            placeholder("Loading…", muted)
+        let muted = cx.theme().muted_foreground;
+        let state = self.state.clone().filter(|_| self.open_file().is_some());
+        let content = match (state, &self.files) {
+            (Some(state), _) => self.diff_view(&state, cx),
+            (None, Some(_)) => placeholder("This file has no changes now", muted),
+            (None, None) => placeholder("Loading…", muted),
         };
-        v_flex()
-            .size_full()
-            .when(self.truncated, |d| {
-                d.child(
-                    div().flex_none().px_3().py_1().text_xs().bg(secondary).child("Some untracked files aren't shown"),
-                )
-            })
-            .when(!self.comments.is_empty(), |d| d.child(self.comments_bar(cx)))
-            .child(div().flex_1().min_h_0().w_full().child(content))
+        div().size_full().child(content)
     }
 }

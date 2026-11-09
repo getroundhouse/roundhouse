@@ -33,16 +33,16 @@ Anything recorded since the copy is lost.
 
 To work on Roundhouse rather than use it, `cargo run -p desktop --bin roundhouse-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
-Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To comment, hover a line in the diff and click its add button. The `roundhouse` command-line client, in the same directory, talks to the same hub.
+Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To review the changes, open the diff with `Cmd-Shift-D` and click a file, and to comment, hover a changed line and click its add button. The `roundhouse` command-line client, in the same directory, talks to the same hub.
 
 | Key | Action |
 |---|---|
 | `Cmd-N` | New workspace |
 | `Cmd-[`, `Cmd-]` | Move between workspaces |
 | `Cmd-T` | New chat |
-| `Cmd-W` | Close a chat |
+| `Cmd-W` | Close a chat, or the diff tab |
 | `Ctrl-Tab` | Move between chats |
-| `Cmd-Shift-D` | Open the diff |
+| `Cmd-Shift-D` | Show or hide the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |
 | `Cmd-.` | Stop the agent's turn |
 | `Cmd-,` | Open Settings |

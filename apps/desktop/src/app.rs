@@ -355,7 +355,7 @@ impl AppView {
             pane.update(cx, WorkspacePane::catch_up);
         }
         if let Some(pane) = self.panes.get(&id) {
-            pane.update(cx, |p, cx| p.focus_composer(window, cx));
+            pane.update(cx, |p, cx| p.focus_showing(window, cx));
         }
         self.read_on_screen(window.is_window_active(), cx);
         cx.notify();

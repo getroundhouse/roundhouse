@@ -5,6 +5,7 @@
 
 #![cfg(test)]
 
+mod changes;
 mod chats;
 mod checkout;
 mod core_loop;

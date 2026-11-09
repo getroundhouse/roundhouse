@@ -1,4 +1,4 @@
-//! How a workspace looks: its header, tabs, composer and pickers.
+//! How a workspace looks: its header, tabs, composer and pickers, and the sidebar of changes beside them.
 
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -14,7 +14,7 @@ use protocol::model::{Session, SessionId, SessionStatus};
 use transcript::mode_label;
 
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, PaneEvent, WorkspacePane, in_turn};
+use super::{HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane, in_turn};
 use crate::StopAgent;
 use crate::right_click;
 
@@ -30,9 +30,9 @@ pub(super) fn model_label(model: Option<&str>) -> String {
 }
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
-const TAB_WIDTH: Pixels = px(200.);
+pub(super) const TAB_WIDTH: Pixels = px(200.);
 /// Each tab's, so a tab's close button shows only while the pointer is over that tab.
-const TAB_GROUP: &str = "chat-tab";
+pub(super) const TAB_GROUP: &str = "chat-tab";
 
 fn chat_title(session: &Session, number: usize) -> String {
     session.title.as_deref().map_or_else(|| format!("Chat {number}"), str::to_string)
@@ -41,7 +41,7 @@ fn chat_title(session: &Session, number: usize) -> String {
 impl WorkspacePane {
     fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
-        let selected = self.active.as_ref() == Some(&session.id);
+        let selected = self.active.as_ref() == Some(&session.id) && self.showing == Showing::Chat;
         let unread = self.shows_unread(session);
         let mark = crate::sidebar::signal(Some(session.status), unread);
         let work = self.work();
@@ -111,15 +111,17 @@ impl WorkspacePane {
         })
     }
 
-    /// One tab for each open chat, then a way to start another, and any closed ones to go back to.
+    /// One tab for each open chat, then the diff tab if there is one, then a way to start another chat, and any closed
+    /// ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
-        let tabs: Vec<AnyElement> = numbered
+        let mut tabs: Vec<AnyElement> = numbered
             .iter()
             .filter(|(_, s)| s.closed_at_ms.is_none())
             .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx))
             .collect();
+        tabs.extend(self.diff_tab_element(cx));
         let closed: Vec<(SessionId, String)> = numbered
             .iter()
             .filter(|(_, s)| s.closed_at_ms.is_some())
@@ -247,8 +249,8 @@ impl WorkspacePane {
                     .ghost()
                     .small()
                     .icon(IconName::PanelRight)
-                    .label(if self.diff_open { "Hide diff" } else { "Diff" })
-                    .on_click(cx.listener(|t, _, _, cx| t.toggle_diff(cx))),
+                    .label(if self.changes_open { "Hide diff" } else { "Diff" })
+                    .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
             )
             .child(Button::new("archive").ghost().small().label("Archive").on_click(cx.listener(move |_, _, _, cx| {
                 cx.emit(PaneEvent::Archive(id.clone(), false));
@@ -341,39 +343,55 @@ impl WorkspacePane {
 
 impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
-        let setup_line = self.setup_line(cx);
         let header = self.header(cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
-        let composer = self.composer_row(cx).into_any_element();
-        let log = self.setup_log.clone();
-        let transcript = self.transcript();
-        let diff = if self.diff_open { self.diff.clone() } else { None };
+        let showing = match self.diff.clone().filter(|_| self.showing == Showing::Diff) {
+            Some(diff) => {
+                div().track_focus(&self.diff_focus).flex_1().min_h_0().w_full().child(diff).into_any_element()
+            }
+            None => self.chat(cx),
+        };
+        let changes = self.changes_sidebar(cx);
         v_flex().size_full().child(header).child(
             h_flex()
                 .flex_1()
                 .min_h_0()
                 .w_full()
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .h_full()
-                        .child(tabs)
-                        .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
-                        .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
-                        .children(setup_line)
-                        .when(interrupted, |d| {
-                            d.child(div().flex_none().w_full().px_4().py_1().text_xs().text_color(muted).child(
-                                "The agent stopped before it finished. Send a message to pick up where it left off.",
-                            ))
-                        })
-                        .child(composer),
-                )
-                .when_some(diff, |d, diff| {
-                    d.child(div().flex_1().min_w_0().h_full().border_l_1().border_color(border).child(diff))
-                }),
+                .child(v_flex().flex_1().min_w_0().h_full().child(tabs).child(showing))
+                .children(changes),
         )
+    }
+}
+
+impl WorkspacePane {
+    /// The active chat, under the tabs: its transcript, how setup is going, and the composer.
+    fn chat(&self, cx: &mut Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
+        let setup_line = self.setup_line(cx);
+        let composer = self.composer_row(cx).into_any_element();
+        let log = self.setup_log.clone();
+        let transcript = self.transcript();
+        v_flex()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
+            .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
+            .children(setup_line)
+            .when(interrupted, |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .w_full()
+                        .px_4()
+                        .py_1()
+                        .text_xs()
+                        .text_color(muted)
+                        .child("The agent stopped before it finished. Send a message to pick up where it left off."),
+                )
+            })
+            .child(composer)
+            .into_any_element()
     }
 }

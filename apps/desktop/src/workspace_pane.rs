@@ -1,20 +1,23 @@
-//! One workspace: its chats, the composer, and the diff beside them when it's open.
+//! One workspace: its chats, the composer, the diff tab, and the sidebar of changes beside them when it's open.
 
 use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
+    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Pixels, Subscription, Task, Window,
+    px,
 };
 use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use transcript::Transcript;
 
-use crate::diff_panel::{DiffEvent, DiffPanel};
+use crate::changes::Changes;
+use crate::diff_panel::DiffPanel;
 pub use reading::Mark;
 use reading::Reading;
 
 mod chats;
+mod diff_tab;
 mod reading;
 mod setup;
 #[cfg(test)]
@@ -25,6 +28,16 @@ mod view;
 /// reach it.
 fn in_turn(session: &Session) -> bool {
     matches!(session.status, SessionStatus::Running | SessionStatus::WaitingApproval)
+}
+
+/// What shows under the tabs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Showing {
+    /// The active chat.
+    #[default]
+    Chat,
+    /// The diff tab, in place of the active chat.
+    Diff,
 }
 
 #[derive(Clone, Debug)]
@@ -53,7 +66,7 @@ pub struct WorkspacePane {
     pub sessions: Vec<Session>,
     /// A chat to show once client-core's copy has it, such as one just made.
     showing_next: Option<SessionId>,
-    /// What client-core holds for this workspace, for the diff panel.
+    /// What client-core holds for this workspace, for the diff.
     comments: Vec<DiffComment>,
     pub active: Option<SessionId>,
     /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
@@ -64,8 +77,14 @@ pub struct WorkspacePane {
     creating_chat: bool,
     reading: Reading,
     pub composer: Entity<TextareaState>,
+    /// Made the first time the sidebar of changes opens, then kept.
     pub diff: Option<Entity<DiffPanel>>,
-    pub diff_open: bool,
+    pub changes: Option<Entity<Changes>>,
+    /// The sidebar of changes is open.
+    pub changes_open: bool,
+    pub showing: Showing,
+    /// Where keys go while the diff tab shows, so the window's keys still reach it with the composer hidden.
+    diff_focus: FocusHandle,
     pub pull_request: Option<PullRequest>,
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
@@ -140,7 +159,10 @@ impl WorkspacePane {
             reading: Reading::default(),
             composer,
             diff: None,
-            diff_open: false,
+            changes: None,
+            changes_open: false,
+            showing: Showing::Chat,
+            diff_focus: cx.focus_handle(),
             pull_request: None,
             setup_log: None,
             setup_log_refresh: None,
@@ -198,13 +220,14 @@ impl WorkspacePane {
         self.behind = true;
     }
 
-    /// For when the pane is shown. After a reconnect, reads the pull request again, and the diff if it's open.
+    /// For when the pane is shown. After a reconnect, reads the pull request again, and the diff if it shows.
     pub fn catch_up(&mut self, cx: &mut Context<Self>) {
         if !std::mem::take(&mut self.behind) {
             return;
         }
         self.refresh_pull_request(cx);
-        if let Some(diff) = self.diff.as_ref().filter(|_| self.diff_open) {
+        let shown = self.changes_open || self.diff_tab(cx).is_some();
+        if let Some(diff) = self.diff.clone().filter(|_| shown) {
             diff.update(cx, DiffPanel::refresh);
         }
     }
@@ -236,8 +259,33 @@ impl WorkspacePane {
         cx.notify();
     }
 
+    /// Runs `then` with the window, which a click handler is already inside an update of, just after whatever called
+    /// this.
+    fn with_window(
+        &self,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) {
+        let (handle, this) = (self.window, cx.weak_entity());
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, cx| {
+                let _ = this.update(cx, |t, cx| then(t, window, cx));
+            });
+        });
+    }
+
     pub fn focus_composer(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.composer.update(cx, |c, cx| c.focus(window, cx));
+    }
+
+    /// Focuses the diff while the diff tab shows, and the composer otherwise. The composer isn't drawn behind the diff
+    /// tab, and focus on something that isn't drawn takes the window's keys, such as `Ctrl-Tab`, nowhere.
+    pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.showing == Showing::Diff && self.diff.is_some() {
+            window.focus(&self.diff_focus, cx);
+        } else {
+            self.focus_composer(window, cx);
+        }
     }
 
     pub fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -261,6 +309,7 @@ impl WorkspacePane {
         if let Some(transcript) = self.transcript() {
             transcript.update(cx, |t, cx| t.send_prompt(prompt, cx));
         }
+        self.show_chat(cx);
     }
 
     pub fn refresh_pull_request(&mut self, cx: &mut Context<Self>) {
@@ -274,43 +323,5 @@ impl WorkspacePane {
             });
         })
         .detach();
-    }
-
-    pub fn toggle_diff(&mut self, cx: &mut Context<Self>) {
-        self.diff_open = !self.diff_open;
-        if self.diff_open {
-            match &self.diff {
-                Some(diff) => diff.update(cx, DiffPanel::refresh),
-                None => self.make_diff_panel(cx),
-            }
-        }
-        cx.notify();
-    }
-
-    /// This needs the window, and a click handler is already inside a window update, so it runs just
-    /// after whatever called it.
-    fn make_diff_panel(&mut self, cx: &mut Context<Self>) {
-        let (handle, this) = (self.window, cx.weak_entity());
-        cx.defer(move |cx| {
-            let _ = handle.update(cx, |_, window, cx| {
-                let _ = this.update(cx, |t, cx| {
-                    let (client, id) = (t.client.clone(), t.workspace.id.clone());
-                    let records = t.records.clone();
-                    let diff = cx.new(|cx| DiffPanel::new(client, records, id, window, cx));
-                    diff.update(cx, |d, cx| d.set_comments(t.comments.clone(), cx));
-                    let events = cx.subscribe(&diff, |this, _, event: &DiffEvent, cx| match event {
-                        DiffEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
-                        DiffEvent::SendToAgent(prompt) => {
-                            if let Some(transcript) = this.transcript() {
-                                transcript.update(cx, |t, cx| t.send_prompt(prompt.clone(), cx));
-                            }
-                        }
-                    });
-                    t.subscriptions.push(events);
-                    t.diff = Some(diff);
-                    cx.notify();
-                });
-            });
-        });
     }
 }

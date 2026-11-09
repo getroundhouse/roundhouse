@@ -54,6 +54,7 @@ fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
     ui.input("say:from the first chat");
     std::fs::write(ui.worktree(&id).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_diff();
+    ui.open_file(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why");
 
@@ -101,7 +102,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
     ui.press("cmd-shift-d");
-    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_open));
+    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.changes_open));
     let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     client.workspace_archive(&archived, false).unwrap();
     for id in [&hidden, &shown] {
@@ -164,7 +165,7 @@ fn open_empty_diff(ui: &mut Ui<'_>) -> Entity<DiffPanel> {
 }
 
 fn shows_changes(ui: &Ui<'_>, diff: &Entity<DiffPanel>) -> bool {
-    ui.cx.read_entity(diff, |d, _| !d.empty)
+    ui.cx.read_entity(diff, |d, _| d.files.as_ref().is_some_and(|files| !files.is_empty()))
 }
 
 #[gpui_kit::test]

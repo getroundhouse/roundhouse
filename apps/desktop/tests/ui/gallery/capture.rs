@@ -10,7 +10,7 @@ use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::assets::Assets;
+use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AnyWindowHandle, App, Entity, HeadlessAppContext, PlatformTextSystem};
 use image::RgbaImage;
@@ -43,7 +43,7 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     }
     let mut cx = HeadlessAppContext::with_platform(
         text_system.clone(),
-        Arc::new(Assets),
+        Arc::new(desktop::Assets),
         gpui_kit::platform::current_headless_renderer,
     );
     // The hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
@@ -102,18 +102,10 @@ impl Driver {
                     })
                 });
             }
-            Step::OpenDiff => {
-                self.update_pane(WorkspacePane::toggle_diff);
-                self.wait("the diff to load", |view, cx| {
-                    let diff = selected_pane(view).and_then(|pane| pane.read(cx).diff.clone());
-                    diff.is_some_and(|diff| diff.read(cx).state.is_some() || diff.read(cx).empty)
-                });
-            }
-            Step::Click(id) => {
-                self.frame();
-                let id = gpui_kit::SharedString::from(*id);
-                self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
-            }
+            Step::OpenDiff => self.open_diff(),
+            Step::OpenFile(path) => self.open_file(path),
+            Step::StartComment(line) => self.start_comment(*line),
+            Step::Click(id) => self.click(*id),
             Step::HoverTab(position) => self.hover_tab(*position),
             Step::Type(text) => {
                 self.frame();
@@ -169,6 +161,43 @@ impl Driver {
         self.frame();
         let id = self.cx.update_window(self.handle, |_, window, _| labelled(window, label)).unwrap();
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+    }
+
+    fn click(&mut self, id: impl Into<gpui_kit::SharedString>) {
+        self.frame();
+        let id = id.into();
+        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+    }
+
+    fn open_diff(&mut self) {
+        self.update_pane(WorkspacePane::toggle_changes);
+        self.wait("the diff to load", |view, cx| {
+            let diff = selected_pane(view).and_then(|pane| pane.read(cx).diff.clone());
+            diff.is_some_and(|diff| diff.read(cx).files.is_some())
+        });
+    }
+
+    fn open_file(&mut self, path: &str) {
+        self.click(format!("file-{path}"));
+        self.wait("the diff tab to show it", |view, cx| {
+            let diff = selected_pane(view).and_then(|pane| pane.read(cx).diff.clone());
+            diff.is_some_and(|diff| diff.read(cx).open_file().is_some_and(|file| file.path() == path))
+        });
+    }
+
+    fn start_comment(&mut self, line: usize) {
+        let view = self.view.clone();
+        let diff =
+            self.cx.update(|cx| selected_pane(view.read(cx)).and_then(|pane| pane.read(cx).diff.clone())).unwrap();
+        self.cx
+            .update_window(self.handle, |_, window, cx| {
+                diff.update(cx, |d, cx| {
+                    let path = d.open.clone().unwrap();
+                    d.start_comment(DiffLinePosition::new(path, DiffSide::Modified, line), window, cx);
+                });
+            })
+            .unwrap();
+        self.frame();
     }
 
     fn update_pane(&mut self, change: impl FnOnce(&mut WorkspacePane, &mut gpui_kit::Context<WorkspacePane>)) {
