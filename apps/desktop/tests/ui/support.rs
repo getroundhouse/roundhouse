@@ -205,9 +205,10 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// Lets the app catch up. In a test, GPUI draws a window as soon as something in it has changed, so what's checked
+    /// next is what the app drew for that change. Nothing here redraws the whole window, as the kit's `render_frame`
+    /// would, since that would also redraw a view that never said it changed, and hide that it forgot to `notify`.
     pub(crate) fn frame(&mut self) {
-        self.cx.run_until_parked();
-        let _ = self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx));
         self.cx.run_until_parked();
     }
 
