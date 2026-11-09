@@ -84,6 +84,19 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![An edit and a search that failed, opened](screens/tool-failures.png)
 
+- **A call that hands work to a subagent is titled with what the subagent is for,** with its kind of agent in an outlined chip, such as `Explore`, and how many calls it's made so far. Opened, what it was asked, then everything it did, in order, under a rule down its left: what it wrote, and its calls, each of which opens as any call does. Its last words are its report. *Unconfirmed.*
+- **A subagent's work shows only in its call.** The agent goes on working while a subagent does, and several subagents can work at once, so their events arrive mixed together, and drawn where they arrive they'd read as one story. Work that arrives too long after its call for the call to gather it, such as more than 2,000 events later, shows where it arrives instead, so it isn't lost. *Unconfirmed.*
+- **A web search shows what it looked for and how many pages it found.** Opened, the pages, each its title and then its site, faint, which open in the browser when clicked, then what was made of them. *Unconfirmed.*
+- **A fetch shows the site in an outlined chip.** Opened, the page's address, what the agent asked of it, then the answer. *Unconfirmed.*
+
+**Subagents: one opened to its work, which came in among the agent's own, and one closed.** *Unconfirmed.*
+
+![A subagent's call, opened to its work](screens/tool-subagent.png)
+
+**The web: a search and a fetch opened, and a fetch the site refused.** *Unconfirmed.*
+
+![A web search and a fetch, opened](screens/tool-web.png)
+
 ## Questions and approvals
 
 - **While the agent waits on a question, what's typed in the composer is the answer,** and the card says so. A plain Allow button would throw the question away. *Unconfirmed.*

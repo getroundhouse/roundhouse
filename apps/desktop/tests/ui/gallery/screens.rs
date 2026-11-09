@@ -10,7 +10,7 @@ use super::worlds::{
     attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, setup_failed, streaming, titled,
     unread,
 };
-use super::{chats, file_chats, pictures, tool_chats};
+use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -166,6 +166,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, file_chats::failures())),
         steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
+    },
+    Screen {
+        name: "tool-subagent",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents())),
+        steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal")],
+    },
+    Screen {
+        name: "tool-web",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::web())),
+        steps: &[Step::Select(FOCUS), Step::Open("Search the web"), Step::Open("Fetch")],
     },
     Screen {
         name: "mode-picker",

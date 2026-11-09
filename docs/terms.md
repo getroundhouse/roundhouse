@@ -15,6 +15,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Instance | Where a provider runs one workspace's worker | `instance_id` |
 | Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
 | Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
+| Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its messages name the call that started it as their parent. The transcript draws them in that call | `parent_tool_use_id`, `transcript::calls::agent` |
 | Adapter | The code that runs one kind of agent and turns its output into events | `agents::claude` |
 
 ## Work

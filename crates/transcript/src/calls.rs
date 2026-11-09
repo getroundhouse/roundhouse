@@ -5,6 +5,7 @@
 
 use serde_json::Value;
 
+pub(crate) mod agent;
 mod command;
 pub(crate) mod diff;
 pub(crate) mod failure;
@@ -12,12 +13,15 @@ pub(crate) mod files;
 pub(crate) mod lines;
 mod other;
 mod search;
+pub(crate) mod web;
 
+pub(crate) use agent::Agent;
 pub(crate) use command::Command;
 pub(crate) use failure::Failure;
 pub(crate) use files::{EditFile, ReadFile, WriteFile};
 pub(crate) use other::Other;
 pub(crate) use search::{Found, Looks, Search};
+pub(crate) use web::{Fetch, WebSearch};
 
 /// A call, by what kind of thing it does.
 pub(crate) enum ToolCall<'a> {
@@ -26,6 +30,9 @@ pub(crate) enum ToolCall<'a> {
     Write(WriteFile<'a>),
     Edit(EditFile<'a>),
     Search(Search<'a>),
+    Agent(Agent<'a>),
+    Fetch(Fetch<'a>),
+    WebSearch(WebSearch<'a>),
     Other(Other),
 }
 
@@ -38,6 +45,10 @@ impl<'a> ToolCall<'a> {
             "Edit" | "MultiEdit" => EditFile::read(input).map(ToolCall::Edit),
             "Grep" => Search::read(input, Looks::InFiles).map(ToolCall::Search),
             "Glob" => Search::read(input, Looks::ForNames).map(ToolCall::Search),
+            "WebFetch" => Fetch::read(input).map(ToolCall::Fetch),
+            "WebSearch" => WebSearch::read(input).map(ToolCall::WebSearch),
+            // Always drawn as one, so the subagent's work, which its rows leave to the call, shows somewhere.
+            name if agent::hands_off(name) => Some(ToolCall::Agent(Agent::read(input))),
             _ => None,
         };
         // A known tool whose input isn't what it should be is still drawn, as any tool would be.

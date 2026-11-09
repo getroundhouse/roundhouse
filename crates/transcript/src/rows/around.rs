@@ -8,11 +8,16 @@ use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::Seq;
 
 use crate::attachments::{self, Carried};
+use crate::calls::agent;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::transcript::Model;
 
 mod nearby;
+mod subagent;
+
+pub(crate) use subagent::SubagentCalls;
+pub(super) use subagent::{Subagent, drawn_in_its_call};
 
 /// How many events apart a call and its result can be and still be drawn together. A result follows its call
 /// within a few events. One further away is drawn where it is.
@@ -35,6 +40,8 @@ pub(super) struct BlockAround {
     pub(super) open: bool,
     /// For a call: its result, to draw under it, once it's back.
     pub(super) answer: Option<Answer>,
+    /// For a call that handed work to a subagent: what the subagent has done.
+    pub(super) subagent: Option<Subagent>,
     /// For a result: whether it's drawn with its call instead.
     pub(super) with_call: bool,
 }
@@ -90,15 +97,16 @@ impl Around {
 impl BlockAround {
     fn read(log: &SessionLog, m: &Model, seq: Seq, block: &ContentBlock, key: ItemKey) -> Self {
         let open = m.folds.is_open(&key, Fold::of(block));
-        let answer = if let ContentBlock::ToolUse { id, .. } = block {
-            nearby::events_after(log, seq, NEAR).find_map(|event| answer_in(event, id))
+        let (answer, subagent) = if let ContentBlock::ToolUse { id, name, .. } = block {
+            let answer = nearby::events_after(log, seq, NEAR).find_map(|event| answer_in(event, id));
+            (answer, agent::hands_off(name).then(|| Subagent::read(log, m, seq, id, open)))
         } else {
-            None
+            (None, None)
         };
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id.as_str(), NEAR).is_some());
-        Self { key, open, answer, with_call }
+        Self { key, open, answer, subagent, with_call }
     }
 }
 

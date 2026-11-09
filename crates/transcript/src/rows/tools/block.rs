@@ -3,6 +3,7 @@
 
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::text::TextView;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement, Styled, StyledText, TestSupportExt as _, div, px,
@@ -10,6 +11,7 @@ use gpui_kit::{
 
 use super::highlight::spans;
 use super::line::INDENT;
+use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
@@ -83,6 +85,19 @@ pub(super) fn code(id: ElementId, language: &str, prompt: &str, text: &str, cx: 
         .text_size(theme.mono_font_size)
         .text_color(theme.foreground)
         .child(StyledText::new(shown).with_highlights(styles.collect::<Vec<_>>()))
+        .test_support()
+        .into_any_element()
+}
+
+/// Prose in a block, such as what a subagent was asked or what a model made of a page, as Markdown, scrolling past
+/// a dozen lines or so. It's the item's `part`.
+pub(super) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElement {
+    let text_id = key.element(&format!("{part}-text"));
+    scrolling(key.element(part))
+        .px_3()
+        .py_2()
+        .text_sm()
+        .child(TextView::markdown(text_id, SharedString::from(text.to_string())).selectable(true))
         .test_support()
         .into_any_element()
 }

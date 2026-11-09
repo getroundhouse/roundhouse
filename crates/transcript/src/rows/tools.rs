@@ -8,11 +8,12 @@ use gpui_kit::{AnyElement, App, IntoElement, ParentElement, WeakEntity};
 use protocol::model::Seq;
 use serde_json::Value;
 
-use super::around::Answer;
+use super::around::{Answer, Subagent};
 use crate::calls::{ToolCall, count};
 use crate::item_key::ItemKey;
 use crate::transcript::Transcript;
 
+mod agent;
 mod block;
 mod command;
 mod files;
@@ -21,6 +22,7 @@ mod line;
 mod numbered;
 mod other;
 mod search;
+mod web;
 
 use line::{Line, Part};
 
@@ -33,13 +35,23 @@ pub(super) struct Toggle<'a> {
 }
 
 /// A call's line, with its result under it once it's back, as its kind draws it.
-pub(super) fn call(toggle: &Toggle, name: &str, input: &Value, answer: Option<&Answer>, cx: &App) -> AnyElement {
+pub(super) fn call(
+    toggle: &Toggle,
+    name: &str,
+    input: &Value,
+    answer: Option<&Answer>,
+    subagent: Option<&Subagent>,
+    cx: &App,
+) -> AnyElement {
     match ToolCall::read(name, input) {
         ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
         ToolCall::Write(file) => files::write(&file, answer, toggle, cx),
         ToolCall::Edit(file) => files::edit(&file, answer, toggle, cx),
         ToolCall::Search(search) => search::draw(&search, answer, toggle, cx),
+        ToolCall::Agent(call) => agent::draw(&call, answer, subagent, toggle, cx),
+        ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
+        ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
 }

@@ -14,7 +14,7 @@ use protocol::tail::{StreamDelta, Tail};
 
 pub(crate) const PAGE_EVENTS: u64 = 250;
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
-pub(crate) const MAX_LOADED_EVENTS: usize = 2000;
+pub const MAX_LOADED_EVENTS: usize = 2000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingPrompt {
@@ -58,6 +58,8 @@ pub struct SessionLog {
     pending: Vec<PendingPrompt>,
     tail: Tail,
     changes: Changes,
+    /// How many times events have been put in, live or by the page.
+    events_added: u64,
 }
 
 fn page_of(seq: Seq) -> u64 {
@@ -180,6 +182,7 @@ impl SessionLog {
             self.last_seq = self.last_seq.max(event.seq);
             self.events.insert(event.seq, event);
         }
+        self.events_added += 1;
         self.evict();
         self.touched(seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last_seq)));
     }
@@ -212,6 +215,7 @@ impl SessionLog {
         if page_of(event.seq) + 1 >= page_of(self.last_seq) {
             self.pages.insert(page_of(event.seq));
             self.events.insert(event.seq, event);
+            self.events_added += 1;
             self.evict();
         }
     }
@@ -275,6 +279,12 @@ impl SessionLog {
 
     pub fn loaded_events(&self) -> usize {
         self.events.len()
+    }
+
+    /// How many times events have been added to what's held. It changes whenever looking through the events again
+    /// could find something that wasn't there before, so a view can keep what it found until then.
+    pub fn events_added(&self) -> u64 {
+        self.events_added
     }
 }
 

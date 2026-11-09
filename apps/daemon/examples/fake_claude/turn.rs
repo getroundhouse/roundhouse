@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::background;
 use crate::tools::{ask_questions, present_plan, run_tool};
 use crate::{Config, Input, Out, current_mode, current_model, emit, pause};
+use crate::{background, subagent};
 
 /// What a streamed block holds.
 #[derive(Clone, Copy)]
@@ -34,7 +34,7 @@ static MESSAGES: AtomicU32 = AtomicU32::new(0);
 
 /// A new message's ID. It's unique within a session, as the real CLI's are, so it counts across turns, and a resumed
 /// conversation is another process.
-fn message_id() -> String {
+pub(crate) fn message_id() -> String {
     let number = MESSAGES.fetch_add(1, Ordering::Relaxed) + 1;
     format!("msg_fake_{}_{number}", std::process::id())
 }
@@ -42,6 +42,8 @@ fn message_id() -> String {
 pub(crate) struct Turn<'a> {
     pub(crate) config: &'a Config,
     pub(crate) out: &'a Out,
+    /// The call that started the subagent whose messages these are, if they're a subagent's.
+    pub(crate) parent: Option<&'a str>,
 }
 
 impl Turn<'_> {
@@ -49,7 +51,7 @@ impl Turn<'_> {
         emit(
             self.out,
             json!({"type":"stream_event","event":event,"session_id":self.config.session_id,
-            "parent_tool_use_id":null,"api_message_id":message_id}),
+            "parent_tool_use_id":self.parent,"api_message_id":message_id}),
         );
     }
 
@@ -57,7 +59,7 @@ impl Turn<'_> {
         emit(
             self.out,
             json!({"type":"assistant","message":{"id":message_id,"model":"fake-model","role":"assistant",
-            "content":[block]},"parent_tool_use_id":null,"session_id":self.config.session_id}),
+            "content":[block]},"parent_tool_use_id":self.parent,"session_id":self.config.session_id}),
         );
     }
 
@@ -91,11 +93,11 @@ impl Turn<'_> {
         false
     }
 
-    /// A tool that's its own card in the app, so it goes by its real name.
-    pub(crate) fn named_tool_use(&mut self, name: &str) -> String {
+    /// A call to the tool `name`, rather than a command.
+    pub(crate) fn named_tool_use(&mut self, name: &str, input: Value) -> String {
         let id = message_id();
         let tool_use_id = format!("toolu_{id}");
-        self.finish_message(&id, json!({"type":"tool_use","id":tool_use_id,"name":name,"input":{}}));
+        self.finish_message(&id, json!({"type":"tool_use","id":tool_use_id,"name":name,"input":input}));
         tool_use_id
     }
 
@@ -110,7 +112,7 @@ impl Turn<'_> {
         emit(
             self.out,
             json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result",
-            "tool_use_id":tool_use_id,"content":content,"is_error":is_error}]},"parent_tool_use_id":null,
+            "tool_use_id":tool_use_id,"content":content,"is_error":is_error}]},"parent_tool_use_id":self.parent,
             "session_id":self.config.session_id}),
         );
     }
@@ -143,7 +145,7 @@ pub(crate) fn run_turn(
         "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
     );
 
-    let mut turn = Turn { config, out };
+    let mut turn = Turn { config, out, parent: None };
     let mut interrupted = false;
     let mut pending: VecDeque<String> = VecDeque::from([script]);
     while let Some(next) = pending.pop_front() {
@@ -263,6 +265,21 @@ pub(crate) fn run_command(
         );
         return false;
     }
+    if command == "recall" {
+        let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
+        let text = format!("I have seen: {}", seen.trim().replace('\n', " | "));
+        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
+    }
+    if let Some(name) = command.strip_prefix("env:") {
+        let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
+        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
+    }
+    act(turn, command, rx, queued, eof)
+}
+
+/// The commands that do something rather than write: calls, questions, plans, subagents, work in the background,
+/// and ways to misbehave.
+fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeque<String>, eof: &mut bool) -> bool {
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
     }
@@ -277,6 +294,9 @@ pub(crate) fn run_command(
     }
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
+    }
+    if let Some(description) = command.strip_prefix("agent:") {
+        return subagent::start(turn, description, rx, queued, eof);
     }
     if let Some(file) = command.strip_prefix("background:") {
         return background::start(turn, file);

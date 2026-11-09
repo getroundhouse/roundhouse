@@ -16,11 +16,13 @@ use crate::item_key::ItemKey;
 /// complete, because it's partial JSON. Thinking shows its latest line, or all of it when `thinking_open`, the way it
 /// will once it's recorded.
 pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: bool, cx: &App) -> AnyElement {
-    if tail.is_empty() && background.is_empty() {
+    // A subagent's work shows in the call that started it, once it's recorded.
+    let messages: Vec<_> = tail.messages.iter().filter(|m| m.parent_tool_use_id.is_none()).collect();
+    if messages.is_empty() && background.is_empty() {
         return empty();
     }
     let mut out = row();
-    for message in &tail.messages {
+    for message in messages {
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             out = match block.kind {

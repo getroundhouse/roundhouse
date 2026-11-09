@@ -28,7 +28,8 @@ mod tail;
 mod tools;
 
 use approval::approval_card;
-use around::{Around, BlockAround};
+pub(crate) use around::SubagentCalls;
+use around::{Around, BlockAround, drawn_in_its_call};
 use prompt::prompt_bubble;
 use tail::{first_line, render_tail};
 use tools::Toggle;
@@ -54,6 +55,8 @@ enum Shown {
     Event(SessionEvent, Around),
     Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
+    /// A subagent's event, which its call draws, so its own row is empty.
+    InCall,
 }
 
 fn render_row_inner(
@@ -70,6 +73,7 @@ fn render_row_inner(
                 return Shown::Tail(log.tail().clone());
             }
             match log.row(ix) {
+                Row::Event(event) if drawn_in_its_call(log, &m, event) => Shown::InCall,
                 Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
                 Row::Pending(prompt) => Shown::Pending(prompt.clone(), attachments::carried(&m, &prompt.attachments)),
                 Row::Unloaded => Shown::Unloaded,
@@ -89,6 +93,7 @@ fn render_row_inner(
             let carried = attachments::view(None, &carried, this, cx);
             prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, carried, true, cx)
         }
+        Shown::InCall => empty(),
         Shown::Unloaded => {
             session.want(ix);
             // A guess at the height. The list keeps its anchor when the real one arrives.
@@ -243,7 +248,9 @@ fn render_block(
             .into_any_element(),
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if calls::asks_in_a_card(name) => return None,
-        ContentBlock::ToolUse { name, input, .. } => tools::call(&toggle, name, input, drawing.answer.as_ref(), cx),
+        ContentBlock::ToolUse { name, input, .. } => {
+            tools::call(&toggle, name, input, drawing.answer.as_ref(), drawing.subagent.as_ref(), cx)
+        }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { is_error, text, .. } => tools::result(&toggle, *is_error, text, cx),
         ContentBlock::Image { .. } => {

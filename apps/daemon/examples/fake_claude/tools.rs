@@ -26,7 +26,7 @@ pub(crate) fn ask_questions(
             json!({"question":text,"header":"Question","options":options,"multiSelect":multi})
         })
         .collect();
-    let tool_use_id = turn.named_tool_use("AskUserQuestion");
+    let tool_use_id = turn.named_tool_use("AskUserQuestion", json!({}));
     let request_id = format!("req_{tool_use_id}");
     emit(
         turn.out,
@@ -78,7 +78,7 @@ pub(crate) fn present_plan(
     queued: &mut VecDeque<String>,
     eof: &mut bool,
 ) -> bool {
-    let tool_use_id = turn.named_tool_use("ExitPlanMode");
+    let tool_use_id = turn.named_tool_use("ExitPlanMode", json!({}));
     let request_id = format!("req_{tool_use_id}");
     emit(
         turn.out,
