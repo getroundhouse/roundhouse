@@ -19,7 +19,8 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let created = cx
                 .background_spawn(async move {
-                    let workspace = client.workspace_create(&repo_id, None, None)?;
+                    let workspace =
+                        client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
                     // Leaves the model and approval mode to the user's own Claude settings.
                     let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
                     Ok::<_, ClientError>((workspace, session))

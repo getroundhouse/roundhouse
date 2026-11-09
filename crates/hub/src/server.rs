@@ -177,8 +177,8 @@ async fn handle(
         R::RepoAdd { path } => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos { repos: hub.repo_list().await? },
         R::RecordsList => C::Records(hub.records_list().await?),
-        R::WorkspaceCreate { repo_id, name, base_ref } => {
-            C::Workspace(hub.workspace_create(repo_id, name, base_ref).await?)
+        R::WorkspaceCreate { repo_id, name, base_ref, client_request_id } => {
+            C::Workspace(hub.workspace_create(repo_id, name, base_ref, client_request_id).await?)
         }
         R::WorkspaceList { include_archived } => {
             C::Workspaces { workspaces: hub.workspace_list(include_archived).await? }
@@ -190,16 +190,16 @@ async fn handle(
         R::WorkspaceSetupLog { id } => C::SetupLog { text: hub.workspace_setup_log(id).await? },
         R::WorkspaceRerunSetup { id } => C::Workspace(hub.workspace_rerun_setup(id).await?),
         R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },
-        R::CommentAdd { workspace_id, path, side, line, text } => {
-            C::Comment(hub.comment_add(workspace_id, path, side, line, text).await?)
+        R::CommentAdd { workspace_id, path, side, line, text, client_request_id } => {
+            C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)
         }
         R::CommentList { workspace_id } => C::Comments { comments: hub.comment_list(workspace_id).await? },
         R::CommentDelete { id } => {
             hub.comment_delete(id).await?;
             C::Ok
         }
-        R::SessionCreate { workspace_id, agent, model, permission_mode } => {
-            C::Session(hub.session_create(workspace_id, agent, model, permission_mode).await?)
+        R::SessionCreate { workspace_id, agent, model, permission_mode, client_request_id } => {
+            C::Session(hub.session_create(workspace_id, agent, model, permission_mode, client_request_id).await?)
         }
         R::SessionEnsure { workspace_id, agent } => C::Session(hub.session_ensure(workspace_id, agent).await?),
         R::SessionList { workspace_id } => C::Sessions { sessions: hub.session_list(workspace_id).await? },

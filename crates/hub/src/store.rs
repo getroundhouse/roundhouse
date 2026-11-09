@@ -16,6 +16,7 @@ use serde_json::Value;
 mod comments;
 mod error;
 mod events;
+mod made;
 mod records;
 mod repos;
 mod schema;
@@ -28,6 +29,7 @@ use schema::{migrate, open_connection};
 
 pub use error::StoreError;
 pub use events::cancelled_approval;
+pub use made::{Made, MadeByRequest};
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.

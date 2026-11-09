@@ -44,8 +44,11 @@ impl WorkspacePane {
         let model = self.session().and_then(|s| s.model.clone());
         let mode = inherited_mode(self.session().and_then(|s| s.permission_mode.as_deref()));
         cx.spawn(async move |this, cx| {
-            let created =
-                cx.background_spawn(async move { client.session_create(&id, AgentKind::Claude, model, mode) }).await;
+            let created = cx
+                .background_spawn(async move {
+                    client.session_create(&id, AgentKind::Claude, model, mode, Some(client_core::new_request_id()))
+                })
+                .await;
             let _ = this.update(cx, |t, cx| t.chat_created(created, cx));
         })
         .detach();

@@ -157,9 +157,10 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
     let stack = Stack::new();
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let workspace = client.workspace_create(&repo.id, None, None).unwrap();
-    let session =
-        client.session_create(&workspace.id, protocol::model::AgentKind::Claude, None, Some("manual".into())).unwrap();
+    let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
+    let session = client
+        .session_create(&workspace.id, protocol::model::AgentKind::Claude, None, Some("manual".into()), None)
+        .unwrap();
     client.session_prompt(&session.id, "tool:echo answered > answered.txt", None).unwrap();
     let deadline = Instant::now() + TIMEOUT;
     while client.session_get(&session.id).unwrap().status != SessionStatus::WaitingApproval {

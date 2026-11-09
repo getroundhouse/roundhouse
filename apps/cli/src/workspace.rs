@@ -16,7 +16,7 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
                 .find(|r| r.name == repo || r.id.as_str() == repo)
                 .or_else(|| repos.iter().find(|r| r.id.as_str().starts_with(&repo)))
                 .ok_or_else(|| anyhow!("no repository matches {repo}. Add one with `roundhouse repo add <path>`"))?;
-            let workspace = client.workspace_create(&found.id, name, base)?;
+            let workspace = client.workspace_create(&found.id, name, base, Some(client_core::new_request_id()))?;
             println!("{}", workspace.name);
             println!("  path    {}", workspace.path.unwrap_or_default());
             println!("  branch  {}", workspace.branch);

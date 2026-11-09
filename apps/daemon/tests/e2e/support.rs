@@ -117,8 +117,9 @@ impl Stack {
 
     pub(crate) fn workspace_with_mode(&self, client: &Client, mode: Option<&str>) -> (Workspace, Session) {
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
-        let workspace = client.workspace_create(&repo.id, None, None).unwrap();
-        let session = client.session_create(&workspace.id, AgentKind::Claude, None, mode.map(String::from)).unwrap();
+        let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
+        let session =
+            client.session_create(&workspace.id, AgentKind::Claude, None, mode.map(String::from), None).unwrap();
         (workspace, session)
     }
 }

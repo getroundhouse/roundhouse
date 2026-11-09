@@ -36,7 +36,7 @@ fn the_feed_reports_what_a_sidebar_shows() {
 
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     assert_eq!(next_notice(&feed, "the repo"), HubNotice::Repo(repo.clone()));
-    let workspace = client.workspace_create(&repo.id, Some("watched".into()), None).unwrap();
+    let workspace = client.workspace_create(&repo.id, Some("watched".into()), None, None).unwrap();
     // Ready, then its setup running and finishing.
     let HubNotice::Workspace(ready) = next_notice(&feed, "the workspace") else { panic!() };
     assert_eq!(ready.id, workspace.id);
@@ -45,7 +45,7 @@ fn the_feed_reports_what_a_sidebar_shows() {
         assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));
     }
     let session =
-        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into())).unwrap();
+        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
     assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
 
     // One notice per change of status, not one per event.
@@ -73,7 +73,7 @@ fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let comment = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this").unwrap();
+    let comment = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", None).unwrap();
     client.comment_delete(&comment.id).unwrap();
     let mut notices = Vec::new();
     while !matches!(notices.last(), Some(HubNotice::Removed { .. })) {
@@ -329,11 +329,11 @@ fn a_kind_of_agent_or_side_of_a_diff_this_hub_doesnt_know_is_refused_and_not_sav
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
 
-    let refused = client.session_create(&workspace.id, AgentKind::Unknown, None, None).unwrap_err();
+    let refused = client.session_create(&workspace.id, AgentKind::Unknown, None, None, None).unwrap_err();
     assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
 
-    let refused = client.comment_add(&workspace.id, "a.txt", DiffSide::Unknown, 1, "Why?").unwrap_err();
+    let refused = client.comment_add(&workspace.id, "a.txt", DiffSide::Unknown, 1, "Why?", None).unwrap_err();
     assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
     assert!(client.comment_list(&workspace.id).unwrap().is_empty());
 }

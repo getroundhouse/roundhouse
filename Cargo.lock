@@ -1065,7 +1065,6 @@ dependencies = [
  "client-core",
  "protocol",
  "serde_json",
- "uuid",
 ]
 
 [[package]]
@@ -1081,6 +1080,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "uuid",
 ]
 
 [[package]]
@@ -7807,7 +7807,6 @@ dependencies = [
  "look",
  "protocol",
  "serde_json",
- "uuid",
 ]
 
 [[package]]

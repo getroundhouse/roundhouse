@@ -5,7 +5,8 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
-    GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    ClientRequestId, GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, Workspace,
+    WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -15,7 +16,7 @@ use tracing::{error, warn};
 use super::{Hub, close_worker, new_id, not_ready, unexpected};
 use crate::error::{internal, provider_failed};
 use crate::session::Command;
-use crate::store::{Store, now_ms};
+use crate::store::{Made, Store, now_ms};
 use crate::worker_link::WorkerLink;
 
 /// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
@@ -41,7 +42,11 @@ impl Hub {
         repo_id: RepoId,
         name: Option<String>,
         base_ref: Option<String>,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace, ApiError> {
+        if let Some(made) = self.made_earlier(client_request_id.as_ref()).await? {
+            return Ok(made);
+        }
         let repo = {
             let repo_id = repo_id.clone();
             self.blocking(move |store| store.get_repo(&repo_id)).await?
@@ -60,7 +65,7 @@ impl Hub {
                 Some(name) => name.clone(),
                 None => self.next_name(&repo.id).await?,
             };
-            match self.try_create(&repo, chosen, base_ref.clone()).await {
+            match self.try_create(&repo, chosen, base_ref.clone(), client_request_id.clone()).await {
                 Ok(workspace) => return Ok(workspace),
                 Err(e) if e.code == ErrorCode::NameTaken => last_error = Some(e),
                 Err(e) => return Err(e),
@@ -81,6 +86,7 @@ impl Hub {
         repo: &Repo,
         name: String,
         base_ref: Option<String>,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace, ApiError> {
         let id = WorkspaceId::from(new_id());
         let provider = self.provider(&self.default_provider)?;
@@ -101,8 +107,13 @@ impl Hub {
             rev: Rev::default(),
         };
         let record = workspace.clone();
-        if !self.blocking(move |store| store.insert_workspace(&record)).await? {
-            return Err(ApiError::new(ErrorCode::NameTaken, format!("{name} is already taken in {}", repo.name)));
+        match self.blocking(move |store| store.insert_workspace(&record, client_request_id.as_ref())).await? {
+            Some(Made::New(_)) => {}
+            // Sent again while the first was making it.
+            Some(Made::Earlier(made)) => return Ok(made),
+            None => {
+                return Err(ApiError::new(ErrorCode::NameTaken, format!("{name} is already taken in {}", repo.name)));
+            }
         }
         let result = self.prepare_new_workspace(repo, &workspace, base_ref, provider.as_ref()).await;
         match result {

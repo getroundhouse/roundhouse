@@ -5,14 +5,15 @@ use std::sync::Arc;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, Rev, Seq, Session, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId, SessionStatus, WorkspaceId,
+    WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
 use super::{Hub, new_id, not_ready};
 use crate::error::internal;
 use crate::session::Command;
-use crate::store::{StoredSession, now_ms};
+use crate::store::{Made, StoredSession, now_ms};
 
 impl Hub {
     pub(crate) async fn session_create(
@@ -21,7 +22,11 @@ impl Hub {
         agent: AgentKind,
         model: Option<String>,
         permission_mode: Option<String>,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<Session, ApiError> {
+        if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
+            return Ok(made.session);
+        }
         if agent == AgentKind::Unknown {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that kind of agent"));
         }
@@ -51,15 +56,13 @@ impl Hub {
             agent_session_id: id.into(),
             agent_opened: false,
         };
-        let session = self
-            .blocking(move |store| {
-                store.insert_session(&stored)?;
-                store.get_session(&stored.session.id)
-            })
-            .await?
-            .session;
-        self.notify(HubNotice::Session(session.clone()));
-        Ok(session)
+        match self.blocking(move |store| store.insert_session(&stored, client_request_id.as_ref())).await? {
+            Made::New(made) => {
+                self.notify(HubNotice::Session(made.session.clone()));
+                Ok(made.session)
+            }
+            Made::Earlier(made) => Ok(made.session),
+        }
     }
 
     pub(crate) async fn session_ensure(
@@ -71,7 +74,7 @@ impl Hub {
         let sessions = self.session_list(workspace_id.clone()).await?;
         match sessions.into_iter().rfind(|s| s.closed_at_ms.is_none()) {
             Some(open) => Ok(open),
-            None => self.session_create(workspace_id, agent, None, None).await,
+            None => self.session_create(workspace_id, agent, None, None, None).await,
         }
     }
 

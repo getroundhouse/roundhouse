@@ -1,9 +1,10 @@
 //! Workspaces.
 
-use protocol::model::{RepoId, Rev, WorkspaceId};
+use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
 use protocol::model::{SetupStatus, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
+use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
 
 const FIRST_PORT_BASE: u16 = 55_000;
@@ -32,11 +33,20 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
 }
 
 impl Store {
-    /// Returns false if the name is taken in this repository.
-    pub fn insert_workspace(&self, workspace: &Workspace) -> Result<bool, StoreError> {
-        let inserted = lock(&self.writer).execute(
+    /// Returns the workspace as stored, or `None` if its name is taken in its repository.
+    pub fn insert_workspace(
+        &self,
+        workspace: &Workspace,
+        client_request_id: Option<&ClientRequestId>,
+    ) -> Result<Option<Made<Workspace>>, StoreError> {
+        let conn = lock(&self.writer);
+        if let Some(made) = made_by(&conn, client_request_id)? {
+            return Ok(Some(Made::Earlier(made)));
+        }
+        let added = conn.execute(
             &format!(
-                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -53,9 +63,13 @@ impl Store {
                 workspace.archived_at_ms,
                 serde_json::to_string(&workspace.setup)?,
                 i64::from(workspace.port_base),
+                client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
-        Ok(inserted == 1)
+        if added == 0 {
+            return Ok(None);
+        }
+        Ok(Some(inserted(&conn, workspace.id.as_str())?))
     }
 
     /// Returns the revision of the removal, or `None` if there was nothing to remove.

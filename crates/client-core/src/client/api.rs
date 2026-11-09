@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Records,
-    Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus,
+    PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, unexpected};
@@ -54,13 +54,20 @@ impl Client {
         Ok(repos)
     }
 
+    /// Sending the same `client_request_id` again returns the workspace the first request made.
     pub fn workspace_create(
         &self,
         repo_id: &RepoId,
         name: Option<String>,
         base_ref: Option<String>,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceCreate { repo_id: repo_id.clone(), name, base_ref })
+        self.expect_workspace(ClientRequest::WorkspaceCreate {
+            repo_id: repo_id.clone(),
+            name,
+            base_ref,
+            client_request_id,
+        })
     }
 
     pub fn workspace_list(&self, include_archived: bool) -> Result<Vec<Workspace>> {
@@ -115,6 +122,7 @@ impl Client {
         Ok(pull_request)
     }
 
+    /// Sending the same `client_request_id` again returns the comment the first request made.
     pub fn comment_add(
         &self,
         workspace_id: &WorkspaceId,
@@ -122,6 +130,7 @@ impl Client {
         side: DiffSide,
         line: u32,
         text: &str,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<DiffComment> {
         let request = ClientRequest::CommentAdd {
             workspace_id: workspace_id.clone(),
@@ -129,6 +138,7 @@ impl Client {
             side,
             line,
             text: text.to_string(),
+            client_request_id,
         };
         let reply = self.call(request)?;
         let ClientResponse::Comment(comment) = reply else {
@@ -149,15 +159,22 @@ impl Client {
         self.expect_ok(ClientRequest::CommentDelete { id: id.clone() })
     }
 
+    /// Sending the same `client_request_id` again returns the session the first request made.
     pub fn session_create(
         &self,
         workspace_id: &WorkspaceId,
         agent: AgentKind,
         model: Option<String>,
         permission_mode: Option<String>,
+        client_request_id: Option<ClientRequestId>,
     ) -> Result<Session> {
-        let request =
-            ClientRequest::SessionCreate { workspace_id: workspace_id.clone(), agent, model, permission_mode };
+        let request = ClientRequest::SessionCreate {
+            workspace_id: workspace_id.clone(),
+            agent,
+            model,
+            permission_mode,
+            client_request_id,
+        };
         self.expect_session(request)
     }
 
@@ -281,4 +298,15 @@ impl Client {
         };
         Ok(session)
     }
+}
+
+/// A new ID for a request that creates something. A retry sends the same one, so the hub makes the
+/// record once.
+pub fn new_request_id() -> ClientRequestId {
+    ClientRequestId::from(uuid::Uuid::new_v4().to_string())
+}
+
+/// A new ID for a prompt. A retry sends the same one, so the hub records the prompt once.
+pub fn new_message_id() -> ClientMessageId {
+    ClientMessageId::from(uuid::Uuid::new_v4().to_string())
 }
