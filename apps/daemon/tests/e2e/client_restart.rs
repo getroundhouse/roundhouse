@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use client_core::session_log::{Row, SessionLog};
@@ -13,7 +13,8 @@ use protocol::model::SessionStatus;
 use protocol::tail::Tail;
 
 use crate::support::{
-    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, is_alive, wait_for_status, wait_for_turn_end, wait_until,
+    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, is_alive, wait_for_status, wait_for_turn_end,
+    wait_for_turn_end_while_progressing, wait_until,
 };
 
 #[test]
@@ -117,6 +118,9 @@ impl Drop for SetOnDrop<'_> {
 
 #[test]
 fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
+    // Each attach is one chance to catch a race, and the attaches go up with the chunks rather than
+    // with time, so fewer chunks would let a narrow race through more often. A busy machine can take
+    // longer than `TIMEOUT` over this many.
     const CHUNKS: u32 = 40_000;
     let stack = Stack::start();
     let client = stack.client();
@@ -128,6 +132,8 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
     // tail must be an exact prefix of the text being written: a lagging client can be short, but
     // nothing else can differ.
     let done = AtomicBool::new(false);
+    // The most text any attacher has held, so the wait for the turn goes on for as long as it grows.
+    let furthest = AtomicUsize::new(0);
     let (snapshots_mid_stream, attaches) = std::thread::scope(|scope| {
         let attachers: Vec<_> = (0..4)
             .map(|_| {
@@ -163,6 +169,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                             common_prefix(&expected, &held),
                             held.len()
                         );
+                        furthest.fetch_max(held.len(), Ordering::Relaxed);
                     }
                     (snapshots_mid_stream, attaches)
                 })
@@ -170,7 +177,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
             .collect();
         let finish = SetOnDrop(&done);
         client.session_prompt(&session.id, &format!("burst:{CHUNKS}"), None).unwrap();
-        let events = wait_for_turn_end(&client, &session.id, 1);
+        let events = wait_for_turn_end_while_progressing(&client, &session.id, 1, || furthest.load(Ordering::Relaxed));
         assert_eq!(assistant_text(&events), expected, "the durable message is the whole text");
         drop(finish);
         attachers

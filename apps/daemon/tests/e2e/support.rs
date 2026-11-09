@@ -189,9 +189,26 @@ pub(crate) fn git(cwd: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-pub(crate) fn wait_until(what: &str, mut condition: impl FnMut() -> bool) {
-    let deadline = Instant::now() + TIMEOUT;
+pub(crate) fn wait_until(what: &str, condition: impl FnMut() -> bool) {
+    wait_while_progressing(what, || (), condition);
+}
+
+/// Waits for `condition` for as long as `progress` keeps changing, and gives up once it has stayed the
+/// same for `TIMEOUT`. For work long enough that a busy machine can take more than `TIMEOUT` over it, so
+/// the wait fails when the work stops rather than when it's slow.
+pub(crate) fn wait_while_progressing<P: PartialEq>(
+    what: &str,
+    mut progress: impl FnMut() -> P,
+    mut condition: impl FnMut() -> bool,
+) {
+    let mut last = progress();
+    let mut deadline = Instant::now() + TIMEOUT;
     while !condition() {
+        let now = progress();
+        if now != last {
+            last = now;
+            deadline = Instant::now() + TIMEOUT;
+        }
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -217,8 +234,19 @@ pub(crate) fn wait_for_status(client: &Client, session_id: &SessionId, status: S
 
 /// Waits until the agent has finished the turn, and everything it said is in the log.
 pub(crate) fn wait_for_turn_end(client: &Client, session_id: &SessionId, count: usize) -> Vec<SessionEvent> {
+    wait_for_turn_end_while_progressing(client, session_id, count, || ())
+}
+
+/// Like `wait_for_turn_end`, but giving up only once `progress` stops changing, as `wait_while_progressing`
+/// does.
+pub(crate) fn wait_for_turn_end_while_progressing<P: PartialEq>(
+    client: &Client,
+    session_id: &SessionId,
+    count: usize,
+    progress: impl FnMut() -> P,
+) -> Vec<SessionEvent> {
     let mut events = Vec::new();
-    wait_until(&format!("{count} turn(s) to end"), || {
+    wait_while_progressing(&format!("{count} turn(s) to end"), progress, || {
         events = read_all(client, session_id);
         let ended = events.iter().filter(|e| matches!(e.body, EventBody::TurnEnded { .. })).count();
         ended >= count && client.session_get(session_id).unwrap().status == SessionStatus::Idle
