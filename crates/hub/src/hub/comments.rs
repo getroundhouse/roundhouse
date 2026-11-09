@@ -49,6 +49,15 @@ impl Hub {
         self.blocking(move |store| store.list_comments(&workspace_id)).await
     }
 
+    pub(crate) async fn comment_edit(&self, id: CommentId, text: String) -> Result<DiffComment, ApiError> {
+        if text.trim().is_empty() {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "a comment can't be empty"));
+        }
+        let edited = self.blocking(move |store| store.edit_comment(&id, &text)).await?;
+        self.notify(HubNotice::Comment(edited.clone()));
+        Ok(edited)
+    }
+
     pub(crate) async fn comment_delete(&self, id: CommentId) -> Result<(), ApiError> {
         let deleted = id.clone();
         if let Some(rev) = self.blocking(move |store| store.delete_comment(&deleted)).await? {

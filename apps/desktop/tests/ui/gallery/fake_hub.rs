@@ -110,6 +110,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::WorkspaceRename { .. }
         | R::WorkspaceRerunSetup { .. }
         | R::CommentAdd { .. }
+        | R::CommentEdit { .. }
         | R::CommentDelete { .. }
         | R::SessionCreate { .. }
         | R::SessionPrompt { .. }

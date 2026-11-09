@@ -160,6 +160,15 @@ impl Client {
         Ok(comments)
     }
 
+    /// Replaces a comment's text. Sending it again sets the same text.
+    pub fn comment_edit(&self, id: &CommentId, text: &str) -> Result<DiffComment> {
+        let reply = self.call(ClientRequest::CommentEdit { id: id.clone(), text: text.to_string() })?;
+        let ClientResponse::Comment(comment) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(comment)
+    }
+
     pub fn comment_delete(&self, id: &CommentId) -> Result<()> {
         self.expect_ok(ClientRequest::CommentDelete { id: id.clone() })
     }
