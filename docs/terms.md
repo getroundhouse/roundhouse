@@ -63,7 +63,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory | `Paths::hub_copy`, `Daemon` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
-| Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json` |
+| Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
 | Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `DiffComment` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
 

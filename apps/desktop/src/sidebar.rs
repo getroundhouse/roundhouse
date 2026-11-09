@@ -1,18 +1,20 @@
 //! Workspaces grouped by repository, each with its status.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, div, px,
+    AnyElement, Context, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
 };
 use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::{AppView, BuildLabel};
+use crate::updates::Problem;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 const WIDTH: f32 = 260.0;
@@ -135,10 +137,28 @@ fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button 
     Button::new(id).ghost().small().icon(icon).label(label)
 }
 
-fn footer(show_archived: bool, build: BuildLabel, cx: &mut Context<AppView>) -> impl IntoElement {
+/// What went wrong updating, under the build, with the detail in its own words on hover.
+fn update_problem(problem: &Problem, color: Hsla) -> impl IntoElement {
+    let detail = problem.detail.clone();
+    div()
+        .id("update-problem")
+        .px_2()
+        .text_xs()
+        .text_color(color)
+        .child(problem.summary())
+        .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
+        .test_support()
+}
+
+fn footer(
+    show_archived: bool,
+    build: BuildLabel,
+    update: Option<Problem>,
+    cx: &mut Context<AppView>,
+) -> impl IntoElement {
     let theme = cx.theme();
     let build_color = if build.differs { theme.warning } else { look::faint() };
-    let border = theme.sidebar_border;
+    let (border, warning) = (theme.sidebar_border, theme.warning);
     v_flex()
         .flex_none()
         .items_start()
@@ -158,6 +178,7 @@ fn footer(show_archived: bool, build: BuildLabel, cx: &mut Context<AppView>) -> 
                 })),
         )
         .child(div().px_2().pt_1().text_xs().text_color(build_color).child(build.text))
+        .when_some(update, |d, problem| d.child(update_problem(&problem, warning)))
 }
 
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -183,7 +204,7 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
                 .gap_4()
                 .children(groups),
         )
-        .child(footer(app.show_archived, app.build_label(), cx))
+        .child(footer(app.show_archived, app.build_label(), crate::updates::problem_shown(cx).cloned(), cx))
 }
 
 #[cfg(test)]

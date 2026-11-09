@@ -47,11 +47,14 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }
 look = { path = "crates/look" }
+desktop = { path = "apps/desktop" }
 
 anyhow = "1"
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 flume = "0.11"
+# Already under GPUI. Compresses what a test serves, as a web server would.
+flate2 = "1"
 # Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate.
 gpui-kit = { version = "=0.9.0", features = ["syntect"] }
 # Moves with gpui-kit: the version its GPUI uses. Only for drawing off the main thread, which tests run on.
@@ -61,6 +64,8 @@ image = { version = "0.25", default-features = false }
 libc = "0.2"
 parking_lot = "0.12"
 proptest = "1"
+# Already under rustls. Checks the update feed's signature.
+ring = "0.17"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -72,7 +77,13 @@ tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "proc
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 two-face = { version = "0.4", default-features = false }
+# The one Velopack uses, with its TLS, for fetching the update feed.
+ureq = "3"
 uuid = { version = "1", features = ["v4"] }
+# Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
+# `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
+# `file-logging` would add a log file and a panic hook, so it stays off.
+velopack = { version = "=1.2.161", features = ["public-utils"] }
 
 # docs/rust.md says what each of these is for.
 [workspace.lints.rust]

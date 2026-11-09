@@ -238,14 +238,14 @@ What someone using the app sees during an update is in `docs/spec/updates.md`. W
 
 ### Updating the app
 
-The app is signed and notarized, you download it, and it updates itself as changes land on `main`, so staying current needs no checkout or toolchain. *Not built:* `tools/install.sh` installs the app, as above.
+The app is signed and notarized, you download it, and it updates itself as changes land on `main`, so staying current needs no checkout or toolchain. `tools/install.sh` stays the way to install a build of a checkout, as above, for working on Roundhouse.
 
-- **Velopack packages, installs and updates the app.** One tool packages the app and makes its updates for macOS, Windows and Linux, and an update downloads only what changed. Sparkle signs its updates but covers only the Mac, and an updater of our own would have to redo what Velopack does on Windows. *Not built.*
+- **Velopack packages, installs and updates the app.** One tool packages the app and makes its updates for macOS, Windows and Linux, and an update downloads only what changed. Sparkle signs its updates but covers only the Mac, and an updater of our own would have to redo what Velopack does on Windows.
 - **CI builds, signs and publishes every merge to `main`.** The merge queue has already run the checks on Linux by then.
 - **A published build is versioned `0.1.<commits on main>`,** such as `0.1.50`, which is what Velopack orders updates by. It's short and readable, every merge adds one, it leaves 0.2 and 1.0 free to mean something later, and each part fits the 16 bits of a Windows version field. A count can't be the build number, because counts differ across branches, but only `main` publishes, and its history only grows.
-- **The update feed is signed, and the app checks the signature before trusting anything in it.** Velopack only checks each package against a checksum in the update feed, so without a signature, whoever controls the host controls the app. *Not built.*
+- **The update feed is signed, and the app checks the signature before trusting anything in it.** Velopack only checks each package against a checksum in the update feed, so without a signature, whoever controls the host controls the app.
 - **A hub a client starts runs from its own copy for each build, outside the app's install directory.** An update replaces that directory, so a hub running from it would start its next workers from different code, and on Windows Velopack first kills everything running from it, which would stop the hub and its agents. *Unconfirmed.*
-- **The app decides when an update installs,** so an update doesn't interrupt what someone is doing. *Not built.*
+- **The app decides when an update installs,** so an update doesn't interrupt what someone is doing.
 
 ## Providers
 

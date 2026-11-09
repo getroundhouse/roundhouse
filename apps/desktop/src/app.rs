@@ -62,6 +62,7 @@ impl AppView {
     pub fn new(hub: HubSource, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
+        crate::updates::observe(cx).detach();
         let mut this = Self {
             hub,
             connection: Connection::Connecting,

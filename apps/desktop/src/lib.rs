@@ -4,6 +4,7 @@ pub mod app;
 pub mod diff_panel;
 mod highlight;
 mod sidebar;
+pub mod updates;
 pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
@@ -66,9 +67,16 @@ pub fn run() {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
-        if let Err(e) = app::HubSource::default_local().and_then(|hub| open_main_window(hub, cx)) {
-            eprintln!("couldn't open a window: {e:#}");
-            cx.quit();
+        let opened = app::HubSource::default_local().and_then(|hub| {
+            let data_dir = hub.paths.data_dir.clone();
+            open_main_window(hub, cx).map(|_| data_dir)
+        });
+        match opened {
+            Ok(data_dir) => updates::start(&data_dir, cx),
+            Err(e) => {
+                eprintln!("couldn't open a window: {e:#}");
+                cx.quit();
+            }
         }
     });
 }

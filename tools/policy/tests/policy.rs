@@ -20,6 +20,9 @@ const ALLOWED: &[&str] = &[
     "BSD-3-Clause",
     "BSL-1.0",
     "CC0-1.0",
+    // A license for data, not code, which only `webpki-roots` uses here: Mozilla's root certificates, which the
+    // update feed's HTTPS client trusts. Its one condition is shipping the license's text with the data.
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "MIT-0",
@@ -240,6 +243,24 @@ fn the_hub_and_the_worker_stay_apart() {
     assert!(!runtime_closure(&metadata, "hub").contains("worker"));
     assert!(!runtime_closure(&metadata, "hub").contains("agents"));
     assert!(!runtime_closure(&metadata, "worker").contains("hub"));
+}
+
+/// `vpk` makes the packages and the feed that the app's `velopack` reads, and Velopack releases the two together,
+/// so they stay on one version. `tools/package/dotnet-tools.json` pins `vpk`.
+#[test]
+fn vpk_is_the_velopack_crate_s_version() {
+    let metadata = metadata();
+    let crates: Vec<&str> = metadata["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|package| package["name"] == "velopack")
+        .map(|package| package["version"].as_str().unwrap())
+        .collect();
+    let tools = Path::new(metadata["workspace_root"].as_str().unwrap()).join("tools/package/dotnet-tools.json");
+    let tools: Value = serde_json::from_str(&std::fs::read_to_string(tools).unwrap()).unwrap();
+
+    assert_eq!(crates, [tools["tools"]["vpk"]["version"].as_str().unwrap()]);
 }
 
 /// The directory of each crate the Rust standards cover, which is every workspace member.
