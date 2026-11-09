@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Daemon};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::checkout::Checkout;
-use desktop::workspace_pane::WorkspacePane;
+use desktop::workspace_pane::{Busy, WorkspacePane};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
@@ -353,7 +353,7 @@ impl<'a> Ui<'a> {
         let id = format!("new-in-{}", self.first_repo_id());
         self.click(SharedString::from(id));
         self.wait("the new workspace", |ui| {
-            ui.view().workspaces.len() > before && ui.transcript().is_some() && !ui.view().busy
+            ui.view().workspaces.len() > before && ui.transcript().is_some() && ui.view().busy == Busy::Free
         });
         self.view().selected.clone().unwrap()
     }

@@ -45,6 +45,8 @@ Use `Add repository` at the bottom left, then `New` beside the repository. The m
 | `Cmd-Shift-D` | Show or hide the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |
 | `Cmd-Enter` | Queue a prompt for when the agent finishes |
+| `Cmd-Shift-A` | Archive the workspace |
+| `Cmd-Shift-U` | Mark the workspace read, or unread again |
 | `Cmd-.` | Stop the agent's turn |
 | `Cmd-,` | Open Settings |
 

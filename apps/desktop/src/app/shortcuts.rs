@@ -9,8 +9,8 @@ use super::AppView;
 use crate::menus;
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
-    AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
-    PreviousWorkspace, StopAgent, ToggleDiff,
+    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, MarkWorkspace, NewChat, NewWorkspace, NextChat,
+    NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
 };
 
 impl AppView {
@@ -71,4 +71,15 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
             cx.listener(|t, _: &PreviousChat, _, cx| t.update_selected_pane(cx, |pane, cx| pane.step_chat(-1, cx))),
         )
         .on_action(cx.listener(|t, _: &StopAgent, _, cx| t.update_selected_pane(cx, WorkspacePane::stop_agent)))
+        // As the selected workspace's row offers them, for the row of the workspace showing.
+        .on_action(cx.listener(|t, _: &ArchiveWorkspace, _, cx| {
+            if let Some(id) = t.selected.clone() {
+                t.archive(id, false, cx);
+            }
+        }))
+        .on_action(cx.listener(|t, _: &MarkWorkspace, _, cx| {
+            if let Some((mark, chats)) = t.selected.as_ref().and_then(|id| t.workspace_marking(id, cx)) {
+                t.mark_chats(mark, chats, cx);
+            }
+        }))
 }

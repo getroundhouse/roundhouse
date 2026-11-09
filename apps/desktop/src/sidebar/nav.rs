@@ -7,6 +7,7 @@ use gpui_kit::{Context, IntoElement, ParentElement, Pixels, Styled, px};
 
 use super::icon_box;
 use crate::app::AppView;
+use crate::workspace_pane::Busy;
 
 /// Each item's height, as a row of body text with 6px above and below.
 const ITEM_HEIGHT: Pixels = px(32.);
@@ -14,7 +15,7 @@ const ITEM_HEIGHT: Pixels = px(32.);
 /// The block of items, with a line under it before the workspaces.
 pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let border = cx.theme().sidebar_border;
-    let can_create = app.current_repo().is_some() && !app.busy;
+    let can_create = app.current_repo().is_some() && app.busy == Busy::Free;
     v_flex()
         .flex_none()
         .w_full()

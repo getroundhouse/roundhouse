@@ -20,6 +20,7 @@ use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
 use crate::sidebar::{Standing, standing};
+use crate::workspace_pane::Busy;
 
 const ROW_HEIGHT: Pixels = px(44.);
 /// The repository's column, wide enough for most names.
@@ -203,7 +204,7 @@ fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyEl
                 .icon(icon)
                 .text_color(muted)
                 .tooltip(what)
-                .disabled(app.busy)
+                .disabled(app.busy == Busy::Changing)
                 .on_click(cx.listener(move |t, _, _, cx| {
                     // The row under it would take the click too, and show the workspace.
                     cx.stop_propagation();

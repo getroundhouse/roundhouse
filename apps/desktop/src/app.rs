@@ -11,7 +11,7 @@ use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::checkout::Checkout;
-use crate::workspace_pane::{PaneEvent, WorkspacePane};
+use crate::workspace_pane::{Busy, PaneEvent, WorkspacePane};
 
 mod build_line;
 mod home;
@@ -71,8 +71,9 @@ pub struct AppView {
     pub show_archived: bool,
     /// Where the sidebar's list is scrolled to. The list is made again each frame, so it can't keep that itself.
     pub(crate) sidebar_scroll: VirtualListScrollHandle,
-    /// Workspaces being created or archived, so their buttons can't be pressed twice.
-    pub busy: bool,
+    /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
+    pub(crate) pointing_at: Option<WorkspaceId>,
+    pub busy: Busy,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
     pub creating_in: Option<RepoId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
@@ -129,7 +130,8 @@ impl AppView {
             error: None,
             show_archived: false,
             sidebar_scroll: VirtualListScrollHandle::new(),
-            busy: false,
+            pointing_at: None,
+            busy: Busy::Free,
             creating_in: None,
             moving_window: false,
             focus,
@@ -351,6 +353,8 @@ impl AppView {
             let Some(records) = self.feed.clone() else { return };
             let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
             let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
+            let busy = self.busy;
+            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),

@@ -63,6 +63,15 @@ struct DiffTab {
     in_front: bool,
 }
 
+/// Whether the app is waiting on the hub to make, archive or restore a workspace. None of those can start while
+/// another is under way, so a button or key pressed twice does it once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Busy {
+    Free,
+    /// Making, archiving or restoring a workspace.
+    Changing,
+}
+
 #[derive(Clone, Debug)]
 pub enum PaneEvent {
     Error(String),
@@ -103,6 +112,7 @@ pub struct WorkspacePane {
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
     closed_menu: closed::Menu,
+    busy: Busy,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -134,6 +144,12 @@ impl WorkspacePane {
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others, usize::from(comment))
+    }
+
+    /// Whether the app is making, archiving or restoring a workspace, which the header's Archive waits for.
+    pub(crate) fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
+        self.busy = busy;
+        cx.notify();
     }
 
     /// Where the workspace's work stands, as its mark and header show it.
@@ -185,6 +201,7 @@ impl WorkspacePane {
             creating_chat: false,
             queue_edit: None,
             closed_menu: closed::Menu::Shut,
+            busy: Busy::Free,
             reading: Reading::default(),
             composer,
             diff: None,

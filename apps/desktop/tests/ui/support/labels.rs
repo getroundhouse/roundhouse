@@ -19,6 +19,15 @@ impl Ui<'_> {
         self.click(id);
     }
 
+    /// Clicks the item labelled `label` in the menu that's open, rather than anything else with that label, such as
+    /// the header's button of the same name.
+    pub(crate) fn click_menu_item(&mut self, label: &str) {
+        let menu = ElementId::Name("popup-menu".into());
+        let found = self.labelled(label);
+        let item = found.iter().find(|e| e.path().contains(&menu)).unwrap_or_else(|| panic!("no {label} in a menu"));
+        self.click(item.path().last().unwrap().clone());
+    }
+
     /// Whether the last frame labelled the element with ID `id`, or something inside it, `label`.
     pub(crate) fn shows_label(&mut self, id: &str, label: &str) -> bool {
         let element = ElementId::Name(id.to_string().into());

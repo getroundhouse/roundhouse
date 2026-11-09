@@ -224,3 +224,23 @@ fn mark_as_read_leaves_a_reply_that_came_while_the_menu_was_open(cx: &mut TestAp
     let session = stack.client().session_get(&chat).unwrap();
     assert!(session.unread() && session.reply_seq == second, "the second reply was read unseen");
 }
+
+#[gpui_kit::test]
+fn the_key_marks_the_workspace_showing_unread_and_read_again(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.input("say:already read");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("already read"));
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+
+    ui.press("cmd-shift-u");
+
+    ui.wait("it to be unread", |ui| row_unread(ui, &workspace));
+    assert!(stack.client().session_get(&chat).unwrap().unread(), "the hub has it unread too");
+
+    ui.press("cmd-shift-u");
+
+    ui.wait("it to be read again", |ui| !row_unread(ui, &workspace));
+    ui.wait("the hub to have it read again", |_| read_at_the_hub(&stack, &chat));
+}

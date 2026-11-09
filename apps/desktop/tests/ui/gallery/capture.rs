@@ -122,6 +122,7 @@ impl Driver {
             Step::Click(id) => self.click(*id),
             Step::MoveAway => self.move_away(),
             Step::HoverTab(position) => self.hover_tab(*position),
+            Step::Point(id) => self.point(*id),
             Step::Type(text) => {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
@@ -163,7 +164,12 @@ impl Driver {
             let open: Vec<_> = pane.read(cx).sessions.iter().filter(|s| s.closed_at_ms.is_none()).collect();
             open[position].id.clone()
         });
-        let id = gpui_kit::SharedString::from(format!("chat-{chat}"));
+        self.point(format!("chat-{chat}"));
+    }
+
+    fn point(&mut self, id: impl Into<gpui_kit::SharedString>) {
+        self.frame();
+        let id = id.into();
         self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
     }
 
