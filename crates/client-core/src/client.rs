@@ -2,6 +2,7 @@
 
 mod admin;
 mod api;
+mod feed;
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -24,6 +25,7 @@ use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub};
 pub use api::{new_message_id, new_request_id};
+pub use feed::RecordsFeed;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {

@@ -152,7 +152,7 @@ impl Hub {
         let id = workspace.id.clone();
         let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
         self.notify(HubNotice::Workspace(ready.clone()));
-        Ok(self.start_setup(repo.clone(), ready))
+        self.start_setup(repo.clone(), ready).await
     }
 
     async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
@@ -275,7 +275,7 @@ impl Hub {
         let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
         self.notify(HubNotice::Workspace(restored.clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
-        Ok(self.start_setup(setup_repo, restored))
+        self.start_setup(setup_repo, restored).await
     }
 
     pub(super) async fn ready_worktree(

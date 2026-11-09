@@ -12,20 +12,25 @@ use super::workspaces::workspace_env;
 use super::{Hub, unexpected};
 
 impl Hub {
-    /// Starts setup in the background, and returns the workspace as it now stands. Prompts wait for it.
-    pub(super) fn start_setup(self: &Arc<Self>, repo: Repo, workspace: Workspace) -> Workspace {
+    /// Records that setup is running, starts it in the background, and returns the workspace as stored,
+    /// so a reply says only what the hub has recorded. Prompts wait for setup.
+    pub(super) async fn start_setup(self: &Arc<Self>, repo: Repo, workspace: Workspace) -> Result<Workspace, ApiError> {
         let (gate_tx, _) = watch::channel(false);
         self.setup_gates.lock().insert(workspace.id.clone(), gate_tx.clone());
-        let mut running = workspace.clone();
-        running.setup = SetupStatus::Running;
+        let marked = workspace.id.clone();
+        let running = self.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await;
+        let running = match running {
+            Ok(running) => running,
+            Err(e) => {
+                self.setup_gates.lock().remove(&workspace.id);
+                gate_tx.send_replace(true);
+                return Err(e);
+            }
+        };
+        self.notify(HubNotice::Workspace(running.clone()));
         let hub = self.clone();
         let id = workspace.id.clone();
         tokio::spawn(async move {
-            let marked = id.clone();
-            match hub.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await {
-                Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
-                Err(e) => warn!(workspace = %id, "recording setup: {e}"),
-            }
             let outcome = hub.run_setup(&repo, &workspace).await;
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
@@ -35,7 +40,7 @@ impl Hub {
             hub.setup_gates.lock().remove(&id);
             gate_tx.send_replace(true);
         });
-        running
+        Ok(running)
     }
 
     async fn run_setup(self: &Arc<Self>, repo: &Repo, workspace: &Workspace) -> SetupStatus {
@@ -87,7 +92,7 @@ impl Hub {
         }
         let repo_id = workspace.repo_id.clone();
         let repo = self.blocking(move |store| store.get_repo(&repo_id)).await?;
-        Ok(self.start_setup(repo, workspace))
+        self.start_setup(repo, workspace).await
     }
 
     /// Stops the setup script, if one is running. The workspace stays usable.
