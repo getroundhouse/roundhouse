@@ -1,6 +1,7 @@
 //! One turn: running a prompt's script, one command at a time.
 
 use std::collections::VecDeque;
+use std::os::unix::process::CommandExt as _;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
@@ -274,7 +275,9 @@ pub(crate) fn run_command(
     false
 }
 
-/// Leaves a process holding stdout open until `file` exists, and then writing `lines` to it.
+/// Leaves a process holding stdout open until `file` exists, and then writing `lines` to it. It's in its
+/// own process group, as the real CLI's tools are, so a signal to this one's group can't stop it. The
+/// worker signals the group when a prompt reaches an agent that has died but isn't reaped yet.
 fn outlive_until(file: &str, lines: &[Value]) {
     let lines: Vec<String> = lines.iter().map(Value::to_string).collect();
     let script = r#"while [ ! -e "$1" ]; do sleep 0.05; done; shift; for line in "$@"; do printf '%s\n' "$line"; done"#;
@@ -282,6 +285,7 @@ fn outlive_until(file: &str, lines: &[Value]) {
     std::process::Command::new("sh")
         .args(["-c", script, "sh", file])
         .args(lines)
+        .process_group(0)
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
