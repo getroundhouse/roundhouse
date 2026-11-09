@@ -102,7 +102,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
     ui.press("cmd-shift-d");
-    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.changes_open));
+    assert!(ui.changes_open());
     let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     client.workspace_archive(&archived, false).unwrap();
     for id in [&hidden, &shown] {

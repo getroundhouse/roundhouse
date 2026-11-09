@@ -18,6 +18,7 @@ mod marks;
 mod menus;
 mod other_hubs;
 mod pickers;
+mod pull_requests;
 mod questions;
 mod queue;
 mod quitting;

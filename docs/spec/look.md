@@ -27,6 +27,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 - **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add repository or Send to agent. With one obvious next step per area, nothing competes with it.
 - **Every other button is borderless until hovered.** A button with an outline opens something, like the pull request.
+- **The pull request's bar fills its main action with the pull request's colour,** still with dark text, so the action reads as part of the bar it's on. One with no colour of its own, such as Create PR, is the light main button. *Unconfirmed.*
 
 ## Colour
 
@@ -37,6 +38,7 @@ Each colour means one thing.
 - **Amber means it's your turn, and red means the agent stopped short,** wherever the app shows where things stand. A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
+- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan, which is too small for words, stays green for every open pull request, so amber on it only ever means you. `look::Work` holds these colours, so the fan and the bar can't disagree. *Unconfirmed.*
 
 ## The status mark
 

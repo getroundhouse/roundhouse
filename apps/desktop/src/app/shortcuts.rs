@@ -35,7 +35,7 @@ impl AppView {
     pub(super) fn keep_menus_current(&mut self, cx: &mut Context<Self>) {
         let pane = self.selected_pane().map(|pane| pane.read(cx));
         let says = menus::Says {
-            diff_open: pane.is_some_and(|pane| pane.changes_open),
+            diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
             diff_tab_showing: pane.is_some_and(|pane| pane.showing() == Showing::Diff),
         };
         if says != self.menus_say {

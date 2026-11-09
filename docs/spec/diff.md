@@ -4,7 +4,8 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
 ## The sidebar of changes
 
-- **The diff opens as a sidebar on the right, listing every file the workspace changes,** with how many lines each adds and removes, and an icon for how it changed: added, modified, removed or renamed. `Diff` in the header and `Cmd-Shift-D` show and hide it.
+- **The sidebar on the right lists every file the workspace changes,** with how many lines each adds and removes, and an icon for how it changed: added, modified, removed or renamed. It sits below the pull request's bar, which `workspaces.md` describes.
+- **It's open from the start, so a workspace's changes and its pull request are always in view.** The button at the right end of the header and `Cmd-Shift-D` hide and show it, in every workspace at once, and the choice holds until the app quits, as the choice of list or folders does. *Unconfirmed.*
 - **The files show as a list of paths, or in folders.** The button at the sidebar's top right switches between them. A folder that holds only another folder shares its row, as `apps / desktop`, so a deep tree stays short, and a folder closes to hide what's in it. The choice holds in every workspace until the app quits. *Unconfirmed:* where the button is, and the choice holding.
 - **A modified file's icon is yellow, and the other icons are muted,** with lines added and removed in green and red, as `look.md` says the diff's colours are.
 - **Comments waiting to be sent are counted at the top of the sidebar, beside Send to agent,** so they can be sent whichever file is showing, or none. Sending them shows the chat they went to, so you see the agent take them up. *Unconfirmed.*
@@ -12,6 +13,10 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 **The sidebar of changes, as a list, with a comment waiting.** *Unconfirmed.*
 
 ![The sidebar of changes as a list](screens/changes.png)
+
+**The sidebar hidden, with the pull request's number and its action in the header.** *Unconfirmed.*
+
+![The sidebar of changes hidden](screens/changes-hidden.png)
 
 **The same changes in folders.** *Unconfirmed.*
 

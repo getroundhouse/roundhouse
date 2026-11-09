@@ -1,6 +1,6 @@
 use super::*;
 
-fn run(cwd: &Path, args: &[&str]) -> String {
+pub(super) fn run(cwd: &Path, args: &[&str]) -> String {
     let output = std::process::Command::new("git")
         .args(args)
         .current_dir(cwd)
@@ -14,7 +14,7 @@ fn run(cwd: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-fn new_repo(dir: &Path) -> PathBuf {
+pub(super) fn new_repo(dir: &Path) -> PathBuf {
     let repo = dir.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     run(&repo, &["init", "-q", "-b", "main"]);
@@ -113,15 +113,6 @@ async fn archiving_refuses_uncommitted_work_unless_forced_and_keeps_the_branch()
     remove_workspace(repo_str, &prepared.path, true).await.unwrap();
     assert!(!path.exists());
     assert!(!run(&repo, &["rev-parse", "--verify", "--quiet", "refs/heads/alder"]).is_empty());
-}
-
-#[test]
-fn pull_requests_parse_from_what_gh_prints() {
-    let json = br#"{"isDraft":true,"number":12,"state":"OPEN","title":"Fix login","url":"https://example.com/12"}"#;
-    let pr = parse_pull_request(json).unwrap();
-    assert_eq!((pr.number, pr.state.as_str(), pr.is_draft), (12, "OPEN", true));
-    assert_eq!(parse_pull_request(b"not json"), None);
-    assert_eq!(parse_pull_request(br#"{"state":"OPEN"}"#), None);
 }
 
 #[tokio::test]

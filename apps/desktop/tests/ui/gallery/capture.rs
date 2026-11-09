@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::pull_request::Lookup;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
@@ -108,15 +109,16 @@ impl Driver {
                         v.select(id, cx);
                     });
                 });
-                self.wait("the chat to load", |view, cx| {
+                self.wait("the chat, the diff and the pull request to load", |view, cx| {
                     selected_pane(view).is_some_and(|pane| {
                         let pane = pane.read(cx);
                         let wanted = pane.session().map_or(0, |s| s.last_seq);
-                        pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted)
+                        let chat = pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted);
+                        let diff = pane.diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some());
+                        chat && diff && pane.pull_request != Lookup::Looking
                     })
                 });
             }
-            Step::OpenDiff => self.open_diff(),
             Step::OpenFile(path) => self.open_file(path),
             Step::StartComment(line) => self.start_comment(*line),
             Step::Click(id) => self.click(*id),
@@ -201,14 +203,6 @@ impl Driver {
             std::thread::sleep(Duration::from_millis(10));
         }
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
-    }
-
-    fn open_diff(&mut self) {
-        self.update_pane(WorkspacePane::toggle_changes);
-        self.wait("the diff to load", |view, cx| {
-            let pane = selected_pane(view);
-            pane.is_some_and(|pane| pane.read(cx).diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some()))
-        });
     }
 
     fn open_file(&mut self, path: &str) {

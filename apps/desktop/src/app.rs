@@ -16,6 +16,7 @@ use crate::workspace_pane::{Busy, PaneEvent, WorkspacePane};
 mod build_line;
 mod home;
 mod hub_source;
+mod pull_requests;
 mod quitting;
 mod reading;
 mod restarts;
@@ -96,6 +97,7 @@ pub struct AppView {
     finishing: Option<Task<()>>,
     /// Asking the older hub whether it's idle.
     looking: Option<Task<()>>,
+    _watching_pull_requests: Task<()>,
     /// What the menu bar was last given to say.
     menus_say: crate::menus::Says,
 }
@@ -144,6 +146,7 @@ impl AppView {
             asking: None,
             finishing: None,
             looking: None,
+            _watching_pull_requests: Self::watch_pull_requests(cx),
             menus_say: crate::menus::Says::default(),
         };
         this.connect(cx);
@@ -364,7 +367,7 @@ impl AppView {
         }
         // Only with a connection. Without one, `refresh` catches it up once there is one.
         if let Some(pane) = self.selected_pane() {
-            pane.update(cx, WorkspacePane::catch_up);
+            pane.update(cx, WorkspacePane::shown);
         }
         // While Home shows, as when the selection goes away under it, its search keeps the keys.
         if let Some(pane) = self.panes.get(&id).filter(|_| !self.home_showing()) {

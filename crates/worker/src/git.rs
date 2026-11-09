@@ -6,11 +6,14 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GitDiff, GitFile, GitStatus, PullRequest};
+use protocol::model::{GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
+mod pull_request;
 #[cfg(test)]
 mod tests;
+
+pub use pull_request::pull_request;
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 const GH_TIMEOUT: Duration = Duration::from_secs(15);
@@ -280,32 +283,4 @@ pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff
         }
     }
     Ok(GitDiff { base_commit: base, patch, truncated })
-}
-
-/// The pull request for the current branch. `None` covers both "there isn't one" and "`gh` isn't
-/// installed or isn't logged in", because neither should stop anyone working.
-pub async fn pull_request(path: &str) -> Option<PullRequest> {
-    let output = Command::new("gh")
-        .args(["pr", "view", "--json", "number,url,title,state,isDraft"])
-        .current_dir(path)
-        .env("GH_PROMPT_DISABLED", "1")
-        .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output();
-    let output = tokio::time::timeout(GH_TIMEOUT, output).await.ok()?.ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_pull_request(&output.stdout)
-}
-
-fn parse_pull_request(json: &[u8]) -> Option<PullRequest> {
-    let value: serde_json::Value = serde_json::from_slice(json).ok()?;
-    Some(PullRequest {
-        number: value["number"].as_u64()?,
-        url: value["url"].as_str()?.to_string(),
-        title: value["title"].as_str().unwrap_or_default().to_string(),
-        state: value["state"].as_str().unwrap_or_default().to_string(),
-        is_draft: value["isDraft"].as_bool().unwrap_or(false),
-    })
 }

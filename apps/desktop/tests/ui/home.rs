@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use gpui_kit::{ElementId, SharedString, TestAppContext};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{Stack, Ui};
@@ -53,12 +53,11 @@ fn the_list_narrows_to_what_the_search_matches_as_its_typed(cx: &mut TestAppCont
 fn the_workspaces_keys_do_nothing_while_home_hides_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, _, _) = open_home(cx, &stack);
-    let pane = ui.pane().unwrap();
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open), "it starts shut");
+    assert!(ui.changes_open(), "it starts open");
 
     ui.press("cmd-shift-d");
 
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open), "the diff of the workspace nobody can see stays shut");
+    assert!(ui.changes_open(), "the sidebar of the workspace nobody can see stays as it was");
 }
 
 #[gpui_kit::test]

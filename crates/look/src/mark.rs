@@ -27,51 +27,7 @@ impl Size {
 
 use crate::clock;
 use crate::fan::{self, ASPECT, Dot, Fan, as_f32};
-use crate::palette::{faint, hex};
-
-/// The work: where its pull request stands, in GitHub's colours. The fan's colour while nobody needs you.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Work {
-    NoPr,
-    Draft,
-    Open,
-    Merged,
-    Closed,
-}
-
-impl Work {
-    /// From GitHub's own words for a pull request's state. Anything else is taken as no pull request.
-    pub fn from_github(state: &str, is_draft: bool) -> Self {
-        match state {
-            "OPEN" if is_draft => Work::Draft,
-            "OPEN" => Work::Open,
-            "MERGED" => Work::Merged,
-            "CLOSED" => Work::Closed,
-            _ => Work::NoPr,
-        }
-    }
-
-    /// What to call it beside a pull request's number.
-    pub fn name(self) -> &'static str {
-        match self {
-            Work::NoPr => "No pull request",
-            Work::Draft => "Draft",
-            Work::Open => "Open",
-            Work::Merged => "Merged",
-            Work::Closed => "Closed",
-        }
-    }
-
-    fn color(self) -> Hsla {
-        match self {
-            Work::NoPr => faint(),
-            Work::Draft => hex(0x008b_949e),
-            Work::Open => hex(0x003f_b950),
-            Work::Merged => hex(0x00a3_71f7),
-            Work::Closed => hex(0x00b9_605a),
-        }
-    }
-}
+use crate::work::Work;
 
 /// What the agent is doing, and whether it needs you.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -108,7 +64,7 @@ pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElemen
         Signal::NeedsYou => theme.warning,
         Signal::Failed => theme.danger,
         Signal::Unread => theme.foreground,
-        Signal::Idle | Signal::SettingUp | Signal::Working => work.color(),
+        Signal::Idle | Signal::SettingUp | Signal::Working => work.fan(),
     };
     let moves = matches!(signal, Signal::Working | Signal::SettingUp) && clock::moving(cx);
     let t = if moves { clock::elapsed() } else { STILL_S };
@@ -180,16 +136,7 @@ fn phase(t: f64, period_s: f64) -> f32 {
 mod tests {
     use gpui_kit::{Bounds, point, px, size};
 
-    use super::{Fan, Signal, Work, brightness};
-
-    #[test]
-    fn a_pull_request_is_read_from_githubs_words() {
-        assert_eq!(Work::from_github("OPEN", false), Work::Open);
-        assert_eq!(Work::from_github("OPEN", true), Work::Draft);
-        assert_eq!(Work::from_github("MERGED", false), Work::Merged);
-        assert_eq!(Work::from_github("CLOSED", false), Work::Closed);
-        assert_eq!(Work::from_github("SOMETHING_NEW", false), Work::NoPr);
-    }
+    use super::{Fan, Signal, brightness};
 
     #[test]
     fn only_a_running_agent_moves_the_mark() {
