@@ -46,27 +46,28 @@ impl IconSize {
         }
     }
 
-    /// Each is tuned by eye at its size. From 64 to 256 it's the sidebar's four rows, with dots big enough to see: the
-    /// Dock shrinks the 256 to under half, where finer dots read as a smudge. Only the biggest have the pixels for
-    /// nine rows of fine dots. Below 128 the fan's own shape would blur, so it's drawn on whole pixels instead.
+    /// Each is tuned by eye at its size, with fewer rows as it shrinks so the dots stay big enough to see: the Dock
+    /// shrinks the 256 to under half. Only the biggest have the pixels for nine rows of fine dots. Below 128 the fan's
+    /// own shape would blur, so it's drawn on whole pixels instead.
     fn drawing(self) -> Drawing {
         match self {
             IconSize::Px16 => {
                 Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., pitch: 2.5, inner: 3., hub: 2., ring: None })
             }
             IconSize::Px32 => {
-                Drawing::OnPixels(OnPixels { inset: 3., rows: 3, dot: 2., pitch: 3.5, inner: 3.5, hub: 2., ring: None })
+                Drawing::OnPixels(OnPixels { inset: 3., rows: 2, dot: 2., pitch: 4., inner: 5.5, hub: 2., ring: None })
             }
             IconSize::Px64 => Drawing::OnPixels(OnPixels {
                 inset: 6.,
-                rows: 4,
+                rows: 3,
                 dot: 2.,
-                pitch: 3.5,
-                inner: 9.,
+                pitch: 4.5,
+                inner: 8.,
                 hub: 2.,
                 ring: Some(4.),
             }),
-            IconSize::Px128 | IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
+            IconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
+            IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
             IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
         }
     }
@@ -143,14 +144,15 @@ fn paint(bounds: Bounds<Pixels>, drawing: &Drawing, colors: &Colors, window: &mu
     }
 }
 
-/// Centred on what it reaches rather than on its box, which leaves room under the turntable.
+/// Centred on what it reaches rather than on its box, which leaves room under the turntable. Every row has a dot on
+/// the middle line, so the rows line up down it rather than staggering.
 fn scaled(bounds: Bounds<Pixels>, rows: usize, width: Pixels, copper: Hsla, window: &mut Window) {
     let placed = Fan::with_rows(Bounds::new(point(px(0.), px(0.)), size(width, width * ASPECT)), rows);
     let (up, down) = placed.reach();
     let middle = bounds.center();
     let center = point(middle.x, middle.y + (up - down) * 0.5);
     let fan = Fan::with_rows(Bounds::new(center - placed.center, size(width, width * ASPECT)), rows);
-    for dot in fan.dots() {
+    for dot in fan.dots_counted(Count::Odd) {
         fan::disc(window, dot.at, fan.dot, copper);
     }
     let turntable = fan.turntable();
@@ -188,10 +190,11 @@ impl Layout {
     fn of(fan: &OnPixels, canvas: f32) -> Self {
         let outer = fan.inner + fan.pitch * fan::as_f32(fan.rows - 1);
         let (up, down) = (outer + fan.dot / 2.0, (fan.hub / 2.0).max(fan.ring.unwrap_or(0.)));
-        // On the line between the tile's two middle pixels, and centred up and down on what it reaches. Dots an odd
-        // number of pixels across sit on pixels' middles, so to mirror across that line, none can sit on it.
+        // On the line between the tile's two middle pixels, and centred up and down on what it reaches. Every row has
+        // a dot on that line, as in `scaled`, except where dots are an odd number of pixels across: they sit on
+        // pixels' middles, so to mirror across the line, none can sit on it, and every row has a gap there instead.
         let center = (canvas / 2.0, ((canvas + up - down) / 2.0).round());
-        let count = if odd(fan.dot) { Count::Even } else { Count::Fitting };
+        let count = if odd(fan.dot) { Count::Even } else { Count::Odd };
         let touch = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0).abs().max((a.1 - b.1).abs()) < fan.dot + 1.;
         let mut dots: Vec<(f32, f32)> = Vec::new();
         let middle = point(px(center.0), px(center.1));
@@ -282,6 +285,17 @@ mod tests {
             let (space_left, space_right) = (left - fan.inset, canvas - fan.inset - right);
             assert!((space_left - space_right).abs() < 0.01, "{pixels}: {space_left} on the left, {space_right} right");
             assert!((layout.center.0 - canvas / 2.0).abs() < 0.01, "{pixels}: the turntable");
+        }
+    }
+
+    #[test]
+    fn every_row_of_a_fan_on_whole_pixels_has_the_same_middle() {
+        for (pixels, fan) in on_pixels() {
+            let layout = Layout::of(&fan, f32::from(pixels));
+            let on_the_line = layout.dots.iter().filter(|d| (d.0 - layout.center.0).abs() < 0.01).count();
+
+            let expected = if odd(fan.dot) { 0 } else { fan.rows };
+            assert_eq!(on_the_line, expected, "{pixels}: dots on the middle line");
         }
     }
 

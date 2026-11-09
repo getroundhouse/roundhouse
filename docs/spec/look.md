@@ -60,7 +60,8 @@ The brand on a tile: the fan in copper, on a warm dark tile that fades from `#21
 ![The app icon, at 1024 pixels](../../apps/desktop/AppIcon.iconset/icon_512x512@2x.png)
 
 - **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge.
-- **From 64 to 256 pixels it's the sidebar's four rows,** with dots big enough to see. The Dock shrinks the 256-pixel drawing to under half its size, where finer dots read as a smudge. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
+- **Smaller drawings have fewer rows,** so the dots stay big enough to see: four at 256 pixels, which the Dock shrinks to under half its size, three at 128 and 64, and two below that. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
+- **Every row has a dot on the middle line,** so the rows line up down it rather than staggering, which shows when a fan has few dots. The 16-pixel drawing has a gap there in every row instead, since its one-pixel dots can't sit on the line between two pixels. *Unconfirmed.*
 - **Below 128 pixels it's drawn on whole pixels,** where the fan's own shape would blur: square dots with a pixel clear around each, mirrored across the line between the tile's two middle pixels so the fan sits in the middle, and a turntable that's only its hub where a ring would be too small to see. *Unconfirmed.*
 - **macOS mostly uses the smallest drawing with at least the pixels it needs,** and shrinks it to fit, so on a Retina display each drawing covers the sizes up to half its pixels in points. The Dock is the exception: at about 55 points it uses the 256-pixel drawing.
 
@@ -68,9 +69,9 @@ The brand on a tile: the fan in copper, on a warm dark tile that fades from `#21
 |---|---|---|---|
 | 1024 and 512 | 129 to 512 points, such as Finder's largest icons | 9 | The fan's shape, 62% of the canvas wide |
 | 256 | 65 to 128 points, and the Dock | 4 | The fan's shape, 66% wide |
-| 128 | 33 to 64 points | 4 | The fan's shape, 66% wide |
-| 64 | 17 to 32 points | 4 | On whole pixels, with dots two pixels square and a ring |
-| 32 | 16 points and under, such as a list | 3 | On whole pixels, with dots two pixels square |
+| 128 | 33 to 64 points | 3 | The fan's shape, 66% wide |
+| 64 | 17 to 32 points | 3 | On whole pixels, with dots two pixels square and a ring |
+| 32 | 16 points and under, such as a list | 2 | On whole pixels, with dots two pixels square |
 | 16 | Only on a display that isn't Retina, at 16 points | 2 | On whole pixels, with dots one pixel square. *Unconfirmed* |
 
 - **It's an `.icns`,** because it keeps a drawing for each size. `look::icon` draws every size, and the gallery checks each against its file in `apps/desktop/AppIcon.iconset/`, which `iconutil` packs into the `.icns`. *Not built:* the app isn't packaged yet, so nothing shows the icon.

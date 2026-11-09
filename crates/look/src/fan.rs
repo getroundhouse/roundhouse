@@ -75,7 +75,11 @@ impl Fan {
     }
 
     pub(crate) fn dots(&self) -> impl Iterator<Item = Dot> + use<> {
-        rows_of_dots(self.center, self.inner, self.pitch, self.rows, Count::Fitting)
+        self.dots_counted(Count::Fitting)
+    }
+
+    pub(crate) fn dots_counted(&self, count: Count) -> impl Iterator<Item = Dot> + use<> {
+        rows_of_dots(self.center, self.inner, self.pitch, self.rows, count)
     }
 
     /// Its line and hub keep a share of its size, so they don't thin out as the dots get finer.
@@ -98,6 +102,9 @@ pub(crate) enum Count {
     /// The even number nearest that, so no dot sits on the middle line. A fan of dots an odd number of pixels across
     /// needs it to centre on the line between two pixels.
     Even,
+    /// The odd number nearest that, so every row has a dot on the middle line and the rows line up down it, rather
+    /// than staggering, which shows when a fan has few dots.
+    Odd,
 }
 
 /// Rows of dots in a half circle over `center`, the first `inner` from it and each `pitch` further out. The dots in
@@ -115,6 +122,7 @@ pub(crate) fn rows_of_dots(
         let count = match count {
             Count::Fitting => dots_in((r * PI) / pitch) + 1,
             Count::Even => 2 * dots_in((r * PI) / pitch / 2.0 + 0.5),
+            Count::Odd => 2 * dots_in((r * PI) / pitch / 2.0) + 1,
         };
         (0..count).map(move |j| {
             let along = as_f32(j) / as_f32(count - 1);
@@ -169,7 +177,7 @@ fn dots_in(length_in_pitches: f32) -> usize {
 mod tests {
     use gpui_kit::{Bounds, point, px, size};
 
-    use super::{ASPECT, Fan};
+    use super::{ASPECT, Count, Fan, rows_of_dots};
 
     fn fan(width: f32) -> Fan {
         Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(width), px(width * ASPECT))))
@@ -185,6 +193,22 @@ mod tests {
         for row in 0..fan.rows {
             let along: Vec<f32> = dots.iter().filter(|d| d.row == row).map(|d| d.along).collect();
             assert_eq!((along.first().copied(), along.last().copied()), (Some(0.0), Some(1.0)));
+        }
+    }
+
+    #[test]
+    fn an_odd_count_puts_a_dot_on_the_middle_line_of_every_row_and_an_even_one_a_gap() {
+        for rows in [2, 3, 4, 9] {
+            let middle = |count| {
+                let center = point(px(50.), px(50.));
+                let dots: Vec<_> = rows_of_dots(center, px(8.), px(3.), rows, count).collect();
+                (0..rows)
+                    .map(|row| dots.iter().any(|d| d.row == row && (d.along - 0.5).abs() < 1e-6))
+                    .collect::<Vec<_>>()
+            };
+
+            assert!(middle(Count::Odd).into_iter().all(|on| on), "{rows} rows, odd");
+            assert!(middle(Count::Even).into_iter().all(|on| !on), "{rows} rows, even");
         }
     }
 
