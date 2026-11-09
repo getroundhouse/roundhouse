@@ -7,7 +7,7 @@ use gpui_kit::{Context, Div, InteractiveElement};
 
 use super::AppView;
 use crate::menus;
-use crate::workspace_pane::WorkspacePane;
+use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
     AddRepository, CloseChat, CreatePullRequest, NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
     PreviousWorkspace, StopAgent, ToggleDiff,
@@ -36,7 +36,11 @@ impl AppView {
     /// Hide Diff, since macOS only shows what it was last given. Cheap when nothing has changed, so every frame can
     /// ask, which catches every way it can change.
     pub(super) fn keep_menus_current(&mut self, cx: &mut Context<Self>) {
-        let says = menus::Says { diff_open: self.selected_pane().is_some_and(|pane| pane.read(cx).diff_open) };
+        let pane = self.selected_pane().map(|pane| pane.read(cx));
+        let says = menus::Says {
+            diff_open: pane.is_some_and(|pane| pane.changes_open),
+            diff_tab_showing: pane.is_some_and(|pane| pane.showing == Showing::Diff),
+        };
         if says != self.menus_say {
             self.menus_say = says;
             // Not while the window draws.
@@ -57,17 +61,13 @@ impl AppView {
 
 /// What acts on the selected workspace, which there has to be.
 fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
-    root.on_action(cx.listener(|t, _: &ToggleDiff, _, cx| t.update_selected_pane(cx, WorkspacePane::toggle_diff)))
+    root.on_action(cx.listener(|t, _: &ToggleDiff, _, cx| t.update_selected_pane(cx, WorkspacePane::toggle_changes)))
         .on_action(cx.listener(|t, _: &CreatePullRequest, _, cx| {
             t.update_selected_pane(cx, WorkspacePane::create_pull_request);
         }))
         .on_action(cx.listener(|t, _: &NewChat, _, cx| t.update_selected_pane(cx, WorkspacePane::new_chat)))
         .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
-            t.update_selected_pane(cx, |pane, cx| {
-                if let Some(id) = pane.active.clone() {
-                    pane.close_chat(id, window, cx);
-                }
-            });
+            t.update_selected_pane(cx, |pane, cx| pane.close_tab(window, cx));
         }))
         .on_action(cx.listener(|t, _: &NextChat, _, cx| t.update_selected_pane(cx, |pane, cx| pane.step_chat(1, cx))))
         .on_action(

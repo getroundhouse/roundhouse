@@ -1,64 +1,107 @@
-//! How a review comment looks in the diff, and the card for writing one.
+//! How a review comment looks in the diff, and the box for writing one. Both sit on the same raised band, which fills
+//! the diff from edge to edge, with their text in a column of the same width, so a comment stays where it was written
+//! once it's saved.
 
+use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
-use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, WeakEntity, div, px,
+    AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, rems,
 };
 use protocol::model::DiffComment;
 
 use super::DiffPanel;
 
-fn annotation_frame(cx: &App) -> Div {
+/// Wide enough to write a sentence or two on one line, and no wider, so a long one still reads easily.
+const WIDTH: f32 = 720.;
+
+/// The raised band across the diff, and the column in it that holds the comment. The diff puts `p_3` around each
+/// comment, so the band reaches out over it to fill the row, and its own padding is that and `px_3`, `pt_2p5` and
+/// `pb_0p5` more. Less goes below, as the buttons there carry space of their own, and the eye measures from their
+/// labels. Its width is left to fill the row, as a width of its own wouldn't reach over the padding on the right.
+fn band(column: Div, cx: &App) -> AnyElement {
+    div()
+        .mx_neg_3()
+        .my_neg_3()
+        .px_6()
+        .pt(rems(0.75 + 0.625))
+        .pb(rems(0.75 + 0.125))
+        .bg(cx.theme().secondary)
+        .text_sm()
+        .child(column.w_full().max_w(px(WIDTH)).gap_3())
+        .into_any_element()
+}
+
+/// The comment being written, or edited. Its box has a thin copper edge the whole time, rather than a ring that comes
+/// and goes with focus, so it's clear where the comment goes.
+pub(super) fn draft_card(
+    input: &Entity<TextareaState>,
+    editing: bool,
+    panel: WeakEntity<DiffPanel>,
+    cx: &App,
+) -> AnyElement {
     let theme = cx.theme();
-    v_flex()
-        .mx_3()
-        .my_2()
-        .max_w(px(380.))
-        .px_3()
-        .py_2p5()
-        .gap_2()
+    let empty = input.read(cx).text().to_string().trim().is_empty();
+    let (cancel, save) = (panel.clone(), panel);
+    let field = div()
+        .w_full()
+        .p_1()
         .rounded_md()
         .border_1()
-        .border_color(theme.border)
-        .bg(theme.secondary)
-        .text_sm()
-}
-
-pub(super) fn draft_card(input: &Entity<TextareaState>, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
-    let (cancel, save) = (panel.clone(), panel);
-    annotation_frame(cx)
-        .child(Textarea::new(input))
+        .border_color(theme.ring.opacity(0.6))
+        .bg(theme.background)
+        .child(Textarea::new(input).appearance(false));
+    let actions = h_flex()
+        .w_full()
+        .justify_end()
+        .gap_2()
+        .child(Button::new("cancel-comment").ghost().label("Cancel").on_click(move |_, _, cx| {
+            let _ = cancel.update(cx, DiffPanel::cancel_draft);
+        }))
         .child(
-            h_flex()
-                .gap_2()
-                .child(Button::new("save-comment").primary().label("Comment").on_click(move |_, window, cx| {
+            Button::new("save-comment")
+                .primary()
+                .label(if editing { "Save ↵" } else { "Comment ↵" })
+                .disabled(empty)
+                .on_click(move |_, window, cx| {
                     let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
-                }))
-                .child(Button::new("cancel-comment").label("Cancel").on_click(move |_, _, cx| {
-                    let _ = cancel.update(cx, DiffPanel::cancel_draft);
-                })),
-        )
-        .into_any_element()
+                }),
+        );
+    band(v_flex().child(field).child(actions), cx)
 }
 
+/// A comment waiting for the agent, with what can be done with it.
 pub(super) fn comment_card(comment: DiffComment, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
-    annotation_frame(cx)
-        .child(div().text_xs().text_color(cx.theme().muted_foreground).child("Your comment, for the agent"))
-        .child(comment.text.clone())
+    let id = comment.id.clone();
+    let named = |action: &str| ElementId::Name(format!("{action}-{id}").into());
+    let (edit, delete, add) = (panel.clone(), panel.clone(), panel);
+    let (to_edit, to_delete, to_add) = (id.clone(), id.clone(), id.clone());
+    let actions = h_flex()
+        .w_full()
+        .justify_end()
+        .gap_2()
+        .child(Button::new(named("edit")).ghost().small().icon(Lucide::Pencil).label("Edit").on_click(
+            move |_, window, cx| {
+                let _ = edit.update(cx, |t, cx| t.edit_comment(&to_edit, window, cx));
+            },
+        ))
+        .child(Button::new(named("delete")).ghost().small().icon(Lucide::Trash).label("Delete").on_click(
+            move |_, _, cx| {
+                let _ = delete.update(cx, |t, cx| t.delete_comment(to_delete.clone(), cx));
+            },
+        ))
+        // Outlined, as it opens the chat, with the comment in its composer.
         .child(
-            div()
-                .id(ElementId::Name(format!("delete-{}", comment.id).into()))
-                .text_xs()
-                .cursor_pointer()
-                .text_color(look::faint())
+            Button::new(named("add-to-chat"))
+                .outline()
+                .small()
+                .icon(Lucide::MessageSquarePlus)
+                .label("Add to chat")
                 .on_click(move |_, _, cx| {
-                    let _ = panel.update(cx, |t, cx| t.delete_comment(comment.id.clone(), cx));
-                })
-                .child("Delete"),
-        )
-        .into_any_element()
+                    let _ = add.update(cx, |t, cx| t.add_to_chat(&to_add, cx));
+                }),
+        );
+    band(v_flex().child(div().px_1().child(comment.text)).child(actions), cx)
 }

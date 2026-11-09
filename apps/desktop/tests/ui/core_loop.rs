@@ -8,6 +8,8 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{SessionStatus, WorkspaceId, WorkspaceStatus};
 
+use desktop::workspace_pane::Showing;
+
 use crate::support::{Stack, Ui, git};
 
 #[gpui_kit::test]
@@ -32,8 +34,9 @@ fn says_which_build_is_running(cx: &mut TestAppContext) {
 }
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
-    // Review the diff.
+    // Review the diff, opening the changed file from the sidebar.
     let diff = ui.open_diff();
+    ui.open_file(&diff, "a.txt");
 
     // Comment on a line. Enter saves it, and the hub keeps it.
     ui.start_comment(&diff, "a.txt", 2);
@@ -42,8 +45,10 @@ fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     ui.wait("the comment to be saved", |ui| ui.cx.read_entity(&diff, |d, _| d.comments.len() == 1));
     assert_eq!(stack.client().comment_list(id).unwrap().len(), 1);
 
-    // Send it to the agent, which sees where it was left.
+    // Send it to the agent, which sees where it was left, and shows the chat it went to.
     ui.click("send-comments");
+    let pane = ui.pane().unwrap();
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.showing), Showing::Chat);
     ui.wait("the comment to reach the agent", |ui| {
         ui.events().iter().any(
             |e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text.contains("`a.txt:2`: Why this word?")),
@@ -165,9 +170,9 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     ui.wait("the pane", |ui| ui.pane().is_some());
     ui.press("cmd-shift-d");
     let pane = ui.pane().unwrap();
-    ui.wait("the diff panel", |ui| ui.cx.read_entity(&pane, |p, _| p.diff_open && p.diff.is_some()));
+    ui.wait("the sidebar of changes", |ui| ui.cx.read_entity(&pane, |p, _| p.changes_open && p.diff.is_some()));
     let diff = ui.cx.read_entity(&pane, |p, _| p.diff.clone()).unwrap();
-    ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&diff, |d, _| d.empty));
+    ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&diff, |d, _| d.has_no_changes()));
 
     let before = ui.view().workspaces.len();
     ui.press("cmd-n");

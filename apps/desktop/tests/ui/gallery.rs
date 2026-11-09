@@ -11,6 +11,7 @@ mod capture;
 mod chats;
 mod fake_hub;
 mod icon;
+mod patch;
 mod screens;
 mod world;
 

@@ -47,10 +47,28 @@ fn show_diff_is_hide_diff_while_the_diff_is_open(cx: &mut TestAppContext) {
 
     choose(&mut ui, "View", "Show Diff");
 
-    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_open));
+    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.changes_open));
     assert_eq!(items(&ui, "View")[0], "Hide Diff");
     ui.click("toggle-diff");
     assert_eq!(items(&ui, "View")[0], "Show Diff");
+}
+
+/// ⌘W closes the diff tab while it shows, rather than the chat behind it, so the item says what it'll close.
+#[gpui_kit::test]
+fn close_chat_is_close_diff_tab_while_the_diff_tab_shows(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_repository(cx, &stack);
+    let workspace = ui.new_workspace();
+    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
+    let diff = ui.open_diff();
+    ui.open_file(&diff, "a.txt");
+    assert_eq!(items(&ui, "File")[4], "Close Diff Tab");
+    assert_eq!(key(&ui, "File", "Close Diff Tab").as_deref(), Some("cmd-w"));
+
+    choose(&mut ui, "File", "Close Diff Tab");
+
+    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, cx| p.diff_tab(cx).is_none()));
+    assert_eq!(items(&ui, "File")[4], "Close Chat");
 }
 
 /// macOS greys out an item when nothing where focus is takes its action, so the window takes each only where it can

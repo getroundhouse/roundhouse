@@ -4,7 +4,7 @@ use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::model::{AgentKind, Session, SessionId};
 use transcript::{Transcript, TranscriptEvent};
 
-use super::{PaneEvent, WorkspacePane};
+use super::{PaneEvent, Showing, WorkspacePane};
 use crate::diff_panel::DiffPanel;
 use crate::rename::{self, Renaming};
 use client_core::records::Record;
@@ -67,8 +67,10 @@ impl WorkspacePane {
     /// Shows a chat, keeping what was being typed in the one it replaces.
     pub fn activate(&mut self, id: SessionId, cx: &mut Context<Self>) {
         if self.active.as_ref() == Some(&id) {
+            self.show_chat(cx);
             return;
         }
+        self.showing = Showing::Chat;
         if let Some(current) = self.active.take() {
             let draft = self.composer.read(cx).text().to_string();
             if draft.is_empty() {
@@ -88,21 +90,25 @@ impl WorkspacePane {
         cx.notify();
     }
 
-    /// This needs the window, and a click handler is already inside a window update, so it runs just
-    /// after whatever called it.
+    /// Shows the active chat in place of the diff tab, with what was typed in it still there.
+    pub(super) fn show_chat(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.showing) == Showing::Chat {
+            return;
+        }
+        self.read_showing(cx);
+        self.with_window(cx, |t, window, cx| t.focus_composer(window, cx));
+        cx.notify();
+    }
+
+    /// Puts the showing chat's draft in the composer, once there's the window to do it with.
     fn show_draft(&mut self, cx: &mut Context<Self>) {
-        let (handle, this) = (self.window, cx.weak_entity());
-        cx.defer(move |cx| {
-            let _ = handle.update(cx, |_, window, cx| {
-                let _ = this.update(cx, |t, cx| {
-                    let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id)).unwrap_or_default();
-                    let end = draft.len();
-                    t.composer.update(cx, |c, cx| {
-                        c.set_value(draft, window, cx);
-                        c.set_selected_range(end..end, cx);
-                        c.focus(window, cx);
-                    });
-                });
+        self.with_window(cx, |t, window, cx| {
+            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id)).unwrap_or_default();
+            let end = draft.len();
+            t.composer.update(cx, |c, cx| {
+                c.set_value(draft, window, cx);
+                c.set_selected_range(end..end, cx);
+                c.focus(window, cx);
             });
         });
     }
@@ -126,12 +132,20 @@ impl WorkspacePane {
         self.transcripts.insert(session.id, (view, events));
     }
 
-    /// Moves to the chat before or after this one, wrapping around.
+    /// Moves to the tab before or after this one, wrapping around. The diff tab comes after the chats.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        let Some(current) = open.iter().position(|id| Some(id) == self.active.as_ref()) else { return };
-        let next = crate::app::wrapped_step(current, step, open.len());
-        self.activate(open[next].clone(), cx);
+        let tabs = open.len() + usize::from(self.diff_tab(cx).is_some());
+        let current = if self.showing == Showing::Diff {
+            open.len()
+        } else {
+            let Some(current) = open.iter().position(|id| Some(id) == self.active.as_ref()) else { return };
+            current
+        };
+        match open.get(crate::app::wrapped_step(current, step, tabs)) {
+            Some(id) => self.activate(id.clone(), cx),
+            None => self.show_diff_tab(cx),
+        }
     }
 
     /// Asks first if it would stop an agent that's working.

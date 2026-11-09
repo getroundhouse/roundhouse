@@ -3,13 +3,13 @@
 
 use std::fmt::Write as _;
 
-use gpui_kit::component::diff::{DiffLinePosition, DiffSide as KitSide};
+use gpui_kit::component::diff::{DiffLinePosition, DiffLineRange, DiffSide as KitSide};
 use gpui_kit::{Context, Window};
 use protocol::model::{CommentId, DiffComment, DiffSide};
 
 use client_core::records::Record;
 
-use super::{DiffEvent, DiffPanel};
+use super::{DiffEvent, DiffPanel, kit_side};
 
 fn our_side(side: KitSide) -> DiffSide {
     match side {
@@ -23,13 +23,18 @@ fn our_side(side: KitSide) -> DiffSide {
 pub fn comments_prompt(comments: &[DiffComment]) -> String {
     let mut prompt = String::from("Please address these review comments on the current diff:\n");
     for comment in comments {
-        let side = match comment.side {
-            DiffSide::Old => " (a removed line)",
-            DiffSide::New | DiffSide::Unknown => "",
-        };
-        let _ = write!(prompt, "\n- `{}:{}`{side}: {}", comment.path, comment.line, comment.text);
+        let _ = write!(prompt, "\n- {}", comment_line(comment));
     }
     prompt
+}
+
+/// One comment as the agent reads it: where it was left, and what it says.
+pub fn comment_line(comment: &DiffComment) -> String {
+    let side = match comment.side {
+        DiffSide::Old => " (a removed line)",
+        DiffSide::New | DiffSide::Unknown => "",
+    };
+    format!("`{}:{}`{side}: {}", comment.path, comment.line, comment.text)
 }
 
 impl DiffPanel {
@@ -55,9 +60,32 @@ impl DiffPanel {
     }
 
     pub fn start_comment(&mut self, position: DiffLinePosition, window: &mut Window, cx: &mut Context<Self>) {
+        self.write(position, None, String::new(), window, cx);
+    }
+
+    /// Opens a comment for editing where it was left, in place of how it shows.
+    pub fn edit_comment(&mut self, id: &CommentId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(comment) = self.comments.iter().find(|c| &c.id == id).cloned() else { return };
+        let position = DiffLinePosition::new(comment.path, kit_side(comment.side), comment.line as usize);
+        self.write(position, Some(comment.id), comment.text, window, cx);
+    }
+
+    /// Opens the box for writing at `position`, with `text` in it, for a new comment or the one being edited.
+    fn write(
+        &mut self,
+        position: DiffLinePosition,
+        editing: Option<CommentId>,
+        text: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.draft = Some(position);
+        self.editing = editing;
+        self.select_draft_line(cx);
+        let end = text.len();
         self.draft_input.update(cx, |input, cx| {
-            input.set_value("", window, cx);
+            input.set_value(text, window, cx);
+            input.set_selected_range(end..end, cx);
             input.focus(window, cx);
         });
         cx.notify();
@@ -65,7 +93,28 @@ impl DiffPanel {
 
     pub fn cancel_draft(&mut self, cx: &mut Context<Self>) {
         self.draft = None;
+        self.editing = None;
+        self.select_draft_line(cx);
         cx.notify();
+    }
+
+    /// Puts a comment in the chat's composer, for the agent with whatever else is said there. It stays on the diff
+    /// until it's deleted, like any other.
+    pub fn add_to_chat(&self, id: &CommentId, cx: &mut Context<Self>) {
+        let Some(comment) = self.comments.iter().find(|c| &c.id == id) else { return };
+        cx.emit(DiffEvent::AddToChat(comment_line(comment)));
+    }
+
+    /// Selects the line being commented on, when its file is the one showing, so it stays marked with its add button
+    /// showing. Clears the selection once there's no comment being written.
+    pub(super) fn select_draft_line(&self, cx: &mut Context<Self>) {
+        let Some(state) = &self.state else { return };
+        let showing = self.draft.as_ref().filter(|draft| self.open.as_ref() == Some(draft.path()));
+        let line =
+            showing.map(|draft| DiffLineRange::new(draft.path().clone(), draft.side(), draft.line(), draft.line()));
+        if line.is_some() || self.draft.is_none() {
+            state.update(cx, |s, cx| s.set_selected_lines(line, cx));
+        }
     }
 
     pub fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -75,20 +124,23 @@ impl DiffPanel {
             return;
         }
         self.draft = None;
+        let editing = self.editing.take();
+        self.select_draft_line(cx);
         self.draft_input.update(cx, |input, cx| input.set_value("", window, cx));
         let id = self.workspace_id.clone();
-        let adding = self.client.start(move |client| {
-            client.comment_add(
+        let saving = self.client.start(move |client| match &editing {
+            Some(comment) => client.comment_edit(comment, &text),
+            None => client.comment_add(
                 &id,
                 position.path(),
                 our_side(position.side()),
                 u32::try_from(position.line()).unwrap_or(u32::MAX),
                 &text,
                 Some(client_core::new_request_id()),
-            )
+            ),
         });
         cx.spawn(async move |this, cx| {
-            let added = adding.recv().await;
+            let added = saving.recv().await;
             let _ = this.update(cx, |t, cx| {
                 match added {
                     // Shown once client-core's copy has it, like any other change.

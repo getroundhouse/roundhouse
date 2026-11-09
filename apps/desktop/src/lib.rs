@@ -2,6 +2,8 @@
 
 mod alert;
 pub mod app;
+mod assets;
+pub mod changes;
 pub mod checkout;
 pub mod diff_panel;
 mod highlight;
@@ -13,8 +15,8 @@ mod sidebar;
 pub mod updates;
 pub mod workspace_pane;
 
+pub use assets::Assets;
 use checkout::Checkout;
-use gpui_kit::assets::Assets;
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
     actions, point, px, size,

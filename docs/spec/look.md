@@ -30,9 +30,10 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 Each colour means one thing.
 
-- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon and keyboard focus, and never a status.
+- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus and the edge of a comment being written, and never a status.
 - **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
-- **Amber means it's your turn, and red means the agent stopped short.** A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
+- **Amber means it's your turn, and red means the agent stopped short,** wherever the app shows where things stand. A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
+- **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
 
 ## The status mark
