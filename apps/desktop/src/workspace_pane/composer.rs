@@ -94,6 +94,7 @@ impl WorkspacePane {
         let working = self.session().is_some_and(|s| s.status.in_turn());
         let theme = cx.theme();
         let (surface, border, ring) = (theme.muted, theme.input, theme.ring);
+        let stop_mark = theme.button_primary_foreground;
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
@@ -116,10 +117,14 @@ impl WorkspacePane {
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
             .child(h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(pickers).child(if working {
+                // The same square as Send, with a filled square rather than an icon, which would only be outlined.
                 Button::new("stop")
+                    .primary()
                     .small()
-                    .icon(IconName::Square)
-                    .label("Stop")
+                    .size_6()
+                    .p_0()
+                    .child(div().size_2p5().rounded_xs().bg(stop_mark))
+                    .accessibility_label("Stop")
                     .tooltip_with_action("Stop", &StopAgent, None)
                     .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                     .into_any_element()
