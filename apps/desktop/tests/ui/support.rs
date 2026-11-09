@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod chats;
 mod diff;
 mod hub;
 mod stand_in;
@@ -17,7 +18,7 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{RepoId, SessionId, SessionStatus, WorkspaceId};
+use protocol::model::{RepoId, SessionStatus, WorkspaceId};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -237,6 +238,21 @@ impl<'a> Ui<'a> {
         self.frame();
     }
 
+    /// Moves the pointer over it, and leaves it there.
+    pub(crate) fn hover(&mut self, id: impl Into<ElementId>) {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Whether the last frame drew it where it can be seen and pressed.
+    pub(crate) fn visible(&mut self, id: impl Into<ElementId>) -> bool {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, _| window.try_find(id).is_some_and(|e| e.visible())).unwrap()
+    }
+
     /// Turns the mouse wheel over the element, by `delta`. Down the page is a negative `y`.
     pub(crate) fn scroll(&mut self, id: impl Into<ElementId>, delta: ScrollDelta) {
         let id = id.into();
@@ -298,36 +314,9 @@ impl<'a> Ui<'a> {
         self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
     }
 
-    pub(crate) fn active_chat(&self) -> SessionId {
-        let pane = self.pane().unwrap();
-        self.cx.read_entity(&pane, |p, _| p.active.clone().unwrap())
-    }
-
-    pub(crate) fn open_chats(&self) -> Vec<SessionId> {
-        let pane = self.pane().unwrap();
-        self.cx.read_entity(&pane, |p, _| {
-            p.sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone()).collect()
-        })
-    }
-
     pub(crate) fn composer_text(&self) -> String {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, cx| p.composer.read(cx).text().to_string())
-    }
-
-    /// Presses the new chat button and waits until that chat is showing.
-    pub(crate) fn new_chat(&mut self) -> SessionId {
-        let before = self.open_chats().len();
-        self.click("new-chat");
-        self.wait("the new chat", |ui| ui.open_chats().len() > before && ui.transcript().is_some());
-        let newest = self.open_chats().last().unwrap().clone();
-        self.wait("the new chat to show", |ui| ui.active_chat() == newest);
-        newest
-    }
-
-    pub(crate) fn show_chat(&mut self, id: &SessionId) {
-        self.click(SharedString::from(format!("chat-{id}")));
-        self.wait("the chat to show", |ui| ui.active_chat() == *id);
     }
 
     /// Opens a picker and clicks the item at this position, the way someone would.

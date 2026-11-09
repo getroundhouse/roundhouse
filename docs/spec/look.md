@@ -6,7 +6,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Surfaces and type
 
-- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a message, a card, a popover or the selected tab, is `#24201e`. The composer and code blocks are `#1e1b19`.
+- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a message, a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
 - **The system font, at 14px for body text.** Secondary text and tool calls use the kit's small size, 12.25px, and small details its extra-small size, 10.5px, both scaled from the body text. It's dense enough to watch many agents, and still easy to read.
 - **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
@@ -31,6 +31,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 Each colour means one thing.
 
 - **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon and keyboard focus, and never a status.
+- **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
 - **Amber means it's your turn, and red means the agent stopped short.** A card that needs you, such as a question or an approval, gets a thin amber edge and a faint amber background.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
 

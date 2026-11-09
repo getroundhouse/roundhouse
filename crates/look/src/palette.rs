@@ -15,3 +15,8 @@ pub fn faint() -> Hsla {
 pub(crate) fn tile_top() -> Hsla {
     hex(0x0021_1d1b)
 }
+
+/// The line under the chat showing's tab: the brand's copper, paled toward the text.
+pub fn tab_underline() -> Hsla {
+    hex(0x00d8_c2b3)
+}
