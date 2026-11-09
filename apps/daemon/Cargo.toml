@@ -21,6 +21,7 @@ tracing.workspace = true
 worker.workspace = true
 
 [dev-dependencies]
+agents = { workspace = true, features = ["testing"] }
 parking_lot.workspace = true
 client-core.workspace = true
 flume.workspace = true

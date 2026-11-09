@@ -42,6 +42,15 @@ const STOP_GRACE: Duration = Duration::from_secs(3);
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
 const STDERR_TAIL_LINES: usize = 20;
 
+/// [`DRAIN_GRACE`], unless a test has set `ENV_DRAIN_GRACE_MS`, which only a `testing` build reads.
+fn drain_grace() -> Duration {
+    #[cfg(feature = "testing")]
+    if let Some(ms) = std::env::var(crate::ENV_DRAIN_GRACE_MS).ok().and_then(|ms| ms.parse().ok()) {
+        return Duration::from_millis(ms);
+    }
+    DRAIN_GRACE
+}
+
 struct Shared {
     /// Also held while a prompt is noted and written, and while a relaunch swaps this and replays.
     /// Either a prompt is on the list before the swap or it's written after, never both.

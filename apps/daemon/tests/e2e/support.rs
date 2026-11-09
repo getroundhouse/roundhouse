@@ -41,13 +41,19 @@ pub(crate) fn fake_agent() -> &'static Path {
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: Option<Child>,
+    /// Set for every hub this starts, and so for its workers.
+    env: Vec<(&'static str, String)>,
 }
 
 impl Stack {
     pub(crate) fn start() -> Stack {
+        Stack::start_with(Vec::new())
+    }
+
+    pub(crate) fn start_with(env: Vec<(&'static str, String)>) -> Stack {
         // Under /tmp because of the socket path limit, which the default temp directory can exceed.
         let dir = tempfile::Builder::new().prefix("ah-").tempdir_in("/tmp").unwrap();
-        let mut stack = Stack { dir, hub: None };
+        let mut stack = Stack { dir, hub: None, env };
         std::fs::create_dir_all(stack.repo()).unwrap();
         git(&stack.repo(), &["init", "-q", "-b", "main"]);
         std::fs::write(stack.repo().join("a.txt"), "one\n").unwrap();
@@ -87,6 +93,7 @@ impl Stack {
             .env("FAKE_CLAUDE_STATE", self.agent_state())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
+            .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         command

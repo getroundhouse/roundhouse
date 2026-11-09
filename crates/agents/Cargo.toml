@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What only tests use: a longer wait for an agent's last output.
+testing = []
+
 [dependencies]
 process.workspace = true
 parking_lot.workspace = true

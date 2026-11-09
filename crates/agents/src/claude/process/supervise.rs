@@ -15,7 +15,7 @@ use tracing::warn;
 
 use super::launch::launch;
 use super::output::{read_stderr, read_stdout};
-use super::{DRAIN_GRACE, Shared, user_message, write_to};
+use super::{Shared, drain_grace, user_message, write_to};
 use crate::{AgentOptions, AgentOutput};
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -132,7 +132,7 @@ pub(super) fn classify_launch_failure(stderr: &[String]) -> Option<LaunchFailure
 }
 
 async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
-    if let Ok(result) = tokio::time::timeout(DRAIN_GRACE, &mut task).await {
+    if let Ok(result) = tokio::time::timeout(drain_grace(), &mut task).await {
         result.ok()
     } else {
         task.abort();
