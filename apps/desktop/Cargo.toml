@@ -13,6 +13,10 @@ path = "src/main.rs"
 name = "desktop"
 path = "src/lib.rs"
 
+[features]
+# What only tests use: showing that updating failed, without an installed app.
+testing = []
+
 [dependencies]
 protocol.workspace = true
 client-core.workspace = true
@@ -21,12 +25,17 @@ gpui-kit.workspace = true
 look.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 # The kit's highlighter is private, so diffs use the same two crates directly. Oniguruma took
 # highlighting a large diff from 12.2 s of CPU to 2.6 s.
 syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
+velopack.workspace = true
+ureq.workspace = true
+ring.workspace = true
 
 [dev-dependencies]
+desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }

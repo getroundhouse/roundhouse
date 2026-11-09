@@ -4,6 +4,7 @@ pub mod app;
 pub mod diff_panel;
 mod highlight;
 mod sidebar;
+pub mod updates;
 pub mod workspace_pane;
 
 use gpui_kit::assets::Assets;
@@ -70,5 +71,6 @@ pub fn run() {
             eprintln!("couldn't open a window: {e:#}");
             cx.quit();
         }
+        updates::start(cx);
     });
 }

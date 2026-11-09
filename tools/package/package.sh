@@ -21,6 +21,9 @@
 # The version is `0.1.<commits>`, as `docs/architecture.md` says, and it's the build the app and its hub say they are. A
 # package with uncommitted changes gets its commit's version, which is never published, since the release workflow
 # packages a clean checkout, and its build says when it was built after the version.
+#
+# The app updates from the published feed. To try updating against another, such as a local server and a key made for
+# the test, set ROUNDHOUSE_UPDATE_URL and ROUNDHOUSE_UPDATE_KEY, and publish to it with `publish.py`.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
