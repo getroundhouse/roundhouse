@@ -281,7 +281,8 @@ fn dropping_a_client_really_disconnects_it() {
     let stack = Stack::start();
     let watcher = stack.client();
     let count = || watcher.hub_status().unwrap().clients;
-    assert_eq!(count(), 1);
+    // The client `Stack::start` waits for the hub with may not have been seen to leave yet.
+    wait_until("the hub to see the stack's own client leave", || count() == 1);
     let (_, session) = stack.workspace(&watcher);
 
     let other = stack.client();
