@@ -26,7 +26,9 @@ done
 
 app_dir="$(cd "$(dirname "$0")/.." && pwd)"
 repo="$(cd "$app_dir/../.." && pwd)"
-target_dir="$(cargo metadata --format-version 1 --no-deps --manifest-path "$repo/Cargo.toml" | jq -r .target_directory)"
+metadata="$(cargo metadata --format-version 1 --no-deps --manifest-path "$repo/Cargo.toml")"
+target_dir="$(jq -r .target_directory <<<"$metadata")"
+version="$(jq -r '.packages[] | select(.name == "mobile-ios") | .version' <<<"$metadata")"
 
 # The oldest iOS the app supports, which ios/project.yml sets for Xcode too.
 IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build --manifest-path "$repo/Cargo.toml" --locked \
@@ -43,14 +45,12 @@ rm -rf "$built"
 # Each part is read as a number, so the time loses its leading zero.
 stamp="$(date -u +%Y%m%d.%H%M)"
 build_number="${stamp%%.*}.$((10#${stamp#*.}))"
-version="$(cargo metadata --format-version 1 --no-deps --manifest-path "$repo/Cargo.toml" \
-  | jq -r '.packages[] | select(.name == "mobile-ios") | .version')"
 # Building for the phone itself, rather than any iOS device, is what lets Xcode add it to the profile.
 xcodebuild build -quiet -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
   -destination "platform=iOS,id=$device" \
   -project "$app_dir/ios/Roundhouse.xcodeproj" -scheme Roundhouse -configuration "$config" \
   -derivedDataPath "$app_dir/build/DerivedData" \
-  CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM="$TEAM_ID" \
+  CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM="$TEAM_ID" \
   BUNDLE_ID="$BUNDLE_ID" RUST_BINARY="$target_dir/aarch64-apple-ios/$profile/roundhouse-ios" \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build_number"
 

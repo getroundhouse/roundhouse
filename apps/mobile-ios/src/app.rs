@@ -8,58 +8,34 @@ mod workspaces;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use client_core::{Client, ClientError};
+use client_core::{PairingLink, RemoteHub};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::{ActiveTheme as _, Theme};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
-    Subscription, Task, Window, WindowOptions, div, px,
+    AnyElement, AnyWindowHandle, App, AppContext as _, Context, Entity, IntoElement, ParentElement, Render,
+    SharedString, Styled, Subscription, Task, Window, WindowOptions, div, px,
 };
 use protocol::model::RepoId;
 
 use crate::chat::{ChatEvent, ChatView};
-use crate::hub_link::{Connect, HubLink, Reconnected};
+use crate::hub_link::{HubLink, Reconnected};
 use crate::vault::Vault;
-use client_core::{PairingLink, RemoteHub};
 
 /// How long the app can be away before coming back connects again. A phone suspends an app soon after it
 /// leaves the screen, and a connection it held may have gone without a word, but a glance at another app
 /// shouldn't drop a working one.
 const AWAY_BEFORE_RECONNECT: Duration = Duration::from_secs(20);
 
-/// Pairs with the hub a link names, giving it the name to list this device under.
-pub type Pair = Arc<dyn Fn(&PairingLink, &str) -> Result<RemoteHub, ClientError> + Send + Sync>;
-
-/// Connects to a hub this phone paired with.
-pub type ConnectTo = Arc<dyn Fn(&RemoteHub) -> Result<Client, ClientError> + Send + Sync>;
-
-/// What the app needs from the phone, so tests can give it fakes.
-pub struct Services {
-    pub vault: Arc<dyn Vault>,
-    pub pair: Pair,
-    pub connect: ConnectTo,
-}
-
-impl Services {
-    /// The phone's own: the vault it's given, and pairing and connecting over the network.
-    pub fn device(vault: Arc<dyn Vault>, client_name: &'static str) -> Services {
-        Services {
-            vault,
-            pair: Arc::new(client_core::pair),
-            connect: Arc::new(move |hub| Client::connect_remote(hub, client_name)),
-        }
-    }
-}
-
-/// Opens the app's one window, after `gpui_kit::init`. On a phone it fills the screen whatever `options` asks.
+/// Opens the app's one window, after `gpui_kit::init`, on the hub `vault` keeps. On a phone the window fills the
+/// screen whatever `options` asks. `links` carries pairing links the phone opens, such as from the Camera app.
 pub fn open_window(
-    services: Services,
+    vault: Arc<dyn Vault>,
     links: flume::Receiver<String>,
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
     init(cx);
-    gpui_kit::open_window(options, cx, move |window, cx| cx.new(|cx| MobileApp::new(services, links, window, cx)))
+    gpui_kit::open_window(options, cx, move |window, cx| cx.new(|cx| MobileApp::new(vault, links, window, cx)))
 }
 
 /// The app's theme, with type sized for a phone held at arm's length rather than a desktop screen.
@@ -70,6 +46,7 @@ fn init(cx: &mut App) {
     theme.mono_font_size = px(13.);
 }
 
+/// The screen shown. Every one but pairing needs a hub, and shows pairing if there's none.
 enum Screen {
     Pairing,
     Workspaces,
@@ -88,28 +65,33 @@ enum Pairing {
     /// A link to another hub, waiting for a yes, since pairing with it replaces the hub this phone has. Any app can
     /// open a link, so one arriving isn't enough.
     Confirm(PairingLink),
-    Busy(SharedString),
+    Busy {
+        hub: SharedString,
+        _task: Task<()>,
+    },
     Failed(SharedString),
 }
 
-/// The hub being followed: the connection to it, what the vault keeps of it, and the subscriptions to the
-/// connection, which last as long as it's followed.
+/// The hub being followed: the connection to it, the workspace being made in it, and the subscriptions to the
+/// connection. All of it goes with the hub.
 struct Followed {
     link: Entity<HubLink>,
-    hub: RemoteHub,
+    creating: Option<Creating>,
     _events: [Subscription; 2],
 }
 
+/// A workspace being made, in this repository.
+struct Creating {
+    repo: RepoId,
+    _task: Task<()>,
+}
+
 pub struct MobileApp {
-    services: Services,
+    vault: Arc<dyn Vault>,
     followed: Option<Followed>,
     screen: Screen,
     pairing: Pairing,
     link_input: Entity<InputState>,
-    /// The repository a new workspace is being made in, and the task making it.
-    creating_in: Option<RepoId>,
-    creating: Option<Task<()>>,
-    pairing_task: Option<Task<()>>,
     error: Option<SharedString>,
     /// By the wall clock, since an `Instant` on Apple's platforms stops while the phone sleeps.
     left_at: Option<SystemTime>,
@@ -118,10 +100,8 @@ pub struct MobileApp {
 }
 
 impl MobileApp {
-    /// Opens on the hub the vault holds, or on pairing if it holds none. `links` carries pairing links the phone
-    /// opens, such as from the Camera app's QR scanner.
-    pub fn new(
-        services: Services,
+    fn new(
+        vault: Arc<dyn Vault>,
         links: flume::Receiver<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -136,31 +116,25 @@ impl MobileApp {
         });
         let activation = cx.observe_window_activation(window, Self::activation);
         let mut app = MobileApp {
-            services,
+            vault,
             followed: None,
             screen: Screen::Pairing,
             pairing: Pairing::Idle,
             link_input,
-            creating_in: None,
-            creating: None,
-            pairing_task: None,
             error: None,
             left_at: None,
             _activation: activation,
             _links: opened,
         };
-        if let Some(hub) = app.services.vault.load() {
+        if let Some(hub) = app.vault.load() {
             app.follow(hub, cx);
         }
         app
     }
 
-    /// Starts following a hub, and shows its workspaces.
+    /// Starts following a hub, in place of any before it, and shows its workspaces.
     fn follow(&mut self, hub: RemoteHub, cx: &mut Context<Self>) {
-        let connect_to = self.services.connect.clone();
-        let target = hub.clone();
-        let connect: Connect = Arc::new(move || connect_to(&target));
-        let link = cx.new(|cx| HubLink::new(hub.hub_name.clone().into(), connect, cx));
+        let link = cx.new(|cx| HubLink::new(hub, cx));
         let events = [
             cx.observe(&link, |_, _, cx| cx.notify()),
             cx.subscribe(&link, |app, _, Reconnected(client), cx| {
@@ -169,24 +143,15 @@ impl MobileApp {
                 }
             }),
         ];
-        self.followed = Some(Followed { link, hub, _events: events });
-        self.stop_creating();
+        self.followed = Some(Followed { link, creating: None, _events: events });
         self.screen = Screen::Workspaces;
         cx.notify();
     }
 
-    /// A workspace being made belongs to the hub it was asked of, so it stops when that hub goes.
-    fn stop_creating(&mut self) {
-        self.creating = None;
-        self.creating_in = None;
-    }
-
     /// Stops following the hub and forgets it, so the phone can pair again.
     fn forget(&mut self, cx: &mut Context<Self>) {
-        self.services.vault.forget();
+        self.vault.forget();
         self.followed = None;
-        self.stop_creating();
-        self.pairing_task = None;
         self.pairing = Pairing::Idle;
         self.screen = Screen::Pairing;
         cx.notify();
@@ -205,16 +170,19 @@ impl MobileApp {
         }
     }
 
-    /// The screen shown, by name.
-    #[cfg(feature = "testing")]
-    pub fn showing(&self) -> &'static str {
-        match &self.screen {
-            Screen::Pairing => "pairing",
-            Screen::Workspaces => "workspaces",
-            Screen::NewWorkspace => "new workspace",
-            Screen::HubInfo => "hub info",
-            Screen::Chat { .. } => "chat",
-        }
+    fn link(&self) -> Option<&Entity<HubLink>> {
+        self.followed.as_ref().map(|followed| &followed.link)
+    }
+
+    fn show_chat(&mut self, chat: Entity<ChatView>, cx: &mut Context<Self>) {
+        let events = cx.subscribe(&chat, |app, _, ChatEvent::Back, cx| app.show(Screen::Workspaces, cx));
+        self.show(Screen::Chat { chat, _events: events }, cx);
+    }
+
+    fn show(&mut self, screen: Screen, cx: &mut Context<Self>) {
+        self.screen = screen;
+        self.error = None;
+        cx.notify();
     }
 
     /// Whether it's connected to the hub, and caught up.
@@ -231,34 +199,16 @@ impl MobileApp {
             Screen::Pairing | Screen::Workspaces | Screen::NewWorkspace | Screen::HubInfo => None,
         }
     }
-
-    fn link(&self) -> Option<&Entity<HubLink>> {
-        self.followed.as_ref().map(|followed| &followed.link)
-    }
-
-    fn show_chat(&mut self, chat: Entity<ChatView>, cx: &mut Context<Self>) {
-        let events = cx.subscribe(&chat, |app, _, ChatEvent::Back, cx| {
-            let home = if app.followed.is_some() { Screen::Workspaces } else { Screen::Pairing };
-            app.show(home, cx);
-        });
-        self.show(Screen::Chat { chat, _events: events }, cx);
-    }
-
-    fn show(&mut self, screen: Screen, cx: &mut Context<Self>) {
-        self.screen = screen;
-        self.error = None;
-        cx.notify();
-    }
 }
 
 impl Render for MobileApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let screen = match &self.screen {
-            Screen::Pairing => self.pairing_screen(window, cx).into_any_element(),
-            Screen::Workspaces => self.workspaces_screen(window, cx).into_any_element(),
-            Screen::NewWorkspace => self.new_workspace_screen(window, cx).into_any_element(),
-            Screen::HubInfo => self.hub_info_screen(window, cx).into_any_element(),
-            Screen::Chat { chat, .. } => chat.clone().into_any_element(),
+        let screen: AnyElement = match (&self.followed, &self.screen) {
+            (None, _) | (Some(_), Screen::Pairing) => self.pairing_screen(window, cx),
+            (Some(followed), Screen::Workspaces) => self.workspaces_screen(followed, window, cx),
+            (Some(followed), Screen::NewWorkspace) => self.new_workspace_screen(followed, window, cx),
+            (Some(followed), Screen::HubInfo) => Self::hub_info_screen(followed, window, cx),
+            (Some(_), Screen::Chat { chat, .. }) => chat.clone().into_any_element(),
         };
         div().size_full().bg(cx.theme().background).text_color(cx.theme().foreground).child(screen)
     }

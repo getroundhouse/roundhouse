@@ -94,7 +94,8 @@ The binaries are `roundhouse`, `roundhoused`, `roundhouse-desktop` and the iPhon
 
 ```
 apps/desktop ──> transcript, terminal-view ──> client-core ──> protocol
-apps/desktop, transcript ──> look
+apps/mobile-ios ──> transcript
+apps/desktop, apps/mobile-ios, transcript ──> look ──> protocol
 apps/cli ─────────────────────────────────────> client-core
 apps/daemon ──> hub ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
@@ -174,7 +175,7 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 
 - **An item keeps one identity through every state it passes through.** A prompt is its `client_msg_id`, from pending to recorded. A block of the agent's output is its message ID and index, from its first delta to the event that records it. Anything with no identity before it's recorded is its `seq`, and its position in that event. The transcript makes the element IDs of what each item shows from these in one function, so nothing on screen resets when a prompt is recorded or a block finishes. Its buttons belong to one event and never change state, so they're keyed by that event.
 - **A command is safe to repeat, and its reply says only what the hub has recorded.** Each request that changes something either has the same effect however often it's applied, such as closing a session, or carries an ID the client chose, as a prompt carries `client_msg_id`. Whatever happens after the reply reaches every client through the log and records, not through the reply. Each request in `protocol::client` says which kind it is. *Not built:* cancelling a turn and running setup again carry no such ID, so sent again later, they act again.
-- **client-core keeps each hub's copy, and views only read it.** For each hub a client is connected to, client-core holds the records and a window of each open session, and does all the subscribing, fetching and recovering, reconnects included. It applies updates as they arrive and tells a view what changed, combining whatever the view hasn't looked at, so a slow view sees the latest state rather than a backlog, and nothing queues without limit. Views keep only per-device state, such as scroll position and selection, keyed by the IDs above, so it survives a reconnect. That way the CLI, the desktop app and a native mobile app make the same guarantees without each implementing them. *Not built:* the desktop app makes the new connection itself, since it knows how to start its hub, and hands it to client-core.
+- **client-core keeps each hub's copy, and views only read it.** For each hub a client is connected to, client-core holds the records and a window of each open session, and does all the subscribing, fetching and recovering, reconnects included. It applies updates as they arrive and tells a view what changed, combining whatever the view hasn't looked at, so a slow view sees the latest state rather than a backlog, and nothing queues without limit. Views keep only per-device state, such as scroll position and selection, keyed by the IDs above, so it survives a reconnect. That way the CLI, the desktop app and a native mobile app make the same guarantees without each implementing them. *Not built:* each app makes the new connection itself and hands it to client-core: the desktop app because it knows how to start its hub, and the iPhone app, which tries again with a growing wait, and again whenever it comes back to the front.
 
 ## Wire format and event log
 

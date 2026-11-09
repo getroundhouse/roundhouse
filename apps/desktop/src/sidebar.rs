@@ -11,7 +11,7 @@ use gpui_kit::{
     StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
 };
 use look::{Signal, Work};
-use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Repo, Workspace, WorkspaceStatus};
 
 use crate::app::{AppView, BuildLabel};
 use crate::updates::Problem;
@@ -19,33 +19,13 @@ use crate::workspace_pane::HEADER_HEIGHT;
 
 const WIDTH: f32 = 260.0;
 
-/// The open chat that most needs attention speaks for the workspace.
-pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
-    let urgency = |status: &SessionStatus| match status {
-        SessionStatus::WaitingApproval => 3,
-        SessionStatus::Running => 2,
-        SessionStatus::Interrupted => 1,
-        SessionStatus::Idle | SessionStatus::Unknown => 0,
-    };
-    sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
-}
-
-pub(crate) fn signal(status: Option<SessionStatus>) -> Signal {
-    match status {
-        Some(SessionStatus::Running) => Signal::Working,
-        Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
-        Some(SessionStatus::Interrupted) => Signal::Failed,
-        None | Some(SessionStatus::Idle | SessionStatus::Unknown) => Signal::Idle,
-    }
-}
-
 fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
     let selected = app.selected.as_ref() == Some(&workspace.id);
-    let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
+    let status = app.sessions.get(&workspace.id).and_then(|s| client_core::records::workspace_status(s));
     let archived = workspace.status == WorkspaceStatus::Archived;
     let id = workspace.id.clone();
     let muted = cx.theme().muted_foreground;
-    let mark = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status) };
+    let mark = Signal::for_workspace(workspace, status);
     // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
     let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
     Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
@@ -205,43 +185,4 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
                 .children(groups),
         )
         .child(footer(app.show_archived, app.build_label(), crate::updates::problem_shown(cx).cloned(), cx))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::workspace_status;
-    use protocol::model::{AgentKind, Session, SessionStatus};
-
-    fn session(status: SessionStatus, closed: bool) -> Session {
-        Session {
-            id: "s".into(),
-            workspace_id: "w".into(),
-            agent: AgentKind::Claude,
-            model: None,
-            permission_mode: None,
-            status,
-            last_seq: 0,
-            created_at_ms: 0,
-            updated_at_ms: 0,
-            title: None,
-            closed_at_ms: closed.then_some(1),
-            rev: protocol::model::Rev::default(),
-        }
-    }
-
-    #[test]
-    fn the_chat_needing_attention_speaks_for_the_workspace_wherever_it_is() {
-        use SessionStatus::*;
-        let chats = [session(WaitingApproval, false), session(Running, false), session(Idle, false)];
-        assert_eq!(workspace_status(&chats), Some(WaitingApproval));
-        let chats = [session(Idle, false), session(Running, false), session(Interrupted, false)];
-        assert_eq!(workspace_status(&chats), Some(Running));
-    }
-
-    #[test]
-    fn a_closed_chat_doesnt_count() {
-        use SessionStatus::*;
-        assert_eq!(workspace_status(&[session(Running, true), session(Idle, false)]), Some(Idle));
-        assert_eq!(workspace_status(&[session(Running, true)]), None);
-    }
 }

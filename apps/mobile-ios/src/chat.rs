@@ -37,10 +37,10 @@ struct Shown {
 impl EventEmitter<ChatEvent> for ChatView {}
 
 impl ChatView {
-    /// Opens the workspace's most recently active chat, or joins or starts one if it has none open.
+    /// Opens `session`, or with none, joins or starts the workspace's chat.
     pub(crate) fn new(
         workspace: Workspace,
-        sessions: &[Session],
+        session: Option<Session>,
         client: Client,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -48,8 +48,8 @@ impl ChatView {
         // Return makes a new line: the on-screen keyboard's Return never arrives as Enter, so sending is a button.
         let composer = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 6).placeholder("Message the agent"));
         let mut chat = ChatView { workspace, client, shown: None, composer, error: None, ensuring: None };
-        match chrome::chat_to_open(sessions) {
-            Some(session) => chat.show(session, cx),
+        match session {
+            Some(session) => chat.show(&session, cx),
             None => chat.ensure_chat(cx),
         }
         chat
@@ -108,9 +108,7 @@ impl ChatView {
         if text.is_empty() {
             return;
         }
-        // While the agent waits on a question, what's typed is the answer to it.
-        let taken = transcript
-            .update(cx, |transcript, cx| transcript.answer_with_text(&text, cx) || transcript.send_prompt(text, cx));
+        let taken = transcript.update(cx, |transcript, cx| transcript.submit(text, cx));
         if taken {
             self.error = None;
             self.composer.update(cx, |composer, cx| composer.set_value("", window, cx));
@@ -150,25 +148,18 @@ impl ChatView {
 
 impl Render for ChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let insets = window.insets();
-        let back = Button::new("back")
-            .icon(IconName::ChevronLeft)
-            .ghost()
-            .w(px(TAP_HEIGHT))
-            .h(px(TAP_HEIGHT))
-            .on_click(cx.listener(|_, _, _, cx| cx.emit(ChatEvent::Back)));
+        let back = chrome::back_button().on_click(cx.listener(|_, _, _, cx| cx.emit(ChatEvent::Back)));
         let title = SharedString::from(self.workspace.name.clone());
         let branch = chrome::branch_under_name(&self.workspace);
+        let error = self.error.clone().map(|error| chrome::error_line(error, cx));
         v_flex()
             .size_full()
-            .child(chrome::header(title, branch, Some(back.into_any_element()), None, insets.safe_area.top, cx))
-            .when_some(self.error.clone(), |this, error| {
-                this.child(div().px_3().py_2().text_sm().text_color(cx.theme().danger).child(error))
-            })
+            .child(chrome::header(title, branch, Some(back.into_any_element()), None, window, cx))
+            .when_some(error, ParentElement::child)
             .child(match &self.shown {
                 Some(shown) => div().flex_1().min_h_0().w_full().child(shown.transcript.clone()).into_any_element(),
-                None => chrome::empty("Opening the chat", "", cx).into_any_element(),
+                None => chrome::empty("Opening the chat", "", cx),
             })
-            .child(self.composer_row(insets.effective().bottom, cx))
+            .child(self.composer_row(window.insets().effective().bottom, cx))
     }
 }

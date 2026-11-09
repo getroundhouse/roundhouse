@@ -4370,6 +4370,7 @@ name = "look"
 version = "0.1.0"
 dependencies = [
  "gpui-kit",
+ "protocol",
  "serde_json",
 ]
 
@@ -4641,13 +4642,11 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-ios",
- "image",
  "look",
  "mobile-ios",
  "parking_lot",
  "protocol",
  "security-framework",
- "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",

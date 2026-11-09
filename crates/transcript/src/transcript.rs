@@ -213,6 +213,12 @@ impl Transcript {
     }
 
     /// Shows the prompt at once, and takes it back if it can't be sent. Returns false if it's empty.
+    /// What someone typed: the answer to the question the agent is waiting on, if it's waiting on one, and
+    /// otherwise a prompt. Whether it was taken.
+    pub fn submit(&mut self, text: String, cx: &mut Context<Self>) -> bool {
+        self.answer_with_text(&text, cx) || self.send_prompt(text, cx)
+    }
+
     pub fn send_prompt(&mut self, text: String, cx: &mut Context<Self>) -> bool {
         if text.trim().is_empty() {
             return false;

@@ -83,7 +83,7 @@ impl IconSize {
             }
             IconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
             IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
-            IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
+            IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: LARGEST_ROWS, fan: LARGEST_FAN },
         }
     }
 }
@@ -96,6 +96,10 @@ enum Drawing {
     },
     OnPixels(OnPixels),
 }
+
+/// How the biggest sizes draw the fan, which the phone's icon draws too.
+const LARGEST_ROWS: usize = 9;
+const LARGEST_FAN: f32 = 0.62;
 
 /// macOS's grid for an app icon: the tile is inset by this share of the canvas, and rounded by this share of itself.
 /// macOS masks the icon to its own shape anyway, so the tile only has to sit under that mask.
@@ -178,9 +182,9 @@ fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &C
 
 fn paint_phone(bounds: Bounds<Pixels>, colors: &Colors, window: &mut Window) {
     window.paint_quad(fill(bounds, tile_fill(colors)));
-    let Drawing::Scaled { rows, fan } = IconSize::Px1024.drawing() else { return };
-    let width = bounds.size.width * fan / (1. - 2. * INSET);
-    scaled(bounds, IconStyle::Working, rows, width, colors, window);
+    // The same fan as the Mac's, to the tile rather than the canvas, since the phone's tile fills it.
+    let width = bounds.size.width * LARGEST_FAN / (1. - 2. * INSET);
+    scaled(bounds, IconStyle::Working, LARGEST_ROWS, width, colors, window);
 }
 
 fn tile_fill(colors: &Colors) -> Background {

@@ -14,7 +14,7 @@ name = "mobile"
 path = "src/lib.rs"
 
 [features]
-testing = []
+testing = ["dep:parking_lot"]
 
 [dependencies]
 anyhow.workspace = true
@@ -24,10 +24,9 @@ transcript.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
 flume.workspace = true
-parking_lot.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+parking_lot = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 gpui_ios.workspace = true
@@ -36,9 +35,7 @@ security-framework.workspace = true
 
 [dev-dependencies]
 mobile-ios = { path = ".", features = ["testing"] }
-look = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
-image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]

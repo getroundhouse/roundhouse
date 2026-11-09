@@ -9,8 +9,7 @@ mod chrome;
 mod hub_link;
 mod vault;
 
-pub use app::{ConnectTo, MobileApp, Pair, Services, open_window};
-pub use client_core::{PairingLink, RemoteHub};
+pub use app::{MobileApp, open_window};
 pub use vault::{Vault, VaultError};
 
 #[cfg(target_os = "ios")]

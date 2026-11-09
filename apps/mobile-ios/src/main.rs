@@ -6,11 +6,11 @@ fn main() {
     use std::sync::Arc;
 
     use gpui_kit::assets::Assets;
-    use mobile::{DeviceVault, Services};
+    use mobile::DeviceVault;
 
     // The app's container. iOS gives every app its own, and backs this directory up.
     let data_dir = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("Library/Application Support");
-    let services = Services::device(Arc::new(DeviceVault::new(&data_dir)), "roundhouse-ios");
+    let vault = Arc::new(DeviceVault::new(&data_dir));
     let (links, opened) = flume::unbounded();
     let application = gpui_kit::Application::with_platform(gpui_ios::current_platform(false)).with_assets(Assets);
     application.on_open_urls(move |urls| {
@@ -21,7 +21,7 @@ fn main() {
     application.run(move |cx| {
         gpui_kit::init(cx);
         gpui_ios::ios::set_status_bar_style(gpui_ios::StatusBarContentStyle::Light);
-        if let Err(e) = mobile::open_window(services, opened, gpui_kit::WindowOptions::default(), cx) {
+        if let Err(e) = mobile::open_window(vault, opened, gpui_kit::WindowOptions::default(), cx) {
             eprintln!("couldn't open the window: {e:#}");
         }
     });

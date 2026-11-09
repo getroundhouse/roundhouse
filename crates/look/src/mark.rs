@@ -5,6 +5,7 @@
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
+use protocol::model::{SessionStatus, SetupStatus, Workspace};
 
 /// The two sizes a mark comes in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -86,6 +87,23 @@ pub enum Signal {
     NeedsYou,
     /// Stopped short. The whole fan turns red.
     Failed,
+}
+
+impl Signal {
+    /// What a chat in `status` shows, or a workspace whose chats add up to it.
+    pub fn for_status(status: Option<SessionStatus>) -> Signal {
+        match status {
+            Some(SessionStatus::Running) => Signal::Working,
+            Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
+            Some(SessionStatus::Interrupted) => Signal::Failed,
+            None | Some(SessionStatus::Idle | SessionStatus::Unknown) => Signal::Idle,
+        }
+    }
+
+    /// What a workspace shows: being set up, until it is, and then what its chats add up to.
+    pub fn for_workspace(workspace: &Workspace, status: Option<SessionStatus>) -> Signal {
+        if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { Signal::for_status(status) }
+    }
 }
 
 /// The moment, in seconds, a mark that isn't moving is drawn at. It catches a working mark with its light on the fan.

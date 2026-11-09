@@ -15,9 +15,9 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, TestAppContext, WindowBounds, WindowOptions, point,
     px, size,
 };
-use mobile::{MemoryVault, MobileApp, Services, Vault as _};
-use parking_lot::Mutex;
+use mobile::{MemoryVault, MobileApp, Vault as _};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::model::{Repo, Workspace};
 use tempfile::TempDir;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -43,7 +43,7 @@ fn binaries() -> &'static PathBuf {
 pub(crate) struct Stack {
     dir: TempDir,
     port: u16,
-    hub: Mutex<Option<Child>>,
+    hub: Option<Child>,
 }
 
 impl Stack {
@@ -58,26 +58,32 @@ impl Stack {
         git(&root.join("repo"), &["commit", "-qm", "first"]);
         // Free when asked. Another test could take it before the hub does, which would fail that test loudly.
         let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let stack = Stack { dir, port, hub: Mutex::new(None) };
+        let mut stack = Stack { dir, port, hub: None };
         stack.start_hub();
         stack
     }
 
-    pub(crate) fn repo(&self) -> PathBuf {
-        self.dir.path().join("repo")
+    /// The stack's repository, added to the hub.
+    pub(crate) fn add_repo(&self) -> Repo {
+        self.client().repo_add(self.dir.path().join("repo").to_str().unwrap()).unwrap()
+    }
+
+    /// A workspace in the stack's repository, made by another client, as from the desktop app.
+    pub(crate) fn workspace(&self) -> Workspace {
+        self.client().workspace_create(&self.add_repo().id, None, None, None).unwrap()
     }
 
     fn socket(&self) -> PathBuf {
         self.dir.path().join("home/hub.sock")
     }
 
-    pub(crate) fn start_hub(&self) {
+    pub(crate) fn start_hub(&mut self) {
         let path = |name: &str| self.dir.path().join(name);
         let hub = Command::new(binaries().join("roundhoused"))
             .arg("hub")
             .env(protocol::paths::ENV_HOME, path("home"))
             .env(protocol::paths::ENV_WORKSPACES, path("workspaces"))
-            .env("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
+            .env(protocol::paths::ENV_CLAUDE_BIN, binaries().join("examples/fake_claude"))
             .env("FAKE_CLAUDE_STATE", path("agent-state"))
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", path("user-home"))
@@ -88,7 +94,7 @@ impl Stack {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        *self.hub.lock() = Some(hub);
+        self.hub = Some(hub);
         let deadline = Instant::now() + TIMEOUT;
         while Client::connect(&self.socket(), "test").is_err() {
             assert!(Instant::now() < deadline, "timed out waiting for the hub to start");
@@ -96,8 +102,8 @@ impl Stack {
         }
     }
 
-    pub(crate) fn stop_hub(&self) {
-        let Some(mut hub) = self.hub.lock().take() else { return };
+    pub(crate) fn stop_hub(&mut self) {
+        let Some(mut hub) = self.hub.take() else { return };
         if let Ok(client) = Client::connect(&self.socket(), "test") {
             let _ = client.hub_shutdown();
         }
@@ -155,27 +161,29 @@ pub(crate) struct Phone<'a> {
 }
 
 impl<'a> Phone<'a> {
-    /// The app, already paired with the stack's hub if `paired`.
-    pub(crate) fn open(cx: &'a mut TestAppContext, stack: &Stack, paired: bool) -> Phone<'a> {
+    /// The app on a phone that has never paired.
+    pub(crate) fn unpaired(cx: &'a mut TestAppContext) -> Phone<'a> {
+        Phone::open(cx, Arc::new(MemoryVault::default()))
+    }
+
+    /// The app on a phone already paired with the stack's hub.
+    pub(crate) fn paired(cx: &'a mut TestAppContext, stack: &Stack) -> Phone<'a> {
         let vault = Arc::new(MemoryVault::default());
-        if paired {
-            let link = PairingLink::parse(&stack.pairing_link()).unwrap();
-            vault.save(&client_core::pair(&link, "phone").unwrap()).unwrap();
-        }
+        let link = PairingLink::parse(&stack.pairing_link()).unwrap();
+        vault.save(&client_core::pair(&link, "phone").unwrap()).unwrap();
+        Phone::open(cx, vault)
+    }
+
+    fn open(cx: &'a mut TestAppContext, vault: Arc<MemoryVault>) -> Phone<'a> {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
-        let services = Services::device(vault.clone(), "roundhouse-ios");
         let (links, opened) = flume::unbounded();
         // An iPhone's screen, in points.
         let screen = Bounds::new(point(px(0.), px(0.)), size(px(402.), px(874.)));
         let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(screen)), ..Default::default() };
-        let (handle, app) = cx.update(|cx| mobile::open_window(services, opened, options, cx)).unwrap();
+        let (handle, app) = cx.update(|cx| mobile::open_window(vault.clone(), opened, options, cx)).unwrap();
         Phone { cx, handle, app, vault, links }
-    }
-
-    pub(crate) fn showing(&self) -> &'static str {
-        self.cx.read_entity(&self.app, |app, _| app.showing())
     }
 
     pub(crate) fn is_connected(&self) -> bool {
@@ -198,7 +206,7 @@ impl<'a> Phone<'a> {
             if done(self) {
                 return;
             }
-            assert!(Instant::now() < deadline, "timed out waiting for {what}, showing {}", self.showing());
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
             std::thread::sleep(STEP);
             self.cx.executor().advance_clock(STEP);
         }
@@ -224,6 +232,20 @@ impl<'a> Phone<'a> {
         self.frame();
     }
 
+    /// Taps the workspace in the list, once it's there, and waits for its chat.
+    pub(crate) fn open_chat(&mut self, workspace: &Workspace) {
+        let row = ElementId::Name(format!("workspace-{}", workspace.id).into());
+        self.wait("the workspace", |phone| phone.has(row.clone()));
+        self.tap(row);
+        self.wait("its chat", |phone| phone.has("composer") && phone.transcript_shown());
+    }
+
+    /// Types into the chat's composer and sends it.
+    pub(crate) fn send(&mut self, text: &str) {
+        self.type_into("composer", text);
+        self.tap("send");
+    }
+
     /// The newest approval the chat has open, by its place in the chat.
     pub(crate) fn open_approval(&self) -> Option<u64> {
         let transcript = self.cx.read_entity(&self.app, MobileApp::transcript)?;
@@ -233,14 +255,6 @@ impl<'a> Phone<'a> {
 
     pub(crate) fn transcript_shown(&self) -> bool {
         self.cx.read_entity(&self.app, MobileApp::transcript).is_some()
-    }
-
-    pub(crate) fn pairing_failed(&self) -> bool {
-        self.cx.read_entity(&self.app, |app, _| app.pairing_failed())
-    }
-
-    pub(crate) fn confirming_pairing(&self) -> bool {
-        self.cx.read_entity(&self.app, |app, _| app.confirming_pairing())
     }
 
     fn events(&self) -> Vec<SessionEvent> {

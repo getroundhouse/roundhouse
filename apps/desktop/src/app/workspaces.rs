@@ -4,7 +4,7 @@ use client_core::ClientError;
 use client_core::records::Record;
 use gpui_kit::{AppContext, Context, PathPromptOptions, PromptLevel};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, RepoId, WorkspaceId};
+use protocol::model::{RepoId, WorkspaceId};
 
 use super::AppView;
 
@@ -18,15 +18,7 @@ impl AppView {
         self.creating_in = Some(repo_id.clone());
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let created = cx
-                .background_spawn(async move {
-                    let workspace =
-                        client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
-                    // Leaves the model and approval mode to the user's own Claude settings.
-                    let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
-                    Ok::<_, ClientError>((workspace, session))
-                })
-                .await;
+            let created = cx.background_spawn(async move { client.workspace_start(&repo_id) }).await;
             let _ = this.update(cx, |t, cx| {
                 t.busy = false;
                 t.creating_in = None;

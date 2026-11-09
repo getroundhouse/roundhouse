@@ -2,20 +2,19 @@
 
 use std::collections::HashMap;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use client_core::records::{latest_open_session, workspace_status};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+    Pixels, StatefulInteractiveElement, Styled, Window, div,
 };
-use look::{Size, Work};
+use look::{Signal, Size, Work};
 use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
-use super::{MobileApp, Screen};
+use super::{Followed, MobileApp, Screen};
 use crate::chat::ChatView;
-use crate::chrome::{self, TAP_HEIGHT};
-use crate::hub_link::LinkState;
+use crate::chrome;
 
 /// What the list shows, read from client-core in one go.
 struct Listing {
@@ -25,52 +24,42 @@ struct Listing {
 }
 
 impl MobileApp {
-    pub(super) fn workspaces_screen(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let insets = window.insets();
-        let Some(link) = self.link() else { return div().into_any_element() };
-        let link = link.read(cx);
-        let (name, ready) = (link.name().clone(), link.client().is_some());
-        let subtitle: SharedString = match link.state() {
-            LinkState::Connecting => "Connecting…".into(),
-            LinkState::Ready => "Connected".into(),
-            LinkState::Unreachable(_) => "Can't reach it. Trying again".into(),
-        };
+    pub(super) fn workspaces_screen(&self, followed: &Followed, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        let link = followed.link.read(cx);
+        let (name, ready) = (link.hub().hub_name.clone(), link.client().is_some());
+        // Ready ones only, as on the desktop: one still being made has nothing to open yet.
         let listing = link.read(|records| Listing {
             repos: records.repos(),
-            workspaces: records.workspaces().into_iter().filter(|w| w.status != WorkspaceStatus::Archived).collect(),
+            workspaces: records.workspaces().into_iter().filter(|w| w.status == WorkspaceStatus::Ready).collect(),
             sessions: records.sessions(),
         });
-        let hub_button = icon_button("hub-info", IconName::Settings)
+        let hub_button = chrome::icon_button("hub-info", IconName::Settings)
             .on_click(cx.listener(|app, _, _, cx| app.show(Screen::HubInfo, cx)));
-        let new_button = icon_button("new-workspace", IconName::Plus)
+        let new_button = chrome::icon_button("new-workspace", IconName::Plus)
             .disabled(!ready)
             .on_click(cx.listener(|app, _, _, cx| app.show(Screen::NewWorkspace, cx)));
         let header = chrome::header(
-            name.clone(),
-            Some(subtitle),
+            name.clone().into(),
+            Some(chrome::connection(link.state())),
             Some(hub_button.into_any_element()),
             Some(new_button.into_any_element()),
-            insets.safe_area.top,
+            window,
             cx,
         );
         let body = match listing {
-            None => chrome::empty(format!("Connecting to {name}"), "", cx).into_any_element(),
-            Some(listing) if listing.workspaces.is_empty() => {
-                chrome::empty("No workspaces", "Tap + to start one.", cx).into_any_element()
-            }
-            Some(listing) => Self::list(&listing, ready, insets.safe_area.bottom, cx),
+            None => chrome::empty(format!("Connecting to {name}"), "", cx),
+            Some(listing) if listing.workspaces.is_empty() => chrome::empty("No workspaces", "Tap + to start one.", cx),
+            Some(listing) => Self::list(&listing, ready, window.insets().safe_area.bottom, cx),
         };
         // Such as the vault failing to keep the hub just paired with.
-        let error =
-            self.error.clone().map(|error| div().px_4().py_2().text_sm().text_color(cx.theme().danger).child(error));
+        let error = self.error.clone().map(|error| chrome::error_line(error, cx));
         v_flex().size_full().child(header).when_some(error, ParentElement::child).child(body).into_any_element()
     }
 
-    fn list(listing: &Listing, ready: bool, bottom: gpui_kit::Pixels, cx: &mut Context<Self>) -> AnyElement {
-        let mut repos: Vec<&Repo> = listing.repos.iter().collect();
-        repos.sort_by(|a, b| a.name.cmp(&b.name));
+    /// Newest first in each repository, and the repositories by name, as client-core keeps them.
+    fn list(listing: &Listing, ready: bool, bottom: Pixels, cx: &mut Context<Self>) -> AnyElement {
         let mut sections = v_flex().w_full().pb(bottom);
-        for repo in repos {
+        for repo in &listing.repos {
             let mut workspaces: Vec<&Workspace> = listing.workspaces.iter().filter(|w| w.repo_id == repo.id).collect();
             if workspaces.is_empty() {
                 continue;
@@ -95,35 +84,33 @@ impl MobileApp {
 
     fn row(workspace: &Workspace, sessions: &[Session], ready: bool, cx: &mut Context<Self>) -> AnyElement {
         let id = workspace.id.clone();
-        let signal = chrome::workspace_signal(workspace, sessions);
+        let signal = Signal::for_workspace(workspace, workspace_status(sessions));
+        let muted = cx.theme().muted_foreground;
         let content = h_flex()
             .w_full()
             .gap_3()
             .items_center()
             .child(look::mark(signal, Work::NoPr, Size::Row, cx))
-            .child(v_flex().flex_1().min_w_0().child(div().truncate().child(workspace.name.clone())).when_some(
-                chrome::branch_under_name(workspace),
-                |this, branch| {
-                    this.child(div().text_xs().truncate().text_color(cx.theme().muted_foreground).child(branch))
-                },
-            ))
-            .child(div().text_color(cx.theme().muted_foreground).child(IconName::ChevronRight));
-        let button = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
-            .ghost()
-            .w_full()
-            .h(px(60.))
-            .px_4()
-            .child(content)
-            .on_click(cx.listener(move |app, _, window, cx| {
-                if ready {
-                    app.open_workspace(&id, window, cx);
-                }
-            }));
-        div().border_b_1().border_color(cx.theme().border).child(button).into_any_element()
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .child(div().truncate().child(workspace.name.clone()))
+                    .when_some(chrome::branch_under_name(workspace), |this, branch| {
+                        this.child(div().text_xs().truncate().text_color(muted).child(branch))
+                    }),
+            )
+            .child(div().text_color(muted).child(IconName::ChevronRight));
+        let open = cx.listener(move |app, _, window, cx| {
+            if ready {
+                app.open_workspace(&id, window, cx);
+            }
+        });
+        chrome::row(ElementId::Name(format!("workspace-{}", workspace.id).into()), content, open, cx)
     }
 
     /// Shows a workspace's chat. Needs a connection, since the chat reads its history from the hub.
-    pub(super) fn open_workspace(&mut self, id: &WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_workspace(&mut self, id: &WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(link) = self.link() else { return };
         let link = link.read(cx);
         let Some(client) = link.client() else { return };
@@ -133,11 +120,8 @@ impl MobileApp {
             Some((workspace, sessions))
         });
         let Some((workspace, sessions)) = found.flatten() else { return };
-        let chat = cx.new(|cx| ChatView::new(workspace, &sessions, client, window, cx));
+        let session = latest_open_session(&sessions).cloned();
+        let chat = cx.new(|cx| ChatView::new(workspace, session, client, window, cx));
         self.show_chat(chat, cx);
     }
-}
-
-fn icon_button(id: &'static str, icon: IconName) -> Button {
-    Button::new(id).icon(icon).ghost().w(px(TAP_HEIGHT)).h(px(TAP_HEIGHT))
 }

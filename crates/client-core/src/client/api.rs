@@ -186,6 +186,14 @@ impl Client {
         Ok(sessions)
     }
 
+    /// Makes a workspace with the hub's own choice of name and branch, and joins or starts its chat with Claude,
+    /// leaving the model and approval mode to the user's own Claude settings.
+    pub fn workspace_start(&self, repo_id: &RepoId) -> Result<(Workspace, Session)> {
+        let workspace = self.workspace_create(repo_id, None, None, Some(crate::new_request_id()))?;
+        let session = self.session_ensure(&workspace.id, AgentKind::Claude)?;
+        Ok((workspace, session))
+    }
+
     pub fn session_ensure(&self, workspace_id: &WorkspaceId, agent: AgentKind) -> Result<Session> {
         self.expect_session(ClientRequest::SessionEnsure { workspace_id: workspace_id.clone(), agent })
     }

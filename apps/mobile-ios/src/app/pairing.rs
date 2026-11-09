@@ -7,7 +7,8 @@ use gpui_kit::component::input::Input;
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, px,
+    AnyElement, AppContext as _, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement,
+    SharedString, Styled, TestSupportExt as _, Window, div, px,
 };
 
 use super::{MobileApp, Pairing, Screen};
@@ -22,7 +23,7 @@ impl MobileApp {
     /// new hub replaces the old one.
     pub(super) fn pair(&mut self, url: &str, cx: &mut Context<Self>) {
         // A code works once, and the first link is already using it.
-        if matches!(self.pairing, Pairing::Busy(_)) {
+        if matches!(self.pairing, Pairing::Busy { .. }) {
             return;
         }
         self.screen = Screen::Pairing;
@@ -35,17 +36,14 @@ impl MobileApp {
     }
 
     fn start_pairing(&mut self, link: PairingLink, cx: &mut Context<Self>) {
-        self.pairing = Pairing::Busy(link.hub_name.clone().into());
-        cx.notify();
-        let pair = self.services.pair.clone();
-        self.pairing_task = Some(cx.spawn(async move |this, cx| {
-            let paired = cx.background_spawn(async move { pair(&link, DEVICE_NAME) }).await;
+        let hub = link.hub_name.clone().into();
+        let task = cx.spawn(async move |this, cx| {
+            let paired = cx.background_spawn(async move { client_core::pair(&link, DEVICE_NAME) }).await;
             let _ = this.update(cx, |app, cx| {
-                app.pairing_task = None;
                 match paired {
                     Ok(hub) => {
                         // Still followed for now if it can't be kept, and paired again next launch.
-                        app.error = app.services.vault.save(&hub).err().map(|e| e.to_string().into());
+                        app.error = app.vault.save(&hub).err().map(|e| e.to_string().into());
                         app.pairing = Pairing::Idle;
                         app.follow(hub, cx);
                     }
@@ -53,12 +51,13 @@ impl MobileApp {
                 }
                 cx.notify();
             });
-        }));
+        });
+        self.pairing = Pairing::Busy { hub, _task: task };
+        cx.notify();
     }
 
     /// Back to the hub this phone has, leaving the link unused.
     fn keep_hub(&mut self, cx: &mut Context<Self>) {
-        self.pairing_task = None;
         self.pairing = Pairing::Idle;
         self.show(Screen::Workspaces, cx);
     }
@@ -67,11 +66,11 @@ impl MobileApp {
         let insets = window.insets();
         let body = match &self.pairing {
             Pairing::Confirm(link) => self.confirm(link, cx),
-            Pairing::Idle | Pairing::Busy(_) | Pairing::Failed(_) => self.instructions(cx),
+            Pairing::Idle | Pairing::Busy { .. } | Pairing::Failed(_) => self.instructions(cx),
         };
         let back = self.followed.as_ref().filter(|_| !matches!(self.pairing, Pairing::Confirm(_))).map(|followed| {
             Button::new("keep-hub")
-                .label(format!("Back to {}", followed.hub.hub_name))
+                .label(format!("Back to {}", followed.link.read(cx).hub().hub_name))
                 .ghost()
                 .h(px(TAP_HEIGHT))
                 .on_click(cx.listener(|app, _, _, cx| app.keep_hub(cx)))
@@ -90,7 +89,7 @@ impl MobileApp {
     }
 
     fn instructions(&self, cx: &mut Context<Self>) -> AnyElement {
-        let busy = matches!(self.pairing, Pairing::Busy(_));
+        let busy = matches!(self.pairing, Pairing::Busy { .. });
         let muted = cx.theme().muted_foreground;
         v_flex()
             .gap_4()
@@ -127,7 +126,8 @@ impl MobileApp {
     }
 
     fn confirm(&self, link: &PairingLink, cx: &mut Context<Self>) -> AnyElement {
-        let old = self.followed.as_ref().map(|followed| followed.hub.hub_name.clone()).unwrap_or_default();
+        let old =
+            self.followed.as_ref().map(|followed| followed.link.read(cx).hub().hub_name.clone()).unwrap_or_default();
         let new = link.hub_name.clone();
         v_flex()
             .gap_4()
@@ -154,23 +154,20 @@ impl MobileApp {
     }
 
     fn pairing_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (text, color): (Option<SharedString>, _) = match &self.pairing {
-            Pairing::Idle | Pairing::Confirm(_) => (None, cx.theme().muted_foreground),
-            Pairing::Busy(hub) => (Some(format!("Pairing with {hub}…").into()), cx.theme().muted_foreground),
-            Pairing::Failed(why) => (Some(why.clone()), cx.theme().danger),
+        let (id, text, color): (_, Option<SharedString>, _) = match &self.pairing {
+            Pairing::Idle | Pairing::Confirm(_) => ("pairing-status", None, cx.theme().muted_foreground),
+            Pairing::Busy { hub, .. } => {
+                ("pairing-status", Some(format!("Pairing with {hub}…").into()), cx.theme().muted_foreground)
+            }
+            Pairing::Failed(why) => ("pairing-failed", Some(why.clone()), cx.theme().danger),
         };
-        div().min_h(px(40.)).text_sm().text_center().text_color(color).when_some(text, ParentElement::child)
-    }
-
-    /// Whether the last try to pair failed, and pairing is showing why.
-    #[cfg(feature = "testing")]
-    pub fn pairing_failed(&self) -> bool {
-        matches!(self.pairing, Pairing::Failed(_))
-    }
-
-    /// Whether it's asking before pairing with another hub.
-    #[cfg(feature = "testing")]
-    pub fn confirming_pairing(&self) -> bool {
-        matches!(self.pairing, Pairing::Confirm(_))
+        div()
+            .id(id)
+            .min_h(px(40.))
+            .text_sm()
+            .text_center()
+            .text_color(color)
+            .when_some(text, ParentElement::child)
+            .test_support()
     }
 }
