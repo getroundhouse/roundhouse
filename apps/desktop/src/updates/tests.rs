@@ -243,7 +243,7 @@ fn checking_looks_again_and_says_an_update_is_ready(cx: &mut TestAppContext) {
     let (message, detail) = answer(cx);
 
     assert_eq!(message, "Roundhouse 0.1.6 is ready");
-    assert_eq!(detail, "It installs when you quit.");
+    assert!(detail.ends_with("Otherwise it installs when you quit."), "{detail}");
     assert!(feeds_read(&server) > looks_before);
     assert!(!cx.read(checking));
 }
@@ -273,4 +273,67 @@ fn checking_says_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestApp
 
     assert_eq!(message, "Couldn't reach the update server");
     assert!(cx.read(|cx| problem_shown(cx).is_none()));
+}
+
+/// Has the stand-in for Velopack's updater write down what it was asked to do, and returns where.
+fn updater_that_notes(installed: &VelopackLocatorConfig) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let noted = installed.RootAppDir.with_file_name("asked");
+    std::fs::write(&installed.UpdateExePath, format!("#!/bin/sh\necho \"$@\" > '{}'\n", noted.display())).unwrap();
+    std::fs::set_permissions(&installed.UpdateExePath, std::fs::Permissions::from_mode(0o755)).unwrap();
+    noted
+}
+
+/// An app that has downloaded 0.1.6, and the server it came from.
+fn with_an_update_ready(installed: &VelopackLocatorConfig, cx: &mut TestAppContext) -> (Server, tempfile::TempDir) {
+    let pair = key_pair();
+    let new = b"0.1.6, packaged".as_slice();
+    let server = publish(&[("0.1.6", new, Reply::file(new))], &pair);
+    let state = app_looking_at(&server.base, public(&pair), installed, cx);
+    check(cx);
+    assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), Some("0.1.6"));
+    (server, state)
+}
+
+#[gpui_kit::test]
+fn restarting_to_update_has_velopack_install_it_and_open_the_app_again(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let noted = updater_that_notes(&installed);
+    let _app = with_an_update_ready(&installed, cx);
+
+    cx.update(restart_to_update);
+
+    let deadline = Instant::now() + LOOK_TIMEOUT;
+    while !noted.exists() {
+        assert!(Instant::now() < deadline, "the updater wasn't started");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let asked = std::fs::read_to_string(&noted).unwrap();
+    assert!(asked.starts_with("apply "), "{asked}");
+    assert!(asked.contains(&format!("--waitPid {}", std::process::id())), "{asked}");
+    assert!(!asked.contains("--norestart"), "{asked}");
+}
+
+#[gpui_kit::test]
+fn after_restarting_to_update_quitting_has_nothing_to_install(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let _noted = updater_that_notes(&installed);
+    let _app = with_an_update_ready(&installed, cx);
+
+    cx.update(restart_to_update);
+
+    assert!(cx.read(|cx| apply(false, cx)).is_none(), "quitting would hand it to a second updater");
+    assert!(cx.read(|cx| ready(cx).is_none()), "the card goes as the app does");
+}
+
+#[gpui_kit::test]
+fn an_update_that_cant_install_says_so_and_stays_ready(cx: &mut TestAppContext) {
+    // The stand-in for Velopack's updater is an empty file, which can't be run.
+    let (_dir, installed) = installed();
+    let _app = with_an_update_ready(&installed, cx);
+
+    cx.update(restart_to_update);
+
+    assert_eq!(cx.read(|cx| problem_shown(cx).map(|p| p.kind)), Some(Kind::Failed(Step::Install)));
+    assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), Some("0.1.6"));
 }

@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use client_core::{Client, Daemon};
-use desktop::app::{AppView, Connection, HubSource};
+use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, SharedString, TestAppContext};
@@ -183,6 +183,12 @@ impl<'a> Ui<'a> {
         let hub = stack.hub.clone();
         let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, cx)).unwrap();
         Self { cx, handle, view, seen_approval: 0 }
+    }
+
+    /// What the line at the bottom of the sidebar says.
+    pub(crate) fn build_line(&mut self) -> BuildLine {
+        let view = self.view.clone();
+        self.cx.update(|cx| view.read(cx).build_line(cx))
     }
 
     /// Whether the last frame drew it.

@@ -15,6 +15,7 @@ const QUIET_FOR: Duration = Duration::from_hours(24);
 pub enum Step {
     Check,
     Download,
+    Install,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +61,7 @@ impl Problem {
             Kind::Refused(Refusal::NotAsListed) => refused("a download doesn't match the update feed"),
             Kind::Failed(Step::Check) => "Couldn't check for updates".to_string(),
             Kind::Failed(Step::Download) => "Couldn't download an update".to_string(),
+            Kind::Failed(Step::Install) => "Couldn't install the update".to_string(),
             Kind::Translocated => "Move Roundhouse to Applications to update it".to_string(),
             Kind::ReadOnly => "Can't update Roundhouse where it is".to_string(),
         }
@@ -99,6 +101,8 @@ pub(super) struct Shown {
     pub(super) problem: Option<Problem>,
     /// Someone checked for updates, and the look that answers them hasn't finished.
     pub(super) checking: bool,
+    /// The version of the update that's downloaded, which installs when the app restarts or quits.
+    pub(super) ready: Option<String>,
 }
 
 impl Global for Shown {}

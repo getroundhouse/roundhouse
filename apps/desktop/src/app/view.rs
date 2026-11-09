@@ -172,6 +172,25 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         .child(div().flex_none().child("Dismiss"))
 }
 
+/// "1 chat" or "2 chats", or `None` for none.
+fn counted(n: usize, what: &str) -> Option<String> {
+    match n {
+        0 => None,
+        1 => Some(format!("1 {what}")),
+        n => Some(format!("{n} {what}s")),
+    }
+}
+
+/// What restarting the app would lose, or `None` for nothing: what's typed in `chats` and in `comments` on the diff.
+pub(super) fn unsent_note(chats: usize, comments: usize) -> Option<String> {
+    let typed = match (counted(chats, "chat"), counted(comments, "comment")) {
+        (None, None) => return None,
+        (Some(both), None) | (None, Some(both)) => both,
+        (Some(chats), Some(comments)) => format!("{chats} and {comments}"),
+    };
+    Some(format!("What's typed in {typed} hasn't been sent, and restarting loses it."))
+}
+
 /// What restarting would cost, since this is the one screen that can stop agents with one click.
 fn restart_note(agents: u32, setups: u32) -> String {
     let count = |n: u32, what: &str| match n {
@@ -275,6 +294,17 @@ fn centered(text: &str, color: Hsla) -> AnyElement {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restarting_says_what_typing_it_would_lose() {
+        assert_eq!(unsent_note(0, 0), None);
+        assert_eq!(unsent_note(1, 0).unwrap(), "What's typed in 1 chat hasn't been sent, and restarting loses it.");
+        assert_eq!(unsent_note(0, 1).unwrap(), "What's typed in 1 comment hasn't been sent, and restarting loses it.");
+        assert_eq!(
+            unsent_note(2, 1).unwrap(),
+            "What's typed in 2 chats and 1 comment hasn't been sent, and restarting loses it."
+        );
+    }
 
     #[test]
     fn the_restart_note_says_what_would_stop() {

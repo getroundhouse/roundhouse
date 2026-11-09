@@ -13,13 +13,15 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
 use protocol::frame;
-use protocol::model::{GitDiff, GitStatus, SessionId, WorkspaceStatus};
+use protocol::model::{GitDiff, GitStatus, SessionId, SessionStatus, WorkspaceStatus};
 
 use super::world::World;
 
 /// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
 /// checkout's version is.
 pub(crate) const BUILD: &str = "1.0.0";
+/// The app's build number, which a screen's hub can be older than.
+pub(crate) const BUILD_NUMBER: u64 = 2;
 
 /// Listens until the process ends. Each screen gets its own socket, so nothing outlives the screen that needs it.
 pub(crate) fn serve(socket: &Path, world: World) {
@@ -61,8 +63,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
     use ClientResponse as C;
     let reply = |response| Ok((response, Vec::new()));
     match request {
-        R::Hello { .. } => reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: BUILD.to_string() }),
-        R::HubStatus => reply(C::HubStatus(status())),
+        R::Hello { .. } => {
+            reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: version(world).to_string() })
+        }
+        R::HubStatus => reply(C::HubStatus(status(world))),
         R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
         R::RecordsList => reply(C::Records(world.records())),
         R::WorkspaceList { include_archived } => reply(C::Workspaces {
@@ -124,18 +128,28 @@ fn subscribe(world: &World, id: &SessionId, from_seq: u64, subscription_id: u64)
     Ok((ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }
 
-/// Started by hand, as far as the app can tell, so it never tries to replace it.
-fn status() -> HubStatus {
+fn version(world: &World) -> &'static str {
+    world.hub.map_or(BUILD, |hub| hub.version)
+}
+
+/// Started by hand, as far as the app can tell, unless the screen says otherwise. A hub a client started is never
+/// replaced, because its running chats keep it busy.
+fn status(world: &World) -> HubStatus {
+    let running = world
+        .sessions
+        .iter()
+        .filter(|s| matches!(s.status, SessionStatus::Running | SessionStatus::WaitingApproval))
+        .count();
     HubStatus {
         pid: std::process::id(),
-        hub_version: BUILD.to_string(),
+        hub_version: version(world).to_string(),
         protocol_version: PROTOCOL_VERSION,
         started_at_ms: 0,
         workers: 0,
-        running_sessions: 0,
+        running_sessions: u32::try_from(running).unwrap(),
         clients: 1,
-        on_demand: false,
-        build_number: None,
+        on_demand: world.hub.is_some_and(|hub| hub.on_demand),
+        build_number: world.hub.map(|hub| hub.number),
         running_setups: 0,
         requests: 1,
     }
