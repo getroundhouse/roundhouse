@@ -55,6 +55,9 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     cx.update(look::hold_still);
     // The kit's own animations, such as a dialog's entrance, show as they end.
     cx.update(|cx| cx.set_reduce_motion(true));
+    // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
+    // a picture of the app once it's ready.
+    look::preload_highlighting();
     // As people see it, so no checkout.
     let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, None, cx)).unwrap();
     let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf() };

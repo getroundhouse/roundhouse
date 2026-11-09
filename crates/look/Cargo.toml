@@ -1,6 +1,6 @@
 [package]
 name = "look"
-description = "How the app looks: its theme, the colours the kit has no name for, the status mark and the app icon."
+description = "How the app looks: its theme, the colours the kit has no name for, code's colours, the status mark and the app icon."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -12,6 +12,10 @@ testing = []
 [dependencies]
 gpui-kit.workspace = true
 serde_json.workspace = true
+# The kit's highlighter is private, so code is highlighted with the same two crates directly. Oniguruma took
+# highlighting a large diff from 12.2 s of CPU to 2.6 s.
+syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
+two-face = { workspace = true, features = ["syntect-onig"] }
 
 [lints]
 workspace = true

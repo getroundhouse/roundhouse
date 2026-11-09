@@ -7,8 +7,8 @@ use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
 };
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, HighlightStyle,
-    Hsla, InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Subscription, Window, div,
+    AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Subscription, Window, div,
 };
 use protocol::model::DiffSide;
 
@@ -97,15 +97,7 @@ impl FileDiff {
             self.select_draft_line(cx);
         } else {
             let state = cx.new(|cx| {
-                DiffState::new([file], cx).with_mode(DiffMode::Unified).with_syntax_highlighter(|language, text| {
-                    crate::highlight::highlight(language, text)
-                        .into_iter()
-                        .map(|span| {
-                            let style = HighlightStyle { color: Some(span.style.color), ..Default::default() };
-                            (span.range, style)
-                        })
-                        .collect()
-                })
+                DiffState::new([file], cx).with_mode(DiffMode::Unified).with_syntax_highlighter(look::highlight)
             });
             self.state = Some(state);
         }

@@ -6,7 +6,6 @@ mod assets;
 pub mod changes;
 pub mod checkout;
 pub mod file_diff;
-mod highlight;
 mod menus;
 mod rename;
 pub mod review;
@@ -79,7 +78,7 @@ pub fn open_main_window(
         KeyBinding::new("ctrl-shift-tab", PreviousChat, None),
     ]);
     menus::set(cx);
-    std::thread::spawn(highlight::preload);
+    std::thread::spawn(look::preload_highlighting);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),
         // No title bar of its own: the sidebar and the workspace header run to the top edge, and the window's
