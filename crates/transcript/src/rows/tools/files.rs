@@ -1,0 +1,122 @@
+//! Reading, writing and editing a file: what the call did and to which file, with how many lines where that helps.
+//! Opened, the file's lines with their numbers, and a change as a diff. Hovering an edit shows its diff.
+
+use std::rc::Rc;
+
+use gpui_kit::assets::IconName;
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{
+    AnyElement, App, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement, Render,
+    SharedString, Styled, TestSupportExt as _, Window, div, px,
+};
+
+use super::line::{Line, Part, Preview};
+use super::{Answer, Toggle, block, line, numbered};
+use crate::calls::diff;
+use crate::calls::files::{file_name, language, numbered_lines};
+use crate::calls::lines::{Mark, NumberedLine, Section};
+use crate::calls::{EditFile, ReadFile, WriteFile, count};
+
+const PREVIEW_WIDTH: f32 = 560.0;
+/// About a dozen lines, so a preview never covers much of the transcript.
+const PREVIEW_HEIGHT: f32 = 260.0;
+
+pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
+    let lines = answer.and_then(Answer::success).map(numbered_lines).unwrap_or_default();
+    let title =
+        if lines.is_empty() { "Read".to_string() } else { format!("Read {}", count(lines.len(), "line", "lines")) };
+    let line = Line::new(IconName::FileText, title).part(chip(file.path));
+    let opened = if !toggle.open {
+        None
+    } else if lines.is_empty() {
+        // What came back instead of lines. A failure is shown under the line, as for any call.
+        answer.and_then(Answer::success).map(|text| {
+            let output = block::output(toggle.key.element("output"), text, cx.theme().muted_foreground, cx);
+            block::frame(cx).child(output).into_any_element()
+        })
+    } else {
+        let section = lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
+        Some(shown_file(toggle, file.path, &[section], cx))
+    };
+    line::drawn(line, answer, opened, toggle, cx)
+}
+
+pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
+    // A write over a file that was there is a change, counted like an edit. Otherwise all of it is new.
+    let replaced = answer.and_then(Answer::hunks);
+    let icon = if replaced.is_some() { IconName::FilePen } else { IconName::FilePlus };
+    let title = format!("Write {}", count(file.content.lines().count(), "line", "lines"));
+    let line = Line::new(icon, title)
+        .part(chip(file.path))
+        .part(replaced.map(|hunks| Part::Counts(diff::change_counts(hunks))));
+    let opened = toggle.open.then(|| {
+        let sections = replaced.map_or_else(|| vec![whole(file.content)], diff::from_hunks);
+        shown_file(toggle, file.path, &sections, cx)
+    });
+    line::drawn(line, answer, opened, toggle, cx)
+}
+
+pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
+    let sections: Vec<Section> = answer
+        .and_then(Answer::hunks)
+        .map_or_else(|| file.edits.iter().map(|(old, new)| diff::from_text(old, new)).collect(), diff::from_hunks);
+    let sections = Rc::new(sections);
+    let line = Line::new(IconName::FilePen, "Edit")
+        .part(chip(file.path))
+        .part(Part::Counts(diff::counts(&sections)))
+        .preview(preview(language(file.path), sections.clone()));
+    let opened = toggle.open.then(|| shown_file(toggle, file.path, &sections, cx));
+    line::drawn(line, answer, opened, toggle, cx)
+}
+
+/// A file's lines in a block, under its path.
+fn shown_file(toggle: &Toggle, path: &str, sections: &[Section], cx: &App) -> AnyElement {
+    block::frame(cx)
+        .child(block::label(path.to_string(), cx))
+        .child(numbered::lines(toggle.key.element("file"), language(path), sections, cx))
+        .into_any_element()
+}
+
+fn chip(path: &str) -> Part {
+    Part::Chip(file_name(path).to_string().into())
+}
+
+/// A new file, all of it added, numbered from the top.
+fn whole(content: &str) -> Section {
+    (1..).zip(content.lines()).map(|(number, text)| NumberedLine::new(Mark::Added, Some(number), text)).collect()
+}
+
+fn preview(language: &str, sections: Rc<Vec<Section>>) -> Preview {
+    let language: SharedString = language.to_string().into();
+    Rc::new(move |_, cx: &mut App| {
+        let (language, sections) = (language.clone(), sections.clone());
+        cx.new(|_| DiffPreview { language, sections }).into()
+    })
+}
+
+/// An edit's diff, shown while its line is hovered.
+struct DiffPreview {
+    language: SharedString,
+    sections: Rc<Vec<Section>>,
+}
+
+impl Render for DiffPreview {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, cx));
+        div()
+            .id("edit-preview")
+            .w(px(PREVIEW_WIDTH))
+            .max_h(px(PREVIEW_HEIGHT))
+            .py_1()
+            .overflow_hidden()
+            .rounded(px(10.))
+            .border_1()
+            .border_color(theme.input)
+            .bg(theme.popover)
+            .font_family(theme.mono_font_family.clone())
+            .text_size(theme.mono_font_size)
+            .children(rows.collect::<Vec<_>>())
+            .test_support()
+    }
+}

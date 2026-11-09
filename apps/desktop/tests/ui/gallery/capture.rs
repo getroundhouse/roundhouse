@@ -262,8 +262,8 @@ impl Driver {
         match target {
             Target::Id(id) => gpui_kit::SharedString::from(id).into(),
             Target::Label(label) => {
-                let found = self.cx.update_window(self.handle, |_, window, _| window.find_by_label(label)).unwrap();
-                found.path().last().unwrap().clone()
+                let found = self.cx.update_window(self.handle, |_, window, _| window.find_all_by_label(label)).unwrap();
+                found.first().unwrap_or_else(|| panic!("nothing is labelled {label}")).path().last().unwrap().clone()
             }
         }
     }

@@ -8,7 +8,8 @@ use serde_json::json;
 
 use super::events::{finished_turn, text, tool_failed, tool_result, tool_use, user_prompt};
 
-const ASK: &str = "Make signals say whether a train may pass, and add a test for it.";
+/// What the chats about the signalling crate were asked.
+pub(crate) const ASK: &str = "Make signals say whether a train may pass, and add a test for it.";
 
 const TEST_OUTPUT: &str = "   Compiling signals v0.1.0 (/workspaces/aspen/crates/signals)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 2.91s

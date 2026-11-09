@@ -14,10 +14,7 @@ pub(crate) struct Failure<'a> {
 
 impl<'a> Failure<'a> {
     pub(crate) fn read(text: &'a str) -> Self {
-        let exit_code = exit_code(text);
-        let rest = if exit_code.is_some() { after_first_line(text) } else { text };
-        let rest = rest.trim().trim_start_matches(TOOL_ERROR_OPEN).trim_end_matches(TOOL_ERROR_CLOSE);
-        Self { exit_code, message: super::first_line(rest) }
+        Self { exit_code: exit_code(text), message: super::first_line(output(text)) }
     }
 
     /// What its line says first, such as `Exit 2`.
@@ -26,9 +23,18 @@ impl<'a> Failure<'a> {
     }
 }
 
-/// A command's output without the line saying how it exited, which the line under the call already says.
+/// What went wrong, in full, as an opened call shows it: a command's output without the line saying how it exited,
+/// which the line under the call already says, or a tool's refusal without its tags.
 pub(crate) fn output(text: &str) -> &str {
-    if exit_code(text).is_some() { after_first_line(text) } else { text }
+    if exit_code(text).is_some() {
+        return after_first_line(text);
+    }
+    let trimmed = text.trim();
+    if trimmed.starts_with(TOOL_ERROR_OPEN) {
+        trimmed.trim_start_matches(TOOL_ERROR_OPEN).trim_end_matches(TOOL_ERROR_CLOSE)
+    } else {
+        text
+    }
 }
 
 fn exit_code(text: &str) -> Option<i32> {
@@ -56,10 +62,13 @@ mod tests {
 
     #[test]
     fn a_tool_that_refused_says_why() {
-        let failure = Failure::read("<tool_use_error>String to replace not found in file.</tool_use_error>");
+        let text = "<tool_use_error>regex parse error:\n    Stop(\nerror: unclosed group</tool_use_error>";
+
+        let failure = Failure::read(text);
 
         assert_eq!(failure.label(), "Error");
-        assert_eq!(failure.message, "String to replace not found in file.");
+        assert_eq!(failure.message, "regex parse error:");
+        assert_eq!(output(text), "regex parse error:\n    Stop(\nerror: unclosed group", "all of it, without its tags");
     }
 
     #[test]

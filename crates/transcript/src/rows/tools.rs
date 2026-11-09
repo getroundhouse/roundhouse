@@ -15,9 +15,12 @@ use crate::transcript::Transcript;
 
 mod block;
 mod command;
+mod files;
 mod highlight;
 mod line;
+mod numbered;
 mod other;
+mod search;
 
 use line::{Line, Part};
 
@@ -33,15 +36,19 @@ pub(super) struct Toggle<'a> {
 pub(super) fn call(toggle: &Toggle, name: &str, input: &Value, answer: Option<&Answer>, cx: &App) -> AnyElement {
     match ToolCall::read(name, input) {
         ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
+        ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
+        ToolCall::Write(file) => files::write(&file, answer, toggle, cx),
+        ToolCall::Edit(file) => files::edit(&file, answer, toggle, cx),
+        ToolCall::Search(search) => search::draw(&search, answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
 }
 
 /// A result drawn on its own, because its call isn't near it: a line saying how much came back, which opens to it.
 pub(super) fn result(toggle: &Toggle, is_error: bool, text: &str, cx: &App) -> AnyElement {
-    let answer = &Answer { is_error, text: text.to_string() };
+    let answer = &Answer { is_error, text: text.to_string(), change: None };
     let lines = count(answer.text.lines().count(), "line", "lines");
-    let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(lines.into()));
+    let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(lines.into())).shows_output(true);
     let opened = toggle.open.then(|| {
         let output = block::output(toggle.key.element("output"), &answer.text, cx.theme().muted_foreground, cx);
         block::frame(cx).child(output).into_any_element()

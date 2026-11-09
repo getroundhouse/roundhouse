@@ -13,6 +13,7 @@ gpui-kit.workspace = true
 image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
 look.workspace = true
 serde_json.workspace = true
+similar.workspace = true
 
 [lints]
 workspace = true

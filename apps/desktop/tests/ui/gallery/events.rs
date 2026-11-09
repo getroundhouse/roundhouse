@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use protocol::event::{ContentBlock, EventBody, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{MessageId, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
@@ -29,15 +29,20 @@ fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
 }
 
 pub(crate) fn tool_result(id: &str, text: &str) -> EventBody {
-    tool_answer(id, text, false)
+    tool_answer(id, text, false, None)
 }
 
 /// A result that says the call failed.
 pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
-    tool_answer(id, text, true)
+    tool_answer(id, text, true, None)
 }
 
-fn tool_answer(id: &str, text: &str, is_error: bool) -> EventBody {
+/// A result that says what the call changed in a file, as Claude's edits and writes do.
+pub(crate) fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBody {
+    tool_answer(id, text, false, Some(change))
+}
+
+fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> EventBody {
     EventBody::AgentUser {
         parent_tool_use_id: None,
         blocks: vec![ContentBlock::ToolResult {
@@ -45,7 +50,7 @@ fn tool_answer(id: &str, text: &str, is_error: bool) -> EventBody {
             is_error,
             text: text.to_string(),
             image_count: 0,
-            change: None,
+            change,
         }],
     }
 }
