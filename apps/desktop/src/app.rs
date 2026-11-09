@@ -51,6 +51,8 @@ pub struct AppView {
     pub busy: bool,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
     pub creating_in: Option<RepoId>,
+    /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
+    moving_window: bool,
     focus: FocusHandle,
     window: AnyWindowHandle,
     /// Held so these tasks stop when the view goes away.
@@ -77,6 +79,7 @@ impl AppView {
             show_archived: false,
             busy: false,
             creating_in: None,
+            moving_window: false,
             focus,
             window: window.window_handle(),
             connecting: None,

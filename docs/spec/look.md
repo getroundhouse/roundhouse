@@ -16,6 +16,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 ## Space and shape
 
 - **A 4px grid.** Controls are 28px tall, sidebar rows 30px, the workspace header 48px, and the chat tabs 40px.
+- **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what the system's setting for a title bar says, except where a button takes the press, and pressing it leaves focus where it was.
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **The transcript is a centred column, at most 780px wide,** so lines stay short enough to read in a wide window.
 - **A tool call is one compact line,** with an icon for its kind and the input that matters, and its result folds underneath it, even when the agent runs several calls at once.

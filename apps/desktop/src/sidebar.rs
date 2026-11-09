@@ -193,17 +193,10 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .bg(background)
         .border_r_1()
         .border_color(border)
-        .child(
-            v_flex()
-                .id("workspaces")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .px_2()
-                .pt(HEADER_HEIGHT)
-                .gap_4()
-                .children(groups),
-        )
+        // Where the window's buttons sit, level with the workspace header. It stays put, so the list scrolls
+        // under its bottom edge rather than under the buttons.
+        .child(div().flex_none().h(HEADER_HEIGHT))
+        .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().px_2().gap_4().children(groups))
         .child(footer(app.show_archived, app.build_label(), crate::updates::problem_shown(cx).cloned(), cx))
 }
 
