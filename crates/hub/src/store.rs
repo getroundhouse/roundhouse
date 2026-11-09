@@ -13,6 +13,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+mod backup;
 mod comments;
 mod error;
 mod events;
@@ -27,7 +28,7 @@ mod workspaces;
 
 use schema::{migrate, open_connection};
 
-pub use error::StoreError;
+pub use error::{BackupError, StoreError};
 pub use events::cancelled_approval;
 pub use made::{Made, MadeByRequest};
 
@@ -97,9 +98,11 @@ fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {
 }
 
 impl Store {
-    pub fn open(path: &Path) -> Result<Self, StoreError> {
+    /// Opens the database at `path`, and migrates it if an older build wrote it, after saving a copy in
+    /// `backups_dir`.
+    pub fn open(path: &Path, backups_dir: &Path) -> Result<Self, StoreError> {
         let mut writer = open_connection(path)?;
-        migrate(&mut writer)?;
+        migrate(&mut writer, backups_dir)?;
         let reader = open_connection(path)?;
         Ok(Self { writer: Mutex::new(writer), reader: Mutex::new(reader) })
     }

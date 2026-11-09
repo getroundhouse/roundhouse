@@ -3,8 +3,10 @@
 use std::path::Path;
 
 use rusqlite::Connection;
+use tracing::info;
 
 use super::StoreError;
+use super::backup::back_up;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 const MIGRATIONS: &[&str] = &[
@@ -191,19 +193,35 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
 #[cfg(test)]
 pub(crate) const BEFORE_RUNS: usize = 4;
 
-pub(crate) fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
-    migrate_to(conn, MIGRATIONS.len())
+/// Brings the database up to this build's schema. One that an older build wrote is copied into
+/// `backups_dir` first, since a build from before a migration can't open what it leaves.
+pub(crate) fn migrate(conn: &mut Connection, backups_dir: &Path) -> Result<(), StoreError> {
+    migrate_through(conn, backups_dir, MIGRATIONS)
 }
 
-/// Applies migrations until `target` have run.
-pub(crate) fn migrate_to(conn: &mut Connection, target: usize) -> Result<(), StoreError> {
-    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    // Negative isn't something this code ever writes, so it counts as newer.
-    let version = usize::try_from(version).unwrap_or(usize::MAX);
-    if version > MIGRATIONS.len() {
-        return Err(StoreError::TooNew { found: version, known: MIGRATIONS.len() });
+/// Applies migrations until `target` have run, so a test can make an older database.
+#[cfg(test)]
+pub(crate) fn migrate_to(conn: &mut Connection, backups_dir: &Path, target: usize) -> Result<(), StoreError> {
+    migrate_through(conn, backups_dir, &MIGRATIONS[..target])
+}
+
+/// [`migrate`], with the list of migrations given, so a test can stop short of this build's or add one
+/// that fails.
+fn migrate_through(conn: &mut Connection, backups_dir: &Path, migrations: &[&str]) -> Result<(), StoreError> {
+    let version = schema_version(conn)?;
+    if version > migrations.len() {
+        return Err(StoreError::TooNew { found: version, known: migrations.len() });
     }
-    for (reached, migration) in (1_i64..).zip(&MIGRATIONS[..target]).skip(version) {
+    // Only a database that holds something and is about to change gets a copy. If the copy fails, such as
+    // on a full disk, the hub doesn't start rather than migrate without one: any update can bring a
+    // migration, and nothing would say the way back had gone. The database is untouched at that point, so
+    // the build before still opens it.
+    if (1..migrations.len()).contains(&version) {
+        let backup = back_up(conn, version, backups_dir)
+            .map_err(|source| StoreError::Backup { dir: backups_dir.to_path_buf(), source })?;
+        info!(backup = %backup.display(), version, "saved a copy of the database before migrating it");
+    }
+    for (reached, migration) in (1_i64..).zip(migrations).skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(migration)?;
         tx.pragma_update(None, "user_version", reached)?;
@@ -211,3 +229,13 @@ pub(crate) fn migrate_to(conn: &mut Connection, target: usize) -> Result<(), Sto
     }
     Ok(())
 }
+
+/// How many migrations have run on this database.
+fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    // Negative isn't something this code ever writes, so it counts as newer.
+    Ok(usize::try_from(version).unwrap_or(usize::MAX))
+}
+
+#[cfg(test)]
+mod tests;

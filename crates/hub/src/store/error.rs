@@ -1,3 +1,6 @@
+use std::io;
+use std::path::PathBuf;
+
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use tracing::error;
 
@@ -7,10 +10,29 @@ pub enum StoreError {
     NotFound { kind: &'static str, id: String },
     #[error("the database was written by a newer version ({found} migrations, this build has {known})")]
     TooNew { found: usize, known: usize },
+    /// Nothing was migrated, so the database is as the last build left it.
+    #[error("couldn't back up the database into {} before migrating it", dir.display())]
+    Backup { dir: PathBuf, source: BackupError },
     #[error("the database failed")]
     Database(#[from] rusqlite::Error),
     #[error("a stored value couldn't be encoded")]
     Encoding(#[from] serde_json::Error),
+}
+
+/// Why a copy of the database couldn't be saved.
+#[derive(Debug, thiserror::Error)]
+pub enum BackupError {
+    /// What it was doing, and what went wrong.
+    #[error("{what}")]
+    Io { what: String, source: io::Error },
+    #[error("copying the database with VACUUM INTO")]
+    Database(#[source] rusqlite::Error),
+}
+
+impl BackupError {
+    pub(crate) fn io(what: impl Into<String>, source: io::Error) -> Self {
+        Self::Io { what: what.into(), source }
+    }
 }
 
 impl From<StoreError> for ApiError {
@@ -18,7 +40,10 @@ impl From<StoreError> for ApiError {
         let message = error_chain(&failure);
         match failure {
             StoreError::NotFound { .. } => ApiError::new(ErrorCode::NotFound, message),
-            StoreError::TooNew { .. } | StoreError::Database(_) | StoreError::Encoding(_) => {
+            StoreError::TooNew { .. }
+            | StoreError::Backup { .. }
+            | StoreError::Database(_)
+            | StoreError::Encoding(_) => {
                 error!("{message}");
                 ApiError::new(ErrorCode::Internal, message)
             }

@@ -23,7 +23,13 @@ tools/install.sh
 "$HOME/Library/Application Support/roundhouse-builds/current/roundhouse-desktop"
 ```
 
-Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated.
+Each install keeps its own version, built from the current commit. `tools/install.sh --list` shows them, and `--use VERSION` goes back to one. An older version can't open a database that a newer one has migrated, so before migrating, the hub saves a copy in `backups/` in its data directory, named for the schema version it holds. To go back past a migration:
+
+1. Quit the app, which otherwise starts a new hub as soon as this one stops, then run `roundhouse hub stop`.
+2. Run `tools/install.sh --use VERSION` with the version from before the update, or the next hub migrates the copy again.
+3. In the data directory, delete `hub.db-wal` and `hub.db-shm`, then copy the newest backup over `hub.db`, keeping the backup.
+
+Anything recorded since the copy is lost.
 
 To work on Roundhouse rather than use it, `cargo run -p desktop --bin roundhouse-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
