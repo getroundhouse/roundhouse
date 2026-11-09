@@ -235,6 +235,7 @@ impl WorkspacePane {
             }
         }
         self.keep_active_valid(cx);
+        self.keep_edit_valid(cx);
         self.show_next(cx);
         self.read_showing(cx);
         cx.notify();

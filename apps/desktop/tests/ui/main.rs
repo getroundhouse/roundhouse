@@ -18,6 +18,7 @@ mod menus;
 mod other_hubs;
 mod pickers;
 mod questions;
+mod queue;
 mod quitting;
 mod reconnecting;
 mod settings;

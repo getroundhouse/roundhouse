@@ -87,6 +87,7 @@ impl WorkspacePane {
     pub(super) fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let pickers = self.pickers(cx).into_any_element();
         let attached = self.attached_tiles(cx);
+        let queue = self.queue_card(cx);
         let working = self.session().is_some_and(in_turn);
         let theme = cx.theme();
         let (surface, border, ring) = (theme.muted, theme.input, theme.ring);
@@ -100,7 +101,7 @@ impl WorkspacePane {
             .icon(IconName::Plus)
             .tooltip("Attach images or files")
             .on_click(cx.listener(|_, _, _, cx| Self::pick_files(cx)));
-        div().flex_none().w_full().px_4().pb_4().pt_1().child(
+        div().flex_none().w_full().px_4().pb_4().pt_1().children(queue).child(
             v_flex()
                 .id("composer")
                 .w_full()

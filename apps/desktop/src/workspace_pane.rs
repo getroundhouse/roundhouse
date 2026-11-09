@@ -22,6 +22,7 @@ mod attaching;
 mod chats;
 mod composer;
 mod diff_tab;
+mod queue;
 mod reading;
 mod setup;
 #[cfg(test)]
@@ -98,6 +99,8 @@ pub struct WorkspacePane {
     attached: Vec<Attached>,
     /// A new chat is on its way, so another press doesn't make a second.
     creating_chat: bool,
+    /// A queued prompt being changed.
+    queue_edit: Option<queue::Editing>,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -151,9 +154,14 @@ impl WorkspacePane {
                 .submit_on_enter(true)
                 .placeholder("Ask the agent to do something")
         });
+        // While the agent works, Enter steers it, and Cmd-Enter queues what's typed for after it finishes.
         let on_enter = cx.subscribe_in(&composer, window, |this, _, event: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { shift: false, .. } = event {
-                this.submit(window, cx);
+            if let InputEvent::PressEnter { shift: false, secondary } = event {
+                if *secondary && this.session().is_some_and(|s| s.status.is_active()) {
+                    this.queue_typed(window, cx);
+                } else {
+                    this.submit(window, cx);
+                }
             }
         });
         let on_settings = crate::settings::observe(cx, |this, cx| {
@@ -173,6 +181,7 @@ impl WorkspacePane {
             drafts: HashMap::new(),
             attached: Vec::new(),
             creating_chat: false,
+            queue_edit: None,
             reading: Reading::default(),
             composer,
             diff: None,

@@ -44,6 +44,7 @@ Use `Add repository` at the bottom left, then `New` beside the repository. The m
 | `Ctrl-Tab` | Move between chats |
 | `Cmd-Shift-D` | Show or hide the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |
+| `Cmd-Enter` | Queue a prompt for when the agent finishes |
 | `Cmd-.` | Stop the agent's turn |
 | `Cmd-,` | Open Settings |
 
