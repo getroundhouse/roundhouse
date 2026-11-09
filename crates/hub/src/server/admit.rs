@@ -16,7 +16,7 @@ use crate::remote::{DeviceLink, Revoke};
 
 /// Where a connection comes from, which decides what it has to do first and what it may ask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Origin {
+enum Origin {
     /// The Unix socket, which only this user can open, as `run::bind_socket` makes sure.
     Local,
     /// TLS over TCP, from anything that can reach the port.
@@ -32,10 +32,14 @@ const MAX_FIRST_FRAME_BYTES: usize = 16 * 1024;
 pub(super) const AUTHENTICATE_WITHIN: Duration = Duration::from_secs(10);
 
 enum Stage {
-    /// From the network, before pairing or authenticating.
-    Authenticating,
-    Greeting,
-    Open,
+    /// From the network, before pairing or authenticating, which it has to do by `deadline`. Until then it holds a
+    /// place among the connections that haven't authenticated.
+    Authenticating { deadline: Instant, _unproven: OwnedSemaphorePermit },
+    /// Counted among the hub's clients, which only a client on the hub's machine, or a device that has
+    /// authenticated, is. The app replaces an older hub only while it's the one client, so a connection from anyone
+    /// on the network could otherwise hold that up. Saying hello doesn't change the stage, since moving the count to
+    /// another would need a third stage to leave behind meanwhile.
+    Admitted { greeted: bool, _counted: Counted },
 }
 
 pub(super) struct Gate {
@@ -43,14 +47,6 @@ pub(super) struct Gate {
     stage: Stage,
     /// The device a connection from the network authenticated as.
     pub(super) device: Option<DeviceLink>,
-    /// When a connection from the network has to have authenticated by.
-    deadline: Option<Instant>,
-    /// A connection from the network's place among those that haven't authenticated yet, given up once it has.
-    unproven: Option<OwnedSemaphorePermit>,
-    /// Counts the connection among the hub's clients, which only a client on the hub's machine, or a device that
-    /// has authenticated, is. The app replaces an older hub only while it's the one client, so a connection from
-    /// anyone on the network could otherwise hold that up.
-    counted: Option<Counted>,
     /// Set if the device the connection authenticated as is revoked.
     revoke: Revoke,
 }
@@ -86,11 +82,8 @@ impl Gate {
     pub(super) fn local(hub: &Arc<Hub>) -> Gate {
         Gate {
             origin: Origin::Local,
-            stage: Stage::Greeting,
+            stage: Stage::Admitted { greeted: false, _counted: Counted::new(hub) },
             device: None,
-            deadline: None,
-            unproven: None,
-            counted: Some(Counted::new(hub)),
             revoke: Arc::new(watch::Sender::new(false)),
         }
     }
@@ -100,11 +93,8 @@ impl Gate {
     pub(super) fn network(deadline: Instant, unproven: OwnedSemaphorePermit) -> Gate {
         Gate {
             origin: Origin::Network,
-            stage: Stage::Authenticating,
+            stage: Stage::Authenticating { deadline, _unproven: unproven },
             device: None,
-            deadline: Some(deadline),
-            unproven: Some(unproven),
-            counted: None,
             revoke: Arc::new(watch::Sender::new(false)),
         }
     }
@@ -116,32 +106,38 @@ impl Gate {
 
     pub(super) fn max_frame_bytes(&self) -> usize {
         match self.stage {
-            Stage::Authenticating => MAX_FIRST_FRAME_BYTES,
-            Stage::Greeting | Stage::Open => frame::MAX_FRAME_BYTES,
+            Stage::Authenticating { .. } => MAX_FIRST_FRAME_BYTES,
+            Stage::Admitted { .. } => frame::MAX_FRAME_BYTES,
         }
     }
 
     /// When the next request has to have arrived by, if there's a limit.
     pub(super) fn deadline(&self) -> Option<Instant> {
-        self.deadline
+        match self.stage {
+            Stage::Authenticating { deadline, .. } => Some(deadline),
+            Stage::Admitted { .. } => None,
+        }
     }
 
     pub(super) async fn admit(&mut self, hub: &Arc<Hub>, request: ClientRequest) -> Admit {
-        match self.stage {
-            Stage::Authenticating => self.authenticate(hub, &request).await,
-            Stage::Greeting if self.origin == Origin::Local && works_without_hello(&request) => Admit::Handle(request),
-            Stage::Greeting => match hello(&request) {
+        let origin = self.origin;
+        match &mut self.stage {
+            Stage::Authenticating { .. } => self.authenticate(hub, &request).await,
+            Stage::Admitted { greeted: false, .. } if origin == Origin::Local && works_without_hello(&request) => {
+                Admit::Handle(request)
+            }
+            Stage::Admitted { greeted: greeted @ false, .. } => match hello(&request) {
                 Ok(response) => {
-                    self.stage = Stage::Open;
+                    *greeted = true;
                     Admit::Answer(ReplyOutcome::Response(response))
                 }
                 Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
             },
-            Stage::Open if self.origin == Origin::Network && local_only(&request) => {
+            Stage::Admitted { greeted: true, .. } if origin == Origin::Network && local_only(&request) => {
                 let message = "only a client on the hub's own machine can ask that";
                 Admit::Answer(ReplyOutcome::Error(ApiError::new(ErrorCode::LocalOnly, message)))
             }
-            Stage::Open => Admit::Handle(request),
+            Stage::Admitted { greeted: true, .. } => Admit::Handle(request),
         }
     }
 
@@ -159,10 +155,8 @@ impl Gate {
         match authenticated {
             Ok((response, link)) => {
                 self.device = Some(link);
-                self.stage = Stage::Greeting;
-                self.deadline = None;
-                self.unproven = None;
-                self.counted = Some(Counted::new(hub));
+                // Gives up its place among those that haven't authenticated.
+                self.stage = Stage::Admitted { greeted: false, _counted: Counted::new(hub) };
                 Admit::Answer(ReplyOutcome::Response(response))
             }
             Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
@@ -171,8 +165,8 @@ impl Gate {
 }
 
 /// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and stopped.
-/// Anyone who can reach the socket is this user. Only the socket gets this, because stopping a shared hub is for its
-/// admins.
+/// Anyone who can reach the socket is this user. Only the socket gets this, because a device on the network may never
+/// stop the hub.
 fn works_without_hello(request: &ClientRequest) -> bool {
     matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown)
 }
