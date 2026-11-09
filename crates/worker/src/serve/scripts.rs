@@ -9,11 +9,28 @@ use protocol::worker::WorkerResponse;
 use super::State;
 use crate::setup;
 
-/// Signals the script's whole group, because stopping only the shell would leave what it started.
+/// The workspace's setup script, from when the hub asks for it until it has exited.
+pub(crate) enum Setup {
+    Idle,
+    /// Asked for, but not started yet.
+    Starting {
+        stopped: bool,
+    },
+    Running(u32),
+}
+
+pub(crate) fn setup_requested(state: &State) {
+    *state.setup.lock() = Setup::Starting { stopped: false };
+}
+
+/// Signals the script's whole group, because stopping only the shell would leave what it started. A script
+/// that hasn't started yet is stopped as it starts.
 pub(crate) fn stop_setup_script(state: &State) {
-    if let Some(pid) = *state.setup_pid.lock() {
-        // Its entry is cleared as soon as it has been waited on, so this can't reach a reused PID.
-        process::signal_group(pid, process::Signal::Terminate);
+    match &mut *state.setup.lock() {
+        // Set back to idle as soon as it has been waited on, so this can't reach a reused PID.
+        Setup::Running(pid) => process::signal_group(*pid, process::Signal::Terminate),
+        Setup::Starting { stopped } => *stopped = true,
+        Setup::Idle => {}
     }
 }
 
@@ -36,20 +53,26 @@ pub(crate) async fn run_setup(
         setup::append_log(&log, &format!("Warning: {warning}"));
     }
     let Some(script) = settings.setup else {
+        *state.setup.lock() = Setup::Idle;
         return Ok(WorkerResponse::SetupDone { code: Some(0) });
     };
     setup::append_log(&log, "Running the setup script");
     // Recorded like an agent, so the provider can stop it if this worker is killed.
     let record = state.config.state_dir.as_ref().map(|dir| dir.join("agents/setup.pid"));
-    let (setup_pid, for_start) = (state.setup_pid.clone(), record.clone());
+    let (tracked, for_start) = (state.setup.clone(), record.clone());
     let status = setup::run_script(&script, worktree, env, &log, move |pid| {
-        *setup_pid.lock() = Some(pid);
+        let mut tracked = tracked.lock();
+        if matches!(*tracked, Setup::Starting { stopped: true }) {
+            process::signal_group(pid, process::Signal::Terminate);
+        }
+        *tracked = Setup::Running(pid);
+        drop(tracked);
         if let Some(path) = &for_start {
             let _ = process::ProcessRecord::write(path, pid);
         }
     })
     .await;
-    *state.setup_pid.lock() = None;
+    *state.setup.lock() = Setup::Idle;
     if let Some(path) = &record {
         let _ = std::fs::remove_file(path);
     }

@@ -143,6 +143,19 @@ fn stopping_interrupts_a_running_setup_and_it_can_be_run_again() {
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict), "already running");
 }
 
+/// Stopped as soon as the workspace exists, which is before the worker has started the script.
+#[test]
+fn stopping_setup_before_its_script_has_started_still_stops_it() {
+    let stack = Stack::start();
+    commit_settings(&stack, "[scripts]\nsetup = \"sleep 60\"\n");
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+
+    client.session_cancel(&session.id).unwrap();
+
+    assert_eq!(wait_for_setup(&client, &workspace.id), protocol::model::SetupStatus::Failed { code: None });
+}
+
 /// A process running a command line containing this, or none.
 fn pid_running(pattern: &str) -> Option<u32> {
     let out = Command::new("pgrep").args(["-f", pattern]).output().unwrap();

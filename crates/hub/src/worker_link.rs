@@ -86,6 +86,15 @@ impl WorkerLink {
     }
 
     pub(crate) async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
+        self.send(request).await?.await
+    }
+
+    /// Returns once the request is queued, with its reply to wait for. Requests reach the worker in the order
+    /// they're queued.
+    pub(crate) async fn send(
+        &self,
+        request: WorkerRequest,
+    ) -> Result<impl Future<Output = Result<WorkerResponse, ApiError>> + use<>, ApiError> {
         let id = self.next_call.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&WorkerCall { id, request }).map_err(|e| internal(e.to_string()))?;
         let calls = self.calls.lock().clone().ok_or_else(lost)?;
@@ -100,7 +109,7 @@ impl WorkerLink {
         // Not held while waiting. A long call, like setup, would otherwise keep the worker's stdin open
         // after `close`, and it wouldn't find out that it should stop.
         drop(calls);
-        reply_rx.await.map_err(|_| lost())?
+        Ok(async move { reply_rx.await.map_err(|_| lost())? })
     }
 
     pub(crate) fn is_open(&self) -> bool {
