@@ -167,7 +167,6 @@ impl LiveSession {
             text: text.to_string(),
             client_msg_id: client_msg_id.clone(),
             attachments: attachments.clone(),
-            tracked: true,
         };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         if !duplicate {

@@ -9,7 +9,7 @@ use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
-use super::events::{finished_turn, text, thought, tool_result, tool_use, user_prompt};
+use super::events::{finished_turn, taken, text, thought, tool_result, tool_use, user_prompt};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 
@@ -57,7 +57,7 @@ pub(crate) fn background() -> Vec<EventBody> {
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
-    vec![user_prompt(prompt), text("msg-1", reply), finished_turn(9, 0.04)]
+    vec![user_prompt(prompt), taken(1), text("msg-1", reply), finished_turn(9, 0.04)]
 }
 
 /// A prompt carrying a screenshot and a log, and the reply to it.
@@ -69,8 +69,8 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
                 .to_string(),
             client_msg_id: None,
             attachments,
-            tracked: false,
         },
+        taken(1),
         text(
             "msg-1",
             "The badge comes after the name in the row, but the name isn't allowed to shrink, so at this width the \
@@ -146,7 +146,6 @@ pub(crate) fn steered() -> Vec<EventBody> {
         text: "Only the sidebar's tests matter here, so skip the rest next time.".to_string(),
         client_msg_id: None,
         attachments: Vec::new(),
-        tracked: true,
     });
     events
 }
@@ -186,6 +185,7 @@ changing it, since `slow` might need a speed.";
 pub(crate) fn thinking() -> Vec<EventBody> {
     vec![
         user_prompt("Why does the train stop at a caution signal in the depot test?"),
+        taken(1),
         thought("msg-1", FIRST_THOUGHT),
         tool_use("msg-2", "toolu-1", "Read", json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" })),
         tool_result(
@@ -205,6 +205,7 @@ pub(crate) fn thinking() -> Vec<EventBody> {
 fn looked_around() -> Vec<EventBody> {
     let mut events = vec![
         user_prompt(ASK),
+        taken(1),
         EventBody::AgentInit {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),

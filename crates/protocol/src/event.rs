@@ -39,14 +39,10 @@ pub enum EventBody {
         /// The files it carries, in the order they were added. Their bytes are read with `AttachmentRead`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
-        /// A `PromptTaken` or `PromptDropped` for it follows, so until one does, the agent hasn't got it. Prompts from
-        /// before hubs recorded those don't have this, and the agent had them.
-        #[serde(default)]
-        tracked: bool,
     },
     /// The agent took the prompt recorded at `prompt` into its conversation. One sent mid-turn waits until the agent
-    /// can take it, such as when a running tool finishes. The agent says so, or the hub does for an agent that doesn't,
-    /// once its turn ends, since it has every prompt by then.
+    /// can take it, such as when a running tool finishes. Every prompt gets this or `PromptDropped`, and until then the
+    /// agent hasn't got it.
     PromptTaken {
         prompt: Seq,
     },

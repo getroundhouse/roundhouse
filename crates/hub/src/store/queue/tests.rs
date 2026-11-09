@@ -68,12 +68,8 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     queue(&store, &queued("a", "first"));
-    let prompt = EventBody::UserPrompt {
-        text: "first".into(),
-        client_msg_id: Some("a".into()),
-        attachments: Vec::new(),
-        tracked: false,
-    };
+    let prompt =
+        EventBody::UserPrompt { text: "first".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
     store.append(&"s".into(), None, &prompt, None, Some(&"a".into()), None).unwrap();
 
     let refused = store.queue_prompt(&"s".into(), &queued("a", "changed too late")).unwrap();
@@ -120,7 +116,6 @@ fn recording_a_queued_prompt_takes_it_out_of_the_queue_in_the_same_commit() {
         text: "sent".into(),
         client_msg_id: Some(id.into()),
         attachments: Vec::new(),
-        tracked: false,
     };
 
     let sent = store.append(&"s".into(), None, &prompt("a"), None, Some(&"a".into()), None).unwrap();

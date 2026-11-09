@@ -10,12 +10,12 @@ use std::sync::Arc;
 
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::event::{AgentRunState, EventBody, ExitReason, TurnOutcome};
-use protocol::model::{ClientMessageId, QueuedPrompt, RunId, Seq, Session, SessionStatus};
+use protocol::event::{EventBody, TurnOutcome};
+use protocol::model::{ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use super::{Command, LiveSession, Origin};
+use super::{Command, LiveSession};
 use crate::hub::Hub;
 use crate::store::{Queued, Reading};
 
@@ -31,9 +31,6 @@ pub(super) struct QueueWatch {
     /// Recorded prompts the agent hasn't taken or dropped, oldest first, as the store keeps them. Until it has taken
     /// every one, a queued prompt could fold into the turn one of them starts.
     untaken: Vec<Seq>,
-    /// The newest run that has said what it did with a prompt. Its word is the only one taken on that, since an `idle`
-    /// from the turn before can arrive after a new prompt has been sent to it. The hub speaks for any other run.
-    says_what_it_takes: Option<RunId>,
     /// The queue waits for the person, as `Session::queue_held` says.
     held: bool,
 }
@@ -66,43 +63,17 @@ impl QueueWatch {
         self.held = held;
     }
 
-    /// Whether `idle` from `origin` comes from before a prompt it hasn't taken yet, so the agent isn't idle after all.
-    pub(super) fn idle_is_stale(&self, origin: Origin) -> bool {
-        !self.untaken.is_empty() && self.says_what_it_takes.is_some() && self.says_what_it_takes == origin.run()
+    /// Whether an `idle` comes from before a prompt the agent has yet to take, so the agent isn't idle after all.
+    pub(super) fn idle_is_stale(&self) -> bool {
+        !self.untaken.is_empty()
     }
 
-    /// What the hub records about the prompts the agent has yet to take, just before `body` from `origin`, where the
-    /// agent won't. One that doesn't say what it takes has taken them all by the end of its turn, or once it's idle or
-    /// gone, so that's said first. One whose worker was lost can't say it dropped them.
-    pub(super) fn settled_before(&self, origin: Origin, body: &EventBody) -> Vec<EventBody> {
-        let Origin::Run { run, current: true } = origin else { return Vec::new() };
-        let done = matches!(
-            body,
-            EventBody::TurnEnded { .. }
-                | EventBody::AgentState { state: AgentRunState::Idle }
-                | EventBody::AgentExited { .. }
-        );
-        let verdict: fn(Seq) -> EventBody = if done && self.says_what_it_takes != Some(run) {
-            |prompt| EventBody::PromptTaken { prompt }
-        } else if matches!(body, EventBody::AgentExited { reason: ExitReason::WorkerLost, .. }) {
-            |prompt| EventBody::PromptDropped { prompt }
-        } else {
-            return Vec::new();
-        };
-        self.untaken.iter().copied().map(verdict).collect()
+    pub(super) fn untaken(&self) -> &[Seq] {
+        &self.untaken
     }
 
     pub(super) fn set_untaken(&mut self, untaken: Vec<Seq>) {
         self.untaken = untaken;
-    }
-
-    /// Notes which run says what it does with the prompts it's sent.
-    pub(super) fn heard(&mut self, origin: Origin, body: &EventBody) {
-        if let (EventBody::PromptTaken { .. } | EventBody::PromptDropped { .. }, Origin::Run { run, current: true }) =
-            (body, origin)
-        {
-            self.says_what_it_takes = Some(run);
-        }
     }
 }
 

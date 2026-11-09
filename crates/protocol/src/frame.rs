@@ -50,12 +50,8 @@ mod tests {
 
     #[test]
     fn a_frame_is_exactly_one_line() {
-        let body = EventBody::UserPrompt {
-            text: "line one\nline two".into(),
-            client_msg_id: None,
-            attachments: Vec::new(),
-            tracked: false,
-        };
+        let body =
+            EventBody::UserPrompt { text: "line one\nline two".into(), client_msg_id: None, attachments: Vec::new() };
         let line = encode(&body).unwrap();
         assert_eq!(line.iter().position(|b| *b == b'\n'), Some(line.len() - 1));
         assert_eq!(line.last(), Some(&b'\n'));
@@ -78,10 +74,7 @@ mod tests {
         assert_eq!(block, ContentBlock::Unknown);
         let body: EventBody =
             decode(br#"{"type":"user_prompt","text":"hi","client_msg_id":null,"later":true}"#).unwrap();
-        assert_eq!(
-            body,
-            EventBody::UserPrompt { text: "hi".into(), client_msg_id: None, attachments: Vec::new(), tracked: false }
-        );
+        assert_eq!(body, EventBody::UserPrompt { text: "hi".into(), client_msg_id: None, attachments: Vec::new() });
         assert_eq!(decode::<WorkspaceStatus>(br#""from_the_future""#).unwrap(), WorkspaceStatus::Unknown);
         assert_eq!(decode::<SessionStatus>(br#""from_the_future""#).unwrap(), SessionStatus::Unknown);
         assert_eq!(decode::<AgentKind>(br#""from_the_future""#).unwrap(), AgentKind::Unknown);

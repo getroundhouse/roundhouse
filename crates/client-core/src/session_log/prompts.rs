@@ -19,16 +19,10 @@ pub enum PromptState {
 }
 
 impl SessionLog {
-    /// Where the prompt recorded at `seq` stands, from what's loaded after it. The hub records whether the agent took
-    /// or dropped every prompt it tracks, so a tracked one is waiting until that's recorded. One the agent dropped can
-    /// still be taken by the agent after it. Something after it that isn't loaded is far behind the tail, and long
-    /// settled.
+    /// Where the prompt recorded at `seq` stands, from what's loaded after it. The log records whether the agent took
+    /// or dropped every prompt, and until it does, the prompt is waiting. One the agent dropped can still be taken by
+    /// the agent after it.
     pub fn prompt_state(&self, seq: Seq) -> PromptState {
-        let tracked =
-            self.events.get(&seq).is_some_and(|e| matches!(e.body, EventBody::UserPrompt { tracked: true, .. }));
-        if !tracked {
-            return PromptState::Taken;
-        }
         let mut dropped = false;
         for later in seq + 1..=self.last_seq {
             // Not loaded, so far behind the tail, where it was settled long ago.

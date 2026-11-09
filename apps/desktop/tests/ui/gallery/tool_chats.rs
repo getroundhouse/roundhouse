@@ -6,7 +6,7 @@
 use protocol::event::EventBody;
 use serde_json::json;
 
-use super::events::{finished_turn, text, tool_failed, tool_result, tool_use, user_prompt};
+use super::events::{finished_turn, taken, text, tool_failed, tool_result, tool_use, user_prompt};
 
 /// What the chats about the signalling crate were asked.
 pub(crate) const ASK: &str = "Make signals say whether a train may pass, and add a test for it.";
@@ -33,6 +33,7 @@ Diff in /workspaces/aspen/crates/signals/src/signal_test.rs:4:
 pub(crate) fn commands() -> Vec<EventBody> {
     vec![
         user_prompt(ASK),
+        taken(1),
         text("msg-1", "I'll run the tests and check the formatting before changing anything."),
         tool_use(
             "msg-2",
@@ -69,6 +70,7 @@ pub(crate) fn commands() -> Vec<EventBody> {
 pub(crate) fn any_tool() -> Vec<EventBody> {
     vec![
         user_prompt("File the idea about saying why a train stopped."),
+        taken(1),
         text("msg-1", "I'll look for an existing issue first, then file one."),
         tool_use(
             "msg-2",
@@ -119,6 +121,7 @@ pub(crate) fn web() -> Vec<EventBody> {
                   medium speed approach.";
     vec![
         user_prompt("What does a flashing yellow signal mean on a railway?"),
+        taken(1),
         tool_use("msg-1", "toolu-1", "WebSearch", json!({ "query": query })),
         tool_result("toolu-1", &results),
         tool_use(

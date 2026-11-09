@@ -3,10 +3,15 @@
 #![cfg(test)]
 
 use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
-use protocol::model::{MessageId, ToolUseId};
+use protocol::model::{MessageId, Seq, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new(), tracked: false }
+    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() }
+}
+
+/// The agent taking the prompt recorded at `prompt`, which is the first event of every chat here.
+pub(crate) fn taken(prompt: Seq) -> EventBody {
+    EventBody::PromptTaken { prompt }
 }
 
 /// Something the agent wrote, as its own message, the way Claude sends each block.

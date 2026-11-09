@@ -7,8 +7,8 @@ fn event(seq: Seq, body: EventBody) -> SessionEvent {
     SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
 }
 
-fn prompt(tracked: bool) -> EventBody {
-    EventBody::UserPrompt { text: "steer".into(), client_msg_id: None, attachments: Vec::new(), tracked }
+fn prompt() -> EventBody {
+    EventBody::UserPrompt { text: "steer".into(), client_msg_id: None, attachments: Vec::new() }
 }
 
 fn notice() -> EventBody {
@@ -25,17 +25,16 @@ fn log(bodies: Vec<EventBody>) -> SessionLog {
 }
 
 #[test]
-fn a_tracked_prompt_waits_until_the_log_says_it_was_taken_or_dropped() {
-    let waiting = log(vec![prompt(true), notice(), EventBody::PromptTaken { prompt: 9 }]);
-    let taken = log(vec![prompt(true), notice(), EventBody::PromptTaken { prompt: 1 }]);
-    let dropped = log(vec![prompt(true), EventBody::PromptDropped { prompt: 1 }]);
+fn a_prompt_waits_until_the_log_says_it_was_taken_or_dropped() {
+    let waiting = log(vec![prompt(), notice(), EventBody::PromptTaken { prompt: 9 }]);
+    let taken = log(vec![prompt(), notice(), EventBody::PromptTaken { prompt: 1 }]);
+    let dropped = log(vec![prompt(), EventBody::PromptDropped { prompt: 1 }]);
 
-    assert_eq!(log(vec![prompt(true)]).prompt_state(1), PromptState::Waiting, "just recorded");
+    assert_eq!(log(vec![prompt()]).prompt_state(1), PromptState::Waiting, "just recorded");
     assert_eq!(waiting.prompt_state(1), PromptState::Waiting, "another prompt's news isn't this one's");
     assert_eq!(taken.prompt_state(1), PromptState::Taken);
     assert_eq!(dropped.prompt_state(1), PromptState::Dropped);
-    let sent_again =
-        log(vec![prompt(true), EventBody::PromptDropped { prompt: 1 }, EventBody::PromptTaken { prompt: 1 }]);
+    let sent_again = log(vec![prompt(), EventBody::PromptDropped { prompt: 1 }, EventBody::PromptTaken { prompt: 1 }]);
     assert_eq!(sent_again.prompt_state(1), PromptState::Taken, "another agent took it after all");
 }
 
@@ -53,21 +52,16 @@ fn only_what_the_log_says_about_the_prompt_settles_it() {
         EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };
 
     for after in [ended.clone(), EventBody::AgentState { state: AgentRunState::Idle }, exited] {
-        assert_eq!(log(vec![prompt(true), after.clone()]).prompt_state(1), PromptState::Waiting, "{after:?}");
+        assert_eq!(log(vec![prompt(), after.clone()]).prompt_state(1), PromptState::Waiting, "{after:?}");
     }
-    let late = log(vec![prompt(true), ended.clone(), ended, EventBody::PromptDropped { prompt: 1 }]);
+    let late = log(vec![prompt(), ended.clone(), ended, EventBody::PromptDropped { prompt: 1 }]);
     assert_eq!(late.prompt_state(1), PromptState::Dropped, "however many turns end first");
-}
-
-#[test]
-fn a_prompt_from_before_the_hub_tracked_them_was_taken() {
-    assert_eq!(log(vec![prompt(false)]).prompt_state(1), PromptState::Taken);
 }
 
 #[test]
 fn a_prompt_far_behind_what_is_loaded_was_settled_long_ago() {
     let mut log = SessionLog::new(0);
-    log.apply_event(event(1, prompt(true)));
+    log.apply_event(event(1, prompt()));
     log.apply_event(event(3, notice()));
 
     assert_eq!(log.prompt_state(1), PromptState::Taken, "seq 2 isn't loaded");

@@ -77,21 +77,36 @@ fn stopping_drops_a_prompt_the_agent_hadnt_taken() {
     assert!(!assistant_text(&events).contains("never"));
 }
 
+fn agent_pid(client: &Client, session_id: &SessionId) -> u32 {
+    read_all(client, session_id)
+        .iter()
+        .find_map(|e| match e.body {
+            EventBody::AgentStarted { pid, .. } => Some(pid),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn a_prompt_the_agent_hadnt_taken_when_it_died_is_dropped() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let steered = waiting_prompt(&client, &session.id);
+
+    signal(agent_pid(&client, &session.id), libc::SIGKILL);
+
+    wait_for_drop(&client, &session.id, steered);
+}
+
 #[test]
 fn a_prompt_the_agent_hadnt_taken_when_its_worker_was_lost_is_dropped() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let steered = waiting_prompt(&client, &session.id);
-    let agent_pid = read_all(&client, &session.id)
-        .iter()
-        .find_map(|e| match e.body {
-            EventBody::AgentStarted { pid, .. } => Some(pid),
-            _ => None,
-        })
-        .unwrap();
 
-    signal(parent_of(agent_pid), libc::SIGKILL);
+    signal(parent_of(agent_pid(&client, &session.id)), libc::SIGKILL);
 
     wait_for_drop(&client, &session.id, steered);
 }

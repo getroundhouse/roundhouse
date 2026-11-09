@@ -17,7 +17,7 @@ fn after(state: &LiveState, origin: Origin, body: &EventBody) -> (SessionStatus,
         return (state.status, SessionChange::default(), state.background_tasks.clone());
     }
     let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, body);
-    let next = next_status(state.status, body, open, state.queue.idle_is_stale(origin));
+    let next = next_status(state.status, body, open, state.queue.idle_is_stale());
     let ends_turn = ends_turn(state.status, next);
     let background_tasks = (tasks != state.background_tasks).then(|| tasks.clone());
     let changed = next != state.status || background_tasks.is_some();
@@ -27,8 +27,7 @@ fn after(state: &LiveState, origin: Origin, body: &EventBody) -> (SessionStatus,
 
 impl LiveSession {
     /// Commits to the log first, so nothing is seen that isn't durable, then updates live state.
-    /// One at a time: both tasks record, and status has to change in the same order as the log. Anything the hub has
-    /// to say about the agent's prompts for it, because the agent can't, goes first.
+    /// One at a time: both tasks record, and status has to change in the same order as the log.
     pub(crate) async fn record(
         &self,
         origin: Origin,
@@ -37,21 +36,6 @@ impl LiveSession {
         client_msg_id: Option<ClientMessageId>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
-        let settled = self.state.lock().queue.settled_before(origin, &body);
-        for verdict in settled {
-            self.record_in_order(Origin::Hub, verdict, None, None).await?;
-        }
-        self.record_in_order(origin, body, raw, client_msg_id).await
-    }
-
-    /// Records one event. The caller holds `recording`.
-    async fn record_in_order(
-        &self,
-        origin: Origin,
-        body: EventBody,
-        raw: Option<String>,
-        client_msg_id: Option<ClientMessageId>,
-    ) -> Result<(SessionEvent, bool), ApiError> {
         let hub = self.hub()?;
         let run = origin.run();
         let (next, change, tasks) = after(&self.state.lock(), origin, &body);
@@ -134,7 +118,6 @@ fn apply(
     }
     state.status = next;
     state.background_tasks = tasks;
-    state.queue.heard(origin, body);
     if let Some(untaken) = &appended.untaken {
         state.queue.set_untaken(untaken.clone());
     }

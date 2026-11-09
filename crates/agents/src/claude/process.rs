@@ -68,9 +68,6 @@ struct Shared {
     unconfirmed_prompts: Mutex<Vec<Value>>,
     /// Prompts the CLI hasn't taken yet, by the `uuid` each was sent with, and where each is recorded.
     untaken: Mutex<HashMap<String, Seq>>,
-    /// Set once the CLI has reported on a prompt. One that never does says nothing of what it took, so none of its
-    /// prompts can be said to have been dropped.
-    reports_prompts: AtomicBool,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
     pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
@@ -113,7 +110,6 @@ pub fn spawn_at(
         held_output: Mutex::new(Vec::new()),
         unconfirmed_prompts: Mutex::new(Vec::new()),
         untaken: Mutex::new(HashMap::new()),
-        reports_prompts: AtomicBool::new(false),
         pending_inputs: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
         stop_requested: AtomicBool::new(false),

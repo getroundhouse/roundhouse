@@ -10,8 +10,8 @@ use super::{Store, StoreError, lock};
 mod tests;
 
 /// Notes what the event recorded at `seq` does to the prompts the agent has yet to take, as part of the transaction
-/// that records it, and returns them if it changed them. A tracked prompt waits until a `PromptTaken` or
-/// `PromptDropped` names it.
+/// that records it, and returns them if it changed them. A prompt waits until a `PromptTaken` or `PromptDropped` names
+/// it.
 pub(super) fn note_prompts(
     conn: &Connection,
     id: &SessionId,
@@ -20,7 +20,7 @@ pub(super) fn note_prompts(
 ) -> Result<Option<Vec<Seq>>, StoreError> {
     let settled = if let EventBody::PromptTaken { prompt } | EventBody::PromptDropped { prompt } = body {
         Some(*prompt)
-    } else if matches!(body, EventBody::UserPrompt { tracked: true, .. }) {
+    } else if matches!(body, EventBody::UserPrompt { .. }) {
         None
     } else {
         return Ok(None);

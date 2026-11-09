@@ -6,7 +6,7 @@
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use serde_json::json;
 
-use super::events::{finished_turn, text, tool_changed, tool_failed, tool_result, tool_use, user_prompt};
+use super::events::{finished_turn, taken, text, tool_changed, tool_failed, tool_result, tool_use, user_prompt};
 use super::tool_chats::ASK;
 const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
 
@@ -57,6 +57,7 @@ fn clear_and_caution_may_pass() {
 pub(crate) fn files() -> Vec<EventBody> {
     let mut events = vec![
         user_prompt(ASK),
+        taken(1),
         text("msg-1", "I'll read the signal first."),
         tool_use("msg-2", "toolu-1", "Read", json!({ "file_path": SIGNAL })),
         tool_result("toolu-1", &numbered(SIGNAL_RS.lines(), 1)),
@@ -118,6 +119,7 @@ fn changelog_write(message: &str, id: &str) -> [EventBody; 2] {
 pub(crate) fn file_contents() -> Vec<EventBody> {
     vec![
         user_prompt(ASK),
+        taken(1),
         tool_use("msg-1", "toolu-1", "Read", json!({ "file_path": SIGNAL, "offset": 11, "limit": 10 })),
         tool_result("toolu-1", &numbered(SIGNAL_RS.lines().skip(10).take(10), 11)),
         tool_use(
@@ -142,6 +144,7 @@ pub(crate) fn searches() -> Vec<EventBody> {
                  /workspaces/aspen/crates/signals/src/depot.rs:19:    if aspect == Aspect::Stop { return None; }";
     vec![
         user_prompt("Where does anything check for a stop signal?"),
+        taken(1),
         tool_use("msg-1", "toolu-1", "Grep", json!({ "pattern": "Stop\\b", "output_mode": "content", "-n": true })),
         tool_result("toolu-1", found),
         tool_use("msg-2", "toolu-2", "Grep", json!({ "pattern": "Aspect::", "path": "/workspaces/aspen/crates" })),
@@ -168,6 +171,7 @@ pub(crate) fn failures() -> Vec<EventBody> {
     });
     vec![
         user_prompt("Use may_pass in the depot too."),
+        taken(1),
         tool_use("msg-1", "toolu-1", "Edit", edit),
         tool_failed(
             "toolu-1",

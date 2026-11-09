@@ -83,7 +83,6 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
 /// What the CLI's report on a prompt means for the log. Only a prompt the CLI hasn't taken can be taken or dropped, so
 /// the cancel that ends a turn says nothing of the prompts it took.
 fn prompt_progress(shared: &Shared, uuid: &str, progress: PromptProgress) -> EventBody {
-    shared.reports_prompts.store(true, Ordering::SeqCst);
     let unchanged = || EventBody::AgentOther { kind: "command_lifecycle".to_string() };
     let moved = match progress {
         PromptProgress::Started | PromptProgress::Cancelled => shared.untaken.lock().remove(uuid),
