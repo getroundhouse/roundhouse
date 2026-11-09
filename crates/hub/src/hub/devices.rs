@@ -9,12 +9,13 @@ use protocol::model::DeviceId;
 use protocol::pairing::{Device, DeviceToken, Pairing, PairingCode, PairingLink};
 use tokio::sync::MutexGuard;
 use tracing::{info, warn};
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 use super::{Hub, new_id};
 use crate::error::internal;
 use crate::remote::codes::Waiting;
 use crate::remote::machine::this_machine;
-use crate::remote::{DeviceLink, random_text};
+use crate::remote::{DeviceLink, Revoke, random_text};
 use crate::store::{Store, TokenHash, now_ms};
 
 /// Enough for any name a phone gives itself.
@@ -24,16 +25,17 @@ fn unauthorized(message: &str) -> ApiError {
     ApiError::new(ErrorCode::Unauthorized, message)
 }
 
-/// The name a device gave itself, trimmed. One with a control character is refused, because names are shown in a
-/// terminal, where an escape sequence could change what's shown, or hide what's there.
+/// The name a device gave itself, trimmed. One with a control or format character is refused, because names are
+/// shown in a terminal and in lists, where an escape sequence or a bidi override could change what's shown, and a
+/// character with no width could make one name look like another.
 fn device_name_from(name: &str) -> Result<&str, ApiError> {
     let name = name.trim();
     let invalid = |message: String| Err(ApiError::new(ErrorCode::InvalidRequest, message));
     if name.is_empty() || name.chars().count() > MAX_DEVICE_NAME_CHARS {
         return invalid(format!("a device's name has to be 1 to {MAX_DEVICE_NAME_CHARS} characters"));
     }
-    if name.chars().any(char::is_control) {
-        return invalid(format!("a device's name can't have control characters, as {name:?} does"));
+    if name.chars().any(|c| c.is_control() || c.general_category() == GeneralCategory::Format) {
+        return invalid(format!("a device's name can't have control or format characters, as {name:?} does"));
     }
     Ok(name)
 }
@@ -115,11 +117,13 @@ impl Hub {
         self.stop_listening_if_unneeded(&changing).await
     }
 
-    /// The first request on a connection from the network, with a code from a pairing link.
+    /// The first request on a connection from the network, with a code from a pairing link. Revoking the device
+    /// sets the connection's `revoke`.
     pub(crate) async fn pair(
         &self,
         code: &PairingCode,
         device_name: &str,
+        revoke: &Revoke,
     ) -> Result<(DeviceToken, DeviceLink), ApiError> {
         let name = device_name_from(device_name)?;
         let wrong_code =
@@ -144,14 +148,15 @@ impl Hub {
         let (saving, hash) = (device.clone(), TokenHash::of(&token));
         self.blocking(move |store| store.add_device(&saving, &hash)).await?;
         info!(device = %device.id, name = device.name, "paired a device");
-        let link = self.remote.connected(&device.id);
+        let link = self.remote.connected(&device.id, revoke);
         self.remote.codes.lock().paired(code, device);
         self.remote.paired.notify_waiters();
         Ok((token, link))
     }
 
-    /// The first request on a connection from a device that has paired.
-    pub(crate) async fn authenticate(&self, token: &DeviceToken) -> Result<DeviceLink, ApiError> {
+    /// The first request on a connection from a device that has paired. Revoking the device sets the connection's
+    /// `revoke`.
+    pub(crate) async fn authenticate(&self, token: &DeviceToken, revoke: &Revoke) -> Result<DeviceLink, ApiError> {
         let not_paired = || unauthorized("this device isn't paired with this hub, or was revoked. Pair it again");
         let hash = TokenHash::of(token);
         // Looked up before waiting on anything, so a connection with a wrong token holds up nobody.
@@ -163,7 +168,7 @@ impl Hub {
         if !self.blocking(move |store| store.device_seen(&id, now)).await? {
             return Err(not_paired());
         }
-        Ok(self.remote.connected(&device.id))
+        Ok(self.remote.connected(&device.id, revoke))
     }
 
     pub(crate) async fn device_disconnected(&self, link: &DeviceLink) {
@@ -186,7 +191,7 @@ impl Hub {
     async fn stop_listening_if_unneeded(&self, _changing: &MutexGuard<'_, ()>) -> Result<(), ApiError> {
         let open = self.remote.codes.lock().any_open(Instant::now());
         if !open && !self.blocking(Store::has_devices).await? {
-            self.remote.stop_listening();
+            self.remote.stop_listening().await;
         }
         Ok(())
     }
@@ -197,9 +202,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_device_name_is_trimmed_and_has_no_control_characters() {
+    fn a_device_name_is_trimmed_and_has_no_control_or_format_characters() {
         assert_eq!(device_name_from("  Ada’s iPhone ").unwrap(), "Ada’s iPhone");
-        for refused in ["", "   ", "\u{1b}[2J\u{1b}[Hhub", "two\nlines", "bell\u{7}", "csi\u{9b}2J"] {
+        assert_eq!(device_name_from("Ada’s 📱 Pro").unwrap(), "Ada’s 📱 Pro");
+        let controls = ["", "   ", "\u{1b}[2J\u{1b}[Hhub", "two\nlines", "bell\u{7}", "csi\u{9b}2J"];
+        // A right-to-left override, a zero-width space, joiner and no-break space, and a soft hyphen.
+        let formats = ["Ada\u{202e}enohp", "Ad\u{200b}a", "Ad\u{200d}a", "\u{feff}Ada", "A\u{ad}da"];
+        for refused in controls.into_iter().chain(formats) {
             let error = device_name_from(refused).map(drop).unwrap_err();
             assert_eq!(error.code, ErrorCode::InvalidRequest, "{refused:?}");
         }

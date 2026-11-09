@@ -61,20 +61,21 @@ pub(crate) fn load_or_create(certificate: &Path, key: &Path) -> Result<Identity,
         info!(fingerprint = identity.fingerprint, "made a certificate for paired devices");
         return Ok(identity);
     };
+    let unusable =
+        |path: &Path, e: CertificateError| CertificateError::Kept { path: path.to_path_buf(), source: Box::new(e) };
+    let key_pair = rcgen::KeyPair::try_from(key_der.as_slice()).map_err(|e| unusable(key, e.into()))?;
     let certificate_der = if let Some(certificate_der) = read_if_there(certificate)? {
         certificate_der
     } else {
         // Certifying the same key again keeps its fingerprint, so no device has to pair again. A hub stopped between
         // writing the two files leaves this.
-        let key_pair = rcgen::KeyPair::try_from(key_der.as_slice())
-            .map_err(|e| CertificateError::Kept { path: key.to_path_buf(), source: Box::new(e.into()) })?;
         let certificate_der = certify(&key_pair)?;
         write_private(certificate, &certificate_der)?;
         warn!("made a new certificate for the hub's key, which devices already pinned");
         certificate_der
     };
-    identity(certificate_der, key_der)
-        .map_err(|e| CertificateError::Kept { path: certificate.to_path_buf(), source: Box::new(e) })
+    // The key read, so what's wrong is the certificate, or that it's for another key.
+    identity(certificate_der, key_der).map_err(|e| unusable(certificate, e))
 }
 
 /// What's at `path`, or `None` if there's nothing there.
@@ -164,6 +165,24 @@ mod tests {
         std::fs::remove_file(&key).unwrap();
         std::fs::write(&key, &kept_key).unwrap();
         assert!(load_or_create(&certificate, &key).is_err(), "the certificate wasn't replaced either");
+    }
+
+    #[test]
+    fn the_file_that_cant_be_used_is_the_one_named() {
+        let dir = tempfile::tempdir().unwrap();
+        let (certificate, key) = (dir.path().join("hub-cert.der"), dir.path().join("hub-key.der"));
+        load_or_create(&certificate, &key).unwrap();
+        let named = |path: &Path| {
+            let error = load_or_create(&certificate, &key).map(|_| ()).unwrap_err();
+            matches!(&error, CertificateError::Kept { path: named, .. } if named == path)
+        };
+
+        let kept_key = std::fs::read(&key).unwrap();
+        std::fs::write(&key, b"not a key").unwrap();
+        assert!(named(&key), "a key that can't be used");
+        std::fs::write(&key, kept_key).unwrap();
+        std::fs::write(&certificate, b"not a certificate").unwrap();
+        assert!(named(&certificate), "a certificate that can't be used");
     }
 
     #[test]

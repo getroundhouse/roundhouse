@@ -17,6 +17,8 @@ pub mod session_log;
 
 mod client;
 
+#[cfg(feature = "testing")]
+pub use client::WriteOnly;
 pub use client::{
     Client, ClientError, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, RemoteHub, Result,
     Subscription, SubscriptionItem, new_message_id, new_request_id, pair, stop_hub,

@@ -16,8 +16,8 @@ use protocol::client::{ClientFrame, HubFrame, ReplyOutcome};
 use protocol::frame;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
-use tokio::sync::{mpsc, oneshot, watch};
-use tokio::task::AbortHandle;
+use tokio::sync::{mpsc, watch};
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::Instant;
 use tracing::{debug, warn};
 
@@ -51,7 +51,7 @@ struct Connection {
     frames: mpsc::Sender<HubFrame>,
     subscriptions: Mutex<HashMap<u64, AbortHandle>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
-    closed: watch::Sender<bool>,
+    closed: Arc<watch::Sender<bool>>,
 }
 
 impl Drop for Connection {
@@ -76,19 +76,24 @@ where
 {
     let (read, write) = tokio::io::split(stream);
     let (frames, queued) = mpsc::channel::<HubFrame>(CONNECTION_QUEUE);
-    let writer = tokio::spawn(write_frames(write, queued));
-    let connection =
-        Arc::new(Connection { frames, subscriptions: Mutex::new(HashMap::new()), closed: watch::Sender::new(false) });
+    let mut writer = tokio::spawn(write_frames(write, queued));
+    let closed = Arc::new(watch::Sender::new(false));
+    let connection = Arc::new(Connection { frames, subscriptions: Mutex::new(HashMap::new()), closed: closed.clone() });
+    let revoked = gate.revoked();
+    let mut revoking = revoked.clone();
 
-    let ending = read_requests(&hub, &connection, &mut gate, BufReader::new(read)).await;
-    connection.closed.send_replace(true);
-    drop(connection);
-    match ending {
-        // Finish writing what's queued, such as the error for a version mismatch.
-        Ending::Closed => {
-            let _ = writer.await;
-        }
-        Ending::Revoked => writer.abort(),
+    let serving = serve_requests(&hub, connection, &mut gate, BufReader::new(read), &revoked, &mut writer);
+    // Around everything the connection does, so revoking closes it however it's waiting: on the device to send, on
+    // room to queue a reply, or on a device that has stopped reading to take what's queued.
+    let revoked = tokio::select! {
+        biased;
+        Ok(_) = revoking.wait_for(|revoked| *revoked) => true,
+        ending = serving => matches!(ending, Ending::Revoked),
+    };
+    closed.send_replace(true);
+    if revoked {
+        // Nothing more is sent, and the stream closes as its halves are dropped.
+        writer.abort();
     }
     if let Some(device) = &gate.device {
         hub.device_disconnected(device).await;
@@ -97,20 +102,48 @@ where
     drop(gate);
 }
 
-async fn read_requests<R>(hub: &Arc<Hub>, connection: &Arc<Connection>, gate: &mut Gate, mut reader: R) -> Ending
+/// Reads and answers requests until the connection ends, and then, unless its device was revoked, sends what's
+/// queued, such as the error for a version mismatch.
+async fn serve_requests<R>(
+    hub: &Arc<Hub>,
+    connection: Arc<Connection>,
+    gate: &mut Gate,
+    reader: R,
+    revoked: &watch::Receiver<bool>,
+    writer: &mut JoinHandle<()>,
+) -> Ending
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let ending = read_requests(hub, &connection, gate, reader, revoked).await;
+    connection.closed.send_replace(true);
+    // The writer finishes once nothing can queue a frame, and this is one thing that can.
+    drop(connection);
+    if let Ending::Closed = ending {
+        let _ = writer.await;
+    }
+    ending
+}
+
+async fn read_requests<R>(
+    hub: &Arc<Hub>,
+    connection: &Arc<Connection>,
+    gate: &mut Gate,
+    mut reader: R,
+    revoked: &watch::Receiver<bool>,
+) -> Ending
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline());
-        // Revoking comes first, so a revoked device can't slip in another request that's already arrived.
-        let read = tokio::select! {
-            biased;
-            () = revoked(gate.device.as_mut().map(|device| &mut device.revoked)) => return Ending::Revoked,
-            read = read => read,
-        };
+        let read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline()).await;
+        // As well as around the whole connection, so a revoked device can't slip in a request that had already
+        // arrived.
+        if *revoked.borrow() {
+            return Ending::Revoked;
+        }
         if !read {
             return Ending::Closed;
         }
@@ -158,16 +191,6 @@ where
         None => read.await,
     };
     matches!(read, Ok(n) if n > 0 && line.len() <= limit)
-}
-
-/// Resolves when the connection's device is revoked, and never for a connection that isn't a device's.
-async fn revoked(revoked: Option<&mut oneshot::Receiver<()>>) {
-    match revoked {
-        Some(revoked) => {
-            let _ = revoked.await;
-        }
-        None => std::future::pending().await,
-    }
 }
 
 async fn write_frames<W: AsyncWrite + Unpin>(mut write: W, mut queued: mpsc::Receiver<HubFrame>) {

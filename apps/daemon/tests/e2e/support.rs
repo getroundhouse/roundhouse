@@ -17,6 +17,10 @@ use tempfile::TempDir;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Where nothing answers. Hubs and listeners in these tests all ask for port 0, and the system never hands out port
+/// 1 for that, so unlike a port another test freed, no other test's hub can be listening there.
+pub(crate) const CLOSED: &str = "127.0.0.1:1";
+
 /// Returns what `kill` did. Signal 0 only checks that the process exists.
 pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
     // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.

@@ -8,11 +8,11 @@ use std::time::Duration;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::frame;
-use tokio::sync::OwnedSemaphorePermit;
+use tokio::sync::{OwnedSemaphorePermit, watch};
 use tokio::time::Instant;
 
 use crate::hub::Hub;
-use crate::remote::DeviceLink;
+use crate::remote::{DeviceLink, Revoke};
 
 /// Where a connection comes from, which decides what it has to do first and what it may ask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,6 +51,8 @@ pub(super) struct Gate {
     /// has authenticated, is. The app replaces an older hub only while it's the one client, so a connection from
     /// anyone on the network could otherwise hold that up.
     counted: Option<Counted>,
+    /// Set if the device the connection authenticated as is revoked.
+    revoke: Revoke,
 }
 
 /// Counts a connection among the hub's clients for as long as it's held.
@@ -89,6 +91,7 @@ impl Gate {
             deadline: None,
             unproven: None,
             counted: Some(Counted::new(hub)),
+            revoke: Arc::new(watch::Sender::new(false)),
         }
     }
 
@@ -102,7 +105,13 @@ impl Gate {
             deadline: Some(deadline),
             unproven: Some(unproven),
             counted: None,
+            revoke: Arc::new(watch::Sender::new(false)),
         }
+    }
+
+    /// Becomes true if the device the connection authenticated as is revoked.
+    pub(super) fn revoked(&self) -> watch::Receiver<bool> {
+        self.revoke.subscribe()
     }
 
     pub(super) fn max_frame_bytes(&self) -> usize {
@@ -138,11 +147,11 @@ impl Gate {
 
     async fn authenticate(&mut self, hub: &Arc<Hub>, request: &ClientRequest) -> Admit {
         let authenticated = if let ClientRequest::Pair { code, device_name } = request {
-            hub.pair(code, device_name)
+            hub.pair(code, device_name, &self.revoke)
                 .await
                 .map(|(token, link)| (ClientResponse::Paired { device_id: link.device_id.clone(), token }, link))
         } else if let ClientRequest::Authenticate { token } = request {
-            hub.authenticate(token).await.map(|link| (ClientResponse::Ok, link))
+            hub.authenticate(token, &self.revoke).await.map(|link| (ClientResponse::Ok, link))
         } else {
             let message = "a connection from the network has to pair or authenticate first";
             Err(ApiError::new(ErrorCode::Unauthorized, message))

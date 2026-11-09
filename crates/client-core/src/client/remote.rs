@@ -4,20 +4,20 @@
 mod pin;
 mod race;
 mod tls;
+#[cfg(feature = "testing")]
+mod write_only;
 
 use std::fmt;
-use std::time::Duration;
 
 use protocol::client::{ClientRequest, ClientResponse};
 use protocol::pairing::{DeviceToken, PairingCode, PairingLink};
 use serde::{Deserialize, Serialize};
 
+use super::transport::Transport;
 use super::{Client, ClientError, Result, unexpected};
 use race::Lost;
-
-/// How long to wait for each lookup, and each address to connect: long enough for a hub on the same network or
-/// tailnet, and short enough that a device away from both gives up quickly.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+#[cfg(feature = "testing")]
+pub use write_only::WriteOnly;
 
 /// What a device needs to connect to a hub it paired with. An app keeps it, and the token in it is a secret, so
 /// `Debug` leaves the token out.
@@ -65,8 +65,8 @@ pub fn pair(link: &PairingLink, device_name: &str) -> Result<RemoteHub> {
 
 impl Client {
     /// Connects to a hub over the network, as the device that paired with it, and checks the protocol version.
-    /// Tries every host at once, favouring them in order. Once connected, it's like any other `Client`, except that a hub refuses what only
-    /// its own machine may ask, such as stopping it.
+    /// Tries every host at once, favouring them in order. Once connected, it's like any other `Client`, except that
+    /// a hub refuses what only its own machine may ask, such as stopping it.
     pub fn connect_remote(hub: &RemoteHub, client_name: &str) -> Result<Client> {
         let client = open(&hub.hosts, &hub.fingerprint)?;
         let reply = client.call(ClientRequest::Authenticate { token: DeviceToken::from(hub.token.as_str()) })?;
@@ -84,14 +84,20 @@ impl Client {
     }
 }
 
-/// A connection to whichever of these hosts first answers with the pinned key. If none does, says so, and that one
-/// answered with another key, if any did, since that needs pairing again rather than waiting.
 fn open(hosts: &[String], fingerprint: &str) -> Result<Client> {
-    match race::race(hosts, fingerprint, CONNECT_TIMEOUT) {
-        Ok(transport) => Client::start(transport),
-        Err(Lost { not_pinned: Some(host), .. }) => Err(ClientError::FingerprintMismatch { host }),
-        Err(Lost { not_pinned: None, last }) => Err(ClientError::Unreachable { hosts: hosts.to_vec(), last }),
-    }
+    Client::start(reach(hosts, fingerprint)?)
+}
+
+/// A connection to whichever of these hosts first answers with the pinned key. If none does, it says the hub has
+/// another key only if every host answered with one, since that means pairing again. If any host didn't answer, the
+/// hub couldn't be reached, as when its machine is asleep and another machine has an address it had.
+fn reach(hosts: &[String], fingerprint: &str) -> Result<Transport> {
+    race::race(hosts, fingerprint).map_err(|lost| match lost {
+        Lost { all_not_pinned: true, not_pinned, .. } => {
+            ClientError::FingerprintMismatch { host: not_pinned.into_iter().next().unwrap_or_default() }
+        }
+        Lost { not_pinned, last, .. } => ClientError::Unreachable { hosts: hosts.to_vec(), last, not_pinned },
+    })
 }
 
 #[cfg(test)]
@@ -116,7 +122,9 @@ mod tests {
 
     #[test]
     fn a_hub_that_answers_nowhere_is_unreachable() {
-        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().to_string();
+        // The system never hands out port 1 for port 0, which is what tests listen on, so unlike a port another test
+        // freed, nothing can take it while this looks.
+        let closed = "127.0.0.1:1".to_string();
 
         let error = open(std::slice::from_ref(&closed), "f").map(drop).unwrap_err();
 

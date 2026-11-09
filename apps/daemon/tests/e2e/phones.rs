@@ -7,12 +7,12 @@ use std::time::{Duration, Instant};
 
 use client_core::records::HubRecords;
 use client_core::session_log::{Row, SessionLog};
-use client_core::{Client, ClientError, Ended, OpenSession, RecordsFeed, RemoteHub};
+use client_core::{Client, ClientError, Ended, OpenSession, RecordsFeed, RemoteHub, WriteOnly};
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ClientRequest, ErrorCode};
 use protocol::event::SessionEvent;
 
-use crate::support::{Stack, TIMEOUT, assistant_text, pair_phone, wait_until};
+use crate::support::{Stack, TIMEOUT, assistant_text, pair_phone, wait_for_turn_end, wait_until};
 
 fn connections(client: &Client) -> u32 {
     client.device_list().unwrap().iter().map(|device| device.connections).sum()
@@ -58,13 +58,17 @@ fn a_phone_connects_at_once_when_an_address_before_the_hub_never_answers() {
     // Accepts, since the system does that, but never says anything.
     let silent = TcpListener::bind("127.0.0.1:0").unwrap();
     let hosts = vec![silent.local_addr().unwrap().to_string(), paired.hosts[0].clone()];
+    let started = Instant::now();
+    drop(Client::connect_remote(&paired, "phone").unwrap());
+    let alone = started.elapsed();
 
     let started = Instant::now();
     let phone = Client::connect_remote(&RemoteHub { hosts, ..paired }, "phone");
 
     let took = started.elapsed();
     assert!(phone.is_ok(), "{:?}", phone.map(drop));
-    assert!(took < Duration::from_millis(1500), "took {took:?}");
+    // Waiting the silent host out would take 5 s more. A quarter of a second more is the wait before trying the next.
+    assert!(took < alone + Duration::from_millis(2500), "took {took:?}, and {alone:?} with only the hub's host");
 }
 
 #[test]
@@ -98,7 +102,39 @@ fn a_revoked_phone_is_cut_off_at_once_and_refused_after() {
     client.device_revoke(&kept.device_id.as_str().into()).unwrap();
     assert_eq!(client.hub_status().unwrap().network_port, None);
     let gone = Client::connect_remote(&kept, "phone").map(drop);
-    assert!(matches!(gone, Err(ClientError::Unreachable { .. })), "{gone:?}");
+    // Another test's hub can have the port by now, with its own key.
+    let refused = matches!(gone, Err(ClientError::Unreachable { .. } | ClientError::FingerprintMismatch { .. }));
+    assert!(refused, "{gone:?}");
+}
+
+/// However the connection is waiting. Here the phone asked for far more than the system holds between the two, never
+/// read it, and then sent something that ends the connection, so all that's left is to send what it won't take.
+#[test]
+fn a_revoked_phone_is_cut_off_even_while_the_hub_waits_for_it_to_read() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    // A megabyte the fake agent ignores, since it isn't a command.
+    client.session_prompt(&session.id, &format!("say:ok;{}", "x".repeat(1 << 20)), None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    let paired = pair_phone(&client, "phone");
+    let mut phone = WriteOnly::open(&paired.hosts, &paired.fingerprint).unwrap();
+    phone.send(ClientRequest::Authenticate { token: paired.token.as_str().into() }).unwrap();
+    phone.send(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: "phone".to_string() }).unwrap();
+    // About a megabyte each.
+    let read =
+        ClientRequest::SessionRead { id: session.id, from_seq: 1, limit: 100, max_bytes: None, include_raw: true };
+    for _ in 0..48 {
+        phone.send(read.clone()).unwrap();
+    }
+    phone.send_bytes(b"not a frame\n").unwrap();
+    wait_until("the phone to count as a client", || client.hub_status().unwrap().clients == 2);
+    // Counting the request that asks.
+    wait_until("the hub to answer everything", || client.hub_status().unwrap().requests == 1);
+
+    client.device_revoke(&paired.device_id.as_str().into()).unwrap();
+
+    wait_until("the revoked phone to stop counting", || client.hub_status().unwrap().clients == 1);
 }
 
 #[test]

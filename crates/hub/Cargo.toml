@@ -24,6 +24,7 @@ socket2.workspace = true
 tokio.workspace = true
 tokio-rustls.workspace = true
 tracing.workspace = true
+unicode-properties.workspace = true
 uuid.workspace = true
 webpki.workspace = true
 

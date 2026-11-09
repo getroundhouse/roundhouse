@@ -31,6 +31,8 @@ pub use api::{new_message_id, new_request_id};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub use open_session::OpenSession;
+#[cfg(feature = "testing")]
+pub use remote::WriteOnly;
 pub use remote::{RemoteHub, pair};
 pub use start::Daemon;
 use transport::{Closer, Transport};
@@ -47,19 +49,30 @@ pub enum ClientError {
     Unexpected(String),
     #[error(transparent)]
     Link(#[from] LinkError),
-    /// None of a remote hub's hosts answered, as when its machine is asleep or this device is on another network.
-    #[error("couldn't reach the hub at {}", hosts.join(", "))]
+    /// A remote hub didn't answer with its key at any of its hosts, and some didn't answer at all, as when its
+    /// machine is asleep or this device is on another network.
+    #[error("couldn't reach the hub at {}{}", hosts.join(", "), answered_with_another_key(not_pinned))]
     Unreachable {
         hosts: Vec<String>,
         #[source]
         last: Option<std::io::Error>,
+        /// Hosts that did answer, but with a key other than the hub's, such as another machine that now has an
+        /// address the hub had.
+        not_pinned: Vec<String>,
     },
-    /// Something answered at a remote hub's address with a key other than the one this device pinned when it
-    /// paired. Either the hub made a new certificate, and the device needs pairing again, or it isn't the hub.
+    /// Every host of a remote hub answered with a key other than the one this device pinned when it paired. Either
+    /// the hub made a new certificate, and the device needs pairing again, or it isn't the hub.
     #[error(
         "the hub at {host} isn't the one this device paired with, because its key doesn't match. If the hub made a new certificate, pair again"
     )]
     FingerprintMismatch { host: String },
+}
+
+fn answered_with_another_key(not_pinned: &[String]) -> String {
+    if not_pinned.is_empty() {
+        return String::new();
+    }
+    format!(". {} answered, but with another key", not_pinned.join(", "))
 }
 
 impl ClientError {

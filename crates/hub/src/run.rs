@@ -167,7 +167,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         _ = terminate.recv() => info!("terminated"),
     }
     accept.abort();
-    hub.remote.stop_listening();
+    hub.remote.stop_listening().await;
     let _ = std::fs::remove_file(&paths.socket);
     hub.stop_all_workers().await;
     drop(lock_file);

@@ -87,6 +87,8 @@ tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "proc
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 two-face = { version = "0.4", default-features = false }
+# Already in Cargo.lock. Tells format characters, such as bidi overrides, from the rest.
+unicode-properties = { version = "0.1", default-features = false, features = ["general-category"] }
 # The one Velopack uses, with its TLS, for fetching the update feed.
 ureq = "3"
 uuid = { version = "1", features = ["v4"] }

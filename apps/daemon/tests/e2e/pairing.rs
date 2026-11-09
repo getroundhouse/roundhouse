@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use std::io::Write as _;
-use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
 
 use client_core::{Client, ClientError, PairingLink, RemoteHub};
@@ -11,7 +10,7 @@ use protocol::PROTOCOL_VERSION;
 use protocol::client::{ClientFrame, ClientRequest, ErrorCode};
 use protocol::frame;
 
-use crate::support::{Stack, pair_phone, pairing_link, wait_until};
+use crate::support::{CLOSED, Stack, pair_phone, pairing_link, wait_until};
 
 /// Long enough to pair with a code on a busy machine, and short enough to wait for one to expire.
 const SHORT_LIFE_MS: &str = "2000";
@@ -62,7 +61,9 @@ fn a_hub_with_nothing_paired_listens_only_while_a_code_is_live() {
     let expired = client.pairing_wait(&code).unwrap_err();
     assert!(matches!(&expired, ClientError::Api(e) if e.code == ErrorCode::NotFound), "{expired:?}");
     wait_until("the hub to stop listening", || client.hub_status().unwrap().network_port.is_none());
-    assert!(TcpStream::connect(&link.hosts[0]).is_err(), "nothing listens on {}", link.hosts[0]);
+    // Another test's hub can have the port by now, but not this hub's key.
+    let gone = Client::open_remote(&link.hosts, &link.fingerprint).map(drop);
+    assert!(gone.is_err(), "this hub still answers at {}", link.hosts[0]);
 }
 
 #[test]
@@ -98,4 +99,21 @@ fn a_phone_refuses_a_hub_with_another_key() {
     let moved = RemoteHub { fingerprint: another_key, ..phone };
     let refused = Client::connect_remote(&moved, "phone").map(drop);
     assert!(matches!(&refused, Err(ClientError::FingerprintMismatch { .. })), "{refused:?}");
+}
+
+/// Such as when the hub's Mac is asleep, and another Mac running a hub now has an address it had. Pairing again
+/// wouldn't help, and might pair with the wrong hub.
+#[test]
+fn a_phone_that_reaches_only_a_hub_with_another_key_says_it_can_not_reach_its_own() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let paired = pair_phone(&client, "phone");
+    let other = paired.hosts[0].clone();
+    let hosts = vec![CLOSED.to_string(), other.clone()];
+
+    let unreachable = Client::connect_remote(&RemoteHub { hosts, fingerprint: "A".repeat(43), ..paired }, "phone");
+
+    let unreachable = unreachable.map(drop).unwrap_err();
+    assert!(matches!(&unreachable, ClientError::Unreachable { not_pinned, .. } if *not_pinned == [other]));
+    assert!(unreachable.to_string().contains("with another key"), "{unreachable}");
 }

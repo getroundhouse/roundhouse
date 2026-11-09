@@ -20,8 +20,8 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::DeviceId;
 use protocol::paths::ENV_PORT;
 use ring::rand::SecureRandom;
-use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore, oneshot};
-use tokio::task::AbortHandle;
+use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore, watch};
+use tokio::task::JoinHandle;
 use tracing::info;
 
 use crate::error::internal;
@@ -58,7 +58,7 @@ pub(crate) struct Remote {
     /// Woken when a device pairs.
     pub(crate) paired: Notify,
     /// Each device's open connections, and how to close each one.
-    connections: Mutex<HashMap<DeviceId, HashMap<u64, oneshot::Sender<()>>>>,
+    connections: Mutex<HashMap<DeviceId, HashMap<u64, Revoke>>>,
     next_connection: AtomicU64,
     /// A place for each connection from the network that hasn't authenticated yet, up to [`MAX_UNAUTHENTICATED`].
     pub(crate) unauthenticated: Arc<Semaphore>,
@@ -66,14 +66,17 @@ pub(crate) struct Remote {
 
 struct Listening {
     port: u16,
-    accept: AbortHandle,
+    accept: JoinHandle<()>,
 }
 
-/// One connection's claim to be a device. Its `revoked` resolves when the device is revoked.
+/// Set when a connection's device is revoked. The connection holds it from when it's accepted, and watches it around
+/// everything it does, so revoking closes it however it's waiting, such as on a device that has stopped reading.
+pub(crate) type Revoke = Arc<watch::Sender<bool>>;
+
+/// One connection's claim to be a device.
 pub(crate) struct DeviceLink {
     pub(crate) device_id: DeviceId,
     connection: u64,
-    pub(crate) revoked: oneshot::Receiver<()>,
 }
 
 impl Remote {
@@ -113,17 +116,20 @@ impl Remote {
         })?;
         let port = listener.local_addr().map_err(|e| internal(format!("reading the port listened on: {e}")))?.port();
         let accept = tokio::spawn(crate::server::accept_devices(hub.clone(), listener, identity.acceptor.clone()));
-        *self.listening.lock() = Some(Listening { port, accept: accept.abort_handle() });
+        *self.listening.lock() = Some(Listening { port, accept });
         info!(port, "listening for paired devices");
         Ok(port)
     }
 
-    /// Connections already open carry on, but nothing new can connect.
-    pub(crate) fn stop_listening(&self) {
-        if let Some(listening) = self.listening.lock().take() {
-            listening.accept.abort();
-            info!(port = listening.port, "stopped listening for devices");
-        }
+    /// Connections already open carry on, but nothing new can connect. Returns once the port is free, so listening
+    /// again straight away can have it.
+    pub(crate) async fn stop_listening(&self) {
+        let listening = self.listening.lock().take();
+        let Some(listening) = listening else { return };
+        listening.accept.abort();
+        // Finishes once the task, and the listener it owns, have been dropped.
+        let _ = listening.accept.await;
+        info!(port = listening.port, "stopped listening for devices");
     }
 
     pub(crate) async fn fingerprint(&self) -> Result<String, ApiError> {
@@ -142,12 +148,11 @@ impl Remote {
         Ok(self.identity.lock().get_or_insert(Arc::new(identity)).clone())
     }
 
-    /// Notes a connection as this device's, so revoking the device closes it.
-    pub(crate) fn connected(&self, device_id: &DeviceId) -> DeviceLink {
+    /// Notes a connection as this device's, so revoking the device sets the connection's `revoke`.
+    pub(crate) fn connected(&self, device_id: &DeviceId, revoke: &Revoke) -> DeviceLink {
         let connection = self.next_connection.fetch_add(1, Ordering::Relaxed);
-        let (close, revoked) = oneshot::channel();
-        self.connections.lock().entry(device_id.clone()).or_default().insert(connection, close);
-        DeviceLink { device_id: device_id.clone(), connection, revoked }
+        self.connections.lock().entry(device_id.clone()).or_default().insert(connection, revoke.clone());
+        DeviceLink { device_id: device_id.clone(), connection }
     }
 
     pub(crate) fn disconnected(&self, link: &DeviceLink) {
@@ -162,8 +167,8 @@ impl Remote {
 
     /// Closes every connection this device has open.
     pub(crate) fn close_all(&self, device_id: &DeviceId) {
-        for (_, close) in self.connections.lock().remove(device_id).unwrap_or_default() {
-            let _ = close.send(());
+        for (_, revoke) in self.connections.lock().remove(device_id).unwrap_or_default() {
+            revoke.send_replace(true);
         }
     }
 

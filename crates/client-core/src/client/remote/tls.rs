@@ -5,7 +5,7 @@
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use rustls::pki_types::ServerName;
@@ -15,8 +15,6 @@ use socket2::{SockRef, TcpKeepalive};
 use super::pin::PinnedKey;
 use crate::client::transport::{Closer, Transport};
 
-/// How long the handshake may take once connected. Only a hub that's very busy, or not a hub, takes longer.
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// TLS records are at most this much plus a little, so one read usually brings a whole one.
 const READ_BUFFER_BYTES: usize = 32 * 1024;
 /// A phone keeps a connection open for minutes while someone watches a chat, and the hub's Mac can go to sleep, or
@@ -39,9 +37,10 @@ impl From<io::Error> for Failure {
 }
 
 /// Connects, and finishes the handshake before handing over the stream, so a key that isn't pinned is refused
-/// before anything is sent.
-pub(super) fn connect(address: SocketAddr, fingerprint: &str, connect_timeout: Duration) -> Result<Transport, Failure> {
-    let tcp = open_tcp(address, connect_timeout)?;
+/// before anything is sent. Connecting and the whole handshake have until `deadline`, so something that accepts the
+/// connection but never answers, or answers a byte at a time, can't hold it longer.
+pub(super) fn connect(address: SocketAddr, fingerprint: &str, deadline: Instant) -> Result<Transport, Failure> {
+    let tcp = open_tcp(address, time_left(deadline)?)?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let pinned = Arc::new(PinnedKey::new(fingerprint, provider.clone()));
     let config = ClientConfig::builder_with_provider(provider)
@@ -53,10 +52,8 @@ pub(super) fn connect(address: SocketAddr, fingerprint: &str, connect_timeout: D
     // Nothing checks the name, since the key is pinned, but TLS needs one.
     let name = ServerName::try_from("roundhouse").map_err(io::Error::other)?;
     let mut tls = ClientConnection::new(Arc::new(config), name).map_err(io::Error::other)?;
-    tcp.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
-    tcp.set_write_timeout(Some(HANDSHAKE_TIMEOUT))?;
     while tls.is_handshaking() {
-        if let Err(e) = tls.complete_io(&mut &tcp) {
+        if let Err(e) = tls.complete_io(&mut Until { tcp: &tcp, deadline }) {
             return Err(if pinned.refused() { Failure::NotPinned } else { Failure::Io(e) });
         }
     }
@@ -68,6 +65,50 @@ pub(super) fn connect(address: SocketAddr, fingerprint: &str, connect_timeout: D
         reader: Box::new(TlsReader { shared: shared.clone(), raw: vec![0; READ_BUFFER_BYTES], start: 0, end: 0 }),
         writer: Box::new(TlsWriter { shared }),
         closer: Closer::tcp(tcp),
+    })
+}
+
+/// What's left before `deadline`, or an error once there's nothing.
+fn time_left(deadline: Instant) -> io::Result<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|left| !left.is_zero())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "the hub didn't finish connecting in time"))
+}
+
+/// The socket, with each read and write given only what's left before `deadline`. rustls reads as often as it needs
+/// to in one call, so a timeout set once would apply to each read rather than to the whole handshake.
+struct Until<'a> {
+    tcp: &'a TcpStream,
+    deadline: Instant,
+}
+
+impl Read for Until<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.tcp.set_read_timeout(Some(time_left(self.deadline)?))?;
+        timed_out_if_blocked(self.tcp.read(buf))
+    }
+}
+
+impl Write for Until<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.tcp.set_write_timeout(Some(time_left(self.deadline)?))?;
+        timed_out_if_blocked(self.tcp.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// A socket's timeout comes back as `WouldBlock` on Unix, which reads as though nothing was wrong.
+fn timed_out_if_blocked<T>(result: io::Result<T>) -> io::Result<T> {
+    result.map_err(|e| {
+        if e.kind() == io::ErrorKind::WouldBlock {
+            io::Error::new(io::ErrorKind::TimedOut, "the hub didn't finish connecting in time")
+        } else {
+            e
+        }
     })
 }
 
@@ -168,5 +209,27 @@ mod tests {
         assert_eq!(socket.tcp_keepalive_time().unwrap(), Duration::from_secs(10));
         assert_eq!(socket.tcp_keepalive_interval().unwrap(), Duration::from_secs(5));
         assert_eq!(socket.tcp_keepalive_retries().unwrap(), 3);
+    }
+
+    /// Each read waiting its own time would let this one go on for as long as the bytes kept coming.
+    #[test]
+    fn a_host_that_answers_a_byte_at_a_time_is_given_up_on_at_the_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            // The start of a TLS record 255 bytes long, then the record a byte at a time.
+            let mut next: &[u8] = &[0x16, 0x03, 0x03, 0x00, 0xff];
+            while stream.write_all(next).is_ok() {
+                std::thread::sleep(Duration::from_millis(50));
+                next = &[0];
+            }
+        });
+        let started = Instant::now();
+
+        let failed = connect(address, &"f".repeat(43), started + Duration::from_millis(500));
+
+        assert!(matches!(&failed, Err(Failure::Io(e)) if e.kind() == io::ErrorKind::TimedOut));
+        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
     }
 }
