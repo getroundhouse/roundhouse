@@ -121,7 +121,7 @@ impl WorkspacePane {
             subscriptions: vec![on_enter],
         };
         // The chat last worked in.
-        let latest = this.open_sessions().max_by_key(|s| (s.updated_at_ms, s.created_at_ms)).map(|s| s.id.clone());
+        let latest = client_core::records::latest_open_session(&this.sessions).map(|s| s.id.clone());
         match latest {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
@@ -216,7 +216,7 @@ impl WorkspacePane {
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
         // While the agent is waiting on a question, what's typed is the answer to it.
-        let taken = transcript.update(cx, |t, cx| t.answer_with_text(&text, cx) || t.send_prompt(text, cx));
+        let taken = transcript.update(cx, |t, cx| t.submit(text, cx));
         if taken {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         }

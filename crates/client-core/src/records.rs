@@ -10,8 +10,11 @@ use std::collections::HashMap;
 use protocol::client::HubNotice;
 use protocol::model::{DiffComment, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId};
 
+mod chats;
 #[cfg(test)]
 mod laws;
+
+pub use chats::{latest_open_session, workspace_status};
 
 /// One record of any kind.
 #[derive(Clone, Debug, PartialEq)]

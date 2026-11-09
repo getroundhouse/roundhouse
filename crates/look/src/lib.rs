@@ -12,7 +12,7 @@ mod theme;
 
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
-pub use icon::{IconSize, IconStyle, icon};
+pub use icon::{IconSize, IconStyle, icon, phone_icon};
 pub use mark::{Signal, Size, Work, brand, mark};
 pub use palette::faint;
 pub use theme::apply;

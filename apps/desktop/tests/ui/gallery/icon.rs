@@ -1,6 +1,6 @@
 //! The app icon, in each style and at every size macOS keeps a drawing for, checked against its images in the
 //! style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns` the app
-//! is packaged with.
+//! is packaged with. The iPhone app's icon is drawn and checked here too, in its asset catalog.
 
 #![cfg(test)]
 
@@ -10,8 +10,9 @@ use std::sync::Arc;
 use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, Context, HeadlessAppContext, Hsla, IntoElement, ParentElement as _, PlatformTextSystem,
-    Render, Styled as _, Window, WindowBounds, WindowOptions, black, div, point, px, size, white,
+    AnyWindowHandle, AppContext as _, Bounds, Context, HeadlessAppContext, Hsla, IntoElement, ParentElement as _,
+    Pixels, PlatformTextSystem, Render, Styled as _, Window, WindowBounds, WindowOptions, black, div, point, px, size,
+    white,
 };
 use image::{Rgba, RgbaImage};
 use look::{IconSize, IconStyle};
@@ -73,6 +74,42 @@ fn every_size_of_the_icon_looks_as_approved() {
     );
 }
 
+/// The iPhone's, which is opaque, and kept without an alpha channel, since App Store Connect refuses an icon with one.
+#[test]
+fn the_phone_icon_looks_as_approved() {
+    let mut cx = headless();
+    let options = window_options(px(512.));
+    let handle = cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| PhoneIcon))).unwrap();
+    let drawn = capture(&mut cx, handle.into());
+    assert_eq!(drawn.dimensions(), (1024, 1024), "drawn at 2x, so each point is two pixels");
+    assert!(drawn.pixels().all(|pixel| pixel.0[3] == 255), "opaque");
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.context/gallery");
+    std::fs::create_dir_all(&out).unwrap();
+    drawn.save(out.join("icon-phone-1024.png")).unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../mobile-ios/ios/Assets.xcassets/AppIcon.appiconset/icon-1024.png");
+    if std::env::var_os(UPDATE).is_some() {
+        image::DynamicImage::ImageRgba8(drawn).to_rgb8().save(&path).unwrap();
+        return;
+    }
+    let kept = image::open(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert!(!kept.color().has_alpha(), "{} has an alpha channel", path.display());
+    assert!(
+        kept.to_rgba8() == drawn,
+        "{} no longer matches the phone's icon. What it looks like now is in .context/gallery/. If a change is meant, \
+         {UPDATE}=1 accepts it.",
+        path.display()
+    );
+}
+
+struct PhoneIcon;
+
+impl Render for PhoneIcon {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(look::phone_icon(cx))
+    }
+}
+
 /// The icon over a backdrop of one colour.
 struct Icon {
     style: IconStyle,
@@ -103,19 +140,27 @@ fn draw(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize) -> RgbaIm
 
 /// In a window exactly as big as the icon.
 fn over(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize, backdrop: Hsla) -> RgbaImage {
-    let points = px(f32::from(icon.pixels()) / 2.0);
-    let options = WindowOptions {
+    let options = window_options(px(f32::from(icon.pixels()) / 2.0));
+    let handle =
+        cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Icon { style, size: icon, backdrop }))).unwrap();
+    capture(cx, handle.into())
+}
+
+fn window_options(points: Pixels) -> WindowOptions {
+    WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(0.), px(0.)), size(points, points)))),
         focus: false,
         show: false,
         ..Default::default()
-    };
-    let handle =
-        cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Icon { style, size: icon, backdrop }))).unwrap();
+    }
+}
+
+/// Draws the window, takes its picture, and closes it.
+fn capture(cx: &mut HeadlessAppContext, handle: AnyWindowHandle) -> RgbaImage {
     cx.run_until_parked();
-    cx.update_window(handle.into(), |_, window, cx| window.render_frame(cx)).unwrap();
-    let image = cx.capture_screenshot(handle.into()).unwrap();
-    cx.update_window(handle.into(), |_, window, _| window.remove_window()).unwrap();
+    cx.update_window(handle, |_, window, cx| window.render_frame(cx)).unwrap();
+    let image = cx.capture_screenshot(handle).unwrap();
+    cx.update_window(handle, |_, window, _| window.remove_window()).unwrap();
     cx.run_until_parked();
     image
 }

@@ -35,7 +35,7 @@ impl WorkspacePane {
     fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id);
-        let mark = crate::sidebar::signal(Some(session.status));
+        let mark = look::Signal::for_status(Some(session.status));
         let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         h_flex()

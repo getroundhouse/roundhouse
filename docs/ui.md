@@ -39,7 +39,7 @@ The transcript is the kit's `MessageScroller` and `TextView`, plus a small windo
 
 ## iOS
 
-The iOS app is GPUI throughout, on Zed's iOS backend, `gpui-pre-ios`, and shares the transcript with the desktop app. *Not built:* `mobile-poc/` holds the proof of concept.
+The iOS app, `apps/mobile-ios`, is GPUI throughout, on Zed's iOS backend, `gpui-pre-ios`, and shares the transcript with the desktop app. `mobile-poc/` holds the proof of concept that chose it.
 
 - **It behaves like an iPhone app where it counts.** It scrolls at 120 Hz, and selection, copy and paste, and editing with the on-screen keyboard work as in other iOS apps, including moving the cursor from the space bar.
 - **It's released with GPUI,** at the version the kit pins, so an upgrade needs no porting.
@@ -57,4 +57,4 @@ Why not the alternatives:
 - **No VoiceOver.** Neither iOS backend has accessibility code, unlike GPUI on the Mac.
 - It's experimental, and young.
 - Native views can only sit on top of GPUI, not around it, so a native navigation bar or composer would mean switching backends.
-- It needs two patches the kit and the backend don't carry. The kit's text input has to report its length, or the keyboard never appears, and the display link has to ask for 120 Hz, or an iPhone holds it to 60. `mobile-poc/README.md` lists them.
+- It needs two changes the backend doesn't carry. The keyboard never appears for an input that reports no document range, as the kit's don't, and the display link has to ask for 120 Hz, or an iPhone holds it to 60. `third_party/gpui-pre-ios/` is the backend with both, and `apps/mobile-ios/README.md` says how to carry them to a new release.

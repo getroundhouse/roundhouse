@@ -11,6 +11,7 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | `diff.md` | The diff, and comments on it |
 | `sidebar.md` | The sidebar |
 | `updates.md` | What someone sees when the app or its hub updates, or when there's no hub |
+| `mobile.md` | The iPhone app: pairing with a hub, its workspaces, and a chat |
 | `look.md` | The rules every screen follows: surfaces, type, space, buttons, colour and the status mark |
 | `speed.md` | How fast the desktop app has to be |
 
