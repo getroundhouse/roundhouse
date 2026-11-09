@@ -8,10 +8,14 @@ use gpui_kit::{AssetSource, Result, SharedString};
 gpui_kit::assets::icon_assets!(
     Extra,
     [
+        Archive,
+        ArchiveRestore,
+        ArrowUpDown,
         Brain,
         CornerDownRight,
         FilePen,
         FilePlus,
+        House,
         ListTree,
         MessageSquarePlus,
         Pencil,

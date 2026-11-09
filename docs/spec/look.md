@@ -15,7 +15,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Space and shape
 
-- **A 4px grid.** Controls are 32px tall, or 24px for small ones, sidebar rows 30px, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.*
+- **A 4px grid.** Controls are 32px tall, or 24px for small ones, sidebar rows 36px, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.*
 - **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what the system's setting for a title bar says, except where a button takes the press, and pressing it leaves focus where it was.
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **The transcript is a centred column, at most 780px wide,** so lines stay short enough to read in a wide window.
@@ -39,7 +39,7 @@ Each colour means one thing.
 
 ## The status mark
 
-Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards and the working line. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
+Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 18px wide in the sidebar and 16px in chat tabs, cards, the working line and Home. A bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
 
 The mark has three layers, and each is about one thing, so several facts can show at once without competing:
 

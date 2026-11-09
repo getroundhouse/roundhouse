@@ -12,6 +12,7 @@ mod checkout;
 mod core_loop;
 #[cfg(target_os = "macos")]
 mod gallery;
+mod home;
 #[cfg(target_os = "macos")]
 mod marks;
 mod menus;

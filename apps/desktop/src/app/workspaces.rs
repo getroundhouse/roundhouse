@@ -4,12 +4,42 @@ use client_core::ClientError;
 use client_core::records::Record;
 use gpui_kit::{Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, RepoId, WorkspaceId};
+use protocol::model::{AgentKind, Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::rename::{self, Renaming};
 
 impl AppView {
+    /// The repository a new workspace goes in when nothing says which: the one Home's list shows, while Home shows,
+    /// or else the selected workspace's, or the first.
+    pub fn current_repo(&self) -> Option<RepoId> {
+        let home = self.home_repo().filter(|_| self.home_showing());
+        let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
+        let selected = selected.map(|w| &w.repo_id);
+        home.or(selected).or_else(|| self.repos.first().map(|r| &r.id)).cloned()
+    }
+
+    /// Makes a workspace where nothing else says, as Create and `Cmd-N` do.
+    pub(crate) fn new_workspace_here(&mut self, cx: &mut Context<Self>) {
+        if let Some(repo) = self.current_repo() {
+            self.new_workspace(repo, cx);
+        }
+    }
+
+    pub(crate) fn repo(&self, id: &RepoId) -> Option<&Repo> {
+        self.repos.iter().find(|r| &r.id == id)
+    }
+
+    /// Shows the workspace, or brings it back first if it's archived, as clicking its row does.
+    pub(crate) fn open_workspace(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
+        let archived = self.workspaces.iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived);
+        if archived {
+            self.restore(id, cx);
+        } else {
+            self.select(id, cx);
+        }
+    }
+
     pub fn new_workspace(&mut self, repo_id: RepoId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
         if self.busy {

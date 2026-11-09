@@ -8,6 +8,7 @@ mod assets;
 pub mod changes;
 pub mod checkout;
 pub mod file_diff;
+mod home;
 mod menus;
 mod rename;
 pub mod review;

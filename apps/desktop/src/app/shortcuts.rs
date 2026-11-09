@@ -18,18 +18,15 @@ impl AppView {
     pub(super) fn with_shortcuts(&self, root: Div, cx: &mut Context<Self>) -> Div {
         let connected = self.client().is_some();
         root.when(connected && self.current_repo().is_some(), |root| {
-            root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| {
-                if let Some(repo) = t.current_repo() {
-                    t.new_workspace(repo, cx);
-                }
-            }))
+            root.on_action(cx.listener(|t, _: &NewWorkspace, _, cx| t.new_workspace_here(cx)))
         })
         .when(connected, |root| root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx))))
         .when(!self.visible_workspaces().is_empty(), |root| {
             root.on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
                 .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
         })
-        .when(self.selected_pane().is_some(), |root| with_workspace_shortcuts(root, cx))
+        // Home hides the selected workspace, so nothing acts on it unseen.
+        .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
     }
 
     /// Gives the menu bar again when what it says about the selected workspace changes, such as Show Diff becoming

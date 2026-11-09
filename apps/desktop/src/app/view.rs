@@ -34,6 +34,7 @@ impl Render for AppView {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
             }
+            Connection::Ready(_) if self.home_showing() => crate::home::page(self, cx).into_any_element(),
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => empty_state(
@@ -49,19 +50,16 @@ impl Render for AppView {
                 None => empty_state(
                     "Start a workspace",
                     "Pick a repository in the sidebar and press + to give an agent a branch of its own.",
-                    Button::new("first-new-workspace").primary().label("New workspace").on_click(cx.listener(
-                        |t, _, _, cx| {
-                            if let Some(repo) = t.current_repo() {
-                                t.new_workspace(repo, cx);
-                            }
-                        },
-                    )),
+                    Button::new("first-new-workspace")
+                        .primary()
+                        .label("New workspace")
+                        .on_click(cx.listener(|t, _, _, cx| t.new_workspace_here(cx))),
                     cx,
                 ),
             },
         };
         let root = self.with_shortcuts(h_flex(), cx);
-        self.root(root, cx).child(crate::sidebar::render(self, window, cx)).child(
+        self.root(root, cx).child(crate::sidebar::render(self, cx)).child(
             v_flex()
                 .flex_1()
                 .min_w_0()
