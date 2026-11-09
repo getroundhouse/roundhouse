@@ -1,8 +1,7 @@
 //! Where the app finds its hub.
 
-use std::path::PathBuf;
-
-use client_core::{Client, ClientError};
+use anyhow::Context as _;
+use client_core::{Client, ClientError, Daemon};
 use gpui_kit::Result;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
@@ -11,7 +10,7 @@ use protocol::paths::Paths;
 #[derive(Clone, Debug)]
 pub struct HubSource {
     pub paths: Paths,
-    pub daemon: PathBuf,
+    pub daemon: Daemon,
     /// Which build this app is, for telling whether a hub is older.
     pub build_number: Option<u64>,
     /// Which build this app is, for telling people. A picture of the app sets its own, so it doesn't change
@@ -32,10 +31,12 @@ impl HubSource {
     /// The default hub for this user, with the daemon next to this binary.
     pub fn default_local() -> anyhow::Result<Self> {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-        let daemon = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map_or_else(
-            || std::env::current_exe().and_then(|exe| client_core::daemon_beside(&exe)).unwrap_or("roundhoused".into()),
-            PathBuf::from,
-        );
+        let daemon = match std::env::var_os(protocol::paths::ENV_DAEMON_BIN) {
+            Some(path) => Daemon::in_place(path),
+            None => std::env::current_exe()
+                .and_then(|exe| Daemon::beside(&exe))
+                .context("finding the daemon next to this binary")?,
+        };
         Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
     }
 

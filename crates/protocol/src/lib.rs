@@ -19,9 +19,16 @@ pub mod worker;
 
 pub const PROTOCOL_VERSION: u32 = 3;
 
-/// Which build this is, for telling people. An install stamps the commit it came from with
-/// `ROUNDHOUSE_BUILD`, and anything else says `-dev`.
-pub const BUILD_VERSION: &str = match option_env!("ROUNDHOUSE_BUILD") {
+/// The build version an install stamped with `ROUNDHOUSE_BUILD`, if one did. It names a directory, so a build stamped
+/// with one that can't doesn't compile.
+pub const STAMPED_VERSION: Option<&str> = match option_env!("ROUNDHOUSE_BUILD") {
+    Some(version) if paths::is_plain_name(version) => Some(version),
+    Some(_) => panic!("ROUNDHOUSE_BUILD has to be one plain name, without a /, since it names a directory"),
+    None => None,
+};
+
+/// Which build this is, for telling people. An install stamps the commit it came from, and anything else says `-dev`.
+pub const BUILD_VERSION: &str = match STAMPED_VERSION {
     Some(version) => version,
     None => concat!(env!("CARGO_PKG_VERSION"), "-dev"),
 };
@@ -35,3 +42,10 @@ pub const BUILD_NUMBER: Option<u64> = match option_env!("ROUNDHOUSE_BUILD_NUMBER
     },
     None => None,
 };
+
+// A build with a number and no version would say `-dev` whatever its code, yet still be put in order and get a copy
+// of the daemon kept for it by name.
+const _: () = assert!(
+    STAMPED_VERSION.is_some() == BUILD_NUMBER.is_some(),
+    "ROUNDHOUSE_BUILD and ROUNDHOUSE_BUILD_NUMBER are set together or not at all"
+);

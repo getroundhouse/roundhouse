@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use client_core::{Client, HubAdmin};
+use client_core::{Client, Daemon, HubAdmin, StampedBuild};
 use protocol::model::{AgentKind, WorkspaceStatus};
 
 use crate::support::{
@@ -84,17 +84,11 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
     wait_for_turn_end(&client, &session.id, 1);
     drop(client);
     let first = stack.hub_pid();
-    let paths = protocol::paths::resolve(|name| match name {
-        protocol::paths::ENV_HOME => Some(stack.path("home").to_str().unwrap().to_string()),
-        protocol::paths::ENV_WORKSPACES => Some(stack.path("workspaces").to_str().unwrap().to_string()),
-        _ => None,
-    })
-    .unwrap();
 
     HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
 
-    let daemon = Path::new(env!("CARGO_BIN_EXE_roundhoused"));
-    let client = Client::connect_or_start(&paths, daemon, "test").unwrap();
+    let daemon = Daemon::in_place(env!("CARGO_BIN_EXE_roundhoused"));
+    let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     let status = client.hub_status().unwrap();
     // First, because nothing else would stop this hub if an assertion failed.
     client.hub_shutdown().unwrap();
@@ -128,6 +122,55 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:still here", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
+}
+
+/// An update replaces the app's files, its daemon among them. A hub that an installed build started runs from that
+/// build's copy, so it keeps starting workers from the code it started with, and so does the next hub a client starts.
+#[test]
+fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone() {
+    let mut stack = Stack::start();
+    stack.kill_hub();
+    let app = stack.path("app");
+    std::fs::create_dir_all(&app).unwrap();
+    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
+    // The version this daemon gives, which its copy is checked against.
+    let build = StampedBuild::from_stamp(Some(protocol::BUILD_VERSION), Some(1));
+    let daemon = Daemon { path: app.join("roundhoused"), build };
+    let copy = stack.paths().hubs_dir.join(format!("{}-1/roundhoused", protocol::BUILD_VERSION));
+
+    let started = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
+    let command = started.map(|status| command_line(status.pid));
+    // Before the assertion, because nothing else would stop this hub if it failed.
+    client_core::stop_hub(&stack.socket()).unwrap();
+    let command = command.unwrap();
+    assert!(command.starts_with(&format!("{} hub", copy.display())), "{command}");
+
+    // The same file, with the environment the stack's hubs need for the fake agent, which a client doesn't pass on.
+    stack.hub = Some(stack.command_at(&copy).spawn().unwrap());
+    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    // The update, with a daemon that can run neither a hub nor a worker.
+    std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
+    install_executable(&stack.path("broken"), &app.join("roundhoused"));
+    // This is the first thing since the update to need a worker.
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:still here", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    drop(client);
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+    stack.hub.take().unwrap().wait().unwrap();
+
+    // The broken daemon never answers, so this only connects if it starts the copy again.
+    let next = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
+    let _ = client_core::stop_hub(&stack.socket());
+    assert!(next.is_ok(), "{next:?}");
+}
+
+/// What a process was started with, its executable first.
+fn command_line(pid: u32) -> String {
+    let output =
+        std::process::Command::new("ps").args(["-ww", "-o", "args=", "-p", &pid.to_string()]).output().unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 /// The code in a workspace can be another build of Roundhouse, whose commands would otherwise reach this hub.
@@ -185,15 +228,8 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
         drop(connection);
     });
 
-    let home = stack.path("home");
-    let workspaces = stack.path("workspaces");
-    let paths = protocol::paths::resolve(|name| match name {
-        protocol::paths::ENV_HOME => Some(home.to_str().unwrap().to_string()),
-        protocol::paths::ENV_WORKSPACES => Some(workspaces.to_str().unwrap().to_string()),
-        _ => None,
-    })
-    .unwrap();
-    let client = Client::connect_or_start(&paths, Path::new(env!("CARGO_BIN_EXE_roundhoused")), "test").unwrap();
+    let daemon = Daemon::in_place(env!("CARGO_BIN_EXE_roundhoused"));
+    let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());
     client.hub_shutdown().unwrap();

@@ -1,9 +1,7 @@
 //! Carrying out a command.
 
-use std::path::PathBuf;
-
 use anyhow::Context;
-use client_core::{Client, HubAdmin};
+use client_core::{Client, Daemon, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
@@ -17,12 +15,12 @@ fn connect(paths: &Paths) -> anyhow::Result<Client> {
 }
 
 /// The daemon ships next to this binary.
-fn find_daemon() -> anyhow::Result<PathBuf> {
+fn find_daemon() -> anyhow::Result<Daemon> {
     if let Some(path) = std::env::var_os(protocol::paths::ENV_DAEMON_BIN) {
-        return Ok(path.into());
+        return Ok(Daemon::in_place(path));
     }
     let exe = std::env::current_exe().context("finding this binary")?;
-    client_core::daemon_beside(&exe).context("finding the daemon next to this binary")
+    Daemon::beside(&exe).context("finding the daemon next to this binary")
 }
 
 pub(crate) fn run(args: Args) -> anyhow::Result<()> {

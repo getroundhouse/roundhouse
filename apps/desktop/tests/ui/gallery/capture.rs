@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::assets::Assets;
@@ -65,7 +66,8 @@ fn hub_source(dir: &Path) -> HubSource {
         _ => None,
     })
     .unwrap();
-    HubSource { paths, daemon: "/nonexistent/roundhoused".into(), build_number: None, build_version: fake_hub::BUILD }
+    let daemon = Daemon::in_place("/nonexistent/roundhoused");
+    HubSource { paths, daemon, build_number: None, build_version: fake_hub::BUILD }
 }
 
 struct Driver {

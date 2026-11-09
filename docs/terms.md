@@ -59,6 +59,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `roundhoused hub --on-demand` |
 | Build version | Which build a binary is, for people to read. An install stamps the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
 | Build number | Puts installed builds in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
+| Stamped build | One an install stamped with both a build version and a build number. A build with only one doesn't compile. Every other build says `-dev` whatever its code, so nothing can be kept for it by name | `StampedBuild`, `protocol::STAMPED_VERSION` |
+| Hub's copy | The copy of the daemon that a stamped build's hubs run from, one for each build in the data directory's `hubs/<version>-<number>/`. An update replaces the app's files, and a hub starts its workers from the file it runs, so the copy keeps a hub and its workers on one build | `Daemon`, `Paths::hubs_dir` |
 | Subscription | A client following one session's log, from a given seq | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json` |

@@ -19,6 +19,22 @@ const fn dir_name(debug_build: bool) -> &'static str {
     if debug_build { "roundhouse-dev" } else { "roundhouse" }
 }
 
+/// Whether `name` can name a directory on its own: not empty, not `.` or `..`, and without a `/`. A build version names
+/// the directory of its hubs' copy of the daemon.
+pub const fn is_plain_name(name: &str) -> bool {
+    let mut rest = name.as_bytes();
+    if matches!(rest, [] | [b'.'] | [b'.', b'.']) {
+        return false;
+    }
+    while let [first, others @ ..] = rest {
+        if *first == b'/' {
+            return false;
+        }
+        rest = others;
+    }
+    true
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Paths {
     pub data_dir: PathBuf,
@@ -29,6 +45,10 @@ pub struct Paths {
     pub backups_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
+    /// A copy of the daemon for each stamped build that started a hub here, in a directory named for the build. Its
+    /// hubs run from that, because an update replaces the app's files, and a hub starts its workers from the file it
+    /// runs.
+    pub hubs_dir: PathBuf,
     pub workspaces_root: PathBuf,
 }
 
@@ -68,6 +88,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         backups_dir: data_dir.join("backups"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
+        hubs_dir: data_dir.join("hubs"),
         workspaces_root,
         data_dir,
     })
@@ -99,6 +120,16 @@ mod tests {
         assert_eq!(dir_name(false), "roundhouse");
         assert_eq!(dir_name(true), "roundhouse-dev");
         assert_eq!(DIR_NAME, dir_name(cfg!(debug_assertions)));
+    }
+
+    #[test]
+    fn a_plain_name_is_one_directory_and_nothing_else() {
+        for name in ["abc123def456", "abc123def456-dirty-20261108120000", "0.1.0-dev", "..a", "a.."] {
+            assert!(is_plain_name(name), "{name}");
+        }
+        for name in ["", ".", "..", "a/b", "/abc", "abc/", "../abc"] {
+            assert!(!is_plain_name(name), "{name}");
+        }
     }
 
     #[test]
