@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- What the hardened runtime lets every binary in the bundle do beyond its defaults: nothing. vpk's default is .NET's,
+     which allows JIT, unsigned executable memory and libraries signed by anyone, none of which these binaries use. -->
+<plist version="1.0">
+<dict/>
+</plist>

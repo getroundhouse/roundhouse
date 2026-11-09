@@ -80,6 +80,7 @@ tools/
   policy/          Tests that enforce the license and dependency rules below
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
   install.sh       Installs this commit as a version of its own, outside `target/`
+  package/         Packages this commit as Roundhouse.app with Velopack, and signs and notarizes it when given an identity
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
 .github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change
 ```
