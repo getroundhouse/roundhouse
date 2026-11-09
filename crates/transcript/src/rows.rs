@@ -252,7 +252,7 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
             questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
-        EventBody::UserPrompt { text, client_msg_id } => {
+        EventBody::UserPrompt { text, client_msg_id, .. } => {
             prompt_bubble(&ItemKey::prompt(seq, client_msg_id.as_ref()), text.clone(), false, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {

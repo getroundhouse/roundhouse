@@ -6,9 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, ClientMessageId, ClientRequestId, CommentId, DiffSide, RepoId, Seq, SessionId, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, RepoId, Seq, SessionId,
+    WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -159,11 +161,31 @@ pub enum ClientRequest {
     /// Resolves once the prompt is recorded. Sending the same `client_msg_id` twice records it once,
     /// so retrying after a disconnect can't send it twice. A retry only records: if the hub stopped
     /// before delivering the original, the session shows as interrupted, and the prompt needs sending
-    /// again with a new ID.
+    /// again with a new ID. Each of `attachments` has to have been added to this session first, and a
+    /// prompt with any can have no text.
     SessionPrompt {
         id: SessionId,
         text: String,
         client_msg_id: Option<ClientMessageId>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<AttachmentId>,
+    },
+    /// Adds a file to a session, for a prompt to carry. Sending the same `id` again returns the attachment it
+    /// made, whatever else it says. Refused if the file is too big, or isn't the kind it says, as
+    /// [`MediaType::check`] decides. A hub older than attachments refuses it as unsupported, so a client finds
+    /// out before it sends the prompt.
+    AttachmentAdd {
+        session_id: SessionId,
+        id: AttachmentId,
+        name: String,
+        media_type: MediaType,
+        data: AttachmentBytes,
+    },
+    /// An image's bytes, for drawing it. Only the session it was added to has it, and once its prompt has gone,
+    /// the hub keeps only images, so any other file is not found.
+    AttachmentRead {
+        session_id: SessionId,
+        id: AttachmentId,
     },
     /// Answering again is refused, changing nothing.
     SessionApprove {

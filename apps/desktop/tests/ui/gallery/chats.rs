@@ -68,7 +68,7 @@ pub(crate) fn background() -> Vec<EventBody> {
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
     vec![
-        EventBody::UserPrompt { text: prompt.to_string(), client_msg_id: None },
+        EventBody::UserPrompt { text: prompt.to_string(), client_msg_id: None, attachments: Vec::new() },
         text("msg-1", reply),
         EventBody::TurnEnded {
             outcome: TurnOutcome::Success,
@@ -151,7 +151,7 @@ pub(crate) fn question() -> Vec<EventBody> {
 /// The start every chat here shares: the prompt, a search and a file read.
 fn looked_around() -> Vec<EventBody> {
     let mut events = vec![
-        EventBody::UserPrompt { text: ASK.to_string(), client_msg_id: None },
+        EventBody::UserPrompt { text: ASK.to_string(), client_msg_id: None, attachments: Vec::new() },
         EventBody::AgentInit {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),

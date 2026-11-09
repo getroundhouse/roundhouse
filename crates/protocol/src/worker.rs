@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::attachment::{AttachmentBytes, AttachmentFile};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, SessionId};
@@ -69,10 +70,21 @@ pub enum WorkerRequest {
         path: String,
         env: Vec<(String, String)>,
     },
+    /// Writes a file a prompt carries into the worktree at `path`, in `.context/attachments/`, which git ignores, and
+    /// replies with where it went. The same bytes under the same name find the copy already there, so sending it
+    /// again makes no second one, and a different file with the same name gets a name of its own.
+    AttachmentWrite {
+        path: String,
+        name: String,
+        data: AttachmentBytes,
+    },
     AgentStart(AgentSpec),
+    /// Each of `attachments` has been written into the worktree first.
     AgentPrompt {
         session_id: SessionId,
         text: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<AttachmentFile>,
     },
     AgentApproval {
         session_id: SessionId,
@@ -142,6 +154,10 @@ pub enum WorkerResponse {
     },
     SetupLog {
         text: String,
+    },
+    /// Where an attachment was written, in full.
+    AttachmentWritten {
+        path: String,
     },
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {

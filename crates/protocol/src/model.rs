@@ -56,6 +56,9 @@ ids!(
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
     ClientMessageId,
+    /// Chosen by a client before it adds the file, so it can show the file at once and adding it again can't add it
+    /// twice. Unique within its session.
+    AttachmentId,
     /// Chosen by a client, so that retrying a request that creates something can't create it twice.
     ClientRequestId,
     /// The agent's own ID for a message it's sending.

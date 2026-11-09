@@ -25,7 +25,7 @@ use protocol::frame;
 use protocol::tail::{StreamDelta, Tail};
 
 pub use admin::{HubAdmin, stop_hub, stop_hub_if_still};
-pub use api::{new_message_id, new_request_id};
+pub use api::{new_attachment_id, new_message_id, new_request_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
@@ -221,7 +221,7 @@ fn read_frames(inner: &Arc<Inner>, stream: UnixStream) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
-        line.clear();
+        frame::clear_buffer(&mut line);
         match reader.read_until(b'\n', &mut line) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}

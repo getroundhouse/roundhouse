@@ -149,7 +149,7 @@ async fn read_frames(
     let mut reader = BufReader::new(reader);
     let mut bytes = Vec::new();
     loop {
-        bytes.clear();
+        frame::clear_buffer(&mut bytes);
         let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut bytes).await;
         match read {
             Ok(0) => break,

@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::attachment::Attachment;
 use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -35,6 +36,9 @@ pub enum EventBody {
         text: String,
         #[serde(default)]
         client_msg_id: Option<ClientMessageId>,
+        /// The files it carries, in the order they were added. Their bytes are read with `AttachmentRead`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<Attachment>,
     },
     /// The worker launched an agent process for this session.
     AgentStarted {

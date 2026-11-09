@@ -101,7 +101,7 @@ where
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
     loop {
-        line.clear();
+        frame::clear_buffer(&mut line);
         let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
         match read {
             Ok(0) => break,
@@ -231,11 +231,19 @@ async fn handle(
         WorkerRequest::ArchiveScript { repo_path, path, env } => {
             run_archive_script(state, &repo_path, &path, &env).await
         }
+        WorkerRequest::AttachmentWrite { path, name, data } => {
+            let written = tokio::task::spawn_blocking(move || {
+                crate::attachments::write(Path::new(&path), &name, data.as_slice())
+            })
+            .await
+            .map_err(|e| ApiError::new(ErrorCode::Internal, format!("writing an attachment stopped: {e}")))??;
+            Ok(WorkerResponse::AttachmentWritten { path: written.to_string_lossy().into_owned() })
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
-        WorkerRequest::AgentPrompt { session_id, text } => {
+        WorkerRequest::AgentPrompt { session_id, text, attachments } => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
-                Some(agent) => agent.send_prompt(&text).await.is_ok(),
+                Some(agent) => agent.send_prompt(&text, &attachments).await.is_ok(),
                 None => false,
             }))
         }

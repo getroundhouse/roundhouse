@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
+use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
@@ -19,6 +20,7 @@ pub(crate) const MAX_LOADED_EVENTS: usize = 2000;
 pub struct PendingPrompt {
     pub client_msg_id: ClientMessageId,
     pub text: String,
+    pub attachments: Vec<Attachment>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -225,8 +227,8 @@ impl SessionLog {
     }
 
     /// Adds a prompt that's on its way, so it shows straight away. Recording it removes this.
-    pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String) {
-        self.pending.push(PendingPrompt { client_msg_id, text });
+    pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
+        self.pending.push(PendingPrompt { client_msg_id, text, attachments });
         self.touched(seq_index(self.last_seq)..self.row_count() + 1);
     }
 

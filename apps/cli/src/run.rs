@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::{Client, Daemon, HubAdmin};
+use client_core::{Client, Daemon, FileToSend, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
@@ -29,11 +29,12 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Repo(command) => repo_command(&client, command)?,
         Cmd::Workspace(command) => workspace_command(&client, command)?,
         Cmd::Session(command) => session_command(&client, command)?,
-        Cmd::Send { session, prompt, no_follow, client_msg_id } => {
+        Cmd::Send { session, prompt, no_follow, client_msg_id, attach } => {
             let session = find_session(&client, &session)?;
+            let files = attach.iter().map(|path| FileToSend::read(path)).collect::<Result<Vec<_>, _>>()?;
             // Generated here rather than left to the hub, so a retry of this exact send is safe.
             let msg_id = client_msg_id.unwrap_or_else(client_core::new_message_id);
-            let (seq, duplicate) = client.session_prompt(&session.id, &prompt, Some(msg_id))?;
+            let (seq, duplicate) = client.send_prompt_carrying(&session.id, &prompt, Some(msg_id), &files)?;
             if duplicate {
                 eprintln!("(already recorded as event {seq})");
             }

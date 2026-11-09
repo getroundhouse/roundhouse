@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::model::{
     DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError, Workspace,
@@ -61,6 +62,10 @@ pub enum ClientResponse {
     PromptRecorded {
         seq: Seq,
         duplicate: bool,
+    },
+    Attachment(Attachment),
+    AttachmentData {
+        data: AttachmentBytes,
     },
 }
 

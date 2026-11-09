@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
+use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
-use protocol::model::{ApprovalId, ClientMessageId, Seq, SetupStatus, WorkspaceStatus};
+use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus, WorkspaceStatus};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -17,7 +18,9 @@ use crate::worker_link::WorkerLink;
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
         match command {
-            Command::Prompt { text, client_msg_id, reply } => session.handle_prompt(text, client_msg_id, reply).await,
+            Command::Prompt { text, client_msg_id, attachments, reply } => {
+                session.handle_prompt(text, client_msg_id, &attachments, reply).await;
+            }
             Command::Approve { approval_id, decision, reply } => {
                 let _ = reply.send(session.handle_approve(approval_id, decision).await);
             }
@@ -119,11 +122,17 @@ impl LiveSession {
         Ok(())
     }
 
-    async fn forward_prompt(&self, text: String) -> Result<(), ApiError> {
+    async fn forward_prompt(&self, text: String, attachments: Vec<Attachment>) -> Result<(), ApiError> {
+        // Only now, after waiting on setup, since the worktree has to be ready for them.
+        let attachments = self.hub()?.place_attachments(&self.id, &self.workspace_id, &attachments).await?;
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            let request = WorkerRequest::AgentPrompt { session_id: self.id.clone(), text: text.clone() };
+            let request = WorkerRequest::AgentPrompt {
+                session_id: self.id.clone(),
+                text: text.clone(),
+                attachments: attachments.clone(),
+            };
             let WorkerResponse::AgentNotRunning = link.call(request).await? else {
                 return Ok(());
             };
@@ -135,31 +144,39 @@ impl LiveSession {
         Err(ApiError::new(ErrorCode::Worker, "the agent keeps exiting before it can take the prompt"))
     }
 
-    /// Returns the prompt's place in the log, and whether it had already been recorded.
+    /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
     async fn record_prompt(
         &self,
         hub: &Arc<Hub>,
         text: &str,
         client_msg_id: Option<ClientMessageId>,
-    ) -> Result<(Seq, bool), ApiError> {
+        attachments: &[AttachmentId],
+    ) -> Result<(Seq, bool, Vec<Attachment>), ApiError> {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
         if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
             return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
         }
-        let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: client_msg_id.clone() };
+        let (id, ids) = (self.id.clone(), attachments.to_vec());
+        let attachments = hub.blocking(move |store| store.attachments(&id, &ids)).await?;
+        let body = EventBody::UserPrompt {
+            text: text.to_string(),
+            client_msg_id: client_msg_id.clone(),
+            attachments: attachments.clone(),
+        };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         if !duplicate {
             hub.title_from_prompt(&self.id, &self.workspace_id, text).await;
         }
-        Ok((event.seq, duplicate))
+        Ok((event.seq, duplicate, attachments))
     }
 
     async fn handle_prompt(
         &self,
         text: String,
         client_msg_id: Option<ClientMessageId>,
+        attachments: &[AttachmentId],
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     ) {
         let hub = match self.hub() {
@@ -169,7 +186,7 @@ impl LiveSession {
                 return;
             }
         };
-        let (seq, duplicate) = match self.record_prompt(&hub, &text, client_msg_id).await {
+        let (seq, duplicate, attachments) = match self.record_prompt(&hub, &text, client_msg_id, attachments).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 let _ = reply.send(Err(e));
@@ -186,20 +203,8 @@ impl LiveSession {
         if self.is_closed() {
             return;
         }
-        if let Ok(workspace) = hub.workspace(&self.workspace_id).await
-            && let SetupStatus::Failed { .. } = workspace.setup
-            && !self.warned_about_setup.swap(true, std::sync::atomic::Ordering::Relaxed)
-        {
-            self.record_or_log(
-                Origin::Hub,
-                EventBody::Notice {
-                    level: NoticeLevel::Warning,
-                    message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
-                },
-            )
-            .await;
-        }
-        if let Err(e) = self.forward_prompt(text).await {
+        self.warn_if_setup_failed(&hub).await;
+        if let Err(e) = self.forward_prompt(text, attachments).await {
             if self.is_closed() {
                 return;
             }
@@ -212,6 +217,23 @@ impl LiveSession {
                     code: None,
                     signal: None,
                     stderr_tail: vec![e.message.clone()],
+                },
+            )
+            .await;
+        }
+    }
+
+    /// Once per session, since every prompt after the first would say the same.
+    async fn warn_if_setup_failed(&self, hub: &Hub) {
+        if let Ok(workspace) = hub.workspace(&self.workspace_id).await
+            && let SetupStatus::Failed { .. } = workspace.setup
+            && !self.warned_about_setup.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            self.record_or_log(
+                Origin::Hub,
+                EventBody::Notice {
+                    level: NoticeLevel::Warning,
+                    message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
                 },
             )
             .await;

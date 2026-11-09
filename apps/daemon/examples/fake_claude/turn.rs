@@ -209,6 +209,19 @@ pub(crate) fn hang(
     false
 }
 
+/// What a command that answers in one piece says, if `command` is one.
+fn answer(turn: &Turn, command: &str) -> Option<String> {
+    if command == "attached" {
+        return Some(crate::attached());
+    }
+    if command == "recall" {
+        let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
+        return Some(format!("I have seen: {}", seen.trim().replace('\n', " | ")));
+    }
+    let name = command.strip_prefix("env:")?;
+    Some(format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string())))
+}
+
 /// Returns true if the turn was interrupted.
 pub(crate) fn run_command(
     turn: &mut Turn,
@@ -217,6 +230,9 @@ pub(crate) fn run_command(
     queued: &mut VecDeque<String>,
     eof: &mut bool,
 ) -> bool {
+    if let Some(text) = answer(turn, command) {
+        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
+    }
     if let Some(text) = command.strip_prefix("say:") {
         let chunks: Vec<String> = text.chars().collect::<Vec<_>>().chunks(4).map(|c| c.iter().collect()).collect();
         return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
@@ -253,11 +269,6 @@ pub(crate) fn run_command(
     if let Some(ms) = command.strip_prefix("hang:") {
         return hang(turn, ms.parse().unwrap(), rx, queued, eof);
     }
-    if command == "recall" {
-        let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
-        let text = format!("I have seen: {}", seen.trim().replace('\n', " | "));
-        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
-    }
     if let Some(code) = command.strip_prefix("crash:") {
         std::process::exit(code.parse().unwrap());
     }
@@ -269,10 +280,6 @@ pub(crate) fn run_command(
     }
     if let Some(file) = command.strip_prefix("background:") {
         return background::start(turn, file);
-    }
-    if let Some(name) = command.strip_prefix("env:") {
-        let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
-        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
     }
     false
 }

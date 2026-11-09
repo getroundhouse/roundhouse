@@ -228,6 +228,22 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // The files a session's prompts carry. What each is never changes once added, and where it was put is filled in
+    // once. Each prompt's event says which it carries.
+    // Their bytes are files in the attachments directory, so copying the database before a migration stays quick.
+    r"
+    CREATE TABLE attachments (
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        -- Where the worker put it in the worktree, once a prompt has carried it.
+        placed_at TEXT,
+        PRIMARY KEY (session_id, id)
+    );
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
