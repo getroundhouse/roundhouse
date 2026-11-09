@@ -28,6 +28,10 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button by its ID, such as one that opens a menu.
     Click(&'static str),
+    /// Types this where focus is, such as the composer.
+    Type(&'static str),
+    /// Presses Finish now in the update's card, and waits for what it asks.
+    AskToFinish,
     /// Has the app show this version as downloaded, as if an update had come.
     UpdateReady(&'static str),
     /// Has the app show that it couldn't reach the update server.
@@ -64,10 +68,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::UpdateReady("1.0.1")],
     },
     Screen {
+        name: "restart-to-update-question",
+        spec: "updates.md",
+        world: Some(conversation),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Type("Also show it in the header"),
+            Step::UpdateReady("1.0.1"),
+            Step::Click("restart-to-update"),
+        ],
+    },
+    Screen {
         name: "finishing-update",
         spec: "updates.md",
         world: Some(finishing_update),
         steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "finish-update-question",
+        spec: "updates.md",
+        world: Some(finishing_update),
+        steps: &[Step::Select(FOCUS), Step::AskToFinish],
     },
     Screen { name: "own-hub", spec: "updates.md", world: Some(own_hub), steps: &[Step::Select(FOCUS)] },
     Screen {

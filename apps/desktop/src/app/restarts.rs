@@ -1,11 +1,41 @@
 //! Restarting the hub, across a real break or to finish an update, and the app, to install one. Each can lose
-//! something, agents that stop or what's typed and not sent, so each says what first.
+//! something, agents that stop or what's typed and not sent, so each says what first. For an update, the card at the
+//! bottom of the sidebar asks, rather than a dialog.
 
 use std::time::Duration;
 
-use gpui_kit::{App, AppContext as _, Context, PromptButton, PromptLevel, Task, Window};
+use gpui_kit::{App, AppContext as _, Context, Task};
+use protocol::client::HubStatus;
 
 use super::{AppView, Connection, hub_source, view};
+
+/// What the update's card asks before going ahead with something that loses work. It holds nothing else in the app
+/// up, so more can be typed, or start running, while it asks, and going ahead first checks it loses no more than it
+/// said.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UpdateQuestion {
+    /// Whether to restart to update, which loses what's typed and not sent in this many chats and comments.
+    Restart { chats: usize, comments: usize },
+    /// Whether to finish the update by restarting the older hub, which stops what this says is running on it.
+    Finish(HubStatus),
+}
+
+impl UpdateQuestion {
+    pub fn title(&self) -> &'static str {
+        match self {
+            Self::Restart { .. } => "Restart to update?",
+            Self::Finish(_) => "Finish the update now?",
+        }
+    }
+
+    /// What going ahead loses.
+    pub fn detail(&self) -> String {
+        match self {
+            Self::Restart { chats, comments } => view::unsent_note(*chats, *comments).unwrap_or_default(),
+            Self::Finish(status) => view::finish_question(status),
+        }
+    }
+}
 
 /// How often to look whether an older hub has gone idle, for what the records don't show, such as another client
 /// leaving it.
@@ -24,8 +54,9 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.looking = None;
                 let idle = status.is_ok_and(|s| s.pid == pid && hub_source::should_replace(&s, build));
-                // Not while someone is being asked whether to finish it now, or is back in the window.
-                if idle && t.asking.is_none() && !t.in_front(cx) && t.still_finishing(pid) {
+                // Not while someone is back in the window. The card asking whether to finish it now doesn't hold it
+                // up, since finishing an idle hub stops nothing, and the question goes with the card.
+                if idle && !t.in_front(cx) && t.still_finishing(pid) {
                     t.restart_hub(pid, cx);
                 }
             });
@@ -78,51 +109,81 @@ impl AppView {
     /// Asks whether to finish an update now by restarting the older hub, saying what that would stop, from a status
     /// read now rather than when it connected.
     pub fn offer_hub_restart(&mut self, cx: &mut Context<Self>) {
+        self.read_the_older_hub(cx, |t, status, cx| t.ask(UpdateQuestion::Finish(status), cx));
+    }
+
+    /// Finishes the update now, as the card asked, unless more is running on the older hub than it said, which it
+    /// asks about instead.
+    pub fn finish_update_now(&mut self, cx: &mut Context<Self>) {
+        let Some(UpdateQuestion::Finish(said)) = self.update_question.clone() else { return };
+        self.read_the_older_hub(cx, move |t, now, cx| {
+            if now.running_sessions > said.running_sessions || now.running_setups > said.running_setups {
+                return t.ask(UpdateQuestion::Finish(now), cx);
+            }
+            t.update_question = None;
+            t.restart_hub(now.pid, cx);
+        });
+    }
+
+    /// Reads what's running on the older hub the app may restart, and then does `then` with it, if the app is still
+    /// connected to that hub.
+    fn read_the_older_hub(
+        &mut self,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, HubStatus, &mut Context<Self>) + 'static,
+    ) {
         let (Some(client), Some(pid), None) = (self.client(), self.restartable_hub, &self.asking) else { return };
         self.asking = Some(cx.spawn(async move |this, cx| {
             let status = cx.background_spawn(async move { client.hub_status() }).await;
-            let answer = this.update(cx, |t, cx| match status {
-                Ok(status) => {
-                    let detail = view::finish_question(&status);
-                    let answers = [PromptButton::cancel("Not now"), PromptButton::new("Finish now")];
-                    let ask = |window: &mut Window, cx: &mut App| {
-                        window.prompt(PromptLevel::Warning, "Finish the update now?", Some(&detail), &answers, cx)
-                    };
-                    t.window.update(cx, |_, window, cx| ask(window, cx)).ok()
-                }
-                Err(e) => {
-                    t.show_error(format!("couldn't see what's running on the hub: {e}"), cx);
-                    None
-                }
-            });
-            let finish = match answer {
-                Ok(Some(answer)) => answer.await == Ok(1),
-                _ => false,
-            };
             let _ = this.update(cx, |t, cx| {
                 t.asking = None;
-                if finish && t.still_finishing(pid) {
-                    t.restart_hub(pid, cx);
+                match status {
+                    Ok(status) if status.pid == pid && t.still_finishing(pid) => then(t, status, cx),
+                    // Another hub since, which the app connects to rather than asks about.
+                    Ok(_) => {}
+                    Err(e) => t.show_error(format!("couldn't see what's running on the hub: {e}"), cx),
                 }
             });
         }));
     }
 
-    /// Restarts the app to install the update that's downloaded, asking first when that would lose what's typed and
-    /// not sent.
-    pub fn restart_to_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (chats, comments) =
-            self.panes.values().map(|pane| pane.read(cx).unsent(cx)).fold((0, 0), |(a, b), (c, d)| (a + c, b + d));
-        let Some(lost) = view::unsent_note(chats, comments) else {
-            return crate::updates::restart_to_update(cx);
+    /// Restarts the app to install the update that's downloaded. When that would lose what's typed and not sent, the
+    /// card asks first.
+    pub fn restart_to_update(&mut self, cx: &mut Context<Self>) {
+        match self.unsent(cx) {
+            (0, 0) => crate::updates::restart_to_update(cx),
+            (chats, comments) => self.ask(UpdateQuestion::Restart { chats, comments }, cx),
+        }
+    }
+
+    /// Restarts to update, as the card asked, unless more is typed and not sent than it said, which it asks about
+    /// instead.
+    pub fn restart_to_update_anyway(&mut self, cx: &mut Context<Self>) {
+        let Some(UpdateQuestion::Restart { chats: said_chats, comments: said_comments }) = self.update_question else {
+            return;
         };
-        let answers = [PromptButton::cancel("Keep working"), PromptButton::new("Restart")];
-        let answer = window.prompt(PromptLevel::Warning, "Restart to update?", Some(&lost), &answers, cx);
-        cx.spawn(async move |_, cx| {
-            if answer.await == Ok(1) {
-                cx.update(crate::updates::restart_to_update);
-            }
-        })
-        .detach();
+        let (chats, comments) = self.unsent(cx);
+        if chats > said_chats || comments > said_comments {
+            return self.ask(UpdateQuestion::Restart { chats, comments }, cx);
+        }
+        self.update_question = None;
+        cx.notify();
+        crate::updates::restart_to_update(cx);
+    }
+
+    /// Leaves things as they are, as `Not now` and `Keep working` do.
+    pub fn dismiss_update_question(&mut self, cx: &mut Context<Self>) {
+        self.update_question = None;
+        cx.notify();
+    }
+
+    fn ask(&mut self, question: UpdateQuestion, cx: &mut Context<Self>) {
+        self.update_question = Some(question);
+        cx.notify();
+    }
+
+    /// How many chats and comments have something typed in them that isn't sent.
+    fn unsent(&self, cx: &App) -> (usize, usize) {
+        self.panes.values().map(|pane| pane.read(cx).unsent(cx)).fold((0, 0), |(a, b), (c, d)| (a + c, b + d))
     }
 }

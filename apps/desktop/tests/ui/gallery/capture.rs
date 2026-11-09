@@ -108,6 +108,14 @@ impl Driver {
                 let id = gpui_kit::SharedString::from(*id);
                 self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
             }
+            Step::Type(text) => {
+                self.frame();
+                self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
+            }
+            Step::AskToFinish => {
+                self.step(&Step::Click("finish-update"));
+                self.wait("the question", |view, _| view.update_question.is_some());
+            }
             Step::UpdateReady(version) => self.cx.update(|cx| desktop::updates::show_ready(version, cx)),
             Step::UpdateProblem => {
                 let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };

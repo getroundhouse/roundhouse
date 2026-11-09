@@ -1,21 +1,21 @@
 //! Workspaces grouped by repository, each with its status.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
+    AnyElement, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
+    StatefulInteractiveElement, Styled, div, px,
 };
-use look::{IconSize, IconStyle, Signal, Work};
+use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
-use crate::app::{AppView, BuildLine};
-use crate::updates::{Answer, Kind, Problem};
+use crate::app::AppView;
 use crate::workspace_pane::HEADER_HEIGHT;
+
+mod footer;
 
 const WIDTH: f32 = 260.0;
 
@@ -133,171 +133,6 @@ fn repo_group(app: &AppView, repo: &Repo, visible: &[&Workspace], cx: &mut Conte
         .into_any_element()
 }
 
-fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button {
-    Button::new(id).ghost().small().icon(icon).label(label)
-}
-
-/// What went wrong updating, under the build, with the detail in its own words on hover. A download that isn't what
-/// the release workflow signed is the one that's red, since it may be someone tampering with the update.
-fn update_problem(problem: &Problem, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let color = if matches!(problem.kind, Kind::Refused(_)) { theme.danger } else { theme.muted_foreground };
-    let detail = problem.detail.clone();
-    h_flex()
-        .id("update-problem")
-        .px_2()
-        .gap_1p5()
-        .text_xs()
-        .text_color(color)
-        .child(Icon::new(IconName::TriangleAlert).xsmall())
-        .child(problem.summary())
-        .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
-        .test_support()
-        .into_any_element()
-}
-
-/// The version, faint, and the hub's too when it's another build the app leaves alone.
-fn version(line: &BuildLine) -> AnyElement {
-    let text = div().id("build-line").px_2().pt_1().text_xs().text_color(look::faint());
-    match line {
-        BuildLine::OtherHub { app, hub } => {
-            let detail = format!(
-                "The hub is {hub}, and this app is {app}. The app leaves a hub someone started themselves for them to \
-                 update, and never restarts a newer one."
-            );
-            text.child(format!("{app} · hub {hub}"))
-                .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
-                .test_support()
-                .into_any_element()
-        }
-        BuildLine::Current { app } | BuildLine::UpdateReady { app, .. } | BuildLine::Finishing { app, .. } => {
-            text.child(app.clone()).test_support().into_any_element()
-        }
-    }
-}
-
-/// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
-/// which says the version on hover. Installing an update is the card's main action. Finishing one stops agents, and
-/// happens by itself, so it's a quiet button under what it's waiting on.
-fn update_card(line: &BuildLine, cx: &mut Context<AppView>) -> Option<AnyElement> {
-    let theme = cx.theme();
-    let (surface, edge, muted) = (theme.secondary, theme.border, theme.muted_foreground);
-    let text = |title: &str, detail: String, hover: String| {
-        v_flex()
-            .id("update-about")
-            .min_w_0()
-            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
-            .child(div().text_xs().text_color(muted).child(detail))
-            .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
-    };
-    let (about, action) = match line {
-        BuildLine::UpdateReady { app, next } => (
-            text(
-                "Update ready",
-                format!("Roundhouse {next}"),
-                format!(
-                    "Roundhouse {next} is downloaded, and this is {app}. Restarting installs it, and agents keep \
-                     running. Quitting installs it too."
-                ),
-            ),
-            Some(
-                Button::new("restart-to-update")
-                    .primary()
-                    .small()
-                    .w_full()
-                    .label("Restart to update")
-                    .on_click(cx.listener(|t, _, window, cx| t.restart_to_update(window, cx))),
-            ),
-        ),
-        BuildLine::Finishing { app, hub, agents } => {
-            let hover = if *agents == 0 {
-                format!(
-                    "This is {app}, and the previous version, {hub}, is still busy, such as with a setup script or \
-                     the command line connected to it. The update finishes by itself once it's free."
-                )
-            } else {
-                format!(
-                    "This is {app}, and agents are still running on the previous version, {hub}. The update \
-                     finishes by itself once they're done."
-                )
-            };
-            // Under the text, and in line with it, past the button's own padding.
-            let finish = h_flex().pt_1().ml(px(-3.5)).child(finish_now(cx));
-            (text("Finishing update", waiting_on(*agents), hover).child(finish), None)
-        }
-        BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
-    };
-    let card = v_flex()
-        .id("update-card")
-        .w_full()
-        .mt_2()
-        .p_2p5()
-        .gap_2p5()
-        .rounded(px(10.))
-        .bg(surface)
-        .border_1()
-        .border_color(edge)
-        .child(h_flex().items_start().gap_2p5().child(look::icon(IconStyle::Working, IconSize::Px64, cx)).child(about))
-        .when_some(action, ParentElement::child)
-        .test_support();
-    Some(card.into_any_element())
-}
-
-/// What finishing an update is waiting on.
-fn waiting_on(agents: usize) -> String {
-    match agents {
-        0 => "Waiting on other work".to_string(),
-        1 => "Waiting on 1 agent".to_string(),
-        n => format!("Waiting on {n} agents"),
-    }
-}
-
-/// What a check for updates is doing or found, faint, under the build.
-fn check_line(id: &'static str, text: &'static str) -> AnyElement {
-    div().id(id).px_2().text_xs().text_color(look::faint()).child(text).test_support().into_any_element()
-}
-
-/// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
-fn finish_now(cx: &mut Context<AppView>) -> Button {
-    let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
-    Button::new("finish-update").ghost().xsmall().label("Finish now").on_click(finish)
-}
-
-fn footer(
-    show_archived: bool,
-    build: &BuildLine,
-    checking: bool,
-    answer: Option<Answer>,
-    update: Option<&Problem>,
-    cx: &mut Context<AppView>,
-) -> impl IntoElement {
-    let border = cx.theme().sidebar_border;
-    let card = update_card(build, cx);
-    let problem = update.map(|problem| update_problem(problem, cx));
-    v_flex()
-        .flex_none()
-        .items_start()
-        .p_2()
-        .gap_px()
-        .border_t_1()
-        .border_color(border)
-        .child(
-            footer_item("add-repository", IconName::Plus, "Add repository")
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-        )
-        .child(
-            footer_item("toggle-archived", IconName::Inbox, if show_archived { "Hide archived" } else { "Archived" })
-                .on_click(cx.listener(|t, _, _, cx| {
-                    t.show_archived = !t.show_archived;
-                    cx.notify();
-                })),
-        )
-        .child(card.unwrap_or_else(|| version(build)))
-        .when(checking, |d| d.child(check_line("checking-for-updates", "Checking for updates…")))
-        .when_some(answer, |d, answer| d.child(check_line("update-answer", answer.text())))
-        .when_some(problem, ParentElement::child)
-}
-
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (background, border) = (theme.sidebar, theme.sidebar_border);
@@ -314,9 +149,10 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         // under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().px_2().gap_4().children(groups))
-        .child(footer(
+        .child(footer::footer(
             app.show_archived,
             &app.build_line(cx),
+            app.update_question.as_ref(),
             crate::updates::checking(cx),
             crate::updates::answered(cx),
             crate::updates::problem_shown(cx).cloned().as_ref(),
