@@ -7,9 +7,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use client_core::{Client, Subscription, SubscriptionItem};
+use client_core::{Client, PairingLink, RemoteHub, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, ApprovalId, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::pairing::PairingCode;
 use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
@@ -43,7 +44,7 @@ pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: Option<Child>,
     /// Set for every hub this starts, and so for its workers.
-    env: Vec<(&'static str, String)>,
+    pub(crate) env: Vec<(&'static str, String)>,
 }
 
 impl Stack {
@@ -104,6 +105,9 @@ impl Stack {
             .env("FAKE_CLAUDE_STATE", self.agent_state())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
+            // Any free port, and only on loopback, so tests can run side by side and never ask a firewall.
+            .env(protocol::paths::ENV_PORT, "0")
+            .env(protocol::paths::ENV_LISTEN_ON_LOOPBACK, "1")
             .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -325,6 +329,21 @@ impl Follower {
     pub(crate) fn tail_text(&self) -> String {
         self.tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
     }
+}
+
+/// A new pairing link from the hub, and its code. Its hosts are this machine's names and addresses, with the port
+/// the hub bound, but tests listen on loopback, so it points there instead.
+pub(crate) fn pairing_link(client: &Client) -> (PairingLink, PairingCode) {
+    let pairing = client.pairing_start().unwrap();
+    let mut link = PairingLink::parse(&pairing.link).unwrap();
+    let port = client.hub_status().unwrap().network_port.expect("listening once a code is made");
+    assert!(link.hosts.iter().all(|host| host.ends_with(&format!(":{port}"))), "{:?}", link.hosts);
+    link.hosts = vec![format!("127.0.0.1:{port}")];
+    (link, pairing.code)
+}
+
+pub(crate) fn pair_phone(client: &Client, name: &str) -> RemoteHub {
+    client_core::pair(&pairing_link(client).0, name).unwrap()
 }
 
 /// Commits Conductor-style settings to the test repository.

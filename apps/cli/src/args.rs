@@ -15,6 +15,9 @@ pub(crate) enum Cmd {
     /// Inspect or stop the hub. It starts by itself when a command needs it.
     #[command(subcommand)]
     Hub(HubCmd),
+    /// Phones that reach the hub over the network.
+    #[command(subcommand)]
+    Phone(PhoneCmd),
     #[command(subcommand)]
     Repo(RepoCmd),
     /// Workspaces: one worktree and branch per piece of work.
@@ -76,6 +79,18 @@ pub(crate) enum Cmd {
 pub(crate) enum HubCmd {
     Status,
     Stop,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PhoneCmd {
+    /// Show a QR code for a phone's camera, and wait until a phone pairs or the code expires.
+    Pair,
+    List,
+    /// Forget a phone and close its connections. It has to pair again to reconnect.
+    Revoke {
+        /// A phone's name, ID or ID prefix.
+        phone: String,
+    },
 }
 
 #[derive(Subcommand)]

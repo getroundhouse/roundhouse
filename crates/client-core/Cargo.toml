@@ -4,17 +4,27 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What only tests use: a connection over the network that hasn't authenticated.
+testing = []
+
 [dependencies]
+base64.workspace = true
 parking_lot.workspace = true
 protocol.workspace = true
 flume.workspace = true
 libc.workspace = true
+ring.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+socket2.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+webpki.workspace = true
 
 [dev-dependencies]
+client-core = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 tempfile.workspace = true
 

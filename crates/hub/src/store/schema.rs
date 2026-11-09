@@ -176,6 +176,17 @@ const MIGRATIONS: &[&str] = &[
     CREATE UNIQUE INDEX diff_comments_by_request ON diff_comments (client_request_id)
         WHERE client_request_id IS NOT NULL;
 ",
+    // Devices that reach the hub over the network. Only each token's SHA-256 is kept, so a copy of the database
+    // can't connect as one.
+    r"
+    CREATE TABLE devices (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        token_sha256 BLOB NOT NULL UNIQUE,
+        paired_at_ms INTEGER NOT NULL,
+        last_seen_ms INTEGER NOT NULL
+    );
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

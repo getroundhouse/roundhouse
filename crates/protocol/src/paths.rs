@@ -12,16 +12,42 @@ pub const ENV_WORKSPACES: &str = "ROUNDHOUSE_WORKSPACES";
 pub const ENV_DAEMON_BIN: &str = "ROUNDHOUSE_DAEMON_BIN";
 pub const ENV_CLAUDE_BIN: &str = "ROUNDHOUSE_CLAUDE_BIN";
 pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
+/// The TCP port for paired devices, in place of [`DEFAULT_PORT`]. 0 lets the OS choose, which tests use.
+pub const ENV_PORT: &str = "ROUNDHOUSE_PORT";
+/// How many milliseconds a pairing code works for, in place of ten minutes, so a test can watch one expire. Only a
+/// hub built with its `testing` feature reads it.
+pub const ENV_PAIRING_LIFE_MS: &str = "ROUNDHOUSE_PAIRING_LIFE_MS";
+/// Set to anything, a hub listens for devices on loopback only, so tests never have to get past a firewall. Only a
+/// hub built with its `testing` feature reads it.
+pub const ENV_LISTEN_ON_LOOPBACK: &str = "ROUNDHOUSE_LISTEN_ON_LOOPBACK";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
 
-/// Which hub this is and what it runs. Nothing a worker starts in a workspace gets these, because the
-/// code there can be another build of Roundhouse, and its commands would otherwise reach this hub.
-pub const HUB_ONLY_ENV: [&str; 5] = [ENV_HOME, ENV_WORKSPACES, ENV_DAEMON_BIN, ENV_CLAUDE_BIN, ENV_LOG];
+/// Which hub this is, what it runs and how it listens. Nothing a worker starts in a workspace gets these, because
+/// the code there can be another build of Roundhouse, and its commands would otherwise reach this hub.
+pub const HUB_ONLY_ENV: [&str; 8] = [
+    ENV_HOME,
+    ENV_WORKSPACES,
+    ENV_DAEMON_BIN,
+    ENV_CLAUDE_BIN,
+    ENV_LOG,
+    ENV_PORT,
+    ENV_PAIRING_LIFE_MS,
+    ENV_LISTEN_ON_LOOPBACK,
+];
+
+/// Where a hub listens for paired devices, while it does. A debug build uses the next port, for the same reason it
+/// has its own data: a hub run from a checkout that a phone pairs with listens from then on, and would otherwise
+/// take the installed hub's port.
+pub const DEFAULT_PORT: u16 = default_port(cfg!(debug_assertions));
 
 const fn dir_name(debug_build: bool) -> &'static str {
     if debug_build { "roundhouse-dev" } else { "roundhouse" }
+}
+
+const fn default_port(debug_build: bool) -> u16 {
+    if debug_build { 7868 } else { 7867 }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +63,18 @@ pub struct Paths {
     /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
     pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
+    /// The hub's TLS certificate for paired devices, as DER, made the first time one is needed.
+    pub certificate: PathBuf,
+    /// Its private key, as PKCS #8 DER.
+    pub certificate_key: PathBuf,
+}
+
+/// The port a hub listens on for paired devices.
+pub fn network_port(env: impl Fn(&str) -> Option<String>) -> Result<u16, String> {
+    match env(ENV_PORT).filter(|v| !v.is_empty()) {
+        Some(port) => port.parse().map_err(|_| format!("{ENV_PORT} has to be a port number, not {port}")),
+        None => Ok(DEFAULT_PORT),
+    }
 }
 
 impl Paths {
@@ -83,6 +121,8 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         daemons_dir: data_dir.join("daemons"),
+        certificate: data_dir.join("hub-cert.der"),
+        certificate_key: data_dir.join("hub-key.der"),
         workspaces_root,
         data_dir,
     })
@@ -123,6 +163,14 @@ mod tests {
         let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
 
         assert_eq!(copy, PathBuf::from("/d/daemons/abc123-7/roundhoused"));
+    }
+
+    #[test]
+    fn a_debug_build_listens_apart_from_a_release_build_unless_told_where() {
+        assert_ne!(default_port(false), default_port(true));
+        assert_eq!(network_port(env_of(&[])), Ok(default_port(cfg!(debug_assertions))));
+        assert_eq!(network_port(env_of(&[(ENV_PORT, "0")])), Ok(0));
+        assert!(network_port(env_of(&[(ENV_PORT, "seventy")])).is_err());
     }
 
     #[test]

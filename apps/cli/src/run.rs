@@ -8,6 +8,7 @@ use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 
 use crate::args::{Args, Cmd, HubCmd, RepoCmd};
+use crate::phone::phone_command;
 use crate::session::{find_session, follow, print_log, session_command};
 use crate::workspace::workspace_command;
 
@@ -26,6 +27,7 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
     let client = connect(&paths)?;
     match args.command {
         Cmd::Hub(_) => unreachable!("handled above"),
+        Cmd::Phone(command) => phone_command(&client, command)?,
         Cmd::Repo(command) => repo_command(&client, command)?,
         Cmd::Workspace(command) => workspace_command(&client, command)?,
         Cmd::Session(command) => session_command(&client, command)?,
@@ -108,6 +110,9 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
                 status.clients,
                 if status.on_demand { "started on demand" } else { "started by hand" }
             );
+            if let Some(port) = status.network_port {
+                println!("listening for phones on port {port}");
+            }
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }

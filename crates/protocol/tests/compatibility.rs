@@ -38,6 +38,33 @@ fn what_works_across_a_protocol_break_keeps_its_form() {
     assert_eq!(reply, HubFrame::Reply { id: 3, outcome: ReplyOutcome::Error(refused) });
 }
 
+/// Spelled out for the same reason: a device sends one of these before its hello, so it has to learn of a real
+/// break, or that it was revoked, from a hub of any version.
+#[test]
+fn what_a_device_sends_before_its_hello_keeps_its_form() {
+    let pair = ClientFrame { id: 1, request: ClientRequest::Pair { code: "c".into(), device_name: "phone".into() } };
+    assert_eq!(
+        frame::encode(&pair).unwrap(),
+        b"{\"id\":1,\"request\":{\"method\":\"pair\",\"code\":\"c\",\"device_name\":\"phone\"}}\n"
+    );
+    let authenticate = ClientFrame { id: 1, request: ClientRequest::Authenticate { token: "t".into() } };
+    assert_eq!(
+        frame::encode(&authenticate).unwrap(),
+        b"{\"id\":1,\"request\":{\"method\":\"authenticate\",\"token\":\"t\"}}\n"
+    );
+
+    let reply: HubFrame =
+        frame::decode(br#"{"frame":"reply","id":1,"response":{"result":"paired","device_id":"d","token":"t"}}"#)
+            .unwrap();
+    let paired = ClientResponse::Paired { device_id: "d".into(), token: "t".into() };
+    assert_eq!(reply, HubFrame::Reply { id: 1, outcome: ReplyOutcome::Response(paired) });
+
+    let reply: HubFrame =
+        frame::decode(br#"{"frame":"reply","id":1,"error":{"code":"unauthorized","message":"no"}}"#).unwrap();
+    let refused = ApiError::new(ErrorCode::Unauthorized, "no");
+    assert_eq!(reply, HubFrame::Reply { id: 1, outcome: ReplyOutcome::Error(refused) });
+}
+
 #[test]
 fn a_status_from_a_hub_older_than_on_demand_reads_as_not_on_demand() {
     let status: HubStatus = frame::decode(

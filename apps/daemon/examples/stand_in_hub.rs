@@ -69,6 +69,7 @@ fn serve(mut stream: UnixStream, args: &Args, paths: &Paths) {
                     build_number: args.build,
                     running_setups: 0,
                     requests: 1,
+                    network_port: None,
                 };
                 reply(&mut stream, request.id, ReplyOutcome::Response(ClientResponse::HubStatus(status)));
             }

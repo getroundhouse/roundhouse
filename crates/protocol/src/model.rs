@@ -56,6 +56,8 @@ ids!(
     MessageId,
     /// The agent's own ID for one use of a tool.
     ToolUseId,
+    /// A device paired with a hub, such as a phone. See [`crate::pairing`].
+    DeviceId,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.

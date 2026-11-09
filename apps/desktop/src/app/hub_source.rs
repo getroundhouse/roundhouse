@@ -74,6 +74,7 @@ mod tests {
             build_number: Some(1),
             running_setups: 0,
             requests: 1,
+            network_port: None,
         }
     }
 

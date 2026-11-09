@@ -1,15 +1,17 @@
-//! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
+//! The hub's state, and what the rest of it shares: its workers, live sessions, feed and paired devices.
 
 use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
 mod comments;
+mod devices;
 mod repos;
 mod sessions;
 mod setup;
 mod workspaces;
 
 use crate::error::internal;
+use crate::remote::Remote;
 use crate::session::{Item, LiveSession};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::worker_link::WorkerLink;
@@ -54,6 +56,8 @@ pub(crate) struct Hub {
     name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
+    /// Devices that reach it over the network.
+    pub(crate) remote: Remote,
 }
 
 fn not_ready(workspace: &Workspace) -> ApiError {
@@ -65,10 +69,11 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 }
 
 impl Hub {
-    pub(crate) fn new(store: Arc<Store>, provider: Arc<dyn Provider>, on_demand: bool) -> Self {
+    pub(crate) fn new(store: Arc<Store>, provider: Arc<dyn Provider>, on_demand: bool, remote: Remote) -> Self {
         Self {
             store,
             on_demand,
+            remote,
             providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
             default_provider: LOCAL_PROVIDER.to_string(),
             workers: Mutex::new(HashMap::new()),
@@ -239,6 +244,7 @@ impl Hub {
             build_number: protocol::BUILD_NUMBER,
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
+            network_port: self.remote.port(),
         }
     }
 
