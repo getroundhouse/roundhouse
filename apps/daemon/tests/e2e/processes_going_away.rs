@@ -238,12 +238,14 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
 
 #[test]
 fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
-    let stack = Stack::start();
+    // The worker waits a minute for the old agent's last output, rather than a few seconds, so it's this
+    // test that ends the wait, however slowly it gets there.
+    let stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into())]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    // Something it started keeps its stdout open, so the worker takes seconds to report the exit, and
-    // writes to it when told, just before letting go.
+    // Something it started keeps its stdout open, so the worker waits to report the exit, and writes to
+    // it when told, just before letting go.
     let go = stack.path("late-output");
     client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; crash:3", go.display()), None).unwrap();
     let mut first = None;

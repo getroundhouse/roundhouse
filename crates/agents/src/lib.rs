@@ -38,6 +38,11 @@ pub enum AgentOutput {
 /// Names the Claude CLI directly, for tests and unusual installs.
 pub use protocol::paths::ENV_CLAUDE_BIN;
 
+/// How many milliseconds to wait for an agent's output once it has exited, in place of the usual few
+/// seconds, so a test can do what it needs before that wait ends.
+#[cfg(feature = "testing")]
+pub const ENV_DRAIN_GRACE_MS: &str = "ROUNDHOUSE_DRAIN_GRACE_MS";
+
 /// Where to look for an agent's CLI. `main` reads these from the environment.
 #[derive(Clone, Debug, Default)]
 pub struct BinaryLookup {
