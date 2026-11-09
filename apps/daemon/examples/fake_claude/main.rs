@@ -25,6 +25,7 @@
 //!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
 //!                   SIGTERM stops it, and lists none left.
+//!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
 //!
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
@@ -49,6 +50,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 mod background;
+mod subagent;
 mod title;
 mod tools;
 mod turn;

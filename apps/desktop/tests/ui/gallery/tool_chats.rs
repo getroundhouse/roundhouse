@@ -99,3 +99,46 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
         finished_turn(14, 0.05),
     ]
 }
+
+/// A web search, a fetch of a page it found, and a fetch a site refused.
+pub(crate) fn web() -> Vec<EventBody> {
+    let query = "flashing yellow railway signal meaning";
+    let links = json!([
+        { "title": "Railway signal", "url": "https://en.wikipedia.org/wiki/Railway_signal" },
+        { "title": "Signal aspects and what they tell a driver", "url": "https://www.example.org/signals/aspects" },
+        { "title": "Reading the line: a guide to signals", "url": "https://signals.example.com/guide" },
+    ]);
+    let results = format!(
+        "Web search results for query: \"{query}\"\n\nLinks: {links}\n\nA flashing yellow usually means the train may \
+         go on, but the next signal is at caution, so it should be ready to slow down. Railways differ, and some use \
+         it to warn of a diverging route.\n\n\nREMINDER: You MUST include the sources above in your response to the \
+         user using markdown hyperlinks."
+    );
+    let answer = "A **flashing yellow** is a preliminary caution: the train may pass, and the next signal shows \
+                  caution.\n\n- Some railways use it to warn of a diverging route ahead.\n- Others use it for a \
+                  medium speed approach.";
+    vec![
+        user_prompt("What does a flashing yellow signal mean on a railway?"),
+        tool_use("msg-1", "toolu-1", "WebSearch", json!({ "query": query })),
+        tool_result("toolu-1", &results),
+        tool_use(
+            "msg-2",
+            "toolu-2",
+            "WebFetch",
+            json!({
+                "url": "https://en.wikipedia.org/wiki/Railway_signal",
+                "prompt": "What does a flashing yellow aspect mean, and does it differ between railways?",
+            }),
+        ),
+        tool_result("toolu-2", answer),
+        tool_use(
+            "msg-3",
+            "toolu-3",
+            "WebFetch",
+            json!({ "url": "https://signals.example.com/guide", "prompt": "What does a flashing yellow mean here?" }),
+        ),
+        tool_failed("toolu-3", "The server returned HTTP 403 Forbidden."),
+        text("msg-4", "A flashing yellow means the train may go on, but should be ready to stop at the next signal."),
+        finished_turn(21, 0.08),
+    ]
+}

@@ -18,6 +18,7 @@ use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_ind
 use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
+use crate::rows::SubagentCalls;
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -40,6 +41,8 @@ pub(crate) struct Model {
     pub background: Vec<AgentTask>,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
+    /// Where the calls that started subagents are, as rows have looked for them.
+    pub subagent_calls: RefCell<SubagentCalls>,
 }
 
 pub struct Transcript {

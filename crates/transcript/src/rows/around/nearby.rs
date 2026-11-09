@@ -29,6 +29,11 @@ pub(super) fn call_before<'a>(log: &'a SessionLog, seq: Seq, id: &str, reach: us
     })
 }
 
+/// Whether the event at `seq` is loaded, so its row is drawn.
+pub(super) fn is_loaded(log: &SessionLog, seq: Seq) -> bool {
+    seq_index(seq).checked_sub(1).is_some_and(|row| event_in(log, row).is_some())
+}
+
 fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {
     match log.row(ix) {
         Row::Event(event) => Some(event),

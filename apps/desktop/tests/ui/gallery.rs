@@ -16,6 +16,7 @@ mod icon;
 mod patch;
 mod pictures;
 mod screens;
+mod subagent_chats;
 mod tool_chats;
 mod world;
 mod worlds;

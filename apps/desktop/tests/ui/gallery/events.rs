@@ -66,3 +66,13 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
         num_turns: None,
     }
 }
+
+/// `event` as the subagent started by the call `parent` sends it.
+pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
+    if let EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. } =
+        &mut event
+    {
+        *parent_tool_use_id = Some(ToolUseId::from(parent));
+    }
+    event
+}

@@ -19,11 +19,25 @@ pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog 
 
 /// The agent running a command for each of `ids` at once.
 pub(crate) fn calls(ids: &[&str]) -> EventBody {
+    calls_to("Bash", ids)
+}
+
+/// The agent calling the tool `name` once for each of `ids`, at once.
+pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
     let blocks = ids
         .iter()
-        .map(|id| ContentBlock::ToolUse { id: (*id).to_string(), name: "Bash".into(), input: json!({}) })
+        .map(|id| ContentBlock::ToolUse { id: (*id).to_string(), name: name.to_string(), input: json!({}) })
         .collect();
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+}
+
+/// `body` as the subagent started by the call `parent` sends it.
+pub(crate) fn within(parent: &str, mut body: EventBody) -> EventBody {
+    if let EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. } = &mut body
+    {
+        *parent_tool_use_id = Some(parent.into());
+    }
+    body
 }
 
 /// The result of the call `id`.
