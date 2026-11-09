@@ -1,6 +1,7 @@
 # The full checks from AGENTS.md, for every PR and the merge queue. They run on Linux, where everything passes but
 # the gallery: the window tests use GPUI's test platform, which draws nothing, and the gallery, whose images are
-# exact to the Mac that approved them, is compiled only on macOS. mac.yml covers what only a Mac catches.
+# exact to the Mac that approved them, is compiled only on macOS. mac.yml covers what only a Mac catches. A change
+# to nothing but Markdown skips them.
 name: CI
 
 on:
@@ -32,11 +33,34 @@ env:
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
 
-# The ruleset on main requires `lint` and `test` by name, so renaming either job blocks every merge until the
-# ruleset is changed to match. The repo also only runs actions pinned to a full commit, as these are.
+# The ruleset on main requires only `checks`, so jobs can be added, renamed or skipped without changing it. A paths
+# filter can't do the skipping: GitHub leaves a required check pending forever when its workflow doesn't run. The repo
+# also only runs actions pinned to a full commit, as these are.
 jobs:
+  # Whether anything but Markdown differs from the branch being merged into. In the queue, that includes the PRs ahead.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A push to main has no base, and an error counts as code, so both run the checks.
+      - id: diff
+        env:
+          BASE: ${{ github.base_ref || github.event.merge_group.base_ref }}
+        run: |
+          code=true
+          if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
+            git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md'; then
+            code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
   lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
@@ -65,6 +89,8 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
@@ -92,3 +118,14 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  # The one check the ruleset requires. It fails if any job failed or was cancelled, `changes` included, and passes
+  # if the rest passed or were skipped. It runs even when they fail, since a skipped job would count as passing.
+  checks:
+    needs: [changes, lint, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

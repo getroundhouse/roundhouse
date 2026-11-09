@@ -25,7 +25,7 @@ Roundhouse can be developed from inside Roundhouse, so nothing run from a checko
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices.
 
-Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. CI runs them too, on Linux for every PR, and on a Mac only when dependencies change, so it doesn't replace running them here. On Linux, `--workspace` needs the packages `.github/workflows/ci.yml` installs for GPUI, and the gallery doesn't run:
+Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. CI runs them too, on Linux for every PR that changes more than Markdown, and on a Mac only when dependencies change, so it doesn't replace running them here. On Linux, `--workspace` needs the packages `.github/workflows/ci.yml` installs for GPUI, and the gallery doesn't run:
 
 ```sh
 cargo fmt --all --check
@@ -33,7 +33,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-PRs merge through GitHub's merge queue, squashed, once CI's `lint` and `test` pass on the PR merged onto `main` and whatever is ahead of it in the queue, so only each PR's final state reaches `main`. Add a PR to the queue only when the owner asks. Between commits, `cargo check` and the tests for what changed are enough.
+PRs merge through GitHub's merge queue, squashed, once CI's `checks` job passes on the PR merged onto `main` and whatever is ahead of it in the queue, so only each PR's final state reaches `main`. Add a PR to the queue only when the owner asks. Between commits, `cargo check` and the tests for what changed are enough.
 
 For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix.
 
