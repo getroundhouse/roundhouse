@@ -57,6 +57,13 @@ pub enum ClientRequest {
     WorkspaceRestore {
         id: WorkspaceId,
     },
+    /// Sets the title someone typed, which nothing generated replaces. It's tidied as
+    /// [`Title::typed`](crate::model::Title::typed) says, and refused if that leaves nothing or too much. Sent
+    /// again, it sets the same again.
+    WorkspaceRename {
+        id: WorkspaceId,
+        title: String,
+    },
     WorkspaceStatus {
         id: WorkspaceId,
     },
@@ -192,6 +199,11 @@ pub enum ClientRequest {
     /// it again does nothing more.
     SessionMarkUnread {
         id: SessionId,
+    },
+    /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
+    SessionRename {
+        id: SessionId,
+        title: String,
     },
     /// Any request this build doesn't know, from a client newer than it. A hub answers with
     /// [`super::ErrorCode::Unsupported`] and carries on.

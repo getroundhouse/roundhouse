@@ -25,6 +25,7 @@ mod schema;
 mod sessions;
 #[cfg(test)]
 mod tests;
+mod titles;
 mod workspaces;
 
 use schema::{migrate, open_connection};
@@ -33,6 +34,7 @@ pub use error::{BackupError, StoreError};
 pub use events::{StatusChange, cancelled_approval};
 pub use made::{Made, MadeByRequest};
 pub use reading::Reading;
+pub use titles::{Retitle, Retitled};
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.

@@ -1,12 +1,13 @@
-//! Adding repositories, and making, archiving and restoring workspaces.
+//! Adding repositories, and making, renaming, archiving and restoring workspaces.
 
 use client_core::ClientError;
 use client_core::records::Record;
-use gpui_kit::{Context, PathPromptOptions, PromptLevel};
+use gpui_kit::{Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, RepoId, WorkspaceId};
 
 use super::AppView;
+use crate::rename::{self, Renaming};
 
 impl AppView {
     pub fn new_workspace(&mut self, repo_id: RepoId, cx: &mut Context<Self>) {
@@ -58,6 +59,30 @@ impl AppView {
             let _ = this.update(cx, |t, cx| match added {
                 Ok(repo) => t.take_reply(Record::Repo(repo), cx),
                 Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Asks what to call the workspace, and renames it.
+    pub fn start_renaming(&mut self, id: WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(current) = self.workspaces.iter().find(|w| w.id == id).map(|w| w.label().to_string()) else {
+            return;
+        };
+        let this = cx.weak_entity();
+        rename::open(Renaming::Workspace, &current, window, cx, move |title, cx| {
+            let _ = this.update(cx, |t, cx| t.rename(id.clone(), title, cx));
+        });
+    }
+
+    fn rename(&mut self, id: WorkspaceId, title: String, cx: &mut Context<Self>) {
+        let Some(client) = self.client() else { return };
+        let renaming = client.start(move |client| client.workspace_rename(&id, &title));
+        cx.spawn(async move |this, cx| {
+            let renamed = renaming.recv().await;
+            let _ = this.update(cx, |t, cx| match renamed {
+                Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
+                Err(e) => t.show_error(Renaming::Workspace.failed(&e), cx),
             });
         })
         .detach();

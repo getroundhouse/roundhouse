@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use protocol::model::{
-    CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, WorkspaceId,
+    CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, Title, WorkspaceId,
     WorkspaceStatus,
 };
 
@@ -39,6 +39,10 @@ pub(crate) enum Step {
     },
     /// Presses Finish now in the update's card, and waits for what it asks.
     AskToFinish,
+    /// Right-clicks something by its ID, which opens its menu.
+    RightClick(&'static str),
+    /// Picks the item with this label in the menu that's open.
+    ClickItem(&'static str),
     /// Has the app show this version as downloaded, as if an update had come.
     UpdateReady(&'static str),
     /// Has the app show that it couldn't reach the update server.
@@ -78,6 +82,13 @@ pub(crate) const SCREENS: &[Screen] = &[
     },
     Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "rename",
+        spec: "workspaces.md",
+        world: Some(titled),
+        // The screen's own workspace is the fourth.
+        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4"), Step::ClickItem("Rename…")],
+    },
     Screen {
         name: "update-ready",
         spec: "updates.md",
@@ -229,6 +240,24 @@ fn chat_tabs() -> World {
         world.chat(&focus, SessionStatus::Idle, chats::answered(prompt, reply));
     }
     converse(&mut world, &focus);
+    world
+}
+
+/// The conversation, with every workspace titled from its first prompt.
+fn titled() -> World {
+    let mut world = conversation();
+    let titles = [
+        ("alder", "Fix the login redirect"),
+        ("birch", "Speed up opening a large diff"),
+        ("cedar", "Ask before deleting files"),
+        (FOCUS, "Show PR state in the sidebar"),
+        ("elm", "Retry a failed setup"),
+        ("fir", "Read settings from TOML"),
+    ];
+    for workspace in &mut world.workspaces {
+        workspace.title =
+            titles.iter().find(|(name, _)| *name == workspace.name).and_then(|(_, title)| Title::tidied(title));
+    }
     world
 }
 

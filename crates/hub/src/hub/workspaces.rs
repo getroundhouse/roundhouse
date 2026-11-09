@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
-    ClientRequestId, GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, Workspace,
-    WorkspaceId, WorkspaceStatus,
+    ClientRequestId, GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
+    Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -105,6 +105,8 @@ impl Hub {
             setup: SetupStatus::NotStarted,
             port_base: self.blocking(Store::next_port_base).await?,
             rev: Rev::default(),
+            title: None,
+            title_source: TitleSource::FirstLine,
         };
         let record = workspace.clone();
         match self.blocking(move |store| store.insert_workspace(&record, client_request_id.as_ref())).await? {

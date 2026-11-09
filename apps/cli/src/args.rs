@@ -115,6 +115,11 @@ pub(crate) enum WorkspaceCmd {
     Restore {
         workspace: String,
     },
+    /// Change what it's called. Its name, which is its directory and branch, stays.
+    Rename {
+        workspace: String,
+        title: String,
+    },
     Status {
         workspace: String,
     },
@@ -153,5 +158,10 @@ pub(crate) enum SessionCmd {
     },
     Reopen {
         session: String,
+    },
+    /// Change what it's called.
+    Rename {
+        session: String,
+        title: String,
     },
 }

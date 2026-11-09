@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::AgentTask;
 
+mod title;
+
+pub use title::{Title, TitleError, TitleSource};
+
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
 /// can't be passed as another. They're plain strings on the wire and in storage.
 macro_rules! ids {
@@ -169,6 +173,8 @@ pub enum WorkspaceStatus {
 pub struct Workspace {
     pub id: WorkspaceId,
     pub repo_id: RepoId,
+    /// Its worktree's directory, the branch it started on, and `CONDUCTOR_WORKSPACE_NAME`. Unique in its
+    /// repository, and never changes, because renaming a worktree under a running agent would break it.
     pub name: String,
     pub branch: String,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.
@@ -185,6 +191,18 @@ pub struct Workspace {
     pub port_base: u16,
     #[serde(default)]
     pub rev: Rev,
+    /// What it's called on screen. `None` until its first prompt or a rename.
+    #[serde(default, deserialize_with = "Title::deserialize_optional")]
+    pub title: Option<Title>,
+    #[serde(default)]
+    pub title_source: TitleSource,
+}
+
+impl Workspace {
+    /// What to call it on screen: its title, or its name until it has one.
+    pub fn label(&self) -> &str {
+        self.title.as_deref().unwrap_or(&self.name)
+    }
 }
 
 /// Where a workspace's setup has got to. Copying local files counts, even with no script to run.
@@ -260,9 +278,9 @@ pub struct Session {
     pub last_seq: Seq,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
-    /// The start of the first prompt. `None` until there's been one.
-    #[serde(default)]
-    pub title: Option<String>,
+    /// What the chat is called. `None` until its first prompt or a rename.
+    #[serde(default, deserialize_with = "Title::deserialize_optional")]
+    pub title: Option<Title>,
     #[serde(default)]
     pub closed_at_ms: Option<i64>,
     /// The event that ended the newest turn, which makes what the agent said then its reply. 0 until a turn has
@@ -279,6 +297,8 @@ pub struct Session {
     pub background_tasks: Vec<AgentTask>,
     #[serde(default)]
     pub rev: Rev,
+    #[serde(default)]
+    pub title_source: TitleSource,
 }
 
 impl Session {

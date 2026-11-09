@@ -58,6 +58,11 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
             let session = find_session(client, &session)?;
             client.session_reopen(&session.id)?;
         }
+        SessionCmd::Rename { session, title } => {
+            let session = find_session(client, &session)?;
+            let renamed = client.session_rename(&session.id, &title)?;
+            println!("renamed {} to {}", short(renamed.id.as_str()), renamed.title.as_deref().unwrap_or_default());
+        }
     }
     Ok(())
 }

@@ -25,5 +25,6 @@ mod streaming;
 #[cfg(test)]
 mod support;
 mod title_strip;
+mod titles;
 mod unread;
 mod updating;

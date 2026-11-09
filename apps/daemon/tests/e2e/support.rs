@@ -364,10 +364,15 @@ pub(crate) fn commit_settings(stack: &Stack, toml: &str) {
     git(&stack.repo(), &["commit", "-qm", "settings"]);
 }
 
+/// The workspace as the hub has it now, archived or not.
+pub(crate) fn workspace(client: &Client, id: &WorkspaceId) -> protocol::model::Workspace {
+    client.workspace_list(true).unwrap().into_iter().find(|w| &w.id == id).unwrap()
+}
+
 pub(crate) fn wait_for_setup(client: &Client, id: &WorkspaceId) -> protocol::model::SetupStatus {
     let mut status = protocol::model::SetupStatus::Running;
     wait_until("setup to finish", || {
-        status = client.workspace_list(true).unwrap().into_iter().find(|w| &w.id == id).unwrap().setup;
+        status = workspace(client, id).setup;
         !matches!(status, protocol::model::SetupStatus::Running | protocol::model::SetupStatus::NotStarted)
     });
     status

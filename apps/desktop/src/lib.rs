@@ -6,6 +6,8 @@ pub mod checkout;
 pub mod diff_panel;
 mod highlight;
 mod menus;
+mod rename;
+mod right_click;
 mod settings;
 mod sidebar;
 pub mod updates;
