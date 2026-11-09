@@ -1553,11 +1553,9 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
- "syntect",
  "tempfile",
  "thiserror 2.0.21",
  "transcript",
- "two-face",
  "ureq",
  "velopack",
 ]
@@ -4298,6 +4296,8 @@ version = "0.1.0"
 dependencies = [
  "gpui-kit",
  "serde_json",
+ "syntect",
+ "two-face",
 ]
 
 [[package]]
