@@ -18,6 +18,7 @@ mod prompt;
 mod tasks;
 #[cfg(test)]
 mod tests;
+mod user;
 
 #[derive(Debug, PartialEq)]
 pub enum Parsed {
@@ -106,7 +107,7 @@ fn parse_value(value: &Value) -> Parsed {
     let kind = str_of(value, "type").unwrap_or("unknown");
     match kind {
         "assistant" => Parsed::Event(assistant(value)),
-        "user" => Parsed::Event(user(value)),
+        "user" => user::line(value),
         "result" => Parsed::Event(turn_ended(value)),
         "system" => system(value),
         "stream_event" => stream_event(value),
@@ -237,16 +238,6 @@ fn assistant(value: &Value) -> EventBody {
         // A Normalizer knows it from the deltas before.
         first_index: None,
     }
-}
-
-fn user(value: &Value) -> EventBody {
-    let message = value.get("message").unwrap_or(&Value::Null);
-    let mut blocks = blocks(message.get("content"));
-    // Claude says what an edit changed beside the line's one result, rather than in it.
-    if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
-        *change = file_change::read(value);
-    }
-    EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks }
 }
 
 fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {

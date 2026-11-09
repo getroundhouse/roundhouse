@@ -97,6 +97,27 @@ fn tool_results_flatten_text_and_count_images() {
 }
 
 #[test]
+fn a_line_written_for_the_model_isn_t_shown() {
+    let note =
+        "[Image: original 2640x1720, displayed at 2000x1303. Multiply coordinates by 1.32 to map to original image.]";
+    let line =
+        json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":note}]},"isSynthetic":true});
+
+    assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into() }));
+}
+
+#[test]
+fn a_result_written_for_the_model_is_still_its_call_s_result() {
+    let line = json!({"type":"user","message":{"role":"user","content":[{
+        "type":"tool_result","tool_use_id":"t1","content":"Interrupted","is_error":true
+    }]},"isSynthetic":true});
+
+    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line.to_string()) else { panic!() };
+
+    assert!(matches!(blocks.as_slice(), [ContentBlock::ToolResult { is_error: true, .. }]), "{blocks:?}");
+}
+
+#[test]
 fn an_edit_s_result_carries_what_it_changed() {
     let line = json!({"type":"user","message":{"role":"user","content":[{
         "type":"tool_result","tool_use_id":"t1","content":"The file has been updated."
