@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, Row, params};
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks";
 
 pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     Ok(StoredSession {
@@ -25,7 +25,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             closed_at_ms: row.get(12)?,
             reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
             read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
-            rev: rev_of(row, 15)?,
+            // Written only by this hub, as JSON. Anything it can't read is nothing it knows to be running.
+            background_tasks: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
+            rev: rev_of(row, 16)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -47,7 +49,7 @@ impl Store {
         conn.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -65,6 +67,7 @@ impl Store {
                 session.closed_at_ms,
                 session.reply_seq.cast_signed(),
                 session.read_seq.cast_signed(),
+                serde_json::to_string(&session.background_tasks)?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

@@ -184,6 +184,30 @@ fn a_chat_with_work_in_the_background_takes_a_prompt_and_asks_before_closing(cx:
 }
 
 #[gpui_kit::test]
+fn whats_running_in_the_background_shows_until_it_finishes(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    let done = stack.dir.path().join("done");
+    ui.input(&format!("background:{}", done.display()));
+    ui.press("enter");
+    ui.wait("its turn to end with work left going", |ui| ui.session_status() == Some(SessionStatus::Background));
+    let task = stack.client().session_get(&chat).unwrap().background_tasks[0].id.clone();
+    let line = SharedString::from(format!("background-{task}"));
+
+    ui.wait("its line", |ui| ui.has(line.clone()));
+    std::fs::write(&done, "").unwrap();
+
+    ui.wait("the agent to pick up and finish", |ui| {
+        ui.session_status() == Some(SessionStatus::Idle) && ui.assistant_text().contains("finished")
+    });
+    assert!(!ui.has(line));
+}
+
+#[gpui_kit::test]
 fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();

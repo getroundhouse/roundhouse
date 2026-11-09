@@ -51,6 +51,7 @@ impl Hub {
                 closed_at_ms: None,
                 reply_seq: 0,
                 read_seq: 0,
+                background_tasks: Vec::new(),
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the

@@ -1,22 +1,24 @@
 //! Each session's event log.
 
-use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
-/// A session's next status, which commits with the event that brings it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What an event changes about where a session's agent has got to, which commits with the event that brings it.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StatusChange {
     pub status: SessionStatus,
     /// The event ends a turn, so it becomes the session's newest reply.
     pub ends_turn: bool,
+    /// What it's running in the background now, if the event changes that.
+    pub background_tasks: Option<Vec<AgentTask>>,
 }
 
 impl From<SessionStatus> for StatusChange {
     fn from(status: SessionStatus) -> Self {
-        Self { status, ends_turn: false }
+        Self { status, ends_turn: false, background_tasks: None }
     }
 }
 
@@ -69,7 +71,13 @@ impl Store {
             "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
             params![seq, ts_ms, session_id.as_str()],
         )?;
-        if let Some(StatusChange { status, ends_turn }) = change {
+        if let Some(StatusChange { status, ends_turn, background_tasks }) = change {
+            if let Some(tasks) = background_tasks {
+                tx.execute(
+                    "UPDATE sessions SET background_tasks = ? WHERE id = ?",
+                    params![serde_json::to_string(&tasks)?, session_id.as_str()],
+                )?;
+            }
             let status = text_of(&status);
             if ends_turn {
                 tx.execute(

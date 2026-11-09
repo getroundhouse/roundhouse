@@ -99,7 +99,8 @@ impl World {
         self.workspaces.iter_mut().find(|w| &w.id == id).unwrap()
     }
 
-    /// A chat holding these events. Its title is the start of the first prompt, as the hub makes it.
+    /// A chat holding these events. Its title is the start of the first prompt, and what's running in the background
+    /// is the newest list, as the hub makes them.
     pub(crate) fn chat(&mut self, workspace: &WorkspaceId, status: SessionStatus, events: Vec<EventBody>) -> SessionId {
         let id = SessionId::from(format!("chat-{}", self.sessions.len() + 1));
         let created_at_ms = self.next_time();
@@ -120,6 +121,14 @@ impl World {
             })
             .collect();
         let last_seq = log.last().map_or(0, |event| event.seq);
+        let background_tasks = log
+            .iter()
+            .rev()
+            .find_map(|event| match &event.body {
+                EventBody::AgentTasks { tasks, .. } => Some(tasks.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
         self.sessions.push(Session {
             id: id.clone(),
             workspace_id: workspace.clone(),
@@ -134,6 +143,7 @@ impl World {
             closed_at_ms: None,
             reply_seq: 0,
             read_seq: 0,
+            background_tasks,
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);

@@ -259,6 +259,7 @@ mod tests {
             closed_at_ms: closed.then_some(1),
             reply_seq: 0,
             read_seq: 0,
+            background_tasks: Vec::new(),
             rev: protocol::model::Rev::default(),
         }
     }

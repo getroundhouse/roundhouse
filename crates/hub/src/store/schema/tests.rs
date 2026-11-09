@@ -1,7 +1,10 @@
 use std::fs;
 
+use protocol::event::AgentTask;
+
 use super::*;
 use crate::store::backup::files_in;
+use crate::store::tests::store_with_session;
 
 /// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
 /// this returns open, and what it wrote stays in the WAL, as it does when a hub is killed.
@@ -102,4 +105,20 @@ fn a_database_from_a_newer_build_is_refused_and_left_as_it_is() {
     assert!(matches!(result, Err(StoreError::TooNew { .. })), "got {result:?}");
     assert_eq!(schema_version(&newer).unwrap(), MIGRATIONS.len() + 1);
     assert_eq!(files_in(&backups), Vec::<String>::new());
+}
+
+/// What's running in the background is on the session's record, so writing it moves the session's revision, as
+/// writing the rest of the record does. Every change to it comes with its status today, which moves the revision
+/// anyway, so this writes it alone.
+#[test]
+fn writing_whats_running_in_the_background_gives_the_session_a_newer_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let before = store.get_session(&"s".into()).unwrap().session.rev;
+    let task = AgentTask { id: "t".into(), description: Some("Run the tests".into()) };
+    let listed = serde_json::to_string(&[&task]).unwrap();
+    store.writer.lock().execute("UPDATE sessions SET background_tasks = ? WHERE id = 's'", [listed]).unwrap();
+    let after = store.get_session(&"s".into()).unwrap().session;
+    assert!(after.rev > before, "{} isn't past {before}", after.rev);
+    assert_eq!(after.background_tasks, [task]);
 }

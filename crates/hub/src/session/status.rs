@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use protocol::event::{AgentRunState, EventBody};
+use protocol::event::{AgentRunState, AgentTask, EventBody};
 use protocol::model::{ApprovalId, RunId, SessionStatus};
 
 /// What the agent has left open once an event is applied.
@@ -68,9 +68,15 @@ pub(crate) fn ends_turn(current: SessionStatus, next: SessionStatus) -> bool {
         && matches!(current, SessionStatus::Running | SessionStatus::WaitingApproval)
 }
 
-/// What stays open once this event is applied, from what was open before it.
-pub(crate) fn open_after(pending: &HashMap<ApprovalId, Option<RunId>>, tasks: usize, body: &EventBody) -> Open {
-    Open { approvals: approvals_after(pending, body), tasks: tasks_after(tasks, body) }
+/// What stays open once this event is applied, from what was open before it, and what's then running in the
+/// background.
+pub(crate) fn open_after(
+    pending: &HashMap<ApprovalId, Option<RunId>>,
+    tasks: &[AgentTask],
+    body: &EventBody,
+) -> (Open, Vec<AgentTask>) {
+    let tasks = tasks_after(tasks, body);
+    (Open { approvals: approvals_after(pending, body), tasks: tasks.len() }, tasks)
 }
 
 /// How many approvals stay open once this event is applied.
@@ -96,12 +102,12 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
     }
 }
 
-/// How many tasks are running in the background once this event is applied. They go with the agent that started
-/// them, which stops them when it's stopped.
-fn tasks_after(tasks: usize, body: &EventBody) -> usize {
+/// What's running in the background once this event is applied. It goes with the agent that started it, which
+/// stops it when it's stopped.
+fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
     match body {
-        EventBody::AgentTasks { tasks, .. } => tasks.len(),
-        EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => 0,
+        EventBody::AgentTasks { tasks, .. } => tasks.clone(),
+        EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => Vec::new(),
         EventBody::UserPrompt { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
@@ -113,6 +119,6 @@ fn tasks_after(tasks: usize, body: &EventBody) -> usize {
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
         | EventBody::AgentOther { .. }
-        | EventBody::Unknown => tasks,
+        | EventBody::Unknown => tasks.to_vec(),
     }
 }

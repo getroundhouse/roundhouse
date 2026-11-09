@@ -18,10 +18,12 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     client.session_prompt(&session.id, &format!("background:{}; say:started", done.display()), None).unwrap();
     wait_for_status(&client, &session.id, SessionStatus::Background);
 
-    // An update waits on it, and what it said is a reply.
+    // An update waits on it, what it said is a reply, and its record says what's running.
     assert_eq!(client.hub_status().unwrap().running_sessions, 1);
-    let first_reply = client.session_get(&session.id).unwrap().reply_seq;
-    assert!(first_reply > 0);
+    let waiting = client.session_get(&session.id).unwrap();
+    assert!(waiting.reply_seq > 0);
+    let described: Vec<_> = waiting.background_tasks.iter().map(|t| t.description.clone()).collect();
+    assert_eq!(described, [Some(format!("Wait for {}", done.display()))]);
 
     // The turn it starts by itself begins with no state event, and is a turn all the same, with a reply of its own.
     std::fs::write(&done, "").unwrap();
@@ -29,8 +31,9 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     assert!(assistant_text(&events).ends_with(&format!("finished {}", done.display())), "{}", assistant_text(&events));
     assert!(events.iter().any(|e| matches!(&e.body, EventBody::AgentTasks { tasks, .. } if tasks.is_empty())));
     let finished = client.session_get(&session.id).unwrap();
-    assert!(finished.reply_seq > first_reply, "{} after {first_reply}", finished.reply_seq);
+    assert!(finished.reply_seq > waiting.reply_seq, "{} after {}", finished.reply_seq, waiting.reply_seq);
     assert_eq!(finished.status, SessionStatus::Idle);
+    assert!(finished.background_tasks.is_empty());
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
 }
 
@@ -49,7 +52,9 @@ fn stopping_the_hub_with_work_in_the_background_interrupts_it() {
     stack.start_hub();
 
     // The agent said it would carry on when its work finished, and that work went with it.
-    assert_eq!(stack.client().session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
+    let recovered = stack.client().session_get(&session.id).unwrap();
+    assert_eq!(recovered.status, SessionStatus::Interrupted);
+    assert!(recovered.background_tasks.is_empty());
 }
 
 #[test]
@@ -67,7 +72,9 @@ fn a_hub_crash_with_work_in_the_background_interrupts_it() {
     wait_until("the agent to stop after the hub died", || !is_alive(agent));
     stack.start_hub();
 
-    assert_eq!(stack.client().session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
+    let recovered = stack.client().session_get(&session.id).unwrap();
+    assert_eq!(recovered.status, SessionStatus::Interrupted);
+    assert!(recovered.background_tasks.is_empty(), "the agent took its work with it");
 }
 
 #[test]
