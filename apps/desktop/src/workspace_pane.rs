@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
+};
 use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use transcript::Transcript;
 
@@ -75,6 +77,19 @@ impl EventEmitter<PaneEvent> for WorkspacePane {}
 pub(crate) const HEADER_HEIGHT: Pixels = px(48.);
 
 impl WorkspacePane {
+    /// What's typed here and not sent, which goes when the app quits: how many chats have something in their
+    /// composer, and how many comments on the diff are being written.
+    pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
+        let typed = |text: &str| !text.trim().is_empty();
+        let showing = usize::from(typed(&self.composer.read(cx).text().to_string()));
+        let others = self.drafts.values().filter(|draft| typed(draft)).count();
+        let comment = self.diff.as_ref().is_some_and(|diff| {
+            let diff = diff.read(cx);
+            diff.draft.is_some() && typed(&diff.draft_input.read(cx).text().to_string())
+        });
+        (showing + others, usize::from(comment))
+    }
+
     /// Where the workspace's work stands, as its mark and header show it.
     pub(crate) fn work(&self) -> look::Work {
         self.pull_request.as_ref().map_or(look::Work::NoPr, |pr| look::Work::from_github(&pr.state, pr.is_draft))

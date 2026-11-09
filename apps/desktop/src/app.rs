@@ -5,18 +5,20 @@ use std::collections::HashMap;
 
 use client_core::records::Record;
 use client_core::{Client, HubAdmin, RecordsFeed};
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, PromptButton, PromptLevel, Task, Window,
+};
 use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
-mod build_label;
+mod build_line;
 mod hub_source;
 mod view;
 mod workspaces;
 
-pub use build_label::BuildLabel;
+pub use build_line::BuildLine;
 pub use hub_source::HubSource;
 
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
@@ -114,9 +116,27 @@ impl AppView {
         }));
     }
 
-    pub fn build_label(&self) -> BuildLabel {
+    pub fn build_line(&self, cx: &App) -> BuildLine {
         let client = self.client();
-        BuildLabel::new(self.hub.build_version, client.as_ref().map(Client::hub_version))
+        BuildLine::new(self.hub.build_version, client.as_ref().map(Client::hub_version), crate::updates::ready(cx))
+    }
+
+    /// Restarts the app to install the update that's downloaded, asking first when that would lose what's typed and
+    /// not sent.
+    pub fn restart_to_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (chats, comments) =
+            self.panes.values().map(|pane| pane.read(cx).unsent(cx)).fold((0, 0), |(a, b), (c, d)| (a + c, b + d));
+        let Some(lost) = view::unsent_note(chats, comments) else {
+            return crate::updates::restart_to_update(cx);
+        };
+        let answers = [PromptButton::cancel("Keep working"), PromptButton::new("Restart")];
+        let answer = window.prompt(PromptLevel::Warning, "Restart to update?", Some(&lost), &answers, cx);
+        cx.spawn(async move |_, cx| {
+            if answer.await == Ok(1) {
+                cx.update(crate::updates::restart_to_update);
+            }
+        })
+        .detach();
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {

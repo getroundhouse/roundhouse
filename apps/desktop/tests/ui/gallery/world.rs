@@ -32,7 +32,18 @@ pub(crate) struct World {
     pub(crate) comments: HashMap<WorkspaceId, Vec<DiffComment>>,
     pub(crate) setup_logs: HashMap<WorkspaceId, String>,
     pub(crate) pull_requests: HashMap<WorkspaceId, PullRequest>,
+    /// The hub's build, for a screen about a hub that isn't the app's build.
+    pub(crate) hub: Option<HubBuild>,
     records: i64,
+}
+
+/// A hub's build, other than the app's.
+#[derive(Clone, Copy)]
+pub(crate) struct HubBuild {
+    pub(crate) version: &'static str,
+    pub(crate) number: u64,
+    /// A client started it, rather than someone running it themselves.
+    pub(crate) on_demand: bool,
 }
 
 impl World {

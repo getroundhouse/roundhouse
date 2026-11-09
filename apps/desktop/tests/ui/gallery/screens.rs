@@ -8,7 +8,7 @@ use protocol::model::{
 };
 
 use super::chats;
-use super::world::World;
+use super::world::{HubBuild, World};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -28,6 +28,10 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button by its ID, such as one that opens a menu.
     Click(&'static str),
+    /// Has the app show this version as downloaded, as if an update had come.
+    UpdateReady(&'static str),
+    /// Has the app show that it couldn't reach the update server.
+    UpdateProblem,
 }
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
@@ -53,7 +57,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
     },
     Screen { name: "diff", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen {
+        name: "update-ready",
+        spec: "updates.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::UpdateReady("1.0.1")],
+    },
+    Screen { name: "own-hub", spec: "updates.md", world: Some(own_hub), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "update-problem",
+        spec: "updates.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::UpdateProblem],
+    },
 ];
+
+/// The conversation, on an older hub that someone runs themselves.
+fn own_hub() -> World {
+    let mut world = conversation();
+    world.hub = Some(HubBuild { version: "0.9.0", number: 1, on_demand: false });
+    world
+}
 
 /// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden.
 /// Returns the screen's own workspace, which comes after them.

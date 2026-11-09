@@ -31,6 +31,59 @@ fn a_check_under_way_shows_in_the_sidebar(cx: &mut TestAppContext) {
     assert!(ui.has("checking-for-updates"));
 }
 
+#[gpui_kit::test]
+fn a_downloaded_update_shows_as_a_card_in_the_versions_place(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    assert!(ui.has("build-line"));
+    assert!(!ui.has("update-card"));
+
+    ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
+
+    assert!(ui.has("update-card"));
+    assert!(!ui.has("build-line"));
+}
+
+/// Opens a workspace with something typed in its chat, and an update downloaded.
+fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, typed: &str) -> Ui<'a> {
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input(typed);
+    ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
+    ui
+}
+
+#[gpui_kit::test]
+fn restarting_to_update_asks_first_when_something_typed_would_be_lost(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
+
+    ui.click("restart-to-update");
+    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+
+    let (message, detail) = ui.cx.pending_prompt().unwrap();
+    assert_eq!(message, "Restart to update?");
+    assert_eq!(detail, "What's typed in 1 chat hasn't been sent, and restarting loses it.");
+    ui.cx.simulate_prompt_answer("Keep working");
+    ui.frame();
+    assert_eq!(ui.composer_text(), "say:not sent yet");
+}
+
+/// Only an app Velopack installed can install an update, so here it says it couldn't, which shows it went ahead.
+#[gpui_kit::test]
+fn restarting_to_update_with_nothing_typed_asks_nothing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "  ");
+    assert!(!ui.has("update-problem"));
+
+    ui.click("restart-to-update");
+
+    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.has("update-problem"));
+}
+
 /// The names of the app menu's items, leaving out separators.
 fn app_menu(ui: &Ui<'_>) -> Vec<String> {
     let menus = ui.cx.update(|cx| cx.get_menus()).unwrap();

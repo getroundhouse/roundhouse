@@ -1,7 +1,8 @@
 //! Keeps the app up to date through Velopack, which packages and installs it. It looks for an update on launch, every
-//! hour and whenever someone checks, downloads it in the background, and installs it when the app quits, without
-//! relaunching. This is the one module that knows about Velopack, so replacing it touches nothing else. A build that
-//! Velopack didn't install, such as `cargo run` or `tools/install.sh`, doesn't update.
+//! hour and whenever someone checks, and downloads it in the background. It installs it when someone restarts the app
+//! to update it, or else when the app quits, without relaunching. This is the one module that knows about Velopack, so
+//! replacing it touches nothing else. A build that Velopack didn't install, such as `cargo run` or
+//! `tools/install.sh`, doesn't update.
 
 mod answer;
 mod location;
@@ -38,8 +39,8 @@ const UPDATE_FEED_KEY: UpdateFeedKey = UpdateFeedKey::from_base64(match option_e
     None => include_str!("updates/update-feed.key").trim_ascii(),
 });
 
-/// How long to wait before looking again. An update only installs when the app quits, so looking more often would
-/// mostly download versions that nobody runs.
+/// How long to wait before looking again. An update only installs when someone restarts the app for it or quits it, so
+/// looking more often would mostly download versions that nobody runs.
 const CHECK_EVERY: Duration = Duration::from_hours(1);
 
 /// What a look found, and how long the update server had been out of reach then.
@@ -56,7 +57,7 @@ struct Updater {
 impl Global for Updater {}
 
 /// Velopack's hooks, which it runs through the app's own binary, so this comes first in `main`. An update installs
-/// only when the app quits, never as it launches, which would quit and relaunch it as it opens.
+/// only as the app quits or restarts for it, never as it launches, which would quit and relaunch it as it opens.
 pub fn run_hooks() {
     VelopackApp::build().set_auto_apply_on_startup(false).run();
 }
@@ -131,6 +132,11 @@ pub(crate) fn checking(cx: &App) -> bool {
     cx.try_global::<Shown>().is_some_and(|shown| shown.checking)
 }
 
+/// The version of the update that's downloaded, if there is one.
+pub(crate) fn ready(cx: &App) -> Option<&str> {
+    cx.try_global::<Shown>().and_then(|shown| shown.ready.as_deref())
+}
+
 /// Shows a problem as if updating had failed, which only an installed app can do for real.
 #[cfg(feature = "testing")]
 pub fn show_problem(problem: Problem, cx: &mut App) {
@@ -140,7 +146,13 @@ pub fn show_problem(problem: Problem, cx: &mut App) {
 /// Shows a check as under way, which only an installed app can start for real.
 #[cfg(feature = "testing")]
 pub fn show_checking(cx: &mut App) {
-    cx.set_global(Shown { problem: None, checking: true });
+    cx.set_global(Shown { problem: None, checking: true, ready: None });
+}
+
+/// Shows an update as downloaded, which only an installed app can do for real.
+#[cfg(feature = "testing")]
+pub fn show_ready(version: &str, cx: &mut App) {
+    cx.set_global(Shown { problem: None, checking: false, ready: Some(version.to_string()) });
 }
 
 /// Looks, then waits an hour or until someone asks, for as long as the app takes what it finds.
@@ -177,8 +189,10 @@ fn newest(manager: &UpdateManager) -> Result<Option<UpdateInfo>, Problem> {
 }
 
 fn record((found, out_of_reach): Look, cx: &mut App) {
+    let mut downloaded = None;
     let outcome = found.map(|found| {
         if let Some(info) = found {
+            downloaded = Some(info.TargetFullRelease.Version.clone());
             cx.global_mut::<Updater>().ready = Some(info);
         }
     });
@@ -186,24 +200,54 @@ fn record((found, out_of_reach): Look, cx: &mut App) {
         let updater = cx.global::<Updater>();
         Answer::after(&outcome, updater.ready.as_ref(), updater.manager.get_current_version_as_string())
     });
-    cx.update_global::<Shown, _>(|shown, _| shown.record(outcome, out_of_reach));
+    cx.update_global::<Shown, _>(|shown, _| {
+        shown.record(outcome, out_of_reach);
+        if downloaded.is_some() {
+            shown.ready = downloaded;
+        }
+    });
     if let Some(answer) = answer {
         answer.show(cx);
+    }
+}
+
+/// Installs the downloaded update and opens the app again. Velopack's updater waits for this process to exit, so the
+/// app quits first. Agents keep running, since the hub doesn't belong to the app.
+pub(crate) fn restart_to_update(cx: &mut App) {
+    match apply(true, cx) {
+        Some(Ok(())) => {
+            // So quitting doesn't hand it to a second updater, and the card goes as the app does.
+            cx.global_mut::<Updater>().ready = None;
+            cx.update_global::<Shown, _>(|shown, _| shown.ready = None);
+            cx.quit();
+        }
+        Some(Err(e)) => cx.update_global::<Shown, _>(|shown, _| shown.problem = Some(problem(Step::Install, &e))),
+        // The card showed an update that Velopack doesn't have, so pressing it says so rather than do nothing.
+        None => {
+            let nothing = Problem { kind: Kind::Failed(Step::Install), detail: "nothing is downloaded".to_string() };
+            cx.default_global::<Shown>().problem = Some(nothing);
+        }
     }
 }
 
 /// Hands the downloaded update to Velopack's updater, which waits for this process to exit, then replaces the app.
 /// Silently, since nobody is there to answer it, and without relaunching, since quitting was asked for.
 fn install(cx: &mut App) {
-    let Some(Updater { manager, ready: Some(info), .. }) = cx.try_global::<Updater>() else { return };
-    if let Err(e) = manager.wait_exit_then_apply_updates(info, true, false, Vec::<String>::new()) {
+    if let Some(Err(e)) = apply(false, cx) {
         eprintln!("couldn't install the update: {e}");
     }
 }
 
+/// Hands the downloaded update, if there is one, to Velopack's updater, which installs it once this process exits,
+/// without asking anything, and opens the app again if `restart`.
+fn apply(restart: bool, cx: &App) -> Option<Result<(), velopack::Error>> {
+    let Some(Updater { manager, ready: Some(info), .. }) = cx.try_global::<Updater>() else { return None };
+    Some(manager.wait_exit_then_apply_updates(info, true, restart, Vec::<String>::new()))
+}
+
 /// Shows a problem that no later look clears, since there won't be one.
 fn show(problem: Problem, cx: &mut App) {
-    cx.set_global(Shown { problem: Some(problem), checking: false });
+    cx.set_global(Shown { problem: Some(problem), checking: false, ready: None });
 }
 
 #[cfg(test)]

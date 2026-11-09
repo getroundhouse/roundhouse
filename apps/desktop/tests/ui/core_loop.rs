@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use desktop::app::BuildLine;
 use gpui_kit::component::Theme;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
@@ -25,11 +26,9 @@ fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppCont
 fn says_which_build_is_running(cx: &mut TestAppContext) {
     let stack = Stack::new();
 
-    let ui = Ui::open(cx, &stack);
+    let mut ui = Ui::open(cx, &stack);
 
-    let label = ui.view().build_label();
-    assert_eq!(label.text, protocol::BUILD_VERSION);
-    assert!(!label.differs);
+    assert_eq!(ui.build_line(), BuildLine::Current { app: protocol::BUILD_VERSION.to_string() });
 }
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {

@@ -10,7 +10,7 @@ use super::Problem;
 pub(super) enum Answer {
     /// Nothing is newer than this version.
     UpToDate { version: String },
-    /// This version is downloaded, and installs when the app quits.
+    /// This version is downloaded, and installs when the app restarts to update or quits.
     Ready { version: String },
     /// What stopped the check, or stops this app updating at all.
     Failed(Problem),
@@ -36,7 +36,9 @@ impl Answer {
                 (PromptLevel::Info, "Roundhouse is up to date".to_string(), format!("{version} is the newest version."))
             }
             Self::Ready { version } => {
-                (PromptLevel::Info, format!("Roundhouse {version} is ready"), "It installs when you quit.".to_string())
+                let detail = "Restart to update, at the bottom of the sidebar, installs it now. Otherwise it installs when \
+                              you quit.";
+                (PromptLevel::Info, format!("Roundhouse {version} is ready"), detail.to_string())
             }
             Self::Failed(problem) => (PromptLevel::Warning, problem.summary(), problem.detail),
             Self::NotUpdating => (

@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
+use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::assets::Assets;
 use gpui_kit::test::TestWindowExt as _;
@@ -67,7 +68,7 @@ fn hub_source(dir: &Path) -> HubSource {
     })
     .unwrap();
     let daemon = Daemon::in_place("/nonexistent/roundhoused");
-    HubSource { paths, daemon, build_number: None, build_version: fake_hub::BUILD }
+    HubSource { paths, daemon, build_number: Some(fake_hub::BUILD_NUMBER), build_version: fake_hub::BUILD }
 }
 
 struct Driver {
@@ -106,6 +107,11 @@ impl Driver {
                 self.frame();
                 let id = gpui_kit::SharedString::from(*id);
                 self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+            }
+            Step::UpdateReady(version) => self.cx.update(|cx| desktop::updates::show_ready(version, cx)),
+            Step::UpdateProblem => {
+                let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
+                self.cx.update(|cx| desktop::updates::show_problem(problem, cx));
             }
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);

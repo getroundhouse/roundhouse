@@ -7,14 +7,14 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
 };
-use look::{Signal, Work};
+use look::{IconSize, IconStyle, Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
-use crate::app::{AppView, BuildLabel};
-use crate::updates::Problem;
+use crate::app::{AppView, BuildLine};
+use crate::updates::{Kind, Problem};
 use crate::workspace_pane::HEADER_HEIGHT;
 
 const WIDTH: f32 = 260.0;
@@ -137,29 +137,100 @@ fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button 
     Button::new(id).ghost().small().icon(icon).label(label)
 }
 
-/// What went wrong updating, under the build, with the detail in its own words on hover.
-fn update_problem(problem: &Problem, color: Hsla) -> impl IntoElement {
+/// What went wrong updating, under the build, with the detail in its own words on hover. A download that isn't what
+/// the release workflow signed is the one that's red, since it may be someone tampering with the update.
+fn update_problem(problem: &Problem, cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    let color = if matches!(problem.kind, Kind::Refused(_)) { theme.danger } else { theme.muted_foreground };
     let detail = problem.detail.clone();
-    div()
+    h_flex()
         .id("update-problem")
         .px_2()
+        .gap_1p5()
         .text_xs()
         .text_color(color)
+        .child(Icon::new(IconName::TriangleAlert).xsmall())
         .child(problem.summary())
         .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
         .test_support()
+        .into_any_element()
+}
+
+/// The version, faint, and the hub's too when it's another build.
+fn version(line: &BuildLine) -> AnyElement {
+    let text = div().id("build-line").px_2().pt_1().text_xs().text_color(look::faint());
+    match line {
+        BuildLine::OtherHub { app, hub } => {
+            let detail = format!("The hub is {hub}, and this app is {app}.");
+            text.child(format!("{app} · hub {hub}"))
+                .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
+                .test_support()
+                .into_any_element()
+        }
+        BuildLine::Current { app } | BuildLine::UpdateReady { app, .. } => {
+            text.child(app.clone()).test_support().into_any_element()
+        }
+    }
+}
+
+/// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
+/// which says the version on hover.
+fn update_card(line: &BuildLine, cx: &mut Context<AppView>) -> Option<AnyElement> {
+    let theme = cx.theme();
+    let (surface, edge, muted) = (theme.secondary, theme.border, theme.muted_foreground);
+    let text = |title: &str, detail: String, hover: String| {
+        v_flex()
+            .id("update-about")
+            .min_w_0()
+            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
+            .child(div().text_xs().text_color(muted).child(detail))
+            .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
+    };
+    let (about, action) = match line {
+        BuildLine::UpdateReady { app, next } => (
+            text(
+                "Update ready",
+                format!("Roundhouse {next}"),
+                format!(
+                    "Roundhouse {next} is downloaded, and this is {app}. Restarting installs it, and agents keep \
+                     running. Quitting installs it too."
+                ),
+            ),
+            Button::new("restart-to-update")
+                .primary()
+                .small()
+                .w_full()
+                .label("Restart to update")
+                .on_click(cx.listener(|t, _, window, cx| t.restart_to_update(window, cx))),
+        ),
+        BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
+    };
+    let card = v_flex()
+        .id("update-card")
+        .w_full()
+        .mt_2()
+        .p_2p5()
+        .gap_2p5()
+        .rounded(px(10.))
+        .bg(surface)
+        .border_1()
+        .border_color(edge)
+        .child(h_flex().items_start().gap_2p5().child(look::icon(IconStyle::Working, IconSize::Px64, cx)).child(about))
+        .child(action)
+        .test_support();
+    Some(card.into_any_element())
 }
 
 fn footer(
     show_archived: bool,
-    build: BuildLabel,
+    build: &BuildLine,
     checking: bool,
-    update: Option<Problem>,
+    update: Option<&Problem>,
     cx: &mut Context<AppView>,
 ) -> impl IntoElement {
-    let theme = cx.theme();
-    let build_color = if build.differs { theme.warning } else { look::faint() };
-    let (border, warning) = (theme.sidebar_border, theme.warning);
+    let border = cx.theme().sidebar_border;
+    let card = update_card(build, cx);
+    let problem = update.map(|problem| update_problem(problem, cx));
     v_flex()
         .flex_none()
         .items_start()
@@ -178,7 +249,7 @@ fn footer(
                     cx.notify();
                 })),
         )
-        .child(div().px_2().pt_1().text_xs().text_color(build_color).child(build.text))
+        .child(card.unwrap_or_else(|| version(build)))
         .when(checking, |d| {
             d.child(
                 div()
@@ -190,7 +261,7 @@ fn footer(
                     .test_support(),
             )
         })
-        .when_some(update, |d, problem| d.child(update_problem(&problem, warning)))
+        .when_some(problem, ParentElement::child)
 }
 
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -211,9 +282,9 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().px_2().gap_4().children(groups))
         .child(footer(
             app.show_archived,
-            app.build_label(),
+            &app.build_line(cx),
             crate::updates::checking(cx),
-            crate::updates::problem_shown(cx).cloned(),
+            crate::updates::problem_shown(cx).cloned().as_ref(),
             cx,
         ))
 }
