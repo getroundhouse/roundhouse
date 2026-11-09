@@ -46,16 +46,17 @@ impl Details {
                 hub,
                 app,
                 format!(
-                    "This is {app}, and the previous version, {hub}, is still busy, such as with a setup script or \
-                     the command line connected to it. The update finishes by itself once it's free."
+                    "You're on version {app} of the app, and a previous version, {hub}, is still busy, such as with \
+                     a setup script or the command line connected to it. The update finishes by itself once it's \
+                     free."
                 ),
             ),
             BuildLine::Finishing { app, hub, agents: _ } => (
                 hub,
                 app,
                 format!(
-                    "This is {app}, and agents are still running on the previous version, {hub}. The update \
-                     finishes by itself once they're done."
+                    "You're on version {app} of the app, and agents are still running on a previous version, {hub}. \
+                     The update finishes by itself once they're done."
                 ),
             ),
             BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
