@@ -167,6 +167,7 @@ impl LiveSession {
             text: text.to_string(),
             client_msg_id: client_msg_id.clone(),
             attachments: attachments.clone(),
+            tracked: true,
         };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         if !duplicate {
@@ -204,14 +205,17 @@ impl LiveSession {
         }
     }
 
-    /// Gets a recorded prompt to the agent, starting one if it has to. Failures go in the log.
+    /// Gets a recorded prompt to the agent, starting one if it has to. Failures go in the log, and so does a prompt
+    /// that never reaches an agent, since no agent will say so.
     pub(super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, text: String, attachments: Vec<Attachment>) {
+        let dropped = EventBody::PromptDropped { prompt: seq };
         hub.wait_for_setup(&self.workspace_id).await;
         if self.is_closed() {
-            return;
+            return self.record_or_log(Origin::Hub, dropped).await;
         }
         self.warn_if_setup_failed(hub).await;
         if let Err(e) = self.forward_prompt(seq, text, attachments).await {
+            self.record_or_log(Origin::Hub, dropped).await;
             if self.is_closed() {
                 return;
             }

@@ -259,6 +259,12 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // The prompts each session's agent hasn't taken or dropped yet, as a JSON list of where they're recorded, so a
+    // hub that starts again can drop those its last one's agents took with them. Only the hub reads it, so the
+    // trigger leaves it out.
+    r"
+    ALTER TABLE sessions ADD COLUMN untaken TEXT NOT NULL DEFAULT '[]';
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

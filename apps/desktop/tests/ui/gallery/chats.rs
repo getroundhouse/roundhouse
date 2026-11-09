@@ -69,6 +69,7 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
                 .to_string(),
             client_msg_id: None,
             attachments,
+            tracked: false,
         },
         text(
             "msg-1",
@@ -145,6 +146,7 @@ pub(crate) fn steered() -> Vec<EventBody> {
         text: "Only the sidebar's tests matter here, so skip the rest next time.".to_string(),
         client_msg_id: None,
         attachments: Vec::new(),
+        tracked: true,
     });
     events
 }

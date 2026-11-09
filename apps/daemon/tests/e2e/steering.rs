@@ -6,7 +6,7 @@ use client_core::Client;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId};
 
-use crate::support::{Stack, assistant_text, read_all, wait_for_turn_end, wait_until};
+use crate::support::{Stack, assistant_text, parent_of, read_all, signal, wait_for_turn_end, wait_until};
 
 /// Waits until the agent is running a tool, which is when a prompt sent now has to wait.
 pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
@@ -20,6 +20,21 @@ pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
 
 fn position(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> Option<Seq> {
     events.iter().find(|e| wanted(&e.body)).map(|e| e.seq)
+}
+
+/// A prompt sent while the agent runs a long tool, which it hasn't taken yet.
+fn waiting_prompt(client: &Client, session_id: &SessionId) -> Seq {
+    client.session_prompt(session_id, "hang:60000", None).unwrap();
+    wait_for_tool(client, session_id);
+    client.session_prompt(session_id, "say:never", None).unwrap().0
+}
+
+fn wait_for_drop(client: &Client, session_id: &SessionId, prompt: Seq) {
+    wait_until("the prompt to be dropped", || {
+        read_all(client, session_id)
+            .iter()
+            .any(|e| matches!(e.body, EventBody::PromptDropped { prompt: p } if p == prompt))
+    });
 }
 
 #[test]
@@ -60,4 +75,36 @@ fn stopping_drops_a_prompt_the_agent_hadnt_taken() {
     assert!(dropped.is_some(), "{events:#?}");
     assert!(position(&events, |b| matches!(b, EventBody::PromptTaken { prompt } if *prompt == steered)).is_none());
     assert!(!assistant_text(&events).contains("never"));
+}
+
+#[test]
+fn a_prompt_the_agent_hadnt_taken_when_its_worker_was_lost_is_dropped() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let steered = waiting_prompt(&client, &session.id);
+    let agent_pid = read_all(&client, &session.id)
+        .iter()
+        .find_map(|e| match e.body {
+            EventBody::AgentStarted { pid, .. } => Some(pid),
+            _ => None,
+        })
+        .unwrap();
+
+    signal(parent_of(agent_pid), libc::SIGKILL);
+
+    wait_for_drop(&client, &session.id, steered);
+}
+
+#[test]
+fn a_prompt_the_agent_hadnt_taken_when_the_hub_went_away_is_dropped() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let steered = waiting_prompt(&client, &session.id);
+
+    stack.kill_hub();
+    stack.start_hub();
+
+    wait_for_drop(&stack.client(), &session.id, steered);
 }

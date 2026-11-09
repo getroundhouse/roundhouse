@@ -4,6 +4,7 @@ use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::prompts::note_prompts;
 use super::queue::take_out_recorded;
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
@@ -96,7 +97,7 @@ impl Store {
         if let Some(client_msg_id) = client_msg_id
             && let Some(event) = recorded_with(&tx, session_id, client_msg_id)?
         {
-            return Ok(Appended { event, duplicate: true, dequeued: false });
+            return Ok(Appended { event, duplicate: true, dequeued: false, untaken: None });
         }
         let last_seq: Option<i64> = tx
             .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
@@ -128,6 +129,7 @@ impl Store {
             (EventBody::UserPrompt { .. }, Some(client_msg_id)) => take_out_recorded(&tx, session_id, client_msg_id)?,
             _ => false,
         };
+        let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
         tx.commit()?;
         let event = SessionEvent {
             session_id: session_id.clone(),
@@ -137,7 +139,7 @@ impl Store {
             body: body.clone(),
             raw: None,
         };
-        Ok(Appended { event, duplicate: false, dequeued })
+        Ok(Appended { event, duplicate: false, dequeued, untaken })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.

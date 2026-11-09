@@ -107,7 +107,12 @@ fn a_prompt_shows_at_once_then_becomes_the_recorded_event() {
 
     log.apply_event(event(
         6,
-        EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()), attachments: Vec::new() },
+        EventBody::UserPrompt {
+            text: "hello".into(),
+            client_msg_id: Some("m1".into()),
+            attachments: Vec::new(),
+            tracked: false,
+        },
     ));
     assert_eq!(log.row_count(), 6, "it swapped in place");
     assert!(matches!(log.row(5), Row::Event(_)));
@@ -181,7 +186,12 @@ fn changes_gather_into_one_range_until_a_view_looks() {
     log.add_pending("p".into(), "hi".into(), Vec::new());
     log.apply_event(event(
         1,
-        EventBody::UserPrompt { text: "hi".into(), client_msg_id: Some("p".into()), attachments: Vec::new() },
+        EventBody::UserPrompt {
+            text: "hi".into(),
+            client_msg_id: Some("p".into()),
+            attachments: Vec::new(),
+            tracked: false,
+        },
     ));
     log.apply_event(event(
         2,

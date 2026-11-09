@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, Rev, Session};
+use protocol::model::{AgentSessionId, Rev, Seq, Session};
 use rusqlite::{Connection, Row};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -19,6 +19,7 @@ mod comments;
 mod error;
 mod events;
 mod made;
+mod prompts;
 mod queue;
 mod reading;
 mod records;
@@ -61,6 +62,8 @@ pub struct Appended {
     pub duplicate: bool,
     /// The event is a prompt that was waiting in the queue, and recording it took it out.
     pub dequeued: bool,
+    /// The prompts the agent has yet to take, oldest first, if the event changed them.
+    pub untaken: Option<Vec<Seq>>,
 }
 
 pub fn now_ms() -> i64 {

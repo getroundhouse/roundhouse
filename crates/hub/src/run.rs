@@ -26,10 +26,16 @@ pub struct HubConfig {
     pub on_demand: bool,
 }
 
-/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too. A
-/// queue whose agent went away at work is held, as when the agent exits mid-turn with the hub still there.
+/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too, so
+/// a prompt one of them hadn't taken never will be. A queue whose agent went away at work is held, as when the agent
+/// exits mid-turn with the hub still there.
 fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
     store.fail_interrupted_setups()?;
+    for (id, prompts) in store.untaken_prompts()? {
+        for prompt in prompts {
+            store.append(&id, None, &EventBody::PromptDropped { prompt }, None, None, None)?;
+        }
+    }
     for id in store.active_session_ids()? {
         for approval_id in store.open_approvals(&id)? {
             store.append(&id, None, &cancelled_approval(approval_id), None, None, None)?;

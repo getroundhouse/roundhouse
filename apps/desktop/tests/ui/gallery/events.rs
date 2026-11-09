@@ -6,7 +6,7 @@ use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{MessageId, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new(), tracked: false }
 }
 
 /// Something the agent wrote, as its own message, the way Claude sends each block.

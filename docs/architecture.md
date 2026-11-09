@@ -145,6 +145,7 @@ Each piece of state has one owner, and every other copy is a cache.
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.
 - **A running agent decides its own model and approval mode.** A change goes to the agent first and is saved only once it agrees, and the agent reports every change of mode itself, so what's shown is never ahead of what's true.
+- **Whether the agent has a prompt is recorded, not worked out.** The hub records a `PromptTaken` or `PromptDropped` for every prompt: the agent's own word, or the hub's where the agent can't say, such as when its worker is lost. So no client has to guess from the rest of the log, and every client shows the same. *Unconfirmed.*
 - **A queued prompt belongs to the hub, on its session's record,** so it's sent when a turn ends with no client there, and every client shows the same queue. The hub sends it once the agent is idle and has taken every prompt it was sent, because one sent sooner folds into the turn the agent is about to start. Whether the queue is held is on the record too, so a restart neither sends what the person stopped for nor holds what they didn't, and a starting hub sends any queue left ready. *Unconfirmed.*
 
 ## Keeping clients in sync

@@ -199,7 +199,7 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
 
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:hi", None).unwrap();
+    let (prompt, _) = client.session_prompt(&session.id, "say:hi", None).unwrap();
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);
     let events = read_all(&client, &session.id);
     let reported = events.iter().any(|e| match &e.body {
@@ -209,6 +209,8 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
         _ => false,
     });
     assert!(reported, "{events:#?}");
+    let dropped = events.iter().any(|e| matches!(e.body, EventBody::PromptDropped { prompt: p } if p == prompt));
+    assert!(dropped, "it never reached an agent: {events:#?}");
 }
 
 #[test]

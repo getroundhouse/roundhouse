@@ -54,7 +54,7 @@ pub(super) fn prompt_bubble(
                 div()
                     .text_xs()
                     .text_color(look::faint())
-                    .child("The agent was stopped before it read this, so it never got it."),
+                    .child("The agent stopped before it read this, so it never got it."),
             )
         })
         .into_any_element()
