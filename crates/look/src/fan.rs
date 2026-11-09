@@ -9,14 +9,21 @@ use gpui_kit::{
 
 /// How tall a fan is, for its width: a half circle, with room under it for the turntable.
 pub(crate) const ASPECT: f32 = 0.62;
-/// The inner row's radius, as a share of the outer row's. Inside it is the turntable.
-const INNER: f32 = 0.4;
-/// A dot's radius, as a share of the space between rows.
+/// How many more dots each row has than the one inside it. A row one dot's spacing further out would fit π more, so
+/// with four the rows sit a little further apart than the dots in them. Four is even, so every row keeps the inner
+/// row's odd count, with a dot on the middle line.
+const MORE: usize = 4;
+/// The inner row's radius is at least this share of the outer row's, 2/5, which leaves the turntable its hole.
+const HOLE: (usize, usize) = (2, 5);
+/// A dot's radius, as a share of the space between dots along a row.
 const DOT: f32 = 0.32;
-/// The turntable's ring, in the dot radii of a four-row fan.
-const TURNTABLE: f32 = 2.6;
-/// The rows the turntable, and where it sits, are sized from.
-const TURNTABLE_ROWS: usize = 4;
+/// The space outside the outer row's dots, to the fan's edge, in dot radii.
+const MARGIN: f32 = 1.25;
+/// The turntable's ring, to its outer edge, as a share of the fan's width, whatever its rows.
+const TURNTABLE: f32 = 0.07;
+/// How far above the bottom of the fan's box its centre sits, as a share of its width. The bottom dots of every row
+/// sit on the line through the centre, and the turntable's ring dips a little below the box.
+const BASE: f32 = 0.037;
 
 /// How many rows of dots a fan `width` wide has: more as it grows, so its dots stay fine. The status marks, 16 and 18
 /// wide, have four, and the empty state's, 72 wide, has five.
@@ -47,14 +54,14 @@ pub(crate) struct Turntable {
 /// Where everything sits inside a fan's bounds.
 pub(crate) struct Fan {
     pub(crate) center: Point<Pixels>,
-    inner: Pixels,
-    pitch: Pixels,
+    /// Between neighbouring dots along a row, the same in every row.
+    spacing: Pixels,
+    rows: usize,
     /// Every dot's radius.
     pub(crate) dot: Pixels,
-    rows: usize,
-    /// A four-row fan's dot, at the same width. The turntable, and where it sits, come from it, so a fan with more
-    /// rows has finer dots and nothing else changes.
-    turntable_dot: Pixels,
+    /// The turntable's radius, which comes from the fan's width alone, so a fan with more rows has finer dots and
+    /// nothing else changes.
+    turntable: Pixels,
 }
 
 impl Fan {
@@ -63,60 +70,58 @@ impl Fan {
         Fan::with_rows(bounds, rows_for(bounds.size.width))
     }
 
+    /// The outer row is as big as fits, with `MARGIN` outside it, and every other row follows from it.
     pub(crate) fn with_rows(bounds: Bounds<Pixels>, rows: usize) -> Self {
-        let outer = bounds.size.width * 0.5;
-        let inner = outer * INNER;
-        let dot_for = |rows: usize| ((outer - inner) / (as_f32(rows) - 0.4) * DOT).max(px(0.45));
-        let pitch = (outer - inner) / (as_f32(rows) - 0.4);
-        let dot = dot_for(rows);
-        let turntable_dot = dot_for(TURNTABLE_ROWS);
-        let bottom = bounds.origin.y + bounds.size.height - turntable_dot * 1.4;
-        Fan { center: point(bounds.origin.x + bounds.size.width * 0.5, bottom), inner, pitch, dot, rows, turntable_dot }
+        let width = bounds.size.width;
+        let spaces = as_f32(first_row(rows) - 1 + MORE * (rows - 1));
+        let outer = width * 0.5 / (1.0 + (1.0 + MARGIN) * DOT * PI / spaces);
+        let spacing = outer * PI / spaces;
+        let center = point(bounds.origin.x + width * 0.5, bounds.origin.y + bounds.size.height - width * BASE);
+        Fan { center, spacing, rows, dot: (spacing * DOT).max(px(0.45)), turntable: width * TURNTABLE }
     }
 
     pub(crate) fn dots(&self) -> impl Iterator<Item = Dot> + use<> {
-        rows_of_dots(self.center, self.inner, self.pitch, self.rows, Count::Odd)
+        rows_of_dots(self.center, self.spacing, first_row(self.rows), self.rows)
     }
 
     /// Its line and hub keep a share of its size, so they don't thin out as the dots get finer.
     pub(crate) fn turntable(&self) -> Turntable {
-        let radius = self.turntable_dot * TURNTABLE;
+        let radius = self.turntable;
         Turntable { radius, line: (self.dot * 0.8).max(radius * 0.16).max(px(0.6)), hub: self.dot.max(radius * 0.28) }
     }
 
     /// How far the fan reaches above its centre, to the outer row's edge, and below it, to the turntable's.
     pub(crate) fn reach(&self) -> (Pixels, Pixels) {
-        (self.inner + self.pitch * as_f32(self.rows - 1) + self.dot, self.turntable().radius)
+        let outer = row_radius(self.spacing, first_row(self.rows) + MORE * (self.rows - 1));
+        (outer + self.dot, self.turntable)
     }
 }
 
-/// How many dots a row gets: the odd or even number nearest to how many fit `pitch` apart.
-#[derive(Clone, Copy)]
-pub(crate) enum Count {
-    /// Every fan's, so every row has a dot on the middle line and the rows line up down it, rather than staggering
-    /// between a dot and a gap.
-    Odd,
-    /// So no dot sits on the middle line. A fan of dots an odd number of pixels across needs it to centre on the
-    /// line between two pixels.
-    Even,
+/// How many dots the inner row of a fan of `rows` has: the fewest that keep its radius at least `HOLE` of the outer
+/// row's, and odd. A row's radius is in proportion to the spaces between its dots, its count less one.
+pub(crate) fn first_row(rows: usize) -> usize {
+    let (part, whole) = HOLE;
+    let spaces = (part * MORE * (rows - 1)).div_ceil(whole - part);
+    spaces + spaces % 2 + 1
 }
 
-/// Rows of dots in a half circle over `center`, the first `inner` from it and each `pitch` further out. The dots in
-/// a row are spaced evenly, about `pitch` apart, so outer rows have more of them and the edge stays as dense as the
-/// middle.
+/// The radius of a half circle of `count` dots `spacing` apart, its first and last on the line through its centre.
+fn row_radius(spacing: Pixels, count: usize) -> Pixels {
+    spacing * as_f32(count - 1) / PI
+}
+
+/// Rows of dots in a half circle over `center`, `spacing` apart along every row, with `first` in the inner row and
+/// `MORE` more in each row out. Each row is as far out as its dots need, so the rows are `MORE` spacings over π apart,
+/// a little more than the dots in them, and the fan keeps the same pattern with any number of rows.
 pub(crate) fn rows_of_dots(
     center: Point<Pixels>,
-    inner: Pixels,
-    pitch: Pixels,
+    spacing: Pixels,
+    first: usize,
     rows: usize,
-    count: Count,
 ) -> impl Iterator<Item = Dot> + use<> {
     (0..rows).flat_map(move |row| {
-        let r = inner + pitch * as_f32(row);
-        let count = match count {
-            Count::Odd => 2 * dots_in((r * PI) / pitch / 2.0) + 1,
-            Count::Even => 2 * dots_in((r * PI) / pitch / 2.0 + 0.5),
-        };
+        let count = first + MORE * row;
+        let r = row_radius(spacing, count);
         (0..count).map(move |j| {
             let along = as_f32(j) / as_f32(count - 1);
             let angle = PI * (along - 1.0);
@@ -157,64 +162,105 @@ pub(crate) fn as_f32(n: usize) -> f32 {
     n as f32
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "how many dots fit along a row: positive, and a few dozen at most"
-)]
-fn dots_in(length_in_pitches: f32) -> usize {
-    length_in_pitches.round().max(1.0) as usize
-}
-
 #[cfg(test)]
 mod tests {
     use gpui_kit::{Bounds, point, px, size};
 
-    use super::{ASPECT, Count, Fan, rows_of_dots};
+    use super::{ASPECT, Dot, Fan, as_f32};
 
     fn fan(width: f32) -> Fan {
         Fan::within(Bounds::new(point(px(0.), px(0.)), size(px(width), px(width * ASPECT))))
+    }
+
+    fn with_rows(rows: usize) -> Fan {
+        Fan::with_rows(Bounds::new(point(px(0.), px(0.)), size(px(200.), px(200. * ASPECT))), rows)
+    }
+
+    fn row(dots: &[Dot], row: usize) -> Vec<&Dot> {
+        dots.iter().filter(|d| d.row == row).collect()
+    }
+
+    fn radius(fan: &Fan, dot: &Dot) -> f32 {
+        ((dot.at.x - fan.center.x) / px(1.)).hypot((dot.at.y - fan.center.y) / px(1.))
     }
 
     #[test]
     fn outer_rows_have_more_dots_and_every_row_reaches_both_ends() {
         let fan = fan(60.);
         let dots: Vec<_> = fan.dots().collect();
-        let per_row: Vec<usize> = (0..fan.rows).map(|row| dots.iter().filter(|d| d.row == row).count()).collect();
+        let per_row: Vec<usize> = (0..fan.rows).map(|r| row(&dots, r).len()).collect();
 
         assert!(per_row.windows(2).all(|pair| pair[0] < pair[1]), "{per_row:?}");
-        for row in 0..fan.rows {
-            let along: Vec<f32> = dots.iter().filter(|d| d.row == row).map(|d| d.along).collect();
+        for r in 0..fan.rows {
+            let along: Vec<f32> = row(&dots, r).iter().map(|d| d.along).collect();
             assert_eq!((along.first().copied(), along.last().copied()), (Some(0.0), Some(1.0)));
         }
     }
 
     #[test]
-    fn an_odd_count_puts_a_dot_on_the_middle_line_of_every_row_and_an_even_one_a_gap() {
-        for rows in [2, 3, 4, 9] {
-            let middle = |count| {
-                let center = point(px(50.), px(50.));
-                let dots: Vec<_> = rows_of_dots(center, px(8.), px(3.), rows, count).collect();
-                (0..rows)
-                    .map(|row| dots.iter().any(|d| d.row == row && (d.along - 0.5).abs() < 1e-6))
-                    .collect::<Vec<_>>()
-            };
+    fn every_row_has_four_more_dots_than_the_one_inside_it() {
+        let expected: [(usize, &[usize]); 4] =
+            [(2, &[5, 9]), (3, &[7, 11, 15]), (4, &[9, 13, 17, 21]), (5, &[13, 17, 21, 25, 29])];
+        for (rows, counts) in expected {
+            let dots: Vec<_> = with_rows(rows).dots().collect();
+            let per_row: Vec<usize> = (0..rows).map(|r| row(&dots, r).len()).collect();
 
-            assert!(middle(Count::Odd).into_iter().all(|on| on), "{rows} rows, odd");
-            assert!(middle(Count::Even).into_iter().all(|on| !on), "{rows} rows, even");
+            assert_eq!(per_row, counts, "{rows} rows");
+        }
+        for rows in 2..=9 {
+            let dots: Vec<_> = with_rows(rows).dots().collect();
+            let per_row: Vec<usize> = (0..rows).map(|r| row(&dots, r).len()).collect();
+            assert!(per_row.windows(2).all(|pair| pair[1] == pair[0] + 4), "{rows} rows: {per_row:?}");
+        }
+    }
+
+    #[test]
+    fn dots_are_as_far_apart_along_every_row() {
+        for rows in 2..=9 {
+            let fan = with_rows(rows);
+            let dots: Vec<_> = fan.dots().collect();
+            let spacing: Vec<f32> = (0..rows)
+                .map(|r| {
+                    let row = row(&dots, r);
+                    radius(&fan, row[0]) * std::f32::consts::PI / as_f32(row.len() - 1)
+                })
+                .collect();
+
+            let (least, most) = spacing.iter().fold((f32::MAX, f32::MIN), |(a, b), s| (a.min(*s), b.max(*s)));
+            assert!((most - least) / least < 1e-4, "{rows} rows: {spacing:?}");
         }
     }
 
     #[test]
     fn every_fan_has_a_dot_on_the_middle_line_of_every_row() {
-        for width in [16., 18., 72., 320.] {
+        for width in [16., 18., 72., 100., 320.] {
             let fan = fan(width);
             let dots: Vec<_> = fan.dots().collect();
 
-            for row in 0..fan.rows {
-                let middle = dots.iter().filter(|d| d.row == row && (d.along - 0.5).abs() < 1e-6).count();
-                assert_eq!(middle, 1, "{width} wide, row {row}");
+            for r in 0..fan.rows {
+                let middle = row(&dots, r).iter().filter(|d| (d.along - 0.5).abs() < 1e-6).count();
+                assert_eq!(middle, 1, "{width} wide, row {r}");
             }
+        }
+    }
+
+    #[test]
+    fn the_inner_row_has_the_fewest_dots_that_leave_the_turntable_its_hole() {
+        for rows in 2..=9 {
+            let fan = with_rows(rows);
+            let dots: Vec<_> = fan.dots().collect();
+            let (inner, outer) = (row(&dots, 0), row(&dots, rows - 1));
+            let hole = radius(&fan, inner[0]) / radius(&fan, outer[0]);
+            // The next odd count down: two fewer dots in every row. A row's radius goes with its count less one.
+            let spaces = |row: &[&Dot]| as_f32(row.len() - 1);
+            let fewer = (spaces(&inner) - 2.0) / (spaces(&outer) - 2.0);
+
+            assert!(hole >= 0.4 - 1e-5, "{rows} rows: the hole is {hole} of the outer row");
+            assert!(fewer < 0.4, "{rows} rows: two fewer would still leave {fewer}");
+            assert!(
+                radius(&fan, inner[0]) - fan.dot / px(1.) > (fan.turntable().radius + fan.dot) / px(1.),
+                "{rows} rows"
+            );
         }
     }
 
@@ -227,6 +273,19 @@ mod tests {
         assert!(fans.windows(2).all(|pair| pair[0].rows <= pair[1].rows), "rows only grow");
         let fineness: Vec<f32> = fans.iter().zip(widths).map(|(fan, w)| fan.dot / px(w)).collect();
         assert!(fineness.windows(2).all(|pair| pair[1] <= pair[0]), "{fineness:?}");
+    }
+
+    #[test]
+    fn every_fan_fits_its_box_across() {
+        for width in [16., 18., 72., 100., 320.] {
+            let fan = fan(width);
+            let (up, _) = fan.reach();
+
+            assert!(up <= px(width) * 0.5, "{width} wide reaches {up:?}");
+            for dot in fan.dots() {
+                assert!(dot.at.x - fan.dot >= px(0.) && dot.at.x + fan.dot <= px(width), "{width} wide");
+            }
+        }
     }
 
     #[test]

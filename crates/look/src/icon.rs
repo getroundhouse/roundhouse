@@ -7,11 +7,11 @@ use gpui_kit::{
     linear_color_stop, linear_gradient, point, px, quad, size,
 };
 
-use crate::fan::{self, ASPECT, Count, Fan};
+use crate::fan::{self, ASPECT, Fan};
 use crate::palette::tile_top;
 
-/// The sizes macOS keeps a drawing of the icon for. It picks one by the pixels it needs, so on a Retina display
-/// each is shown at half its pixels in points, and the 128 is what the Dock shows at 64 points.
+/// The sizes macOS keeps a drawing of the icon for. It mostly picks the smallest with the pixels it needs, so on a
+/// Retina display each is shown at up to half its pixels in points. The Dock is the exception, and uses the 256.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IconSize {
     Px16,
@@ -48,24 +48,19 @@ impl IconSize {
 
     /// Each is tuned by eye at its size, with fewer rows as it shrinks so the dots stay big enough to see: the Dock
     /// shrinks the 256 to under half. Only the biggest have the pixels for nine rows of fine dots. Below 128 the fan's
-    /// own shape would blur, so it's drawn on whole pixels instead.
+    /// own shape would blur, so it's drawn on whole pixels instead, with the dots as far apart as keeps a pixel clear
+    /// around each.
     fn drawing(self) -> Drawing {
         match self {
             IconSize::Px16 => {
-                Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., pitch: 2.5, inner: 3., hub: 2., ring: None })
+                Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., spacing: 2.5, hub: 2., ring: None })
             }
             IconSize::Px32 => {
-                Drawing::OnPixels(OnPixels { inset: 3., rows: 2, dot: 2., pitch: 4., inner: 5.5, hub: 2., ring: None })
+                Drawing::OnPixels(OnPixels { inset: 3., rows: 2, dot: 2., spacing: 3.7, hub: 2., ring: None })
             }
-            IconSize::Px64 => Drawing::OnPixels(OnPixels {
-                inset: 6.,
-                rows: 3,
-                dot: 2.,
-                pitch: 4.5,
-                inner: 8.,
-                hub: 2.,
-                ring: Some(4.),
-            }),
+            IconSize::Px64 => {
+                Drawing::OnPixels(OnPixels { inset: 6., rows: 3, dot: 2., spacing: 4.2, hub: 2., ring: Some(4.) })
+            }
             IconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
             IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
             IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
@@ -82,16 +77,15 @@ enum Drawing {
     OnPixels(OnPixels),
 }
 
-/// A fan laid out in the display's pixels, on a tile `inset` from the edge: each dot `dot` across, rows `pitch`
-/// apart from `inner` out, and dots about `pitch` apart along a row. The turntable is a hub `hub` across, in a ring of
-/// one pixel out to `ring`, if any. The tile's middle falls between two pixels, so the hub and the ring are an even
-/// number of pixels across, to centre on it.
+/// A fan laid out in the display's pixels, on a tile `inset` from the edge: `rows` rows of dots `dot` across, with
+/// every fan's counts, `spacing` apart along each row before they're moved onto whole pixels. The turntable is a hub
+/// `hub` across, in a ring of one pixel out to `ring`, if any. The tile's middle falls between two pixels, so the hub
+/// and the ring are an even number of pixels across, to centre on it.
 struct OnPixels {
     inset: f32,
     rows: usize,
     dot: f32,
-    pitch: f32,
-    inner: f32,
+    spacing: f32,
     hub: f32,
     ring: Option<f32>,
 }
@@ -184,28 +178,25 @@ struct Layout {
 }
 
 impl Layout {
-    /// A dot that would touch one already placed is left out, since two touching dots read as one blot. The left
-    /// half is placed and the right mirrors it, so a dot left out on one side is left out on the other too.
+    /// The left half is placed and the right mirrors it, so rounding can't make the two sides differ.
     fn of(fan: &OnPixels, canvas: f32) -> Self {
-        let outer = fan.inner + fan.pitch * fan::as_f32(fan.rows - 1);
+        // Every row has a dot on the middle line, as in every fan, except where dots are an odd number of pixels
+        // across: they sit on pixels' middles, so to mirror across the line between the tile's two middle pixels,
+        // none can sit on it, and every row has one dot fewer, with a gap there instead.
+        let first = fan::first_row(fan.rows) - usize::from(odd(fan.dot));
+        let around =
+            |center: (f32, f32)| fan::rows_of_dots(point(px(center.0), px(center.1)), px(fan.spacing), first, fan.rows);
+        let outer = around((0., 0.)).map(|dot| -dot.at.y / px(1.)).fold(0., f32::max);
         let (up, down) = (outer + fan.dot / 2.0, (fan.hub / 2.0).max(fan.ring.unwrap_or(0.)));
-        // On the line between the tile's two middle pixels, and centred up and down on what it reaches. Every row has
-        // a dot on that line, as in every fan, except where dots are an odd number of pixels across: they sit on
-        // pixels' middles, so to mirror across the line, none can sit on it, and every row has a gap there instead.
+        // On the line between the tile's two middle pixels, and centred up and down on what it reaches.
         let center = (canvas / 2.0, ((canvas + up - down) / 2.0).round());
-        let count = if odd(fan.dot) { Count::Even } else { Count::Odd };
-        let touch = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0).abs().max((a.1 - b.1).abs()) < fan.dot + 1.;
         let mut dots: Vec<(f32, f32)> = Vec::new();
-        let middle = point(px(center.0), px(center.1));
-        let rows = fan::rows_of_dots(middle, px(fan.inner), px(fan.pitch), fan.rows, count);
-        for dot in rows.filter(|d| d.along <= 0.5) {
+        for dot in around(center).filter(|d| d.along <= 0.5) {
             let at = (on_whole_pixels(dot.at.x / px(1.), fan.dot), on_whole_pixels(dot.at.y / px(1.), fan.dot));
-            let twins = if dot.along < 0.5 { vec![at, (center.0 * 2.0 - at.0, at.1)] } else { vec![at] };
-            let crowded = twins.iter().any(|t| dots.iter().any(|d| touch(*t, *d)));
-            if crowded || (twins.len() == 2 && touch(twins[0], twins[1])) {
-                continue;
+            dots.push(at);
+            if dot.along < 0.5 {
+                dots.push((center.0 * 2.0 - at.0, at.1));
             }
-            dots.extend(twins);
         }
         Layout { center, dots }
     }
@@ -257,6 +248,33 @@ mod tests {
                 let reach = (a.0 - fan.dot / 2.0, a.0 + fan.dot / 2.0, a.1 - fan.dot / 2.0, a.1 + fan.dot / 2.0);
                 let tile = (fan.inset, canvas - fan.inset);
                 assert!(reach.0 >= tile.0 && reach.1 <= tile.1 && reach.2 >= tile.0 && reach.3 <= tile.1, "{pixels}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_fan_on_whole_pixels_keeps_every_dot_of_its_rows() {
+        // Four more a row, as in every fan: 5 and 9, and 7, 11 and 15. Dots one pixel across have one fewer.
+        let expected = [(16, 4 + 8), (32, 5 + 9), (64, 7 + 11 + 15)];
+        for ((pixels, fan), (size, dots)) in on_pixels().into_iter().zip(expected) {
+            let layout = Layout::of(&fan, f32::from(pixels));
+
+            assert_eq!((pixels, layout.dots.len()), (size, dots));
+        }
+    }
+
+    #[test]
+    fn every_dot_on_whole_pixels_has_a_pixel_clear_of_the_turntable() {
+        for (pixels, fan) in on_pixels() {
+            let layout = Layout::of(&fan, f32::from(pixels));
+            let turntable = (fan.hub / 2.0).max(fan.ring.unwrap_or(0.));
+            let (cx, cy) = layout.center;
+
+            for (x, y) in &layout.dots {
+                let half = fan.dot / 2.0;
+                let nearest = (cx.clamp(x - half, x + half), cy.clamp(y - half, y + half));
+                let apart = (nearest.0 - cx).hypot(nearest.1 - cy);
+                assert!(apart >= turntable + 1.0, "{pixels}: the dot at {x}, {y} is {apart} from the centre");
             }
         }
     }
