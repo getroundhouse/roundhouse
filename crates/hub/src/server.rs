@@ -195,6 +195,7 @@ async fn handle(
             C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)
         }
         R::CommentList { workspace_id } => C::Comments { comments: hub.comment_list(workspace_id).await? },
+        R::CommentEdit { id, text } => C::Comment(hub.comment_edit(id, text).await?),
         R::CommentDelete { id } => {
             hub.comment_delete(id).await?;
             C::Ok

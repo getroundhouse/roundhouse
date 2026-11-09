@@ -59,6 +59,17 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
+    /// Replaces a comment's text, and returns it as stored, with its new revision.
+    pub fn edit_comment(&self, id: &CommentId, text: &str) -> Result<DiffComment, StoreError> {
+        let conn = lock(&self.writer);
+        let changed = conn.execute("UPDATE diff_comments SET text = ? WHERE id = ?", params![text, id.as_str()])?;
+        if changed == 0 {
+            return Err(StoreError::NotFound { kind: "comment", id: id.to_string() });
+        }
+        let query = format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments WHERE id = ?");
+        Ok(conn.query_row(&query, [id.as_str()], comment_from_row)?)
+    }
+
     /// Returns the revision of the removal, or `None` if there was nothing to remove.
     pub fn delete_comment(&self, id: &CommentId) -> Result<Option<Rev>, StoreError> {
         self.delete("diff_comments", id.as_str())

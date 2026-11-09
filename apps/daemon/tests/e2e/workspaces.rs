@@ -131,6 +131,26 @@ fn comments_are_kept_by_the_hub_and_survive_a_restart() {
     assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![]);
 }
 
+#[test]
+fn a_comment_is_edited_in_place() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    let added = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", None).unwrap();
+
+    let edited = client.comment_edit(&added.id, "Rename this to `count`").unwrap();
+
+    assert_eq!((&edited.id, edited.line, edited.text.as_str()), (&added.id, 1, "Rename this to `count`"));
+    assert!(edited.rev > added.rev, "so clients can tell which copy is newer");
+    assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![edited.clone()]);
+    let empty = client.comment_edit(&added.id, "  ").unwrap_err();
+    assert!(matches!(empty, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
+    client.comment_delete(&added.id).unwrap();
+    let gone = client.comment_edit(&added.id, "Too late").unwrap_err();
+    assert!(matches!(gone, ClientError::Api(e) if e.code == ErrorCode::NotFound));
+    assert!(client.comment_list(&workspace.id).unwrap().is_empty(), "editing doesn't bring it back");
+}
+
 /// So a client that loses the reply can send it again without making a second one.
 #[test]
 fn creating_again_with_the_same_request_id_returns_what_the_first_made() {

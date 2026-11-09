@@ -98,6 +98,11 @@ pub enum ClientRequest {
     CommentList {
         workspace_id: WorkspaceId,
     },
+    /// Replaces a comment's text, keeping its place in the diff. Sending it again sets the same text.
+    CommentEdit {
+        id: CommentId,
+        text: String,
+    },
     /// Deleting a comment that's already gone does nothing.
     CommentDelete {
         id: CommentId,
