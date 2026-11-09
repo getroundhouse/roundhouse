@@ -64,6 +64,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::Hello { .. } => reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: BUILD.to_string() }),
         R::HubStatus => reply(C::HubStatus(status())),
         R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
+        R::RecordsList => reply(C::Records(world.records())),
         R::WorkspaceList { include_archived } => reply(C::Workspaces {
             workspaces: world
                 .workspaces

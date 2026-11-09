@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::{ApprovalDecision, SessionEvent};
 use crate::model::{
-    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest, Repo,
-    RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, ClientMessageId, CommentId, DiffComment, DiffSide, GitDiff, GitStatus, PullRequest,
+    RecordKey, Records, Repo, RepoId, Rev, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -34,6 +34,9 @@ pub enum ClientRequest {
         path: String,
     },
     RepoList,
+    /// Every repository, workspace, session and comment, read at one moment, with the revision it
+    /// was read at. Follow the feed first, then list, and keep whichever copy of a record is newer.
+    RecordsList,
 
     /// Generates a name if none is given. Uses the repository's default branch if no base is given.
     WorkspaceCreate {
@@ -125,8 +128,8 @@ pub enum ClientRequest {
     SessionUnsubscribe {
         subscription_id: u64,
     },
-    /// Sends a [`HubNotice`] whenever a record a sidebar shows changes. List first, then subscribe,
-    /// and list again on `Resync`.
+    /// Sends a [`HubNotice`] whenever a record changes. Subscribe, then list with `RecordsList`, and
+    /// keep whichever copy of each record has the newer revision. List again on `Resync`.
     FeedSubscribe {
         subscription_id: u64,
     },
@@ -180,6 +183,7 @@ pub enum ClientResponse {
     Repos {
         repos: Vec<Repo>,
     },
+    Records(Records),
     Workspace(Workspace),
     Workspaces {
         workspaces: Vec<Workspace>,
@@ -313,13 +317,20 @@ pub enum HubFrame {
     },
 }
 
-/// A record changed. Carries the whole record, so a client only ever replaces its copy.
+/// A record changed. Carries the whole record and its revision, so a client only ever replaces its
+/// copy with a newer one.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "notice", rename_all = "snake_case")]
 pub enum HubNotice {
     Repo(Repo),
     Workspace(Workspace),
     Session(Session),
+    Comment(DiffComment),
+    /// The record is gone, as of `rev`.
+    Removed {
+        record: RecordKey,
+        rev: Rev,
+    },
     /// This client fell behind and missed some. List everything again.
     Resync,
     #[serde(other)]
@@ -328,6 +339,10 @@ pub enum HubNotice {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a reply is decoded once and handed straight to its caller, and boxing it would stop callers matching through it"
+)]
 pub enum ReplyOutcome {
     Response(ClientResponse),
     Error(ApiError),

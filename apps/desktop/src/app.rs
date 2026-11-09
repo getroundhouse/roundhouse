@@ -241,7 +241,9 @@ impl AppView {
                     .detach();
                 }
             }
-            HubNotice::Unknown => {}
+            // A removed workspace stays listed until the next list, and comments are fetched by the diff
+            // panel itself.
+            HubNotice::Comment(_) | HubNotice::Removed { .. } | HubNotice::Unknown => {}
         }
         cx.notify();
     }

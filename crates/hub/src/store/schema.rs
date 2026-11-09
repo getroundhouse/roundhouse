@@ -102,6 +102,68 @@ const MIGRATIONS: &[&str] = &[
     );
     INSERT INTO counters (name, value) VALUES ('run', 0);
 ",
+    // Each record's revision is set by triggers, so no write can forget it. A delete moves the counter too,
+    // so a client can tell a removal from what came before it. Revisions start at 1, because 0 means a hub
+    // that doesn't keep them.
+    r"
+    INSERT INTO counters (name, value) VALUES ('rev', 1);
+    ALTER TABLE repos ADD COLUMN rev INTEGER NOT NULL DEFAULT 0;
+    UPDATE repos SET rev = 1;
+    CREATE TRIGGER repos_rev_on_insert AFTER INSERT ON repos BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE repos SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER repos_rev_on_update AFTER UPDATE ON repos WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE repos SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER repos_rev_on_delete AFTER DELETE ON repos BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+    ALTER TABLE workspaces ADD COLUMN rev INTEGER NOT NULL DEFAULT 0;
+    UPDATE workspaces SET rev = 1;
+    CREATE TRIGGER workspaces_rev_on_insert AFTER INSERT ON workspaces BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER workspaces_rev_on_update AFTER UPDATE ON workspaces WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER workspaces_rev_on_delete AFTER DELETE ON workspaces BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+    ALTER TABLE sessions ADD COLUMN rev INTEGER NOT NULL DEFAULT 0;
+    UPDATE sessions SET rev = 1;
+    CREATE TRIGGER sessions_rev_on_insert AFTER INSERT ON sessions BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    -- Not on every event, which moves last_seq and updated_at_ms but isn't announced on the feed. A column
+    -- that a Session record shows, and the feed announces, has to be named here.
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER sessions_rev_on_delete AFTER DELETE ON sessions BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+    ALTER TABLE diff_comments ADD COLUMN rev INTEGER NOT NULL DEFAULT 0;
+    UPDATE diff_comments SET rev = 1;
+    CREATE TRIGGER diff_comments_rev_on_insert AFTER INSERT ON diff_comments BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE diff_comments SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER diff_comments_rev_on_update AFTER UPDATE ON diff_comments WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE diff_comments SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER diff_comments_rev_on_delete AFTER DELETE ON diff_comments BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {

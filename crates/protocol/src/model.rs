@@ -87,6 +87,11 @@ macro_rules! counters {
 }
 
 counters!(
+    /// When a record last changed, from one counter per hub, so a client can tell which of two copies is
+    /// newer. A hub that doesn't keep revisions sends none, which reads as 0, and one that does never
+    /// uses 0.
+    #[derive(Default)]
+    Rev,
     /// One launch of an agent. The hub picks it before the launch, and it never repeats, even across
     /// hub restarts, so whatever a run produced can always be told apart from its replacement's. A
     /// later launch has a higher one.
@@ -102,12 +107,46 @@ pub const fn seq_index(seq: Seq) -> usize {
     seq as usize
 }
 
+/// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RecordKey {
+    Repo {
+        id: RepoId,
+    },
+    Workspace {
+        id: WorkspaceId,
+    },
+    Session {
+        id: SessionId,
+    },
+    Comment {
+        id: CommentId,
+    },
+    #[serde(other)]
+    Unknown,
+}
+
+/// Every record a hub holds, read at one moment.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+pub struct Records {
+    pub repos: Vec<Repo>,
+    pub workspaces: Vec<Workspace>,
+    pub sessions: Vec<Session>,
+    pub comments: Vec<DiffComment>,
+    /// The hub's newest revision when this was read. A record missing from the list is gone, unless
+    /// a client holds a copy newer than this.
+    pub rev: Rev,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Repo {
     pub id: RepoId,
     pub name: String,
     pub path: String,
     pub created_at_ms: i64,
+    #[serde(default)]
+    pub rev: Rev,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +177,8 @@ pub struct Workspace {
     pub setup: SetupStatus,
     /// The first of ten ports set aside for this workspace, so workspaces don't collide.
     pub port_base: u16,
+    #[serde(default)]
+    pub rev: Rev,
 }
 
 /// Where a workspace's setup has got to. Copying local files counts, even with no script to run.
@@ -195,6 +236,8 @@ pub struct Session {
     /// Passed through to the agent. `None` leaves the choice to the user's own agent settings.
     pub permission_mode: Option<String>,
     pub status: SessionStatus,
+    /// The newest event when this copy was read, and `updated_at_ms` its time. Every event moves them,
+    /// and the feed doesn't announce that, or its revision, so the log says how far a session has got.
     pub last_seq: Seq,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -203,6 +246,8 @@ pub struct Session {
     pub title: Option<String>,
     #[serde(default)]
     pub closed_at_ms: Option<i64>,
+    #[serde(default)]
+    pub rev: Rev,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
@@ -271,6 +316,8 @@ pub struct DiffComment {
     pub line: u32,
     pub text: String,
     pub created_at_ms: i64,
+    #[serde(default)]
+    pub rev: Rev,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

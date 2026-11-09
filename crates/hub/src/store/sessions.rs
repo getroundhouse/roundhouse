@@ -4,11 +4,11 @@ use protocol::model::{AgentKind, Session, SessionStatus};
 use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::{Store, StoreError, StoredSession, from_text, lock, text_of};
+use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms";
 
-fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
+pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     Ok(StoredSession {
         session: Session {
             id: row.get::<_, String>(0)?.into(),
@@ -22,6 +22,7 @@ fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             updated_at_ms: row.get(8)?,
             title: row.get(11)?,
             closed_at_ms: row.get(12)?,
+            rev: rev_of(row, 13)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -54,7 +55,11 @@ impl Store {
 
     pub fn get_session(&self, id: &SessionId) -> Result<StoredSession, StoreError> {
         lock(&self.reader)
-            .query_row(&format!("SELECT {SESSION_COLUMNS} FROM sessions WHERE id = ?"), [id.as_str()], session_from_row)
+            .query_row(
+                &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE id = ?"),
+                [id.as_str()],
+                session_from_row,
+            )
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
     }
@@ -62,7 +67,7 @@ impl Store {
     pub fn list_sessions(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {SESSION_COLUMNS} FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
+            "SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
         ))?;
         let rows = statement.query_map([workspace_id.as_str()], session_from_row)?;
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>()?;

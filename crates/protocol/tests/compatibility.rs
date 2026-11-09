@@ -4,10 +4,11 @@
 #![cfg(test)]
 
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
+use protocol::model::{RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -66,6 +67,16 @@ fn a_known_request_with_a_new_field_still_decodes() {
 }
 
 #[test]
+fn a_record_from_a_hub_without_revisions_reads_as_revision_zero() {
+    let line = br#"{"notice":"repo","id":"r","name":"repo","path":"/repo","created_at_ms":1}"#;
+
+    let notice: HubNotice = frame::decode(line).unwrap();
+
+    let HubNotice::Repo(repo) = notice else { panic!("{notice:?}") };
+    assert_eq!(repo.rev, Rev::default());
+}
+
+#[test]
 fn an_event_or_delta_from_a_hub_without_runs_has_none() {
     let event: SessionEvent =
         frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":null,"cost_usd":null,"num_turns":null}}"#)
@@ -74,4 +85,13 @@ fn an_event_or_delta_from_a_hub_without_runs_has_none() {
         frame::decode(br#"{"message_id":"m","change":{"type":"text","index":0,"text":"hi"}}"#).unwrap();
 
     assert_eq!((event.run, delta.run), (None, None));
+}
+
+#[test]
+fn a_removed_record_of_a_kind_this_build_does_not_know_still_reads() {
+    let line = br#"{"notice":"removed","record":{"kind":"pin","id":"p"},"rev":3}"#;
+
+    let notice: HubNotice = frame::decode(line).unwrap();
+
+    assert_eq!(notice, HubNotice::Removed { record: RecordKey::Unknown, rev: Rev::new(3) });
 }

@@ -9,8 +9,8 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, DiffComment, GitDiff, InstanceId, PullRequest, Repo, RepoId, Seq, Session, SessionId, SessionStatus,
-    SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    AgentKind, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
+    SessionStatus, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::tail::Tail;
 
@@ -39,7 +39,13 @@ impl World {
     pub(crate) fn repo(&mut self, name: &str) -> RepoId {
         let id = RepoId::from(format!("repo-{}", self.repos.len() + 1));
         let created_at_ms = self.next_time();
-        self.repos.push(Repo { id: id.clone(), name: name.to_string(), path: format!("/src/{name}"), created_at_ms });
+        self.repos.push(Repo {
+            id: id.clone(),
+            name: name.to_string(),
+            path: format!("/src/{name}"),
+            created_at_ms,
+            rev: Rev::default(),
+        });
         id
     }
 
@@ -62,8 +68,20 @@ impl World {
             archived_at_ms: None,
             setup: SetupStatus::Succeeded,
             port_base,
+            rev: Rev::default(),
         });
         id
+    }
+
+    /// Everything, as one list.
+    pub(crate) fn records(&self) -> Records {
+        Records {
+            repos: self.repos.clone(),
+            workspaces: self.workspaces.clone(),
+            sessions: self.sessions.clone(),
+            comments: self.comments.values().flatten().cloned().collect(),
+            rev: Rev::default(),
+        }
     }
 
     pub(crate) fn workspace_mut(&mut self, id: &WorkspaceId) -> &mut Workspace {
@@ -103,6 +121,7 @@ impl World {
             updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq).unwrap(),
             title,
             closed_at_ms: None,
+            rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);
         id
