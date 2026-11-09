@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 use protocol::model::DiffComment;
 
-use super::DiffPanel;
+use super::FileDiff;
 
 /// Wide enough to write a sentence or two on one line, and no wider, so a long one still reads easily.
 const WIDTH: f32 = 720.;
@@ -39,12 +39,12 @@ fn band(column: Div, cx: &App) -> AnyElement {
 pub(super) fn draft_card(
     input: &Entity<TextareaState>,
     editing: bool,
-    panel: WeakEntity<DiffPanel>,
+    view: WeakEntity<FileDiff>,
     cx: &App,
 ) -> AnyElement {
     let theme = cx.theme();
     let empty = input.read(cx).text().to_string().trim().is_empty();
-    let (cancel, save) = (panel.clone(), panel);
+    let (cancel, save) = (view.clone(), view);
     let field = div()
         .w_full()
         .p_1()
@@ -57,8 +57,8 @@ pub(super) fn draft_card(
         .w_full()
         .justify_end()
         .gap_2()
-        .child(Button::new("cancel-comment").ghost().label("Cancel").on_click(move |_, _, cx| {
-            let _ = cancel.update(cx, DiffPanel::cancel_draft);
+        .child(Button::new("cancel-comment").ghost().label("Cancel").on_click(move |_, window, cx| {
+            let _ = cancel.update(cx, |t, cx| t.cancel_draft(window, cx));
         }))
         .child(
             Button::new("save-comment")
@@ -73,10 +73,10 @@ pub(super) fn draft_card(
 }
 
 /// A comment waiting for the agent, with what can be done with it.
-pub(super) fn comment_card(comment: DiffComment, panel: WeakEntity<DiffPanel>, cx: &App) -> AnyElement {
+pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx: &App) -> AnyElement {
     let id = comment.id.clone();
     let named = |action: &str| ElementId::Name(format!("{action}-{id}").into());
-    let (edit, delete, add) = (panel.clone(), panel.clone(), panel);
+    let (edit, delete, add) = (view.clone(), view.clone(), view);
     let (to_edit, to_delete, to_add) = (id.clone(), id.clone(), id.clone());
     let actions = h_flex()
         .w_full()

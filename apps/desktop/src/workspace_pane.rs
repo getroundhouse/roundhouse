@@ -5,14 +5,15 @@ use std::collections::HashMap;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Pixels, Subscription, Task, Window,
-    px,
+    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
+    Subscription, Task, Window, px,
 };
 use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::changes::Changes;
-use crate::diff_panel::DiffPanel;
+use crate::file_diff::FileDiff;
+use crate::review::Review;
 pub use reading::Mark;
 use reading::Reading;
 
@@ -38,6 +39,23 @@ pub enum Showing {
     Chat,
     /// The diff tab, in place of the active chat.
     Diff,
+}
+
+/// The workspace's diff and its two views, made together the first time the sidebar of changes opens, then kept.
+pub struct Diff {
+    pub review: Entity<Review>,
+    /// What the diff tab shows.
+    pub file: Entity<FileDiff>,
+    /// The sidebar of changes.
+    pub changes: Entity<Changes>,
+    /// The diff tab, while it's open. It's here so there's never a diff tab without a diff to show in it.
+    tab: Option<DiffTab>,
+}
+
+struct DiffTab {
+    path: SharedString,
+    /// It covers the active chat.
+    in_front: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -77,14 +95,9 @@ pub struct WorkspacePane {
     creating_chat: bool,
     reading: Reading,
     pub composer: Entity<TextareaState>,
-    /// Made the first time the sidebar of changes opens, then kept.
-    pub diff: Option<Entity<DiffPanel>>,
-    pub changes: Option<Entity<Changes>>,
+    pub diff: Option<Diff>,
     /// The sidebar of changes is open.
     pub changes_open: bool,
-    pub showing: Showing,
-    /// Where keys go while the diff tab shows, so the window's keys still reach it with the composer hidden.
-    diff_focus: FocusHandle,
     pub pull_request: Option<PullRequest>,
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
@@ -108,10 +121,8 @@ impl WorkspacePane {
         let typed = |text: &str| !text.trim().is_empty();
         let showing = usize::from(typed(&self.composer.read(cx).text().to_string()));
         let others = self.drafts.values().filter(|draft| typed(draft)).count();
-        let comment = self.diff.as_ref().is_some_and(|diff| {
-            let diff = diff.read(cx);
-            diff.draft.is_some() && typed(&diff.draft_input.read(cx).text().to_string())
-        });
+        let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
+        let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others, usize::from(comment))
     }
 
@@ -159,10 +170,7 @@ impl WorkspacePane {
             reading: Reading::default(),
             composer,
             diff: None,
-            changes: None,
             changes_open: false,
-            showing: Showing::Chat,
-            diff_focus: cx.focus_handle(),
             pull_request: None,
             setup_log: None,
             setup_log_refresh: None,
@@ -215,7 +223,7 @@ impl WorkspacePane {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
         if let Some(diff) = &self.diff {
-            diff.update(cx, |d, _| d.reconnect(client));
+            diff.review.update(cx, |r, _| r.reconnect(client));
         }
         self.behind = true;
     }
@@ -226,9 +234,9 @@ impl WorkspacePane {
             return;
         }
         self.refresh_pull_request(cx);
-        let shown = self.changes_open || self.diff_tab(cx).is_some();
-        if let Some(diff) = self.diff.clone().filter(|_| shown) {
-            diff.update(cx, DiffPanel::refresh);
+        let shown = self.changes_open || self.diff_tab().is_some();
+        if let Some(diff) = self.diff.as_ref().filter(|_| shown) {
+            diff.review.update(cx, Review::refresh);
         }
     }
 
@@ -252,7 +260,7 @@ impl WorkspacePane {
         }
         if comments != self.comments {
             if let Some(diff) = &self.diff {
-                diff.update(cx, |d, cx| d.set_comments(comments.clone(), cx));
+                diff.review.update(cx, |r, cx| r.set_comments(comments.clone(), cx));
             }
             self.comments = comments;
         }
@@ -278,13 +286,34 @@ impl WorkspacePane {
         self.composer.update(cx, |c, cx| c.focus(window, cx));
     }
 
+    /// What's in front under the tabs.
+    pub fn showing(&self) -> Showing {
+        let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
+        if tab.is_some_and(|tab| tab.in_front) { Showing::Diff } else { Showing::Chat }
+    }
+
+    /// Puts the active chat or the diff tab in front, as long as the diff tab is open. It's the only way either comes
+    /// to the front, so what's read and what has focus always follow what's drawn.
+    pub(super) fn bring_to_front(&mut self, front: Showing, cx: &mut Context<Self>) {
+        if let Some(tab) = self.diff.as_mut().and_then(|diff| diff.tab.as_mut()) {
+            tab.in_front = front == Showing::Diff;
+        }
+        // The chat is read only while it's in front.
+        self.read_showing(cx);
+        self.with_window(cx, |t, window, cx| t.focus_showing(window, cx));
+        cx.notify();
+    }
+
     /// Focuses the diff while the diff tab shows, and the composer otherwise. The composer isn't drawn behind the diff
     /// tab, and focus on something that isn't drawn takes the window's keys, such as `Ctrl-Tab`, nowhere.
     pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.showing == Showing::Diff && self.diff.is_some() {
-            window.focus(&self.diff_focus, cx);
-        } else {
-            self.focus_composer(window, cx);
+        match self.showing() {
+            Showing::Diff => {
+                if let Some(diff) = &self.diff {
+                    window.focus(&diff.file.focus_handle(cx), cx);
+                }
+            }
+            Showing::Chat => self.focus_composer(window, cx),
         }
     }
 

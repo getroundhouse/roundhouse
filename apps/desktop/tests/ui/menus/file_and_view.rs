@@ -67,7 +67,7 @@ fn close_chat_is_close_diff_tab_while_the_diff_tab_shows(cx: &mut TestAppContext
 
     choose(&mut ui, "File", "Close Diff Tab");
 
-    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, cx| p.diff_tab(cx).is_none()));
+    assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff_tab().is_none()));
     assert_eq!(items(&ui, "File")[4], "Close Chat");
 }
 

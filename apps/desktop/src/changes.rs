@@ -15,7 +15,7 @@ use gpui_kit::{
     TestSupportExt as _, Window, div, px, uniform_list,
 };
 
-use crate::diff_panel::DiffPanel;
+use crate::review::Review;
 use rows::{Layout, Row, rows, split};
 
 mod rows;
@@ -55,7 +55,9 @@ fn toggle_layout(cx: &mut App) {
 }
 
 pub struct Changes {
-    diff: Entity<DiffPanel>,
+    review: Entity<Review>,
+    /// The file the diff tab shows, as the pane says, which its row marks.
+    showing: Option<SharedString>,
     /// Folders closed in the tree, by path.
     closed: HashSet<String>,
     /// The rows as last drawn, which the list draws from as it scrolls.
@@ -66,9 +68,15 @@ pub struct Changes {
 impl EventEmitter<ChangesEvent> for Changes {}
 
 impl Changes {
-    pub fn new(diff: Entity<DiffPanel>, cx: &mut Context<Self>) -> Self {
-        let observing = cx.observe(&diff, |_, _, cx| cx.notify());
-        Self { diff, closed: HashSet::new(), rows: Vec::new(), _observing: observing }
+    pub fn new(review: Entity<Review>, cx: &mut Context<Self>) -> Self {
+        let observing = cx.observe(&review, |_, _, cx| cx.notify());
+        Self { review, showing: None, closed: HashSet::new(), rows: Vec::new(), _observing: observing }
+    }
+
+    /// Marks the row of the file the diff tab shows, or none.
+    pub fn set_showing(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
+        self.showing = path;
+        cx.notify();
     }
 
     fn toggle_folder(&mut self, path: String, cx: &mut Context<Self>) {
@@ -80,8 +88,7 @@ impl Changes {
 
     /// The rows in `range`, for the list to draw.
     fn draw_rows(&mut self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let diff = self.diff.read(cx);
-        let (files, open) = (diff.files.clone().unwrap_or_default(), diff.open.clone());
+        let (files, open) = (self.review.read(cx).files.clone().unwrap_or_default(), self.showing.clone());
         let layout = layout(cx);
         let rows: Vec<Row> = self.rows.get(range).map(<[Row]>::to_vec).unwrap_or_default();
         rows.into_iter()
@@ -98,7 +105,7 @@ impl Changes {
 
     /// How many comments are waiting, and the button that sends them.
     fn comments_bar(&self, count: usize, cx: &mut Context<Self>) -> impl IntoElement {
-        let diff = self.diff.downgrade();
+        let review = self.review.downgrade();
         h_flex()
             .flex_none()
             .w_full()
@@ -115,15 +122,15 @@ impl Changes {
                     .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
             )
             .child(Button::new("send-comments").primary().small().label("Send to agent").on_click(move |_, _, cx| {
-                let _ = diff.update(cx, DiffPanel::send_comments);
+                let _ = review.update(cx, Review::send_comments);
             }))
     }
 }
 
 impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let diff = self.diff.read(cx);
-        let (files, truncated, comments) = (diff.files.clone(), diff.truncated, diff.comments.len());
+        let review = self.review.read(cx);
+        let (files, truncated, comments) = (review.files.clone(), review.truncated, review.comments.len());
         let muted = cx.theme().muted_foreground;
         let body = match &files {
             None => placeholder("Loading…", muted),

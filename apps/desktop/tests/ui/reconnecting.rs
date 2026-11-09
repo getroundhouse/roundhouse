@@ -7,11 +7,10 @@ use std::time::{Duration, Instant};
 
 use client_core::Client;
 use desktop::app::Connection;
-use desktop::diff_panel::DiffPanel;
-use gpui_kit::{AppContext as _, ElementId, Entity, SharedString, TestAppContext};
+use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 
-use crate::support::{Stack, TIMEOUT, Ui};
+use crate::support::{Diff, Stack, TIMEOUT, Ui};
 
 #[gpui_kit::test]
 fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestAppContext) {
@@ -158,14 +157,14 @@ fn lose_the_hub(ui: &mut Ui<'_>, stack: &Stack) {
 }
 
 /// Opens the selected workspace's diff, which has nothing in it yet.
-fn open_empty_diff(ui: &mut Ui<'_>) -> Entity<DiffPanel> {
+fn open_empty_diff(ui: &mut Ui<'_>) -> Diff {
     let diff = ui.open_diff();
     assert!(!shows_changes(ui, &diff));
     diff
 }
 
-fn shows_changes(ui: &Ui<'_>, diff: &Entity<DiffPanel>) -> bool {
-    ui.cx.read_entity(diff, |d, _| d.files.as_ref().is_some_and(|files| !files.is_empty()))
+fn shows_changes(ui: &Ui<'_>, diff: &Diff) -> bool {
+    ui.cx.read_entity(&diff.review, |r, _| r.files.as_ref().is_some_and(|files| !files.is_empty()))
 }
 
 #[gpui_kit::test]

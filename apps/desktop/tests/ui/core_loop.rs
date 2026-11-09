@@ -42,20 +42,20 @@ fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why this word?");
     ui.press("enter");
-    ui.wait("the comment to be saved", |ui| ui.cx.read_entity(&diff, |d, _| d.comments.len() == 1));
+    ui.wait("the comment to be saved", |ui| ui.comments(&diff).len() == 1);
     assert_eq!(stack.client().comment_list(id).unwrap().len(), 1);
 
     // Send it to the agent, which sees where it was left, and shows the chat it went to.
     ui.click("send-comments");
     let pane = ui.pane().unwrap();
-    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.showing), Showing::Chat);
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.showing()), Showing::Chat);
     ui.wait("the comment to reach the agent", |ui| {
         ui.events().iter().any(
             |e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text.contains("`a.txt:2`: Why this word?")),
         )
     });
     ui.wait("the comment to be cleared", |ui| {
-        ui.cx.read_entity(&diff, |d, _| d.comments.is_empty()) && stack.client().comment_list(id).unwrap().is_empty()
+        ui.comments(&diff).is_empty() && stack.client().comment_list(id).unwrap().is_empty()
     });
     ui.wait("the turn to finish", |ui| ui.session_status() == Some(SessionStatus::Idle));
 }
@@ -171,8 +171,8 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     ui.press("cmd-shift-d");
     let pane = ui.pane().unwrap();
     ui.wait("the sidebar of changes", |ui| ui.cx.read_entity(&pane, |p, _| p.changes_open && p.diff.is_some()));
-    let diff = ui.cx.read_entity(&pane, |p, _| p.diff.clone()).unwrap();
-    ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&diff, |d, _| d.has_no_changes()));
+    let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
+    ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));
 
     let before = ui.view().workspaces.len();
     ui.press("cmd-n");
