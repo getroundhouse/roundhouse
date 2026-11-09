@@ -98,7 +98,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let lock_file = take_lock(&paths)?;
 
     private_file(&paths.database)?;
-    let store = Arc::new(Store::open(&paths.database).map_err(HubError::OpenDatabase)?);
+    let store = Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?);
     let unfinished = recover(&store).map_err(HubError::Recover)?;
 
     let provider: Arc<dyn Provider> = Arc::new(LocalProvider::new(LocalConfig {

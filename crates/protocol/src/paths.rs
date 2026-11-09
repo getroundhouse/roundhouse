@@ -25,6 +25,8 @@ pub struct Paths {
     pub socket: PathBuf,
     pub lock: PathBuf,
     pub database: PathBuf,
+    /// Copies of the database from before each migration, so an older build has one it can open.
+    pub backups_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
     pub workspaces_root: PathBuf,
@@ -63,6 +65,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         socket,
         lock: data_dir.join("hub.lock"),
         database: data_dir.join("hub.db"),
+        backups_dir: data_dir.join("backups"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         workspaces_root,

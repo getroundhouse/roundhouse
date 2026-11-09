@@ -7,7 +7,7 @@ use protocol::model::{
 use super::*;
 
 fn store_with_session(dir: &Path) -> Store {
-    let store = Store::open(&dir.join("hub.db")).unwrap();
+    let store = Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap();
     let now = now_ms();
     let repo =
         Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
@@ -148,7 +148,7 @@ fn open_approvals_are_those_requested_and_not_resolved() {
 fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
     store_with_session(dir.path()).append(&"s".into(), None, &notice("kept"), None, None, None).unwrap();
-    let store = Store::open(&dir.path().join("hub.db")).unwrap();
+    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
     assert_eq!(store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
 }
 
@@ -161,7 +161,7 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
     store.append(&"s".into(), None, &notice("from the hub"), None, None, None).unwrap();
     drop(store);
 
-    let store = Store::open(&dir.path().join("hub.db")).unwrap();
+    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
     let second = store.next_run().unwrap();
 
     assert!(second > first, "a reopened store handed out {second} after {first}");
@@ -173,8 +173,9 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
 fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("hub.db");
+    let backups = dir.path().join("backups");
     let mut conn = schema::open_connection(&path).unwrap();
-    schema::migrate_to(&mut conn, schema::BEFORE_RUNS).unwrap();
+    schema::migrate_to(&mut conn, &backups, schema::BEFORE_RUNS).unwrap();
     conn.execute_batch(
         r#"
         INSERT INTO repos VALUES ('r', 'repo', '/repo', 0);
@@ -189,7 +190,7 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     .unwrap();
     drop(conn);
 
-    let store = Store::open(&path).unwrap();
+    let store = Store::open(&path, &backups).unwrap();
 
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
@@ -305,15 +306,6 @@ fn a_request_sent_again_gets_what_it_made_the_first_time() {
     comment.id = "c2".into();
     assert_eq!(store.add_comment(&comment, Some(&request)).unwrap(), Made::Earlier(first), "a comment");
     assert_eq!(store.list_comments(&"w".into()).unwrap().len(), 1);
-}
-
-#[test]
-fn a_database_from_a_newer_version_is_refused_rather_than_damaged() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("hub.db");
-    drop(Store::open(&path).unwrap());
-    Connection::open(&path).unwrap().pragma_update(None, "user_version", 999).unwrap();
-    assert!(Store::open(&path).is_err());
 }
 
 #[test]
