@@ -1,0 +1,86 @@
+//! Work an agent leaves running in the background after its turn ends.
+
+#![cfg(test)]
+
+use protocol::event::EventBody;
+use protocol::model::SessionStatus;
+
+use crate::support::{
+    Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end, wait_until,
+};
+
+#[test]
+fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let done = stack.path("done");
+    client.session_prompt(&session.id, &format!("background:{}; say:started", done.display()), None).unwrap();
+    wait_for_status(&client, &session.id, SessionStatus::Background);
+
+    // An update waits on it, and what it said is a reply.
+    assert_eq!(client.hub_status().unwrap().running_sessions, 1);
+    let first_reply = client.session_get(&session.id).unwrap().reply_seq;
+    assert!(first_reply > 0);
+
+    // The turn it starts by itself begins with no state event, and is a turn all the same, with a reply of its own.
+    std::fs::write(&done, "").unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    assert!(assistant_text(&events).ends_with(&format!("finished {}", done.display())), "{}", assistant_text(&events));
+    assert!(events.iter().any(|e| matches!(&e.body, EventBody::AgentTasks { tasks, .. } if tasks.is_empty())));
+    let finished = client.session_get(&session.id).unwrap();
+    assert!(finished.reply_seq > first_reply, "{} after {first_reply}", finished.reply_seq);
+    assert_eq!(finished.status, SessionStatus::Idle);
+    assert_eq!(client.hub_status().unwrap().running_sessions, 0);
+}
+
+#[test]
+fn stopping_the_hub_with_work_in_the_background_interrupts_it() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let never = stack.path("never");
+    client.session_prompt(&session.id, &format!("background:{}", never.display()), None).unwrap();
+    wait_for_status(&client, &session.id, SessionStatus::Background);
+
+    client.hub_shutdown().unwrap();
+    let mut hub = stack.hub.take().unwrap();
+    wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
+    stack.start_hub();
+
+    // The agent said it would carry on when its work finished, and that work went with it.
+    assert_eq!(stack.client().session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
+}
+
+#[test]
+fn a_hub_crash_with_work_in_the_background_interrupts_it() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, &format!("background:{}", stack.path("never").display()), None).unwrap();
+    wait_for_status(&client, &session.id, SessionStatus::Background);
+    let agent = started_pid(&read_all(&client, &session.id)).unwrap();
+    drop(client);
+
+    // Nothing the agent says on its way out is recorded, so the next hub finds it at work.
+    stack.kill_hub();
+    wait_until("the agent to stop after the hub died", || !is_alive(agent));
+    stack.start_hub();
+
+    assert_eq!(stack.client().session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
+}
+
+#[test]
+fn an_agent_stopped_from_outside_with_work_in_the_background_is_interrupted() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, &format!("background:{}", stack.path("never").display()), None).unwrap();
+    wait_for_status(&client, &session.id, SessionStatus::Background);
+    let pid = started_pid(&read_all(&client, &session.id)).unwrap();
+
+    assert_eq!(signal(pid, libc::SIGTERM), 0);
+
+    // It stops its work and lists none left on the way out, which isn't that work finishing.
+    wait_for_status(&client, &session.id, SessionStatus::Interrupted);
+}

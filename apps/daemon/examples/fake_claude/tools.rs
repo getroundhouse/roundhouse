@@ -61,7 +61,7 @@ pub(crate) fn ask_questions(
                 turn.tool_result(&tool_use_id, "cancelled", true);
                 return true;
             }
-            Ok(Input::Prompt(text)) => queued.push_back(text),
+            Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
             Ok(Input::Eof) | Err(_) => {
                 *eof = true;
                 return true;
@@ -105,7 +105,7 @@ pub(crate) fn present_plan(
                 turn.tool_result(&tool_use_id, "cancelled", true);
                 return true;
             }
-            Ok(Input::Prompt(text)) => queued.push_back(text),
+            Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
             Ok(Input::Eof) | Err(_) => {
                 *eof = true;
                 return true;
@@ -151,7 +151,7 @@ pub(crate) fn run_tool(
                     turn.tool_result(&tool_use_id, "cancelled", true);
                     return true;
                 }
-                Ok(Input::Prompt(text)) => queued.push_back(text),
+                Ok(Input::Prompt(text) | Input::Resume(text)) => queued.push_back(text),
                 Ok(Input::Eof) | Err(_) => {
                     *eof = true;
                     return true;

@@ -16,7 +16,7 @@ use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
-use protocol::model::{ClientRequestId, InstanceId, Records, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{ClientRequestId, InstanceId, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -221,12 +221,7 @@ impl Hub {
     }
 
     pub(crate) fn status(&self) -> HubStatus {
-        let running_sessions = self
-            .sessions
-            .lock()
-            .values()
-            .filter(|session| matches!(session.status(), SessionStatus::Running | SessionStatus::WaitingApproval))
-            .count();
+        let running_sessions = self.sessions.lock().values().filter(|session| session.status().is_active()).count();
         HubStatus {
             pid: std::process::id(),
             hub_version: protocol::BUILD_VERSION.to_string(),

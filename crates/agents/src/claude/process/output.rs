@@ -100,6 +100,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
+        | EventBody::AgentTasks { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }

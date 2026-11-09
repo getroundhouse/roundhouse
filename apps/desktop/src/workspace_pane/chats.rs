@@ -4,7 +4,7 @@ use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::model::{AgentKind, Session, SessionId};
 use transcript::{Transcript, TranscriptEvent};
 
-use super::{PaneEvent, WorkspacePane, is_working};
+use super::{PaneEvent, WorkspacePane};
 use crate::diff_panel::DiffPanel;
 use client_core::records::Record;
 
@@ -135,7 +135,7 @@ impl WorkspacePane {
 
     /// Asks first if it would stop an agent that's working.
     pub fn close_chat(&mut self, id: SessionId, window: &mut Window, cx: &mut Context<Self>) {
-        let working = self.sessions.iter().any(|s| s.id == id && is_working(s));
+        let working = self.sessions.iter().any(|s| s.id == id && s.status.is_active());
         if !working {
             self.finish_closing(id, cx);
             return;

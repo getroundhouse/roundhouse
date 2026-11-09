@@ -56,6 +56,8 @@ ids!(
     MessageId,
     /// The agent's own ID for one use of a tool.
     ToolUseId,
+    /// The agent's own ID for work it runs in the background.
+    TaskId,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.
@@ -225,8 +227,21 @@ pub enum SessionStatus {
     WaitingApproval,
     /// The agent went away mid-turn. The next prompt resumes the conversation.
     Interrupted,
+    /// The turn has ended, and work the agent started in the background, such as a command, is still going. The
+    /// agent picks up again by itself when it finishes, and a prompt starts a turn meanwhile.
+    Background,
     #[serde(other)]
     Unknown,
+}
+
+impl SessionStatus {
+    /// Whether the agent is at work, in a turn or in the background, so stopping it would cut something short.
+    pub fn is_active(self) -> bool {
+        match self {
+            SessionStatus::Running | SessionStatus::WaitingApproval | SessionStatus::Background => true,
+            SessionStatus::Idle | SessionStatus::Interrupted | SessionStatus::Unknown => false,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

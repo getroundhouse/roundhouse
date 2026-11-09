@@ -124,14 +124,20 @@ impl Store {
         Ok(())
     }
 
-    /// Sessions that were mid-turn when the hub last stopped.
+    /// Sessions whose agent was at work when the hub last stopped, in a turn or in the background.
     pub fn active_session_ids(&self) -> Result<Vec<SessionId>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached("SELECT id FROM sessions WHERE status IN (?, ?)")?;
-        let rows = statement
-            .query_map([text_of(&SessionStatus::Running), text_of(&SessionStatus::WaitingApproval)], |row| {
-                row.get::<_, String>(0).map(SessionId::from)
-            })?;
-        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
+        let mut statement = conn.prepare_cached("SELECT id, status FROM sessions")?;
+        let rows = statement.query_map([], |row| {
+            Ok((SessionId::from(row.get::<_, String>(0)?), from_text::<SessionStatus>(row.get(1)?)?))
+        })?;
+        let mut active = Vec::new();
+        for row in rows {
+            let (id, status) = row?;
+            if status.is_active() {
+                active.push(id);
+            }
+        }
+        Ok(active)
     }
 }

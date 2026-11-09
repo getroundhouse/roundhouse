@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
-use protocol::model::{MessageId, Seq};
+use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, TurnOutcome};
+use protocol::model::{MessageId, Seq, TaskId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
@@ -88,7 +88,19 @@ impl Printer {
             EventBody::AgentMode { permission_mode } => {
                 self.line(event.seq, &format!("approval mode: {permission_mode}"));
             }
+            EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
             EventBody::AgentState { .. } | EventBody::AgentOther { .. } | EventBody::Unknown => {}
+        }
+    }
+
+    fn background(&mut self, seq: u64, tasks: &[AgentTask], stopped: &[TaskId]) {
+        let what: Vec<&str> =
+            tasks.iter().map(|task| task.description.as_deref().unwrap_or(task.id.as_str())).collect();
+        let running = if what.is_empty() { "nothing".to_string() } else { what.join(", ") };
+        self.line(seq, &format!("running in the background: {running}"));
+        if !stopped.is_empty() {
+            let stopped: Vec<&str> = stopped.iter().map(TaskId::as_str).collect();
+            self.line(seq, &format!("  stopped: {}", stopped.join(", ")));
         }
     }
 

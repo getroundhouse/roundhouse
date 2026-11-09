@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use crate::background;
 use crate::tools::{ask_questions, present_plan, run_tool};
 use crate::{Config, Input, Out, current_mode, current_model, emit, pause};
 
@@ -123,6 +124,7 @@ pub(crate) fn run_turn(
     config: &Config,
     out: &Out,
     script: String,
+    by_itself: bool,
     rx: &Receiver<Input>,
     queued: &mut VecDeque<String>,
     eof: &mut bool,
@@ -132,7 +134,9 @@ pub(crate) fn run_turn(
     seen.push('\n');
     std::fs::write(&config.conversation, &seen).unwrap();
 
-    state_event(config, out, "running");
+    if !by_itself {
+        state_event(config, out, "running");
+    }
     emit(
         out,
         json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
@@ -232,12 +236,7 @@ pub(crate) fn run_command(
         return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("late:") {
-        let (file, text) = rest.rsplit_once(':').unwrap();
-        let delta = json!({"type":"stream_event","session_id":turn.config.session_id,"parent_tool_use_id":null,
-            "api_message_id":"msg_late",
-            "event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}}});
-        outlive_until(file, &[delta, json!({"type":"late_marker"})]);
-        return false;
+        return late(turn, rest);
     }
     if let Some(text) = command.strip_prefix("partial:") {
         let id = message_id();
@@ -268,10 +267,23 @@ pub(crate) fn run_command(
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
     }
+    if let Some(file) = command.strip_prefix("background:") {
+        return background::start(turn, file);
+    }
     if let Some(name) = command.strip_prefix("env:") {
         let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
         return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
     }
+    false
+}
+
+/// Never interrupted, since what it leaves behind is the point.
+fn late(turn: &Turn, rest: &str) -> bool {
+    let (file, text) = rest.rsplit_once(':').unwrap();
+    let delta = json!({"type":"stream_event","session_id":turn.config.session_id,"parent_tool_use_id":null,
+        "api_message_id":"msg_late",
+        "event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}}});
+    outlive_until(file, &[delta, json!({"type":"late_marker"})]);
     false
 }
 

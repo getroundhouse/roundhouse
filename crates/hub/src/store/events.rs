@@ -158,6 +158,7 @@ impl Store {
                 | EventBody::AgentStarted { .. }
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }
+                | EventBody::AgentTasks { .. }
                 | EventBody::Assistant { .. }
                 | EventBody::AgentUser { .. }
                 | EventBody::TurnEnded { .. }
