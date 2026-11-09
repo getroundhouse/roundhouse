@@ -20,6 +20,7 @@ use reading::Reading;
 
 mod attaching;
 mod chats;
+mod closed;
 mod composer;
 mod diff_tab;
 mod queue;
@@ -101,6 +102,7 @@ pub struct WorkspacePane {
     creating_chat: bool,
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
+    closed_menu: closed::Menu,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -182,6 +184,7 @@ impl WorkspacePane {
             attached: Vec::new(),
             creating_chat: false,
             queue_edit: None,
+            closed_menu: closed::Menu::Shut,
             reading: Reading::default(),
             composer,
             diff: None,

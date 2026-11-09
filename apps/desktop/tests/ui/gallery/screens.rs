@@ -7,8 +7,8 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, queue_held, queued,
-    setup_failed, streaming, titled, unread,
+    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, finishing_update, own_hub, queue_held,
+    queued, setup_failed, streaming, titled, unread,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -35,6 +35,9 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button, such as one that opens a menu.
     Click(&'static str),
+    /// Moves the pointer somewhere with no hover of its own, so the picture shows what's open rather than what's
+    /// under the pointer.
+    MoveAway,
     /// Moves the pointer over the tab of the open chat at this position in the workspace showing, and leaves it there.
     HoverTab(usize),
     /// Types this where focus is, such as the composer.
@@ -209,6 +212,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(chat_tabs),
         steps: &[Step::Select(FOCUS), Step::HoverTab(1)],
+    },
+    Screen {
+        name: "closed-chats",
+        spec: "chats.md",
+        world: Some(closed_chats),
+        steps: &[Step::Select(FOCUS), Step::Click("closed-chats"), Step::MoveAway],
     },
     Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
     Screen {

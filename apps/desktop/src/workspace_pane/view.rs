@@ -3,14 +3,14 @@
 
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use protocol::model::{Session, SessionId, SessionStatus};
+use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::{HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
@@ -21,7 +21,7 @@ pub(super) const TAB_WIDTH: Pixels = px(200.);
 /// Each tab's, so a tab's close button shows only while the pointer is over that tab.
 pub(super) const TAB_GROUP: &str = "chat-tab";
 
-fn chat_title(session: &Session, number: usize) -> String {
+pub(super) fn chat_title(session: &Session, number: usize) -> String {
     session.title.as_deref().map_or_else(|| format!("Chat {number}"), str::to_string)
 }
 
@@ -98,8 +98,8 @@ impl WorkspacePane {
         })
     }
 
-    /// The diff tab if there is one, then one tab for each open chat, then a way to start another chat, and any closed
-    /// ones to go back to.
+    /// The diff tab if there is one, then one tab for each open chat, and a way to start another chat. At the far end
+    /// are any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
@@ -110,12 +110,7 @@ impl WorkspacePane {
                 .filter(|(_, s)| s.closed_at_ms.is_none())
                 .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx)),
         );
-        let closed: Vec<(SessionId, String)> = numbered
-            .iter()
-            .filter(|(_, s)| s.closed_at_ms.is_some())
-            .map(|(index, s)| (s.id.clone(), chat_title(s, index + 1)))
-            .collect();
-        let this = cx.weak_entity();
+        let closed = self.closed_chats(cx);
         div()
             .relative()
             .flex_none()
@@ -139,24 +134,9 @@ impl WorkspacePane {
                             .tooltip("New chat")
                             .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
                     )
-                    .when(!closed.is_empty(), |d| {
-                        d.child(
-                            Button::new("closed-chats")
-                                .ghost()
-                                .xsmall()
-                                .label(format!("Closed ({})", closed.len()))
-                                .dropdown_menu(move |mut menu, _, _| {
-                                    for (id, title) in &closed {
-                                        let (this, id) = (this.clone(), id.clone());
-                                        menu =
-                                            menu.item(PopupMenuItem::new(title.clone()).on_click(move |_, _, cx| {
-                                                let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
-                                            }));
-                                    }
-                                    menu
-                                }),
-                        )
-                    }),
+                    // Kept to the end of the row, so it stays put as chats open and close.
+                    .child(div().flex_1())
+                    .children(closed),
             )
     }
 
