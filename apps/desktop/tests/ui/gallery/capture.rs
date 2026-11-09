@@ -23,6 +23,8 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 /// How many pictures in a row have to match before a screen counts as finished drawing.
 const SAME_IN_A_ROW: usize = 3;
 const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
+/// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
+const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 
 pub(crate) struct Picture {
     pub(crate) image: RgbaImage,
@@ -113,6 +115,7 @@ impl Driver {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
             }
+            Step::Hover { on, shows } => self.hover(on, shows),
             Step::AskToFinish => {
                 self.step(&Step::Click("finish-update"));
                 self.wait("the question", |view, _| view.update_question.is_some());
@@ -183,6 +186,24 @@ impl Driver {
                 return;
             }
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Rests the pointer on `on`, and waits until the window draws `shows`, such as its tooltip.
+    fn hover(&mut self, on: &'static str, shows: &'static str) {
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.hover(on, cx)).unwrap();
+        // The app's clock only moves when told to, and a tooltip waits for it.
+        self.cx.run_until_parked();
+        self.cx.advance_clock(LONGER_THAN_A_TOOLTIP_WAITS);
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            self.frame();
+            if self.cx.update_window(self.handle, |_, window, _| window.try_find(shows).is_some()).unwrap() {
+                return;
+            }
+            assert!(Instant::now() < deadline, "timed out waiting for {shows}");
             std::thread::sleep(Duration::from_millis(10));
         }
     }
