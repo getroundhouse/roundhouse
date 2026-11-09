@@ -7,8 +7,8 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, setup_failed, streaming, titled,
-    unread,
+    attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, queue_held, queued,
+    setup_failed, streaming, titled, unread,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
 
@@ -131,6 +131,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Running, chats::steered())),
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "queued",
+        spec: "chats.md",
+        world: Some(queued),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("queued-queued-2"), shows: "edit-queued-queued-2" }],
+    },
+    Screen { name: "queue-held", spec: "chats.md", world: Some(queue_held), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "tool-commands",
         spec: "chats.md",

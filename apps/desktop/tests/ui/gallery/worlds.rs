@@ -4,8 +4,8 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, Title,
-    WorkspaceId, WorkspaceStatus,
+    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, QueuedPrompt, Rev, SessionStatus,
+    SetupStatus, Title, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -139,6 +139,38 @@ pub(super) fn streaming() -> World {
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Running, chats::streaming());
     world.tails.insert(chat, chats::streaming_tail());
+    world
+}
+
+fn three_queued() -> Vec<QueuedPrompt> {
+    vec![
+        QueuedPrompt {
+            client_msg_id: "queued-1".into(),
+            text: "Once that's in, add the PR state to the header as well.".to_string(),
+        },
+        QueuedPrompt { client_msg_id: "queued-2".into(), text: "Then open a draft PR for all of it.".to_string() },
+        QueuedPrompt {
+            client_msg_id: "queued-3".into(),
+            text: "After that, look at whether the CLI should show it too. It lists workspaces with their \
+                   branches, so the state could go beside each one, but only if it fits on one line at 80 columns."
+                .to_string(),
+        },
+    ]
+}
+
+/// Writing a reply, with three prompts queued for after it.
+pub(super) fn queued() -> World {
+    let mut world = streaming();
+    world.sessions.last_mut().unwrap().queued = three_queued();
+    world
+}
+
+/// Stopped, with three prompts the queue holds since.
+pub(super) fn queue_held() -> World {
+    let mut world = chat_world(SessionStatus::Idle, chats::stopped());
+    let chat = world.sessions.last_mut().unwrap();
+    chat.queued = three_queued();
+    chat.queue_held = true;
     world
 }
 

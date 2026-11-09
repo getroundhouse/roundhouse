@@ -150,6 +150,20 @@ pub(crate) fn steered() -> Vec<EventBody> {
     events
 }
 
+/// Stopped partway, after looking around.
+pub(crate) fn stopped() -> Vec<EventBody> {
+    let mut events = looked_around();
+    events.push(EventBody::TurnEnded {
+        outcome: TurnOutcome::Cancelled,
+        result: None,
+        errors: Vec::new(),
+        duration_ms: Some(21_000),
+        cost_usd: Some(0.09),
+        num_turns: Some(2),
+    });
+    events
+}
+
 /// Waiting for an answer to a question with choices.
 pub(crate) fn question() -> Vec<EventBody> {
     let mut events = looked_around();
