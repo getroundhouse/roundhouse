@@ -1,15 +1,16 @@
-//! The screens the gallery draws: what the hub holds for each, and what to do in the app before taking it.
+//! The screens the gallery draws: what the hub holds for each, from `worlds.rs`, and what to do in the app before
+//! taking it.
 
 #![cfg(test)]
 
-use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{
-    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, Rev, SessionStatus, SetupStatus, Title,
-    WorkspaceId, WorkspaceStatus,
-};
+use protocol::model::SessionStatus;
 
-use super::world::{HubBuild, World};
-use super::{chats, patch, pictures};
+use super::world::World;
+use super::worlds::{
+    attachments, chat_tabs, chat_world, conversation, diff, finishing_update, own_hub, setup_failed, streaming, titled,
+    unread,
+};
+use super::{chats, pictures, tool_chats};
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -32,15 +33,15 @@ pub(crate) enum Step {
     /// Starts a comment on this line of the open file's new side, as the line's add button would.
     StartComment(usize),
     OpenSetupLog,
-    /// Presses a button by its ID, such as one that opens a menu.
+    /// Presses a button, such as one that opens a menu.
     Click(&'static str),
     /// Moves the pointer over the tab of the open chat at this position in the workspace showing, and leaves it there.
     HoverTab(usize),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
-    /// Rests the pointer on the element with the first ID, and waits for the one with the second, such as its tooltip.
+    /// Rests the pointer on an element, and waits for the one with the ID `shows`, such as its tooltip.
     Hover {
-        on: &'static str,
+        on: Target,
         shows: &'static str,
     },
     /// Pastes an image where focus is, and waits for the composer to take it.
@@ -59,10 +60,24 @@ pub(crate) enum Step {
     UpdateProblem,
     /// Opens Settings, as its menu item does.
     OpenSettings,
+    /// Clicks the transcript's line with this label, such as a tool call, to open it, then moves the pointer away,
+    /// so the picture shows it open rather than hovered.
+    Open(&'static str),
+}
+
+/// An element in the app, by its ID, or by the label it gives assistive apps, for one whose ID is made from data
+/// the screen can't know, such as a tool call's line.
+#[derive(Clone, Copy)]
+pub(crate) enum Target {
+    Id(&'static str),
+    Label(&'static str),
 }
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
-const FOCUS: &str = "aspen";
+pub(super) const FOCUS: &str = "aspen";
+
+/// A log pasted into the composer, as a file.
+const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen { name: "no-hub", spec: "updates.md", world: None, steps: &[] },
@@ -92,9 +107,36 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(attachments),
         steps: &[Step::Select(FOCUS), Step::Click("picture/attachment/shot-1")],
     },
-    Screen { name: "approval", spec: "chats.md", world: Some(approval), steps: &[Step::Select(FOCUS)] },
-    Screen { name: "background", spec: "chats.md", world: Some(background), steps: &[Step::Select(FOCUS)] },
-    Screen { name: "question", spec: "chats.md", world: Some(question), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "approval",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::approval())),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "background",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Background, chats::background())),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "question",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::question())),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "tool-commands",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),
+        steps: &[Step::Select(FOCUS), Step::Open("Run the signal tests")],
+    },
+    Screen {
+        name: "tool-any",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::any_tool())),
+        steps: &[Step::Select(FOCUS), Step::Open("Create issue")],
+    },
     Screen {
         name: "mode-picker",
         spec: "chats.md",
@@ -166,7 +208,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "update-details",
         spec: "updates.md",
         world: Some(finishing_update),
-        steps: &[Step::Select(FOCUS), Step::Hover { on: "update-details", shows: "update-details-text" }],
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("update-details"), shows: "update-details-text" }],
     },
     Screen {
         name: "finish-update-question",
@@ -188,210 +230,3 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings],
     },
 ];
-
-/// The conversation, on an older hub that a client started, with chats still running on it.
-fn finishing_update() -> World {
-    older_hub(true)
-}
-
-/// The conversation, on an older hub that someone runs themselves.
-fn own_hub() -> World {
-    older_hub(false)
-}
-
-fn older_hub(on_demand: bool) -> World {
-    let mut world = conversation();
-    world.hub = Some(HubBuild { version: "0.9.0", number: 1, on_demand });
-    world
-}
-
-/// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden.
-/// Returns the screen's own workspace, which comes after them.
-fn sidebar(world: &mut World) -> WorkspaceId {
-    let roundhouse = world.repo("roundhouse");
-    let signal_box = world.repo("signal-box");
-    for (name, status) in
-        [("alder", SessionStatus::Idle), ("birch", SessionStatus::Running), ("cedar", SessionStatus::WaitingApproval)]
-    {
-        let id = world.workspace(&roundhouse, name);
-        world.chat(&id, status, Vec::new());
-    }
-    let focus = world.workspace(&roundhouse, FOCUS);
-    for (name, status) in [("elm", SessionStatus::Interrupted), ("fir", SessionStatus::Idle)] {
-        let id = world.workspace(&signal_box, name);
-        world.chat(&id, status, Vec::new());
-    }
-    let archived = world.workspace(&signal_box, "hazel");
-    world.workspace_mut(&archived).status = WorkspaceStatus::Archived;
-    focus
-}
-
-fn conversation() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    converse(&mut world, &focus);
-    world
-}
-
-/// The finished turn in the screen's own workspace, on a branch with a pull request open.
-fn converse(world: &mut World, focus: &WorkspaceId) {
-    world.workspace_mut(focus).branch = "sidebar-pr-state".to_string();
-    world.chat(focus, SessionStatus::Idle, chats::finished());
-    world.pull_requests.insert(
-        focus.clone(),
-        PullRequest {
-            number: 182,
-            url: "https://example.com/pull/182".to_string(),
-            title: "Show PR state in the sidebar".to_string(),
-            state: "OPEN".to_string(),
-            is_draft: false,
-        },
-    );
-}
-
-/// Replies nobody has read: in a workspace that isn't showing, and in the chat that isn't showing in this one. The chat
-/// showing is read, as it is on screen.
-fn unread() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    let alder = world.workspaces.iter().find(|w| w.name == "alder").unwrap().id.clone();
-    let reply = chats::answered(
-        "Why does the hub log a warning on every reconnect?",
-        "It logs one each time a client goes without saying goodbye. That's ordinary, so it should be a debug line.",
-    );
-    let elsewhere = world.chat(&alder, SessionStatus::Idle, reply);
-    world.unread(&elsewhere);
-    // Older than the conversation, so the app opens the workspace on that instead, as it opens the chat last worked in.
-    let reply = chats::answered(
-        "Which colours does GitHub use for a PR's state?",
-        "Green for open, purple for merged, red for closed, and grey for a draft.",
-    );
-    let other_chat = world.chat(&focus, SessionStatus::Idle, reply);
-    world.unread(&other_chat);
-    converse(&mut world, &focus);
-    world
-}
-
-/// Three chats in the screen's own workspace, the conversation showing, all of them read.
-fn chat_tabs() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    // Older than the conversation, so the app opens the workspace on that, as it opens the chat last worked in.
-    for (prompt, reply) in [
-        (
-            "Which colours does GitHub use for a PR's state?",
-            "Green for open, purple for merged, red for closed, and grey for a draft.",
-        ),
-        (
-            "Why does the hub log a warning on every reconnect?",
-            "It logs one each time a client goes without saying goodbye.",
-        ),
-    ] {
-        world.chat(&focus, SessionStatus::Idle, chats::answered(prompt, reply));
-    }
-    converse(&mut world, &focus);
-    world
-}
-
-/// The conversation, with every workspace titled from its first prompt.
-fn titled() -> World {
-    let mut world = conversation();
-    let titles = [
-        ("alder", "Fix the login redirect"),
-        ("birch", "Speed up opening a large diff"),
-        ("cedar", "Ask before deleting files"),
-        (FOCUS, "Show PR state in the sidebar"),
-        ("elm", "Retry a failed setup"),
-        ("fir", "Read settings from TOML"),
-    ];
-    for workspace in &mut world.workspaces {
-        workspace.title =
-            titles.iter().find(|(name, _)| *name == workspace.name).and_then(|(_, title)| Title::tidied(title));
-    }
-    world
-}
-
-fn streaming() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    let chat = world.chat(&focus, SessionStatus::Running, chats::streaming());
-    world.tails.insert(chat, chats::streaming_tail());
-    world
-}
-
-/// A turn that's over, with what it started still going in the background.
-fn background() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::Background, chats::background());
-    world
-}
-
-const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
-
-/// The screen's chat, with a prompt that carried a screenshot and a log.
-fn attachments() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    let shot = pictures::overlapping_badge();
-    let attached = [
-        ("shot-1", "Screenshot 2026-11-01 at 10.24.png", MediaType::Png, shot),
-        ("log-1", "layout.log", MediaType::Text, chats::LAYOUT_LOG.as_bytes().to_vec()),
-    ];
-    let mut carried = Vec::new();
-    for (id, name, media_type, data) in attached {
-        let size_bytes = u64::try_from(data.len()).unwrap();
-        carried.push(Attachment { id: AttachmentId::from(id), name: name.to_string(), media_type, size_bytes });
-        world.attachments.insert(AttachmentId::from(id), data);
-    }
-    world.chat(&focus, SessionStatus::Idle, chats::attached(carried));
-    world
-}
-
-fn approval() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::WaitingApproval, chats::approval());
-    world
-}
-
-fn question() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::WaitingApproval, chats::question());
-    world
-}
-
-fn diff() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::Idle, chats::finished());
-    world.diffs.insert(
-        focus.clone(),
-        GitDiff { base_commit: Some("3f4c19c".to_string()), patch: patch::PATCH.to_string(), truncated: false },
-    );
-    world.comments.insert(
-        focus.clone(),
-        vec![DiffComment {
-            id: CommentId::from("comment-1"),
-            workspace_id: focus,
-            path: "crates/protocol/src/model.rs".to_string(),
-            side: DiffSide::New,
-            line: 101,
-            text: "Should this say when it was last checked, so a stale state can show as stale?".to_string(),
-            created_at_ms: 0,
-            rev: Rev::default(),
-        }],
-    );
-    world
-}
-
-/// A new workspace whose setup script failed, with its log open and nothing said in its chat yet.
-fn setup_failed() -> World {
-    let mut world = World::default();
-    let focus = sidebar(&mut world);
-    world.workspace_mut(&focus).setup = SetupStatus::Failed { code: Some(1) };
-    world.chat(&focus, SessionStatus::Idle, Vec::new());
-    world.setup_logs.insert(focus, chats::SETUP_LOG.to_string());
-    world
-}

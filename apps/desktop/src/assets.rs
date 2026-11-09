@@ -7,7 +7,20 @@ use gpui_kit::{AssetSource, Result, SharedString};
 // Only these are embedded, rather than the whole catalog, which would add every icon to the app.
 gpui_kit::assets::icon_assets!(
     Extra,
-    [ListTree, MessageSquarePlus, Pencil, SquareArrowRight, SquareDot, SquareMinus, SquarePlus, Trash]
+    [
+        CornerDownRight,
+        ListTree,
+        MessageSquarePlus,
+        Pencil,
+        Plug,
+        SquareArrowRight,
+        SquareDot,
+        SquareMinus,
+        SquarePlus,
+        Terminal,
+        Trash,
+        Wrench,
+    ]
 );
 
 /// What every window loads its icons from.

@@ -11,7 +11,7 @@ use desktop::app::{AppView, Connection, HubSource};
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
-use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
     PlatformTextSystem,
@@ -19,7 +19,7 @@ use gpui_kit::{
 use image::RgbaImage;
 
 use super::fake_hub;
-use super::screens::{Screen, Step};
+use super::screens::{Screen, Step, Target};
 use crate::support::labelled;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
@@ -29,6 +29,9 @@ const SAME_IN_A_ROW: usize = 3;
 const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
+/// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
+/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line.
+const AWAY: &str = "build-line";
 
 pub(crate) struct Picture {
     pub(crate) image: RgbaImage,
@@ -119,7 +122,7 @@ impl Driver {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
             }
-            Step::Hover { on, shows } => self.hover(on, shows),
+            Step::Hover { on, shows } => self.hover(*on, shows),
             Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
             Step::PasteFile(name, text) => self.paste_file(name, text),
             Step::AskToFinish => {
@@ -137,6 +140,7 @@ impl Driver {
                 let open = Box::new(desktop::OpenSettings);
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
             }
+            Step::Open(label) => self.open(label),
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
@@ -245,6 +249,25 @@ impl Driver {
         self.cx.update(|cx| selected_pane(view.read(cx)).map_or(0, |pane| pane.read(cx).attached_names().len()))
     }
 
+    /// Clicks the line with this label, then moves away from it, so the picture shows it open rather than hovered.
+    fn open(&mut self, label: &'static str) {
+        let id = self.find(Target::Label(label));
+        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.cx.update_window(self.handle, |_, window, cx| window.hover(AWAY, cx)).unwrap();
+    }
+
+    /// The ID of what's drawn now as `target`. One found by its label is the first drawn with it.
+    fn find(&mut self, target: Target) -> gpui_kit::ElementId {
+        self.frame();
+        match target {
+            Target::Id(id) => gpui_kit::SharedString::from(id).into(),
+            Target::Label(label) => {
+                let found = self.cx.update_window(self.handle, |_, window, _| window.find_by_label(label)).unwrap();
+                found.path().last().unwrap().clone()
+            }
+        }
+    }
+
     fn update_pane(&mut self, change: impl FnOnce(&mut WorkspacePane, &mut gpui_kit::Context<WorkspacePane>)) {
         let view = self.view.clone();
         self.cx.update(|cx| {
@@ -285,8 +308,8 @@ impl Driver {
     }
 
     /// Rests the pointer on `on`, and waits until the window draws `shows`, such as its tooltip.
-    fn hover(&mut self, on: &'static str, shows: &'static str) {
-        self.frame();
+    fn hover(&mut self, on: Target, shows: &'static str) {
+        let on = self.find(on);
         self.cx.update_window(self.handle, |_, window, cx| window.hover(on, cx)).unwrap();
         // The app's clock only moves when told to, and a tooltip waits for it.
         self.cx.run_until_parked();

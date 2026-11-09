@@ -30,6 +30,7 @@ pub enum TranscriptEvent {
     TurnEnded,
 }
 
+#[derive(Default)]
 pub(crate) struct Model {
     pub folds: Folds,
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
@@ -59,12 +60,7 @@ impl Transcript {
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
-        let model = Rc::new(RefCell::new(Model {
-            folds: Folds::default(),
-            picks: HashMap::new(),
-            background: session.background_tasks.clone(),
-            pictures: HashMap::new(),
-        }));
+        let model = Rc::new(RefCell::new(Model { background: session.background_tasks.clone(), ..Model::default() }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {

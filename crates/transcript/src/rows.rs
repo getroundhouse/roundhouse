@@ -1,11 +1,10 @@
 //! What each row of the log looks like.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use client_core::OpenSession;
-use client_core::session_log::{PendingPrompt, Row, SessionLog};
+use client_core::session_log::{PendingPrompt, Row};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -18,21 +17,21 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
-use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::questions;
 use crate::transcript::{Model, Transcript};
+use crate::{calls, questions};
 
 mod approval;
+mod around;
 mod prompt;
 mod tail;
 mod tools;
 
 use approval::approval_card;
+use around::{Around, BlockAround};
 use prompt::prompt_bubble;
 use tail::{first_line, render_tail};
-use tools::Answer;
-pub(crate) use tools::summarize_input;
+use tools::Toggle;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
 const COLUMN: f32 = 780.0;
@@ -96,82 +95,6 @@ fn render_row_inner(
             div().h(px(120.)).into_any_element()
         }
     }
-}
-
-/// What drawing one event needs from the rest of the log and the model, read while they're held.
-struct Around {
-    /// What each of the event's blocks is, by position.
-    keys: Vec<ItemKey>,
-    /// Whether each of the event's blocks is open, by position.
-    expanded: Vec<bool>,
-    /// For an approval: whether it's still waiting, and what's been chosen on its questions so far.
-    approval_open: bool,
-    picks: BTreeMap<String, Vec<String>>,
-    /// For a call: its result, by the call's position, to draw under it.
-    answers: Vec<Option<Answer>>,
-    /// For a result: whether it's drawn with its call instead, by the result's position.
-    with_call: Vec<bool>,
-    /// For a prompt: the files it carries.
-    carried: Vec<Carried>,
-}
-
-impl Around {
-    fn read(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody) -> Self {
-        let keys = block_keys(seq, body);
-        let expanded =
-            keys.iter().zip(blocks_of(body)).map(|(key, block)| m.folds.is_open(key, Fold::of(block))).collect();
-        let mut around = Around {
-            keys,
-            expanded,
-            approval_open: false,
-            picks: BTreeMap::new(),
-            answers: Vec::new(),
-            with_call: Vec::new(),
-            carried: Vec::new(),
-        };
-        if let EventBody::UserPrompt { attachments, .. } = body {
-            around.carried = attachments::carried(m, attachments);
-        }
-        if let EventBody::ApprovalRequested { approval_id, .. } = body {
-            around.approval_open = log
-                .open_approvals()
-                .iter()
-                .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
-            around.picks = m.picks.get(approval_id).cloned().unwrap_or_default();
-        }
-        if let EventBody::Assistant { blocks, .. } = body {
-            around.answers = tools::answers(log, &m.folds, seq, blocks);
-        }
-        if let EventBody::AgentUser { blocks, .. } = body {
-            around.with_call = blocks
-                .iter()
-                .map(|block| {
-                    matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
-                        if tools::drawn_with_call(log, seq, tool_use_id))
-                })
-                .collect();
-        }
-        around
-    }
-}
-
-/// What each block of an event is, by position.
-fn block_keys(seq: Seq, body: &EventBody) -> Vec<ItemKey> {
-    (0..blocks_of(body).len()).map(|position| block_key(seq, body, position)).collect()
-}
-
-/// The blocks an event holds, if it's one that holds any.
-fn blocks_of(body: &EventBody) -> &[ContentBlock] {
-    if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body { blocks } else { &[] }
-}
-
-/// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
-/// while it streamed.
-fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
-    if let EventBody::Assistant { message_id, first_index, .. } = body {
-        return ItemKey::recorded_block(seq, position, message_id.as_ref(), *first_index);
-    }
-    ItemKey::Event(seq, position)
 }
 
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.
@@ -257,12 +180,16 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
             let rendered: Vec<AnyElement> = blocks
                 .iter()
                 .enumerate()
-                .filter_map(|(b, block)| render_block(seq, b, block, around, this, cx))
+                .zip(&around.blocks)
+                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
             }
-            row().children(rendered).into_any_element()
+            // Calls in a row read as one list, so they sit closer together than paragraphs do.
+            let only_tools =
+                blocks.iter().all(|b| matches!(b, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }));
+            row().when(only_tools, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
         EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
             turn_ended(*outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors, cx)
@@ -301,14 +228,13 @@ fn colored_line(text: String, color: Hsla) -> AnyElement {
 
 fn render_block(
     seq: Seq,
-    b: usize,
     block: &ContentBlock,
-    around: &Around,
+    drawing: &BlockAround,
     this: &WeakEntity<Transcript>,
     cx: &App,
 ) -> Option<AnyElement> {
-    let key = around.keys.get(b)?;
-    let expanded = around.expanded.get(b).copied().unwrap_or(false);
+    let (key, expanded) = (&drawing.key, drawing.open);
+    let toggle = Toggle { seq, key, open: expanded, this };
     Some(match block {
         ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
@@ -316,14 +242,10 @@ fn render_block(
             .when(expanded, |d| d.child(thinking_text(key, text, cx)))
             .into_any_element(),
         // These show as cards when they ask, with everything in them.
-        ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
-        ContentBlock::ToolUse { name, input, .. } => {
-            tools::call(seq, name, input, around.answers.get(b).and_then(Option::as_ref), this, cx)
-        }
-        ContentBlock::ToolResult { .. } if around.with_call.get(b).copied().unwrap_or(false) => return None,
-        ContentBlock::ToolResult { is_error, text, .. } => {
-            tools::result(seq, key, *is_error, text, expanded, this, cx).into_any_element()
-        }
+        ContentBlock::ToolUse { name, .. } if calls::asks_in_a_card(name) => return None,
+        ContentBlock::ToolUse { name, input, .. } => tools::call(&toggle, name, input, drawing.answer.as_ref(), cx),
+        ContentBlock::ToolResult { .. } if drawing.with_call => return None,
+        ContentBlock::ToolResult { is_error, text, .. } => tools::result(&toggle, *is_error, text, cx),
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
         }
@@ -368,26 +290,4 @@ pub(super) fn disclosure(
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(summary.into()))
             .test_support(),
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use protocol::event::{ContentBlock, EventBody};
-
-    use super::block_keys;
-    use crate::item_key::ItemKey;
-
-    #[test]
-    fn a_recorded_block_is_known_by_its_place_in_its_message() {
-        let finished = |first_index| EventBody::Assistant {
-            message_id: Some("m".into()),
-            parent_tool_use_id: None,
-            model: None,
-            blocks: vec![ContentBlock::Text { text: "a".into() }],
-            first_index,
-        };
-
-        assert_eq!(block_keys(7, &finished(Some(2))), [ItemKey::Block("m".into(), 2)]);
-        assert_eq!(block_keys(7, &finished(None)), [ItemKey::Event(7, 0)], "nothing streamed");
-    }
 }
