@@ -54,7 +54,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
 | Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
-| Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
+| Hello | The first request on a connection, which compares protocol versions. A device authenticates before it | `ClientRequest::Hello` |
 | Protocol version | The number a client and hub compare in their hello. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
 | On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `roundhoused hub --on-demand` |
 | Build version | Which build a binary is, for people to read. A package stamps its published version, `0.1.N`, an install the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
@@ -66,6 +66,17 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
 | Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `DiffComment` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
+
+## Reaching a hub over the network
+
+| Term | Meaning | In code |
+|---|---|---|
+| Device | A phone, or anything else, paired with a hub so it can reach it over the network | `Device`, `DeviceId` |
+| Pairing link | What a phone opens to pair, from a QR code: the hub's name, its addresses, its fingerprint and a pairing code | `PairingLink`, `roundhouse://pair` |
+| Pairing code | Pairs one device, once, for ten minutes. Only the hub's memory has it | `PairingCode` |
+| Token | What a paired device proves itself with on each connection. The hub keeps only its hash | `DeviceToken` |
+| Fingerprint | The SHA-256 of a hub certificate's key, which a device pins when it pairs | `fingerprint` |
+| Local only | A request only a client on the hub's own machine can make, such as stopping the hub | `ErrorCode::LocalOnly` |
 
 ## Easily confused
 
@@ -84,6 +95,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
 | Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
 | Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
+| Phone, device | What a person pairs, and anything that can pair | "Phone" in the CLI and interface text, "device" in code and docs |
+| Pairing code, token | The pairing code works once, to pair. The token works on every connection after | The one you mean |
 
 ## Ending things
 
@@ -101,3 +114,4 @@ These sound alike, and do different things.
 | Archive | A workspace | Removes the worktree and keeps the branch. Refuses if work would be lost, unless forced. `workspace_archive` | It can be restored |
 | Destroy | An instance | Removes it. `Provider::destroy` | It's gone |
 | Discard | A half-made workspace | Removes a workspace that failed while being created, or was left by a crash. `discard_workspace`, `take_unfinished_workspaces` | It's gone |
+| Revoke | A device | Forgets it, and closes its connections at once. `device_revoke`, `roundhouse phone revoke` | It has to pair again |

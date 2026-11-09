@@ -25,8 +25,8 @@ All of these are the same code and the same API. A workspace belongs to one hub.
 
 | Hub | Runs on | Serves | Storage | Auth |
 |---|---|---|---|---|
-| **Local** | A Mac | One person | SQLite | A Unix socket only this user can open. The relay path needs its own |
-| **Self-hosted** | Your own server | You or your team | SQLite, Postgres if it grows | Accounts or tokens |
+| **Local** | A Mac | One person | SQLite | A Unix socket only this user can open. Paired devices over TLS pinned to the hub's key, with a token each |
+| **Self-hosted** | Your own server | You or your team | SQLite, Postgres if it grows | Paired devices, as on a Mac. Accounts once it serves a team |
 | **Hosted**, if one is ever run | A shared service | Many users | Postgres | Accounts |
 
 Any of them can use any provider. A hub is only reachable while its machine is awake, so persistent mobile access needs an always-on hub.
@@ -178,9 +178,9 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 
 Details are in `crates/protocol/`.
 
-- **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
+- **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients on the hub's machine, TLS over TCP for paired devices, and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
 - **Versioning:** both sides say hello first and compare a protocol number. "Changing the protocol" says what needs a bump, which is rare.
-- **`hub_status` and `hub_shutdown` work without a hello,** so a client of any version can see a hub and stop it. That's how `roundhouse hub status`, `roundhouse hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A connection from elsewhere, once there are any, shouldn't get this.
+- **`hub_status` and `hub_shutdown` work without a hello,** so a client of any version can see a hub and stop it. That's how `roundhouse hub status`, `roundhouse hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A paired device never gets them, as "Reaching a hub over the network" says.
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
 - **A hub saves a copy of the database before migrating it,** and doesn't start if it can't. Any update can bring a migration without anyone choosing it, and the build before can't open what it leaves. The copies are in `backups/` in the data directory, and each of the last three schema versions copied keeps its newest, so retrying an update that stopped part way can't push out the copy from before it. *Unconfirmed.*
 - **Each event has a normalized body, plus the agent's raw line in a separate column.** Agent output is untrusted input, so `agents::claude::normalize` takes any line without panicking. Clients read the normalized form. The raw line means views can be rebuilt if normalization was wrong, and range reads don't load it.
@@ -200,7 +200,27 @@ These rules let peers on different versions keep working together.
 - **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. A client checks `is_unsupported()`, and hides or disables whatever needed it. There's no list of capabilities until something needs one.
 - **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. Client and hub can't work together across one, so it should be rare.
 - **`hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** They're what lets a client see a hub and stop it across one. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it.
+- **`pair` and `authenticate` can't change form either,** with the reply to `pair`. A device sends one before its hello, so this is what lets it hear of a real break, or that it was revoked, from a hub of any version. The same test spells them out. *Unconfirmed.*
 - **The worker protocol follows the same rules once workers can differ in version.** Today a hub and its worker are one binary.
+
+## Reaching a hub over the network
+
+A phone connects to a hub directly, over the network it shares with the hub's machine or over a tailnet, with no relay in between. Once connected, it speaks the same protocol as a client on the hub's machine, and client-core makes the two the same to a view.
+
+- **A hub listens on the network only while a device could connect:** from when a pairing code is made, for as long as a code is live or a device is paired, and so from startup when one is. A hub nobody has paired with opens no port. *Unconfirmed.*
+- **TCP on every interface, on port 7867,** or 7868 for a debug build, so a hub run from a checkout that a phone pairs with can't take the installed hub's port. `ROUNDHOUSE_PORT` chooses another, and `crates/protocol/src/paths.rs` names it. *Unconfirmed.*
+- **TLS 1.3, with a self-signed certificate pinned by its key.** A hub makes the certificate the first time it's needed and keeps it in its data directory, readable only by its user. A device accepts a hub only if the SHA-256 of its certificate's `SubjectPublicKeyInfo` matches the fingerprint it paired with, so no certificate authority or name is involved, and a hub with a new key has to be paired again. So a hub makes a new key only when it has none. One it can't read or use is an error, left for someone to fix, and a missing certificate is made again for the same key. It's rustls on ring, because aws-lc-rs, rustls' default, is under a license that includes the OpenSSL license. *Unconfirmed.*
+- **A phone pairs from a link in a QR code,** which `roundhouse phone pair` shows: `roundhouse://pair?v=1&name=…&fp=…&code=…&host=…`, with the link's own version, the hub's name, its fingerprint, a pairing code, and one `host:port` for each address the phone might reach it at, in the order it prefers them: the machine's `.local` name, then each IPv4 address that isn't loopback or link-local, which includes a Tailscale address. A link with a newer version is refused, so an older app says to update, and parameters a build doesn't know are ignored. *Unconfirmed.*
+- **A device tries all of a hub's addresses at once,** in the manner of Happy Eyeballs (RFC 8305). It looks every name up together, starts connecting to each address as soon as it's known and 250 ms after the one before, in the link's order where several are ready, and keeps the first connection that passes the pin. A `.local` name can take seconds to look up, or give an address this device can't reach, and trying one at a time would wait each of those out before the address that works. *Unconfirmed.*
+- **A pairing code is random, works once, expires after 10 minutes, and lives only in the hub's memory.** A lost reply to `pair` means pairing again with a new code, since the first one is spent. *Unconfirmed.*
+- **A device authenticates before anything else.** The first request on a connection from the network is `pair` or `authenticate`. Anything else, or a code or token the hub doesn't accept, gets `Unauthorized`, and the connection closes. Then the device says hello as any client does. A token is 32 random bytes, and the hub keeps only its SHA-256, so a copy of the database can't connect as a device. A device's name has no control characters, because names are shown in a terminal. *Unconfirmed.*
+- **What anyone on the network can cost a hub without a code or token is bounded.** A connection gets 10 seconds from when it's accepted to finish its TLS handshake and authenticate, at most 16 can be waiting to at once, and one more is closed straight away. Until it authenticates, it doesn't count among the hub's clients, because the app replaces an older hub only while it's the one client. A hub also raises its limit on open files when it starts, which is 256 on a Mac, so the connections it does take can't crowd out its socket and workers. *Unconfirmed.*
+- **Both ends probe a quiet connection with TCP keepalive,** after 10 seconds, then every 5, giving up after 3 go unanswered. A hub whose Mac went to sleep, or a phone that left the network, doesn't close its connections, and nothing is sent on a quiet one, so the other end would otherwise never notice. It notices within about 25 seconds. Probes only go while nothing is waiting to be sent, and once something is, the system's limit on resending applies, which can take minutes. *Unconfirmed.*
+- **Only a client on the hub's own machine can see or stop the hub, or choose which devices reach it:** `hub_status`, `hub_shutdown`, `pairing_start`, `pairing_wait`, `device_list` and `device_revoke`. A device gets `LocalOnly`. Stopping a hub is for whoever runs it, and a device shouldn't be able to let another in. The hub lists every request as one or the other, so a new one has to be decided. *Unconfirmed.*
+- **Revoking a device closes its connections at once,** and its token stops working. *Unconfirmed.*
+- **client-core stays blocking over TLS.** rustls keeps a connection's state in one object, which is shared under a lock that's never held while waiting on the network, so rule 4 holds on a phone too. *Unconfirmed.*
+
+When a Mac's firewall is on, macOS may ask whether `roundhoused` may accept incoming connections, and a phone can't connect until it's allowed. A hub on a Mac that's asleep can't be reached at all, as "Where a hub can run" says.
 
 ## When a process dies
 
