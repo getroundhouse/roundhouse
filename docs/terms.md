@@ -53,6 +53,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Home | Every workspace in one list, which shows in place of the workspace from the top of the sidebar. `docs/spec/home.md` has the rules | `home::Home`, `AppView::open_home` |
 | Pull request's bar, standing | The strip at the top of the sidebar of changes, in the pull request's colour. It says the workspace's standing, the first thing in the way of merging its pull request, and offers the one thing to do about it. `docs/spec/workspaces.md` has the rules | `desktop::pull_request::bar`, `Standing` |
 | Diff tab | A workspace's one tab for a changed file's diff, before its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
+| Working line | The line a chat ends with while its agent works: the mark with its light sweeping, and how long the turn has taken so far | `working_line` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery

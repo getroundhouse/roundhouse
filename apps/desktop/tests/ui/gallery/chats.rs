@@ -9,30 +9,39 @@ use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
-use super::events::{finished_turn, taken, text, thought, tool_result, tool_use, user_prompt};
+use super::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
+
+/// The reply that ends [`finished`].
+const REPLY: &str = "The sidebar only knows what's in `Workspace`, so the PR state has to reach it through the feed.\n\n\
+     **Two ways to get it there:**\n\n\
+     1. The hub asks GitHub for each workspace's branch, and puts the answer on `Workspace`. Every client gets it from \
+     the feed, and GitHub is asked once.\n\
+     2. Each client asks GitHub itself, the way the header's PR button does now.\n\n\
+     I'd go with the first. The field would look like this:\n\n\
+     ```rust\npub struct Workspace {\n    // ...\n    /// As the hub last saw it. `None` if there isn't one.\n    \
+     pub pull_request: Option<PullRequest>,\n}\n```";
 
 /// A turn that's over: a prompt, two tools and a reply with a list and some code.
 pub(crate) fn finished() -> Vec<EventBody> {
     let mut events = looked_around();
-    events.push(text(
-        "msg-3",
-        "The sidebar only knows what's in `Workspace`, so the PR state has to reach it through the feed.\n\n\
-         **Two ways to get it there:**\n\n\
-         1. The hub asks GitHub for each workspace's branch, and puts the answer on `Workspace`. Every client gets \
-         it from the feed, and GitHub is asked once.\n\
-         2. Each client asks GitHub itself, the way the header's PR button does now.\n\n\
-         I'd go with the first. The field would look like this:\n\n\
-         ```rust\npub struct Workspace {\n    // ...\n    /// As the hub last saw it. `None` if there isn't one.\n    \
-         pub pull_request: Option<PullRequest>,\n}\n```",
-    ));
-    events.push(finished_turn(48, 0.21));
+    events.push(text("msg-3", REPLY));
+    events.push(replied(REPLY, 106, 0.21));
     events
 }
 
 /// A turn that's over with the test run it started still going in the background, which the agent comes back to.
 pub(crate) fn background() -> Vec<EventBody> {
+    let reply = "The full test suite is running in the background, since it takes a few minutes. I'll pick up again \
+                 when it finishes, or sooner if something fails.";
+    let mut events = started_in_background();
+    events.extend([text("msg-5", reply), replied(reply, 31, 0.14)]);
+    events
+}
+
+/// Partway through a turn, with the test run it started, and a watch on it, going in the background.
+pub(crate) fn started_in_background() -> Vec<EventBody> {
     let mut events = looked_around();
     let command = json!({ "command": "cargo test --workspace", "description": "Run the full test suite",
         "run_in_background": true });
@@ -46,19 +55,18 @@ pub(crate) fn background() -> Vec<EventBody> {
     let watcher = AgentTask { id: TaskId::from("b2"), description: Some("Watch the run for failures".to_string()) };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
     events.push(tool_result("toolu-4", "Command running in background with ID: b2"));
-    events.push(text(
-        "msg-5",
-        "The full test suite is running in the background, since it takes a few minutes. I'll pick up again when it \
-         finishes, or sooner if something fails.",
-    ));
-    events.push(finished_turn(31, 0.14));
     events
 }
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
-    vec![user_prompt(prompt), taken(1), text("msg-1", reply), finished_turn(9, 0.04)]
+    vec![user_prompt(prompt), taken(1), text("msg-1", reply), replied(reply, 9, 0.04)]
 }
+
+/// The reply that ends [`attached`].
+const ATTACHED_REPLY: &str = "The badge comes after the name in the row, but the name isn't allowed to shrink, so at \
+     this width the badge is pushed over it rather than the name being cut short. Letting the name shrink and end in \
+     an ellipsis, with the badge kept at its own width, fixes it.";
 
 /// A prompt carrying a screenshot and a log, and the reply to it.
 pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
@@ -71,21 +79,8 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
             attachments,
         },
         taken(1),
-        text(
-            "msg-1",
-            "The badge comes after the name in the row, but the name isn't allowed to shrink, so at this width the \
-             badge is pushed over it rather than the name being cut short. Letting the name shrink and end in an \
-             ellipsis, with the badge kept at its own width, fixes it.",
-        ),
-        EventBody::TurnEnded {
-            outcome: TurnOutcome::Success,
-            result: None,
-            errors: Vec::new(),
-            duration_ms: Some(21_000),
-            cost_usd: Some(0.08),
-            num_turns: Some(1),
-            started_at_ms: None,
-        },
+        text("msg-1", ATTACHED_REPLY),
+        replied(ATTACHED_REPLY, 21, 0.08),
     ]
 }
 
@@ -102,20 +97,29 @@ pub(crate) fn streaming() -> Vec<EventBody> {
 }
 
 pub(crate) fn streaming_tail() -> Tail {
+    writing(
+        "msg-3",
+        BlockKind::Text,
+        "The feed already sends the whole `Workspace` record whenever it changes, so a new field reaches every client \
+         without anything else. What it doesn't have yet is a way to",
+    )
+}
+
+/// The next call [`started_in_background`] is writing, which doesn't show until it's recorded.
+pub(crate) fn calling_tail() -> Tail {
+    let mut tail = writing("msg-5", BlockKind::ToolUse, r#"{"command": "cargo test -p desk"#);
+    tail.messages[0].blocks[0].tool_name = Some("Bash".to_string());
+    tail
+}
+
+/// A message the agent is still writing, with one block of `kind` so far.
+fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
     Tail {
         messages: vec![TailMessage {
             run: None,
-            message_id: MessageId::from("msg-3"),
+            message_id: MessageId::from(message),
             parent_tool_use_id: None,
-            blocks: vec![TailBlock {
-                index: 0,
-                kind: BlockKind::Text,
-                tool_name: None,
-                text:
-                    "The feed already sends the whole `Workspace` record whenever it changes, so a new field reaches \
-                       every client without anything else. What it doesn't have yet is a way to"
-                        .to_string(),
-            }],
+            blocks: vec![TailBlock { index: 0, kind, tool_name: None, text: text.to_string() }],
         }],
     }
 }
@@ -199,6 +203,31 @@ changing it, since `slow` might need a speed.";
 /// Thinking between calls, about the signalling crate the tool calls' chats work on: a long thought opened, and a
 /// short one closed.
 pub(crate) fn thinking() -> Vec<EventBody> {
+    let reply = "The train treats caution as stop: `approach` brakes for any signal that isn't clear. It should brake \
+                 only at stop, and slow to half speed at caution.";
+    let mut events = thought_then_read();
+    events.extend([
+        thought("msg-3", "`slow` takes a target speed, so caution can pass half the line speed."),
+        text("msg-4", reply),
+        replied(reply, 18, 0.07),
+    ]);
+    events
+}
+
+/// Partway through [`thinking`], with its second thought still being written. The rest of it is
+/// [`thinking_tail`].
+pub(crate) fn thinking_so_far() -> Vec<EventBody> {
+    let mut events = thought_then_read();
+    events.push(EventBody::AgentState { state: AgentRunState::Running });
+    events
+}
+
+pub(crate) fn thinking_tail() -> Tail {
+    writing("msg-3", BlockKind::Thinking, "So slow takes a target speed, and caution can pass half the line")
+}
+
+/// The prompt, a thought about it, and a look at the code it's about.
+fn thought_then_read() -> Vec<EventBody> {
     vec![
         user_prompt("Why does the train stop at a caution signal in the depot test?"),
         taken(1),
@@ -208,12 +237,6 @@ pub(crate) fn thinking() -> Vec<EventBody> {
             "toolu-1",
             "    52\t    fn approach(&mut self, signal: Aspect) {\n    53\t        if signal != Aspect::Clear {\n    54\t            self.brake();",
         ),
-        thought("msg-3", "`slow` takes a target speed, so caution can pass half the line speed."),
-        text(
-            "msg-4",
-            "The train treats caution as stop: `approach` brakes for any signal that isn't clear. It should brake only at stop, and slow to half speed at caution.",
-        ),
-        finished_turn(18, 0.07),
     ]
 }
 

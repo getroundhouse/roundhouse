@@ -1,26 +1,29 @@
-//! Text the agent is still writing, and what it's running in the background.
+//! The end of the transcript: text the agent is still writing, the working line while it works, and what it's running
+//! in the background.
+
+use std::time::Duration;
 
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
     div, px,
 };
 use look::{Signal, Work};
-use protocol::event::AgentTask;
 use protocol::tail::{BlockKind, Tail};
 
-use super::line::HEIGHT;
-use super::thinking;
-use super::{agent_text, empty, row};
+use super::line::{HEIGHT, still_icon};
+use super::{agent_text, empty, row, thinking, turn_times};
 use crate::item_key::ItemKey;
+use crate::transcript::AtWork;
 
-/// Text the agent is still writing, and what it's running in the background. Tool input is hidden until it's
-/// complete, because it's partial JSON. Thinking shows its latest line, or all of it when `thinking_open`, the way it
-/// will once it's recorded.
-pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: bool, cx: &App) -> AnyElement {
+/// Text the agent is still writing, then the working line while it works, then what it's running in the background.
+/// A thought shows its latest line, or all of it when `thinking_open`, the way it will once it's recorded. A call
+/// shows once it's recorded: until then it isn't running, and the working line says the agent is at work.
+pub(super) fn render_tail(tail: &Tail, at_work: &AtWork, thinking_open: bool, cx: &App) -> AnyElement {
     // A subagent's work shows in the call that started it, once it's recorded.
     let messages: Vec<_> = tail.messages.iter().filter(|m| m.parent_tool_use_id.is_none()).collect();
-    if messages.is_empty() && background.is_empty() {
+    if messages.is_empty() && !at_work.working && at_work.background.is_empty() {
         return empty();
     }
     let mut out = row();
@@ -30,36 +33,58 @@ pub(super) fn render_tail(tail: &Tail, background: &[AgentTask], thinking_open: 
             out = match block.kind {
                 BlockKind::Text => out.child(agent_text(&key, &block.text)),
                 BlockKind::Thinking if thinking_open => {
-                    out.child(working("Thinking…".to_string(), cx)).child(thinking::text(&key, &block.text, cx))
+                    out.child(thought("Thinking…".to_string(), cx)).child(thinking::text(&key, &block.text, cx))
                 }
-                BlockKind::Thinking => out.child(working(format!("Thinking… {}", last_line(&block.text)), cx)),
-                BlockKind::ToolUse => {
-                    out.child(working(format!("Running {}", block.tool_name.as_deref().unwrap_or("a tool")), cx))
-                }
-                BlockKind::Unknown => out,
+                BlockKind::Thinking => out.child(thought(format!("Thinking… {}", last_line(&block.text)), cx)),
+                BlockKind::ToolUse | BlockKind::Unknown => out,
             };
         }
     }
+    out = out.when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, cx)));
     // Left going by a turn, or started during one, and still the agent's work.
-    for task in background {
+    for task in &at_work.background {
         let text = format!("In the background · {}", task.description.as_deref().unwrap_or("a task"));
         let id = ElementId::Name(format!("background-{}", task.id).into());
-        out = out.child(working(text, cx).id(id).test_support());
+        out = out.child(going(text, cx).id(id).test_support());
     }
     out.into_any_element()
 }
 
-/// What the agent is doing, beside its mark with the light sweeping. As tall as a call's line, at body size, so it
-/// doesn't jump when what it's writing is recorded.
-fn working(text: String, cx: &App) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .gap_2()
-        .h(px(HEIGHT))
-        .text_color(cx.theme().muted_foreground)
+/// A line as tall as a call's, at body size, so nothing jumps when what's above it is recorded.
+fn tail_line(cx: &App) -> Div {
+    div().flex().items_center().gap_2().h(px(HEIGHT)).text_color(cx.theme().muted_foreground)
+}
+
+/// What a thought the agent is still writing says, after the icon its line will have once it's recorded. The working
+/// line under it has the mark that says the agent is at work.
+fn thought(text: String, cx: &App) -> Div {
+    tail_line(cx).child(still_icon(thinking::ICON)).child(clipped(text))
+}
+
+/// Work in the background, beside its mark with the light sweeping, since it goes on after the turn.
+fn going(text: String, cx: &App) -> Div {
+    tail_line(cx).child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx)).child(clipped(text))
+}
+
+fn clipped(text: String) -> impl IntoElement {
+    div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text)
+}
+
+/// The mark with its light sweeping, and how long the turn has taken so far, in the code font so the digits stay put.
+fn working_line(started_at_ms: Option<i64>, cx: &App) -> impl IntoElement {
+    let theme = cx.theme();
+    let so_far = started_at_ms.map(|started| {
+        let elapsed = look::now_ms(cx) - started;
+        // The hub's clock can be a little ahead of this one.
+        turn_times::so_far(Duration::from_millis(u64::try_from(elapsed).unwrap_or(0)))
+    });
+    tail_line(cx)
+        .id("working-line")
+        .font_family(theme.mono_font_family.clone())
+        .text_size(theme.mono_font_size)
         .child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx))
-        .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
+        .children(so_far)
+        .test_support()
 }
 
 fn last_line(text: &str) -> String {

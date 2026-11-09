@@ -12,7 +12,7 @@ use gpui_kit::{
     px,
 };
 use protocol::attachment::Attachment;
-use protocol::event::{AgentTask, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
 
 use crate::attachments::Picture;
@@ -22,6 +22,10 @@ use crate::linked_images::LinkedImages;
 use crate::rows::SubagentCalls;
 
 mod answers;
+mod record;
+
+pub(crate) use record::AtWork;
+use record::tick;
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -40,12 +44,12 @@ pub(crate) struct Model {
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
-    /// What the agent is running in the background, as its session's record says, drawn where the conversation ends.
-    pub background: Vec<AgentTask>,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
     /// Where the calls that started subagents are, as rows have looked for them.
     pub subagent_calls: RefCell<SubagentCalls>,
+    /// What the agent is at, as the session's record says, which the transcript's last row draws.
+    pub at_work: AtWork,
 }
 
 pub struct Transcript {
@@ -58,6 +62,8 @@ pub struct Transcript {
     linked: LinkedImages,
     scroller: Entity<MessageScrollerState>,
     _changes: Task<()>,
+    /// Draws the time so far again while the agent works.
+    ticking: Option<Task<()>>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -69,7 +75,9 @@ impl Transcript {
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
         let linked = LinkedImages::new(client.clone(), session.workspace_id.clone(), cx.weak_entity());
-        let model = Rc::new(RefCell::new(Model { background: session.background_tasks.clone(), ..Model::default() }));
+        let at_work = AtWork::of(session);
+        let ticking = at_work.working.then(|| tick(cx));
+        let model = Rc::new(RefCell::new(Model { at_work, ..Model::default() }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -78,7 +86,16 @@ impl Transcript {
                 }
             }
         });
-        Self { client, session_id: session.id.clone(), session: open, model, linked, scroller, _changes: following }
+        Self {
+            client,
+            session_id: session.id.clone(),
+            session: open,
+            model,
+            linked,
+            scroller,
+            _changes: following,
+            ticking,
+        }
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -96,20 +113,6 @@ impl Transcript {
         // Asked for again the next time they're drawn, in case the connection was what failed.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client);
-    }
-
-    /// Follows the session's record, which says what the agent is running in the background.
-    pub fn show_background(&mut self, tasks: &[AgentTask], cx: &mut Context<Self>) {
-        if self.model.borrow().background == tasks {
-            return;
-        }
-        self.model.borrow_mut().background = tasks.to_vec();
-        // They're drawn in the last row, with the streaming tail.
-        self.scroller.update(cx, |list, cx| {
-            let rows = list.item_count();
-            list.remeasure_items(rows.saturating_sub(1)..rows, cx);
-        });
-        cx.notify();
     }
 
     /// The approvals waiting on an answer, newest last.

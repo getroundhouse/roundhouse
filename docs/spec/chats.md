@@ -3,7 +3,13 @@
 ## A turn
 
 - **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, the agent counts as working: its mark moves, an update waits for it, and closing its chat asks first. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
-- **What's running in the background shows where the conversation ends,** one working line for each task, with its mark moving and what the agent said it's for. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
+- **What's running in the background shows where the conversation ends,** a line for each task, with its mark moving and what the agent said it's for. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
+- **While the agent works, the chat ends with the working line:** its mark with the light sweeping, and how long the turn has taken so far, to a tenth of a second, so the count moving says it's still at it. The time is in the code font, so its digits stay put as they count. It counts from when the turn started, by the hub's clock, so every client counts the same. When the agent picks up again by itself after work in the background, or takes a prompt sent as its last turn ended, that's a new turn, and the count starts again.
+- **The working line is above the lines for work in the background,** so when the turn ends, its end takes the working line's place and they stay where they are.
+- **The working line goes while the agent waits on you,** since the card says so, and when it comes back its time counts the wait too.
+- **A thought the agent is still writing is a muted line above the working line, with the icon its line will have once it's recorded and no mark of its own,** since the working line under it has one. A call it's still writing doesn't show until it's recorded, since it isn't running yet, and the working line says the agent is at work.
+- **A finished turn ends with how long it took and when it ended,** such as "1m, 48s · 2:15 PM", and a button that copies the agent's final message. It says only as much of the day as it takes to tell when: none today, the day of the week within the last week, and the date before that. A stopped turn says "Stopped" instead, and one that failed says why, in red.
+- **How long a turn took is counted the way the working line counts it,** by the hub's clock from the turn's start to its end, so the time doesn't jump when the turn ends, and doesn't change later. A turn from a hub too old to say when it started shows the agent's own count instead.
 
 **A finished turn,** with tools, a list and code, and a pull request open for the branch. *Unconfirmed.*
 
@@ -13,7 +19,11 @@
 
 ![Work in the background](screens/background.png)
 
-**The agent partway through writing a reply.** *Unconfirmed.*
+**The agent still working, with the test suite it started running in the background.** *Unconfirmed.*
+
+![Working with work in the background](screens/working-background.png)
+
+**The agent partway through writing a reply, and how long it's been working.** *Unconfirmed.*
 
 ![A reply being written](screens/streaming.png)
 
@@ -108,6 +118,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **Thinking among calls: a long thought opened, and a short one closed.** *Unconfirmed.*
 
 ![Thinking, one opened in full and one closed](screens/thinking.png)
+
+**A thought still being written, above the working line.** *Unconfirmed.*
+
+![A thought being written](screens/thinking-streaming.png)
 
 ## Sending while the agent works
 

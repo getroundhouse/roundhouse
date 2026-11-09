@@ -232,7 +232,7 @@ impl WorkspacePane {
         self.sessions = sessions;
         for session in &self.sessions {
             if let Some((transcript, _)) = self.transcripts.get(&session.id) {
-                transcript.update(cx, |t, cx| t.show_background(&session.background_tasks, cx));
+                transcript.update(cx, |t, cx| t.set_session(session, cx));
             }
         }
         self.keep_active_valid(cx);

@@ -74,7 +74,7 @@ impl WorkspacePane {
             .tooltip("Closed chats")
             // From its right edge, since the button is at the end of the row.
             .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, cx| {
-                let now_ms = crate::ago::now_ms(cx);
+                let now_ms = look::now_ms(cx);
                 for chat in &closed {
                     let (this, id) = (this.clone(), chat.id.clone());
                     let row = row(chat.title.clone(), crate::ago::ago(chat.closed_at_ms, now_ms).into());

@@ -56,10 +56,17 @@ pub(super) fn conversation() -> World {
     world
 }
 
+/// A chat whose one turn is over. It took a little longer as the hub saw it than the agent counted, and the hub's count
+/// is the one shown.
+fn finished_chat(world: &mut World, workspace: &WorkspaceId) {
+    let chat = world.chat(workspace, SessionStatus::Idle, chats::finished());
+    world.last_turn_took(&chat, 108_000);
+}
+
 /// The finished turn in the screen's own workspace, on a branch with a pull request open.
 fn converse(world: &mut World, focus: &WorkspaceId) {
     world.workspace_mut(focus).branch = "sidebar-pr-state".to_string();
-    world.chat(focus, SessionStatus::Idle, chats::finished());
+    finished_chat(world, focus);
     world.pull_requests.insert(
         focus.clone(),
         PullRequest {
@@ -163,7 +170,37 @@ pub(super) fn streaming() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Running, chats::streaming());
-    world.tails.insert(chat, chats::streaming_tail());
+    world.tails.insert(chat.clone(), chats::streaming_tail());
+    world.working_for(&chat, 72_400);
+    world
+}
+
+/// Still working, with a prompt sent meanwhile that it hasn't taken yet.
+pub(super) fn steered() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::steered());
+    world.working_for(&chat, 31_600);
+    world
+}
+
+/// Still working on a turn, with what it started going in the background, and writing its next call.
+pub(super) fn working_background() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::started_in_background());
+    world.tails.insert(chat.clone(), chats::calling_tail());
+    world.working_for(&chat, 48_300);
+    world
+}
+
+/// Partway through a thought.
+pub(super) fn thinking_streaming() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::thinking_so_far());
+    world.tails.insert(chat.clone(), chats::thinking_tail());
+    world.working_for(&chat, 12_700);
     world
 }
 
@@ -236,7 +273,7 @@ pub(super) fn pointed() -> World {
 pub(super) fn diff() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    world.chat(&focus, SessionStatus::Idle, chats::finished());
+    finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
         GitDiff { base_commit: Some("3f4c19c".to_string()), patch: patch::PATCH.to_string(), truncated: false },

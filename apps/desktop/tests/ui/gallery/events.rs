@@ -78,6 +78,15 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
     }
 }
 
+/// A turn that finished saying `reply`, as the CLI ends one, so its copy button has something to copy.
+pub(crate) fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
+    let mut ended = finished_turn(seconds, cost_usd);
+    if let EventBody::TurnEnded { result, .. } = &mut ended {
+        *result = Some(reply.to_string());
+    }
+    ended
+}
+
 /// `event` as the subagent started by the call `parent` sends it.
 pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
     if let EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. } =
