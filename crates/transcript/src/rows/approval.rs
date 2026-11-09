@@ -12,6 +12,7 @@ use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
 use super::{row, summarize_input, waiting_card};
+use crate::item_key::ItemKey;
 use crate::transcript::Transcript;
 
 #[expect(
@@ -49,7 +50,7 @@ pub(super) fn approval_card(
         };
         (
             "Plan".to_string(),
-            TextView::markdown(ElementId::NamedInteger("plan".into(), seq), SharedString::from(plan))
+            TextView::markdown(ItemKey::Event(seq, 0).element("plan"), SharedString::from(plan))
                 .selectable(true)
                 .into_any_element(),
             h_flex()

@@ -9,12 +9,13 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
+    AnyElement, App, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, WeakEntity, div, px,
 };
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, TurnOutcome};
 use protocol::model::Seq;
 
+use crate::item_key::ItemKey;
 use crate::questions;
 use crate::transcript::{Model, Transcript};
 
@@ -55,9 +56,9 @@ fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, i
             render_event(seq, &body, &around, this, cx)
         }
         Row::Pending(prompt) => {
-            let text = prompt.text.clone();
+            let (key, text) = (ItemKey::Prompt(prompt.client_msg_id.clone()), prompt.text.clone());
             drop(m);
-            prompt_bubble(ElementId::NamedInteger("pending".into(), ix as u64), text, true, cx)
+            prompt_bubble(&key, text, true, cx)
         }
         Row::Unloaded => {
             m.focus = ix;
@@ -76,8 +77,10 @@ fn render_row_inner(model: &Rc<RefCell<Model>>, this: &WeakEntity<Transcript>, i
 
 /// What drawing one event needs from the rest of the model, read while it's borrowed.
 struct Around {
-    /// The event's blocks the user has opened, by position.
-    expanded: Vec<usize>,
+    /// What each of the event's blocks is, by position.
+    keys: Vec<ItemKey>,
+    /// Whether the user has opened each of the event's blocks, by position.
+    expanded: Vec<bool>,
     /// For an approval: whether it's still waiting, and what's been chosen on its questions so far.
     approval_open: bool,
     picks: BTreeMap<String, Vec<String>>,
@@ -89,8 +92,10 @@ struct Around {
 
 impl Around {
     fn read(m: &Model, seq: Seq, body: &EventBody) -> Self {
-        let expanded = m.expanded.iter().filter(|(s, _)| *s == seq).map(|(_, block)| *block).collect();
+        let keys = block_keys(seq, body);
+        let expanded = keys.iter().map(|key| m.expanded.contains(key)).collect();
         let mut around = Around {
+            keys,
             expanded,
             approval_open: false,
             picks: BTreeMap::new(),
@@ -120,6 +125,26 @@ impl Around {
     }
 }
 
+/// What each block of an event is, by position.
+fn block_keys(seq: Seq, body: &EventBody) -> Vec<ItemKey> {
+    let count = if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body {
+        blocks.len()
+    } else {
+        0
+    };
+    (0..count).map(|position| block_key(seq, position)).collect()
+}
+
+/// What the block at `position` in the event at `seq` is, wherever it's drawn.
+fn block_key(seq: Seq, position: usize) -> ItemKey {
+    ItemKey::Event(seq, position)
+}
+
+/// Text the agent wrote, under the same ID while it streams and once it's recorded.
+fn agent_text(key: &ItemKey, text: &str) -> TextView {
+    TextView::markdown(key.element("text"), SharedString::from(text.to_string())).selectable(true)
+}
+
 pub(crate) fn row() -> Div {
     v_flex().w_full().pb_4().gap_2()
 }
@@ -141,7 +166,7 @@ fn empty() -> AnyElement {
     div().into_any_element()
 }
 
-fn prompt_bubble(id: ElementId, text: String, pending: bool, cx: &App) -> AnyElement {
+fn prompt_bubble(key: &ItemKey, text: String, pending: bool, cx: &App) -> AnyElement {
     let theme = cx.theme();
     row()
         .child(
@@ -154,7 +179,7 @@ fn prompt_bubble(id: ElementId, text: String, pending: bool, cx: &App) -> AnyEle
                 .border_color(theme.border)
                 .bg(theme.secondary)
                 .when(pending, |d| d.opacity(0.6))
-                .child(TextView::markdown(id, SharedString::from(text)).selectable(true)),
+                .child(TextView::markdown(key.element("prompt"), SharedString::from(text)).selectable(true)),
         )
         .into_any_element()
 }
@@ -197,8 +222,8 @@ fn render_event(seq: Seq, body: &EventBody, around: &Around, this: &WeakEntity<T
         EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
             questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
         }
-        EventBody::UserPrompt { text, .. } => {
-            prompt_bubble(ElementId::NamedInteger("prompt".into(), seq), text.clone(), false, cx)
+        EventBody::UserPrompt { text, client_msg_id } => {
+            prompt_bubble(&ItemKey::prompt(seq, client_msg_id.as_ref()), text.clone(), false, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks
@@ -253,15 +278,14 @@ fn render_block(
     this: &WeakEntity<Transcript>,
     cx: &App,
 ) -> Option<AnyElement> {
-    let id = |kind: &'static str| ElementId::NamedInteger(kind.into(), (seq << 8) | b as u64);
-    let expanded = around.expanded.contains(&b);
+    let key = around.keys.get(b)?;
+    let id = |part: &str| key.element(part);
+    let expanded = around.expanded.get(b).copied().unwrap_or(false);
     Some(match block {
-        ContentBlock::Text { text } => {
-            TextView::markdown(id("text"), SharedString::from(text.clone())).selectable(true).into_any_element()
-        }
+        ContentBlock::Text { text } => agent_text(key, text).into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => {
-            disclosure(id("thinking"), "Thinking", first_line(text), expanded, seq, b, this, cx)
+            disclosure("Thinking", first_line(text), expanded, seq, key, this, cx)
                 .when(expanded, |d| {
                     d.child(div().pl_4().text_color(cx.theme().muted_foreground).child(
                         TextView::markdown(id("thinking-text"), SharedString::from(text.clone())).selectable(true),
@@ -272,11 +296,11 @@ fn render_block(
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if name == questions::TOOL_NAME || name == "ExitPlanMode" => return None,
         ContentBlock::ToolUse { name, input, .. } => {
-            tools::call(name, input, around.answers.get(b).and_then(Option::as_ref), this, cx)
+            tools::call(seq, name, input, around.answers.get(b).and_then(Option::as_ref), this, cx)
         }
         ContentBlock::ToolResult { .. } if around.with_call.get(b).copied().unwrap_or(false) => return None,
         ContentBlock::ToolResult { is_error, text, .. } => {
-            tools::result(seq, b, *is_error, text, expanded, this, cx).into_any_element()
+            tools::result(seq, key, *is_error, text, expanded, this, cx).into_any_element()
         }
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
@@ -285,22 +309,19 @@ fn render_block(
     })
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each is a separate input to the card, and a struct would only bundle them for this call"
-)]
+/// A line that opens and closes the block `key`, drawn in the row of the event at `seq`.
 pub(super) fn disclosure(
-    id: ElementId,
     label: &str,
     summary: impl Into<SharedString>,
     expanded: bool,
     seq: Seq,
-    b: usize,
+    key: &ItemKey,
     this: &WeakEntity<Transcript>,
     cx: &App,
 ) -> Div {
     let theme = cx.theme();
-    let this = this.clone();
+    let id = key.element("disclosure");
+    let (this, key) = (this.clone(), key.clone());
     let chevron = if expanded { IconName::ChevronDown } else { IconName::ChevronRight };
     let (faint, foreground) = (look::faint(), theme.foreground);
     v_flex().w_full().gap_1().text_xs().child(
@@ -314,7 +335,7 @@ pub(super) fn disclosure(
             .text_color(faint)
             .hover(move |d| d.text_color(foreground))
             .on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.toggle(seq, b, cx));
+                let _ = this.update(cx, |t, cx| t.toggle(seq, key.clone(), cx));
             })
             .child(Icon::new(chevron).xsmall())
             .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(SharedString::from(label.to_string())))

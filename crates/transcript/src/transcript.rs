@@ -14,6 +14,8 @@ use gpui_kit::{
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
 
+use crate::item_key::ItemKey;
+
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
 pub enum TranscriptEvent {
@@ -27,8 +29,8 @@ pub enum TranscriptEvent {
 
 pub(crate) struct Model {
     pub log: SessionLog,
-    /// Blocks the user has opened, by the event's `seq` and the block's position in it.
-    pub expanded: HashSet<(Seq, usize)>,
+    /// Blocks the user has opened.
+    pub expanded: HashSet<ItemKey>,
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
@@ -219,7 +221,6 @@ impl Transcript {
         }
     }
 
-    /// Opens or closes a thinking or tool block.
     /// Records a choice on a question card, and answers once nothing else is needed.
     pub(crate) fn pick_answer(
         &mut self,
@@ -287,11 +288,12 @@ impl Transcript {
         true
     }
 
-    pub(crate) fn toggle(&mut self, seq: Seq, block: usize, cx: &mut Context<Self>) {
+    /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
+    pub(crate) fn toggle(&mut self, seq: Seq, key: ItemKey, cx: &mut Context<Self>) {
         {
             let mut m = self.model.borrow_mut();
-            if !m.expanded.remove(&(seq, block)) {
-                m.expanded.insert((seq, block));
+            if !m.expanded.remove(&key) {
+                m.expanded.insert(key);
             }
         }
         let row = seq_index(seq) - 1;
