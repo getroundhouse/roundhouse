@@ -34,7 +34,26 @@ use tail::render_tail;
 use tools::Toggle;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
-const COLUMN: f32 = 780.0;
+const COLUMN: f32 = 848.0;
+/// How far the composer reaches past the column on each side, so the transcript's text sits inside its edges.
+const COMPOSER_REACH: f32 = 24.0;
+
+/// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
+/// width. It's inset as the scroller insets each row, and then as the row is.
+pub fn in_column(content: impl IntoElement) -> Div {
+    div().w_full().px_3().child(column(content))
+}
+
+/// The composer under the transcript, centred under the column and wider than it on each side. In a pane too narrow
+/// for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
+pub fn around_column(content: impl IntoElement) -> Div {
+    let width = px(COLUMN + 2. * COMPOSER_REACH);
+    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(width).child(content))
+}
+
+fn column(content: impl IntoElement) -> Div {
+    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(content))
+}
 
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
@@ -44,7 +63,7 @@ pub(crate) fn render_row(
     cx: &mut App,
 ) -> AnyElement {
     let row = render_row_inner(model, session, this, ix, cx);
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(row)).into_any_element()
+    column(row).into_any_element()
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.

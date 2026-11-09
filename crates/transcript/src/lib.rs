@@ -16,4 +16,5 @@ mod rows;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
+pub use rows::{around_column, in_column};
 pub use transcript::{Transcript, TranscriptEvent, mode_label};

@@ -32,11 +32,11 @@
 - **Files stay with their chat until they're sent,** the way what's typed does, and a prompt that can't be sent comes back to its chat's composer, files and all. While the agent waits on a question, what's typed answers it and the files wait for the next prompt, since an answer can't carry them.
 - **In the transcript, a prompt's images show small above its text, and a click opens one to its own width, up to the column's.** Other files show their name and size. The hub keeps each image, so every client shows it, and it's still there after the workspace is archived. Other files are only in the workspace, so archiving takes them with it.
 
-**A prompt that carried a screenshot and a log, and two more files waiting in the composer.**
+**A prompt that carried a screenshot and a log, and two more files waiting in the composer.** *Unconfirmed.*
 
 ![Attachments in the transcript and the composer](screens/attachments.png)
 
-**The screenshot, opened.**
+**The screenshot, opened.** *Unconfirmed.*
 
 ![An attached image, opened](screens/attachment-opened.png)
 

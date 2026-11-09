@@ -188,7 +188,7 @@ impl WorkspacePane {
                 None => transcript::file_card(element, attachment).on_remove(remove),
             }
         });
-        Some(AttachmentGroup::new("composer-attachments").px_2().pt_2().children(tiles).into_any_element())
+        Some(AttachmentGroup::new("composer-attachments").px_3().pt_3().children(tiles).into_any_element())
     }
 }
 

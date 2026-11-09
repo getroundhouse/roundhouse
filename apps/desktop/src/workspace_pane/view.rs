@@ -259,16 +259,16 @@ impl WorkspacePane {
             .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
+            // In the transcript's column, so it starts where the rows above it do.
             .when(interrupted, |d| {
                 d.child(
-                    div()
-                        .flex_none()
-                        .w_full()
-                        .px_4()
-                        .py_1()
-                        .text_xs()
-                        .text_color(muted)
-                        .child("The agent stopped before it finished. Send a message to pick up where it left off."),
+                    transcript::in_column(
+                        "The agent stopped before it finished. Send a message to pick up where it left off.",
+                    )
+                    .flex_none()
+                    .py_1()
+                    .text_xs()
+                    .text_color(muted),
                 )
             })
             .child(composer)

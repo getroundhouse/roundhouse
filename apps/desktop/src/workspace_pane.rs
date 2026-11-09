@@ -168,7 +168,8 @@ impl WorkspacePane {
     ) -> Self {
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .auto_grow(2, 12)
+                // Room for a paragraph before it grows, so a longer prompt doesn't start out cramped.
+                .auto_grow(4, 12)
                 .submit_on_enter(true)
                 .placeholder("Ask the agent to do something")
         });
