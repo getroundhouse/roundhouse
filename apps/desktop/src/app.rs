@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use client_core::records::Record;
 use client_core::{Client, HubAdmin, RecordsFeed};
+use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, SessionStatus, Workspace, WorkspaceId, WorkspaceStatus};
@@ -59,6 +60,8 @@ pub struct AppView {
     pub panes: HashMap<WorkspaceId, Entity<WorkspacePane>>,
     pub error: Option<String>,
     pub show_archived: bool,
+    /// Where the sidebar's list is scrolled to. The list is made again each frame, so it can't keep that itself.
+    pub(crate) sidebar_scroll: VirtualListScrollHandle,
     /// Workspaces being created or archived, so their buttons can't be pressed twice.
     pub busy: bool,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
@@ -111,6 +114,7 @@ impl AppView {
             panes: HashMap::new(),
             error: None,
             show_archived: false,
+            sidebar_scroll: VirtualListScrollHandle::new(),
             busy: false,
             creating_in: None,
             moving_window: false,
@@ -287,7 +291,12 @@ impl AppView {
     }
 
     pub fn visible_workspaces(&self) -> Vec<&Workspace> {
-        self.workspaces.iter().filter(|w| self.show_archived || w.status == WorkspaceStatus::Ready).collect()
+        self.workspaces.iter().filter(|w| self.lists(w)).collect()
+    }
+
+    /// Whether the sidebar lists this workspace.
+    pub(crate) fn lists(&self, workspace: &Workspace) -> bool {
+        self.show_archived || workspace.status == WorkspaceStatus::Ready
     }
 
     pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
