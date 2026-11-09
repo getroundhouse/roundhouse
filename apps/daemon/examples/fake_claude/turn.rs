@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{background, subagent};
+use crate::{background, read, subagent};
 
 /// What a streamed block holds.
 #[derive(Clone, Copy)]
@@ -316,6 +316,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(file) = command.strip_prefix("background:") {
         return background::start(turn, file);
+    }
+    if let Some(file) = command.strip_prefix("read:") {
+        read::image(turn, file);
     }
     false
 }

@@ -1,9 +1,9 @@
-//! A `user` line: what the agent's tool calls sent back, or something written for the model.
+//! A `user` line: what the agent's tool calls sent back, with any images among it, or something written for the model.
 
 use protocol::event::{ContentBlock, EventBody};
 use serde_json::Value;
 
-use super::{Parsed, blocks, file_change, id_of, other};
+use super::{Parsed, blocks, file_change, id_of, images, other};
 
 pub(super) fn line(value: &Value) -> Parsed {
     let content = value.get("message").and_then(|message| message.get("content"));
@@ -18,5 +18,11 @@ pub(super) fn line(value: &Value) -> Parsed {
     if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
         *change = file_change::read(value);
     }
-    Parsed::Event(EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks })
+    let taken = images::take(content, &mut blocks);
+    let body = EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks };
+    if taken.is_empty() {
+        return Parsed::Event(body);
+    }
+    let raw = images::without(value, &taken);
+    Parsed::EventWithImages { body, images: taken.into_iter().map(|found| found.kept).collect(), raw }
 }

@@ -63,7 +63,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 - **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. Opened, the command comes first, highlighted as shell after a faint `$`, then what it printed. *Unconfirmed.*
 - **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. Opened, the call shows all of what went wrong, since the line only has room for its start, then what it tried, such as an edit's diff. The output itself stays in muted text, so it's still easy to read. *Unconfirmed.*
-- **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
+- **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines or images came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
 - **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
 
 **Commands: one opened, one that failed, one the agent didn't describe, and one too long for its line.** *Unconfirmed.*
@@ -75,6 +75,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ![Other tools, one opened to its input and output](screens/tool-any.png)
 
 - **A file call names the file in an outlined chip, and says how much it read or wrote,** such as `Read 10 lines` or `Write 12 lines`. Opened, the file's path, then its lines with their numbers in the file, highlighted for its language. The full path is only there, since the file's name is enough to tell calls apart. *Unconfirmed.*
+- **A read of an image says `Read 1 image`, and opens to the image under the file's path, at its own width, up to the column's.** Any other tool's images, such as a screenshot from an MCP server, show the same way, after what else it sent back. The hub keeps them, as it does a prompt's, so every client shows them, and they're still there after the workspace is archived. *Unconfirmed.*
 - **An edit shows how many lines it added and removed,** as `+5 −0` in green and red, and so does a write over a file that was already there. A write that made a new file shows no counts, since all of it is new, and opens to the whole file marked as added. *Unconfirmed.*
 - **An edit's diff uses the file's own line numbers,** from the patch the agent sent back, with a gap mark between parts of the file that aren't next to each other. Added and removed lines are tinted, with a bar down their left, and where a line changed in place, the part that changed is picked out. Before the patch comes back, the diff is worked out from the edit itself, without numbers. *Unconfirmed.*
 - **Hovering an edit shows its diff,** so a change can be checked without opening it. The preview is a dozen lines tall at most, and stays while the pointer is on it, so a longer diff can be scrolled there. The wheel over it scrolls only the diff, so the transcript doesn't carry the edit away from it.
@@ -92,6 +93,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **A read of part of a file and a new file, both opened to their lines.** *Unconfirmed.*
 
 ![A read and a new file, opened](screens/tool-file-contents.png)
+
+**A read of a screenshot, opened.** *Unconfirmed.*
+
+![A read of an image, opened](screens/tool-read-image.png)
 
 **Searches: one opened to its matching lines, one listing files, and one by name.** *Unconfirmed.*
 

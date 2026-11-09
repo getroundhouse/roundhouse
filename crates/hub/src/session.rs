@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use parking_lot::Mutex;
+use protocol::attachment::NewAttachment;
 use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
@@ -44,6 +45,8 @@ pub(crate) enum Item {
         run: RunId,
         body: EventBody,
         raw: Option<String>,
+        /// Images `body` names, which are kept before it's recorded.
+        attachments: Vec<NewAttachment>,
     },
     Delta {
         run: RunId,

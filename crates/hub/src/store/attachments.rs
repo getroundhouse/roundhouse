@@ -1,5 +1,6 @@
-//! What the files a session's prompts carry are, and where in the worktree each was put. What a file is never changes
-//! once it's added. Its bytes aren't here, but in a file of their own, which `attachment_files` keeps.
+//! What the files a session's prompts carry are, and the images its agent's tools send, and where in the worktree each
+//! of a prompt's files was put. What a file is never changes once it's added. Its bytes aren't here, but in a file of
+//! their own, which `attachment_files` keeps.
 
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, SessionId};

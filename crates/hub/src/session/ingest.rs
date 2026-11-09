@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use protocol::attachment::NewAttachment;
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{ApprovalId, RunId};
 use protocol::tail::StreamDelta;
@@ -14,7 +15,7 @@ use crate::store::cancelled_approval;
 pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Receiver<Item>) {
     while let Some(item) = items.recv().await {
         match item {
-            Item::Event { run, body, raw } => ingest_event(&session, run, body, raw).await,
+            Item::Event { run, body, raw, attachments } => ingest_event(&session, run, body, raw, attachments).await,
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::WorkerLost(link) => session.agent_lost(link, ExitReason::WorkerLost).await,
             Item::Flush(done) => {
@@ -24,7 +25,18 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
     }
 }
 
-async fn ingest_event(session: &Arc<LiveSession>, run: RunId, body: EventBody, raw: Option<String>) {
+async fn ingest_event(
+    session: &Arc<LiveSession>,
+    run: RunId,
+    body: EventBody,
+    raw: Option<String>,
+    attachments: Vec<NewAttachment>,
+) {
+    if !attachments.is_empty()
+        && let Ok(hub) = session.hub()
+    {
+        hub.keep_from_agent(&session.id, attachments).await;
+    }
     let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
     match &body {
         EventBody::AgentInit { .. } => mark_opened(session).await,

@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use protocol::attachment::AttachmentFile;
+use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::{AgentKind, ApprovalId, Seq, Title};
 use protocol::tail::StreamDelta;
@@ -25,6 +25,8 @@ pub enum AgentOutput {
     Event {
         body: EventBody,
         raw: Option<String>,
+        /// Images the event names, such as one a tool sent back, for the hub to keep. `raw` is without their bytes.
+        attachments: Vec<NewAttachment>,
     },
     Delta(StreamDelta),
     /// Always the last thing sent.
@@ -34,6 +36,13 @@ pub enum AgentOutput {
         stderr_tail: Vec<String>,
         requested: bool,
     },
+}
+
+impl AgentOutput {
+    /// An event that names no images.
+    pub fn event(body: EventBody, raw: Option<String>) -> Self {
+        AgentOutput::Event { body, raw, attachments: Vec::new() }
+    }
 }
 
 /// Names the Claude CLI directly, for tests and unusual installs.

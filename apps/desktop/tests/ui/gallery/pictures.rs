@@ -13,11 +13,12 @@ const TEXT: Rgba<u8> = Rgba([0x8a, 0x84, 0x7f, 0xff]);
 const FAINT: Rgba<u8> = Rgba([0x4a, 0x45, 0x41, 0xff]);
 const GREEN: Rgba<u8> = Rgba([0x3f, 0xb9, 0x50, 0xff]);
 
-/// A narrow sidebar where a pull request's badge runs over a workspace's name, as someone might paste to show a bug.
-pub(crate) fn overlapping_badge() -> Vec<u8> {
-    let mut image = RgbaImage::from_pixel(720, 450, PANE);
-    fill(&mut image, (0, 0), (250, 450), SIDEBAR);
-    fill(&mut image, (250, 0), (1, 450), EDGE);
+/// A narrow sidebar where a pull request's badge runs over a workspace's name, as someone might paste to show a bug,
+/// `height` pixels tall. Its rows end above 240.
+pub(crate) fn overlapping_badge(height: u32) -> Vec<u8> {
+    let mut image = RgbaImage::from_pixel(720, height, PANE);
+    fill(&mut image, (0, 0), (250, height), SIDEBAR);
+    fill(&mut image, (250, 0), (1, height), EDGE);
     for (row, name) in [120, 96, 150, 104, 130].into_iter().enumerate() {
         let y = 60 + 40 * u32::try_from(row).unwrap();
         fill(&mut image, (22, y), (12, 12), FAINT);

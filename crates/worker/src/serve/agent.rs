@@ -65,8 +65,8 @@ pub(crate) async fn start_agent(
 async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mut output: mpsc::Receiver<AgentOutput>) {
     while let Some(item) = output.recv().await {
         let frame = match item {
-            AgentOutput::Event { body, raw } => {
-                WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw }
+            AgentOutput::Event { body, raw, attachments } => {
+                WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments }
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
@@ -78,7 +78,13 @@ async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mu
                 }
                 let reason = if requested { ExitReason::Requested } else { ExitReason::Unexpected };
                 let body = EventBody::AgentExited { reason, code, signal, stderr_tail };
-                WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw: None }
+                WorkerFrame::AgentEvent {
+                    session_id: session_id.clone(),
+                    run,
+                    body,
+                    raw: None,
+                    attachments: Vec::new(),
+                }
             }
         };
         if state.frames.send(frame).await.is_err() {

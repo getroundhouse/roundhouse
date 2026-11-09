@@ -109,7 +109,7 @@ fn render_row_inner(
             render_tail(&tail, &m.at_work, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
-            attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
+            attachments::fetch_missing(model, this, Some(event.seq), around.images(), cx);
             render_event(&event, &around, this, linked, cx)
         }
         Shown::Pending(prompt, carried) => {
@@ -259,7 +259,7 @@ fn render_block(
             tools::call(&toggle, name, input, drawing.answer.as_ref(), drawing.subagent.as_ref(), cx)
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { is_error, text, .. } => tools::result(&toggle, *is_error, text, cx),
+        ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.answer.as_ref()?, cx),
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
         }

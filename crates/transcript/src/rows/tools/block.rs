@@ -2,14 +2,15 @@
 //! a few lines.
 
 use gpui_kit::base::SelectableText;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::text::TextView;
+use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement, Styled, StyledText, TestSupportExt as _, div, px,
 };
 
 use super::highlight::spans;
+use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 
@@ -63,6 +64,11 @@ pub(in crate::rows) fn output(id: ElementId, text: &str, color: Hsla, cx: &App) 
         .child(body)
         .test_support()
         .into_any_element()
+}
+
+/// Images a tool sent back, each whole, one under another.
+pub(in crate::rows) fn images(images: &[Carried], cx: &App) -> AnyElement {
+    v_flex().px_3().py_2().gap_2().children(images.iter().map(|image| attachments::whole(image, cx))).into_any_element()
 }
 
 /// Code in a block, highlighted as `language`, after `prompt` in faint text.

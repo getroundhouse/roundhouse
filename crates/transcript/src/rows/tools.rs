@@ -4,6 +4,7 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement, WeakEntity};
 use protocol::model::Seq;
 use serde_json::Value;
@@ -58,14 +59,41 @@ pub(super) fn call(
     }
 }
 
+/// How much came back, such as `10 lines`, `1 image`, or both, or `None` for nothing.
+pub(super) fn amount(lines: usize, images: usize) -> Option<String> {
+    let lines = (lines > 0).then(|| count(lines, "line", "lines"));
+    let images = (images > 0).then(|| count(images, "image", "images"));
+    match (lines, images) {
+        (Some(lines), Some(images)) => Some(format!("{lines} and {images}")),
+        (lines, images) => lines.or(images),
+    }
+}
+
 /// A result drawn on its own, because its call isn't near it: a line saying how much came back, which opens to it.
-pub(super) fn result(toggle: &Toggle, is_error: bool, text: &str, cx: &App) -> AnyElement {
-    let answer = &Answer { is_error, text: text.to_string(), change: None };
-    let lines = count(answer.text.lines().count(), "line", "lines");
-    let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(lines.into())).shows_output(true);
+pub(super) fn result(toggle: &Toggle, answer: &Answer, cx: &App) -> AnyElement {
+    let (text, images) = (answer.text_beside_images(), answer.images());
+    let lines = text.map_or(0, |text| text.lines().count());
+    let size = amount(lines, images.len()).unwrap_or_else(|| count(0, "line", "lines"));
+    let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(size.into())).shows_output(true);
     let opened = toggle.open.then(|| {
-        let output = block::output(toggle.key.element("output"), &answer.text, cx.theme().muted_foreground, cx);
-        block::frame(cx).child(output).into_any_element()
+        let color = cx.theme().muted_foreground;
+        block::frame(cx)
+            .when_some(text, |d, text| d.child(block::output(toggle.key.element("output"), text, color, cx)))
+            .when(!images.is_empty(), |d| d.child(block::images(images, cx)))
+            .into_any_element()
     });
     line::drawn(line, Some(answer), opened, toggle, cx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::amount;
+
+    #[test]
+    fn how_much_came_back_says_lines_images_or_both() {
+        assert_eq!(amount(0, 0), None);
+        assert_eq!(amount(10, 0).as_deref(), Some("10 lines"));
+        assert_eq!(amount(0, 1).as_deref(), Some("1 image"));
+        assert_eq!(amount(1, 2).as_deref(), Some("1 line and 2 images"));
+    }
 }

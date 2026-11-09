@@ -201,9 +201,11 @@ pub enum ContentBlock {
         tool_use_id: ToolUseId,
         is_error: bool,
         text: String,
-        /// Images aren't copied into the normalized event. They stay in the raw line.
-        #[serde(default)]
-        image_count: u32,
+        /// Images the tool sent back, such as a screenshot the agent read. Each is an attachment of the session, which
+        /// the hub keeps, so a client reads its bytes with `AttachmentRead`, as it does a prompt's. A result recorded
+        /// before the hub kept them names none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<Attachment>,
         /// What the tool changed in a file, when the agent says, as with Claude's edits and writes.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         change: Option<FileChange>,

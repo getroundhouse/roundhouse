@@ -40,7 +40,7 @@ pub(super) struct BlockAround {
     /// What the block is, wherever it's drawn.
     pub(super) key: ItemKey,
     pub(super) open: bool,
-    /// For a call: its result, to draw under it, once it's back.
+    /// For a call: its result, to draw under it, once it's back. For a result drawn on its own: itself.
     pub(super) answer: Option<Answer>,
     /// For a call that handed work to a subagent: what the subagent has done.
     pub(super) subagent: Option<Subagent>,
@@ -54,6 +54,8 @@ pub(super) struct Answer {
     pub(super) text: String,
     /// What it changed in a file, when its agent said.
     pub(super) change: Option<FileChange>,
+    /// The images it sent back, such as a screenshot the agent read.
+    pub(super) images: Vec<Carried>,
 }
 
 impl Answer {
@@ -65,6 +67,16 @@ impl Answer {
     /// What it sent back, if it didn't fail.
     pub(super) fn success(&self) -> Option<&str> {
         (!self.is_error).then_some(self.text.as_str())
+    }
+
+    /// The images it sent back, if it didn't fail.
+    pub(super) fn images(&self) -> &[Carried] {
+        if self.is_error { &[] } else { &self.images }
+    }
+
+    /// The text it sent back, unless that's blank and it sent back images too, which are then all there is to show.
+    pub(super) fn text_beside_images(&self) -> Option<&str> {
+        (!self.text.trim().is_empty() || self.images().is_empty()).then_some(self.text.as_str())
     }
 
     /// The parts of a file it changed, when its agent said which they were.
@@ -101,31 +113,58 @@ impl Around {
         }
         around
     }
+
+    /// Every image the event draws now, for its row to ask the hub for: a prompt's, and those of each call or result
+    /// that's open, including what a call gathered from its subagent. A closed call's images wait until it's opened.
+    pub(super) fn images(&self) -> Vec<&Carried> {
+        let mut images: Vec<&Carried> = self.carried.iter().collect();
+        for block in self.blocks.iter().filter(|block| block.open) {
+            images.extend(block.answer.iter().flat_map(Answer::images));
+            let gathered = block.subagent.iter().flat_map(|subagent| subagent.events.iter().flatten());
+            images.extend(gathered.flat_map(|(_, around)| around.images()));
+        }
+        images
+    }
 }
 
 impl BlockAround {
     fn read(log: &SessionLog, m: &Model, seq: Seq, block: &ContentBlock, key: ItemKey) -> Self {
         let open = m.folds.is_open(&key, Fold::of(block));
-        let (answer, subagent) = if let ContentBlock::ToolUse { id, name, .. } = block {
-            let answer = nearby::events_after(log, seq, NEAR).find_map(|event| answer_in(event, id));
-            (answer, agent::hands_off(name).then(|| Subagent::read(log, m, seq, id, open)))
-        } else {
-            (None, None)
-        };
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id.as_str(), NEAR).is_some());
+        let (answer, subagent) = match block {
+            ContentBlock::ToolUse { id, name, .. } => {
+                let answer = nearby::events_after(log, seq, NEAR).find_map(|event| answer_in(event, id, m));
+                (answer, agent::hands_off(name).then(|| Subagent::read(log, m, seq, id, open)))
+            }
+            ContentBlock::ToolResult { .. } if !with_call => (Answer::of(block, m), None),
+            ContentBlock::ToolResult { .. }
+            | ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => (None, None),
+        };
         Self { key, open, answer, subagent, with_call }
     }
 }
 
+impl Answer {
+    /// What `block` says, if it's a result.
+    fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
+        let ContentBlock::ToolResult { is_error, text, change, images, .. } = block else { return None };
+        let images = attachments::carried(m, images);
+        Some(Answer { is_error: *is_error, text: text.clone(), change: change.clone(), images })
+    }
+}
+
 /// The result of the call `id`, if it's in `event`.
-fn answer_in(event: &SessionEvent, id: &str) -> Option<Answer> {
+fn answer_in(event: &SessionEvent, id: &str, m: &Model) -> Option<Answer> {
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
-    blocks.iter().find_map(|block| {
-        let ContentBlock::ToolResult { tool_use_id, is_error, text, change, .. } = block else { return None };
-        (tool_use_id.as_str() == id).then(|| Answer { is_error: *is_error, text: text.clone(), change: change.clone() })
-    })
+    let result = blocks
+        .iter()
+        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id.as_str() == id))?;
+    Answer::of(result, m)
 }
 
 /// The blocks an event holds, if it's one that holds any.
@@ -144,10 +183,11 @@ fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
 
 #[cfg(test)]
 mod tests {
+    use protocol::attachment::{Attachment, MediaType};
     use protocol::event::{ContentBlock, EventBody};
 
     use super::{Around, block_key};
-    use crate::fixtures::{calls, event, log, result};
+    use crate::fixtures::{calls, calls_to, event, log, result, within};
     use crate::item_key::ItemKey;
     use crate::transcript::Model;
 
@@ -176,6 +216,46 @@ mod tests {
         assert_eq!(found, [Some("from a".to_string()), Some("from b".to_string())]);
         assert!(Around::read(&log, &m, 2, &result("b")).blocks[0].with_call);
         assert!(Around::read(&log, &m, 3, &result("a")).blocks[0].with_call);
+    }
+
+    /// The result of the call `id`, with an image.
+    fn with_an_image(id: &str) -> EventBody {
+        let mut shown = result(id);
+        if let EventBody::AgentUser { blocks, .. } = &mut shown
+            && let [ContentBlock::ToolResult { images, .. }] = blocks.as_mut_slice()
+        {
+            let size_bytes = 1;
+            images.push(Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes });
+        }
+        shown
+    }
+
+    #[test]
+    fn a_call_s_images_are_fetched_only_once_it_s_open() {
+        let log = log([event(1, calls(&["a"])), event(2, with_an_image("a"))]);
+        let mut m = Model::default();
+        assert!(Around::read(&log, &m, 1, &calls(&["a"])).images().is_empty(), "closed");
+
+        m.folds.choose(ItemKey::Event(1, 0), true);
+
+        assert_eq!(Around::read(&log, &m, 1, &calls(&["a"])).images().len(), 1, "open");
+    }
+
+    #[test]
+    fn a_subagent_s_images_are_fetched_with_the_call_that_started_it() {
+        let agent = calls_to("Agent", &["a"]);
+        let log = log([
+            event(1, agent.clone()),
+            event(2, within("a", calls(&["b"]))),
+            event(3, within("a", with_an_image("b"))),
+        ]);
+        let mut m = Model::default();
+        m.folds.choose(ItemKey::Event(2, 0), true);
+        assert!(Around::read(&log, &m, 1, &agent).images().is_empty(), "the agent's call is closed");
+
+        m.folds.choose(ItemKey::Event(1, 0), true);
+
+        assert_eq!(Around::read(&log, &m, 1, &agent).images().len(), 1, "opened, it gathers its subagent's");
     }
 
     #[test]
