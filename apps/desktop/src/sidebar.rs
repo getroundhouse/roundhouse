@@ -153,6 +153,7 @@ fn update_problem(problem: &Problem, color: Hsla) -> impl IntoElement {
 fn footer(
     show_archived: bool,
     build: BuildLabel,
+    checking: bool,
     update: Option<Problem>,
     cx: &mut Context<AppView>,
 ) -> impl IntoElement {
@@ -178,6 +179,17 @@ fn footer(
                 })),
         )
         .child(div().px_2().pt_1().text_xs().text_color(build_color).child(build.text))
+        .when(checking, |d| {
+            d.child(
+                div()
+                    .id("checking-for-updates")
+                    .px_2()
+                    .text_xs()
+                    .text_color(look::faint())
+                    .child("Checking for updates…")
+                    .test_support(),
+            )
+        })
         .when_some(update, |d, problem| d.child(update_problem(&problem, warning)))
 }
 
@@ -197,7 +209,13 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         // under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(v_flex().id("workspaces").flex_1().min_h_0().overflow_y_scroll().px_2().gap_4().children(groups))
-        .child(footer(app.show_archived, app.build_label(), crate::updates::problem_shown(cx).cloned(), cx))
+        .child(footer(
+            app.show_archived,
+            app.build_label(),
+            crate::updates::checking(cx),
+            crate::updates::problem_shown(cx).cloned(),
+            cx,
+        ))
 }
 
 #[cfg(test)]
