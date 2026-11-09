@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Signs the update feed, or checks its signature, so the app can tell that a feed came from the release workflow.
+# Velopack only checks each package against the checksum the feed gives, so whoever could change the feed could
+# change the app. The signature is Ed25519 over the feed's exact bytes, kept beside it as `<feed>.sig`, raw 64 bytes.
+#
+#   tools/package/feed-signature.sh sign FEED PRIVATE_KEY PUBLIC_KEY   Write FEED.sig, then check it as verify does
+#   tools/package/feed-signature.sh verify FEED PUBLIC_KEY             Check FEED.sig against the key the app holds
+#
+# PRIVATE_KEY is a PKCS#8 PEM file. PUBLIC_KEY is the form the app builds in: the raw 32-byte key, in base64. It needs
+# OpenSSL 3 or newer. macOS's own `openssl` is LibreSSL, which can't sign raw input with Ed25519.
+set -euo pipefail
+
+die() { echo "error: $1" >&2; exit 1; }
+
+# An Ed25519 public key in DER is this header and then the key.
+SPKI_HEADER='\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00'
+
+find_openssl() {
+  local candidate
+  for candidate in openssl "$(brew --prefix openssl@3 2> /dev/null)/bin/openssl"; do
+    if "$candidate" version 2> /dev/null | awk '$1 == "OpenSSL" { split($2, v, "."); found = v[1] >= 3 } END { exit !found }'; then
+      echo "$candidate"
+      return
+    fi
+  done
+  die "Ed25519 needs OpenSSL 3 or newer, such as from \`brew install openssl@3\`"
+}
+
+# Writes the app's form of a public key as a PEM file OpenSSL can read.
+public_key_pem() {
+  local base64=$1 out=$2
+  { printf '%b' "$SPKI_HEADER"; printf '%s' "$base64" | base64 --decode; } > "$out.der"
+  [ "$(wc -c < "$out.der")" -eq 44 ] || die "the public key isn't 32 bytes in base64"
+  "$OPENSSL" pkey -pubin -inform DER -in "$out.der" -out "$out"
+}
+
+verify() {
+  local feed=$1 public=$2
+  [ -f "$feed.sig" ] || die "$feed.sig is missing"
+  [ "$(wc -c < "$feed.sig")" -eq 64 ] || die "$feed.sig isn't a 64-byte signature"
+  public_key_pem "$public" "$WORK/public.pem"
+  "$OPENSSL" pkeyutl -verify -pubin -inkey "$WORK/public.pem" -rawin -in "$feed" -sigfile "$feed.sig" > /dev/null \
+    || die "$feed.sig doesn't match $feed and that public key"
+}
+
+sign() {
+  local feed=$1 private=$2 public=$3
+  "$OPENSSL" pkeyutl -sign -inkey "$private" -rawin -in "$feed" -out "$feed.sig"
+  # A key that doesn't match the app's would publish a feed every app refuses.
+  verify "$feed" "$public"
+}
+
+OPENSSL="$(find_openssl)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+case "${1:-}" in
+  sign) [ $# -eq 4 ] || die "sign needs FEED PRIVATE_KEY PUBLIC_KEY"; sign "$2" "$3" "$4" ;;
+  verify) [ $# -eq 3 ] || die "verify needs FEED PUBLIC_KEY"; verify "$2" "$3" ;;
+  *) die "unknown command ${1:-}. See the top of this script" ;;
+esac
