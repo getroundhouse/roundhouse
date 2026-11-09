@@ -11,18 +11,22 @@ use protocol::client::HubStatus;
 
 use super::{AppView, Connection, hub_source};
 use crate::workspace_pane::HEADER_HEIGHT;
+use crate::{CloseSettings, OpenSettings};
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Shortcuts only reach this view through whatever has focus, and focus can end up nowhere, as
         // when what had it goes away. Every shortcut would then do nothing until something is clicked.
         if window.focused(cx).is_none() {
-            window.focus(&self.focus, cx);
+            window.focus(if self.settings_open() { &self.settings_focus } else { &self.focus }, cx);
         }
         self.keep_menus_current(cx);
-        let theme = cx.theme();
-        let (background, foreground, muted, danger) =
-            (theme.background, theme.foreground, theme.muted_foreground, theme.danger);
+        if self.settings_open() {
+            // The workspace's keys are left out, since what they'd act on is hidden.
+            let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
+            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, back, cx));
+        }
+        let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
         let main: AnyElement = match &self.connection {
             Connection::Connecting => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, danger, cx),
@@ -56,20 +60,30 @@ impl Render for AppView {
                 ),
             },
         };
-        moves_window(self.with_shortcuts(h_flex(), cx).id("app"), cx)
+        let root = self.with_shortcuts(h_flex(), cx);
+        self.root(root, cx).child(crate::sidebar::render(self, cx)).child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
+                .child(div().flex_1().min_h_0().child(main)),
+        )
+    }
+}
+
+impl AppView {
+    /// The whole window, whatever it shows, and what it answers whatever it shows.
+    fn root(&self, root: Div, cx: &mut Context<Self>) -> Stateful<Div> {
+        let theme = cx.theme();
+        let (background, foreground) = (theme.background, theme.foreground);
+        moves_window(root.id("app"), cx)
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
             .text_color(foreground)
-            .child(crate::sidebar::render(self, cx))
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
-                    .child(div().flex_1().min_h_0().child(main)),
-            )
+            .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
+            .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
     }
 }
 

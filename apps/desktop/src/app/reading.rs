@@ -2,17 +2,17 @@
 //! sidebar.
 
 use client_core::records::Record;
-use gpui_kit::{App, AppContext as _, Context};
+use gpui_kit::{App, Context};
 use protocol::model::{Session, WorkspaceId};
 
 use super::AppView;
 use crate::workspace_pane::Mark;
 
 impl AppView {
-    /// Tells each pane whether it's the one being read: the selected one, with a connection, in the window in front.
-    /// For after anything that changes one of those.
+    /// Tells each pane whether it's the one being read: the selected one, with a connection, in the window in front,
+    /// and not hidden by Settings. For after anything that changes one of those.
     pub(super) fn read_on_screen(&mut self, in_front: bool, cx: &mut Context<Self>) {
-        let showing = self.selected_pane().filter(|_| in_front).map(|pane| pane.entity_id());
+        let showing = self.selected_pane().filter(|_| in_front && !self.settings_open()).map(|pane| pane.entity_id());
         for pane in self.panes.values() {
             let on_screen = Some(pane.entity_id()) == showing;
             pane.update(cx, |p, cx| p.set_on_screen(on_screen, cx));
@@ -56,16 +56,15 @@ impl AppView {
     /// come since, while the menu was open, is left as it is rather than read unseen, or the action turned around.
     pub fn mark_chats(&mut self, mark: Mark, chats: Vec<Session>, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
+        let marking = client.start(move |client| {
+            let mark_one = |s: &Session| match mark {
+                Mark::Read => client.session_mark_read(&s.id, s.reply_seq),
+                Mark::Unread => client.session_mark_unread(&s.id),
+            };
+            chats.iter().map(mark_one).collect::<Result<Vec<Session>, _>>()
+        });
         cx.spawn(async move |this, cx| {
-            let marked = cx
-                .background_spawn(async move {
-                    let mark_one = |s: &Session| match mark {
-                        Mark::Read => client.session_mark_read(&s.id, s.reply_seq),
-                        Mark::Unread => client.session_mark_unread(&s.id),
-                    };
-                    chats.iter().map(mark_one).collect::<Result<Vec<Session>, _>>()
-                })
-                .await;
+            let marked = marking.recv().await;
             let _ = this.update(cx, |t, cx| match marked {
                 Ok(sessions) => sessions.into_iter().for_each(|s| t.take_reply(Record::Session(s), cx)),
                 // A hub older than this app keeps no replies, so it has none to mark.

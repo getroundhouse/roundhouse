@@ -1,5 +1,5 @@
-//! The shortcuts the window answers, which the File and View menus' items share, and what those menus say about the
-//! selected workspace. macOS greys out an item when nothing where focus is takes its action, so each shortcut is
+//! The shortcuts the window answers for repositories, workspaces and chats, which the File and View menus' items
+//! share, and what those menus say about the selected workspace. macOS greys out an item when nothing where focus is takes its action, so each shortcut is
 //! taken only where it can act.
 
 use gpui_kit::prelude::FluentBuilder as _;

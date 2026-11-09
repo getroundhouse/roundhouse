@@ -45,6 +45,7 @@ Use `Add repository` at the bottom left, then `New` beside the repository. The m
 | `Cmd-Shift-D` | Open the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |
 | `Cmd-.` | Stop the agent's turn |
+| `Cmd-,` | Open Settings |
 
 ## Where things are
 

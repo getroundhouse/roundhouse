@@ -119,6 +119,11 @@ impl WorkspacePane {
                 this.submit(window, cx);
             }
         });
+        let on_settings = crate::settings::observe(cx, |this, cx| {
+            for (transcript, _) in this.transcripts.values() {
+                transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
+            }
+        });
         let mut this = Self {
             client,
             records,
@@ -139,7 +144,7 @@ impl WorkspacePane {
             setup_log_refresh: None,
             behind: false,
             window: window.window_handle(),
-            subscriptions: vec![on_enter],
+            subscriptions: vec![on_enter, on_settings],
         };
         // The chat last worked in.
         let latest = this.open_sessions().max_by_key(|s| (s.updated_at_ms, s.created_at_ms)).map(|s| s.id.clone());
@@ -167,9 +172,9 @@ impl WorkspacePane {
     /// has, so the pickers change when this comes back, and a refusal leaves them as they were.
     pub fn configure(&mut self, model: Option<String>, mode: Option<String>, cx: &mut Context<Self>) {
         let Some(id) = self.active.clone() else { return };
-        let client = self.client.clone();
+        let changing = self.client.start(move |client| client.session_configure(&id, model, mode));
         cx.spawn(async move |this, cx| {
-            let changed = cx.background_spawn(async move { client.session_configure(&id, model, mode) }).await;
+            let changed = changing.recv().await;
             let _ = this.update(cx, |t, cx| match changed {
                 Ok(session) => t.took_reply(session, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't change that: {e}"))),

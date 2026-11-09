@@ -13,8 +13,10 @@ use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
 mod hub_source;
+mod quitting;
 mod reading;
 mod restarts;
+mod settings;
 mod shortcuts;
 mod view;
 mod workspaces;
@@ -65,6 +67,10 @@ pub struct AppView {
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
     focus: FocusHandle,
+    /// Settings, when it shows in place of the sidebar and the workspace.
+    settings: Option<settings::Shown>,
+    /// Where keys go while Settings shows.
+    settings_focus: FocusHandle,
     window: AnyWindowHandle,
     /// Held so these tasks stop when the view goes away.
     connecting: Option<Task<()>>,
@@ -87,6 +93,7 @@ impl AppView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
+        crate::settings::observe(cx, |_, cx| cx.notify()).detach();
         // Someone going to another app is the moment to finish an update without interrupting them, and coming back is
         // when they read the chat showing.
         cx.observe_window_activation(window, |t, window, cx| {
@@ -111,6 +118,8 @@ impl AppView {
             creating_in: None,
             moving_window: false,
             focus,
+            settings: None,
+            settings_focus: cx.focus_handle(),
             window: window.window_handle(),
             connecting: None,
             following: None,
@@ -187,6 +196,7 @@ impl AppView {
 
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
     fn connected(&mut self, client: Client, status: &HubStatus, cx: &mut Context<Self>) {
+        quitting::wait_for(&client, cx);
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);
         } else {

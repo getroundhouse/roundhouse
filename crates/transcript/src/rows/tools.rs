@@ -1,8 +1,6 @@
 //! A tool call, and the result it got back, drawn together. They arrive as separate events, often with other calls
 //! in between when the agent runs several at once, so each call finds its own result by ID.
 
-use std::collections::HashSet;
-
 use client_core::session_log::{Row, SessionLog};
 use gpui_kit::base::SelectableText;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
@@ -16,6 +14,7 @@ use serde_json::Value;
 
 use super::tail::first_line;
 use super::{block_key, disclosure};
+use crate::folds::{Fold, Folds};
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 use crate::transcript::Transcript;
@@ -37,23 +36,18 @@ pub(super) struct Answer {
 }
 
 /// The result for each call among an event's `blocks`, by the block's position.
-pub(super) fn answers(
-    log: &SessionLog,
-    expanded: &HashSet<ItemKey>,
-    seq: Seq,
-    blocks: &[ContentBlock],
-) -> Vec<Option<Answer>> {
+pub(super) fn answers(log: &SessionLog, folds: &Folds, seq: Seq, blocks: &[ContentBlock]) -> Vec<Option<Answer>> {
     let after = usize::try_from(seq).unwrap_or(usize::MAX);
     blocks
         .iter()
         .map(|block| {
             let ContentBlock::ToolUse { id, .. } = block else { return None };
-            (after..after.saturating_add(NEAR)).find_map(|ix| result_in(log, expanded, ix, id))
+            (after..after.saturating_add(NEAR)).find_map(|ix| result_in(log, folds, ix, id))
         })
         .collect()
 }
 
-fn result_in(log: &SessionLog, expanded: &HashSet<ItemKey>, ix: usize, call: &str) -> Option<Answer> {
+fn result_in(log: &SessionLog, folds: &Folds, ix: usize, call: &str) -> Option<Answer> {
     let Row::Event(event) = log.row(ix) else { return None };
     let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
     blocks.iter().enumerate().find_map(|(block, content)| {
@@ -62,7 +56,7 @@ fn result_in(log: &SessionLog, expanded: &HashSet<ItemKey>, ix: usize, call: &st
         (tool_use_id.as_str() == call).then(|| Answer {
             is_error: *is_error,
             text: text.clone(),
-            expanded: expanded.contains(&key),
+            expanded: folds.is_open(&key, Fold::Output),
             key,
         })
     })
@@ -177,14 +171,13 @@ pub(crate) fn summarize_input(input: &Value) -> SharedString {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use client_core::session_log::SessionLog;
     use protocol::event::{ContentBlock, EventBody, SessionEvent};
     use protocol::model::{Seq, ToolUseId};
     use serde_json::json;
 
     use super::{answers, drawn_with_call, summarize_input};
+    use crate::folds::Folds;
 
     fn event(seq: Seq, body: EventBody) -> SessionEvent {
         SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
@@ -222,7 +215,7 @@ mod tests {
         let EventBody::Assistant { blocks, .. } = calls(&["a", "b"]) else { unreachable!() };
 
         let found: Vec<Option<String>> =
-            answers(&m, &HashSet::new(), 1, &blocks).into_iter().map(|a| a.map(|a| a.text)).collect();
+            answers(&m, &Folds::default(), 1, &blocks).into_iter().map(|a| a.map(|a| a.text)).collect();
 
         assert_eq!(found, [Some("from a".to_string()), Some("from b".to_string())]);
         assert!(drawn_with_call(&m, 2, &ToolUseId::from("b")));
@@ -236,7 +229,7 @@ mod tests {
 
         assert!(!drawn_with_call(&m, 2, &ToolUseId::from("elsewhere")));
         assert!(
-            answers(&m, &HashSet::new(), 1, &blocks)[0].is_none(),
+            answers(&m, &Folds::default(), 1, &blocks)[0].is_none(),
             "a call whose result hasn't come back has nothing under it"
         );
     }

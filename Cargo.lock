@@ -1551,6 +1551,7 @@ dependencies = [
  "parking_lot",
  "protocol",
  "ring",
+ "serde",
  "serde_json",
  "syntect",
  "tempfile",

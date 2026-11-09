@@ -5,7 +5,7 @@ use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Windo
 
 use crate::{
     About, AddRepository, CheckForUpdates, CloseChat, Hide, HideOthers, Minimize, NewChat, NewWorkspace, NextWorkspace,
-    PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
+    OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
 };
 
 /// What the menu bar says about the selected workspace. macOS shows only what it was last given, so the window gives
@@ -16,8 +16,8 @@ pub(crate) struct Says {
     pub(crate) diff_open: bool,
 }
 
-/// Sets the menu bar, and handles the items no view does, wherever focus is. macOS reads each item's key from the
-/// bindings each time the bar is given, so they're bound first.
+/// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
+/// reads each item's key from the bindings each time the bar is given, so they're bound first.
 pub(crate) fn set(cx: &mut App) {
     show(Says::default(), cx);
     cx.on_action(|_: &About, cx| about(cx));
@@ -42,6 +42,8 @@ fn app_menu() -> Menu {
         MenuItem::action("About Roundhouse", About),
         MenuItem::separator(),
         MenuItem::action("Check for Updates…", CheckForUpdates),
+        MenuItem::separator(),
+        MenuItem::action("Settings…", OpenSettings),
         MenuItem::separator(),
         MenuItem::os_submenu("Services", SystemMenuType::Services),
         MenuItem::separator(),

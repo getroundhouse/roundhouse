@@ -18,7 +18,8 @@ use crate::workspace_pane::HEADER_HEIGHT;
 
 mod footer;
 
-const WIDTH: f32 = 260.0;
+/// Settings stands in for the sidebar at the same width.
+pub(crate) const WIDTH: f32 = 260.0;
 
 /// The open chat that most needs attention speaks for the workspace.
 pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {

@@ -1,7 +1,7 @@
 //! The transcript view: what it's showing, and how it answers.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use client_core::session_log::{Row, SessionLog};
@@ -14,6 +14,7 @@ use gpui_kit::{
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
 
+use crate::folds::Folds;
 use crate::item_key::ItemKey;
 
 /// Things the owner of a transcript has to deal with.
@@ -26,8 +27,7 @@ pub enum TranscriptEvent {
 }
 
 pub(crate) struct Model {
-    /// Blocks the user has opened.
-    pub expanded: HashSet<ItemKey>,
+    pub folds: Folds,
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
@@ -51,7 +51,7 @@ impl Transcript {
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
-        let model = Rc::new(RefCell::new(Model { expanded: HashSet::new(), picks: HashMap::new() }));
+        let model = Rc::new(RefCell::new(Model { folds: Folds::default(), picks: HashMap::new() }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -198,17 +198,23 @@ impl Transcript {
     }
 
     /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
-    pub(crate) fn toggle(&mut self, seq: Seq, key: ItemKey, cx: &mut Context<Self>) {
-        {
-            let mut m = self.model.borrow_mut();
-            if !m.expanded.remove(&key) {
-                m.expanded.insert(key);
-            }
-        }
+    pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, open: bool, cx: &mut Context<Self>) {
+        self.model.borrow_mut().folds.choose(key, open);
         let row = seq_index(seq) - 1;
         self.scroller.update(cx, |list, cx| {
             list.remeasure_items(row..row + 1, cx);
         });
+        cx.notify();
+    }
+
+    /// Whether thinking shows open, here and as it streams, rather than as a line to open. A block someone opened
+    /// or closed stays as they left it.
+    pub fn set_thinking_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if !self.model.borrow_mut().folds.set_thinking_open(open) {
+            return;
+        }
+        // Any row can hold thinking, so every row can change height.
+        self.scroller.update(cx, MessageScrollerState::remeasure);
         cx.notify();
     }
 
@@ -223,10 +229,10 @@ impl Transcript {
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);
         cx.notify();
 
-        let (client, id, msg_id) = (self.client.clone(), self.session_id.clone(), client_msg_id.clone());
+        let (id, msg_id) = (self.session_id.clone(), client_msg_id.clone());
+        let sending = self.client.start(move |client| client.session_prompt(&id, &text, Some(msg_id)));
         cx.spawn(async move |this, cx| {
-            let sent = cx.background_spawn(async move { client.session_prompt(&id, &text, Some(msg_id)) }).await;
-            if let Err(e) = sent {
+            if let Err(e) = sending.recv().await {
                 let _ = this.update(cx, |t, cx| {
                     t.session.remove_pending(&client_msg_id);
                     t.catch_up(cx);
@@ -240,10 +246,10 @@ impl Transcript {
     }
 
     pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.session_id.clone());
+        let id = self.session_id.clone();
+        let answering = self.client.start(move |client| client.session_approve(&id, &approval_id, decision));
         cx.spawn(async move |this, cx| {
-            let result = cx.background_spawn(async move { client.session_approve(&id, &approval_id, decision) }).await;
-            if let Err(e) = result {
+            if let Err(e) = answering.recv().await {
                 let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("couldn't answer that: {e}"))));
             }
         })
@@ -251,10 +257,10 @@ impl Transcript {
     }
 
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.session_id.clone());
+        let id = self.session_id.clone();
+        let stopping = self.client.start(move |client| client.session_cancel(&id));
         cx.spawn(async move |this, cx| {
-            let result = cx.background_spawn(async move { client.session_cancel(&id) }).await;
-            if let Err(e) = result {
+            if let Err(e) = stopping.recv().await {
                 let _ =
                     this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("couldn't stop the agent: {e}"))));
             }

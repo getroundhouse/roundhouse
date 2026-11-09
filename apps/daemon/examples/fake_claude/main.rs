@@ -7,6 +7,7 @@
 //!   say:TEXT        Stream TEXT in chunks, then send the finished message.
 //!   slow:N:TEXT     Same, sending N chunks one per 100 ms, so tests can act mid-stream.
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
+//!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
 //!   tool:COMMAND    Ask for approval if the mode requires it, then run COMMAND with `sh -c`.
 //!   hang:MS         A tool that takes MS milliseconds. Cancelling stops it.
 //!   partial:TEXT    Start a message and leave it unfinished, so a crash can cut it off.

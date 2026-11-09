@@ -5,6 +5,7 @@ pub mod app;
 pub mod diff_panel;
 mod highlight;
 mod menus;
+mod settings;
 mod sidebar;
 pub mod updates;
 pub mod workspace_pane;
@@ -23,6 +24,8 @@ actions!(
         Hide,
         HideOthers,
         ShowAll,
+        OpenSettings,
+        CloseSettings,
         Quit,
         Minimize,
         Zoom,
@@ -42,11 +45,16 @@ actions!(
 
 /// Opens the main window on an app that's already running, and returns its view.
 pub fn open_main_window(hub: app::HubSource, cx: &mut App) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
+    settings::load(&hub.paths.data_dir, cx);
     cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-m", Minimize, None),
+        KeyBinding::new("cmd-,", OpenSettings, None),
+        // Only while Settings shows. Otherwise Cmd-W closes a chat.
+        KeyBinding::new("escape", CloseSettings, Some(settings::KEY_CONTEXT)),
+        KeyBinding::new("cmd-w", CloseSettings, Some(settings::KEY_CONTEXT)),
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),

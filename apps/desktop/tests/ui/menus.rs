@@ -100,6 +100,8 @@ fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppCon
             "-",
             "Check for Updates…",
             "-",
+            "Settings…",
+            "-",
             "Services",
             "-",
             "Hide Roundhouse",
@@ -113,10 +115,12 @@ fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppCon
     assert!(action(&ui, "Roundhouse", "Hide Others").partial_eq(&desktop::HideOthers));
     assert!(action(&ui, "Roundhouse", "Show All").partial_eq(&desktop::ShowAll));
     assert!(action(&ui, "Roundhouse", "Quit Roundhouse").partial_eq(&desktop::Quit));
+    assert!(action(&ui, "Roundhouse", "Settings…").partial_eq(&desktop::OpenSettings));
     assert_eq!(key(&ui, "Roundhouse", "Hide Roundhouse").as_deref(), Some("cmd-h"));
     assert_eq!(key(&ui, "Roundhouse", "Hide Others").as_deref(), Some("alt-cmd-h"));
     assert_eq!(key(&ui, "Roundhouse", "Show All"), None);
     assert_eq!(key(&ui, "Roundhouse", "Quit Roundhouse").as_deref(), Some("cmd-q"));
+    assert_eq!(key(&ui, "Roundhouse", "Settings…").as_deref(), Some("cmd-,"));
 }
 
 #[gpui_kit::test]

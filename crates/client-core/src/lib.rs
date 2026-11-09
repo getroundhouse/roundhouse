@@ -15,6 +15,6 @@ pub mod session_log;
 mod client;
 
 pub use client::{
-    Client, ClientError, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, Result, Subscription,
-    SubscriptionItem, new_message_id, new_request_id, stop_hub, stop_hub_if_still,
+    Client, ClientError, Commands, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, Reply, Result,
+    Subscription, SubscriptionItem, new_message_id, new_request_id, stop_hub, stop_hub_if_still,
 };

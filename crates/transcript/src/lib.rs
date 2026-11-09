@@ -4,6 +4,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod folds;
 mod item_key;
 mod log_block;
 mod questions;

@@ -121,6 +121,10 @@ impl Driver {
                 let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
                 self.cx.update(|cx| desktop::updates::show_problem(problem, cx));
             }
+            Step::OpenSettings => {
+                let open = Box::new(desktop::OpenSettings);
+                self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
+            }
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
