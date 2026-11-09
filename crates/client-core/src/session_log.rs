@@ -11,9 +11,9 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
-pub const PAGE_EVENTS: u64 = 250;
+pub(crate) const PAGE_EVENTS: u64 = 250;
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
-pub const MAX_LOADED_EVENTS: usize = 2000;
+pub(crate) const MAX_LOADED_EVENTS: usize = 2000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingPrompt {
@@ -30,18 +30,42 @@ pub enum Row<'a> {
     Pending(&'a PendingPrompt),
 }
 
+/// What changed since a view last looked, gathered into one however many updates it took, so a view
+/// that's slow to look sees the latest state rather than a backlog.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Changes {
+    /// The rows whose content changed, as one range. The streaming tail is the row after the last.
+    pub rows: Option<Range<usize>>,
+    /// How many turns ended. Anything taken from the worktree may be out of date after one.
+    pub turns_ended: usize,
+}
+
 #[derive(Debug, Default)]
 pub struct SessionLog {
     last_seq: Seq,
+    /// The newest event the subscription has delivered. It delivers every page after this, so those aren't
+    /// fetched.
+    received: Seq,
     events: BTreeMap<Seq, SessionEvent>,
     pages: BTreeSet<u64>,
     in_flight: BTreeSet<u64>,
+    /// Pages whose fetch failed, which aren't asked for again until [`SessionLog::retry_failed`].
+    failed: BTreeSet<u64>,
+    /// The row a view last wanted, which decides what stays loaded.
+    focus: usize,
     pending: Vec<PendingPrompt>,
     tail: Tail,
+    changes: Changes,
 }
 
 fn page_of(seq: Seq) -> u64 {
     (seq.max(1) - 1) / PAGE_EVENTS
+}
+
+/// Where a subscription starts for a log that reaches `last_seq`: the start of the page before the newest,
+/// so every page it delivers arrives whole, and an open approval, which is always near the end, comes too.
+pub(crate) fn first_live_seq(last_seq: Seq) -> Seq {
+    page_range(page_of(last_seq).saturating_sub(1)).start
 }
 
 fn page_range(page: u64) -> Range<Seq> {
@@ -49,8 +73,9 @@ fn page_range(page: u64) -> Range<Seq> {
 }
 
 impl SessionLog {
+    /// A log that reaches `last_seq`, which a subscription fills from [`first_live_seq`] on.
     pub fn new(last_seq: Seq) -> Self {
-        Self { last_seq, ..Default::default() }
+        Self { last_seq, received: first_live_seq(last_seq) - 1, ..Default::default() }
     }
 
     pub fn row_count(&self) -> usize {
@@ -106,12 +131,23 @@ impl SessionLog {
         open
     }
 
-    /// Pages to fetch for a view looking at `focus`, nearest first, marking them as in flight.
-    pub fn pages_to_fetch(&mut self, focus: usize) -> Vec<Range<Seq>> {
+    /// The newest event the subscription has delivered, so a new one carries on after it.
+    pub(crate) fn received(&self) -> Seq {
+        self.received
+    }
+
+    /// Notes the row a view wants, which decides what to fetch and what stays loaded.
+    pub(crate) fn focus_on(&mut self, row: usize) {
+        self.focus = row;
+    }
+
+    /// Pages to fetch for the row a view wants, nearest first, marking them as in flight. A page the
+    /// subscription has yet to deliver isn't one of them.
+    pub(crate) fn pages_to_fetch(&mut self) -> Vec<Range<Seq>> {
         if self.last_seq == 0 {
             return Vec::new();
         }
-        let focus = focus.min(seq_index(self.last_seq) - 1) as Seq + 1;
+        let focus = self.focus.min(seq_index(self.last_seq) - 1) as Seq + 1;
         let center = page_of(focus);
         let last = page_of(self.last_seq);
         let mut wanted = vec![center];
@@ -123,15 +159,16 @@ impl SessionLog {
         }
         let mut out = Vec::new();
         for page in wanted {
-            if !self.pages.contains(&page) && self.in_flight.insert(page) {
+            let fetchable = page_range(page).start <= self.received && !self.failed.contains(&page);
+            if fetchable && !self.pages.contains(&page) && self.in_flight.insert(page) {
                 out.push(page_range(page));
             }
         }
         out
     }
 
-    /// Puts a fetched range in place. Returns the row indexes it filled, to re-measure.
-    pub fn install_page(&mut self, start: Seq, events: Vec<SessionEvent>, focus: usize) -> Range<usize> {
+    /// Puts a fetched range in place.
+    pub(crate) fn install_page(&mut self, start: Seq, events: Vec<SessionEvent>) {
         let page = page_of(start);
         self.in_flight.remove(&page);
         self.pages.insert(page);
@@ -140,53 +177,81 @@ impl SessionLog {
             self.last_seq = self.last_seq.max(event.seq);
             self.events.insert(event.seq, event);
         }
-        self.evict(focus);
-        seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last_seq))
+        self.evict();
+        self.touched(seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last_seq)));
     }
 
-    /// A fetch failed, so the page can be asked for again.
-    pub fn page_failed(&mut self, start: Seq) {
-        self.in_flight.remove(&page_of(start));
+    /// A fetch failed, so the pages still on their way won't come. They aren't asked for again until
+    /// [`SessionLog::retry_failed`], so a view looking at them doesn't keep asking.
+    pub(crate) fn fetch_failed(&mut self) {
+        self.failed.append(&mut self.in_flight);
     }
 
-    /// Takes an event from a live subscription. Returns true if it added a row.
-    pub fn apply_event(&mut self, event: SessionEvent) -> bool {
+    /// Lets failed pages be asked for again, such as on a new connection.
+    pub(crate) fn retry_failed(&mut self) {
+        self.failed.clear();
+    }
+
+    /// Takes an event from a live subscription.
+    pub fn apply_event(&mut self, event: SessionEvent) {
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
         self.tail.on_event(event.run, &event.body);
-        let added = event.seq > self.last_seq;
+        self.received = self.received.max(event.seq);
         self.last_seq = self.last_seq.max(event.seq);
+        if matches!(event.body, EventBody::TurnEnded { .. }) {
+            self.changes.turns_ended += 1;
+        }
+        // Its own row, and everything after it, which a prompt it recorded may have moved, up to the tail.
+        self.touched(seq_index(event.seq) - 1..self.row_count() + 1);
         // Only the tail stays loaded from live events. Anything older is fetched when scrolled to.
         if page_of(event.seq) + 1 >= page_of(self.last_seq) {
             self.pages.insert(page_of(event.seq));
             self.events.insert(event.seq, event);
+            self.evict();
         }
-        added
     }
 
-    pub fn apply_tail(&mut self, tail: Tail) {
+    pub(crate) fn apply_tail(&mut self, tail: Tail) {
         self.tail = tail;
+        self.touched(self.row_count()..self.row_count() + 1);
     }
 
-    pub fn apply_delta(&mut self, delta: &StreamDelta) {
+    pub(crate) fn apply_delta(&mut self, delta: &StreamDelta) {
         self.tail.apply(delta);
+        self.touched(self.row_count()..self.row_count() + 1);
     }
 
     /// Adds a prompt that's on its way, so it shows straight away. Recording it removes this.
-    pub fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String) {
+    pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String) {
         self.pending.push(PendingPrompt { client_msg_id, text });
+        self.touched(seq_index(self.last_seq)..self.row_count() + 1);
+    }
+
+    /// What changed since this was last asked.
+    pub(crate) fn take_changes(&mut self) -> Changes {
+        std::mem::take(&mut self.changes)
+    }
+
+    fn touched(&mut self, rows: Range<usize>) {
+        self.changes.rows = Some(match self.changes.rows.take() {
+            Some(seen) => seen.start.min(rows.start)..seen.end.max(rows.end),
+            None => rows,
+        });
     }
 
     /// The prompt couldn't be sent, so it no longer belongs in the transcript.
-    pub fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
+    pub(crate) fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
         let at = self.pending.iter().position(|prompt| prompt.client_msg_id == *client_msg_id)?;
-        Some(self.pending.remove(at))
+        let removed = self.pending.remove(at);
+        self.touched(seq_index(self.last_seq)..self.row_count() + 1);
+        Some(removed)
     }
 
-    /// Drops whole pages furthest from `focus`, keeping the tail for live updates.
-    fn evict(&mut self, focus: usize) {
-        let center = page_of(focus as Seq + 1);
+    /// Drops whole pages furthest from where a view is looking, keeping the tail for live updates.
+    fn evict(&mut self) {
+        let center = page_of(self.focus as Seq + 1);
         let tail = page_of(self.last_seq);
         while self.events.len() > MAX_LOADED_EVENTS {
             let far = self
@@ -214,149 +279,4 @@ impl SessionLog {
 mod laws;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use protocol::event::{ApprovalOutcome, NoticeLevel};
-    use protocol::tail::DeltaChange;
-    use serde_json::Value;
-
-    fn notice(seq: Seq) -> SessionEvent {
-        SessionEvent {
-            session_id: "s".into(),
-            seq,
-            ts_ms: 0,
-            run: None,
-            body: EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") },
-            raw: None,
-        }
-    }
-
-    fn event(seq: Seq, body: EventBody) -> SessionEvent {
-        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
-    }
-
-    pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {
-        range.map(notice).collect()
-    }
-
-    #[test]
-    fn rows_are_indexed_by_seq_whatever_is_loaded() {
-        let mut log = SessionLog::new(1000);
-        assert_eq!(log.row_count(), 1000);
-        assert_eq!(log.row(0), Row::Unloaded);
-        log.install_page(251, page(251..501), 300);
-        assert!(matches!(log.row(250), Row::Event(e) if e.seq == 251));
-        assert_eq!(log.row(249), Row::Unloaded);
-        assert_eq!(log.row(500), Row::Unloaded);
-    }
-
-    #[test]
-    fn it_asks_for_the_page_in_view_first_and_only_once() {
-        let mut log = SessionLog::new(1000);
-        let first = log.pages_to_fetch(300);
-        assert_eq!(first, vec![251..501, 1..251, 501..751]);
-        assert!(log.pages_to_fetch(300).is_empty(), "already in flight");
-
-        log.page_failed(251);
-        assert_eq!(log.pages_to_fetch(300), vec![251..501], "a failed page can be asked for again");
-
-        assert!(SessionLog::new(0).pages_to_fetch(0).is_empty());
-    }
-
-    #[test]
-    fn an_installed_page_reports_the_rows_it_filled_and_is_not_fetched_again() {
-        let mut log = SessionLog::new(300);
-        log.pages_to_fetch(0);
-        assert_eq!(log.install_page(1, page(1..251), 0), 0..250);
-        assert_eq!(log.install_page(251, page(251..301), 0), 250..300, "a short last page");
-        assert!(log.pages_to_fetch(0).is_empty());
-    }
-
-    #[test]
-    fn it_never_holds_a_whole_long_session() {
-        let mut log = SessionLog::new(15_000);
-        for start in (1..15_000).step_by(seq_index(PAGE_EVENTS)) {
-            let focus = seq_index(start) - 1;
-            log.install_page(start, page(start..start + PAGE_EVENTS), focus);
-            assert!(log.loaded_events() <= MAX_LOADED_EVENTS + seq_index(PAGE_EVENTS));
-        }
-        // What's near the view and the tail stayed, and what was dropped can be fetched again.
-        assert!(matches!(log.row(14_999), Row::Event(_)));
-        assert_eq!(log.row(0), Row::Unloaded);
-        assert_eq!(log.pages_to_fetch(0), vec![1..251, 251..501]);
-    }
-
-    #[test]
-    fn a_prompt_shows_at_once_then_becomes_the_recorded_event() {
-        let mut log = SessionLog::new(5);
-        log.add_pending("m1".into(), "hello".into());
-        assert_eq!(log.row_count(), 6);
-        assert!(matches!(log.row(5), Row::Pending(p) if p.text == "hello"));
-
-        log.apply_event(event(6, EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()) }));
-        assert_eq!(log.row_count(), 6, "it swapped in place");
-        assert!(matches!(log.row(5), Row::Event(_)));
-    }
-
-    #[test]
-    fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
-        let mut log = SessionLog::new(0);
-        log.add_pending("m1".into(), "hello".into());
-        assert_eq!(log.remove_pending(&"m1".into()).unwrap().text, "hello");
-        assert_eq!(log.row_count(), 0);
-        assert_eq!(log.remove_pending(&"m1".into()), None);
-    }
-
-    #[test]
-    fn live_events_grow_the_log_and_replays_do_not() {
-        let mut log = SessionLog::new(2);
-        assert!(log.apply_event(notice(3)));
-        assert!(!log.apply_event(notice(3)));
-        assert_eq!(log.row_count(), 3);
-    }
-
-    #[test]
-    fn open_approvals_are_those_not_yet_answered() {
-        let requested = |id: &str| EventBody::ApprovalRequested {
-            approval_id: id.into(),
-            tool_name: "Bash".into(),
-            tool_use_id: None,
-            input: Value::Null,
-            description: None,
-            suggestions: Value::Null,
-        };
-        let mut log = SessionLog::new(0);
-        log.apply_event(event(1, requested("a")));
-        log.apply_event(event(2, requested("b")));
-        log.apply_event(event(
-            3,
-            EventBody::ApprovalResolved { approval_id: "a".into(), outcome: ApprovalOutcome::Allowed },
-        ));
-        let open = log.open_approvals();
-        assert_eq!(open.len(), 1);
-        assert_eq!(open[0].seq, 2);
-    }
-
-    #[test]
-    fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
-        let mut log = SessionLog::new(0);
-        log.apply_delta(&StreamDelta {
-            run: None,
-            message_id: "m".into(),
-            parent_tool_use_id: None,
-            change: DeltaChange::Text { index: 0, text: "hi".into() },
-        });
-        assert!(!log.tail().is_empty());
-        log.apply_event(event(
-            1,
-            EventBody::Assistant {
-                message_id: Some("m".into()),
-                parent_tool_use_id: None,
-                model: None,
-                blocks: vec![],
-                first_index: None,
-            },
-        ));
-        assert!(log.tail().is_empty());
-    }
-}
+mod tests;

@@ -4,12 +4,12 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
-use client_core::session_log::{PAGE_EVENTS, SessionLog};
-use client_core::{Client, SubscriptionItem};
+use client_core::session_log::{Row, SessionLog};
+use client_core::{Client, OpenSession};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
 use gpui_kit::{
-    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, Result, StyleRefinement, Styled, Task,
-    Window, px,
+    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, StyleRefinement, Styled, Task, Window,
+    px,
 };
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, Seq, Session, SessionId, seq_index};
@@ -21,70 +21,46 @@ use crate::item_key::ItemKey;
 pub enum TranscriptEvent {
     /// Something failed that the user should hear about.
     Error(String),
-    /// The connection to the hub has gone, so this transcript stopped updating.
-    Disconnected,
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
 }
 
 pub(crate) struct Model {
-    pub log: SessionLog,
     /// Blocks the user has opened.
     pub expanded: HashSet<ItemKey>,
     /// What's been chosen so far on questions with more than one thing to choose, by the approval's
     /// ID and then the question's text.
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
-    /// The row a page was last wanted for, which decides what stays loaded.
-    pub focus: usize,
-    pub fetch_scheduled: bool,
 }
 
 pub struct Transcript {
     client: Client,
     session_id: SessionId,
-    pub(crate) model: Rc<RefCell<Model>>,
+    /// Client-core's copy of the session, which this only reads.
+    session: OpenSession,
+    model: Rc<RefCell<Model>>,
     scroller: Entity<MessageScrollerState>,
-    _items: Task<()>,
+    _changes: Task<()>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
 
 impl Transcript {
     pub fn new(client: Client, session: &Session, cx: &mut Context<Self>) -> Self {
-        let log = SessionLog::new(session.last_seq);
+        let open = OpenSession::start(&client, session);
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
-        let rows = log.row_count() + 1;
+        let rows = open.read(SessionLog::row_count) + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
-        let model = Rc::new(RefCell::new(Model {
-            log,
-            expanded: HashSet::new(),
-            picks: HashMap::new(),
-            focus: rows.saturating_sub(1),
-            fetch_scheduled: false,
-        }));
-
-        // Starts a page back rather than at the tail: an open approval is always near the tail, and
-        // this way it arrives without a separate request.
-        let from = session.last_seq.saturating_sub(PAGE_EVENTS - 1).max(1);
-        let (subscribing, id) = (client.clone(), session.id.clone());
-        let items = cx.spawn(async move |this, cx| {
-            let subscription = cx.background_spawn(async move { subscribing.session_subscribe(&id, from) }).await;
-            let subscription = match subscription {
-                Ok(subscription) => subscription,
-                Err(e) => {
-                    let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("{e}"))));
-                    return;
-                }
-            };
-            while let Ok(item) = subscription.items.recv_async().await {
-                let done = matches!(item, SubscriptionItem::Disconnected);
-                if this.update(cx, |t, cx| t.apply(item, cx)).is_err() || done {
+        let model = Rc::new(RefCell::new(Model { expanded: HashSet::new(), picks: HashMap::new() }));
+        let signals = open.changed().clone();
+        let following = cx.spawn(async move |this, cx| {
+            while signals.recv_async().await.is_ok() {
+                if this.update(cx, Transcript::catch_up).is_err() {
                     return;
                 }
             }
         });
-
-        Self { client, session_id: session.id.clone(), model, scroller, _items: items }
+        Self { client, session_id: session.id.clone(), session: open, model, scroller, _changes: following }
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -95,130 +71,63 @@ impl Transcript {
         &self.scroller
     }
 
+    /// Carries on on a new connection to the hub, keeping what's shown and where.
+    pub fn reconnect(&mut self, client: &Client) {
+        self.session.reconnect(client);
+        self.client = client.clone();
+    }
+
     /// The approvals waiting on an answer, newest last.
     pub fn open_approvals(&self) -> Vec<SessionEvent> {
-        self.model.borrow().log.open_approvals().into_iter().cloned().collect()
+        self.session.read(|log| log.open_approvals().into_iter().cloned().collect())
     }
 
     pub fn loaded_events(&self) -> usize {
-        self.model.borrow().log.loaded_events()
+        self.session.read(SessionLog::loaded_events)
     }
 
     /// The event at a row, if it's loaded.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        let model = self.model.borrow();
-        let client_core::session_log::Row::Event(event) = model.log.row(row) else {
-            return None;
-        };
-        Some(event.clone())
+        self.session.read(|log| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded | Row::Pending(_) => None,
+        })
     }
 
     /// Rows in the list, not counting the streaming tail.
     pub fn row_count(&self) -> usize {
-        self.model.borrow().log.row_count()
+        self.session.read(SessionLog::row_count)
     }
 
     pub fn streaming_text(&self) -> String {
-        let model = self.model.borrow();
-        model.log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
+        self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
     }
 
-    fn apply(&mut self, item: SubscriptionItem, cx: &mut Context<Self>) {
-        let mut turn_ended = false;
-        match item {
-            SubscriptionItem::Event(event) => {
-                turn_ended = matches!(event.body, EventBody::TurnEnded { .. });
-                self.model.borrow_mut().log.apply_event(event);
+    /// Shows what changed in the session since this last looked, however much that is.
+    fn catch_up(&mut self, cx: &mut Context<Self>) {
+        let changes = self.session.take_changes();
+        let errors = self.session.take_errors();
+        let rows = self.session.read(SessionLog::row_count) + 1;
+        self.scroller.update(cx, |list, cx| {
+            let have = list.item_count();
+            if rows > have {
+                list.append(rows - have, cx);
+            } else if rows < have {
+                list.splice(rows..have, 0, cx);
             }
-            SubscriptionItem::Tail(tail) => self.model.borrow_mut().log.apply_tail(tail),
-            SubscriptionItem::Delta(delta) => self.model.borrow_mut().log.apply_delta(&delta),
-            SubscriptionItem::Notice(_) => {}
-            SubscriptionItem::Disconnected => {
-                cx.emit(TranscriptEvent::Disconnected);
-                return;
+            if let Some(changed) = changes.rows {
+                list.remeasure_items(changed.start.min(rows)..changed.end.min(rows), cx);
             }
+            // The last rows can change height as text streams into them.
+            list.remeasure_items(have.min(rows).saturating_sub(2)..rows, cx);
+        });
+        for error in errors {
+            cx.emit(TranscriptEvent::Error(error.to_string()));
         }
-        self.sync_rows(cx);
-        if turn_ended {
+        if changes.turns_ended > 0 {
             cx.emit(TranscriptEvent::TurnEnded);
         }
         cx.notify();
-    }
-
-    /// Tells the list about new rows, and that the last ones may have changed height.
-    fn sync_rows(&mut self, cx: &mut Context<Self>) {
-        let want = self.model.borrow().log.row_count() + 1;
-        self.scroller.update(cx, |list, cx| {
-            let have = list.item_count();
-            if want > have {
-                list.append(want - have, cx);
-            } else if want < have {
-                list.splice(want..have, 0, cx);
-            }
-            let from = have.min(want).saturating_sub(2);
-            list.remeasure_items(from..want, cx);
-        });
-    }
-
-    /// Called from row rendering when an unloaded row comes into view.
-    pub(crate) fn fetch_wanted(&mut self, cx: &mut Context<Self>) {
-        let pages = {
-            let mut m = self.model.borrow_mut();
-            m.fetch_scheduled = false;
-            let focus = m.focus;
-            m.log.pages_to_fetch(focus)
-        };
-        for range in pages {
-            let (client, id) = (self.client.clone(), self.session_id.clone());
-            let start = range.start;
-            cx.spawn(async move |this, cx| {
-                let read = cx.background_spawn(async move {
-                    // A size limit can cut a read short, so keep going until the page is complete.
-                    let mut events = Vec::new();
-                    let mut from = range.start;
-                    while from < range.end {
-                        let (page, _) = client.session_read(
-                            &id,
-                            from,
-                            u32::try_from(range.end - from).unwrap_or(u32::MAX),
-                            false,
-                        )?;
-                        let Some(last) = page.last().map(|e| e.seq) else { break };
-                        events.extend(page);
-                        from = last + 1;
-                    }
-                    Ok::<_, client_core::ClientError>(events)
-                });
-                let result = read.await;
-                let _ = this.update(cx, |t, cx| t.install(start, result, cx));
-            })
-            .detach();
-        }
-    }
-
-    fn install(
-        &mut self,
-        start: Seq,
-        result: Result<Vec<SessionEvent>, client_core::ClientError>,
-        cx: &mut Context<Self>,
-    ) {
-        match result {
-            Ok(events) => {
-                let filled = {
-                    let mut m = self.model.borrow_mut();
-                    let focus = m.focus;
-                    m.log.install_page(start, events, focus)
-                };
-                self.scroller.update(cx, |list, cx| {
-                    list.remeasure_items(filled, cx);
-                });
-                cx.notify();
-            }
-            Err(e) => {
-                self.model.borrow_mut().log.page_failed(start);
-                cx.emit(TranscriptEvent::Error(format!("couldn't load history: {e}")));
-            }
-        }
     }
 
     /// Records a choice on a question card, and answers once nothing else is needed.
@@ -309,8 +218,8 @@ impl Transcript {
             return false;
         }
         let client_msg_id = client_core::new_message_id();
-        self.model.borrow_mut().log.add_pending(client_msg_id.clone(), text.clone());
-        self.sync_rows(cx);
+        self.session.add_pending(client_msg_id.clone(), text.clone());
+        self.catch_up(cx);
         self.scroller.update(cx, MessageScrollerState::scroll_to_end);
         cx.notify();
 
@@ -319,8 +228,8 @@ impl Transcript {
             let sent = cx.background_spawn(async move { client.session_prompt(&id, &text, Some(msg_id)) }).await;
             if let Err(e) = sent {
                 let _ = this.update(cx, |t, cx| {
-                    t.model.borrow_mut().log.remove_pending(&client_msg_id);
-                    t.sync_rows(cx);
+                    t.session.remove_pending(&client_msg_id);
+                    t.catch_up(cx);
                     cx.emit(TranscriptEvent::Error(format!("couldn't send that: {e}")));
                     cx.notify();
                 });
@@ -356,12 +265,12 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let model = self.model.clone();
+        let (model, session) = (self.model.clone(), self.session.clone());
         let this = cx.weak_entity();
         MessageScroller::new(
             ElementId::Name(self.session_id.to_string().into()),
             self.scroller.clone(),
-            move |ix, _, cx| crate::rows::render_row(&model, &this, ix, cx),
+            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, ix, cx),
         )
         // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
         .with_row_style(StyleRefinement::default().pb(px(0.)))

@@ -3,6 +3,6 @@
 How code that uses GPUI is written. `docs/architecture.md` says which crates may use it, `docs/rust.md` covers everything else about how Rust is written here, and `docs/ui.md` covers why GPUI and gpui-kit were chosen.
 
 - **`render` does no I/O or blocking.** It reads state the view already holds.
-- **Calls on a `client-core` `Client` go through `cx.background_spawn`,** never on the main thread, because they block. Reading a feed's copy of the records is fine there, because a feed never holds its lock while it waits on the hub.
+- **Calls on a `client-core` `Client` go through `cx.background_spawn`,** never on the main thread, because they block. Reading or updating what client-core keeps, in a `RecordsFeed` or an `OpenSession`, is fine there, because neither holds its lock while it waits on the hub.
 - **A long `render` splits by region of the screen,** into functions that return elements.
 - **Nothing imports `gpui_kit::*`.** A glob brings in GPUI's `test` attribute, which makes `#[test]` recurse. The lint against glob imports catches it.

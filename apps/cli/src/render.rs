@@ -1,6 +1,6 @@
 //! Plain text for a terminal. This is a debugging view, not the product's transcript.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::Write;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
@@ -15,8 +15,9 @@ const RESULT_PREVIEW_LINES: usize = 6;
 
 #[derive(Default)]
 pub(crate) struct Printer {
-    /// Messages whose text has already been printed from the streaming tail.
-    streamed: HashSet<MessageId>,
+    /// How many bytes of each block of text have been printed as it streamed, so a tail that replaces what's
+    /// held, as when following starts again, and then the finished block, only print what's new.
+    printed: HashMap<(MessageId, u32), usize>,
     mid_line: bool,
 }
 
@@ -51,14 +52,12 @@ impl Printer {
                     cwd.as_deref().unwrap_or("?"),
                 ),
             ),
-            EventBody::Assistant { message_id, blocks, .. } => {
-                let already_streamed = message_id.as_ref().is_some_and(|id| self.streamed.remove(id));
-                for block in blocks {
-                    if already_streamed && matches!(block, ContentBlock::Text { .. }) {
-                        self.end_line();
-                        continue;
+            EventBody::Assistant { message_id, blocks, first_index, .. } => {
+                for (position, block) in blocks.iter().enumerate() {
+                    match (block, self.streamed(message_id.as_ref(), *first_index, position)) {
+                        (ContentBlock::Text { text }, Some(printed)) => self.rest(text, printed),
+                        _ => self.block(event.seq, block),
                     }
-                    self.block(event.seq, block);
                 }
             }
             EventBody::AgentUser { blocks, .. } => {
@@ -67,6 +66,8 @@ impl Printer {
                 }
             }
             EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
+                // Whatever was still streaming, such as when the turn was cancelled, won't finish.
+                self.printed.clear();
                 self.turn_ended(event.seq, *outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors);
             }
             EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
@@ -115,10 +116,26 @@ impl Printer {
         }
     }
 
+    /// How much of a finished block was printed as it streamed, which then needn't be remembered.
+    fn streamed(&mut self, message: Option<&MessageId>, first_index: Option<u32>, position: usize) -> Option<usize> {
+        let index = first_index?.checked_add(u32::try_from(position).ok()?)?;
+        self.printed.remove(&(message?.clone(), index))
+    }
+
+    /// The end of a block that was printed as it streamed, such as what streamed while following had fallen
+    /// behind.
+    fn rest(&mut self, text: &str, printed: usize) {
+        if let Some(rest) = text.get(printed..).filter(|rest| !rest.is_empty()) {
+            self.mid_line = true;
+            print!("{rest}");
+        }
+        self.end_line();
+    }
+
     /// Text is printed as it arrives, and everything else waits for the finished block.
     pub(crate) fn delta(&mut self, delta: &StreamDelta) {
-        if let DeltaChange::Text { text, .. } = &delta.change {
-            self.streamed.insert(delta.message_id.clone());
+        if let DeltaChange::Text { index, text } = &delta.change {
+            *self.printed.entry((delta.message_id.clone(), *index)).or_default() += text.len();
             self.mid_line = true;
             print!("{text}");
             std::io::stdout().flush().ok();
@@ -128,11 +145,14 @@ impl Printer {
     pub(crate) fn tail(&mut self, tail: &Tail) {
         for message in &tail.messages {
             for block in &message.blocks {
-                if block.kind == protocol::tail::BlockKind::Text && !block.text.is_empty() {
-                    self.streamed.insert(message.message_id.clone());
-                    self.mid_line = true;
-                    print!("{}", block.text);
+                if block.kind != protocol::tail::BlockKind::Text {
+                    continue;
                 }
+                let printed = self.printed.entry((message.message_id.clone(), block.index)).or_default();
+                let Some(new) = block.text.get(*printed..).filter(|new| !new.is_empty()) else { continue };
+                *printed = block.text.len();
+                self.mid_line = true;
+                print!("{new}");
             }
         }
         std::io::stdout().flush().ok();

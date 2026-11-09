@@ -2,8 +2,7 @@
 
 use std::collections::HashMap;
 
-use client_core::Client;
-use client_core::records::Record;
+use client_core::{Client, RecordsFeed};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::model::{DiffComment, PullRequest, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
@@ -24,10 +23,7 @@ fn is_working(session: &Session) -> bool {
 #[derive(Clone, Debug)]
 pub enum PaneEvent {
     Error(String),
-    Disconnected,
     Archive(WorkspaceId, bool),
-    /// A reply carried this record, for client-core's copy of the records. Boxed, because records are large.
-    Replied(Box<Record>),
 }
 
 /// What `Create PR` asks of the agent. The agent writes it, because it knows why the changes were made.
@@ -43,6 +39,8 @@ fn pull_request_prompt(workspace: &Workspace) -> String {
 
 pub struct WorkspacePane {
     client: Client,
+    /// Client-core's copy of the hub's records, which replies go into.
+    records: RecordsFeed,
     pub workspace: Workspace,
     /// In the order they were made, including closed ones.
     pub sessions: Vec<Session>,
@@ -81,6 +79,7 @@ impl WorkspacePane {
 
     pub fn new(
         client: Client,
+        records: RecordsFeed,
         workspace: Workspace,
         sessions: Vec<Session>,
         comments: Vec<DiffComment>,
@@ -100,6 +99,7 @@ impl WorkspacePane {
         });
         let mut this = Self {
             client,
+            records,
             workspace,
             sessions,
             showing_next: None,
@@ -152,6 +152,18 @@ impl WorkspacePane {
             });
         })
         .detach();
+    }
+
+    /// Carries on on a new connection to the hub, keeping everything shown and typed.
+    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
+        self.client = client.clone();
+        for (transcript, _) in self.transcripts.values() {
+            transcript.update(cx, |t, _| t.reconnect(client));
+        }
+        if let Some(diff) = &self.diff {
+            diff.update(cx, |d, cx| d.reconnect(client, cx));
+        }
+        self.refresh_pull_request(cx);
     }
 
     /// What client-core holds for this workspace now. Only what changed is passed on.
@@ -240,13 +252,11 @@ impl WorkspacePane {
             let _ = handle.update(cx, |_, window, cx| {
                 let _ = this.update(cx, |t, cx| {
                     let (client, id) = (t.client.clone(), t.workspace.id.clone());
-                    let diff = cx.new(|cx| DiffPanel::new(client, id, window, cx));
+                    let records = t.records.clone();
+                    let diff = cx.new(|cx| DiffPanel::new(client, records, id, window, cx));
                     diff.update(cx, |d, cx| d.set_comments(t.comments.clone(), cx));
                     let events = cx.subscribe(&diff, |this, _, event: &DiffEvent, cx| match event {
                         DiffEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
-                        DiffEvent::Replied(comment) => {
-                            cx.emit(PaneEvent::Replied(Box::new(Record::Comment(comment.clone()))));
-                        }
                         DiffEvent::SendToAgent(prompt) => {
                             if let Some(transcript) = this.transcript() {
                                 transcript.update(cx, |t, cx| t.send_prompt(prompt.clone(), cx));

@@ -284,7 +284,7 @@ impl Follower {
             }
             SubscriptionItem::Tail(tail) => self.tail = tail,
             SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
-            SubscriptionItem::Notice(_) | SubscriptionItem::Disconnected => {}
+            SubscriptionItem::Notice(_) => {}
         }
     }
 
