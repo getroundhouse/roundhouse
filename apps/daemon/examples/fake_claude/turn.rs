@@ -1,6 +1,7 @@
 //! One turn: running a prompt's script, one command at a time.
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -9,18 +10,39 @@ use serde_json::{Value, json};
 use crate::tools::{ask_questions, present_plan, run_tool};
 use crate::{Config, Input, Out, current_mode, current_model, emit, pause};
 
+/// What a streamed block holds.
+#[derive(Clone, Copy)]
+pub(crate) enum Block {
+    Text,
+    Thinking,
+}
+
+impl Block {
+    /// Its type, which is also the field its text goes in.
+    fn name(self) -> &'static str {
+        match self {
+            Block::Text => "text",
+            Block::Thinking => "thinking",
+        }
+    }
+}
+
+/// How many messages this process has started.
+static MESSAGES: AtomicU32 = AtomicU32::new(0);
+
+/// A new message's ID. It's unique within a session, as the real CLI's are, so it counts across turns, and a resumed
+/// conversation is another process.
+fn message_id() -> String {
+    let number = MESSAGES.fetch_add(1, Ordering::Relaxed) + 1;
+    format!("msg_fake_{}_{number}", std::process::id())
+}
+
 pub(crate) struct Turn<'a> {
     pub(crate) config: &'a Config,
     pub(crate) out: &'a Out,
-    pub(crate) next_message: u32,
 }
 
 impl Turn<'_> {
-    pub(crate) fn message_id(&mut self) -> String {
-        self.next_message += 1;
-        format!("msg_fake_{}_{}", std::process::id(), self.next_message)
-    }
-
     pub(crate) fn stream_event(&self, message_id: &str, event: Value) {
         emit(
             self.out,
@@ -40,31 +62,28 @@ impl Turn<'_> {
     /// Returns true if interrupted part way.
     pub(crate) fn say(
         &mut self,
+        block: Block,
         chunks: Vec<String>,
         gap: Duration,
         rx: &Receiver<Input>,
         queued: &mut VecDeque<String>,
         eof: &mut bool,
     ) -> bool {
-        let id = self.message_id();
+        let id = message_id();
         self.stream_event(&id, json!({"type":"message_start","message":{"id":id,"role":"assistant"}}));
-        self.stream_event(
-            &id,
-            json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
-        );
+        let name = block.name();
+        self.stream_event(&id, json!({"type":"content_block_start","index":0,"content_block":{"type":name,(name):""}}));
         let mut text = String::new();
         for chunk in chunks {
-            self.stream_event(
-                &id,
-                json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":chunk}}),
-            );
+            let delta = json!({"type":format!("{name}_delta"),(name):chunk});
+            self.stream_event(&id, json!({"type":"content_block_delta","index":0,"delta":delta}));
             text.push_str(&chunk);
             if gap > Duration::ZERO && pause(rx, gap, queued, eof) {
                 return true;
             }
         }
         // The real CLI sends the finished block before content_block_stop.
-        self.finish_message(&id, json!({"type":"text","text":text}));
+        self.finish_message(&id, json!({"type":name,(name):text}));
         self.stream_event(&id, json!({"type":"content_block_stop","index":0}));
         self.stream_event(&id, json!({"type":"message_stop"}));
         false
@@ -72,14 +91,14 @@ impl Turn<'_> {
 
     /// A tool that's its own card in the app, so it goes by its real name.
     pub(crate) fn named_tool_use(&mut self, name: &str) -> String {
-        let id = self.message_id();
+        let id = message_id();
         let tool_use_id = format!("toolu_{id}");
         self.finish_message(&id, json!({"type":"tool_use","id":tool_use_id,"name":name,"input":{}}));
         tool_use_id
     }
 
     pub(crate) fn tool_use(&mut self, command: &str) -> String {
-        let id = self.message_id();
+        let id = message_id();
         let tool_use_id = format!("toolu_{id}");
         self.finish_message(&id, json!({"type":"tool_use","id":tool_use_id,"name":"Bash","input":{"command":command}}));
         tool_use_id
@@ -119,7 +138,7 @@ pub(crate) fn run_turn(
         "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
     );
 
-    let mut turn = Turn { config, out, next_message: 0 };
+    let mut turn = Turn { config, out };
     let mut interrupted = false;
     let mut pending: VecDeque<String> = VecDeque::from([script]);
     while let Some(next) = pending.pop_front() {
@@ -195,16 +214,21 @@ pub(crate) fn run_command(
 ) -> bool {
     if let Some(text) = command.strip_prefix("say:") {
         let chunks: Vec<String> = text.chars().collect::<Vec<_>>().chunks(4).map(|c| c.iter().collect()).collect();
-        return turn.say(chunks, Duration::ZERO, rx, queued, eof);
+        return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("slow:") {
         let (count, text) = rest.split_once(':').unwrap();
         let chunks: Vec<String> = (0..count.parse().unwrap()).map(|i| format!("{text}{i} ")).collect();
-        return turn.say(chunks, Duration::from_millis(100), rx, queued, eof);
+        return turn.say(Block::Text, chunks, Duration::from_millis(100), rx, queued, eof);
+    }
+    if let Some(rest) = command.strip_prefix("think:") {
+        let (count, text) = rest.split_once(':').unwrap();
+        let chunks: Vec<String> = (0..count.parse().unwrap()).map(|i| format!("{text}{i} ")).collect();
+        return turn.say(Block::Thinking, chunks, Duration::from_millis(100), rx, queued, eof);
     }
     if let Some(count) = command.strip_prefix("burst:") {
         let chunks: Vec<String> = (0..count.parse::<u32>().unwrap()).map(|i| format!("{i} ")).collect();
-        return turn.say(chunks, Duration::ZERO, rx, queued, eof);
+        return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("late:") {
         let (file, text) = rest.rsplit_once(':').unwrap();
@@ -215,7 +239,7 @@ pub(crate) fn run_command(
         return false;
     }
     if let Some(text) = command.strip_prefix("partial:") {
-        let id = turn.message_id();
+        let id = message_id();
         turn.stream_event(&id, json!({"type":"message_start","message":{"id":id,"role":"assistant"}}));
         turn.stream_event(
             &id,
@@ -232,7 +256,7 @@ pub(crate) fn run_command(
     if command == "recall" {
         let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
         let text = format!("I have seen: {}", seen.trim().replace('\n', " | "));
-        return turn.say(vec![text], Duration::ZERO, rx, queued, eof);
+        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
     }
     if let Some(code) = command.strip_prefix("crash:") {
         std::process::exit(code.parse().unwrap());
@@ -245,7 +269,7 @@ pub(crate) fn run_command(
     }
     if let Some(name) = command.strip_prefix("env:") {
         let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
-        return turn.say(vec![text], Duration::ZERO, rx, queued, eof);
+        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
     }
     false
 }

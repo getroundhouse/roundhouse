@@ -86,6 +86,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
 | Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
 | Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
+| Settings | The app's own, chosen in Settings and kept on this Mac, or a repository's, in its `.conductor/settings.toml` files | "Settings" alone means the app's. Say "repository settings" for the others |
 
 ## Ending things
 

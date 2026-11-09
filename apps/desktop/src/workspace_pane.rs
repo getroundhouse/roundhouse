@@ -119,6 +119,11 @@ impl WorkspacePane {
                 this.submit(window, cx);
             }
         });
+        let on_settings = crate::settings::observe(cx, |this, cx| {
+            for (transcript, _) in this.transcripts.values() {
+                transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
+            }
+        });
         let mut this = Self {
             client,
             records,
@@ -139,7 +144,7 @@ impl WorkspacePane {
             setup_log_refresh: None,
             behind: false,
             window: window.window_handle(),
-            subscriptions: vec![on_enter],
+            subscriptions: vec![on_enter, on_settings],
         };
         // The chat last worked in.
         let latest = this.open_sessions().max_by_key(|s| (s.updated_at_ms, s.created_at_ms)).map(|s| s.id.clone());

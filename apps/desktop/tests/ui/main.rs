@@ -15,6 +15,7 @@ mod other_hubs;
 mod pickers;
 mod questions;
 mod reconnecting;
+mod settings;
 mod setup;
 mod streaming;
 #[cfg(test)]

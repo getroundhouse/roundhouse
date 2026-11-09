@@ -21,4 +21,5 @@ Start with trackpad feel, then IME, then selection and copy.
 - Status marks: a working agent's light sweeps smoothly at the display's rate, nothing else moves, Reduce Motion holds it still, and with every agent idle the window draws nothing, which Activity Monitor shows as no CPU
 - Resize and window snapping stay smooth during streaming
 - The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen
+- Settings: the strip along the top still moves the window, its switches respond at once, and going back leaves the workspace as it was, scrolled to the same place
 - Overall: does it feel like an app you want to live in all day?
