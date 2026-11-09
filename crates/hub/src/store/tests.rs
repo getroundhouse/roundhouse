@@ -6,8 +6,13 @@ use protocol::model::{
 
 use super::*;
 
+/// The store in `dir`, with its backups beside it.
+fn open_in(dir: &Path) -> Store {
+    Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap()
+}
+
 fn store_with_session(dir: &Path) -> Store {
-    let store = Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap();
+    let store = open_in(dir);
     let now = now_ms();
     let repo =
         Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
@@ -148,7 +153,7 @@ fn open_approvals_are_those_requested_and_not_resolved() {
 fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
     store_with_session(dir.path()).append(&"s".into(), None, &notice("kept"), None, None, None).unwrap();
-    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
+    let store = open_in(dir.path());
     assert_eq!(store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
 }
 
@@ -161,7 +166,7 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
     store.append(&"s".into(), None, &notice("from the hub"), None, None, None).unwrap();
     drop(store);
 
-    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
+    let store = open_in(dir.path());
     let second = store.next_run().unwrap();
 
     assert!(second > first, "a reopened store handed out {second} after {first}");
@@ -190,7 +195,7 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     .unwrap();
     drop(conn);
 
-    let store = Store::open(&path, &backups).unwrap();
+    let store = open_in(dir.path());
 
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));

@@ -143,6 +143,19 @@ impl fmt::Display for Name {
     }
 }
 
+/// What's in `dir`, by name, in order, so a test can see everything a copy left. Nothing, if `dir` isn't there.
+#[cfg(test)]
+pub(crate) fn files_in(dir: &Path) -> Vec<String> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return vec![],
+        Err(e) => panic!("reading {}: {e}", dir.display()),
+    };
+    let mut names: Vec<String> = entries.map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect();
+    names.sort();
+    names
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
@@ -151,14 +164,6 @@ mod tests {
     use proptest::test_runner::{Config, RngSeed};
 
     use super::*;
-
-    /// What's in `dir`, by name, in order.
-    fn files_in(dir: &Path) -> Vec<String> {
-        let mut names: Vec<String> =
-            fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect();
-        names.sort();
-        names
-    }
 
     proptest! {
         #![proptest_config(Config {

@@ -208,9 +208,7 @@ pub(crate) fn migrate_to(conn: &mut Connection, backups_dir: &Path, target: usiz
 /// [`migrate`], with the list of migrations given, so a test can stop short of this build's or add one
 /// that fails.
 fn migrate_through(conn: &mut Connection, backups_dir: &Path, migrations: &[&str]) -> Result<(), StoreError> {
-    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    // Negative isn't something this code ever writes, so it counts as newer.
-    let version = usize::try_from(version).unwrap_or(usize::MAX);
+    let version = schema_version(conn)?;
     if version > migrations.len() {
         return Err(StoreError::TooNew { found: version, known: migrations.len() });
     }
@@ -230,6 +228,13 @@ fn migrate_through(conn: &mut Connection, backups_dir: &Path, migrations: &[&str
         tx.commit()?;
     }
     Ok(())
+}
+
+/// How many migrations have run on this database.
+fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    // Negative isn't something this code ever writes, so it counts as newer.
+    Ok(usize::try_from(version).unwrap_or(usize::MAX))
 }
 
 #[cfg(test)]
