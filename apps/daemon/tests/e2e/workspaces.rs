@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use client_core::{Client, ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, ClientRequestId, DiffSide, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, ClientRequestId, DiffSide, PrState, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, install_executable, is_alive, read_all, wait_for_setup,
@@ -214,7 +214,7 @@ fn a_workspace_reports_its_pull_request_from_gh() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     let pr = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-    assert_eq!((pr.number, pr.state.as_str(), pr.url.as_str()), (7, "OPEN", "https://example.com/7"));
+    assert_eq!((pr.number, pr.state, pr.url.as_str()), (7, PrState::Open, "https://example.com/7"));
 }
 
 #[test]

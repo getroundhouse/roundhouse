@@ -4,9 +4,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::AgentTask;
 
+mod pull_request;
 mod queue;
 mod title;
 
+pub use pull_request::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
 pub use queue::QueuedPrompt;
 pub use title::{Title, TitleError, TitleSource};
 
@@ -387,14 +389,4 @@ pub struct DiffComment {
     pub created_at_ms: i64,
     #[serde(default)]
     pub rev: Rev,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct PullRequest {
-    pub number: u64,
-    pub url: String,
-    pub title: String,
-    /// As GitHub reports it: `OPEN`, `CLOSED` or `MERGED`.
-    pub state: String,
-    pub is_draft: bool,
 }

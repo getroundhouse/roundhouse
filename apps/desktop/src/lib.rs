@@ -11,6 +11,7 @@ pub mod checkout;
 pub mod file_diff;
 mod home;
 mod menus;
+pub mod pull_request;
 mod rename;
 pub mod review;
 mod right_click;

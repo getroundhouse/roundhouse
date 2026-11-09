@@ -85,8 +85,9 @@ fn the_core_loop(cx: &mut TestAppContext) {
 
     review_and_comment(&mut ui, &stack, &id);
 
-    // Open a PR, which is the agent's job.
-    ui.click("create-pr");
+    // Open a PR, which is the agent's job, once the app knows there isn't one.
+    ui.wait("the offer to create a PR", |ui| ui.has("pull-request-action"));
+    ui.click("pull-request-action");
     ui.wait("the PR request to reach the agent", |ui| {
         ui.events()
             .iter()
@@ -169,9 +170,11 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     ui.wait("wrapping around", |ui| ui.view().selected.as_ref() == Some(&first));
 
     ui.wait("the pane", |ui| ui.pane().is_some());
-    ui.press("cmd-shift-d");
     let pane = ui.pane().unwrap();
-    ui.wait("the sidebar of changes", |ui| ui.cx.read_entity(&pane, |p, _| p.changes_open && p.diff.is_some()));
+    ui.press("cmd-shift-d");
+    assert!(!ui.changes_open(), "it starts open, so this hides it");
+    ui.press("cmd-shift-d");
+    ui.wait("the sidebar of changes", |ui| ui.changes_open() && ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
     let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
     ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));
 

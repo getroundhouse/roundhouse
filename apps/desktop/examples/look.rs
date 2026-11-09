@@ -6,8 +6,8 @@
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"
 //!     cargo run -p desktop --example look -- some-workspace click:mode-picker
 //!
-//! Selects the named workspace. With `diff`, opens its diff, and a further argument adds a comment on the
-//! first changed line. `--note TEXT` anywhere says why it's open, as it does for the app.
+//! Selects the named workspace, whose sidebar of changes is open, as it is from the start. With `diff`, a further
+//! argument adds a comment on the first changed line. `--note TEXT` anywhere says why it's open, as it does for the app.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::checkout::Checkout;
-use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::SharedString;
 use gpui_kit::test::TestWindowExt as _;
 
@@ -76,7 +75,6 @@ fn main() {
                         .unwrap();
                 }
             }
-            pane.update(cx, WorkspacePane::toggle_changes);
         })
         .detach();
     });

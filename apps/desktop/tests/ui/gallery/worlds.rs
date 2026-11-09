@@ -4,13 +4,13 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, CommentId, DiffComment, DiffSide, GitDiff, PullRequest, QueuedPrompt, Rev, SessionStatus,
-    SetupStatus, Title, WorkspaceId, WorkspaceStatus,
+    AttachmentId, Checks, CommentId, DiffComment, DiffSide, GitDiff, MergeState, PullRequest, QueuedPrompt, Rev,
+    SessionStatus, SetupStatus, Title, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, World};
-use super::{chats, patch, pictures};
+use super::{chats, patch, pictures, pull_requests};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {
@@ -66,8 +66,10 @@ fn converse(world: &mut World, focus: &WorkspaceId) {
             number: 182,
             url: "https://example.com/pull/182".to_string(),
             title: "Show PR state in the sidebar".to_string(),
-            state: "OPEN".to_string(),
-            is_draft: false,
+            base: Some("main".to_string()),
+            merge_state: MergeState::Clean,
+            checks: Checks { passed: 5, failed: 0, pending: 0 },
+            ..pull_requests::open()
         },
     );
 }

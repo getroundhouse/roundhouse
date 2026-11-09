@@ -24,10 +24,8 @@ pub(crate) struct Screen {
 
 /// Something to do in the app once it has connected, each done once the one before it has finished.
 pub(crate) enum Step {
-    /// Selects the workspace with this name, and waits for its chat to load.
+    /// Selects the workspace with this name, and waits for its chat, its diff and its pull request to load.
     Select(&'static str),
-    /// Opens the sidebar of changes, and waits for the diff to load.
-    OpenDiff,
     /// Clicks this file in the sidebar of changes, and waits for the diff tab to show it.
     OpenFile(&'static str),
     /// Starts a comment on this line of the open file's new side, as the line's add button would.
@@ -221,29 +219,30 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(closed_chats),
         steps: &[Step::Select(FOCUS), Step::Click("closed-chats"), Step::MoveAway],
     },
-    Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS), Step::OpenDiff] },
+    Screen { name: "changes", spec: "diff.md", world: Some(diff), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "changes-hidden",
+        spec: "diff.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Click("toggle-diff")],
+    },
     Screen {
         name: "changes-tree",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::Click("changes-layout")],
+        steps: &[Step::Select(FOCUS), Step::Click("changes-layout")],
     },
     Screen {
         name: "diff",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[Step::Select(FOCUS), Step::OpenDiff, Step::OpenFile("crates/protocol/src/model.rs")],
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs")],
     },
     Screen {
         name: "writing-a-comment",
         spec: "diff.md",
         world: Some(diff),
-        steps: &[
-            Step::Select(FOCUS),
-            Step::OpenDiff,
-            Step::OpenFile("crates/protocol/src/model.rs"),
-            Step::StartComment(99),
-        ],
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::StartComment(99)],
     },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
     Screen { name: "home", spec: "home.md", world: Some(titled), steps: &[Step::Select(FOCUS), Step::Click("home")] },

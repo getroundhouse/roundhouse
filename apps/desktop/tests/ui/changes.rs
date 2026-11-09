@@ -195,3 +195,19 @@ fn add_to_chat_copies_a_comment_into_the_composer(cx: &mut TestAppContext) {
     assert_eq!(shown, std::slice::from_ref(&comment.id), "it stays on the diff");
     assert_eq!(stack.client().comment_list(&workspace).unwrap(), [comment], "and in the hub");
 }
+
+#[gpui_kit::test]
+fn hiding_the_sidebar_of_changes_hides_it_in_every_workspace(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _) = reviewing(cx, &stack);
+    let first = ui.view().selected.clone().unwrap();
+    ui.new_workspace();
+    assert!(ui.changes_open(), "open in the first, so open in the second");
+
+    ui.click("toggle-diff");
+    ui.press("cmd-[");
+
+    ui.wait("the first workspace", |ui| ui.view().selected.as_ref() == Some(&first));
+    assert!(!ui.changes_open());
+    assert!(!ui.has("changed-files"), "the first workspace's changes aren't drawn either");
+}

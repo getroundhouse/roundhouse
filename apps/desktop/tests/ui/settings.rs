@@ -115,13 +115,12 @@ fn cmd_w_goes_back_from_settings_and_leaves_the_chat_open(cx: &mut TestAppContex
 fn the_workspaces_keys_do_nothing_while_settings_shows(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "");
-    let pane = ui.pane().unwrap();
     open_settings(&mut ui);
 
     ui.press("cmd-shift-d");
     ui.press("escape");
 
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.changes_open));
+    assert!(ui.changes_open(), "the sidebar of changes is still open");
 }
 
 #[gpui_kit::test]

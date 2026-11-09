@@ -12,6 +12,7 @@ use gpui_kit::{
 };
 use protocol::model::{Session, SessionStatus};
 
+use super::diff_tab::Sidebar;
 use super::setup::setup_log_view;
 use super::{Busy, HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
 use crate::right_click;
@@ -141,27 +142,28 @@ impl WorkspacePane {
             )
     }
 
-    fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
+    /// its bar's action instead.
+    fn header(&self, sidebar: Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let id = self.workspace.id.clone();
-        let pr = self.pull_request.clone();
+        let controls = match sidebar {
+            Sidebar::Open => None,
+            Sidebar::Hidden => {
+                let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
+                crate::pull_request::controls(&self.pull_request, on_action, cx)
+            }
+        };
         h_flex()
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
-            .px_4()
+            .pl_4()
+            .pr_3()
             .gap_2()
             .border_b_1()
             .border_color(border)
             .child(self.heading(cx))
-            .child(
-                Button::new("toggle-diff")
-                    .ghost()
-                    .small()
-                    .icon(IconName::PanelRight)
-                    .label(if self.changes_open { "Hide diff" } else { "Diff" })
-                    .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
-            )
             .child(
                 Button::new("archive").ghost().small().label("Archive").disabled(self.busy == Busy::Changing).on_click(
                     cx.listener(move |_, _, _, cx| {
@@ -169,25 +171,18 @@ impl WorkspacePane {
                     }),
                 ),
             )
-            .when_some(pr, |d, pr| {
-                let url = pr.url.clone();
-                d.child(
-                    Button::new("pull-request")
-                        .small()
-                        .icon(IconName::Github)
-                        .label(format!("#{} · {}", pr.number, self.work().name()))
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                )
-            })
-            .when(self.pull_request.is_none(), |d| {
-                d.child(
-                    Button::new("create-pr")
-                        .primary()
-                        .small()
-                        .label("Create PR")
-                        .on_click(cx.listener(|t, _, _, cx| t.create_pull_request(cx))),
-                )
-            })
+            .children(controls)
+            .child(
+                Button::new("toggle-diff")
+                    .ghost()
+                    .small()
+                    .icon(IconName::PanelRight)
+                    .tooltip(match sidebar {
+                        Sidebar::Open => "Hide diff",
+                        Sidebar::Hidden => "Show diff",
+                    })
+                    .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
+            )
     }
 
     /// What the workspace is called, and the branch it's on and where that started.
@@ -224,22 +219,20 @@ impl WorkspacePane {
 
 impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let header = self.header(cx).into_any_element();
+        let changes = self.changes_sidebar(cx);
+        // Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
+        let sidebar = if changes.is_some() { Sidebar::Open } else { Sidebar::Hidden };
+        let header = self.header(sidebar, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let file = self.diff.as_ref().filter(|_| self.showing() == Showing::Diff).map(|diff| diff.file.clone());
         let showing = match file {
             Some(file) => div().flex_1().min_h_0().w_full().child(file).into_any_element(),
             None => self.chat(cx),
         };
-        let changes = self.changes_sidebar(cx);
-        v_flex().size_full().child(header).child(
-            h_flex()
-                .flex_1()
-                .min_h_0()
-                .w_full()
-                .child(v_flex().flex_1().min_w_0().h_full().child(tabs).child(showing))
-                .children(changes),
-        )
+        h_flex()
+            .size_full()
+            .child(v_flex().flex_1().min_w_0().h_full().child(header).child(tabs).child(showing))
+            .children(changes)
     }
 }
 

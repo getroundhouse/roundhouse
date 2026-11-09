@@ -33,7 +33,7 @@ Anything recorded since the copy is lost.
 
 To work on Roundhouse rather than use it, `cargo run -p desktop --bin roundhouse-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
-Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To review the changes, open the diff with `Cmd-Shift-D` and click a file, and to comment, hover a changed line and click its add button. The `roundhouse` command-line client, in the same directory, talks to the same hub.
+Use `Add repository` at the bottom left, then `New` beside the repository. The model and approval mode are below the composer. To review the changes, click a file in the sidebar on the right, which `Cmd-Shift-D` hides and shows, and to comment, hover a changed line and click its add button. The top of that sidebar says where the workspace's pull request stands, and offers the next thing to do about it. The `roundhouse` command-line client, in the same directory, talks to the same hub.
 
 | Key | Action |
 |---|---|
