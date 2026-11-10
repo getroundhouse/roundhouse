@@ -257,6 +257,7 @@ fn render_event(
         // These tell the hub things, and there's nothing here for a person.
         EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
@@ -291,10 +292,10 @@ fn render_block(
         // These show as cards when they ask, with everything in them.
         ContentBlock::ToolUse { name, .. } if calls::asks_in_a_card(name) => return None,
         ContentBlock::ToolUse { name, input, .. } => {
-            tools::call(&toggle, name, input, drawing.answer.as_ref(), drawing.subagent.as_ref(), cx)
+            tools::call(&toggle, name, input, &drawing.reply, drawing.subagent.as_ref(), cx)
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.answer.as_ref()?, cx),
+        ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),
         ContentBlock::Image { .. } => {
             div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
         }

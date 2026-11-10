@@ -12,6 +12,6 @@ mod title;
 pub use account::account;
 pub use context::context_usage;
 pub use effort::applied_effort;
-pub use normalize::{Normalizer, Parsed};
+pub use normalize::{Normalized, Normalizer, Parsed};
 pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
 pub use title::title_for;

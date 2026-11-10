@@ -129,6 +129,7 @@ impl SessionLog {
                 EventBody::UserPrompt { .. }
                 | EventBody::PromptTaken { .. }
                 | EventBody::PromptDropped { .. }
+                | EventBody::ToolCallDropped { .. }
                 | EventBody::AgentStarted { .. }
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }

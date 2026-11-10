@@ -207,9 +207,9 @@ fn a_task_that_leaves_the_list_stopped_rather_than_finished_says_so() {
     // As the CLI does on SIGTERM: the notice first, then the list without it.
     normalizer.line(&ended("a", "stopped"));
     normalizer.line(&ended("b", "completed"));
-    assert_eq!(stopped(normalizer.line(&listed(&["a", "c"]))), Vec::<TaskId>::new(), "still listed");
-    assert_eq!(stopped(normalizer.line(&listed(&["c"]))), vec![TaskId::from("a")]);
-    assert_eq!(stopped(normalizer.line(&listed(&[]))), Vec::<TaskId>::new(), "said once");
+    assert_eq!(stopped(normalizer.line(&listed(&["a", "c"])).parsed), Vec::<TaskId>::new(), "still listed");
+    assert_eq!(stopped(normalizer.line(&listed(&["c"])).parsed), vec![TaskId::from("a")]);
+    assert_eq!(stopped(normalizer.line(&listed(&[])).parsed), Vec::<TaskId>::new(), "said once");
 }
 
 #[test]
@@ -254,13 +254,17 @@ fn a_finished_block_takes_its_place_from_its_own_deltas_only() {
     let mut normalizer = Normalizer::default();
 
     normalizer.line(&delta(2));
-    assert_eq!(first_index(normalizer.line(&finished(&["x"]))), Some(2));
-    assert_eq!(first_index(normalizer.line(&finished(&["y"]))), None, "a block that didn't stream");
+    assert_eq!(first_index(normalizer.line(&finished(&["x"])).parsed), Some(2));
+    assert_eq!(first_index(normalizer.line(&finished(&["y"])).parsed), None, "a block that didn't stream");
     normalizer.line(&delta(3));
-    assert_eq!(first_index(normalizer.line(&finished(&["x", "y"]))), None, "which of them streamed is unknown");
+    assert_eq!(first_index(normalizer.line(&finished(&["x", "y"])).parsed), None, "which of them streamed is unknown");
     normalizer.line(&delta(4));
     normalizer.line(&ended);
-    assert_eq!(first_index(normalizer.line(&finished(&["x"]))), None, "a turn that ended left nothing streaming");
+    assert_eq!(
+        first_index(normalizer.line(&finished(&["x"])).parsed),
+        None,
+        "a turn that ended left nothing streaming"
+    );
 }
 
 #[test]

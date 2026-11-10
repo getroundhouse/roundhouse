@@ -44,6 +44,12 @@ impl Printer {
         self.line(seq, &format!("you: {text}{carried}"));
     }
 
+    /// What the agent says it's running as, with `?` for what it left out.
+    fn ready(&mut self, seq: Seq, model: Option<&str>, permission_mode: Option<&str>, cwd: Option<&str>) {
+        let (model, mode, cwd) = (model.unwrap_or("?"), permission_mode.unwrap_or("?"), cwd.unwrap_or("?"));
+        self.line(seq, &format!("agent ready: model {model}, permissions {mode}, in {cwd}"));
+    }
+
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { text, attachments, .. } => self.prompt(event.seq, text, attachments),
@@ -51,15 +57,9 @@ impl Printer {
                 let how = if *resumed { "resumed" } else { "started" };
                 self.line(event.seq, &format!("agent {how}, pid {pid}"));
             }
-            EventBody::AgentInit { model, permission_mode, cwd, .. } => self.line(
-                event.seq,
-                &format!(
-                    "agent ready: model {}, permissions {}, in {}",
-                    model.as_deref().unwrap_or("?"),
-                    permission_mode.as_deref().unwrap_or("?"),
-                    cwd.as_deref().unwrap_or("?"),
-                ),
-            ),
+            EventBody::AgentInit { model, permission_mode, cwd, .. } => {
+                self.ready(event.seq, model.as_deref(), permission_mode.as_deref(), cwd.as_deref());
+            }
             EventBody::Assistant { message_id, blocks, first_index, .. } => {
                 for (position, block) in blocks.iter().enumerate() {
                     match (block, self.streamed(message_id.as_ref(), *first_index, position)) {
@@ -100,6 +100,7 @@ impl Printer {
             EventBody::PromptDropped { prompt } => {
                 self.line(event.seq, &format!("the agent stopped before reading the prompt at {prompt}"));
             }
+            EventBody::ToolCallDropped { .. } => self.line(event.seq, "the agent went on without a call's result"),
             EventBody::PromptTaken { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentLimits { .. }

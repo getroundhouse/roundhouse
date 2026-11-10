@@ -9,7 +9,7 @@ use gpui_kit::{AnyElement, App, IntoElement, ParentElement, WeakEntity};
 use protocol::model::Seq;
 use serde_json::Value;
 
-use super::around::{Answer, Subagent};
+use super::around::{Answer, Reply, Subagent};
 use crate::calls::{ToolCall, count};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
@@ -38,15 +38,18 @@ pub(super) struct Toggle<'a> {
     pub(super) linked: &'a LinkedImages,
 }
 
-/// A call's line, with its result under it once it's back, as its kind draws it.
+/// A call's line, with its result under it once it's back, as its kind draws it. Only a tool the API runs itself is
+/// ever recorded as dropped, and the advisor is the one such tool drawn in a way of its own, so only it says so. Any
+/// other draws as it does while it waits.
 pub(super) fn call(
     toggle: &Toggle,
     name: &str,
     input: &Value,
-    answer: Option<&Answer>,
+    reply: &Reply,
     subagent: Option<&Subagent>,
     cx: &App,
 ) -> AnyElement {
+    let answer = reply.result();
     match ToolCall::read(name, input) {
         ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
@@ -56,7 +59,7 @@ pub(super) fn call(
         ToolCall::Agent(call) => agent::draw(&call, answer, subagent, toggle, cx),
         ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
         ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
-        ToolCall::Advisor => advisor::draw(answer, toggle, cx),
+        ToolCall::Advisor => advisor::draw(reply, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
 }

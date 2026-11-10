@@ -7,22 +7,35 @@ use std::collections::HashMap;
 
 use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
-use protocol::model::MessageId;
+use protocol::model::{MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
+use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
+use surrogates::repair_lone_surrogates;
 use tasks::StoppedTasks;
 
 mod advisor;
 mod file_change;
 mod images;
 mod limits;
+mod pending;
 mod prompt;
+mod surrogates;
 mod tasks;
 #[cfg(test)]
 mod tests;
 mod user;
+
+/// What a line says, and what it shows without saying.
+#[derive(Debug, PartialEq)]
+pub struct Normalized {
+    /// The calls this line showed the agent went on without. No line says so itself, so each goes in the log as a
+    /// `ToolCallDropped` with no raw line, before what the line says.
+    pub dropped: Vec<ToolUseId>,
+    pub parsed: Parsed,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Parsed {
@@ -48,17 +61,20 @@ pub enum Parsed {
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
 /// message, as its deltas did. It also says it stopped a background task before the list that leaves it
-/// out, so the list can say which left without finishing.
+/// out, so the list can say which left without finishing. And it never says a call was dropped, so what follows the
+/// call has to show it.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     streaming: HashMap<MessageId, u32>,
     stopped_tasks: StoppedTasks,
+    pending_calls: PendingCalls,
 }
 
 impl Normalizer {
-    pub fn line(&mut self, line: &str) -> Parsed {
-        let Some(value) = value_of(line) else { return unparsed() };
+    pub fn line(&mut self, line: &str) -> Normalized {
+        let Some(value) = value_of(line) else { return Normalized { dropped: Vec::new(), parsed: unparsed() } };
         self.stopped_tasks.note(&value);
+        let dropped = self.pending_calls.note(&value);
         let mut parsed = parse_value(&value);
         if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
             *stopped = self.stopped_tasks.gone_from(tasks);
@@ -86,8 +102,9 @@ impl Normalizer {
         // Whatever a turn left streaming, such as when it was cancelled, is over.
         if let Parsed::Event(EventBody::TurnEnded { .. }) = &parsed {
             self.streaming.clear();
+            self.pending_calls.turn_ended();
         }
-        parsed
+        Normalized { dropped, parsed }
     }
 }
 
@@ -132,45 +149,6 @@ fn parse_value(value: &Value) -> Parsed {
         "rate_limit_event" => limits::rate_limit_event(value),
         _ => other(kind),
     }
-}
-
-/// Replaces `\\uD800`-style escapes that aren't half of a proper pair with U+FFFD.
-fn repair_lone_surrogates(line: &str) -> String {
-    fn escape_at(bytes: &[u8], at: usize) -> Option<u16> {
-        let hex = bytes.get(at + 2..at + 6)?;
-        if bytes[at] != b'\\' || bytes[at + 1] != b'u' {
-            return None;
-        }
-        u16::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()
-    }
-    const REPLACEMENT: &str = "\\ufffd";
-    let bytes = line.as_bytes();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    let mut copied_to = 0;
-    while i < bytes.len() {
-        if bytes[i] != b'\\' {
-            i += 1;
-            continue;
-        }
-        let Some(unit) = escape_at(bytes, i) else {
-            // Some other escape, such as an escaped backslash. Its second byte isn't an escape start.
-            i += 2;
-            continue;
-        };
-        match unit {
-            0xD800..=0xDBFF if matches!(escape_at(bytes, i + 6), Some(0xDC00..=0xDFFF)) => i += 12,
-            0xD800..=0xDFFF => {
-                out.push_str(&line[copied_to..i]);
-                out.push_str(REPLACEMENT);
-                i += 6;
-                copied_to = i;
-            }
-            _ => i += 6,
-        }
-    }
-    out.push_str(&line[copied_to..]);
-    out
 }
 
 fn other(kind: &str) -> Parsed {

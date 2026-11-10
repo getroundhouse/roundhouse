@@ -14,7 +14,7 @@ const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");
 
 fn parsed() -> Vec<Parsed> {
     let mut normalizer = Normalizer::default();
-    FIXTURE.lines().map(|line| normalizer.line(line)).collect()
+    FIXTURE.lines().map(|line| normalizer.line(line).parsed).collect()
 }
 
 fn events() -> Vec<EventBody> {
@@ -304,7 +304,7 @@ fn exchanges() -> Vec<(Value, Result<Value, String>)> {
         .chunks(2)
         .map(|pair| {
             let sent: Value = serde_json::from_str(pair[0]).unwrap();
-            let Parsed::ControlReply { request_id, answer } = normalizer.line(pair[1]) else {
+            let Parsed::ControlReply { request_id, answer } = normalizer.line(pair[1]).parsed else {
                 panic!("not a reply: {}", pair[1]);
             };
             assert_eq!(sent["request_id"], request_id.as_str());
