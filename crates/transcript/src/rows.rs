@@ -226,17 +226,12 @@ fn render_event(
                 return empty();
             }
             // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
-            let only_lines = blocks.iter().all(|b| {
-                matches!(
-                    b,
-                    ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. }
-                )
-            });
+            let only_lines = blocks.iter().all(is_a_line);
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
-            approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
+            approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, this, cx)
         }
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
@@ -261,10 +256,17 @@ fn render_event(
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Unknown => empty(),
     }
+}
+
+/// A call, its result or thinking, which read as lines of one list.
+fn is_a_line(block: &ContentBlock) -> bool {
+    matches!(block, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. })
 }
 
 fn colored_line(text: String, color: Hsla) -> AnyElement {

@@ -32,6 +32,7 @@
 //!                   SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
+//!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.
 //!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.
@@ -70,6 +71,7 @@ use serde_json::{Value, json};
 mod account;
 mod advisor;
 mod background;
+mod prompt;
 mod read;
 mod result;
 mod subagent;
@@ -77,6 +79,7 @@ mod title;
 mod tools;
 mod turn;
 
+use prompt::{attached, read_prompt};
 use turn::run_turn;
 
 type Out = Arc<Mutex<std::io::Stdout>>;
@@ -94,52 +97,6 @@ struct Config {
     conversation: PathBuf,
     /// Reaches the agent the way stdin does, for what it's told by its own work, such as a task finishing.
     input: mpsc::Sender<Input>,
-}
-
-/// What the newest prompt carried besides its script, as `attached` says it.
-static LAST_ATTACHED: Mutex<Vec<String>> = Mutex::new(Vec::new());
-
-fn attached() -> String {
-    let attached = LAST_ATTACHED.lock();
-    if attached.is_empty() { "nothing attached".to_string() } else { format!("attached: {}", attached.join(" | ")) }
-}
-
-/// A prompt's script, which is its last text block, and what the blocks before it carried.
-fn read_prompt(content: &Value) -> String {
-    let blocks = content.as_array().cloned().unwrap_or_default();
-    let script_at = blocks.iter().rposition(|block| {
-        block["type"] == "text" && !block["text"].as_str().unwrap_or_default().starts_with("<attachment ")
-    });
-    let described = blocks.iter().enumerate().filter(|(i, _)| Some(*i) != script_at).map(|(_, block)| {
-        if block["type"] == "image" {
-            let data = block["source"]["data"].as_str().unwrap_or_default();
-            let bytes = data.len() / 4 * 3 - data.chars().rev().take_while(|c| *c == '=').count();
-            format!("{} {bytes} bytes", block["source"]["media_type"].as_str().unwrap_or_default())
-        } else {
-            describe_tag(block["text"].as_str().unwrap_or_default())
-        }
-    });
-    *LAST_ATTACHED.lock() = described.collect();
-    script_at.map(|at| blocks[at]["text"].as_str().unwrap_or_default().to_string()).unwrap_or_default()
-}
-
-/// `<attachment name="N" path="P">` with the file inside, or `<attachment name="N" path="P" />` for one to open.
-fn describe_tag(text: &str) -> String {
-    let mut lines = text.lines();
-    let tag = lines.next().unwrap_or_default();
-    let attribute = |key: &str| {
-        let start = tag.find(&format!("{key}=\"")).map(|at| at + key.len() + 2)?;
-        let end = tag[start..].find('"')? + start;
-        Some(tag[start..end].replace("&quot;", "\""))
-    };
-    let name = attribute("name").unwrap_or_default();
-    if !tag.ends_with("/>") {
-        return format!("{name}: {}", lines.next().unwrap_or_default());
-    }
-    match attribute("path").map(std::fs::metadata) {
-        Some(Ok(on_disk)) => format!("{name}: on disk, {} bytes", on_disk.len()),
-        _ => format!("{name}: missing"),
-    }
 }
 
 /// What a control request changed. Starts as what the flags said.

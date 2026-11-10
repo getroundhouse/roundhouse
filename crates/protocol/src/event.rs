@@ -98,6 +98,31 @@ pub enum EventBody {
     AgentLimits {
         limits: Vec<UsageLimit>,
     },
+    /// The agent started a subagent with the call `call`, which the subagent's events name as their parent. It's the
+    /// agent's own event, about the subagent.
+    SubagentStarted {
+        call: ToolUseId,
+        /// Its kind of agent, such as `Explore`.
+        #[serde(default)]
+        kind: Option<String>,
+        /// What it's for, in a few words.
+        #[serde(default)]
+        description: Option<String>,
+        /// What it was asked.
+        #[serde(default)]
+        prompt: Option<String>,
+        /// It works on while the agent carries on, rather than the call waiting for it.
+        #[serde(default)]
+        in_background: bool,
+    },
+    /// The subagent that `call` started has stopped working.
+    SubagentEnded {
+        call: ToolUseId,
+        outcome: SubagentOutcome,
+        /// What it reported, once it finished.
+        #[serde(default)]
+        report: Option<String>,
+    },
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
         message_id: Option<MessageId>,
@@ -203,6 +228,8 @@ impl EventBody {
             EventBody::AgentState { .. } => "agent_state",
             EventBody::AgentTasks { .. } => "agent_tasks",
             EventBody::AgentLimits { .. } => "agent_limits",
+            EventBody::SubagentStarted { .. } => "subagent_started",
+            EventBody::SubagentEnded { .. } => "subagent_ended",
             EventBody::Assistant { .. } => "assistant",
             EventBody::AgentUser { .. } => "agent_user",
             EventBody::ToolCallDropped { .. } => "tool_call_dropped",
@@ -233,6 +260,8 @@ impl EventBody {
             | EventBody::AgentTasks { .. }
             | EventBody::AgentLimits { .. }
             | EventBody::ToolCallDropped { .. }
+            | EventBody::SubagentStarted { .. }
+            | EventBody::SubagentEnded { .. }
             | EventBody::TurnEnded { .. }
             | EventBody::ApprovalRequested { .. }
             | EventBody::ApprovalResolved { .. }
@@ -278,6 +307,18 @@ pub enum AgentRunState {
     Idle,
     Running,
     RequiresAction,
+    #[serde(other)]
+    Unknown,
+}
+
+/// How a subagent stopped working. One this build doesn't know reads as `Unknown`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubagentOutcome {
+    Finished,
+    Failed,
+    /// The agent stopped it, or it went with the agent.
+    Stopped,
     #[serde(other)]
     Unknown,
 }

@@ -15,6 +15,7 @@ use calls::OpenCalls;
 pub(super) use limits::{whole_percent, window_named};
 use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
+use subagents::Subagents;
 use surrogates::repair_lone_surrogates;
 use tasks::Tasks;
 use turn_end::{TurnModels, turn_ended};
@@ -26,6 +27,7 @@ mod images;
 mod limits;
 mod pending;
 mod prompt;
+mod subagents;
 mod surrogates;
 mod tasks;
 #[cfg(test)]
@@ -67,16 +69,18 @@ pub enum Parsed {
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
 /// message, as its deltas did. It keeps which calls are open, from each call to its result. It says what a
 /// background task is, and that it stopped one, apart from the list of them, so the list can say which are monitors,
-/// by the call that started each, and which left without finishing. It never says a call was dropped, so what
-/// follows the call has to show it. And its `result` doesn't say which models the agent's own replies came from, so
-/// the replies have to.
+/// by the call that started each, and which left without finishing. It remembers which task each subagent runs as, so
+/// the end of one can say which subagent it was. It never says a call was dropped, so what follows the call has to
+/// show it. And its `result` doesn't say which models the agent's own replies came from, so the replies have to.
 #[derive(Debug, Default)]
 pub struct Normalizer {
-    streaming: HashMap<MessageId, u32>,
+    /// The block of each message that's streaming, and the call whose subagent is writing it, if one is.
+    streaming: HashMap<MessageId, (u32, Option<ToolUseId>)>,
     calls: OpenCalls,
     tasks: Tasks,
     pending_calls: PendingCalls,
     models: TurnModels,
+    subagents: Subagents,
 }
 
 impl Normalizer {
@@ -84,7 +88,11 @@ impl Normalizer {
         let Some(value) = value_of(line) else { return Normalized { dropped: Vec::new(), parsed: unparsed() } };
         self.calls.note(&value);
         let dropped = self.pending_calls.note(&value);
-        let mut parsed = self.tasks.note(&value, &self.calls).unwrap_or_else(|| parse_value(&value));
+        let noted = self.tasks.note(&value, &self.calls);
+        if let Some(body) = self.subagents.read(&value) {
+            return Normalized { dropped, parsed: Parsed::Event(body) };
+        }
+        let mut parsed = noted.unwrap_or_else(|| parse_value(&value));
         if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
             *stopped = self.tasks.listed(tasks);
         }
@@ -94,7 +102,7 @@ impl Normalizer {
                 | DeltaChange::Text { index, .. }
                 | DeltaChange::Thinking { index, .. }
                 | DeltaChange::ToolInput { index, .. } => {
-                    self.streaming.insert(delta.message_id.clone(), index);
+                    self.streaming.insert(delta.message_id.clone(), (index, delta.parent_tool_use_id.clone()));
                 }
                 DeltaChange::MessageStop => {
                     self.streaming.remove(&delta.message_id);
@@ -105,16 +113,18 @@ impl Normalizer {
         if let Parsed::Event(EventBody::Assistant { message_id: Some(id), blocks, first_index, .. }) = &mut parsed {
             // The block that streamed is this one, so no later block can take its place. Claude sends one block
             // per event, and if several come at once, which of them streamed can't be told.
-            let streamed = self.streaming.remove(id);
+            let streamed = self.streaming.remove(id).map(|(index, _)| index);
             *first_index = streamed.filter(|_| blocks.len() == 1);
         }
         if let Parsed::Event(body) = &parsed {
             self.models.note(body);
         }
-        // Whatever a turn left streaming, such as when it was cancelled, is over.
+        // Whatever a turn left streaming, such as when it was cancelled, is over, but for what a subagent in the
+        // background is writing, since it carries on.
         if let Parsed::Event(EventBody::TurnEnded { models, .. }) = &mut parsed {
             *models = self.models.take();
-            self.streaming.clear();
+            let subagents = &self.subagents;
+            self.streaming.retain(|_, (_, writer)| writer.as_ref().is_some_and(|call| subagents.in_background(call)));
             self.pending_calls.turn_ended();
             self.calls.turn_ended();
         }
