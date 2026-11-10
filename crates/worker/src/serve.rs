@@ -19,6 +19,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
+use crate::deleting::Deleter;
 use crate::{git, setup};
 
 mod agent;
@@ -43,6 +44,8 @@ pub struct Config {
     /// Where a one-off call to an agent runs, each in an empty directory of its own. The system's temporary
     /// directory suits, since no project's instructions are above it.
     pub scratch_dir: PathBuf,
+    /// Deletes the worktrees archiving moves aside.
+    pub deleter: Deleter,
 }
 
 struct RunningAgent {
@@ -210,7 +213,7 @@ async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RemoveWorkspace { repo_path, path, force } => {
-            git::remove_workspace(&repo_path, &path, force).await?;
+            git::remove_workspace(&repo_path, &path, force, &state.config.deleter).await?;
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::GitStatus { path } => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),

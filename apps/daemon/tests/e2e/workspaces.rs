@@ -36,6 +36,11 @@ fn archiving_protects_uncommitted_work_keeps_the_branch_and_restoring_brings_it_
     let archived = client.workspace_archive(&workspace.id, false).unwrap();
     assert_eq!(archived.status, WorkspaceStatus::Archived);
     assert!(!worktree.exists());
+    // Its files go after the reply, while the hub closes its worker, from where the worker moved them aside. Only the
+    // lock that archives beside it share stays.
+    let deleting = worktree.with_file_name(".deleting");
+    let left = || std::fs::read_dir(&deleting).map(|entries| entries.flatten().map(|e| e.file_name()).collect());
+    wait_until("its files to be deleted", || left().is_ok_and(|left: Vec<_>| left == [".lock"]));
     assert_eq!(client.workspace_list(false).unwrap().len(), 0);
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
     assert!(!git(&stack.repo(), &["branch", "--list", &workspace.branch]).is_empty());

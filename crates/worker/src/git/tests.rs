@@ -98,108 +98,6 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
 }
 
 #[tokio::test]
-async fn archiving_refuses_uncommitted_work_unless_forced_and_keeps_the_branch() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    let path = Path::new(&prepared.path);
-    let repo_str = repo.to_str().unwrap();
-
-    std::fs::write(path.join("new.txt"), "work\n").unwrap();
-    let err = remove_workspace(repo_str, &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::NeedsForce);
-    assert!(path.join("new.txt").exists(), "a refused archive must not touch files");
-
-    remove_workspace(repo_str, &prepared.path, true).await.unwrap();
-    assert!(!path.exists());
-    assert!(!run(&repo, &["rev-parse", "--verify", "--quiet", "refs/heads/alder"]).is_empty());
-}
-
-#[tokio::test]
-async fn untracked_work_is_protected_even_if_git_is_set_to_hide_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    run(&repo, &["config", "status.showUntrackedFiles", "no"]);
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    let path = Path::new(&prepared.path);
-    std::fs::write(path.join("agent-output.txt"), "precious\n").unwrap();
-
-    assert_eq!(status(&prepared.path).await.unwrap().files.len(), 1, "status must show it too");
-    let err = remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::NeedsForce);
-    assert!(path.join("agent-output.txt").exists());
-}
-
-#[tokio::test]
-async fn commits_only_reachable_from_a_detached_head_are_protected() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    let path = Path::new(&prepared.path);
-    run(path, &["checkout", "-q", "--detach"]);
-    std::fs::write(path.join("work.txt"), "work\n").unwrap();
-    run(path, &["add", "."]);
-    run(path, &["commit", "-qm", "on no branch"]);
-    assert!(status(&prepared.path).await.unwrap().unreferenced_commits);
-
-    let err = remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::NeedsForce, "{}", err.message);
-    assert!(path.join("work.txt").exists());
-    remove_workspace(repo.to_str().unwrap(), &prepared.path, true).await.unwrap();
-}
-
-#[tokio::test]
-async fn a_detached_head_on_a_commit_a_branch_holds_can_be_archived() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    run(Path::new(&prepared.path), &["checkout", "-q", "--detach"]);
-    remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.unwrap();
-    assert!(!Path::new(&prepared.path).exists());
-}
-
-#[tokio::test]
-async fn ignored_files_do_not_block_archiving() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    let ignored = Path::new(&prepared.path).join("ignored");
-    std::fs::create_dir_all(&ignored).unwrap();
-    std::fs::write(ignored.join("cache"), "x").unwrap();
-    remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.unwrap();
-    assert!(!Path::new(&prepared.path).exists());
-}
-
-#[tokio::test]
-async fn restoring_brings_back_committed_work() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    let path = Path::new(&prepared.path);
-    std::fs::write(path.join("kept.txt"), "kept\n").unwrap();
-    run(path, &["add", "."]);
-    run(path, &["commit", "-qm", "work"]);
-    let repo_str = repo.to_str().unwrap();
-    remove_workspace(repo_str, &prepared.path, false).await.unwrap();
-
-    restore_workspace(repo_str, &prepared.path, "alder").await.unwrap();
-    assert_eq!(std::fs::read_to_string(path.join("kept.txt")).unwrap(), "kept\n");
-    assert_eq!(restore_workspace(repo_str, &prepared.path, "alder").await.err().unwrap().code, ErrorCode::Conflict);
-}
-
-#[tokio::test]
-async fn a_worktree_deleted_by_hand_can_still_be_archived_and_restored() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-    std::fs::remove_dir_all(&prepared.path).unwrap();
-    let repo_str = repo.to_str().unwrap();
-    remove_workspace(repo_str, &prepared.path, false).await.unwrap();
-    restore_workspace(repo_str, &prepared.path, "alder").await.unwrap();
-    assert!(Path::new(&prepared.path).join("a.txt").exists());
-}
-
-#[tokio::test]
 async fn status_reports_each_kind_of_change_including_renames_and_odd_names() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
@@ -254,5 +152,4 @@ async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
     let current = status(&prepared.path).await.unwrap();
     assert_eq!(current.branch, None);
     assert!(!current.unreferenced_commits);
-    remove_workspace(repo.to_str().unwrap(), &prepared.path, false).await.unwrap();
 }

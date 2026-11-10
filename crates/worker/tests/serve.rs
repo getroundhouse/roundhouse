@@ -10,7 +10,7 @@ use protocol::model::{AgentKind, RunId, SessionOptions};
 use protocol::worker::{AgentSpec, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::time::timeout;
-use worker::{Config, serve};
+use worker::{Config, Deleter, serve};
 
 #[tokio::test]
 async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
@@ -31,6 +31,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
             path: None,
             claude_bin: Some(cli.clone()),
             scratch_dir: dir.path().to_path_buf(),
+            deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         };
         let running = tokio::spawn(serve(worker_read, worker_write, config));
         tokio::spawn(async move {
@@ -82,6 +83,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
         path: None,
         claude_bin: None,
         scratch_dir: dir.path().to_path_buf(),
+        deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
     };
     tokio::spawn(serve(worker_read, worker_write, config));
     let path = dir.path().to_string_lossy().into_owned();

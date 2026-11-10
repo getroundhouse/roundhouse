@@ -22,6 +22,13 @@ enum Role {
         #[arg(long)]
         on_demand: bool,
     },
+    /// Deletes the worktrees a worker moved aside when archiving, in a process of its own so it can outlive the
+    /// worker. Started by a worker.
+    #[command(hide = true)]
+    Delete {
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
     /// Runs agents and git for a workspace. Started by a hub's provider.
     Worker {
         /// Speak the worker protocol on stdin and stdout.
@@ -72,7 +79,7 @@ fn main() -> anyhow::Result<()> {
     if matches!(args.role, Role::Worker { .. }) {
         forget_hub_variables();
     }
-    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
+    let runtime = || tokio::runtime::Builder::new_multi_thread().enable_all().build();
     match args.role {
         Role::Hub { on_demand } => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
@@ -82,12 +89,21 @@ fn main() -> anyhow::Result<()> {
                 .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            runtime.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))?;
+            runtime()?.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))?;
+            Ok(())
+        }
+        Role::Delete { paths } => {
+            let failed = worker::delete_trees(&paths);
+            for (path, e) in &failed {
+                tracing::error!(path = %path.display(), "couldn't delete a worktree moved aside: {e}");
+            }
+            anyhow::ensure!(failed.is_empty(), "{} of {} weren't deleted", failed.len(), paths.len());
             Ok(())
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {
             anyhow::ensure!(stdio, "--stdio is the only worker transport so far");
-            runtime.block_on(worker::serve(
+            let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
+            runtime()?.block_on(worker::serve(
                 tokio::io::stdin(),
                 tokio::io::stdout(),
                 worker::Config {
@@ -97,6 +113,7 @@ fn main() -> anyhow::Result<()> {
                     path: std::env::var_os("PATH"),
                     claude_bin,
                     scratch_dir: std::env::temp_dir(),
+                    deleter: worker::Deleter::new(exe, ["delete", "--"]),
                 },
             ));
             Ok(())
