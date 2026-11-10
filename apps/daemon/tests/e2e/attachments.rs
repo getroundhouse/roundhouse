@@ -9,7 +9,7 @@ use client_core::{Client, ClientError};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{AttachmentId, SessionId};
+use protocol::model::{AgentKind, AttachmentId, SessionId, SessionOptions};
 
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
 
@@ -140,7 +140,7 @@ fn a_prompt_can_only_carry_what_was_added_to_its_own_chat() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    let other = client.session_create(&workspace.id, protocol::model::AgentKind::Claude, None, None, None).unwrap();
+    let other = client.session_create(&workspace.id, AgentKind::Claude, SessionOptions::default(), None).unwrap();
     let shot = add(&client, &other.id, "a1", "shot.png", MediaType::Png, &png(64));
 
     let elsewhere = client.session_prompt_with(&session.id, "attached", None, vec![shot.id.clone()]);

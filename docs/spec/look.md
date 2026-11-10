@@ -8,6 +8,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 - **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
+- **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.

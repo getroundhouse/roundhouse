@@ -3,19 +3,21 @@
 use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
     Subscription, Task, Window, px,
 };
-use protocol::model::{DiffComment, Session, SessionId, Workspace, WorkspaceId};
+use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, Workspace, WorkspaceId};
 use transcript::Transcript;
 
+use crate::attached::Attachments;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
 use crate::pull_request::Lookup;
 use crate::review::Review;
-use attaching::{Attached, Draft};
+use attaching::Draft;
 pub use reading::Mark;
 use reading::Reading;
 
@@ -91,7 +93,9 @@ pub struct WorkspacePane {
     /// What's been typed and attached in the chats not showing.
     drafts: HashMap<SessionId, Draft>,
     /// What's attached in the chat showing, to go with what's typed.
-    attached: Vec<Attached>,
+    attached: Attachments,
+    /// A prompt handed back before the workspace had a chat to show, for the first that shows.
+    waiting: Option<Draft>,
     /// A new chat is on its way, so another press doesn't make a second.
     creating_chat: bool,
     /// A queued prompt being changed.
@@ -125,7 +129,8 @@ impl WorkspacePane {
     pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
         let typed = |text: &str| !text.trim().is_empty();
         let showing = usize::from(typed(&self.composer.read(cx).text().to_string()) || !self.attached.is_empty());
-        let others = self.drafts.values().filter(|draft| draft.has_anything()).count();
+        let waiting = self.waiting.iter();
+        let others = self.drafts.values().chain(waiting).filter(|draft| draft.has_anything()).count();
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others, usize::from(comment))
@@ -183,7 +188,8 @@ impl WorkspacePane {
             active: None,
             transcripts: HashMap::new(),
             drafts: HashMap::new(),
-            attached: Vec::new(),
+            attached: Attachments::default(),
+            waiting: None,
             creating_chat: false,
             queue_edit: None,
             closed_menu: closed::Menu::Shut,
@@ -220,11 +226,18 @@ impl WorkspacePane {
         self.active.as_ref().and_then(|id| self.transcripts.get(id)).map(|(view, _)| view.clone())
     }
 
-    /// Changes the showing chat's model or approval mode. The hub only agrees once a running agent
+    /// Changes the showing chat's model, approval mode or effort. The hub only agrees once a running agent
     /// has, so the pickers change when this comes back, and a refusal leaves them as they were.
-    pub fn configure(&mut self, model: Option<String>, mode: Option<String>, cx: &mut Context<Self>) {
+    pub fn configure(
+        &mut self,
+        model: Option<String>,
+        mode: Option<String>,
+        effort: Option<Effort>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(id) = self.active.clone() else { return };
-        let changing = self.client.start(move |client| client.session_configure(&id, model, mode));
+        let options = SessionOptions { model, permission_mode: mode, effort };
+        let changing = self.client.start(move |client| client.session_configure(&id, options));
         cx.spawn(async move |this, cx| {
             let changed = changing.recv().await;
             let _ = this.update(cx, |t, cx| match changed {
@@ -323,7 +336,13 @@ impl WorkspacePane {
         }
         // The chat is read only while it's in front.
         self.read_showing(cx);
-        self.with_window(cx, |t, window, cx| t.focus_showing(window, cx));
+        // Not behind a dialog, where typing meant for it would come here unseen. The app focuses the pane showing once
+        // the dialog closes.
+        self.with_window(cx, |t, window, cx| {
+            if !window.has_active_dialog(cx) {
+                t.focus_showing(window, cx);
+            }
+        });
         cx.notify();
     }
 
@@ -349,7 +368,7 @@ impl WorkspacePane {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
             return;
         }
-        let files = std::mem::take(&mut self.attached).into_iter().map(Attached::into_file).collect();
+        let files = self.attached.take();
         if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         }

@@ -58,7 +58,15 @@ fn long_history_loads_a_page_at_a_time_as_it_is_scrolled_to(cx: &mut TestAppCont
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
     let session = client
-        .session_create(&workspace.id, protocol::model::AgentKind::Claude, None, Some("bypassPermissions".into()), None)
+        .session_create(
+            &workspace.id,
+            protocol::model::AgentKind::Claude,
+            protocol::model::SessionOptions {
+                permission_mode: Some("bypassPermissions".into()),
+                ..protocol::model::SessionOptions::default()
+            },
+            None,
+        )
         .unwrap();
     let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
     client.session_prompt(&session.id, &script.join("; "), None).unwrap();

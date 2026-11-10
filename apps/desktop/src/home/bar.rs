@@ -9,7 +9,7 @@ use gpui_kit::{Context, IntoElement, ParentElement, Styled, WeakEntity, Window};
 
 use super::{ArchiveFilter, Sort};
 use crate::app::AppView;
-use crate::workspace_pane::{Busy, HEADER_HEIGHT};
+use crate::workspace_pane::HEADER_HEIGHT;
 
 pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
@@ -38,9 +38,10 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
                 .small()
                 .icon(IconName::Plus)
                 .label("Create")
-                // In the repository the list shows, as `current_repo` says.
-                .disabled(app.current_repo().is_none() || app.busy == Busy::Changing)
-                .on_click(cx.listener(|t, _, _, cx| t.new_workspace_here(cx))),
+                // In the repository the list shows, as `current_repo` says. The dialog opens while another workspace
+                // is being made, and its Create waits.
+                .disabled(app.current_repo().is_none())
+                .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
         )
 }
 

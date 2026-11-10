@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use client_core::{Client, ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, ClientRequestId, DiffSide, PrState, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, ClientRequestId, DiffSide, PrState, SessionOptions, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, install_executable, is_alive, read_all, wait_for_setup,
@@ -162,8 +162,9 @@ fn creating_again_with_the_same_request_id_returns_what_the_first_made() {
     let comment = |id: &ClientRequestId| {
         client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", Some(id.clone()))
     };
-    let session =
-        |id: &ClientRequestId| client.session_create(&workspace.id, AgentKind::Claude, None, None, Some(id.clone()));
+    let session = |id: &ClientRequestId| {
+        client.session_create(&workspace.id, AgentKind::Claude, SessionOptions::default(), Some(id.clone()))
+    };
 
     let made = client.workspace_create(repo, None, None, Some(for_workspace.clone())).unwrap();
     let again = client.workspace_create(repo, None, None, Some(for_workspace.clone())).unwrap();

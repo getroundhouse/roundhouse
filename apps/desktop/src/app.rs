@@ -11,6 +11,7 @@ use protocol::client::HubStatus;
 use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::checkout::Checkout;
+use crate::new_workspace::NewWorkspaceDialog;
 use crate::workspace_pane::{Busy, PaneEvent, WorkspacePane};
 
 mod build_line;
@@ -77,6 +78,10 @@ pub struct AppView {
     pub busy: Busy,
     /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
     pub creating_in: Option<RepoId>,
+    /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
+    pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
+    /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
+    focus_after_dialog: Option<WorkspaceId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
     focus: FocusHandle,
@@ -135,6 +140,8 @@ impl AppView {
             pointing_at: None,
             busy: Busy::Free,
             creating_in: None,
+            new_workspace: None,
+            focus_after_dialog: None,
             moving_window: false,
             focus,
             settings: None,
@@ -369,10 +376,7 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::shown);
         }
-        // While Home shows, as when the selection goes away under it, its search keeps the keys.
-        if let Some(pane) = self.panes.get(&id).filter(|_| !self.home_showing()) {
-            pane.update(cx, |p, cx| p.focus_showing(window, cx));
-        }
+        self.focus_pane(id, window, cx);
         self.read_on_screen(window.is_window_active(), cx);
         cx.notify();
     }
@@ -387,14 +391,4 @@ impl AppView {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stepping_wraps_around_both_ends() {
-        assert_eq!(wrapped_step(0, -1, 3), 2);
-        assert_eq!(wrapped_step(2, 1, 3), 0);
-        assert_eq!(wrapped_step(1, 1, 3), 2);
-        assert_eq!(wrapped_step(0, 1, 1), 0);
-    }
-}
+mod tests;

@@ -36,8 +36,8 @@ pub enum Parsed {
     UnsupportedControl { request_id: String, subtype: String },
     /// Carries nothing worth storing.
     Drop,
-    /// The CLI's answer to a control request of ours.
-    ControlReply { request_id: String, error: Option<String> },
+    /// The CLI's answer to a control request of ours: what it sent back, or why it refused.
+    ControlReply { request_id: String, answer: Result<Value, String> },
     /// Where a prompt the adapter sent has got to, by the `uuid` the adapter gave it. Only the adapter knows which
     /// recorded prompt that is.
     Prompt { uuid: String, progress: PromptProgress },
@@ -197,8 +197,11 @@ fn control_reply(value: &Value) -> Parsed {
     match str_of(response, "request_id") {
         Some(request_id) => Parsed::ControlReply {
             request_id: request_id.to_string(),
-            error: (str_of(response, "subtype") == Some("error"))
-                .then(|| str_of(response, "error").unwrap_or("the agent refused").to_string()),
+            answer: if str_of(response, "subtype") == Some("error") {
+                Err(str_of(response, "error").unwrap_or("the agent refused").to_string())
+            } else {
+                Ok(response.get("response").cloned().unwrap_or(Value::Null))
+            },
         },
         None => Parsed::Drop,
     }

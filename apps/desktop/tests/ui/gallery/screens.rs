@@ -7,8 +7,8 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, finishing_update, own_hub, pointed,
-    queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled, unread,
+    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, effort_chosen, finishing_update, own_hub,
+    pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled, unread,
     working_background,
 };
 use super::{chats, file_chats, pictures, subagent_chats, tool_chats};
@@ -79,6 +79,10 @@ pub(crate) enum Target {
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";
+
+/// A task described in the new-workspace dialog.
+const NEW_WORKSPACE_PROMPT: &str = "When the sidebar is narrow, the PR badge runs over the workspace's name. Let the name \
+                                    shrink and end in an ellipsis, and keep the badge at its own width.";
 
 /// A log pasted into the composer, as a file.
 const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
@@ -223,6 +227,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
     },
     Screen {
+        name: "model-picker",
+        spec: "chats.md",
+        world: Some(effort_chosen),
+        steps: &[Step::Select(FOCUS), Step::Click("model-picker")],
+    },
+    Screen {
         name: "chat-tabs",
         spec: "chats.md",
         world: Some(chat_tabs),
@@ -296,6 +306,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4"), Step::ClickItem("Rename…")],
     },
     Screen {
+        name: "new-workspace",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[Step::Select(FOCUS), Step::Click("new-in-repo-1")],
+    },
+    Screen {
+        name: "new-workspace-written",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("new-in-repo-1"),
+            Step::Click("new-workspace-model"),
+            Step::ClickItem("Opus"),
+            Step::Click("new-workspace-model"),
+            Step::ClickItem("Extra high"),
+            Step::PasteImage(badge_to_paste),
+            Step::Type(NEW_WORKSPACE_PROMPT),
+        ],
+    },
+    Screen {
         name: "update-ready",
         spec: "updates.md",
         world: Some(conversation),
@@ -344,3 +375,8 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings],
     },
 ];
+
+/// A screenshot of a bug, pasted into the new-workspace dialog.
+fn badge_to_paste() -> Vec<u8> {
+    pictures::overlapping_badge(450)
+}

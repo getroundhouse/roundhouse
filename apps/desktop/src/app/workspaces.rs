@@ -4,11 +4,15 @@ use client_core::ClientError;
 use client_core::records::Record;
 use gpui_kit::{Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Repo, RepoId, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
+use crate::new_workspace::Request;
 use crate::rename::{self, Renaming};
 use crate::workspace_pane::Busy;
+
+mod dialog;
+mod made;
 
 impl AppView {
     /// The repository a new workspace goes in when nothing says which: the one Home's list shows, while Home shows,
@@ -20,10 +24,11 @@ impl AppView {
         home.or(selected).or_else(|| self.repos.first().map(|r| &r.id)).cloned()
     }
 
-    /// Makes a workspace where nothing else says, as Create and `Cmd-N` do.
-    pub(crate) fn new_workspace_here(&mut self, cx: &mut Context<Self>) {
+    /// Opens the new-workspace dialog where nothing else says which repository, as `Cmd-N` and Home's and the
+    /// sidebar's New do.
+    pub(crate) fn new_workspace_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(repo) = self.current_repo() {
-            self.new_workspace(repo, cx);
+            self.open_new_workspace(repo, window, cx);
         }
     }
 
@@ -41,37 +46,72 @@ impl AppView {
         }
     }
 
-    pub fn new_workspace(&mut self, repo_id: RepoId, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        if self.busy == Busy::Changing {
-            return;
-        }
+    /// Whether a workspace can be made now: there's a hub, and nothing else is being made, archived or restored.
+    fn can_create(&self) -> bool {
+        self.client().is_some() && self.busy == Busy::Free
+    }
+
+    /// Makes a workspace from what the dialog held, and sends its first chat the prompt, if there is one, with the
+    /// model and effort chosen. The sidebar says it's being made meanwhile. Nothing typed is lost: if the workspace
+    /// couldn't be made, the prompt goes back to the dialog, and if it was made and the prompt couldn't be sent, it
+    /// goes to the chat's composer. Returns the request, untouched, when a workspace can't be made now.
+    pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
+        let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
         self.set_busy(Busy::Changing, cx);
-        self.creating_in = Some(repo_id.clone());
-        let creating = client.start(move |client| {
-            let workspace = client.workspace_create(&repo_id, None, None, Some(client_core::new_request_id()))?;
-            // Leaves the model and approval mode to the user's own Claude settings.
-            let session = client.session_ensure(&workspace.id, AgentKind::Claude)?;
-            Ok((workspace, session))
-        });
+        self.creating_in = Some(request.repo.clone());
+        cx.notify();
+        // Kept in case the call never finishes, which takes the files with it.
+        let typed = request.prompt.clone();
+        let creating = client.start(move |client| Ok(made::make(client, request)));
         cx.spawn(async move |this, cx| {
-            let created = creating.recv().await;
+            let made = creating.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.set_busy(Busy::Free, cx);
                 t.creating_in = None;
-                match created {
-                    Ok((workspace, session)) => {
-                        let id = workspace.id.clone();
-                        t.take_reply(Record::Workspace(workspace), cx);
-                        t.take_reply(Record::Session(session), cx);
-                        t.select(id, cx);
+                match made {
+                    Ok(made) => t.made(made, cx),
+                    // Making it stopped partway, so it may have been made.
+                    Err(e) => {
+                        t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
+                        t.give_back_to_dialog(typed, Vec::new(), cx);
                     }
-                    Err(e) => t.show_error(format!("couldn't create the workspace: {e}"), cx),
                 }
                 cx.notify();
             });
         })
         .detach();
+        Ok(())
+    }
+
+    /// Shows the workspace that was made, and puts back whatever couldn't be sent.
+    fn made(&mut self, made: made::Made, cx: &mut Context<Self>) {
+        let made::Made { workspace, session, unsent } = made;
+        let shown = workspace.as_ref().map(|workspace| workspace.id.clone());
+        let chat = session.as_ref().map(|session| session.id.clone());
+        if let Some(workspace) = workspace {
+            self.take_reply(Record::Workspace(workspace), cx);
+        }
+        if let Some(session) = session {
+            self.take_reply(Record::Session(session), cx);
+        }
+        if let Some(id) = shown.clone() {
+            self.select(id, cx);
+        }
+        let Some(unsent) = unsent else { return };
+        self.show_error(unsent.failed.failed(&unsent.error), cx);
+        let Some(id) = shown else {
+            self.give_back_to_dialog(unsent.text, unsent.files, cx);
+            return;
+        };
+        // To the new chat's composer, or without one, to the first chat the pane shows, which the pane makes itself.
+        // After the pane is made, which selecting the workspace put off until just after this.
+        let this = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = this.update(cx, |t, cx| match t.panes.get(&id).cloned() {
+                Some(pane) => pane.update(cx, |pane, cx| pane.give_back(chat.as_ref(), unsent.text, unsent.files, cx)),
+                None => t.give_back_to_dialog(unsent.text, unsent.files, cx),
+            });
+        });
     }
 
     pub fn add_repository(&mut self, cx: &mut Context<Self>) {

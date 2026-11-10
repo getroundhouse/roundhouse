@@ -21,6 +21,7 @@ impl Render for AppView {
             window.focus(if self.settings_open() { &self.settings_focus } else { &self.focus }, cx);
         }
         self.keep_menus_current(cx);
+        self.keep_dialog_current(cx);
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
@@ -53,7 +54,7 @@ impl Render for AppView {
                     Button::new("first-new-workspace")
                         .primary()
                         .label("New workspace")
-                        .on_click(cx.listener(|t, _, _, cx| t.new_workspace_here(cx))),
+                        .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
                     cx,
                 ),
             },

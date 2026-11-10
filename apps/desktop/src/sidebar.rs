@@ -3,9 +3,7 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list,
-};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
     px, size,
@@ -14,7 +12,7 @@ use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
-use crate::workspace_pane::{Busy, HEADER_HEIGHT};
+use crate::workspace_pane::HEADER_HEIGHT;
 
 mod footer;
 mod nav;
@@ -175,8 +173,7 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
                 .text_color(muted)
                 .tooltip("New workspace")
                 .loading(creating)
-                .disabled(app.busy == Busy::Changing)
-                .on_click(cx.listener(move |t, _, _, cx| t.new_workspace(repo_id.clone(), cx))),
+                .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(repo_id.clone(), window, cx))),
         )
         .into_any_element()
 }
@@ -248,6 +245,7 @@ mod tests {
             agent: AgentKind::Claude,
             model: None,
             permission_mode: None,
+            effort: None,
             status,
             last_seq: 0,
             created_at_ms: 0,

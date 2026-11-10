@@ -229,6 +229,13 @@ fn answer(turn: &Turn, command: &str) -> Option<String> {
     if command == "attached" {
         return Some(crate::attached());
     }
+    if command == "effort" {
+        return Some(format!("effort={}", crate::current_effort()));
+    }
+    if command == "keep-effort" {
+        *crate::KEEPS_EFFORT.lock() = true;
+        return Some("keeping my effort".to_string());
+    }
     if command == "recall" {
         let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
         return Some(format!("I have seen: {}", seen.trim().replace('\n', " | ")));

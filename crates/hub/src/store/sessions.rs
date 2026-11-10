@@ -1,13 +1,13 @@
 //! Sessions.
 
-use protocol::model::{AgentKind, ClientRequestId, QueuedPrompt, Session, SessionStatus, Title};
+use protocol::model::{AgentKind, ClientRequestId, QueuedPrompt, Session, SessionOptions, SessionStatus, Title};
 use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
@@ -37,7 +37,8 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             queued: queue_from(&row.get::<_, String>(17)?)?,
             queue_held: row.get(18)?,
             turn_started_at_ms: row.get(19)?,
-            rev: rev_of(row, 20)?,
+            effort: row.get::<_, Option<String>>(20)?.map(from_text).transpose()?,
+            rev: rev_of(row, 21)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -59,7 +60,7 @@ impl Store {
         conn.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -82,6 +83,7 @@ impl Store {
                 serde_json::to_string(&session.queued)?,
                 session.queue_held,
                 session.turn_started_at_ms,
+                session.effort.as_ref().map(text_of),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -109,19 +111,16 @@ impl Store {
         Ok(sessions.into_iter().map(|s| s.session).collect())
     }
 
-    /// `None` leaves that setting as it is.
-    pub fn set_session_options(
-        &self,
-        id: &SessionId,
-        model: Option<&str>,
-        permission_mode: Option<&str>,
-    ) -> Result<(), StoreError> {
-        lock(&self.writer)
-            .execute(
-                "UPDATE sessions SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode) WHERE id = ?",
-                params![model, permission_mode, id.as_str()],
-            )
-            ?;
+    /// A setting that's `None` is left as it is.
+    pub fn set_session_options(&self, id: &SessionId, options: &SessionOptions) -> Result<(), StoreError> {
+        let SessionOptions { model, permission_mode, effort } = options;
+        lock(&self.writer).execute(
+            "UPDATE sessions
+                 SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode),
+                     effort = COALESCE(?, effort)
+                 WHERE id = ?",
+            params![model, permission_mode, effort.as_ref().map(text_of), id.as_str()],
+        )?;
         Ok(())
     }
 
@@ -153,3 +152,6 @@ impl Store {
         Ok(active)
     }
 }
+
+#[cfg(test)]
+mod tests;

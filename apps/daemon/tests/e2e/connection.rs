@@ -11,10 +11,10 @@ use client_core::records::HubRecords;
 use client_core::{Client, ClientError, Ended, HubAdmin, RecordsFeed, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, DiffSide, RecordKey, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, DiffSide, RecordKey, SessionOptions, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
-    Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_setup, wait_for_turn_end, wait_until,
+    Follower, Stack, TIMEOUT, assert_gapless, in_mode, terminate, wait_for_setup, wait_for_turn_end, wait_until,
 };
 
 fn next_notice(feed: &Subscription, what: &str) -> HubNotice {
@@ -45,8 +45,7 @@ fn the_feed_reports_what_a_sidebar_shows() {
     for _ in 0..2 {
         assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));
     }
-    let session =
-        client.session_create(&workspace.id, AgentKind::Claude, None, Some("bypassPermissions".into()), None).unwrap();
+    let session = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
     assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
 
     // One notice per change of status, not one per event. Once the first prompt is recorded, it titles the
@@ -371,7 +370,8 @@ fn a_kind_of_agent_or_side_of_a_diff_this_hub_doesnt_know_is_refused_and_not_sav
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
 
-    let refused = client.session_create(&workspace.id, AgentKind::Unknown, None, None, None).unwrap_err();
+    let refused =
+        client.session_create(&workspace.id, AgentKind::Unknown, SessionOptions::default(), None).unwrap_err();
     assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
 

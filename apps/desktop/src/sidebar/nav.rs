@@ -7,7 +7,6 @@ use gpui_kit::{Context, IntoElement, ParentElement, Pixels, Styled, px};
 
 use super::icon_box;
 use crate::app::AppView;
-use crate::workspace_pane::Busy;
 
 /// Each item's height, as a row of body text with 6px above and below.
 const ITEM_HEIGHT: Pixels = px(32.);
@@ -15,7 +14,8 @@ const ITEM_HEIGHT: Pixels = px(32.);
 /// The block of items, with a line under it before the workspaces.
 pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let border = cx.theme().sidebar_border;
-    let can_create = app.current_repo().is_some() && app.busy == Busy::Free;
+    // The dialog opens while another workspace is being made, and its Create waits.
+    let can_create = app.current_repo().is_some();
     v_flex()
         .flex_none()
         .w_full()
@@ -31,7 +31,7 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .child(
             item("create", IconName::Plus, "Create", cx)
                 .disabled(!can_create)
-                .on_click(cx.listener(|t, _, _, cx| t.new_workspace_here(cx))),
+                .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
         )
         // Search isn't built, so it's only a place for it.
         .child(item("search", IconName::Search, "Search", cx))

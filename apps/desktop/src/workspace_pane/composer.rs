@@ -5,43 +5,34 @@ use gpui_kit::component::input::Textarea;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{Anchor, Context, ExternalPaths, InteractiveElement, IntoElement, ParentElement, Styled, Window, div};
+use gpui_kit::{Anchor, Context, InteractiveElement, IntoElement, ParentElement, Styled, Window, div};
 use transcript::mode_label;
 
 use super::WorkspacePane;
 use crate::StopAgent;
-
-/// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
-pub(super) const MODELS: [(&str, &str); 5] =
-    [("default", "Default model"), ("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")];
+use crate::attached;
+use crate::model_picker::{Picked, model_picker};
 
 const MODES: [&str; 4] = ["manual", "plan", "acceptEdits", "bypassPermissions"];
 
-pub(super) fn model_label(model: Option<&str>) -> String {
-    let model = model.unwrap_or("default");
-    MODELS.iter().find(|(id, _)| *id == model).map_or(model, |(_, label)| label).to_string()
-}
-
 impl WorkspacePane {
-    /// The model and approval mode of the chat showing.
+    /// The model and its effort, and the approval mode, of the chat showing.
     fn pickers(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let session = self.session();
         let model = session.and_then(|s| s.model.clone());
+        let effort = session.and_then(|s| s.effort);
         let mode = session.and_then(|s| s.permission_mode.clone());
         let full_access = mode.as_deref() == Some("bypassPermissions");
         let warning = cx.theme().warning;
         let mode_text = mode.as_deref().map_or("Your settings", mode_label).to_string();
         let this = cx.weak_entity();
         let models = {
-            let (this, current) = (this.clone(), model.clone().unwrap_or_else(|| "default".to_string()));
-            move |mut menu: gpui_kit::component::menu::PopupMenu, _: &mut Window, _: &mut Context<_>| {
-                for (id, label) in MODELS {
-                    let this = this.clone();
-                    menu = menu.item(PopupMenuItem::new(label).checked(current == id).on_click(move |_, _, cx| {
-                        let _ = this.update(cx, |t, cx| t.configure(Some(id.to_string()), None, cx));
-                    }));
-                }
-                menu
+            let this = this.clone();
+            move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
+                let _ = this.update(cx, |t, cx| match picked {
+                    Picked::Model(id) => t.configure(Some(id.to_string()), None, None, cx),
+                    Picked::Effort(effort) => t.configure(None, None, Some(effort), cx),
+                });
             }
         };
         let approval_modes = {
@@ -52,7 +43,7 @@ impl WorkspacePane {
                     let checked = current.as_deref() == Some(id);
                     menu = menu.item(PopupMenuItem::new(mode_label(id).to_string()).checked(checked).on_click(
                         move |_, _, cx| {
-                            let _ = this.update(cx, |t, cx| t.configure(None, Some(id.to_string()), cx));
+                            let _ = this.update(cx, |t, cx| t.configure(None, Some(id.to_string()), None, cx));
                         },
                     ));
                 }
@@ -63,14 +54,7 @@ impl WorkspacePane {
             .flex_1()
             .min_w_0()
             .gap_0p5()
-            .child(
-                Button::new("model-picker")
-                    .ghost()
-                    .xsmall()
-                    .dropdown_caret(true)
-                    .label(model_label(model.as_deref()))
-                    .dropdown_menu_with_anchor(Anchor::BottomLeft, models),
-            )
+            .child(model_picker("model-picker", model.as_deref(), effort, models))
             .child(
                 Button::new("mode-picker")
                     .ghost()
@@ -93,27 +77,16 @@ impl WorkspacePane {
         // reach it.
         let working = self.session().is_some_and(|s| s.status.in_turn());
         let theme = cx.theme();
-        let (surface, border, ring) = (theme.muted, theme.input, theme.ring);
+        let (surface, border) = (theme.muted, theme.input);
         let stop_mark = theme.button_primary_foreground;
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
-        let attach = Button::new("attach")
-            .ghost()
-            .xsmall()
-            .icon(IconName::Plus)
-            .tooltip("Attach images or files")
-            .on_click(cx.listener(|_, _, _, cx| Self::pick_files(cx)));
-        let composer = v_flex()
-            .id("composer")
-            .w_full()
-            .rounded_lg()
-            .border_1()
-            .border_color(border)
-            .bg(surface)
-            .drag_over::<ExternalPaths>(move |style, _, _, _| style.border_color(ring))
-            .on_drop(cx.listener(|t, dropped: &ExternalPaths, _, cx| t.attach_paths(dropped.paths().to_vec(), cx)))
+        let attach =
+            attached::attach_button("attach", cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx)).xsmall();
+        let composer = v_flex().id("composer").w_full().rounded_lg().border_1().border_color(border).bg(surface);
+        let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
             .child(h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(pickers).child(if working {

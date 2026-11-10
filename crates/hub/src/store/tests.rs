@@ -1,7 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionStatus, SetupStatus, Title, TitleSource,
-    Workspace, WorkspaceStatus,
+    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionOptions, SessionStatus, SetupStatus, Title,
+    TitleSource, Workspace, WorkspaceStatus,
 };
 
 use super::*;
@@ -50,6 +50,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
                     agent: AgentKind::Claude,
                     model: None,
                     permission_mode: None,
+                    effort: None,
                     title: None,
                     title_source: TitleSource::FirstLine,
                     closed_at_ms: None,
@@ -187,25 +188,14 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
 #[test]
 fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("hub.db");
-    let backups = dir.path().join("backups");
-    let mut conn = schema::open_connection(&path).unwrap();
-    schema::migrate_to(&mut conn, &backups, schema::BEFORE_RUNS).unwrap();
-    conn.execute_batch(
-        r#"
-        INSERT INTO repos VALUES ('r', 'repo', '/repo', 0);
-        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
-            VALUES ('w', 'r', 'alder', 'alder', 'ready', 'local', 'w', 0);
+    let rows = r#"
         INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms)
             VALUES ('s', 'w', 'claude', 's', 'idle', 1, 0, 0);
         INSERT INTO events (session_id, seq, ts_ms, kind, body, raw)
             VALUES ('s', 1, 0, 'notice', '{"type":"notice","level":"info","message":"old"}', 'line');
-        "#,
-    )
-    .unwrap();
-    drop(conn);
+    "#;
 
-    let store = open_in(dir.path());
+    let store = older::store_from_before(dir.path(), schema::BEFORE_RUNS, rows);
 
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
@@ -239,7 +229,8 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(status_changed, "a change of status");
     store.append(&"s".into(), None, &notice("y"), None, None, None).unwrap();
     assert_eq!(session(&store), status_changed, "an event alone isn't announced, so it leaves the revision");
-    store.set_session_options(&"s".into(), Some("model"), None).unwrap();
+    let model = SessionOptions { model: Some("model".into()), ..SessionOptions::default() };
+    store.set_session_options(&"s".into(), &model).unwrap();
     newer(session(&store), "a model");
     let title = Title::typed("title").unwrap();
     store.retitle_session(&"s".into(), &title, Retitle::FirstLine).unwrap();

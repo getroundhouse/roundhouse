@@ -23,6 +23,12 @@ pub enum AgentError {
     /// The agent understood the request and said no. This is its own wording.
     #[error("{0}")]
     Refused(String),
+    /// A level of effort this agent has no name for, such as one from a newer peer.
+    #[error("the agent has no such effort")]
+    UnknownEffort,
+    /// The agent said yes to a level of effort, then reported using `applied` instead, or said nothing of one.
+    #[error("the agent kept its effort at {}, rather than {asked}", applied.as_deref().unwrap_or("what it was"))]
+    NotApplied { asked: &'static str, applied: Option<String> },
     #[error("couldn't write to the agent")]
     Write(#[from] io::Error),
     #[error("couldn't encode a message for the agent")]

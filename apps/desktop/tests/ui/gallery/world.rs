@@ -146,6 +146,7 @@ impl World {
             agent: AgentKind::Claude,
             model: Some("opus".to_string()),
             permission_mode: Some("acceptEdits".to_string()),
+            effort: None,
             status,
             last_seq,
             created_at_ms,

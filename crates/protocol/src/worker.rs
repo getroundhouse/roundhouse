@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType, NewAttachment};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
-use crate::model::{AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId};
+use crate::model::{
+    AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionOptions,
+};
 use crate::tail::StreamDelta;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -103,10 +105,11 @@ pub enum WorkerRequest {
     AgentCancel {
         session_id: SessionId,
     },
+    /// A setting left out is left as it is.
     AgentConfigure {
         session_id: SessionId,
-        model: Option<String>,
-        permission_mode: Option<String>,
+        #[serde(flatten)]
+        options: SessionOptions,
     },
     /// Resolves once the process has exited.
     AgentStop {
@@ -132,8 +135,9 @@ pub struct AgentSpec {
     pub agent_session_id: AgentSessionId,
     /// Continue that conversation rather than starting it.
     pub resume: bool,
-    pub model: Option<String>,
-    pub permission_mode: Option<String>,
+    /// What it runs with. A setting left out is left to the user's own agent settings.
+    #[serde(flatten)]
+    pub options: SessionOptions,
     /// Set in the agent's environment, along with the worker's own.
     pub env: Vec<(String, String)>,
 }

@@ -16,6 +16,7 @@ mod home;
 #[cfg(target_os = "macos")]
 mod marks;
 mod menus;
+mod new_workspace;
 mod other_hubs;
 mod pickers;
 mod pull_requests;

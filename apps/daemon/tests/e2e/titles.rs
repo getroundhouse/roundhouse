@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Session, TitleSource};
+use protocol::model::{AgentKind, Session, SessionOptions, TitleSource};
 
 use crate::support::{Stack, is_alive, wait_for_turn_end, wait_until, workspace};
 
@@ -39,7 +39,7 @@ fn the_first_prompt_titles_the_workspace_and_each_chat() {
 
     client.session_prompt(&first.id, "say:fix the login\nand then the rest", None).unwrap();
     wait_for_turn_end(&client, &first.id, 1);
-    let second = client.session_create(&made.id, AgentKind::Claude, None, None, None).unwrap();
+    let second = client.session_create(&made.id, AgentKind::Claude, SessionOptions::default(), None).unwrap();
     client.session_prompt(&second.id, "say:write the docs", None).unwrap();
     wait_for_turn_end(&client, &second.id, 1);
 

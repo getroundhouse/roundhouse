@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use protocol::attachment::AttachmentFile;
 use protocol::event::ApprovalDecision;
-use protocol::model::{ApprovalId, Seq};
+use protocol::model::{ApprovalId, Effort, Seq, SessionOptions};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -72,7 +72,7 @@ struct Shared {
     pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
     /// tells whoever's waiting.
-    pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<(), String>>>>,
+    pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
     stop_requested: AtomicBool,
     /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
     /// still being drained and delivered.
@@ -138,8 +138,8 @@ async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), A
     Ok(())
 }
 
-/// Sends a control request and waits for the CLI's answer.
-async fn control(shared: &Shared, request: Value) -> Result<(), AgentError> {
+/// Sends a control request and waits for the CLI's answer, which is what it sent back, or `null` if nothing.
+async fn control(shared: &Shared, request: Value) -> Result<Value, AgentError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (answered, answer) = oneshot::channel();
     shared.pending_controls.lock().insert(request_id.clone(), answered);
@@ -152,13 +152,26 @@ async fn control(shared: &Shared, request: Value) -> Result<(), AgentError> {
         }
     };
     match result {
-        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Ok(answer))) => Ok(answer),
         Ok(Ok(Err(refusal))) => Err(AgentError::Refused(refusal)),
         Ok(Err(_)) => Err(AgentError::Exited),
         Err(_) => {
             shared.pending_controls.lock().remove(&request_id);
             Err(AgentError::NoAnswer)
         }
+    }
+}
+
+/// Changes the effort, and reads it back. The CLI answers success to a level it doesn't know, and changes nothing, so
+/// only the level it reports applying says the change took.
+async fn set_effort(shared: &Shared, effort: Effort) -> Result<(), AgentError> {
+    let asked = super::effort::level(effort).ok_or(AgentError::UnknownEffort)?;
+    let settings = json!({"effortLevel": asked});
+    control(shared, json!({"subtype": "apply_flag_settings", "settings": settings})).await?;
+    let read = control(shared, json!({"subtype": "get_settings"})).await?;
+    match super::effort::applied_effort(&read) {
+        Some(applied) if applied == asked => Ok(()),
+        applied => Err(AgentError::NotApplied { asked, applied: applied.map(String::from) }),
     }
 }
 
@@ -249,12 +262,15 @@ impl AgentProcess for ClaudeProcess {
         .await
     }
 
-    async fn configure(&self, model: Option<&str>, permission_mode: Option<&str>) -> Result<(), AgentError> {
-        if let Some(model) = model {
+    async fn configure(&self, options: &SessionOptions) -> Result<(), AgentError> {
+        if let Some(model) = &options.model {
             control(&self.shared, json!({"subtype": "set_model", "model": model})).await?;
         }
-        if let Some(mode) = permission_mode {
+        if let Some(mode) = &options.permission_mode {
             control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
+        }
+        if let Some(effort) = options.effort {
+            set_effort(&self.shared, effort).await?;
         }
         Ok(())
     }

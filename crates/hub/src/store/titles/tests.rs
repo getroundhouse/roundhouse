@@ -1,6 +1,6 @@
 use super::*;
-use crate::store::schema;
 use crate::store::tests::store_with_session;
+use crate::store::{older, schema};
 
 fn title(text: &str) -> Title {
     Title::typed(text).unwrap()
@@ -93,27 +93,18 @@ fn where_a_chat_title_came_from_moves_its_revision() {
 #[test]
 fn a_workspace_from_before_titles_takes_its_oldest_chats() {
     let dir = tempfile::tempdir().unwrap();
-    let (path, backups) = (dir.path().join("hub.db"), dir.path().join("backups"));
-    let mut conn = schema::open_connection(&path).unwrap();
-    schema::migrate_to(&mut conn, &backups, schema::BEFORE_TITLES).unwrap();
-    conn.execute_batch(
-        r"
-        INSERT INTO repos (id, name, path, created_at_ms) VALUES ('r', 'repo', '/repo', 0);
+    let rows = r"
         INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
-            VALUES ('w', 'r', 'alder', 'alder', 'ready', 'local', 'w', 0),
-                   ('w2', 'r', 'birch', 'birch', 'ready', 'local', 'w2', 0);
+            VALUES ('w2', 'r', 'birch', 'birch', 'ready', 'local', 'w2', 0);
         INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms,
                               updated_at_ms, title)
             VALUES ('later', 'w', 'claude', 'a', 'idle', 0, 2, 2, 'Write the docs'),
                    ('first', 'w', 'claude', 'b', 'idle', 0, 1, 1, 'Fix the login'),
                    ('unprompted', 'w', 'claude', 'c', 'idle', 0, 0, 0, NULL),
                    ('other', 'w2', 'claude', 'd', 'idle', 0, 0, 0, NULL);
-        ",
-    )
-    .unwrap();
-    drop(conn);
+    ";
 
-    let store = Store::open(&path, &backups).unwrap();
+    let store = older::store_from_before(dir.path(), schema::BEFORE_TITLES, rows);
 
     let workspace = store.get_workspace(&"w".into()).unwrap();
     assert_eq!((workspace.title.as_deref(), workspace.title_source), (Some("Fix the login"), TitleSource::FirstLine));

@@ -50,11 +50,15 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
     args.push(spec.agent_session_id.to_string());
     // `default` is what the picker offers for the account's own default, and only the running CLI
     // has a name for it.
-    if let Some(model) = spec.model.as_ref().filter(|model| *model != "default") {
+    if let Some(model) = spec.options.model.as_ref().filter(|model| *model != "default") {
         args.extend(["--model".to_string(), model.clone()]);
     }
-    if let Some(mode) = &spec.permission_mode {
+    if let Some(mode) = &spec.options.permission_mode {
         args.extend(["--permission-mode".to_string(), mode.clone()]);
+    }
+    // A level this build doesn't know is left out, which the CLI would ignore anyway, with a warning.
+    if let Some(level) = spec.options.effort.and_then(crate::claude::effort::level) {
+        args.extend(["--effort".to_string(), level.to_string()]);
     }
     args
 }

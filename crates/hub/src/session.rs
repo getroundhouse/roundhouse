@@ -14,7 +14,7 @@ use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session, SessionId,
-    SessionStatus, WorkspaceId,
+    SessionOptions, SessionStatus, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -155,8 +155,8 @@ struct LiveState {
     /// deltas are dropped.
     agent: Option<AgentRun>,
     agent_opened: bool,
-    model: Option<String>,
-    permission_mode: Option<String>,
+    /// What the next agent launches with.
+    options: SessionOptions,
     closed_at_ms: Option<i64>,
     /// Whether the agent can take a queued prompt yet.
     queue: QueueWatch,
@@ -180,7 +180,7 @@ pub(crate) struct LiveSession {
     /// Held while a queued prompt is sent, and while the queue changes, so a change can't land between reading the
     /// prompt and taking it out of the queue, and be lost.
     queue_lock: tokio::sync::Mutex<()>,
-    /// Held while the model and mode are being changed, and while an agent is being started with them,
+    /// Held while the model, mode or effort is being changed, and while an agent is being started with them,
     /// so a change can't fall between the two and reach neither.
     configuring: tokio::sync::Mutex<()>,
 }
@@ -221,8 +221,7 @@ impl LiveSession {
                 turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent: None,
                 agent_opened: stored.agent_opened,
-                model: stored.session.model.clone(),
-                permission_mode: stored.session.permission_mode.clone(),
+                options: stored.session.options(),
                 closed_at_ms: stored.session.closed_at_ms,
                 queue: QueueWatch::starting(stored.session.queue_held),
                 live: None,
@@ -273,30 +272,23 @@ impl LiveSession {
     }
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
-    pub(crate) async fn configure(
-        &self,
-        model: Option<String>,
-        permission_mode: Option<String>,
-    ) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(&self, options: SessionOptions) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
-            let request = WorkerRequest::AgentConfigure {
-                session_id: self.id.clone(),
-                model: model.clone(),
-                permission_mode: permission_mode.clone(),
-            };
-            link.call(request).await?;
+            link.call(WorkerRequest::AgentConfigure { session_id: self.id.clone(), options: options.clone() }).await?;
         }
-        let (id, saved_model, saved_mode) = (self.id.clone(), model.clone(), permission_mode.clone());
-        hub.blocking(move |store| store.set_session_options(&id, saved_model.as_deref(), saved_mode.as_deref()))
-            .await?;
-        {
-            let mut state = self.state.lock();
-            state.model = model.or(state.model.take());
-            state.permission_mode = permission_mode.or(state.permission_mode.take());
-        }
+        self.keep_options(&hub, options).await?;
         self.announce(&hub).await
+    }
+
+    /// Saves the settings `newer` changes, and launches the next agent with them.
+    async fn keep_options(&self, hub: &Hub, newer: SessionOptions) -> Result<(), ApiError> {
+        let (id, saved) = (self.id.clone(), newer.clone());
+        hub.blocking(move |store| store.set_session_options(&id, &saved)).await?;
+        let mut state = self.state.lock();
+        state.options = std::mem::take(&mut state.options).merged(newer);
+        Ok(())
     }
 
     pub(crate) async fn close(&self) -> Result<Session, ApiError> {

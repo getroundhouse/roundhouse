@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{AgentKind, RunId, SessionId};
+use protocol::model::{AgentKind, RunId, SessionId, SessionOptions};
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -96,13 +96,12 @@ async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mu
 pub(crate) async fn configure_agent(
     state: &State,
     session_id: &SessionId,
-    model: Option<&str>,
-    permission_mode: Option<&str>,
+    options: &SessionOptions,
 ) -> Result<WorkerResponse, ApiError> {
     let Some(agent) = state.live_agent(session_id) else {
         return Ok(WorkerResponse::AgentNotRunning);
     };
-    match agent.configure(model, permission_mode).await {
+    match agent.configure(options).await {
         Ok(()) => Ok(WorkerResponse::Ok),
         Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
         Err(e) => Err(e.into()),

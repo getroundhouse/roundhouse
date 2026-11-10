@@ -85,6 +85,24 @@ fn restarting_to_update_asks_first_when_something_typed_would_be_lost(cx: &mut T
     assert_eq!(ui.composer_text(), "say:not sent yet");
 }
 
+/// What's left in the new-workspace dialog is for a first chat, and restarting would lose it too.
+#[gpui_kit::test]
+fn restarting_to_update_counts_what_was_left_in_the_new_workspace_dialog(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.open_new_workspace();
+    ui.input("half a thought");
+    ui.press("escape");
+    ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
+
+    ui.click("restart-to-update");
+
+    let (_, detail) = restart_question(&ui).unwrap();
+    assert_eq!(detail, "What's typed in 1 chat hasn't been sent, and restarting loses it.");
+}
+
 /// The card doesn't hold anything else up, so more can be typed while it asks, and it says so before losing it.
 #[gpui_kit::test]
 fn restarting_anyway_asks_again_when_more_is_typed_since_it_asked(cx: &mut TestAppContext) {

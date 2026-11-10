@@ -4,7 +4,7 @@
 
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::model::{Effort, SessionStatus};
 
 use crate::support::{Stack, Ui};
 
@@ -32,7 +32,7 @@ fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
     // Full access and another model, on the agent that's already running.
     ui.pick("mode-picker", 3);
     ui.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
-    ui.pick("model-picker", 2);
+    ui.pick_item("model-picker", "Opus");
     ui.wait("the model", |_| client.session_get(&chat).unwrap().model.as_deref() == Some("opus"));
     ui.input("tool:echo two > two.txt");
     ui.press("enter");
@@ -50,6 +50,32 @@ fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn an_effort_picked_reaches_the_running_agent_and_the_next_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    ui.input("effort");
+    ui.press("enter");
+    ui.wait_idle_with("the agent's own effort", |text| text.contains("effort=high"));
+
+    ui.pick_item("model-picker", "Extra high");
+    ui.wait("the effort", |_| client.session_get(&chat).unwrap().effort == Some(Effort::Xhigh));
+    ui.input("effort");
+    ui.press("enter");
+    ui.wait_idle_with("the running agent's new effort", |text| text.contains("effort=xhigh"));
+    let started = ui.events().iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(started, 1, "the running agent was changed, not replaced");
+
+    ui.new_chat();
+    let pane = ui.pane().unwrap();
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.effort)), Some(Effort::Xhigh));
+}
+
+#[gpui_kit::test]
 fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
@@ -60,7 +86,7 @@ fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppConte
     ui.press("enter");
     ui.wait_idle_with("the agent to be up", |text| text.contains("running"));
     let pane = ui.pane().unwrap();
-    ui.cx.update_entity(&pane, |p, cx| p.configure(Some("not-a-model".to_string()), None, cx));
+    ui.cx.update_entity(&pane, |p, cx| p.configure(Some("not-a-model".to_string()), None, None, cx));
     ui.wait("the refusal", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("not found")));
     assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.model.clone())), None);
 }

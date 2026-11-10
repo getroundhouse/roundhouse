@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{ApprovalId, RunId};
+use protocol::model::{ApprovalId, RunId, SessionOptions};
 use protocol::tail::StreamDelta;
 use tokio::sync::mpsc;
 use tracing::error;
@@ -109,15 +109,14 @@ impl LiveSession {
     /// The agent changed mode, or confirmed a change. The next launch has to start in this one.
     async fn note_mode(&self, mode: String) {
         let Ok(hub) = self.hub() else { return };
-        if self.state.lock().permission_mode.as_deref() == Some(mode.as_str()) {
+        if self.state.lock().options.permission_mode.as_deref() == Some(mode.as_str()) {
             return;
         }
-        let (id, saved) = (self.id.clone(), mode.clone());
-        if let Err(e) = hub.blocking(move |store| store.set_session_options(&id, None, Some(&saved))).await {
+        let newer = SessionOptions { permission_mode: Some(mode), ..SessionOptions::default() };
+        if let Err(e) = self.keep_options(&hub, newer).await {
             error!(session = %self.id, "could not record the agent's mode: {e}");
             return;
         }
-        self.state.lock().permission_mode = Some(mode);
         if let Err(e) = self.announce(&hub).await {
             error!(session = %self.id, "could not announce the agent's mode: {e}");
         }

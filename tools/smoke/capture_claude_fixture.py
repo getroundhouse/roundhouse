@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates crates/agents/tests/fixtures/claude.jsonl from the real `claude` CLI.
+"""Regenerates crates/agents/tests/fixtures/claude.jsonl and claude_controls.jsonl from the real `claude` CLI.
 
 Run this after upgrading the CLI, then run `cargo test -p agents`. A failure there means the CLI's
 output changed in a way the adapter depends on.
@@ -7,6 +7,9 @@ output changed in a way the adapter depends on.
 It uses the adapter's exact flags in a scratch repo, with trivial prompts, on a cheap model. Costs a
 fraction of a cent. Machine details and personal configuration are removed before anything is
 written, because the output goes in the repo.
+
+With --controls, it only regenerates claude_controls.jsonl: control requests and the CLI's replies, with no
+prompt, so nothing is spent.
 """
 import json
 import os
@@ -21,6 +24,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "crates/agents/tests/fixtures/claude.jsonl"
+CONTROLS = ROOT / "crates/agents/tests/fixtures/claude_controls.jsonl"
 FLAGS = """-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages
 --thinking-display summarized --permission-prompt-tool stdio --allow-dangerously-skip-permissions --permission-mode manual --model haiku --effort high""".split()
 # Keeps the fixture small. Order is preserved, so the protocol's sequencing is still real.
@@ -123,6 +127,36 @@ def capture(cwd):
     return cli.lines
 
 
+def capture_controls(cwd):
+    """A level it takes, one it doesn't, and a new model, each followed by what it then reports applying."""
+    cli = Cli(cwd)
+    requests = [
+        ("settings-1", {"subtype": "get_settings"}),
+        ("effort-1", {"subtype": "apply_flag_settings", "settings": {"effortLevel": "low"}}),
+        ("settings-2", {"subtype": "get_settings"}),
+        ("effort-2", {"subtype": "apply_flag_settings", "settings": {"effortLevel": "ultra"}}),
+        ("settings-3", {"subtype": "get_settings"}),
+        ("model-1", {"subtype": "set_model", "model": "sonnet"}),
+        ("settings-4", {"subtype": "get_settings"}),
+    ]
+    exchanged = []
+    for request_id, request in requests:
+        sent = {"type": "control_request", "request_id": request_id, "request": request}
+        cli.send(sent)
+        reply = cli.wait_for(lambda v: v.get("type") == "control_response" and v["response"].get("request_id") == request_id)
+        exchanged += [sent, reply]
+    cli.proc.kill()
+    return exchanged
+
+
+def keep_only_whats_applied(value):
+    """`get_settings` answers with the user's own settings too, which are personal and which the adapter doesn't read."""
+    answer = value.get("response", {}).get("response")
+    if value.get("type") == "control_response" and isinstance(answer, dict) and "applied" in answer:
+        answer["effective"], answer["sources"] = {}, []
+    return value
+
+
 def scrub(text, cwd):
     text = text.replace(os.path.realpath(cwd), "/tmp/fixture").replace(str(cwd), "/tmp/fixture")
     return text.replace(str(pathlib.Path.home()), "/home/user")
@@ -177,27 +211,38 @@ def kind_of(value):
     return "mode" if value.get("subtype") == "status" and "permissionMode" in value else value.get("subtype")
 
 
+def write(path, lines):
+    refuse_anything_personal(lines)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(value) + "\n" for value in lines))
+
+
 def main():
+    controls_only = sys.argv[1:] == ["--controls"]
     with tempfile.TemporaryDirectory(dir="/tmp") as cwd:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=cwd, check=True)
-        lines = capture(cwd)
-        scrub_streamed_text(lines, cwd)
-        kept, counts = [], {}
-        for value in lines:
-            kind = kind_of(value)
-            counts[kind] = counts.get(kind, 0) + 1
-            if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
-                continue
-            kept.append(sanitize(value, cwd))
+        kept = []
+        if not controls_only:
+            lines = capture(cwd)
+            scrub_streamed_text(lines, cwd)
+            counts = {}
+            for value in lines:
+                kind = kind_of(value)
+                counts[kind] = counts.get(kind, 0) + 1
+                if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
+                    continue
+                kept.append(sanitize(value, cwd))
+        controls = [sanitize(keep_only_whats_applied(value), cwd) for value in capture_controls(cwd)]
         # The CLI keeps a conversation file per directory. The random name makes this exact.
         projects = pathlib.Path.home() / ".claude/projects"
         for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):
             shutil.rmtree(leftover, ignore_errors=True)
-    refuse_anything_personal(kept)
-    version = next(v["claude_code_version"] for v in kept if kind_of(v) == "init")
-    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    FIXTURE.write_text("".join(json.dumps(value) + "\n" for value in kept))
-    print(f"wrote {len(kept)} lines from claude {version} to {FIXTURE}")
+    version = subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.split()[0]
+    if kept:
+        write(FIXTURE, kept)
+        print(f"wrote {len(kept)} lines from claude {version} to {FIXTURE}")
+    write(CONTROLS, controls)
+    print(f"wrote {len(controls)} lines from claude {version} to {CONTROLS}")
 
 
 if __name__ == "__main__":

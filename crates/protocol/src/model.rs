@@ -2,11 +2,15 @@
 
 use serde::{Deserialize, Serialize};
 
+mod effort;
+mod options;
 mod pull_request;
 mod queue;
 mod session;
 mod title;
 
+pub use effort::Effort;
+pub use options::SessionOptions;
 pub use pull_request::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};

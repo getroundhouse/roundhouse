@@ -184,13 +184,13 @@ fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let repo = stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
     // The repository disappears, so a new worktree can't be made from it.
     std::fs::remove_dir_all(stack.repo()).unwrap();
-    let id = format!("new-in-{}", repo.id);
-    ui.click(SharedString::from(id));
+    ui.open_new_workspace();
+    ui.click("new-workspace-create");
     ui.wait("the error", |ui| ui.view().error.is_some());
     assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
     assert_eq!(ui.view().busy, Busy::Free, "the button works again");
@@ -203,7 +203,15 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
     let session = client
-        .session_create(&workspace.id, protocol::model::AgentKind::Claude, None, Some("manual".into()), None)
+        .session_create(
+            &workspace.id,
+            protocol::model::AgentKind::Claude,
+            protocol::model::SessionOptions {
+                permission_mode: Some("manual".into()),
+                ..protocol::model::SessionOptions::default()
+            },
+            None,
+        )
         .unwrap();
     client.session_prompt(&session.id, "tool:echo answered > answered.txt", None).unwrap();
     let deadline = Instant::now() + TIMEOUT;
