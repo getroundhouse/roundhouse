@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{EventBody, ExitReason};
-use protocol::model::{ApprovalId, RunId, SessionOptions};
+use protocol::event::{EventBody, ExitReason, SessionEvent};
+use protocol::model::{ApprovalId, ContextUsage, RunId, SessionOptions};
 use protocol::tail::StreamDelta;
 use tokio::sync::mpsc;
 use tracing::error;
@@ -17,6 +17,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
         match item {
             Item::Event { run, body, raw, attachments } => ingest_event(&session, run, body, raw, attachments).await,
             Item::Delta { run, delta } => session.apply_delta(run, delta),
+            Item::Context { run, context } => session.note_context(run, context).await,
             Item::WorkerLost(link) => session.agent_lost(link, ExitReason::WorkerLost).await,
             Item::Flush(done) => {
                 let _ = done.send(());
@@ -53,6 +54,7 @@ async fn ingest_event(
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }
@@ -70,12 +72,28 @@ async fn ingest_event(
     } else {
         None
     };
-    if let Err(e) = session.record(Origin::Run { run, current }, body, raw, None).await {
-        error!(session = %session.id, "could not record agent output: {e}");
+    match session.record(Origin::Run { run, current }, body, raw, None).await {
+        // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
+        Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
+            session.heard_limits(run, limits, ts_ms);
+        }
+        Ok(_) => {}
+        Err(e) => error!(session = %session.id, "could not record agent output: {e}"),
     }
     if let Some(approval_id) = stale_approval {
         session.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;
     }
+}
+
+/// Whether what `run` said of its context changes what the session's record says. A run that isn't the one going is
+/// one that's been replaced or has exited, and what it says is of a conversation the session has moved on from.
+pub(super) fn says_something_new(
+    current: Option<RunId>,
+    known: Option<&ContextUsage>,
+    run: RunId,
+    said: &ContextUsage,
+) -> bool {
+    current == Some(run) && known != Some(said)
 }
 
 async fn mark_opened(session: &Arc<LiveSession>) {
@@ -104,6 +122,28 @@ impl LiveSession {
         delta.run = Some(run);
         state.tail.apply(&delta);
         publish(&mut state, LiveItem::Delta(delta));
+    }
+
+    /// The agent said how full its context is. Only the current run speaks for the session, and only a change is kept
+    /// and announced, so the feed isn't told what it knows.
+    async fn note_context(&self, run: RunId, context: ContextUsage) {
+        let Ok(hub) = self.hub() else { return };
+        {
+            let state = self.state.lock();
+            let current = state.agent.map(|agent| agent.run);
+            if !says_something_new(current, state.context.as_ref(), run, &context) {
+                return;
+            }
+        }
+        let (id, kept) = (self.id.clone(), context.clone());
+        if let Err(e) = hub.blocking(move |store| store.set_session_context(&id, &kept)).await {
+            error!(session = %self.id, "could not record how full the agent's context is: {e}");
+            return;
+        }
+        self.state.lock().context = Some(context);
+        if let Err(e) = self.announce(&hub).await {
+            error!(session = %self.id, "could not announce how full the agent's context is: {e}");
+        }
     }
 
     /// The agent changed mode, or confirmed a change. The next launch has to start in this one.

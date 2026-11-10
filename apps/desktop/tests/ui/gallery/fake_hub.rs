@@ -129,6 +129,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
                 world.worktree_images.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such image"))?;
             reply(C::Image { media_type: MediaType::sniff(data), data: AttachmentBytes::new(data.clone()) })
         }
+        R::SessionAccount { .. } => {
+            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub can't say whose account a chat is under"))
+        }
         R::HubShutdown
         | R::RepoAdd { .. }
         | R::WorkspaceCreate { .. }

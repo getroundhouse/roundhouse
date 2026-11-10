@@ -42,6 +42,10 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Approval | An agent asking before it uses a tool. Any client can answer | `ApprovalRequested`, `ApprovalResolved` |
 | Question | An approval where the agent is asking a person something, so it needs an answer rather than a yes | `ApprovalDecision::Answer` |
 | Approval mode | How much an agent may do without asking, such as "Ask first", "Plan" or "Full access" | `permission_mode` |
+| Context | What an agent's model holds of its conversation: the system prompt, tools, messages and so on, counted in tokens, up to the most the model takes. How full it is belongs to the session's record, as the agent last said, and isn't in the log | `ContextUsage`, `ContextPart`, `Session.context`, `WorkerFrame::AgentContext` |
+| Limit | How much of an account's use of its agent is left in a window, such as five hours or seven days, and when the window ends. It's the account's, not a session's, so the hub keeps it by account | `UsageLimit`, `LimitWindow`, `EventBody::AgentLimits`, the `account_limits` table |
+| Account | The login an agent's CLI runs under on its worker's machine: the model provider, the plan, and the email. Agents under one account share its limits, and there can be several accounts with one model provider. Its ID is the adapter's, opaque, and the same for every agent under that login | `AgentAccount`, `AccountId`, `SessionAccount` |
+| Model provider | Who serves an agent's model, such as Anthropic's own API or a cloud's. It's part of an account | `AgentAccount.model_provider` |
 | Effort | How hard an agent thinks before it answers, from Low to Max. `None` leaves it to the user's own Claude settings | `Effort`, `Session.effort`, `model_picker` |
 | Setup | What happens once a worktree exists: copying local files and running the repository's setup script | `SetupStatus`, `worker::setup` |
 | Diff comment | A comment on one line of a workspace's diff, which can be sent to the agent | `DiffComment` |
@@ -102,6 +106,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |
 | Approval mode, permission mode | The same setting. `permission_mode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `permission_mode` in code |
 | Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |
+| Provider, model provider | A provider is where a hub runs workers. A model provider is who serves an agent's model | "Provider" alone only for the first. Always "model provider" for the second, in code and in the interface |
+| Account | An agent's account is the login its CLI runs under. A hub's accounts, once a hub serves several people, are who may use it | "Account" alone means the agent's, until hubs have their own. Then say which |
 | Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
 | Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
 | Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |

@@ -159,6 +159,7 @@ impl World {
             read_seq: 0,
             turn_started_at_ms: None,
             background_tasks,
+            context: None,
             queued: Vec::new(),
             queue_held: false,
             rev: Rev::default(),

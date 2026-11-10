@@ -9,7 +9,8 @@ use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType, NewAttachmen
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
-    AgentKind, AgentSessionId, ApprovalId, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionOptions,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, GitDiff, GitStatus, PullRequest, RunId, Seq,
+    SessionId, SessionOptions,
 };
 use crate::tail::StreamDelta;
 
@@ -125,6 +126,12 @@ pub enum WorkerRequest {
         agent: AgentKind,
         prompt: String,
     },
+    /// The account `agent`'s CLI is logged in to on this machine, from a call of its own to the CLI, outside any
+    /// session. It changes nothing. Every agent of a kind here runs under one login today. When they can run under
+    /// several, this says which one's it asks for.
+    AccountFor {
+        agent: AgentKind,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -193,6 +200,7 @@ pub enum WorkerResponse {
     Title {
         title: String,
     },
+    Account(AgentAccount),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -218,6 +226,13 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         delta: StreamDelta,
+    },
+    /// How full the agent's context is now. It isn't an event: it answers the worker's own question rather than
+    /// being something the agent said, and only the newest matters, which the hub keeps on the session's record.
+    AgentContext {
+        session_id: SessionId,
+        run: RunId,
+        context: ContextUsage,
     },
 }
 

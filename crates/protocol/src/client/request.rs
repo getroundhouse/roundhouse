@@ -204,6 +204,13 @@ pub enum ClientRequest {
         id: WorkspaceId,
         path: String,
     },
+    /// Whose account the session's agent runs under, read from the session's worker when asked, and what the hub
+    /// has heard of that account's limits. It records nothing, so asking again only reads again, and like any read
+    /// from a worker it starts the workspace's worker if none is running. Refused unless the workspace is ready. A
+    /// hub older than this refuses it as unsupported.
+    SessionAccount {
+        id: SessionId,
+    },
     /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
     /// place. So sending it again changes nothing more. Refused with `Conflict` once that prompt has been sent, since
     /// the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the queue is

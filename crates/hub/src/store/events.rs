@@ -231,6 +231,7 @@ impl Store {
                 | EventBody::AgentInit { .. }
                 | EventBody::AgentState { .. }
                 | EventBody::AgentTasks { .. }
+                | EventBody::AgentLimits { .. }
                 | EventBody::Assistant { .. }
                 | EventBody::AgentUser { .. }
                 | EventBody::TurnEnded { .. }

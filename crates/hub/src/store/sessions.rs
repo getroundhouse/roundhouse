@@ -1,13 +1,15 @@
 //! Sessions.
 
-use protocol::model::{AgentKind, ClientRequestId, QueuedPrompt, Session, SessionOptions, SessionStatus, Title};
+use protocol::model::{
+    AgentKind, ClientRequestId, ContextUsage, QueuedPrompt, Session, SessionOptions, SessionStatus, Title,
+};
 use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
@@ -38,7 +40,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             queue_held: row.get(18)?,
             turn_started_at_ms: row.get(19)?,
             effort: row.get::<_, Option<String>>(20)?.map(from_text).transpose()?,
-            rev: rev_of(row, 21)?,
+            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
+            context: row.get::<_, Option<String>>(21)?.and_then(|json| serde_json::from_str(&json).ok()),
+            rev: rev_of(row, 22)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -60,7 +64,7 @@ impl Store {
         conn.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -84,6 +88,7 @@ impl Store {
                 session.queue_held,
                 session.turn_started_at_ms,
                 session.effort.as_ref().map(text_of),
+                session.context.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -120,6 +125,15 @@ impl Store {
                      effort = COALESCE(?, effort)
                  WHERE id = ?",
             params![model, permission_mode, effort.as_ref().map(text_of), id.as_str()],
+        )?;
+        Ok(())
+    }
+
+    /// How full the session's agent's context is from here on.
+    pub fn set_session_context(&self, id: &SessionId, context: &ContextUsage) -> Result<(), StoreError> {
+        lock(&self.writer).execute(
+            "UPDATE sessions SET context = ? WHERE id = ?",
+            params![serde_json::to_string(context)?, id.as_str()],
         )?;
         Ok(())
     }

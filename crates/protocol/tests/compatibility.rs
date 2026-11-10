@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{EventBody, SessionEvent};
 use protocol::frame;
-use protocol::model::{PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -115,6 +115,32 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
 
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
     assert_eq!(session.turn_started_at_ms, None);
+}
+
+#[test]
+fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_its_form_stays_readable() {
+    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let HubNotice::Session(session) = frame::decode::<HubNotice>(older).unwrap() else { panic!() };
+    assert_eq!(session.context, None);
+
+    // Spelled out, since a hub's stored rows hold this form too.
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"parts":[{"name":"Messages","tokens":5}]}}"#;
+    let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
+    let context = session.context.unwrap();
+    assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));
+}
+
+/// Spelled out, since the log holds this form for good.
+#[test]
+fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_still_reads() {
+    let event: SessionEvent = frame::decode(
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_limits","limits":[{"window":"seven_days","used_percent":4,"resets_at_ms":9},{"window":"thirty_days","used_percent":1}]}}"#,
+    )
+    .unwrap();
+
+    let EventBody::AgentLimits { limits } = event.body else { panic!("{:?}", event.body) };
+    let said: Vec<_> = limits.iter().map(|limit| (limit.window, limit.used_percent, limit.resets_at_ms)).collect();
+    assert_eq!(said, [(LimitWindow::SevenDays, 4, Some(9)), (LimitWindow::Unknown, 1, None)]);
 }
 
 #[test]

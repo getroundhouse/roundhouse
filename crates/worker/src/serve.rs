@@ -25,7 +25,7 @@ use crate::{git, setup};
 mod agent;
 mod scripts;
 
-use agent::{configure_agent, start_agent, stop_agent, title_for};
+use agent::{account_for, configure_agent, start_agent, stop_agent, title_for};
 use scripts::{Setup, run_archive_script, run_setup, setup_requested, stop_setup_script};
 
 /// Enough to see what went wrong, without sending a whole install log across.
@@ -275,6 +275,7 @@ async fn handle(
         WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
         WorkerRequest::TitleFor { agent, prompt } => title_for(state, agent, &prompt).await,
+        WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
     }
 }
 

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, GitDiff, GitStatus, PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError,
-    Workspace,
+    DiffComment, GitDiff, GitStatus, PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session,
+    SessionAccount, TitleError, Workspace,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -76,6 +76,7 @@ pub enum ClientResponse {
         media_type: MediaType,
         data: AttachmentBytes,
     },
+    SessionAccount(SessionAccount),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

@@ -13,7 +13,7 @@ use protocol::attachment::NewAttachment;
 use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session, SessionId,
+    AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, ContextUsage, RunId, Seq, Session, SessionId,
     SessionOptions, SessionStatus, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
@@ -27,6 +27,7 @@ use crate::store::{self, StoredSession};
 
 mod commands;
 mod ingest;
+mod limits;
 mod queue;
 mod record;
 mod status;
@@ -51,6 +52,12 @@ pub(crate) enum Item {
     Delta {
         run: RunId,
         delta: StreamDelta,
+    },
+    /// How full the agent's context is now. It comes in the queue with the agent's events, so it's never taken for
+    /// a later run's, or kept after the run has gone.
+    Context {
+        run: RunId,
+        context: ContextUsage,
     },
     /// The worker connection ended. Everything it sent has been queued ahead of this.
     WorkerLost(u64),
@@ -148,6 +155,10 @@ struct LiveState {
     pending_approvals: HashMap<ApprovalId, Option<RunId>>,
     /// What the current agent is running in the background. None of it outlives the agent, so it starts empty.
     background_tasks: Vec<AgentTask>,
+    /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
+    context: Option<ContextUsage>,
+    /// Which account a launch of the agent runs under, once it has heard of a limit, for filing what it hears.
+    hearing: Option<(RunId, limits::Hearing)>,
     /// When the newest turn started, as the session's record says, for the turn's end to carry.
     turn_started_at_ms: Option<i64>,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
@@ -218,6 +229,8 @@ impl LiveSession {
                 version: 0,
                 pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
                 background_tasks: Vec::new(),
+                context: stored.session.context.clone(),
+                hearing: None,
                 turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent: None,
                 agent_opened: stored.agent_opened,

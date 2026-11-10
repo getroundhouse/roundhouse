@@ -1,16 +1,15 @@
 //! A title for a prompt, from a one-off call to a small model, outside any session, so it costs the session nothing
 //! and never shows in its chat. See `docs/claude-cli.md`.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Output;
 use std::time::Duration;
 
-use process::{Signal, signal_group};
 use protocol::model::Title;
 use serde_json::Value;
-use tokio::io::AsyncWriteExt as _;
 
-use super::process::{command, record, resolve_binary, start};
+use super::one_off::{self, OneOff};
+use super::process::resolve_binary;
 use crate::{AgentError, AgentOptions, NoTitle};
 
 /// Haiku answers in a second or two, so a call taking this long is stuck. Stopping the worker cancels one sooner.
@@ -24,18 +23,15 @@ const SYSTEM_PROMPT: &str = "You name tasks. Reply with only a short title for t
 pub async fn title_for(prompt: &str, options: &AgentOptions, scratch_dir: &Path) -> Result<Title, AgentError> {
     let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
     let room = tempfile::Builder::new().prefix("title-").tempdir_in(scratch_dir).map_err(NoTitle::NoRoom)?;
-    let mut command = command(&bin, room.path());
-    command.args(title_args());
-    let mut child = start(&mut command, &bin, room.path())?;
-    let running = Running::new(child.id().unwrap_or_default(), options.pid_file.clone());
-    let mut stdin = child.stdin.take().ok_or_else(|| AgentError::NoPipes { bin: bin.display().to_string() })?;
-    stdin.write_all(prompt.as_bytes()).await.map_err(NoTitle::Io)?;
-    drop(stdin);
-    let output = tokio::time::timeout(TITLE_TIMEOUT, child.wait_with_output())
-        .await
-        .map_err(|_| NoTitle::TimedOut(TITLE_TIMEOUT))?
-        .map_err(NoTitle::Io)?;
-    running.finished();
+    let call = OneOff {
+        bin: &bin,
+        cwd: room.path(),
+        args: title_args(),
+        stdin: prompt.as_bytes(),
+        timeout: TITLE_TIMEOUT,
+        pid_file: options.pid_file.clone(),
+    };
+    let output = one_off::run(call).await?;
     if !output.status.success() {
         return Err(NoTitle::Failed { status: output.status, said: said(&output) }.into());
     }
@@ -65,37 +61,6 @@ fn title_args() -> Vec<String> {
     ]
     .map(String::from)
     .to_vec()
-}
-
-/// A call under way, recorded so the provider can stop it if the worker is killed. Unless it finished, dropping this
-/// stops its whole process group, which `kill_on_drop` alone doesn't: that reaches only the CLI.
-struct Running {
-    pid: u32,
-    record: Option<PathBuf>,
-    finished: bool,
-}
-
-impl Running {
-    fn new(pid: u32, record_at: Option<PathBuf>) -> Self {
-        record(record_at.as_deref(), pid);
-        Running { pid, record: record_at, finished: false }
-    }
-
-    /// The CLI has exited and been waited for, so its group may be gone and its PID reused.
-    fn finished(mut self) {
-        self.finished = true;
-    }
-}
-
-impl Drop for Running {
-    fn drop(&mut self) {
-        if !self.finished {
-            signal_group(self.pid, Signal::Kill);
-        }
-        if let Some(path) = &self.record {
-            let _ = std::fs::remove_file(path);
-        }
-    }
 }
 
 /// What the CLI said about failing: what its JSON says, or else its stderr. Not being logged in exits with an error

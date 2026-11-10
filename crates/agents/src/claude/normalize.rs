@@ -17,6 +17,7 @@ use tasks::StoppedTasks;
 mod advisor;
 mod file_change;
 mod images;
+mod limits;
 mod prompt;
 mod tasks;
 #[cfg(test)]
@@ -128,6 +129,7 @@ fn parse_value(value: &Value) -> Parsed {
         // Replies to the adapter's own requests, such as an interrupt.
         "control_response" => control_reply(value),
         "command_lifecycle" => prompt::command_lifecycle(value),
+        "rate_limit_event" => limits::rate_limit_event(value),
         _ => other(kind),
     }
 }

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+mod account;
+mod context;
 mod effort;
 mod one_line;
 mod options;
@@ -11,6 +13,8 @@ mod queue;
 mod session;
 mod title;
 
+pub use account::{AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use effort::Effort;
 pub use options::SessionOptions;
 pub use prompt_line::PromptLine;
@@ -57,6 +61,10 @@ macro_rules! ids {
 }
 
 ids!(
+    /// An account an agent runs under, as its adapter names it. It's opaque, says which kind of agent it's for, and
+    /// is the same for every agent under the same login, so the hub can keep what's the account's, such as its
+    /// limits, in one place.
+    AccountId,
     RepoId,
     WorkspaceId,
     SessionId,

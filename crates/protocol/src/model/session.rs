@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Effort, QueuedPrompt, Rev, Seq, SessionId, SessionOptions, Title, TitleSource, WorkspaceId};
+use super::{ContextUsage, Effort, QueuedPrompt, Rev, Seq, SessionId, SessionOptions, Title, TitleSource, WorkspaceId};
 use crate::event::AgentTask;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +97,10 @@ pub struct Session {
     /// takes that work with it.
     #[serde(default)]
     pub background_tasks: Vec<AgentTask>,
+    /// How full the agent's context is, as its newest report said. `None` until it has said, and from a hub that
+    /// doesn't keep it. It stays once the agent has gone, since the conversation it resumes is as full.
+    #[serde(default)]
+    pub context: Option<ContextUsage>,
     /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.
     #[serde(default)]
     pub queued: Vec<QueuedPrompt>,

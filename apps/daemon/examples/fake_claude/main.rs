@@ -44,7 +44,8 @@
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
 //!
-//! With `--output-format json`, it's the one-off call that titles a prompt instead. See `title.rs`.
+//! With `--output-format json`, it's the one-off call that titles a prompt instead. See `title.rs`. And as
+//! `auth status --json`, it says who's logged in. See `account.rs`.
 
 #![expect(
     clippy::unwrap_used,
@@ -55,7 +56,7 @@
 
 use std::collections::VecDeque;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
@@ -63,6 +64,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 
+mod account;
 mod advisor;
 mod background;
 mod read;
@@ -229,7 +231,12 @@ fn start_as_launched(args: &[String]) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let state = PathBuf::from(std::env::var("FAKE_CLAUDE_STATE").expect("FAKE_CLAUDE_STATE"));
+    let state = std::env::var("FAKE_CLAUDE_STATE").map(PathBuf::from);
+    if args == ["auth", "status", "--json"] {
+        println!("{}", account::auth_status(state.as_deref().ok()));
+        return;
+    }
+    let state = state.expect("FAKE_CLAUDE_STATE");
     std::fs::create_dir_all(&state).unwrap();
     if flag(&args, "--output-format").as_deref() == Some("json") {
         title::answer(&state);
@@ -261,8 +268,8 @@ fn main() {
     let (input_tx, input_rx) = mpsc::channel();
     let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
 
-    let control_out = out.clone();
-    std::thread::spawn(move || read_stdin(input_tx, control_out));
+    let (control_out, conversation) = (out.clone(), config.conversation.clone());
+    std::thread::spawn(move || read_stdin(input_tx, control_out, &conversation));
 
     // The real CLI finishes its turn on EOF, then exits. Prompts sent mid-turn fold into that turn.
     let mut queued: VecDeque<Prompt> = VecDeque::new();
@@ -282,7 +289,7 @@ fn main() {
     }
 }
 
-fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
+fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
@@ -328,6 +335,10 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out) {
                 Some("get_settings") => {
                     let applied = json!({"model": current_model(), "effort": current_effort()});
                     answer_control(&out, &value["request_id"], Ok(json!({"applied": applied})));
+                    continue;
+                }
+                Some("get_context_usage") => {
+                    answer_control(&out, &value["request_id"], Ok(account::context_usage(conversation)));
                     continue;
                 }
                 other => panic!("unexpected control request {other:?}"),

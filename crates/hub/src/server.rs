@@ -244,6 +244,7 @@ async fn handle(
             C::Attachment(hub.attachment_add(session_id, id, name, media_type, data).await?)
         }
         R::AttachmentRead { session_id, id } => C::AttachmentData { data: hub.attachment_read(session_id, id).await? },
+        R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
         R::SessionQueue { id, client_msg_id, text } => C::Session(hub.session_queue(id, client_msg_id, text).await?),
         R::SessionUnqueue { id, client_msg_id } => C::Session(hub.session_unqueue(id, client_msg_id).await?),
         R::SessionSendQueued { id, client_msg_id } => C::Session(hub.session_send_queued(id, client_msg_id).await?),

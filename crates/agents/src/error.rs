@@ -35,6 +35,29 @@ pub enum AgentError {
     Encode(#[from] serde_json::Error),
     #[error("the CLI gave no title")]
     NoTitle(#[from] NoTitle),
+    #[error("the CLI didn't say whose account it's logged in to")]
+    NoAccount(#[from] NoAccount),
+    #[error("a one-off call to the CLI failed")]
+    Call(#[from] CallFailed),
+}
+
+/// Why asking the CLI whose account it's logged in to gave nothing to use.
+#[derive(Debug, thiserror::Error)]
+pub enum NoAccount {
+    #[error(transparent)]
+    Call(#[from] CallFailed),
+    /// It answered, but not with whether anyone is logged in, so nothing it said can be taken as an account.
+    #[error("it didn't say whether anyone is logged in")]
+    Unreadable,
+}
+
+/// Why a one-off call to the CLI came back with nothing to read.
+#[derive(Debug, thiserror::Error)]
+pub enum CallFailed {
+    #[error("couldn't talk to it")]
+    Io(#[source] io::Error),
+    #[error("it didn't answer in {} s", .0.as_secs())]
+    TimedOut(Duration),
 }
 
 /// Why a one-off call for a title gave none to use.
@@ -42,10 +65,8 @@ pub enum AgentError {
 pub enum NoTitle {
     #[error("couldn't make an empty directory to run it in")]
     NoRoom(#[source] io::Error),
-    #[error("couldn't talk to it")]
-    Io(#[source] io::Error),
-    #[error("it didn't answer in {} s", .0.as_secs())]
-    TimedOut(Duration),
+    #[error(transparent)]
+    Call(#[from] CallFailed),
     /// What it said is the `result` of its JSON if it had one, such as that nobody is logged in, or else its stderr.
     #[error("it exited with {status}: {said}")]
     Failed { status: ExitStatus, said: String },
