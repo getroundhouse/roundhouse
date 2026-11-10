@@ -313,6 +313,24 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (account_id, window)
     );
 ",
+    // The hub's own settings, one row of them, which is a record like the rest. It keeps its machine awake unless
+    // someone has chosen otherwise. The row goes in after its trigger, so it has a revision from the start.
+    r"
+    CREATE TABLE hub_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        keep_awake INTEGER NOT NULL DEFAULT 1,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER hub_settings_rev_on_insert AFTER INSERT ON hub_settings BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE hub_settings SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+    CREATE TRIGGER hub_settings_rev_on_update AFTER UPDATE ON hub_settings WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE hub_settings SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+    INSERT INTO hub_settings (id) VALUES (1);
+",
 ];
 
 /// How many migrations there were before events recorded their run, so a test can make an older database.
@@ -334,3 +352,7 @@ pub(crate) const BEFORE_PULL_REQUESTS: usize = 14;
 /// How many migrations there were before sessions kept how full their agent's context is.
 #[cfg(test)]
 pub(crate) const BEFORE_CONTEXT: usize = 15;
+
+/// How many migrations there were before the hub kept settings of its own.
+#[cfg(test)]
+pub(crate) const BEFORE_HUB_SETTINGS: usize = 17;

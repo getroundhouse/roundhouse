@@ -12,16 +12,7 @@ pub(crate) fn terminate(pid: u32) {
     signal(pid, libc::SIGTERM);
 }
 
-pub(crate) fn is_alive(pid: u32) -> bool {
-    // A zombie still counts as existing, which is why
-    // tests also look at its state below.
-    if signal(pid, 0) != 0 {
-        return false;
-    }
-    let state = Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]).output().unwrap();
-    let state = String::from_utf8_lossy(&state.stdout);
-    !state.trim().is_empty() && !state.trim().starts_with('Z')
-}
+pub(crate) use process::testing::is_running as is_alive;
 
 pub(crate) fn parent_of(pid: u32) -> u32 {
     let out = Command::new("ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().unwrap();

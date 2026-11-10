@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, FileContents, GitDiff, GitStatus, PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq,
-    Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    DiffComment, FileContents, GitDiff, GitStatus, HubSettings, PromptLine, PullRequest, RecordKey, Records, Repo, Rev,
+    Seq, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -30,6 +30,7 @@ pub enum ClientResponse {
     },
     Ok,
     HubStatus(HubStatus),
+    HubSettings(HubSettings),
     Repo(Repo),
     Repos {
         repos: Vec<Repo>,
@@ -105,6 +106,10 @@ pub struct HubStatus {
     /// such as creating or archiving a workspace.
     #[serde(default)]
     pub requests: u32,
+    /// Whether it's keeping its machine from going to sleep by itself right now, as it does while there's work unless
+    /// it's been told not to.
+    #[serde(default)]
+    pub keeping_awake: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -195,6 +200,7 @@ pub enum HubNotice {
     Workspace(Workspace),
     Session(Session),
     Comment(DiffComment),
+    HubSettings(HubSettings),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,

@@ -18,6 +18,7 @@ mod backup;
 mod comments;
 mod error;
 mod events;
+mod hub_settings;
 mod limits;
 mod made;
 #[cfg(test)]

@@ -110,6 +110,7 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         build_number: args.build,
         running_setups: 0,
         requests: 1,
+        keeping_awake: false,
     }
 }
 

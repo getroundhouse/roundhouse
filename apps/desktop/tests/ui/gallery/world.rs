@@ -112,6 +112,8 @@ impl World {
             workspaces: self.workspaces.clone(),
             sessions: self.sessions.clone(),
             comments: self.comments.values().flatten().cloned().collect(),
+            // As a hub starts out.
+            hub_settings: Some(protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
             rev: Rev::default(),
         }
     }

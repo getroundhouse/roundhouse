@@ -1,7 +1,7 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TurnOutcome};
 
 use super::ingest::says_something_new;
-use super::status::{Open, next_status, turn_edge};
+use super::status::{Open, next_status, turn_edge, works_unattended};
 use super::*;
 use crate::store::TurnEdge;
 
@@ -210,4 +210,15 @@ fn hearing_of_the_accounts_limits_changes_no_status() {
     for status in [Idle, Running, WaitingApproval, Background, Interrupted] {
         assert_eq!(next_status(status, &heard, NOTHING, false), status);
     }
+}
+
+#[test]
+fn only_what_goes_on_without_a_person_is_working_unattended() {
+    for status in [Running, Background] {
+        assert!(works_unattended(status, 0), "{status:?}");
+    }
+    for status in [Idle, Interrupted, Unknown, WaitingApproval] {
+        assert!(!works_unattended(status, 0), "{status:?}");
+    }
+    assert!(works_unattended(WaitingApproval, 1), "what it left running before it asked goes on");
 }

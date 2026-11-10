@@ -1,6 +1,6 @@
-//! What someone has chosen in Settings, and Settings itself. A setting belongs to this Mac rather than to a hub, since
-//! the app can show several hubs, so they're kept in a file in the app's data directory and read once, as the app
-//! opens.
+//! What someone has chosen in Settings, and Settings itself. A setting of the app's own belongs to this Mac rather than
+//! to a hub, since the app can show several hubs, so they're kept in a file in the app's data directory and read once,
+//! as the app opens. A setting a hub carries out is one of that hub's records, which Settings shows and changes.
 
 use std::path::{Path, PathBuf};
 
@@ -12,11 +12,12 @@ mod page;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use page::{KEY_CONTEXT, page};
+pub(crate) use page::{KEY_CONTEXT, OfHub, page};
 
 use crate::saving::{Failure, Saver, write_json};
 
-/// Every setting, each with the value it has when nobody has chosen.
+/// Every setting that's the app's own, each with the value it has when nobody has chosen. A setting a hub carries
+/// out is the hub's, which keeps it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Settings {
     /// Thinking shows in full, rather than as a line to open.

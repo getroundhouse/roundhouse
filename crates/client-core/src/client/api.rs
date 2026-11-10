@@ -6,7 +6,8 @@ use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, PromptLine, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, PromptLine, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId,
+    Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -26,6 +27,16 @@ impl Client {
             Err(e) if hub_is_missing(&e) => Ok(()),
             other => other,
         }
+    }
+
+    /// Changes the hub's own settings, and returns them as they are now. A hub older than this refuses it, as
+    /// `is_unsupported` says.
+    pub fn hub_configure(&self, change: HubSettingsChange) -> Result<HubSettings> {
+        let reply = self.call(ClientRequest::HubConfigure { settings: change })?;
+        let ClientResponse::HubSettings(settings) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(settings)
     }
 
     pub fn repo_add(&self, path: &str) -> Result<Repo> {

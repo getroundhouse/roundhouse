@@ -181,3 +181,33 @@ proptest! {
         prop_assert_eq!(records.sessions(), hub.now());
     }
 }
+
+fn settings(keep_awake: bool, rev: u64) -> HubSettings {
+    HubSettings { keep_awake, rev: Rev::new(rev) }
+}
+
+#[test]
+fn a_hubs_settings_are_a_record_like_the_rest() {
+    let mut held = HubRecords::default();
+    assert_eq!(held.hub_settings(), None);
+
+    assert!(held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(2), ..Records::default() }));
+    assert!(held.apply_notice(HubNotice::HubSettings(settings(false, 5))));
+    assert!(!held.apply_notice(HubNotice::HubSettings(settings(true, 4))), "an older copy that arrives late");
+
+    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+    // A list from before the change, and one from after it, as a reconnect brings.
+    held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(3), ..Records::default() });
+    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+    held.apply_list(Records { hub_settings: Some(settings(false, 5)), rev: Rev::new(6), ..Records::default() });
+    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+}
+
+#[test]
+fn a_hub_from_before_it_kept_settings_has_none() {
+    let mut held = HubRecords::default();
+
+    held.apply_list(Records { rev: Rev::new(3), ..Records::default() });
+
+    assert_eq!(held.hub_settings(), None);
+}

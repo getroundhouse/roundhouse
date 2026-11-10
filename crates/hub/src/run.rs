@@ -84,6 +84,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         .map_err(|e| HubError::io(format!("creating {}", paths.database.display()), e))?;
     let store = Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?);
     let unfinished = recover(&store).map_err(HubError::Recover)?;
+    let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
     let provider: Arc<dyn Provider> = Arc::new(LocalProvider::new(LocalConfig {
         worker_exe: config.worker_exe,
@@ -97,6 +98,8 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let _ = provider.destroy(&workspace.instance_id).await;
     }
     let hub = Arc::new(Hub::new(store, paths.attachments_dir.clone(), provider, config.on_demand));
+    hub.carry_out(&settings);
+    let awake = hub.keep_awake();
     hub.start_queues().await;
 
     // The lock is held, so nothing else is serving here.
@@ -119,6 +122,9 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     watching_pull_requests.abort();
     listener::unbind(&paths.socket);
     hub.stop_all_workers().await;
+    if let Some(awake) = awake {
+        awake.abort();
+    }
     drop(lock_file);
     info!("hub stopped");
     Ok(())

@@ -74,6 +74,17 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
     }
 }
 
+/// Whether an agent in this status, with this much running in the background, is doing something that goes on without
+/// a person, so the machine it's on has to stay awake for it. Waiting on an answer or an approval isn't, since it could
+/// wait all night, but what the agent left running before it asked still is.
+pub(crate) fn works_unattended(status: SessionStatus, background_tasks: usize) -> bool {
+    match status {
+        SessionStatus::Running | SessionStatus::Background => true,
+        SessionStatus::WaitingApproval => background_tasks > 0,
+        SessionStatus::Idle | SessionStatus::Interrupted | SessionStatus::Unknown => false,
+    }
+}
+
 /// What going from `current` to `next` does to the session's turns. A turn starts when the agent starts working from
 /// anything else, including picking up again by itself after work in the background. It ends when the agent comes to
 /// rest, idle or with that work still going, which makes what it said its newest reply. A turn the agent was cut off

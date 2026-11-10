@@ -7,6 +7,8 @@
 
 mod group;
 mod record;
+#[cfg(feature = "testing")]
+pub mod testing;
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]

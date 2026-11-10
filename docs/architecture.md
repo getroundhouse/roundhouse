@@ -31,6 +31,8 @@ All of these are the same code and the same API. A workspace belongs to one hub.
 
 Any of them can use any provider. A hub is only reachable while its machine is awake, so persistent mobile access needs an always-on hub.
 
+A local hub keeps its Mac awake while it has work, which `docs/spec/chats.md` defines, unless its settings say not to. It runs macOS's `caffeinate` for as long as there's any, starts it again if something else stops it, and has it stop when the hub does, so a hub that's killed can't leave the Mac awake. The hub does this rather than a worker or the app, because it outlives the app, knows what every session is doing, and sends queued prompts itself. A worker on another machine keeps its own awake. *Not built.*
+
 ## Platform API
 
 The hub serves this API to the desktop app, mobile app, CLI and automation:
@@ -145,6 +147,7 @@ Each piece of state has one owner, and every other copy is a cache.
 | Per-device view | Scroll position, open panels, selection | The client |
 | Agent accounts | The login an agent runs under, and how much of its limits is left | The login is on the worker's machine, and a worker reads it when its hub asks. What agents hear of an account's limits is the hub's, kept by account, since agents in any workspace can run under one, and several accounts can share a model provider. *Unconfirmed* |
 | App settings | Always expand thinking | The client, in a file in its data directory, since a client can show several hubs. *Unconfirmed* |
+| Hub settings | Keeping the Mac awake | The hub that carries them out, as one record, so they hold with no client there and every client shows the same |
 | Where the window was left | Its place, size and display, and whether it was in full screen | The client, in a file of its own in its data directory, since nobody chooses it in Settings. *Unconfirmed* |
 
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
@@ -163,7 +166,7 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 | Kind | What | Newer or older | Recovering |
 |---|---|---|---|
 | Log | A session's events | By `seq`, which has no gaps | Subscribe again from one past the last `seq` |
-| Record | Repositories, workspaces, sessions, comments, and per-user state | By revision, `rev`, from one counter per hub that moves in the same transaction as the change | List again, and keep whichever copy has the newer revision |
+| Record | Repositories, workspaces, sessions, comments, a hub's settings, and per-user state | By revision, `rev`, from one counter per hub that moves in the same transaction as the change | List again, and keep whichever copy has the newer revision |
 | Live | Output that isn't stored, such as the tail | Nothing to compare. It belongs to one run, and arrives in order on one connection | Replace it with a new snapshot |
 
 - **For logs and records, which copy is newer is decided per item, so the order things arrive in doesn't matter.** A duplicate or an older copy is dropped by its `seq` or revision, so a client doesn't depend on how a list and a feed notice interleave, which a relay or a second connection could change. A list is read in one transaction and carries the revision it was read at, so a record missing from it is gone, unless the client holds a newer copy from the feed. Removing a record is a change like any other, with a revision of its own. A session's newest event isn't announced, so it isn't part of its revision, and the log says how far a session has got.

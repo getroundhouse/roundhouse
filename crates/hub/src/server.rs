@@ -177,6 +177,7 @@ async fn handle(
             hub.request_shutdown();
             C::Ok
         }
+        R::HubConfigure { settings } => C::HubSettings(hub.hub_configure(settings).await?),
         R::RepoAdd { path } => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos { repos: hub.repo_list().await? },
         R::RecordsList => C::Records(hub.records_list().await?),

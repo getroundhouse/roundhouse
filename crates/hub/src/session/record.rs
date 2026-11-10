@@ -70,6 +70,9 @@ impl LiveSession {
         if apply(&mut self.state.lock(), origin, &appended, next, tasks, held) {
             self.wake_queue();
         }
+        if announce {
+            hub.work_changed();
+        }
         if (announce || appended.dequeued)
             && let Err(e) = self.announce(&hub).await
         {
