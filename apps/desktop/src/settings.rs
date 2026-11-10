@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 mod page;
-mod saving;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use page::{KEY_CONTEXT, page};
-use saving::{Failure, Saver};
+
+use crate::saving::{Failure, Saver, write_json};
 
 /// Every setting, each with the value it has when nobody has chosen.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -47,19 +47,8 @@ impl SettingsFile {
         })
     }
 
-    /// Replaces what's saved all at once, so stopping partway leaves the old file rather than half a new one.
     fn write(&self, settings: &Settings) -> Result<(), Failure> {
-        self.write_io(settings).map_err(|e| Failure::new(self.path.clone(), e))
-    }
-
-    fn write_io(&self, settings: &Settings) -> std::io::Result<()> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let text = serde_json::to_string_pretty(settings).map_err(std::io::Error::other)?;
-        let partial = self.path.with_extension("json.partial");
-        std::fs::write(&partial, text)?;
-        std::fs::rename(&partial, &self.path)
+        write_json(&self.path, settings)
     }
 }
 

@@ -19,17 +19,23 @@ pub mod pull_request;
 mod rename;
 pub mod review;
 mod right_click;
+mod saving;
 mod settings;
 mod sidebar;
 pub mod updates;
+mod window_place;
 pub mod workspace_pane;
 
 pub use assets::Assets;
 use checkout::Checkout;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions,
-    actions, point, px, size,
+    AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point, px,
 };
+pub use window_place::Opens;
+
+/// How long after the window last moved its place is saved, which a test can wait out.
+#[cfg(feature = "testing")]
+pub const WINDOW_SETTLES_AFTER: std::time::Duration = window_place::SETTLES_AFTER;
 
 actions!(
     roundhouse,
@@ -65,6 +71,7 @@ actions!(
 pub fn open_main_window(
     hub: app::HubSource,
     checkout: Option<Checkout>,
+    opens: Opens,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
     settings::load(&hub.paths.data_dir, cx);
@@ -94,8 +101,10 @@ pub fn open_main_window(
     ]);
     menus::set(cx);
     std::thread::spawn(look::preload_highlighting);
+    let (display_id, window_bounds) = window_place::open_at(opens, &hub.paths.data_dir, cx);
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),
+        window_bounds: Some(window_bounds),
+        display_id,
         // No title bar of its own: the sidebar and the workspace header run to the top edge, and the window's
         // buttons sit in the sidebar's empty corner, level with the header. The title still names the
         // window in the Window menu and Mission Control.
@@ -114,7 +123,10 @@ pub fn open_main_window(
     gpui_kit::open_window(options, cx, |window, cx| {
         look::apply(cx);
         window.activate_window();
-        cx.new(|cx| app::AppView::new(hub, checkout, window, cx))
+        cx.new(|cx| {
+            window_place::follow(window, cx);
+            app::AppView::new(hub, checkout, window, cx)
+        })
     })
 }
 
@@ -125,7 +137,7 @@ pub fn run(checkout: Option<Checkout>) {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let opened = app::HubSource::default_local().and_then(|hub| {
             let data_dir = hub.paths.data_dir.clone();
-            open_main_window(hub, checkout, cx).map(|_| data_dir)
+            open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
         });
         match opened {
             Ok(data_dir) => updates::start(&data_dir, cx),

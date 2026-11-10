@@ -22,5 +22,6 @@ Start with trackpad feel, then IME, then selection and copy.
 - Resize and window snapping stay smooth during streaming
 - The menu bar's items and keys that macOS carries out: ⌘H and Hide Roundhouse, ⌥⌘H and Hide Others, Show All, ⌘M and Minimize, and Zoom
 - The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen
+- The window opens where it was left: filling the screen, in full screen, out of full screen again, and on a second display, each after quitting, after closing the window, and after `Restart to update`
 - Settings: the strip along the top still moves the window, its switches respond at once, and going back leaves the workspace as it was, scrolled to the same place
 - Overall: does it feel like an app you want to live in all day?

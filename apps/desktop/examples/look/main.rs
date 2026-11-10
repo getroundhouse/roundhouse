@@ -32,8 +32,10 @@ fn main() {
     gpui_kit::application().with_assets(desktop::Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
-        let (handle, view) = desktop::open_main_window(HubSource::default_local().expect("find the hub"), checkout, cx)
-            .expect("open a window");
+        // In its usual place, so one picture is the same size as the next.
+        let hub = HubSource::default_local().expect("find the hub");
+        let (handle, view) =
+            desktop::open_main_window(hub, checkout, desktop::Opens::InItsUsualPlace, cx).expect("open a window");
         let args = args.clone();
         cx.spawn(async move |cx| {
             let wanted = args.first().cloned();
