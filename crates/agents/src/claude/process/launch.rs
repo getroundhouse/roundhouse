@@ -118,13 +118,8 @@ pub(super) fn launch(
 /// parent Claude session set.
 pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
     let mut command = Command::new(bin);
-    command
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .kill_on_drop(true);
+    command.current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    process::own_group(command.as_std_mut());
     for name in SCRUBBED_ENV {
         command.env_remove(name);
     }

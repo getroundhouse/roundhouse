@@ -126,17 +126,17 @@ pub async fn run_script(
     let failed = |e: std::io::Error| ApiError::new(ErrorCode::Worker, format!("couldn't run the script: {e}"));
     let out = std::fs::OpenOptions::new().create(true).append(true).open(log).map_err(failed)?;
     let err = out.try_clone().map_err(failed)?;
-    let mut child = Command::new("bash")
+    let mut command = Command::new("bash");
+    command
         .args(["-c", script])
         .current_dir(worktree)
         .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(out)
         .stderr(err)
-        .process_group(0)
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(failed)?;
+        .kill_on_drop(true);
+    process::own_group(command.as_std_mut());
+    let mut child = command.spawn().map_err(failed)?;
     if let Some(pid) = child.id() {
         on_start(pid);
     }
