@@ -28,7 +28,11 @@ Longbridge's component kit for GPUI, used in their shipping Longbridge Pro app.
 
 ## The transcript
 
-The transcript is the kit's `MessageScroller` and `TextView`, plus a small windowed element for large tool output, in `crates/transcript`.
+The transcript is the kit's `TextView` in GPUI's virtual list, plus a small windowed element for large tool output, in `crates/transcript`.
+
+The list measures every row that's loaded, not only those on screen, so the scrollbar goes by the session's real height. A list that measures only what's been on screen counts every other row as nothing, so in a long session the thumb reaches the top within a screen or two and shakes as rows are drawn, and no guess at the rest holds still either. A row not loaded yet counts as the average of the loaded ones, so the thumb moves a little when an older page arrives. The kit's `MessageScroller` keeps its list to itself, so the transcript lays out GPUI's list the way `MessageScroller` does instead. *Unconfirmed.*
+
+The transcript keeps the text view's state for any message over 4 KB. The kit reads text that long on another thread and gives it no height until that's done, and keeps what it read only while the text is on screen, so the list measured a long message as a few pixels and scrolled past it in one turn of the wheel. *Unconfirmed.*
 
 - **It meets every bar,** and on real content it nearly matches a custom renderer.
 - **Giant rows are fine.** A windowed element of about 70 lines flings through a multi-megabyte row within the bars.

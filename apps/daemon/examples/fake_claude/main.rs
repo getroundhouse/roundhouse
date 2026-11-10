@@ -7,6 +7,7 @@
 //!   say:TEXT        Stream TEXT in chunks, then send the finished message.
 //!   slow:N:TEXT     Same, sending N chunks one per 100 ms, so tests can act mid-stream.
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
+//!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
 //!   tool:COMMAND    Ask for approval if the mode requires it, then run COMMAND with `sh -c`.
 //!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result

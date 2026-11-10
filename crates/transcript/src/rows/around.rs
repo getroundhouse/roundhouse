@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 
 use client_core::session_log::{PromptState, SessionLog};
+use gpui_kit::Entity;
+use gpui_kit::component::text::TextViewState;
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::Seq;
 
@@ -33,6 +35,8 @@ pub(super) struct Around {
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
     pub(super) prompt: PromptState,
+    /// For a prompt: its text view's state, if the transcript keeps it.
+    pub(super) prompt_text: Option<Entity<TextViewState>>,
 }
 
 /// What drawing one block of an event needs.
@@ -46,6 +50,8 @@ pub(super) struct BlockAround {
     pub(super) subagent: Option<Subagent>,
     /// For a result: whether it's drawn with its call instead.
     pub(super) with_call: bool,
+    /// For text: its text view's state, if the transcript keeps it.
+    pub(super) text: Option<Entity<TextViewState>>,
 }
 
 /// A call's result, found in the log, to draw under the call.
@@ -101,10 +107,12 @@ impl Around {
             picks: BTreeMap::new(),
             carried: Vec::new(),
             prompt: PromptState::Taken,
+            prompt_text: None,
         };
-        if let EventBody::UserPrompt { attachments, .. } = body {
+        if let EventBody::UserPrompt { attachments, client_msg_id, .. } = body {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);
+            around.prompt_text = m.long_texts.get(&ItemKey::prompt(seq, client_msg_id.as_ref())).cloned();
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log
@@ -147,7 +155,8 @@ impl BlockAround {
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => (None, None),
         };
-        Self { key, open, answer, subagent, with_call }
+        let text = m.long_texts.get(&key).cloned();
+        Self { key, open, answer, subagent, with_call, text }
     }
 }
 
@@ -176,7 +185,7 @@ pub(super) fn blocks_of(body: &EventBody) -> &[ContentBlock] {
 
 /// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
 /// while it streamed.
-fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
+pub(super) fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
     if let EventBody::Assistant { message_id, first_index, .. } = body {
         return ItemKey::recorded_block(seq, position, message_id.as_ref(), *first_index);
     }

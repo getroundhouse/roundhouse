@@ -150,8 +150,7 @@ fn top(ui: &mut Ui<'_>, id: &'static str) -> Pixels {
 
 /// How far the transcript is scrolled.
 fn scrolled_to(ui: &Ui<'_>) -> ListOffset {
-    let scroller = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().clone());
-    ui.cx.read_entity(&scroller, |s, _| s.logical_scroll_top())
+    ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().logical_scroll_top())
 }
 
 #[gpui_kit::test]

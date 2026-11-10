@@ -41,6 +41,7 @@ objc2.workspace = true
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
+transcript = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true

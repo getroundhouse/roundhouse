@@ -6,11 +6,7 @@ use std::rc::Rc;
 
 use client_core::session_log::{PromptState, Row, SessionLog};
 use client_core::{Client, FileToSend, OpenSession};
-use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
-use gpui_kit::{
-    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, Render, StyleRefinement, Styled, Task, Window,
-    px,
-};
+use gpui_kit::{AppContext, Context, ElementId, EventEmitter, IntoElement, Render, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
@@ -19,7 +15,9 @@ use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::long_texts::LongTexts;
 use crate::rows::SubagentCalls;
+use crate::scroller::Scroller;
 
 mod answers;
 mod record;
@@ -50,6 +48,8 @@ pub(crate) struct Model {
     pub subagent_calls: RefCell<SubagentCalls>,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
+    /// The long messages' text, read ahead of being drawn.
+    pub long_texts: LongTexts,
 }
 
 pub struct Transcript {
@@ -60,7 +60,7 @@ pub struct Transcript {
     model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     linked: LinkedImages,
-    scroller: Entity<MessageScrollerState>,
+    scroller: Scroller,
     _changes: Task<()>,
     /// Draws the time so far again while the agent works.
     ticking: Option<Task<()>>,
@@ -73,7 +73,7 @@ impl Transcript {
         let open = OpenSession::start(&client, session);
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
-        let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
+        let scroller = Scroller::new(rows, cx);
         let linked = LinkedImages::new(client.clone(), session.workspace_id.clone(), cx.weak_entity());
         let at_work = AtWork::of(session);
         let ticking = at_work.working.then(|| tick(cx));
@@ -102,7 +102,7 @@ impl Transcript {
         &self.session_id
     }
 
-    pub fn scroller(&self) -> &Entity<MessageScrollerState> {
+    pub fn scroller(&self) -> &Scroller {
         &self.scroller
     }
 
@@ -156,19 +156,14 @@ impl Transcript {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
         let rows = self.session.read(SessionLog::row_count) + 1;
-        self.scroller.update(cx, |list, cx| {
-            let have = list.item_count();
-            if rows > have {
-                list.append(rows - have, cx);
-            } else if rows < have {
-                list.splice(rows..have, 0, cx);
-            }
-            if let Some(changed) = changes.rows {
-                list.remeasure_items(changed.start.min(rows)..changed.end.min(rows), cx);
-            }
-            // The last rows can change height as text streams into them.
-            list.remeasure_items(have.min(rows).saturating_sub(2)..rows, cx);
-        });
+        let have = self.scroller.item_count();
+        self.scroller.set_rows(rows);
+        self.read_ahead(changes.rows.clone().unwrap_or_default(), cx);
+        if let Some(changed) = changes.rows {
+            self.scroller.remeasure_items(changed);
+        }
+        // The last rows can change height as text streams into them.
+        self.scroller.remeasure_items(have.min(rows).saturating_sub(2)..rows);
         for error in errors {
             cx.emit(TranscriptEvent::Error(error.to_string()));
         }
@@ -176,6 +171,13 @@ impl Transcript {
             cx.emit(TranscriptEvent::TurnEnded);
         }
         cx.notify();
+    }
+
+    /// Starts reading the long texts of rows whose content has changed, such as a page of history that's loaded,
+    /// and of what the agent is still writing, so each has its height when the list measures it.
+    fn read_ahead(&mut self, rows: std::ops::Range<usize>, cx: &mut Context<Self>) {
+        let (this, mut m) = (cx.weak_entity(), self.model.borrow_mut());
+        self.session.read(|log| m.long_texts.follow(log, rows, &this, cx));
     }
 
     /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
@@ -187,9 +189,7 @@ impl Transcript {
     /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         let row = seq_index(seq) - 1;
-        self.scroller.update(cx, |list, cx| {
-            list.remeasure_items(row..row + 1, cx);
-        });
+        self.scroller.remeasure_items(row..row + 1);
         cx.notify();
     }
 
@@ -200,7 +200,7 @@ impl Transcript {
             return;
         }
         // Any row can hold thinking, so every row can change height.
-        self.scroller.update(cx, MessageScrollerState::remeasure);
+        self.scroller.remeasure();
         cx.notify();
     }
 
@@ -227,7 +227,7 @@ impl Transcript {
         let carried = files.iter().map(|file| file.attachment.clone()).collect();
         self.session.add_pending(client_msg_id.clone(), text.clone(), carried);
         self.catch_up(cx);
-        self.scroller.update(cx, MessageScrollerState::scroll_to_end);
+        self.scroller.scroll_to_end();
         cx.notify();
 
         // Started on a thread of its own, so it finishes even if the app quits, and hands back what it was given.
@@ -292,17 +292,15 @@ impl Transcript {
 }
 
 impl Render for Transcript {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
         let this = cx.weak_entity();
-        MessageScroller::new(
+        self.scroller.render(
             ElementId::Name(self.session_id.to_string().into()),
-            self.scroller.clone(),
-            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, &linked, ix, cx),
+            move |ix, bar, _, cx| crate::rows::render_row(&model, &session, &this, &linked, bar, ix, cx),
+            window,
+            cx,
         )
-        // Spacing is the rows' own. Most log events show nothing, and those mustn't leave gaps.
-        .with_row_style(StyleRefinement::default().pb(px(0.)))
-        .with_jump_button_label("Jump to latest")
     }
 }
 
