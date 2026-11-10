@@ -20,6 +20,7 @@ tools/package/package.sh          # Packages this commit as Roundhouse.app, unsi
 python3 -m unittest discover -s tools/package   # The scripts that publish releases, against a directory for the bucket
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
+cargo xwin clippy --workspace --locked --target x86_64-pc-windows-msvc -- -D warnings   # Windows, from a Mac: lints the product's code as built for it, and runs nothing. Needs cargo-xwin, LLVM and the rustup target
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
 
@@ -29,7 +30,7 @@ Roundhouse can be developed from inside Roundhouse, so nothing run from a checko
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices. Undo the break with an edit, not by copying a saved file back: some `cp`s, such as the one in Homebrew's `uutils-coreutils`, keep the saved file's older modification time, so cargo doesn't rebuild and goes on testing the broken code.
 
-Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. CI runs them too, on Linux for every PR that changes more than Markdown, and on a Mac only when dependencies change, so it doesn't replace running them here. On Linux, `--workspace` needs the packages `.github/workflows/ci.yml` installs for GPUI, and the gallery doesn't run:
+Run the full checks once per PR that changes code, just before pushing. A PR that only changes Markdown needs none of them. Warnings count as failures. CI runs them too, on Linux for every PR that changes more than Markdown, and on a Mac only when dependencies change, so it doesn't replace running them here. Windows has a workflow of its own, which lints the product's code as built for it for every PR that changes Rust, builds the hub and the CLI, and starts and stops a hub there. It doesn't block a merge, and it's the only place anything runs on Windows. On Linux, `--workspace` needs the packages `.github/workflows/ci.yml` installs for GPUI, and the gallery doesn't run:
 
 ```sh
 cargo fmt --all --check
