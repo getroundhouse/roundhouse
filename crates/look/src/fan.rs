@@ -25,7 +25,7 @@ const TURNTABLE: f32 = 0.07;
 /// sit on the line through the centre, and the turntable's ring dips a little below the box.
 const BASE: f32 = 0.037;
 
-/// How many rows of dots a fan `width` wide has: more as it grows, so its dots stay fine. The status marks, 16 and 18
+/// How many rows of dots a fan `width` wide has: more as it grows, so its dots stay fine. The status marks, 16 and 26
 /// wide, have four, and the empty state's, 72 wide, has five.
 fn rows_for(width: Pixels) -> usize {
     match width / px(1.) {
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn every_fan_has_a_dot_on_the_middle_line_of_every_row() {
-        for width in [16., 18., 72., 100., 320.] {
+        for width in [16., 26., 72., 100., 320.] {
             let fan = fan(width);
             let dots: Vec<_> = fan.dots().collect();
 
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn a_wider_fan_has_more_rows_so_its_dots_stay_fine() {
-        let widths = [16., 18., 72., 100., 320.];
+        let widths = [16., 26., 72., 100., 320.];
         let fans: Vec<Fan> = widths.iter().map(|w| fan(*w)).collect();
 
         assert_eq!((fans[0].rows, fans[1].rows), (4, 4), "the status marks have four rows");
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn every_fan_fits_its_box_across() {
-        for width in [16., 18., 72., 100., 320.] {
+        for width in [16., 26., 72., 100., 320.] {
             let fan = fan(width);
             let (up, _) = fan.reach();
 
