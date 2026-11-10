@@ -3,6 +3,7 @@
 //! recorded, and every element ID for an item comes from its key here.
 
 use gpui_kit::ElementId;
+use protocol::event::EventBody;
 use protocol::model::{AttachmentId, ClientMessageId, MessageId, Seq};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -39,6 +40,15 @@ impl ItemKey {
         }
     }
 
+    /// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
+    /// while it streamed.
+    pub(crate) fn of_block(seq: Seq, body: &EventBody, position: usize) -> Self {
+        if let EventBody::Assistant { message_id, first_index, .. } = body {
+            return ItemKey::recorded_block(seq, position, message_id.as_ref(), *first_index);
+        }
+        ItemKey::Event(seq, position)
+    }
+
     /// The ID of one part of the item's element, such as its text or its output. Spelled out in
     /// full, so no two items or parts can share one.
     pub(crate) fn element(&self, part: &str) -> ElementId {
@@ -55,6 +65,21 @@ impl ItemKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use protocol::event::ContentBlock;
+
+    #[test]
+    fn a_recorded_block_is_known_by_its_place_in_its_message() {
+        let finished = |first_index| EventBody::Assistant {
+            message_id: Some("m".into()),
+            parent_tool_use_id: None,
+            model: None,
+            blocks: vec![ContentBlock::Text { text: "a".into() }],
+            first_index,
+        };
+
+        assert_eq!(ItemKey::of_block(7, &finished(Some(2)), 0), ItemKey::Block("m".into(), 2));
+        assert_eq!(ItemKey::of_block(7, &finished(None), 0), ItemKey::Event(7, 0), "nothing streamed");
+    }
 
     #[test]
     fn a_prompt_keeps_its_id_from_pending_to_recorded() {

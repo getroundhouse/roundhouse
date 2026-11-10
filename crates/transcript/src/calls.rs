@@ -47,7 +47,7 @@ impl<'a> ToolCall<'a> {
             "Glob" => Search::read(input, Looks::ForNames).map(ToolCall::Search),
             "WebFetch" => Fetch::read(input).map(ToolCall::Fetch),
             "WebSearch" => WebSearch::read(input).map(ToolCall::WebSearch),
-            // Always drawn as one, so the subagent's work, which its rows leave to the call, shows somewhere.
+            // Always drawn as one, so the subagent's work, which shows under the call, has a line that opens to it.
             name if agent::hands_off(name) => Some(ToolCall::Agent(Agent::read(input))),
             _ => None,
         };

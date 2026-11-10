@@ -51,3 +51,9 @@ pub(crate) fn result(id: &str) -> EventBody {
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }
+
+/// Something the agent wrote.
+pub(crate) fn text(text: &str) -> EventBody {
+    let blocks = vec![ContentBlock::Text { text: text.to_string() }];
+    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+}

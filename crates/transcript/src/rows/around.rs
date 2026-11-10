@@ -16,8 +16,7 @@ use crate::transcript::Model;
 mod nearby;
 mod subagent;
 
-pub(crate) use subagent::SubagentCalls;
-pub(super) use subagent::{Subagent, drawn_in_its_call};
+pub(super) use subagent::{Subagent, Under, under};
 
 /// How many events apart a call and its result can be and still be drawn together. A result follows its call
 /// within a few events. One further away is drawn where it is.
@@ -76,10 +75,11 @@ impl Answer {
 
 impl Around {
     pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody) -> Self {
-        let blocks = blocks_of(body)
+        let blocks = body
+            .blocks()
             .iter()
             .enumerate()
-            .map(|(position, block)| BlockAround::read(log, m, seq, block, block_key(seq, body, position)))
+            .map(|(position, block)| BlockAround::read(log, m, seq, block, ItemKey::of_block(seq, body, position)))
             .collect();
         let mut around = Around {
             blocks,
@@ -108,7 +108,7 @@ impl BlockAround {
         let open = m.folds.is_open(&key, Fold::of(block));
         let (answer, subagent) = if let ContentBlock::ToolUse { id, name, .. } = block {
             let answer = nearby::events_after(log, seq, NEAR).find_map(|event| answer_in(event, id));
-            (answer, agent::hands_off(name).then(|| Subagent::read(log, m, seq, id, open)))
+            (answer, agent::hands_off(name).then(|| Subagent::read(m, id)))
         } else {
             (None, None)
         };
@@ -128,42 +128,11 @@ fn answer_in(event: &SessionEvent, id: &str) -> Option<Answer> {
     })
 }
 
-/// The blocks an event holds, if it's one that holds any.
-pub(super) fn blocks_of(body: &EventBody) -> &[ContentBlock] {
-    if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body { blocks } else { &[] }
-}
-
-/// What the block at `position` in an event is, wherever it's drawn. One the agent wrote keeps the key it had
-/// while it streamed.
-fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey {
-    if let EventBody::Assistant { message_id, first_index, .. } = body {
-        return ItemKey::recorded_block(seq, position, message_id.as_ref(), *first_index);
-    }
-    ItemKey::Event(seq, position)
-}
-
 #[cfg(test)]
 mod tests {
-    use protocol::event::{ContentBlock, EventBody};
-
-    use super::{Around, block_key};
+    use super::Around;
     use crate::fixtures::{calls, event, log, result};
-    use crate::item_key::ItemKey;
     use crate::transcript::Model;
-
-    #[test]
-    fn a_recorded_block_is_known_by_its_place_in_its_message() {
-        let finished = |first_index| EventBody::Assistant {
-            message_id: Some("m".into()),
-            parent_tool_use_id: None,
-            model: None,
-            blocks: vec![ContentBlock::Text { text: "a".into() }],
-            first_index,
-        };
-
-        assert_eq!(block_key(7, &finished(Some(2)), 0), ItemKey::Block("m".into(), 2));
-        assert_eq!(block_key(7, &finished(None), 0), ItemKey::Event(7, 0), "nothing streamed");
-    }
 
     #[test]
     fn calls_made_at_once_each_get_their_own_result() {

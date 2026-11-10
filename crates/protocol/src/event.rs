@@ -171,6 +171,20 @@ impl EventBody {
             EventBody::Unknown => "unknown",
         }
     }
+
+    /// The blocks the event holds: what the agent wrote, or what its tools sent back. Any other event holds none.
+    pub fn blocks(&self) -> &[ContentBlock] {
+        if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = self { blocks } else { &[] }
+    }
+
+    /// The call that started the subagent the event is from, if it's from one.
+    pub fn parent_tool_use_id(&self) -> Option<&ToolUseId> {
+        let (EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. }) = self
+        else {
+            return None;
+        };
+        parent_tool_use_id.as_ref()
+    }
 }
 
 /// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that

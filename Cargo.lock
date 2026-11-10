@@ -7859,6 +7859,7 @@ dependencies = [
  "look",
  "parking_lot",
  "percent-encoding",
+ "proptest",
  "protocol",
  "serde_json",
  "similar",

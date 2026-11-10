@@ -293,6 +293,11 @@ impl SessionLog {
         self.events.len()
     }
 
+    /// The events held, oldest first. Unlike asking for each row, it costs nothing for the rows that aren't loaded.
+    pub fn loaded(&self) -> impl Iterator<Item = &SessionEvent> {
+        self.events.values()
+    }
+
     /// How many times events have been added to what's held. It changes whenever looking through the events again
     /// could find something that wasn't there before, so a view can keep what it found until then.
     pub fn events_added(&self) -> u64 {

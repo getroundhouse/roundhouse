@@ -18,6 +18,8 @@ Bars are decided through `l`, and `xl` is only reported. The sizes come from rea
 - Do layout off the main thread, and shape only what's on screen.
 - Cache views per region. In the pinned GPUI, a cached view that renders again renders everything inside it, cached views included, so only the outermost boundary saves work.
 - Keep any list that can grow without limit virtual, as the sidebar's is. Each frame a moving mark asks for rebuilds the whole view it's drawn in, every row of a list in it included, and in a list that isn't virtual, even a mark scrolled out of sight is drawn and asks for frames.
+- That includes what a row opens to. A row of a virtual list is still drawn whole, so a subagent's work is drawn in rows of its own after its call. Drawn inside the call's row, an opened subagent of 500 calls took about 17 ms a frame to draw, against about 1.3 ms closed.
+- Leave out of the list what isn't shown, rather than drawing it empty. Rows with no height take no room, so the list draws all of them whenever it draws the row beside them. Left in the list empty under a closed call, a subagent's 1,100 rows raised the p95 frame from about 1.7 ms to 7 ms.
 - Scroll by anchor, with pinning, so jumping to an item doesn't drift.
 - Parse terminal output off the main thread, with a short lock per frame.
 - Use the kit's `Diff` and `Textarea` rather than writing those.
@@ -29,6 +31,7 @@ Bars are decided through `l`, and `xl` is only reported. The sizes come from rea
 
 - A covered window looks exactly like a freeze, because macOS stops GPUI's frame source. Don't trust frame data without a window visibility log.
 - Run timing tests one app at a time on an otherwise idle Mac. Test windows take focus, and the user's typing can land in them.
+- When the Mac can't be idle, such as while other checkouts build, time a draw by the thread's CPU time, from `clock_gettime(CLOCK_THREAD_CPUTIME_ID)`, as well as by the clock. Time the thread waits for a core counts on the clock but not in CPU time. On a Mac with a load average over 100, frames whose CPU time had a p95 of 3 to 10 ms had a clock p95 of 50 to 190 ms. CPU time still rises under load, by about 1.4 times there, so compare only runs made under the same load.
 - A headless window can be timed instead, with no window on screen. Timing `Window::draw` measures building, laying out, prepainting and painting on the main thread, and not presenting.
 - In a test, GPUI draws a dirty window as soon as the update that dirtied it ends. A timed `Window::draw` has to run in the same update as the change, or it times a window with nothing to redraw.
 - The kit's `render_frame` refreshes the whole window, ignoring every cache, so a frame drawn with it can't show what caching saves or what a missed `notify` leaves stale.

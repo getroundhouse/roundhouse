@@ -28,6 +28,7 @@
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
 //!                   SIGTERM stops it, and lists none left.
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
+//!   agent:N:TEXT    Same, making N calls, described `List what's here 1` and on.
 //!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks

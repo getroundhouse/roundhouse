@@ -11,8 +11,8 @@ pub(crate) fn hands_off(name: &str) -> bool {
     matches!(name, "Agent" | "Task")
 }
 
-/// A call to one of them. Every input is optional, so the call is always drawn as one, and the subagent's work,
-/// which is left out of its own rows, always shows in it.
+/// A call to one of them. Every input is optional, so the call is always drawn as one, and the subagent's work, which
+/// shows under the call while it's open, always has a line that opens to it.
 pub(crate) struct Agent<'a> {
     /// What the agent said the subagent is for.
     description: Option<&'a str>,

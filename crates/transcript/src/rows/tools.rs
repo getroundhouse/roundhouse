@@ -25,6 +25,7 @@ mod search;
 mod web;
 
 use super::line::{self, Line, Part};
+pub(super) use agent::work;
 
 /// Where a call is drawn and whether it's open, which its line needs to open and close it.
 pub(super) struct Toggle<'a> {
@@ -32,7 +33,7 @@ pub(super) struct Toggle<'a> {
     pub(super) key: &'a ItemKey,
     pub(super) open: bool,
     pub(super) this: &'a WeakEntity<Transcript>,
-    /// The images text can point to, for a subagent's work, which is drawn in its call.
+    /// The images text can point to, for the report under a subagent's call.
     pub(super) linked: &'a LinkedImages,
 }
 

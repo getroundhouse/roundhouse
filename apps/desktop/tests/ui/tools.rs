@@ -1,12 +1,14 @@
 //! Tool calls in the transcript: each is one line, which opens to what the call did and closes again. A call that
-//! started a subagent opens to the subagent's work, which arrives after it. An edit shows its diff while it's hovered.
+//! started a subagent opens to the subagent's work, which arrives after it, and draws only what of it is on screen. An
+//! edit shows its diff while it's hovered.
 
 #![cfg(test)]
 
 use std::time::Duration;
 
+use gpui_kit::component::message_scroller::MessageScrollerState;
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
-use gpui_kit::{AppContext as _, Bounds, ListOffset, Pixels, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, Bounds, Context, ListOffset, Pixels, ScrollDelta, TestAppContext, point, px};
 
 use crate::support::{Stack, Ui};
 
@@ -63,6 +65,31 @@ fn a_subagent_s_work_shows_in_its_call_as_it_arrives(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn an_open_subagent_draws_only_the_work_on_screen_and_scrolls_to_the_rest(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_full_access(cx, &stack);
+    // Far taller than the window and what the list draws beyond it.
+    ui.input("agent:100:Look around; say:done");
+    ui.press("enter");
+    ui.wait("the subagent's call", |ui| ui.labelled(AGENT_LINE).len() == 1);
+    ui.click_labelled(AGENT_LINE, 0);
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    let (first, last) = ("List what's here 1", "List what's here 100");
+
+    scroll(&mut ui, MessageScrollerState::scroll_to_end);
+
+    assert!(drawn(&mut ui, last), "the end of its work is on screen");
+    assert!(!drawn(&mut ui, first), "and the start, far above, isn't drawn");
+
+    scroll(&mut ui, |list, cx| {
+        list.scroll_to_item(0, cx);
+    });
+
+    assert!(drawn(&mut ui, first), "scrolled up, the start of its work is drawn");
+    assert!(!drawn(&mut ui, last), "and the end, far below, isn't");
+}
+
+#[gpui_kit::test]
 fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_full_access(cx, &stack);
@@ -105,6 +132,18 @@ fn in_full_access<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 /// Whether the command's line says it's open, as it tells assistive apps.
 fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
     ui.labelled(COMMAND_LINE).first().and_then(ElementSnapshot::expanded)
+}
+
+/// Whether the last frame drew anything with this label, on screen or just beyond it.
+fn drawn(ui: &mut Ui<'_>, label: &str) -> bool {
+    !ui.labelled(label).is_empty()
+}
+
+/// Scrolls the transcript, as its list's own scrolling does.
+fn scroll(ui: &mut Ui<'_>, to: impl FnOnce(&mut MessageScrollerState, &mut Context<MessageScrollerState>)) {
+    let scroller = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().clone());
+    ui.cx.update(|cx| scroller.update(cx, to));
+    ui.frame();
 }
 
 /// Where each element with this label is drawn.

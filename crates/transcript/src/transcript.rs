@@ -14,12 +14,13 @@ use gpui_kit::{
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
+use protocol::tail::Tail;
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
-use crate::rows::SubagentCalls;
+use crate::placement::{LogRow, Placement};
 
 mod answers;
 mod record;
@@ -46,8 +47,12 @@ pub(crate) struct Model {
     pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
-    /// Where the calls that started subagents are, as rows have looked for them.
-    pub subagent_calls: RefCell<SubagentCalls>,
+    /// Where each of the log's rows is drawn in the list, as of the last time this caught up with the log.
+    pub placement: Placement,
+    /// What the agent is writing, from the same moment as the placement. The log moves what it wrote into a row of its
+    /// own as soon as it's recorded, and the list has no place for that row until it catches up, so drawing the log's
+    /// tail would leave it out for a frame.
+    pub streaming: Tail,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
 }
@@ -71,13 +76,14 @@ impl EventEmitter<TranscriptEvent> for Transcript {}
 impl Transcript {
     pub fn new(client: Client, session: &Session, cx: &mut Context<Self>) -> Self {
         let open = OpenSession::start(&client, session);
+        let (placement, streaming) = open.read(|log| (Placement::of(log, &Folds::default()), log.tail().clone()));
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
-        let rows = open.read(SessionLog::row_count) + 1;
+        let rows = placement.len() + 1;
         let scroller = cx.new(|cx| MessageScrollerState::new(rows, cx));
         let linked = LinkedImages::new(client.clone(), session.workspace_id.clone(), cx.weak_entity());
         let at_work = AtWork::of(session);
         let ticking = at_work.working.then(|| tick(cx));
-        let model = Rc::new(RefCell::new(Model { at_work, ..Model::default() }));
+        let model = Rc::new(RefCell::new(Model { placement, streaming, at_work, ..Model::default() }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -124,7 +130,7 @@ impl Transcript {
         self.session.read(SessionLog::loaded_events)
     }
 
-    /// The event at a row, if it's loaded.
+    /// The event at a row of the log, if it's loaded.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
         self.session.read(|log| match log.row(row) {
             Row::Event(event) => Some(event.clone()),
@@ -142,32 +148,36 @@ impl Transcript {
         })
     }
 
-    /// Rows in the list, not counting the streaming tail.
+    /// Rows in the log, which is one for each event and each prompt still being sent. The list draws them, except a
+    /// subagent's work under a closed call, and then the streaming tail.
     pub fn row_count(&self) -> usize {
         self.session.read(SessionLog::row_count)
     }
 
+    /// What the transcript draws of what the agent is writing, as of the last time it caught up with the log.
     pub fn streaming_text(&self) -> String {
-        self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
+        let m = self.model.borrow();
+        m.streaming.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
     }
 
     /// Shows what changed in the session since this last looked, however much that is.
     fn catch_up(&mut self, cx: &mut Context<Self>) {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
-        let rows = self.session.read(SessionLog::row_count) + 1;
+        self.place(cx);
+        let (remeasured, tail) = {
+            let m = self.model.borrow();
+            let rows = self.session.read(SessionLog::row_count);
+            // The rows that changed, and the last ones, which can change height as text streams into them.
+            let last = rows.saturating_sub(2)..rows;
+            let touched = changes.rows.into_iter().flatten().chain(last).map(LogRow);
+            (m.placement.positions_of(touched), m.placement.tail())
+        };
         self.scroller.update(cx, |list, cx| {
-            let have = list.item_count();
-            if rows > have {
-                list.append(rows - have, cx);
-            } else if rows < have {
-                list.splice(rows..have, 0, cx);
+            for run in remeasured {
+                list.remeasure_items(run.start.0..run.end.0, cx);
             }
-            if let Some(changed) = changes.rows {
-                list.remeasure_items(changed.start.min(rows)..changed.end.min(rows), cx);
-            }
-            // The last rows can change height as text streams into them.
-            list.remeasure_items(have.min(rows).saturating_sub(2)..rows, cx);
+            list.remeasure_items(tail.0..tail.0 + 1, cx);
         });
         for error in errors {
             cx.emit(TranscriptEvent::Error(error.to_string()));
@@ -178,18 +188,51 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
+    /// Puts the list's rows where the log and what's open say they go, moving only the ones that have to, and measures
+    /// again the ones that look different because of where others went.
+    fn place(&mut self, cx: &mut Context<Self>) {
+        let (update, rows) = {
+            let m = &mut *self.model.borrow_mut();
+            let update = self.session.read(|log| {
+                m.streaming.clone_from(log.tail());
+                m.placement.follow(log, &m.folds)
+            });
+            // The rows of the log, and the streaming tail after them.
+            (update, m.placement.len() + 1)
+        };
+        self.scroller.update(cx, |list, cx| {
+            for splice in update.splices {
+                let at = splice.at.0;
+                list.splice(at..at + splice.removed, splice.added, cx);
+            }
+            if list.item_count() != rows {
+                debug_assert_eq!(list.item_count(), rows, "the list has a row for each the placement draws");
+                // Every row is measured again, and the list scrolls to the end, but it draws the right rows.
+                list.reset(rows, cx);
+            }
+            for run in update.restyled {
+                list.remeasure_items(run.start.0..run.end.0, cx);
+            }
+        });
+    }
+
+    /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height. Opening a call
+    /// that started a subagent puts the subagent's work in rows after it, and closing it takes them out.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, open);
+        self.place(cx);
         self.remeasure(seq, cx);
     }
 
-    /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
+    /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it. A subagent's
+    /// work is drawn in rows of its own after its call, and changes height with it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
-        let row = seq_index(seq) - 1;
-        self.scroller.update(cx, |list, cx| {
-            list.remeasure_items(row..row + 1, cx);
-        });
+        let positions = self.model.borrow().placement.drawn_with(LogRow(seq_index(seq) - 1));
+        if let Some(positions) = positions {
+            self.scroller.update(cx, |list, cx| {
+                list.remeasure_items(positions.start.0..positions.end.0, cx);
+            });
+        }
         cx.notify();
     }
 

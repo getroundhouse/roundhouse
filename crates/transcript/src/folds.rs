@@ -32,6 +32,8 @@ pub(crate) struct Folds {
     /// Whether thinking starts open. Output always starts closed, since it's mostly long and rarely read, and so does
     /// a picture, which would push the reply off screen.
     thinking_open: bool,
+    /// How many choices have been made, so what depends on them can tell when to look again.
+    chosen_count: u64,
 }
 
 impl Folds {
@@ -44,6 +46,12 @@ impl Folds {
 
     pub(crate) fn choose(&mut self, key: ItemKey, open: bool) {
         self.chosen.insert(key, open);
+        self.chosen_count += 1;
+    }
+
+    /// How many times a block has been opened or closed by hand.
+    pub(crate) fn chosen_count(&self) -> u64 {
+        self.chosen_count
     }
 
     pub(crate) fn thinking_open(&self) -> bool {

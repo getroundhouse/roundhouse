@@ -11,11 +11,11 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
 use protocol::model::Seq;
-use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::placement::{LogRow, Position};
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -30,8 +30,7 @@ mod turn_end;
 mod turn_times;
 
 use approval::approval_card;
-pub(crate) use around::SubagentCalls;
-use around::{Around, BlockAround, drawn_in_its_call};
+use around::{Around, BlockAround, Under, under};
 use prompt::{Progress, prompt_bubble};
 use tail::render_tail;
 use tools::Toggle;
@@ -71,14 +70,15 @@ pub(crate) fn render_row(
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
-#[expect(clippy::large_enum_variant, reason = "made for one row and matched straight away")]
 enum Shown {
-    Tail(Tail),
     Event(SessionEvent, Around),
+    /// A subagent's event, under the calls it's drawn under, which are open.
+    Work(SessionEvent, Around, Vec<Under>),
     Pending(PendingPrompt, Vec<Carried>),
-    Unloaded,
-    /// A subagent's event, which its call draws, so its own row is empty.
-    InCall,
+    /// The log's row that isn't loaded.
+    Unloaded(LogRow),
+    /// Nothing: a row the log no longer has, until the list catches up.
+    Nothing,
 }
 
 fn render_row_inner(
@@ -91,33 +91,41 @@ fn render_row_inner(
 ) -> AnyElement {
     let shown = {
         let m = model.borrow();
+        let Some(row) = m.placement.row_at(Position(ix)) else {
+            return render_tail(&m.streaming, &m.at_work, m.folds.thinking_open(), cx);
+        };
         session.read(|log| {
-            if ix >= log.row_count() {
-                return Shown::Tail(log.tail().clone());
+            if row.0 >= log.row_count() {
+                return Shown::Nothing;
             }
-            match log.row(ix) {
-                Row::Event(event) if drawn_in_its_call(log, &m, event) => Shown::InCall,
-                Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
+            match log.row(row.0) {
+                Row::Event(event) => {
+                    let around = Around::read(log, &m, event.seq, &event.body);
+                    match m.placement.within(row) {
+                        Some(id) => Shown::Work(event.clone(), around, under(log, &m, row, id)),
+                        None => Shown::Event(event.clone(), around),
+                    }
+                }
                 Row::Pending(prompt) => Shown::Pending(prompt.clone(), attachments::carried(&m, &prompt.attachments)),
-                Row::Unloaded => Shown::Unloaded,
+                Row::Unloaded => Shown::Unloaded(row),
             }
         })
     };
     match shown {
-        Shown::Tail(tail) => {
-            let m = model.borrow();
-            render_tail(&tail, &m.at_work, m.folds.thinking_open(), cx)
-        }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, this, Some(event.seq), &around.carried, cx);
             render_event(&event, &around, this, linked, cx)
         }
+        Shown::Work(event, around, under) => {
+            let blocks = drawn_blocks(event.seq, event.body.blocks(), &around, this, linked, cx);
+            tools::work(blocks, &under, linked, cx)
+        }
         Shown::Pending(prompt, carried) => {
             prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, &carried, Progress::Sending, this, cx)
         }
-        Shown::InCall => empty(),
-        Shown::Unloaded => {
-            session.want(ix);
+        Shown::Nothing => empty(),
+        Shown::Unloaded(row) => {
+            session.want(row.0);
             // A guess at the height. The list keeps its anchor when the real one arrives.
             div().h(px(120.)).into_any_element()
         }
@@ -146,7 +154,7 @@ pub(crate) fn waiting_card(open: bool, cx: &App) -> Div {
         .when(open, |d| d.bg(theme.warning.opacity(0.05)))
 }
 
-fn empty() -> AnyElement {
+pub(crate) fn empty() -> AnyElement {
     div().into_any_element()
 }
 
@@ -186,23 +194,7 @@ fn render_event(
             prompt_bubble(&key, text.clone(), &around.carried, progress, this, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-            let rendered: Vec<AnyElement> = blocks
-                .iter()
-                .enumerate()
-                .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, linked, cx))
-                .collect();
-            if rendered.is_empty() {
-                return empty();
-            }
-            // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
-            let only_lines = blocks.iter().all(|b| {
-                matches!(
-                    b,
-                    ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. }
-                )
-            });
-            row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
+            render_blocks(seq, blocks, around, this, linked, cx)
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
@@ -233,6 +225,45 @@ fn render_event(
         | EventBody::ApprovalResolved { .. }
         | EventBody::Unknown => empty(),
     }
+}
+
+/// What the agent or a tool's result said, one block after another in the event's row.
+fn render_blocks(
+    seq: Seq,
+    blocks: &[ContentBlock],
+    around: &Around,
+    this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
+    cx: &App,
+) -> AnyElement {
+    let rendered = drawn_blocks(seq, blocks, around, this, linked, cx);
+    if rendered.is_empty() {
+        return empty();
+    }
+    // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
+    let only_lines = blocks.iter().all(|b| {
+        matches!(b, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. })
+    });
+    // An open call whose subagent's work is drawn after it leaves the space below to the last of that work, so its rule
+    // runs on into the rows below unbroken.
+    let work_follows = around.blocks.iter().any(|b| b.open && b.subagent.as_ref().is_some_and(|s| s.follows));
+    row().when(only_lines, |d| d.pb_2().gap_2()).when(work_follows, Styled::pb_0).children(rendered).into_any_element()
+}
+
+/// The blocks that draw something, in order.
+fn drawn_blocks(
+    seq: Seq,
+    blocks: &[ContentBlock],
+    around: &Around,
+    this: &WeakEntity<Transcript>,
+    linked: &LinkedImages,
+    cx: &App,
+) -> Vec<AnyElement> {
+    blocks
+        .iter()
+        .zip(&around.blocks)
+        .filter_map(|(block, drawing)| render_block(seq, block, drawing, this, linked, cx))
+        .collect()
 }
 
 fn colored_line(text: String, color: Hsla) -> AnyElement {

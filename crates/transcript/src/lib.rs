@@ -12,6 +12,7 @@ mod folds;
 mod item_key;
 mod linked_images;
 mod log_block;
+mod placement;
 mod questions;
 mod rows;
 mod transcript;
