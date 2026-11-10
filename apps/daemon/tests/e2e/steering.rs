@@ -23,10 +23,19 @@ fn position(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> Opt
 }
 
 /// A prompt sent while the agent runs a long tool, which it hasn't taken yet.
+/// A prompt sent mid-turn, once the agent has read it. Recording it isn't enough, since the hub delivers it after: an
+/// agent that went away first would have the prompt delivered to the one that replaces it, which takes it.
 fn waiting_prompt(client: &Client, session_id: &SessionId) -> Seq {
     client.session_prompt(session_id, "hang:60000", None).unwrap();
     wait_for_tool(client, session_id);
-    client.session_prompt(session_id, "say:never", None).unwrap().0
+    let (steered, _) = client.session_prompt(session_id, "say:never", None).unwrap();
+    // The CLI says it has queued a prompt as it reads one.
+    wait_until("the agent to read the prompt", || {
+        read_all(client, session_id).iter().any(|e| {
+            e.seq > steered && matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "command_lifecycle")
+        })
+    });
+    steered
 }
 
 fn wait_for_drop(client: &Client, session_id: &SessionId, prompt: Seq) {
