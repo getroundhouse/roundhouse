@@ -4,36 +4,12 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::*;
-
-/// Text that often has what a title must not: line breaks of every kind, controls, and characters that hide or
-/// reorder text, between ordinary words and emoji.
-fn text() -> impl Strategy<Value = String> {
-    let piece = prop_oneof![
-        "[a-zé ]{0,12}",
-        Just("\n".to_string()),
-        Just("\r".to_string()),
-        Just("\u{2028}".to_string()),
-        Just("\u{85}".to_string()),
-        Just("\t".to_string()),
-        Just("\u{1b}[2J".to_string()),
-        Just("\0".to_string()),
-        Just("\u{200B}".to_string()),
-        Just("\u{202E}".to_string()),
-        Just("\u{2066}".to_string()),
-        Just("\u{FEFF}".to_string()),
-        Just("👩\u{200D}💻".to_string()),
-        "\\PC{0,4}",
-    ];
-    proptest::collection::vec(piece, 0..12).prop_map(|pieces| pieces.concat())
-}
+use crate::model::one_line::laws::{reads_on_one_line, text};
 
 /// What every title holds to, however it was made.
 fn holds(title: &Title) {
-    let text = title.as_str();
-    assert!(!text.is_empty(), "{text:?}");
-    assert_eq!(text, text.trim(), "{text:?}");
-    assert!(!text.contains("  "), "{text:?}");
-    assert!(!text.chars().any(|c| c.is_control() || hides(c) || (c != ' ' && c.is_whitespace())), "{text:?}");
+    assert!(!title.is_empty(), "{title:?}");
+    reads_on_one_line(title);
 }
 
 proptest! {

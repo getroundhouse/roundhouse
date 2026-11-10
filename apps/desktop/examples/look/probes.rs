@@ -1,27 +1,34 @@
 //! Scrolling a real window's transcript the way a person would, printing where the list and its scrollbar are after
-//! every step. A test window draws everything there is to draw between events, and a real one draws when it's ready,
-//! so these show what a test can't, such as a row whose text is still being read when it scrolls into view.
+//! every step, or jumping to a prompt from the outline and printing where the list lands. A test window draws
+//! everything there is to draw between events, and a real one draws when it's ready, so these show what a test can't,
+//! such as a row whose text is still being read when it scrolls into view.
 
 use std::time::{Duration, Instant};
 
 use desktop::app::AppView;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AnyWindowHandle, AsyncApp, Entity, InputEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, point, px,
+    AnyWindowHandle, AsyncApp, ElementId, Entity, InputEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, SharedString, point, px,
 };
+use protocol::model::seq_index;
 use transcript::Transcript;
 
 /// How often a trackpad sends an event, at 60 Hz.
 const TICK: Duration = Duration::from_millis(16);
 /// Long enough for the window to be drawn and the tail to load.
 const SETTLE: Duration = Duration::from_secs(2);
+/// Longer than a jump takes to be drawn.
+const A_MOMENT: Duration = Duration::from_millis(500);
 
 pub(crate) enum Probe {
     /// `scroll:PX`: the wheel, by PX every tick, up to the start and back down to the end.
     Scroll(f32),
     /// `drag:PX`: the scrollbar's thumb, from the bottom of its track to the top, by PX every tick.
     Drag(f32),
+    /// `jump:K`: from the end of the chat, the pointer on the outline's ticks, and a click on the Kth prompt in the
+    /// list they open, counting from 1. It has to be one the list shows.
+    Jump(usize),
 }
 
 impl Probe {
@@ -30,10 +37,12 @@ impl Probe {
         arg.strip_prefix("scroll:")
             .map(|step| Self::Scroll(pixels(step)))
             .or_else(|| arg.strip_prefix("drag:").map(|step| Self::Drag(pixels(step))))
+            .or_else(|| arg.strip_prefix("jump:").map(|k| Self::Jump(k.parse().expect("a prompt's number"))))
     }
 
     /// Prints a line per step: `PROBE`, milliseconds, the pointer's height when dragging, the row at the top and how
-    /// far into it, and the thumb's place and the session's height as the scrollbar has them. Then `PROBE done`.
+    /// far into it, and the thumb's place and the session's height as the scrollbar has them. Then `PROBE done`. A
+    /// jump prints that line before and after, and the row the prompt is in.
     pub(crate) async fn run(self, handle: &AnyWindowHandle, view: &Entity<AppView>, cx: &mut AsyncApp) {
         let transcript =
             view.read_with(cx, |v: &AppView, cx| v.panes[v.selected.as_ref().unwrap()].read(cx).transcript().unwrap());
@@ -83,9 +92,55 @@ impl Probe {
                 };
                 dispatch(handle, cx, up);
             }
+            Self::Jump(prompt) => jump(handle, view, &transcript, prompt, start, cx).await,
         }
         eprintln!("PROBE done");
     }
+}
+
+async fn jump(
+    handle: &AnyWindowHandle,
+    view: &Entity<AppView>,
+    transcript: &Entity<Transcript>,
+    prompt: usize,
+    start: Instant,
+    cx: &mut AsyncApp,
+) {
+    let client = view.read_with(cx, |v: &AppView, _| v.client().unwrap());
+    let session = transcript.read_with(cx, |t, _| t.session_id().clone());
+    // Off the main thread, so the window goes on drawing while the hub answers.
+    let lines = cx.background_executor().spawn(async move { client.session_prompt_list(&session) }).await.unwrap();
+    let row = seq_index(lines[prompt - 1].seq()) - 1;
+    eprintln!("PROBE prompt {prompt} of {} is in row {row}", lines.len());
+    report(transcript, start, None, cx);
+    let ticks = handle.update(cx, |_, window, _| window.find("outline").bounds()).unwrap();
+    point_at(handle, cx, ticks.center());
+    let id = ElementId::from(SharedString::from(format!("outline-prompt/{row}")));
+    let deadline = Instant::now() + SETTLE;
+    let mut found = None;
+    while found.is_none() && Instant::now() < deadline {
+        cx.background_executor().timer(TICK).await;
+        found = handle.update(cx, |_, window, _| window.try_find(id.clone()).map(|row| row.bounds())).unwrap();
+    }
+    let Some(bounds) = found else {
+        eprintln!("PROBE the list doesn't show prompt {prompt}");
+        return;
+    };
+    point_at(handle, cx, bounds.center());
+    dispatch(handle, cx, press(bounds.center()));
+    let up = MouseUpEvent {
+        button: MouseButton::Left,
+        position: bounds.center(),
+        modifiers: Modifiers::default(),
+        click_count: 1,
+    };
+    dispatch(handle, cx, up);
+    cx.background_executor().timer(A_MOMENT).await;
+    report(transcript, start, None, cx);
+}
+
+fn point_at(handle: &AnyWindowHandle, cx: &mut AsyncApp, position: Point<Pixels>) {
+    dispatch(handle, cx, MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() });
 }
 
 fn wheel(position: Point<Pixels>, up: f32) -> ScrollEvent {

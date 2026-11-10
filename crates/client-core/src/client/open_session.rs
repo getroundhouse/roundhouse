@@ -17,10 +17,13 @@ pub struct OpenSession {
 }
 
 impl OpenSession {
-    /// Starts following, on a thread of its own, so this doesn't wait for the hub.
+    /// Starts following, on a thread of its own, so this doesn't wait for the hub. Once it has subscribed, it asks for
+    /// the session's prompts.
     pub fn start(client: &Client, session: &Session) -> OpenSession {
         let source = SessionSource { session_id: session.id.clone() };
-        OpenSession { follow: Follow::start(client, SessionLog::new(session.last_seq), source) }
+        let follow = Follow::start(client, SessionLog::new(session.last_seq), source);
+        follow.wake();
+        OpenSession { follow }
     }
 
     /// Says that something changed. It holds one signal at a time, so changes a view hasn't looked at yet
@@ -100,7 +103,8 @@ impl Source for SessionSource {
         })
     }
 
-    /// Fetches the pages around where the view is looking that aren't loaded.
+    /// Fetches the pages around where the view is looking that aren't loaded, then the session's prompts if they
+    /// haven't been listed.
     fn asked(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
         let pages = held.lock().pages_to_fetch();
         let fetched = !pages.is_empty();
@@ -114,7 +118,33 @@ impl Source for SessionSource {
                 }
             }
         }
-        Ok(fetched)
+        Ok(self.list_prompts(client, held)? || fetched)
+    }
+}
+
+impl SessionSource {
+    /// Asks for the session's prompts, once. It's only asked for here, with the subscription started, so it misses
+    /// nothing: every prompt the subscription won't send was recorded before this. A hub too old to list them leaves
+    /// only the prompts the log is given, and one that fails to is asked again on a new connection, while the chat goes
+    /// on either way.
+    fn list_prompts(&self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
+        if !held.lock().wants_prompt_list() {
+            return Ok(false);
+        }
+        match client.session_prompt_list(&self.session_id) {
+            Ok(lines) => {
+                held.lock().list_prompts(lines);
+                Ok(true)
+            }
+            Err(e) if e.is_unsupported() => {
+                held.lock().prompts_unlisted();
+                Ok(false)
+            }
+            Err(e) => {
+                held.lock().prompt_list_failed();
+                Err(e)
+            }
+        }
     }
 }
 
@@ -131,3 +161,6 @@ fn read_range(client: &Client, session_id: &SessionId, range: std::ops::Range<Se
     }
     Ok(events)
 }
+
+#[cfg(test)]
+mod tests;

@@ -6,7 +6,7 @@ use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Rev, Seq, Session, SessionId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PromptLine, Rev, Seq, Session, SessionId,
     SessionOptions, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
@@ -110,6 +110,15 @@ impl Hub {
             let last_seq = store.get_session(&id)?.session.last_seq;
             let events = store.read_events(&id, from_seq, limit, max_bytes, include_raw)?;
             Ok(ClientResponse::Events { events, last_seq })
+        })
+        .await
+    }
+
+    /// Every prompt in the session, as a line each. A session that isn't there is refused, as a read is.
+    pub(crate) async fn session_prompt_list(&self, id: SessionId) -> Result<Vec<PromptLine>, ApiError> {
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            store.prompt_lines(&id)
         })
         .await
     }

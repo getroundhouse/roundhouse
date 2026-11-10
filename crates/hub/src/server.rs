@@ -213,6 +213,7 @@ async fn handle(
         R::SessionRead { id, from_seq, limit, max_bytes, include_raw } => {
             hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?
         }
+        R::SessionPromptList { id } => C::Prompts { prompts: hub.session_prompt_list(id).await? },
         R::SessionSubscribe { id, from_seq, subscription_id } => {
             let session = hub.live_session(&id).await?;
             add_subscription(connection, subscription_id, || {

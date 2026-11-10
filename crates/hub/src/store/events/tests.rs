@@ -1,5 +1,6 @@
+use protocol::attachment::{Attachment, MediaType};
 use protocol::model::SessionStatus::{Idle, Running, WaitingApproval};
-use protocol::model::{Session, SessionStatus};
+use protocol::model::{AttachmentId, Session, SessionStatus};
 
 use super::*;
 use crate::store::tests::{notice, store_with_session};
@@ -43,4 +44,54 @@ fn the_next_turn_moves_it_and_its_revision() {
     let after = session(&store);
     assert_eq!(after.turn_started_at_ms, Some(prompt.ts_ms));
     assert!(after.rev > before.rev, "a client only takes a newer copy");
+}
+
+fn prompt(text: &str, files: usize) -> EventBody {
+    let shot = |n| Attachment {
+        id: AttachmentId::from(format!("a{n}")),
+        name: "shot.png".to_string(),
+        media_type: MediaType::Png,
+        size_bytes: 4,
+    };
+    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: (0..files).map(shot).collect() }
+}
+
+#[test]
+fn every_prompt_is_listed_in_order_as_a_line_and_nothing_else_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let append = |body: &EventBody| store.append(&"s".into(), None, body, None, None, None).unwrap();
+
+    append(&prompt("Fix\n  this", 0));
+    append(&EventBody::PromptTaken { prompt: 1 });
+    append(&notice("x"));
+    append(&prompt("", 2));
+
+    assert_eq!(
+        store.prompt_lines(&"s".into()).unwrap(),
+        [PromptLine::new(1, "Fix this", 0), PromptLine::new(4, "", 2)]
+    );
+    assert!(store.prompt_lines(&"other".into()).unwrap().is_empty());
+}
+
+/// The hub reads a prompt's text straight from what's stored, and a client makes its line from the event, so the two
+/// must agree, or a client would count the same prompt as changed.
+#[test]
+fn a_listed_line_is_the_line_its_event_makes() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let long = format!("{}{}", "\n".repeat(300), "word ".repeat(100));
+    let texts =
+        ["\0a\0b", "\u{1b}[2Jcleared", "abc\u{202E}def", "\"quoted\" \\ back", "👩\u{200D}💻 é", long.as_str(), ""];
+
+    let made: Vec<_> = texts
+        .iter()
+        .enumerate()
+        .map(|(files, text)| {
+            let event = store.append(&"s".into(), None, &prompt(text, files), None, None, None).unwrap().event;
+            PromptLine::of(event.seq, &event.body).unwrap()
+        })
+        .collect();
+
+    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), made);
 }

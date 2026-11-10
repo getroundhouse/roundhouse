@@ -34,6 +34,24 @@
 
 ![A reply with an image in it](screens/reply-image.png)
 
+## Finding a prompt
+
+- **A chat with more than one prompt has an outline at its right: a short tick for each prompt, top to bottom in the order they were sent, with the one being read in white,** so a long chat shows how far it goes and where you are in it. The one being read is the last to have reached the top of the chat, and at the end of the chat it's the last prompt, since nothing after it can reach the top. A chat with one prompt has nowhere to jump to, so it has no outline. *Unconfirmed.*
+- **The outline shows sixteen ticks at most.** A longer chat shows those around the prompt being read, and a tick at an end with more past it is fainter. *Unconfirmed.*
+- **The ticks sit at the top, in the margin between the scrollbar and the column,** narrow enough that in a narrow pane they stay clear of a prompt at the right of the column. They're a place to rest the pointer, not to click, so they can be that small. The wheel over them scrolls the chat, and doesn't open the list however long it turns, since a trackpad's wheel leaves the pointer resting there without asking for it. The list opens once the pointer moves over them. *Unconfirmed.*
+- **Resting the pointer on the ticks lists the prompts over them, numbered, with up to two lines of each.** The one being read is lit and the rest are quieter, so it stands out among them. The list hides the ticks while it's open, and stays while the pointer is on it. It opens on the one being read, with the two before it above it, and it's as tall as its rows up to about eight prompts of two lines, past which it scrolls. The wheel over it scrolls only the list. A prompt that only carried files says how many. *Unconfirmed.*
+- **In a pane narrower than the list, the list keeps its width,** running past the pane over what's beside it rather than squeezing its rows.
+- **Clicking a prompt in the list puts that prompt at the top of the chat,** and the list closes, so it isn't over where it jumped to. It opens again once the pointer moves over the ticks, not because the click left it resting there. A prompt with less than a screen of chat below it can't reach the top, so the chat stays at its end, where that prompt shows already. *Unconfirmed.*
+- **The outline has every prompt, however long the chat,** including those too far back for the app to have loaded, because the hub lists them. A hub too old to list them leaves only the prompts the app has loaded, and so does one that fails to, until the app reconnects to it, with the chat going on either way. A prompt shows in it once it's recorded. *Unconfirmed.*
+
+**A long chat, jumped to its fourteenth prompt from the list.** *Unconfirmed.*
+
+![A long chat and its outline](screens/outline.png)
+
+**The outline's list, open over its ticks.** *Unconfirmed.*
+
+![The outline's list](screens/outline-list.png)
+
 ## Titles
 
 - **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.

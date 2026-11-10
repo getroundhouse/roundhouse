@@ -57,6 +57,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Pull request's bar, standing | The strip at the top of the sidebar of changes, in the pull request's colour. It says the workspace's standing, the first thing in the way of merging its pull request, and offers the one thing to do about it. `docs/spec/workspaces.md` has the rules | `desktop::pull_request::bar`, `Standing` |
 | Diff tab | A workspace's one tab for a changed file's diff, before its chats. Clicking another file shows that one in it, rather than opening another | `WorkspacePane::diff_tab`, `Showing::Diff` |
 | Working line | The line a chat ends with while its agent works: the mark with its light sweeping, and how long the turn has taken so far | `working_line` |
+| Outline | The ticks at the right of a chat, one for each prompt, with the one being read in white, and the list of prompts that opens over them, for jumping to one. `docs/spec/chats.md` has the rules | `Transcript::with_outline`, `SessionLog::prompt_lines`, `PromptLine`, `SessionPromptList` |
+| Prompt being read | The prompt whose part of the chat is at the top: the last to have reached the top, or at the end of the chat, the last prompt. The outline lights it. It says where someone is in a chat, and has nothing to do with whether a reply is unread | `being_read` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery

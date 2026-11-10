@@ -50,6 +50,13 @@ fn it_asks_for_the_page_in_view_first_and_only_once() {
     assert!(SessionLog::new(0).pages_to_fetch().is_empty());
 }
 
+/// A view opens a chat at its end, which comes live, so a log asked to fetch before any view has looked fetches nothing,
+/// rather than the start of a chat nobody is reading.
+#[test]
+fn before_a_view_has_looked_nothing_is_fetched() {
+    assert!(SessionLog::new(1000).pages_to_fetch().is_empty());
+}
+
 #[test]
 fn an_installed_page_reports_the_rows_it_filled_and_is_not_fetched_again() {
     let mut log = SessionLog::new(800);

@@ -20,6 +20,7 @@ use crate::rows::SubagentCalls;
 use crate::scroller::Scroller;
 
 mod answers;
+mod outline;
 mod record;
 
 pub(crate) use record::AtWork;
@@ -64,6 +65,7 @@ pub struct Transcript {
     _changes: Task<()>,
     /// Draws the time so far again while the agent works.
     ticking: Option<Task<()>>,
+    prompts: outline::Prompts,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -95,6 +97,7 @@ impl Transcript {
             scroller,
             _changes: following,
             ticking,
+            prompts: outline::Prompts::default(),
         }
     }
 
@@ -295,12 +298,13 @@ impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
         let this = cx.weak_entity();
-        self.scroller.render(
+        let rows = self.scroller.render(
             ElementId::Name(self.session_id.to_string().into()),
             move |ix, bar, _, cx| crate::rows::render_row(&model, &session, &this, &linked, bar, ix, cx),
             window,
             cx,
-        )
+        );
+        self.with_outline(rows.into_any_element(), window, cx)
     }
 }
 

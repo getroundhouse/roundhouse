@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use std::time::{Duration, Instant};
-
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AppContext as _, ListOffset, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollDelta,
@@ -12,7 +10,7 @@ use gpui_kit::{
 use protocol::event::EventBody;
 use protocol::model::{SessionStatus, seq_index};
 
-use crate::support::{Stack, TIMEOUT, Ui};
+use crate::support::{Stack, Ui};
 
 #[gpui_kit::test]
 fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
@@ -274,25 +272,13 @@ fn long_session(stack: &Stack) -> usize {
 /// Starts a session and has the agent say `count` things in it, over as many prompts as that takes. Returns how many
 /// rows that came to.
 fn session_saying(stack: &Stack, count: usize, say: impl Fn(usize) -> String) -> usize {
-    let client = stack.client();
-    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-    let options = protocol::model::SessionOptions {
-        permission_mode: Some("bypassPermissions".into()),
-        ..protocol::model::SessionOptions::default()
-    };
-    let session = client.session_create(&workspace.id, protocol::model::AgentKind::Claude, options, None).unwrap();
+    let session = stack.chat_in_full_access();
     // A few to a prompt, as a person would ask, so no prompt is itself most of the session.
     let script: Vec<String> = (0..count).map(|i| format!("say:{}", say(i))).collect();
     for prompt in script.chunks(25) {
-        client.session_prompt(&session.id, &prompt.join("; "), None).unwrap();
-        let deadline = Instant::now() + TIMEOUT;
-        while client.session_get(&session.id).unwrap().status != SessionStatus::Idle {
-            assert!(Instant::now() < deadline, "the agent never finished");
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        stack.run(&session, &prompt.join("; "));
     }
-    seq_index(client.session_get(&session.id).unwrap().last_seq)
+    seq_index(stack.client().session_get(&session).unwrap().last_seq)
 }
 
 #[gpui_kit::test]
