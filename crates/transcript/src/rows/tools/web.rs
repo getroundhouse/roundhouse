@@ -56,7 +56,8 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
         let summary = Some(results.summary).filter(|s| !s.is_empty());
         block::frame(cx)
             .when(!results.links.is_empty(), |d| {
-                d.child(block::scrolling(toggle.key.element("links")).py_1().children(links.collect::<Vec<_>>()))
+                let id = toggle.key.element("links");
+                d.child(block::scrolling(id.clone(), div().id(id).py_1().children(links.collect::<Vec<_>>())))
             })
             .when_some(summary, |d, summary| {
                 d.when(!results.links.is_empty(), |d| d.child(block::separator(cx)))

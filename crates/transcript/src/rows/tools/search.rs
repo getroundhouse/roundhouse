@@ -3,7 +3,7 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled};
+use gpui_kit::{AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, div};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line, numbered};
@@ -35,7 +35,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
                     file.lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
                 rows.extend(numbered::rows(language(file.path), &lines, cx));
             }
-            numbered::scrolling(id).pb_2().children(rows).into_any_element()
+            numbered::scrolling(id.clone(), div().id(id).pb_2().children(rows)).into_any_element()
         }
         Found::Files(files) => {
             let listed = files.iter().take(LISTED_FILES).copied().collect::<Vec<_>>().join("\n");
