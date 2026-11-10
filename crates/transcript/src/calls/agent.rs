@@ -23,7 +23,7 @@ pub(crate) struct Agent<'a> {
 }
 
 impl<'a> Agent<'a> {
-    pub(super) fn read(input: &'a Value) -> Self {
+    pub(crate) fn read(input: &'a Value) -> Self {
         Self {
             description: description(input),
             kind: str_field(input, "subagent_type"),

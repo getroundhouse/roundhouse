@@ -43,6 +43,13 @@ pub(crate) struct Picture {
 }
 
 pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
+    // A sketch for #417: which option a screen draws is in its name.
+    let option = screen.name.strip_prefix("sketch-").and_then(|rest| rest.split('-').next());
+    transcript::set_sketch(match option {
+        Some("page") => transcript::Sketch::Page,
+        Some("thread") => transcript::Sketch::Thread,
+        Some(_) | None => transcript::Sketch::Chat,
+    });
     // Under /tmp because of the socket path limit.
     let dir = tempfile::Builder::new().prefix("gallery-").tempdir_in("/tmp").unwrap();
     let hub = hub_source(dir.path());

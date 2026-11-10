@@ -110,7 +110,9 @@ impl WorkspacePane {
 
     /// Closes whichever tab is showing, as `Cmd-W` does.
     pub fn close_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.showing() == Showing::Diff {
+        if self.showing() == Showing::Subagent {
+            self.close_subagent_tab(cx);
+        } else if self.showing() == Showing::Diff {
             self.close_diff_tab(cx);
         } else if let Some(id) = self.active.clone() {
             self.close_chat(id, window, cx);

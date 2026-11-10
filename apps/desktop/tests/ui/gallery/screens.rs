@@ -88,6 +88,90 @@ const NEW_WORKSPACE_PROMPT: &str = "When the sidebar is narrow, the PR badge run
 const HUB_LOG: &str = "INFO hub: listening\nWARN layout: row fir overflows by 4 px\n";
 
 pub(crate) const SCREENS: &[Screen] = &[
+    Screen {
+        name: "sketch-chat-1-chat",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal"), Step::Open("Review the change")],
+    },
+    Screen {
+        name: "sketch-chat-2-tab",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents_recorded(false))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Find checks for a stop signal"),
+            Step::Click("open-subagent-toolu-1"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "sketch-chat-3-working",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Review the change"),
+            Step::Click("open-subagent-toolu-3"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "sketch-page-1-chat",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal"), Step::Open("Review the change")],
+    },
+    Screen {
+        name: "sketch-page-2-tab",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents_recorded(false))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Find checks for a stop signal"),
+            Step::Click("open-subagent-toolu-1"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "sketch-page-3-working",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Review the change"),
+            Step::Click("open-subagent-toolu-3"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "sketch-thread-1-chat",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal"), Step::Open("Review the change")],
+    },
+    Screen {
+        name: "sketch-thread-2-tab",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents_recorded(false))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Find checks for a stop signal"),
+            Step::Click("open-subagent-toolu-1"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "sketch-thread-3-working",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, subagent_chats::subagents_recorded(true))),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Review the change"),
+            Step::Click("open-subagent-toolu-3"),
+            Step::MoveAway,
+        ],
+    },
     Screen { name: "no-hub", spec: "updates.md", world: None, steps: &[] },
     Screen { name: "first-run", spec: "workspaces.md", world: Some(World::default), steps: &[] },
     Screen {

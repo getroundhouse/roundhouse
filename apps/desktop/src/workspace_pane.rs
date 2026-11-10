@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
     Subscription, Task, Window, px,
 };
-use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, Workspace, WorkspaceId};
+use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, ToolUseId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::attached::Attachments;
@@ -31,6 +31,7 @@ mod pull_request;
 mod queue;
 mod reading;
 mod setup;
+mod subagent_tab;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -43,6 +44,8 @@ pub enum Showing {
     Chat,
     /// The diff tab, in place of the active chat.
     Diff,
+    /// The subagent tab, in place of the active chat.
+    Subagent,
 }
 
 /// The workspace's diff and its two views, made together the first time the sidebar of changes opens, then kept.
@@ -58,6 +61,16 @@ pub struct Diff {
 
 struct DiffTab {
     path: SharedString,
+    /// It covers the active chat.
+    in_front: bool,
+}
+
+/// The workspace's one subagent tab, which shows one subagent's work. A sketch for #417.
+pub struct SubagentTab {
+    /// The chat whose subagent it shows, whose tab it sits after.
+    pub session: SessionId,
+    pub call: ToolUseId,
+    pub transcript: Entity<Transcript>,
     /// It covers the active chat.
     in_front: bool,
 }
@@ -97,6 +110,7 @@ pub struct WorkspacePane {
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
+    pub subagent_tab: Option<SubagentTab>,
     pub pull_request: Lookup,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pull_request_asks: u64,
@@ -190,6 +204,7 @@ impl WorkspacePane {
             reading: Reading::default(),
             composer,
             diff: None,
+            subagent_tab: None,
             pull_request,
             pull_request_asks: 0,
             setup_log: None,
@@ -320,6 +335,9 @@ impl WorkspacePane {
 
     /// What's in front under the tabs.
     pub fn showing(&self) -> Showing {
+        if self.subagent_tab.as_ref().is_some_and(|tab| tab.in_front) {
+            return Showing::Subagent;
+        }
         let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
         if tab.is_some_and(|tab| tab.in_front) { Showing::Diff } else { Showing::Chat }
     }
@@ -329,6 +347,9 @@ impl WorkspacePane {
     pub(super) fn bring_to_front(&mut self, front: Showing, cx: &mut Context<Self>) {
         if let Some(tab) = self.diff.as_mut().and_then(|diff| diff.tab.as_mut()) {
             tab.in_front = front == Showing::Diff;
+        }
+        if let Some(tab) = &mut self.subagent_tab {
+            tab.in_front = front == Showing::Subagent;
         }
         // The chat is read only while it's in front.
         self.read_showing(cx);
@@ -352,6 +373,7 @@ impl WorkspacePane {
                 }
             }
             Showing::Chat => self.focus_composer(window, cx),
+            Showing::Subagent => {}
         }
     }
 

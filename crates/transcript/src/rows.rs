@@ -25,6 +25,7 @@ use crate::{calls, questions};
 
 mod approval;
 mod around;
+mod focus;
 mod line;
 mod prompt;
 mod tail;
@@ -33,6 +34,8 @@ mod tools;
 mod turn_end;
 mod turn_times;
 
+pub(crate) use focus::focus_summary;
+pub use focus::{FocusStatus, FocusSummary};
 pub(crate) use tail::texts_of as tail_texts;
 
 use approval::approval_card;
@@ -85,6 +88,8 @@ enum Shown {
     Unloaded,
     /// A subagent's event, which its call draws, so its own row is empty.
     InCall,
+    /// A row of the subagent tab.
+    Focus(focus::Part),
 }
 
 fn render_row_inner(
@@ -99,6 +104,12 @@ fn render_row_inner(
     let shown = {
         let m = model.borrow();
         session.read(|log| {
+            if let Some(call) = &m.focus {
+                return match focus::part(log, &m, call, ix) {
+                    focus::Part::Work(event, around) => Shown::Event(event, around),
+                    part => Shown::Focus(part),
+                };
+            }
             if ix >= log.row_count() {
                 return Shown::Tail(log.tail().clone());
             }
@@ -120,7 +131,15 @@ fn render_row_inner(
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, this, Some(event.seq), around.images(), cx);
-            render_event(&event, &around, this, linked, cx)
+            let drawn = render_event(&event, &around, this, linked, cx);
+            // In the thread, a subagent's work sits under the rule down its left.
+            let threaded = model.borrow().focus.is_some() && crate::sketch() == crate::Sketch::Thread;
+            if threaded { focus::in_thread(drawn, cx) } else { drawn }
+        }
+        Shown::Focus(part) => {
+            let threaded = part.in_thread() && crate::sketch() == crate::Sketch::Thread;
+            let drawn = focus::render(part, this, cx);
+            if threaded { focus::in_thread(drawn, cx) } else { drawn }
         }
         Shown::Pending(prompt, carried) => {
             let key = ItemKey::Prompt(prompt.client_msg_id);

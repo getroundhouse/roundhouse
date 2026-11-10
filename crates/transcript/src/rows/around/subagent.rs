@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use client_core::session_log::{MAX_LOADED_EVENTS, SessionLog};
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome};
 use protocol::model::{Seq, ToolUseId, seq_index};
 
 use super::{Around, blocks_of, nearby};
@@ -19,18 +19,44 @@ const REACH: usize = MAX_LOADED_EVENTS;
 
 /// What a subagent has done so far.
 pub(in crate::rows) struct Subagent {
+    /// The call that started it.
+    pub(in crate::rows) call: String,
     /// How many calls it's made.
     pub(in crate::rows) calls: usize,
     /// Its events, with what each needs to be drawn. Only gathered while its call is open.
     pub(in crate::rows) events: Option<Vec<(SessionEvent, Around)>>,
+    /// When the agent said it started.
+    pub(in crate::rows) started_at_ms: Option<i64>,
+    /// How it ended, once the agent said.
+    pub(in crate::rows) ended: Option<Ended>,
+}
+
+/// How a subagent ended.
+pub(in crate::rows) struct Ended {
+    pub(in crate::rows) outcome: SubagentOutcome,
+    pub(in crate::rows) report: Option<String>,
+    pub(in crate::rows) at_ms: i64,
 }
 
 impl Subagent {
     /// What the subagent started by the call `id`, in the event at `seq`, has done.
-    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool) -> Self {
-        let mut subagent = Self { calls: 0, events: open.then(Vec::new) };
-        let its_own = |event: &&SessionEvent| parent_of(&event.body).is_some_and(|parent| parent.as_str() == id);
-        for event in nearby::events_after(log, seq, REACH).filter(its_own) {
+    pub(in crate::rows) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool) -> Self {
+        let mut subagent =
+            Self { call: id.to_string(), calls: 0, events: open.then(Vec::new), started_at_ms: None, ended: None };
+        for event in nearby::events_after(log, seq, REACH) {
+            if let EventBody::SubagentStarted { call, .. } = &event.body
+                && call.as_str() == id
+            {
+                subagent.started_at_ms = Some(event.ts_ms);
+            }
+            if let EventBody::SubagentEnded { call, outcome, report } = &event.body
+                && call.as_str() == id
+            {
+                subagent.ended = Some(Ended { outcome: *outcome, report: report.clone(), at_ms: event.ts_ms });
+            }
+            if !parent_of(&event.body).is_some_and(|parent| parent.as_str() == id) {
+                continue;
+            }
             let blocks = blocks_of(&event.body);
             subagent.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
             if let Some(events) = &mut subagent.events {

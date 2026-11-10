@@ -107,12 +107,13 @@ impl WorkspacePane {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
         let mut tabs: Vec<AnyElement> = self.diff_tab_element(cx).into_iter().collect();
-        tabs.extend(
-            numbered
-                .iter()
-                .filter(|(_, s)| s.closed_at_ms.is_none())
-                .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx)),
-        );
+        for (index, session) in numbered.iter().filter(|(_, s)| s.closed_at_ms.is_none()) {
+            tabs.push(self.chat_tab(session, chat_title(session, index + 1), cx));
+            // The subagent tab sits just after the tab of the chat whose subagent it shows.
+            if self.subagent_tab.as_ref().is_some_and(|tab| tab.session == session.id) {
+                tabs.extend(self.subagent_tab_element(cx));
+            }
+        }
         let closed = self.closed_chats(cx);
         div()
             .relative()
@@ -220,6 +221,7 @@ impl Render for WorkspacePane {
         let file = self.diff.as_ref().filter(|_| self.showing() == Showing::Diff).map(|diff| diff.file.clone());
         let showing = match file {
             Some(file) => div().flex_1().min_h_0().w_full().child(file).into_any_element(),
+            None if self.showing() == Showing::Subagent => self.subagent_view(cx),
             None => self.chat(cx),
         };
         h_flex()

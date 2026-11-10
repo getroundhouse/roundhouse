@@ -54,7 +54,9 @@ fn every_screen_looks_as_approved() {
     // because the platform it otherwise comes with has to be made on the main thread, and a test isn't on it.
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
-    for screen in SCREENS {
+    // A sketch's screens alone, by the start of their names.
+    let only = std::env::var("ROUNDHOUSE_SCREENS_ONLY").ok();
+    for screen in SCREENS.iter().filter(|s| only.as_deref().is_none_or(|only| s.name.starts_with(only))) {
         problems.extend(look_at(screen.name, screen.spec, &capture::take(screen, &text_system)));
     }
     let names: Vec<&str> = SCREENS.iter().map(|s| s.name).chain([pull_requests::NAME]).collect();

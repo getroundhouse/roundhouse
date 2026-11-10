@@ -9,7 +9,7 @@ use client_core::{Client, FileToSend, OpenSession};
 use gpui_kit::{AppContext, Context, ElementId, EventEmitter, IntoElement, Render, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
+use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, ToolUseId, seq_index};
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
@@ -34,6 +34,8 @@ pub enum TranscriptEvent {
     NotSent { message: String, text: String, files: Vec<FileToSend> },
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
+    /// Someone asked to see the work of the subagent the call `call` started, in the subagent tab.
+    OpenSubagent { call: ToolUseId, title: String },
 }
 
 #[derive(Default)]
@@ -50,6 +52,8 @@ pub(crate) struct Model {
     pub at_work: AtWork,
     /// The long messages' text, read ahead of being drawn.
     pub long_texts: LongTexts,
+    /// The subagent this transcript shows alone, for the subagent tab, by the call that started it.
+    pub focus: Option<ToolUseId>,
 }
 
 pub struct Transcript {
@@ -61,6 +65,8 @@ pub struct Transcript {
     /// The images the agent's text points to.
     linked: LinkedImages,
     scroller: Scroller,
+    /// What its list is known by, which differs between a chat and the subagent tab showing its work.
+    list_id: String,
     _changes: Task<()>,
     /// Draws the time so far again while the agent works.
     ticking: Option<Task<()>>,
@@ -93,9 +99,25 @@ impl Transcript {
             model,
             linked,
             scroller,
+            list_id: session.id.to_string(),
             _changes: following,
             ticking,
         }
+    }
+
+    /// The work of the subagent `call` started, alone, for the subagent tab.
+    pub fn focused(client: Client, session: &Session, call: ToolUseId, cx: &mut Context<Self>) -> Self {
+        let mut transcript = Self::new(client, session, cx);
+        transcript.list_id = format!("{}-{call}", session.id);
+        transcript.model.borrow_mut().focus = Some(call);
+        transcript.scroller.remeasure();
+        transcript
+    }
+
+    /// What the subagent this shows alone is for, and where it's got to, for its tab.
+    pub fn focus_summary(&self) -> Option<crate::rows::FocusSummary> {
+        let call = self.model.borrow().focus.clone()?;
+        self.session.read(|log| crate::rows::focus_summary(log, &call))
     }
 
     pub fn session_id(&self) -> &SessionId {
@@ -296,7 +318,7 @@ impl Render for Transcript {
         let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
         let this = cx.weak_entity();
         self.scroller.render(
-            ElementId::Name(self.session_id.to_string().into()),
+            ElementId::Name(self.list_id.clone().into()),
             move |ix, bar, _, cx| crate::rows::render_row(&model, &session, &this, &linked, bar, ix, cx),
             window,
             cx,

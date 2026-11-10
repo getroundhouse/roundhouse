@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, FileChange, SubagentOutcome, TurnOutcome};
 use protocol::model::{MessageId, Seq, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
@@ -122,4 +122,20 @@ pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
         *parent_tool_use_id = Some(ToolUseId::from(parent));
     }
     event
+}
+
+/// The agent's word that a subagent started in the background, as the hub records it from the CLI's.
+pub(crate) fn subagent_started(call: &str, kind: &str, description: &str, prompt: &str) -> EventBody {
+    EventBody::SubagentStarted {
+        call: call.into(),
+        kind: Some(kind.into()),
+        description: Some(description.into()),
+        prompt: Some(prompt.into()),
+        in_background: true,
+    }
+}
+
+/// The agent's word that a subagent finished, with its report.
+pub(crate) fn subagent_ended(call: &str, report: &str) -> EventBody {
+    EventBody::SubagentEnded { call: call.into(), outcome: SubagentOutcome::Finished, report: Some(report.into()) }
 }

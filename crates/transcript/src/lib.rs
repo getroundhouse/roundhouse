@@ -17,9 +17,11 @@ mod questions;
 mod rows;
 mod scroll_area;
 mod scroller;
+mod sketch;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
-pub use rows::{around_column, in_column};
+pub use rows::{FocusStatus, FocusSummary, around_column, in_column};
 pub use scroller::Scroller;
+pub use sketch::{Sketch, set_sketch, sketch};
 pub use transcript::{Transcript, TranscriptEvent, mode_label};
