@@ -26,12 +26,14 @@ impl Hub {
         let (done, _) = watch::channel(false);
         let (stop, stopped) = watch::channel(false);
         self.setup_gates.lock().insert(workspace.id.clone(), SetupGate { done: done.clone(), stop });
+        self.work_changed();
         let marked = workspace.id.clone();
         let running = self.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await;
         let running = match running {
             Ok(running) => running,
             Err(e) => {
                 self.setup_gates.lock().remove(&workspace.id);
+                self.work_changed();
                 done.send_replace(true);
                 return Err(e);
             }
@@ -47,6 +49,7 @@ impl Hub {
                 Err(e) => warn!(workspace = %id, "recording setup: {e}"),
             }
             hub.setup_gates.lock().remove(&id);
+            hub.work_changed();
             done.send_replace(true);
         });
         Ok(running)

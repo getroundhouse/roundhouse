@@ -99,6 +99,16 @@ impl Drop for Stack {
     }
 }
 
+/// Waits for something outside the app, such as a hub before the app has opened. [`Ui::wait`] is for what the app
+/// has to draw first.
+pub(crate) fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + TIMEOUT;
+    while !done() {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .args(args)
@@ -174,15 +184,10 @@ impl<'a> Ui<'a> {
     }
 
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
+        wait_until(what, || {
             self.frame();
-            if done(self) {
-                return;
-            }
-            assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+            done(self)
+        });
     }
 
     /// Lets the app catch up. In a test, GPUI draws a window as soon as something in it has changed, so what's checked

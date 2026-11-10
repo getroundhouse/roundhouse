@@ -6,6 +6,7 @@ mod account;
 mod context;
 mod effort;
 mod files;
+mod hub_settings;
 mod one_line;
 mod options;
 mod prompt_line;
@@ -18,6 +19,7 @@ pub use account::{AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use effort::Effort;
 pub use files::{FileContents, WorktreeFiles};
+pub use hub_settings::{HubSettings, HubSettingsChange};
 pub use options::SessionOptions;
 pub use prompt_line::PromptLine;
 pub use pull_request::{
@@ -159,6 +161,8 @@ pub enum RecordKey {
     Comment {
         id: CommentId,
     },
+    /// A hub has one record of its settings.
+    HubSettings,
     #[serde(other)]
     Unknown,
 }
@@ -170,6 +174,9 @@ pub struct Records {
     pub workspaces: Vec<Workspace>,
     pub sessions: Vec<Session>,
     pub comments: Vec<DiffComment>,
+    /// `None` from a hub from before it kept any.
+    #[serde(default)]
+    pub hub_settings: Option<HubSettings>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,

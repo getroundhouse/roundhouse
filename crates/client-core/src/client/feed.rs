@@ -96,7 +96,8 @@ fn list_records(client: &Client) -> Result<Records> {
                 sessions.extend(client.session_list(&workspace.id)?);
                 comments.extend(client.comment_list(&workspace.id)?);
             }
-            Ok(Records { repos: client.repo_list()?, workspaces, sessions, comments, rev: Rev::default() })
+            let repos = client.repo_list()?;
+            Ok(Records { repos, workspaces, sessions, comments, hub_settings: None, rev: Rev::default() })
         }
         listed => listed,
     }

@@ -4,6 +4,7 @@ use protocol::model::Records;
 use rusqlite::{Row, Transaction};
 
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
+use super::hub_settings::hub_settings;
 use super::repos::{REPO_COLUMNS, repo_from_row};
 use super::sessions::{SESSION_COLUMNS, session_from_row};
 use super::workspaces::{WORKSPACE_COLUMNS, workspace_from_row};
@@ -31,6 +32,7 @@ impl Store {
                 &format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments ORDER BY created_at_ms, id"),
                 comment_from_row,
             )?,
+            hub_settings: Some(hub_settings(&tx)?),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

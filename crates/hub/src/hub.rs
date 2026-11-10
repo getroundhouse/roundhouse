@@ -1,11 +1,14 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
+use awake::Awake;
 use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
 mod accounts;
 mod attachments;
+mod awake;
 mod comments;
+mod hub_settings;
 mod pull_requests;
 mod repos;
 mod sessions;
@@ -64,6 +67,9 @@ pub(crate) struct Hub {
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pull_requests: pull_requests::Reading,
+    awake: Arc<Awake>,
+    /// Held while the hub's settings change.
+    configuring: AsyncMutex<()>,
     feed: broadcast::Sender<HubNotice>,
     on_demand: bool,
     started_at_ms: i64,
@@ -101,6 +107,8 @@ impl Hub {
             sessions: Mutex::new(HashMap::new()),
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
+            awake: Arc::default(),
+            configuring: AsyncMutex::new(()),
             feed: broadcast::channel(FEED_CAPACITY).0,
             started_at_ms: now_ms(),
             shutdown: Notify::new(),
@@ -313,7 +321,13 @@ impl Hub {
             build_number: protocol::BUILD_NUMBER,
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
+            keeping_awake: self.awake.holding(),
         }
+    }
+
+    /// Says that what's at work may have changed, for whatever keeps this machine awake.
+    pub(crate) fn work_changed(&self) {
+        self.awake.work_changed();
     }
 
     /// Stops every worker and waits until what they said is recorded.

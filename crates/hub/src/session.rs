@@ -280,6 +280,12 @@ impl LiveSession {
         self.state.lock().status
     }
 
+    /// Whether the agent is doing something that goes on without a person.
+    pub(crate) fn works_unattended(&self) -> bool {
+        let state = self.state.lock();
+        status::works_unattended(state.status, state.background_tasks.len())
+    }
+
     pub(crate) fn agent_running(&self) -> bool {
         self.state.lock().agent.is_some()
     }

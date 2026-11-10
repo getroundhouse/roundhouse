@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What tests of the crates that start processes share.
+testing = []
+
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 

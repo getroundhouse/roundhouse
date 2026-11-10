@@ -15,6 +15,7 @@ mod core_loop;
 mod effort;
 mod feed;
 mod finding_a_hub;
+mod hub_settings;
 mod launch_flags;
 mod misbehaving_worker;
 mod model_and_mode;
@@ -24,6 +25,8 @@ mod questions;
 mod queueing;
 mod reading;
 mod setup;
+#[cfg(target_os = "macos")]
+mod staying_awake;
 mod steering;
 #[cfg(test)]
 mod support;

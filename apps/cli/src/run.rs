@@ -109,6 +109,9 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
                 status.clients,
                 if status.on_demand { "started on demand" } else { "started by hand" }
             );
+            if status.keeping_awake {
+                println!("keeping this machine awake while there's work");
+            }
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }

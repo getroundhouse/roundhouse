@@ -148,6 +148,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::FileContents(FileContents::Text { text: text.clone() }))
         }
         R::HubShutdown
+        | R::HubConfigure { .. }
         | R::RepoAdd { .. }
         | R::WorkspaceCreate { .. }
         | R::WorkspaceRestore { .. }
@@ -208,6 +209,7 @@ fn status(world: &World) -> HubStatus {
         build_number: world.hub.map(|hub| hub.number),
         running_setups: 0,
         requests: 1,
+        keeping_awake: false,
     }
 }
 

@@ -4,7 +4,7 @@ Where each kind of test goes. How to write a test is in `docs/rust.md`, the comm
 
 | Level | Tests | Where |
 |---|---|---|
-| A module | Its own rules, without a process or a socket | Unit tests |
+| A module | Its own rules, without a process or a socket. One whose job is to run a program tests its rules without the program, and that it starts, watches and stops one with a stand-in for it | Unit tests |
 | The agent adapter | Normalizing the CLI's captured output | `crates/agents/tests/` |
 | The whole backend | What spans processes: restarts, crashes, a real worker, with a fake agent | `apps/daemon/tests/` |
 | The window | Clicking and typing through to what's shown | `apps/desktop/tests/` |

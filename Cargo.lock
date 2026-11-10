@@ -1481,6 +1481,7 @@ dependencies = [
  "hub",
  "libc",
  "parking_lot",
+ "process",
  "protocol",
  "serde_json",
  "tempfile",
@@ -3599,6 +3600,7 @@ name = "hub"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
+ "process",
  "proptest",
  "protocol",
  "providers",

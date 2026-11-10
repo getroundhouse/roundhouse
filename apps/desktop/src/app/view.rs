@@ -25,7 +25,8 @@ impl Render for AppView {
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
-            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, back, cx));
+            let hub = self.settings_of_hub();
+            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, back, hub, cx));
         }
         let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
         let main: AnyElement = match &self.connection {
@@ -310,6 +311,7 @@ mod tests {
             build_number: Some(1),
             running_setups: setups,
             requests: 1,
+            keeping_awake: false,
         }
     }
 

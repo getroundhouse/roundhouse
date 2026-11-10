@@ -196,3 +196,75 @@ fn a_saved_setting_is_in_force_from_the_start_and_thinking_streams_in_full(cx: &
     assert_eq!(thinking_open(&mut ui), [true]);
     assert_eq!(thinking_shown(&mut ui), streaming, "the same text, recorded");
 }
+
+/// What the switch for the hub keeping the computer awake is called.
+const KEEP_AWAKE: &str = "Keep computer awake while agents are working";
+
+/// What the hub's own settings say about keeping the computer awake, asked by a second client.
+fn hub_keeps_awake(stack: &Stack) -> bool {
+    stack.client().records_list().unwrap().hub_settings.unwrap().keep_awake
+}
+
+/// Whether the switch for keeping the computer awake shows on, and whether it can be flipped.
+fn keep_awake_switch(ui: &mut Ui<'_>) -> (bool, bool) {
+    let switch = &ui.labelled(KEEP_AWAKE)[0];
+    (switch.checked() == Some(true), switch.disabled() != Some(true))
+}
+
+#[gpui_kit::test]
+fn the_switch_for_keeping_the_computer_awake_changes_the_hubs_own_setting(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing(cx, &stack, "");
+    open_settings(&mut ui);
+    ui.wait("the switch to show what a hub starts out doing", |ui| keep_awake_switch(ui) == (true, true));
+
+    ui.click_label(KEEP_AWAKE);
+
+    ui.wait("the hub to be told", |_| !hub_keeps_awake(&stack));
+    ui.wait("the switch to show off", |ui| keep_awake_switch(ui) == (false, true));
+    let saved = std::fs::read_to_string(settings_file(&stack)).unwrap_or_default();
+    assert!(!saved.contains("keep_awake"), "it's the hub's to keep, not the app's: {saved}");
+    ui.click_label(KEEP_AWAKE);
+    ui.wait("the hub to be told again", |_| hub_keeps_awake(&stack));
+}
+
+#[gpui_kit::test]
+fn the_switch_shows_what_the_hub_says_whoever_chose_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let change = protocol::model::HubSettingsChange { keep_awake: Some(false) };
+    stack.client().hub_configure(change).unwrap();
+    let mut ui = typing(cx, &stack, "");
+    open_settings(&mut ui);
+    ui.wait("the switch to show what was chosen before the app opened", |ui| keep_awake_switch(ui) == (false, true));
+
+    let change = protocol::model::HubSettingsChange { keep_awake: Some(true) };
+    stack.client().hub_configure(change).unwrap();
+
+    ui.wait("the switch to show what another client chose", |ui| keep_awake_switch(ui) == (true, true));
+}
+
+#[gpui_kit::test]
+fn the_switch_cant_be_flipped_with_a_hub_from_before_it_kept_settings(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let _older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--not-on-demand"]);
+    let mut ui = Ui::open(cx, &stack);
+    open_settings(&mut ui);
+
+    assert_eq!(keep_awake_switch(&mut ui), (false, false), "an older hub doesn't keep the computer awake at all");
+}
+
+#[gpui_kit::test]
+fn a_setting_is_found_by_what_its_called(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing(cx, &stack, "");
+    open_settings(&mut ui);
+    assert_eq!(ui.labelled("Always expand thinking").len(), 1);
+
+    ui.press("tab");
+    ui.input("awake");
+    ui.frame();
+
+    assert!(ui.labelled("Always expand thinking").is_empty(), "only what matches is left");
+    assert_eq!(ui.labelled("Keep computer awake while agents are working").len(), 1);
+}

@@ -1,4 +1,4 @@
-//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments.
+//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, and its settings.
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy
 //! has the newer revision, so the result is the same however they interleave. A hub that doesn't keep
@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use protocol::client::HubNotice;
-use protocol::model::{DiffComment, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId};
+use protocol::model::{DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId};
 
 #[cfg(test)]
 mod laws;
@@ -20,6 +20,7 @@ pub enum Record {
     Workspace(Workspace),
     Session(Session),
     Comment(DiffComment),
+    HubSettings(HubSettings),
 }
 
 impl Record {
@@ -29,6 +30,7 @@ impl Record {
             Record::Workspace(workspace) => RecordKey::Workspace { id: workspace.id.clone() },
             Record::Session(session) => RecordKey::Session { id: session.id.clone() },
             Record::Comment(comment) => RecordKey::Comment { id: comment.id.clone() },
+            Record::HubSettings(_) => RecordKey::HubSettings,
         }
     }
 
@@ -38,6 +40,7 @@ impl Record {
             Record::Workspace(workspace) => workspace.rev,
             Record::Session(session) => session.rev,
             Record::Comment(comment) => comment.rev,
+            Record::HubSettings(settings) => settings.rev,
         }
     }
 }
@@ -70,6 +73,7 @@ impl HubRecords {
         let listed = listed.chain(list.workspaces.into_iter().map(Record::Workspace));
         let listed = listed.chain(list.sessions.into_iter().map(Record::Session));
         let listed = listed.chain(list.comments.into_iter().map(Record::Comment));
+        let listed = listed.chain(list.hub_settings.into_iter().map(Record::HubSettings));
         let mut next: HashMap<RecordKey, Record> = HashMap::new();
         for record in listed {
             let key = record.key();
@@ -100,6 +104,7 @@ impl HubRecords {
             HubNotice::Workspace(workspace) => self.apply_record(Record::Workspace(workspace)),
             HubNotice::Session(session) => self.apply_record(Record::Session(session)),
             HubNotice::Comment(comment) => self.apply_record(Record::Comment(comment)),
+            HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
             HubNotice::Removed { record, rev } => self.remove(&record, rev),
             HubNotice::Resync | HubNotice::Unknown => false,
         }
@@ -162,6 +167,12 @@ impl HubRecords {
         let comments =
             self.of_kind(|record| if let Record::Comment(comment) = record { Some(comment.clone()) } else { None });
         by_workspace(comments, |c| (&c.workspace_id, c.created_at_ms, c.id.as_str()))
+    }
+
+    /// The hub's own settings. `None` until they've arrived, and for good from a hub from before it kept any.
+    pub fn hub_settings(&self) -> Option<HubSettings> {
+        let Some(Record::HubSettings(settings)) = self.held.get(&RecordKey::HubSettings) else { return None };
+        Some(settings.clone())
     }
 
     fn of_kind<T>(&self, pick: impl Fn(&Record) -> Option<T>) -> Vec<T> {

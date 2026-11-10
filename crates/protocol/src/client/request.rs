@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, RepoId, Seq, SessionId,
-    SessionOptions, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
+    RepoId, Seq, SessionId, SessionOptions, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -26,6 +26,12 @@ pub enum ClientRequest {
     HubStatus,
     /// Stops the hub and its workers. Agents are stopped and resume on the next prompt.
     HubShutdown,
+    /// Changes the hub's own settings, which it keeps and every client shows. A setting left out is left as it is. Sent
+    /// again, it sets the same again.
+    HubConfigure {
+        #[serde(flatten)]
+        settings: HubSettingsChange,
+    },
 
     /// Adding the same repository again returns the first record.
     RepoAdd {
