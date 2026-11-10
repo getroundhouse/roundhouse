@@ -10,14 +10,15 @@ use std::ops::Range;
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ElementId, HighlightStyle, Hsla, IntoElement, ParentElement, SharedString, Styled, StyledText,
-    TestSupportExt as _, div, px,
+    AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    SharedString, Styled, StyledText, TestSupportExt as _, div, px,
 };
 
 use super::block;
 use super::highlight::{Spans, spans};
 use crate::calls::count;
 use crate::calls::lines::{Mark, NumberedLine, Section};
+use crate::scroll_area::ScrollArea;
 
 /// More than a block is for. Past this, the rest of a file is left to the diff and the editor.
 const SHOWN_LINES: usize = 300;
@@ -42,14 +43,15 @@ pub(super) fn lines(id: ElementId, language: &str, sections: &[Section], cx: &Ap
         drawn.extend(rows(language, &section[..shown], cx));
     }
     let more = (more > 0).then(|| format!("and {}", count(more, "more line", "more lines")));
-    scrolling(id)
+    let part = div()
+        .id(id.clone())
         .py_1()
         .font_family(cx.theme().mono_font_family.clone())
         .text_size(cx.theme().mono_font_size)
         .children(drawn)
         .when_some(more, |d, more| d.child(block::label(more, cx).pb_2()))
-        .test_support()
-        .into_any_element()
+        .test_support();
+    scrolling(id, part).into_any_element()
 }
 
 /// How many of each section's lines fit in `room` lines, in order, and how many are left out.
@@ -67,9 +69,9 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
     (shown, total - (room - left))
 }
 
-/// A block's numbered lines, scrolling past a dozen.
-pub(super) fn scrolling(id: ElementId) -> gpui_kit::Stateful<gpui_kit::Div> {
-    block::scrolling(id).max_h(px(MAX_HEIGHT))
+/// A block's numbered lines, `part`, scrolling past a dozen.
+pub(super) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
+    block::scrolling(id, part).max_height(px(MAX_HEIGHT))
 }
 
 /// A row for each of these lines, without a block around them.

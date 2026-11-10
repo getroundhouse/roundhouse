@@ -15,6 +15,7 @@ mod log_block;
 mod long_texts;
 mod questions;
 mod rows;
+mod scroll_area;
 mod scroller;
 mod transcript;
 

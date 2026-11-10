@@ -25,6 +25,7 @@ use gpui_kit::{
     Window, div, list, px, rems,
 };
 
+use crate::scroll_area::hears_the_wheel;
 use crate::transcript::Transcript;
 
 mod unloaded;
@@ -166,6 +167,8 @@ impl Scroller {
             .size_full()
             .min_h_0()
             .overflow_hidden()
+            // Before the rows, so a block in one knows which gesture the wheel is part of when it hears it.
+            .child(hears_the_wheel())
             .child(viewport)
             .children(self.jump_button(id, window, cx))
             .test_support()
