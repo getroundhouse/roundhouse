@@ -27,7 +27,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Buttons
 
-- **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add repository or Send to agent. With one obvious next step per area, nothing competes with it.
+- **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add project or Send to agent. With one obvious next step per area, nothing competes with it.
 - **Every other button is borderless until hovered.** A button with an outline opens something, like the pull request.
 - **The pull request's bar fills its main action with the pull request's colour,** still with dark text, so the action reads as part of the bar it's on. One with no colour of its own, such as Create PR, is the light main button. *Unconfirmed.*
 

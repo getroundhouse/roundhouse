@@ -232,8 +232,8 @@ impl AppView {
         .detach();
     }
 
-    /// Says whether a workspace is being made, archived or restored, which every pane's header shows as well as the
-    /// sidebar.
+    /// Says whether a workspace is being made, archived or restored, which greys out every button that archives: in
+    /// the sidebar, in Home, and on every pane's pull request bar.
     fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
         self.busy = busy;
         for pane in self.panes.values() {

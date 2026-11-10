@@ -39,18 +39,18 @@ impl Render for AppView {
             Connection::Ready(_) => match self.selected_pane() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => empty_state(
-                    "Add a repository",
-                    "Each workspace is a copy of a repository on its own branch, with its own agents. Start by adding \
-                     a repository from this Mac.",
-                    Button::new("first-add-repository")
+                    "Add a project",
+                    "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a \
+                     project from a repository on this Mac.",
+                    Button::new("first-add-project")
                         .primary()
-                        .label("Add repository")
+                        .label("Add project")
                         .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
                     cx,
                 ),
                 None => empty_state(
                     "Start a workspace",
-                    "Pick a repository in the sidebar and press + to give an agent a branch of its own.",
+                    "Pick a project in the sidebar and press + to give an agent a branch of its own.",
                     Button::new("first-new-workspace")
                         .primary()
                         .label("New workspace")

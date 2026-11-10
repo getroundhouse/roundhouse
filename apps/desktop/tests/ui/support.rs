@@ -10,6 +10,7 @@ mod labels;
 mod new_workspace;
 mod stand_in;
 mod stand_in_gh;
+mod workspaces;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,7 +25,7 @@ use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{RepoId, SessionStatus, WorkspaceId};
+use protocol::model::SessionStatus;
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -34,6 +35,8 @@ pub(crate) use labels::labelled;
 #[cfg(target_os = "macos")]
 pub(crate) use labels::menu_item;
 pub(crate) use stand_in::StandInHub;
+pub(crate) use stand_in_gh::pull_request;
+pub(crate) use workspaces::home_row;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -259,6 +262,14 @@ impl<'a> Ui<'a> {
         self.frame();
     }
 
+    /// Whether the last frame drew it greyed out, so pressing it does nothing.
+    pub(crate) fn disabled(&mut self, id: impl Into<ElementId>) -> bool {
+        let id = id.into();
+        self.frame();
+        let found = self.cx.update_window(self.handle, |_, window, _| window.try_find(id).and_then(|e| e.disabled()));
+        found.unwrap() == Some(true)
+    }
+
     /// Whether the last frame drew it where it can be seen and pressed.
     pub(crate) fn visible(&mut self, id: impl Into<ElementId>) -> bool {
         let id = id.into();
@@ -346,16 +357,6 @@ impl<'a> Ui<'a> {
     pub(crate) fn chat_mode(&self) -> Option<String> {
         let pane = self.pane()?;
         self.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.permission_mode.clone()))
-    }
-
-    pub(crate) fn first_repo_id(&self) -> RepoId {
-        self.view().repos[0].id.clone()
-    }
-
-    pub(crate) fn worktree(&self, id: &WorkspaceId) -> PathBuf {
-        let view = self.view();
-        let workspace = view.workspaces.iter().find(|w| &w.id == id).unwrap();
-        PathBuf::from(workspace.path.clone().unwrap())
     }
 }
 

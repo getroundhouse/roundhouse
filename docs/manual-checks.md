@@ -13,7 +13,7 @@ Start with trackpad feel, then IME, then selection and copy.
 - Composer: IME input (try Japanese or Chinese), emoji picker, dictation
 - Composer: Option/Cmd arrow movement, undo, spellcheck
 - Image paste into the composer
-- Adding a repository through the file picker
+- Adding a project through the file picker
 - `Create PR` on a repository with a GitHub remote opens a real pull request
 - Links open, and right-click menus exist where expected
 - VoiceOver reads messages and sidebar rows

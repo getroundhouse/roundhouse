@@ -4,7 +4,7 @@
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
@@ -14,7 +14,7 @@ use protocol::model::{Session, SessionStatus};
 
 use super::diff_tab::Sidebar;
 use super::setup::setup_log_view;
-use super::{Busy, HEADER_HEIGHT, Mark, PaneEvent, Showing, WorkspacePane};
+use super::{HEADER_HEIGHT, Mark, Showing, WorkspacePane};
 use crate::right_click;
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -146,12 +146,11 @@ impl WorkspacePane {
     /// its bar's action instead.
     fn header(&self, sidebar: Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
-        let id = self.workspace.id.clone();
         let controls = match sidebar {
             Sidebar::Open => None,
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
-                crate::pull_request::controls(&self.pull_request, on_action, cx)
+                crate::pull_request::controls(&self.pull_request, self.busy, on_action, cx)
             }
         };
         h_flex()
@@ -164,13 +163,6 @@ impl WorkspacePane {
             .border_b_1()
             .border_color(border)
             .child(self.heading(cx))
-            .child(
-                Button::new("archive").ghost().small().label("Archive").disabled(self.busy == Busy::Changing).on_click(
-                    cx.listener(move |_, _, _, cx| {
-                        cx.emit(PaneEvent::Archive(id.clone(), false));
-                    }),
-                ),
-            )
             .children(controls)
             .child(
                 Button::new("toggle-diff")

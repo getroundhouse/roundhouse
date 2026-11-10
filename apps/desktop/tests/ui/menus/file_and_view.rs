@@ -11,14 +11,14 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    assert_eq!(items(&ui, "File"), ["New Workspace", "New Chat", "Add Repository…", "-", "Close Chat"]);
+    assert_eq!(items(&ui, "File"), ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat"]);
     assert!(action(&ui, "File", "New Workspace").partial_eq(&desktop::NewWorkspace));
     assert!(action(&ui, "File", "New Chat").partial_eq(&desktop::NewChat));
-    assert!(action(&ui, "File", "Add Repository…").partial_eq(&desktop::AddRepository));
+    assert!(action(&ui, "File", "Add Project…").partial_eq(&desktop::AddRepository));
     assert!(action(&ui, "File", "Close Chat").partial_eq(&desktop::CloseChat));
     assert_eq!(key(&ui, "File", "New Workspace").as_deref(), Some("cmd-n"));
     assert_eq!(key(&ui, "File", "New Chat").as_deref(), Some("cmd-t"));
-    assert_eq!(key(&ui, "File", "Add Repository…"), None);
+    assert_eq!(key(&ui, "File", "Add Project…"), None);
     assert_eq!(key(&ui, "File", "Close Chat").as_deref(), Some("cmd-w"));
 }
 
@@ -79,7 +79,7 @@ fn file_and_view_items_are_greyed_out_until_they_can_act(cx: &mut TestAppContext
     let mut ui = Ui::open(cx, &stack);
     let needs_a_workspace =
         [("File", "New Chat"), ("File", "Close Chat"), ("View", "Show Diff"), ("View", "Next Workspace")];
-    assert!(enabled(&mut ui, "File", "Add Repository…"));
+    assert!(enabled(&mut ui, "File", "Add Project…"));
     assert!(!enabled(&mut ui, "File", "New Workspace"), "there's no repository to put it in");
     for (menu, item) in needs_a_workspace {
         assert!(!enabled(&mut ui, menu, item), "{item} with no workspace");

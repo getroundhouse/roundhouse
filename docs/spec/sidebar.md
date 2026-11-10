@@ -1,8 +1,10 @@
 # Sidebar
 
-- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's repository, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
+- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's project, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
 - **Search is only a place for searching.** *Not built:* it does nothing when pressed, and what it searches isn't decided.
-- **The workspaces are listed by repository, under a small faint heading.** A repository's row has its folder, its name in medium weight, and a button for a new workspace in it. Its workspaces are set in below it, so they read as its, each with its mark and its name at body size. Rows are 36px, 4px apart. *Unconfirmed.*
+- **The workspaces are listed by project, under a small faint heading.** A project's row has its folder, its name in medium weight, and a button for a new workspace in it. Its workspaces are set in below it, so they read as its, each with its mark and its name at body size. Rows are 36px, 4px apart. *Unconfirmed.*
+- **Add project is at the heading's right end, in words,** so it isn't taken for the button for a new workspace on each project's row under it. The heading shows before there's a project too, so the button is in the same place from the start. Without a hub, such as while it restarts, Add project is greyed out, and the heading shows only over projects already listed. *Unconfirmed:* without a hub.
+- **An archived workspace isn't listed.** Home shows archived workspaces, and brings one back, as `home.md` says.
 - **A workspace's mark speaks for its open chat that most needs attention,** so a chat waiting on approval is visible from anywhere. *Unconfirmed.*
 - **A workspace's row shows how many lines it has added and removed,** in green and red at its right, with either left out when it's none. *Not built:* the hub doesn't send them.
 
@@ -19,8 +21,8 @@
 
 ## Archiving
 
-- **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its repository's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*
-- **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers. Both archive as the header's button does, asking first if there's work it would lose, as `workspaces.md` says. An archived row offers neither, since pressing it restores it. *Unconfirmed.*
+- **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*
+- **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers. Both archive as `Cmd-Shift-A` does, asking first if there's work it would lose, as `workspaces.md` says. *Unconfirmed.*
 - **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
 - **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*

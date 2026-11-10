@@ -10,6 +10,8 @@ From Conductor's docs (`/docs/concepts/workflow`):
 - A workspace has its own branch, working tree, files, app processes and agent context.
 - The lifecycle is: break down the work, create workspaces, run agents independently, verify and review and resolve, then open a PR, merge and archive.
 - Durable guidance lives in repository settings or instruction files. Task context comes from chat, attachments and `.context`.
+- A project is Conductor's entry for a codebase, holding its settings, scripts, instructions and workspaces, with one git repository behind it (`/docs/concepts/workspaces-and-branches`). The interface says "project", and keeps "repository" for the git codebase itself, as in "Repository Settings".
+- Its sidebar has an "Add project" button. Release 0.70.0 moved it into the dialog for a new workspace, beside the repository picker, and 0.70.2 put it back in the sidebar and added it to the command palette.
 
 ## Layout
 

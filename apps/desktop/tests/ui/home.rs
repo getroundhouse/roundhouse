@@ -2,20 +2,14 @@
 
 #![cfg(test)]
 
-use gpui_kit::{ElementId, SharedString, TestAppContext};
+use gpui_kit::{SharedString, TestAppContext};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Stack, Ui};
-
-fn home_row(id: &WorkspaceId) -> ElementId {
-    ElementId::Name(SharedString::from(format!("home-{id}")))
-}
+use crate::support::{Stack, Ui, home_row};
 
 /// A window with a repository and two workspaces, the second showing, and Home opened over it. Returns them.
 fn open_home<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, WorkspaceId, WorkspaceId) {
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let mut ui = Ui::open_with_a_repository(cx, stack);
     let first = ui.new_workspace();
     let second = ui.new_workspace();
     ui.click("home");
