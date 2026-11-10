@@ -63,8 +63,9 @@ impl WorkspacePane {
                     .pr_1p5()
                     .text_sm()
                     .line_height(relative(1.25))
-                    // A reply that hasn't been read stands out as the selected chat's title does.
-                    .when(!selected && !unread, |d| d.text_color(muted))
+                    // Only a reply that hasn't been read stands out. The open chat shows in its underline, so moving
+                    // between chats doesn't change how their titles look.
+                    .when(!unread, |d| d.text_color(muted))
                     .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
                     .child(look::mark(mark, work, look::Size::Inline, cx))

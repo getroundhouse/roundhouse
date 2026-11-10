@@ -192,7 +192,8 @@ impl WorkspacePane {
                     .pr_1p5()
                     .text_sm()
                     .line_height(relative(1.25))
-                    .when(!selected, |d| d.text_color(muted))
+                    // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
+                    .text_color(muted)
                     .on_click(cx.listener(|t, _, _, cx| t.show_diff_tab(cx)))
                     .child(Icon::new(IconName::File).xsmall())
                     .child(
