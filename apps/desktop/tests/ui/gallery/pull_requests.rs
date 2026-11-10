@@ -22,8 +22,8 @@ use super::headless;
 pub(crate) const NAME: &str = "pull-request-states";
 /// The spec's file that shows it.
 pub(crate) const SPEC: &str = "workspaces.md";
-/// As wide as the sidebar of changes.
-const SIDEBAR: f32 = 320.;
+/// As wide as the sidebar of changes, `changes::WIDTH`.
+const SIDEBAR: f32 = 432.;
 /// Enough for the widest number and action the header shows.
 const HEADER: f32 = 300.;
 const ROW: f32 = 40.;

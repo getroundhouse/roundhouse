@@ -20,8 +20,9 @@ use rows::{Layout, Row, rows, split};
 
 mod rows;
 
-/// Wide enough for most paths and their counts, and narrow enough to leave the chat its column.
-pub(crate) const WIDTH: Pixels = px(320.);
+/// Its left edge included. As wide as the sidebar of changes `docs/inspiration.md` measures, so the layout feels
+/// familiar, and wide enough for a long path and its counts on one line.
+pub(crate) const WIDTH: Pixels = px(432.);
 /// As tall as the chat tabs, so the two line up across the window.
 const BAR_HEIGHT: Pixels = px(40.);
 const ROW_HEIGHT: Pixels = px(28.);
