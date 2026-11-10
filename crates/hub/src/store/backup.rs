@@ -3,15 +3,15 @@
 
 use std::cmp::Reverse;
 use std::fmt;
-use std::fs::{self, DirBuilder, File, OpenOptions};
+use std::fs::{self, File};
 use std::io;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use tracing::warn;
 
 use super::error::BackupError;
+use crate::private;
 
 /// How many schema versions keep a copy. Each copy is a whole database, so they can't pile up, and three
 /// steps back through the last three updates that migrated.
@@ -39,11 +39,7 @@ fn create_dir(dir: &Path) -> Result<(), BackupError> {
     if dir.is_dir() {
         return Ok(());
     }
-    DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)
-        .map_err(|e| BackupError::io("creating the directory", e))?;
+    private::create_dir_all(dir).map_err(|e| BackupError::io("creating the directory", e))?;
     dir.parent().map_or(Ok(()), |data_dir| sync_dir(data_dir, "syncing the data directory"))
 }
 
@@ -73,10 +69,9 @@ fn write(conn: &Connection, dir: &Path, name: Name) -> Result<(), BackupError> {
 fn copy_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     // Only this user can read it, like the database. SQLite would make a file others can read, but
     // `VACUUM INTO` writes into an empty one as it finds it.
-    let file = OpenOptions::new()
+    let file = private::file_options()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(unfinished)
         .map_err(|e| BackupError::io(format!("creating {UNFINISHED}"), e))?;
     let target = unfinished.to_str().ok_or_else(|| {
@@ -88,7 +83,12 @@ fn copy_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     file.sync_all().map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
 }
 
+/// Makes a name given or taken in `dir` last through a power cut. Not on Windows, which has no way to ask for
+/// that through std: a directory can't be opened as a file there, so this would fail and stop the hub.
 fn sync_dir(dir: &Path, what: &str) -> Result<(), BackupError> {
+    if cfg!(windows) {
+        return Ok(());
+    }
     File::open(dir).and_then(|handle| handle.sync_all()).map_err(|e| BackupError::io(what, e))
 }
 

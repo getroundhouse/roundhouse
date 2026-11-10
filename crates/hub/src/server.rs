@@ -11,13 +11,13 @@ use protocol::client::{
 };
 use protocol::frame;
 use protocol::model::{Seq, SessionId};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
 use crate::hub::Hub;
+use crate::listener::Listener;
 use crate::session::{LiveItem, LiveSession};
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
@@ -27,11 +27,11 @@ pub(crate) const PUMP_PAGE_EVENTS: u32 = 256;
 /// Bounded, so a client that stops reading holds back only its own subscriptions.
 const CONNECTION_QUEUE: usize = 1024;
 
-pub(crate) async fn accept_loop(hub: Arc<Hub>, listener: UnixListener) {
+pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
     loop {
         match listener.accept().await {
-            Ok((stream, _)) => {
-                tokio::spawn(serve_connection(hub.clone(), stream));
+            Ok((read, write)) => {
+                tokio::spawn(serve_connection(hub.clone(), read, write));
             }
             Err(e) => {
                 warn!("accepting a connection failed: {e}");
@@ -54,9 +54,12 @@ impl Drop for Connection {
     }
 }
 
-async fn serve_connection(hub: Arc<Hub>, stream: UnixStream) {
+async fn serve_connection(
+    hub: Arc<Hub>,
+    read: impl AsyncRead + Unpin,
+    mut write: impl AsyncWrite + Unpin + Send + 'static,
+) {
     hub.clients.fetch_add(1, Ordering::Relaxed);
-    let (read, mut write) = stream.into_split();
     let (frames_tx, mut frames_rx) = mpsc::channel::<HubFrame>(CONNECTION_QUEUE);
     let writer = tokio::spawn(async move {
         while let Some(item) = frames_rx.recv().await {

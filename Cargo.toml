@@ -95,7 +95,7 @@ uuid = { version = "1", features = ["v4"] }
 # `file-logging` would add a log file and a panic hook, so it stays off.
 velopack = { version = "=1.2.161", features = ["public-utils"] }
 # Already under tokio and GPUI. The Win32 API, for what std leaves out on Windows: a process's descendants and start
-# time.
+# time, and reading a named pipe while writing to it.
 windows-sys = "0.61"
 
 # docs/rust.md says what each of these is for.
