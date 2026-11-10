@@ -67,7 +67,8 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     // a picture of the app once it's ready.
     look::preload_highlighting();
     // As people see it, so no checkout.
-    let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, None, cx)).unwrap();
+    let (handle, view) =
+        cx.update(|cx| desktop::open_main_window(hub, None, desktop::Opens::InItsUsualPlace, cx)).unwrap();
     let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf() };
     app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
     for step in screen.steps {

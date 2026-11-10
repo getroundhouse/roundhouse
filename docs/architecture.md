@@ -141,6 +141,7 @@ Each piece of state has one owner, and every other copy is a cache.
 | Code, PRs, CI | Git and GitHub data | Git and GitHub. The worker and hub only cache |
 | Per-device view | Scroll position, open panels, selection | The client |
 | App settings | Always expand thinking | The client, in a file in its data directory, since a client can show several hubs. *Unconfirmed* |
+| Where the window was left | Its place, size and display, and whether it was in full screen | The client, in a file of its own in its data directory, since nobody chooses it in Settings. *Unconfirmed* |
 
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.

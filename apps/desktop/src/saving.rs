@@ -1,20 +1,39 @@
-//! Saving the settings on a thread of their own, in the order they changed, so the newest is the one that stays. The
-//! app waits for it as it quits, and quitting holds the main thread, so nothing here needs that thread.
+//! Saving what this Mac keeps for the app, such as the settings, on a thread of its own, in the order it changed, so
+//! the newest is the one that stays. The app waits for it as it quits, and quitting holds the main thread, so nothing
+//! here needs that thread.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use serde::Serialize;
 
 /// What saving failed on.
 #[derive(Debug, thiserror::Error)]
 #[error("{}: {source}", path.display())]
-pub(super) struct Failure {
+pub(crate) struct Failure {
     path: PathBuf,
     source: std::io::Error,
 }
 
 impl Failure {
-    pub(super) fn new(path: PathBuf, source: std::io::Error) -> Self {
+    pub(crate) fn new(path: PathBuf, source: std::io::Error) -> Self {
         Self { path, source }
     }
+}
+
+/// Replaces the file at `path` with `value`, as JSON, all at once, so stopping partway leaves the old file rather than
+/// half a new one.
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Failure> {
+    replace_with_json(path, value).map_err(|e| Failure::new(path.to_path_buf(), e))
+}
+
+fn replace_with_json<T: Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let text = serde_json::to_string_pretty(value).map_err(std::io::Error::other)?;
+    let partial = path.with_extension("json.partial");
+    std::fs::write(&partial, text)?;
+    std::fs::rename(&partial, path)
 }
 
 enum Request<T> {
@@ -24,13 +43,13 @@ enum Request<T> {
 }
 
 /// Saves what it's given, one at a time, on its own thread, which ends once this is dropped.
-pub(super) struct Saver<T> {
+pub(crate) struct Saver<T> {
     requests: flume::Sender<Request<T>>,
 }
 
 impl<T: Send + 'static> Saver<T> {
     /// Starts the thread, which saves with `write`. A save that fails goes to the receiver returned.
-    pub(super) fn start(
+    pub(crate) fn start(
         mut write: impl FnMut(&T) -> Result<(), Failure> + Send + 'static,
     ) -> (Self, flume::Receiver<Failure>) {
         let (requests, received) = flume::unbounded();
@@ -52,12 +71,12 @@ impl<T: Send + 'static> Saver<T> {
         (Self { requests }, failed)
     }
 
-    pub(super) fn save(&self, value: T) {
+    pub(crate) fn save(&self, value: T) {
         let _ = self.requests.send(Request::Save(value));
     }
 
     /// Hears once everything asked to be saved so far has been, or the thread has gone.
-    pub(super) fn saved(&self) -> flume::Receiver<()> {
+    pub(crate) fn saved(&self) -> flume::Receiver<()> {
         let (done, saved) = flume::bounded(1);
         let _ = self.requests.send(Request::Saved(done));
         saved

@@ -173,7 +173,8 @@ impl<'a> Ui<'a> {
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
         let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
-        let (handle, view) = cx.update(|cx| desktop::open_main_window(hub, checkout, cx)).unwrap();
+        let (handle, view) =
+            cx.update(|cx| desktop::open_main_window(hub, checkout, desktop::Opens::WhereItWasLeft, cx)).unwrap();
         Self { cx, handle, view, seen_approval: 0 }
     }
 
