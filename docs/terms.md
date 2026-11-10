@@ -15,7 +15,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Instance | Where a provider runs one workspace's worker | `instance_id` |
 | Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
 | Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
-| Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its lines name the call that started it as their parent, which the hub records with each event. The agent says when one starts, with what it was asked, and when it ends, with its report. The transcript draws them in that call | `parent_tool_use_id`, `SessionEvent::subagent`, `SubagentStarted`, `SubagentEnded`, `transcript::calls::agent` |
+| Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its lines name the call that started it as their parent, which the hub records with each event. The agent says when one starts, with what it was asked, and when it ends, with its report, and the hub keeps a record of each. The transcript draws them in that call | `parent_tool_use_id`, `SessionEvent::subagent`, `SubagentStarted`, `SubagentEnded`, `Subagent`, `transcript::calls::agent` |
 | Advisor | A stronger model the agent can ask for advice, which reads the whole conversation. The API runs it rather than the agent, so it's a tool call whose result comes in the agent's own messages, and the advice can come encrypted, for the model alone | `ToolCall::Advisor`, `agents::claude::normalize::advisor`, `ContentBlock::ToolResult.encrypted` |
 | Adapter | The code that runs one kind of agent and turns its output into events | `agents::claude` |
 
@@ -83,7 +83,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Subscription | A client following one session's log, from a given seq, or the agent's own events or one subagent's in it, from a given place | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
-| Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `DiffComment` |
+| Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session, subagent or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `Subagent`, `DiffComment` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
 
 ## Easily confused

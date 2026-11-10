@@ -146,7 +146,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         // So a screen can show a workspace on its way.
         R::WorkspaceArchive { .. } => Ok(Outcome::Never),
         // As a hub from before them, since nothing shown reads by place yet.
-        R::SessionReadPlaces { .. } | R::SessionSubscribePlaces { .. } | R::Unknown => {
+        R::SessionReadPlaces { .. } | R::SessionSubscribePlaces { .. } | R::SessionSubagents { .. } | R::Unknown => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
         }
     }

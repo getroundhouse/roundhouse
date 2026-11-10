@@ -238,6 +238,7 @@ async fn handle(
         R::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw } => {
             hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?
         }
+        R::SessionSubagents { id } => hub.session_subagents(id).await?,
         R::SessionSubscribePlaces { id, subagent, from_place, subscription_id } => {
             let next = from_place.max(Place::new(1));
             subscribe(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?

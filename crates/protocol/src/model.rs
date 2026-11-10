@@ -7,6 +7,7 @@ mod options;
 mod pull_request;
 mod queue;
 mod session;
+mod subagent;
 mod title;
 
 pub use effort::Effort;
@@ -16,6 +17,7 @@ pub use pull_request::{
 };
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
+pub use subagent::{Call, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one

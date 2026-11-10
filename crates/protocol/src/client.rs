@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, GitDiff, GitStatus, Place, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError,
-    Workspace,
+    DiffComment, GitDiff, GitStatus, Place, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, Subagent,
+    TitleError, Workspace,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -59,6 +59,12 @@ pub enum ClientResponse {
         events: Vec<SessionEvent>,
         /// The session's newest event, so a reader knows how far the log goes.
         last_seq: Seq,
+    },
+    /// A session's subagents, oldest first.
+    Subagents {
+        subagents: Vec<Subagent>,
+        /// The hub's newest revision when they were read, as a list of every record carries.
+        rev: Rev,
     },
     /// The agent's own events, or one subagent's.
     PlacedEvents {
@@ -195,6 +201,9 @@ pub enum HubNotice {
     Workspace(Workspace),
     Session(Session),
     Comment(DiffComment),
+    /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
+    /// `SessionSubagents`.
+    Subagent(Subagent),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,

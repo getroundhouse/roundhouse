@@ -42,6 +42,10 @@ pub(crate) const BEFORE_PULL_REQUESTS: usize = 14;
 #[cfg(test)]
 pub(crate) const BEFORE_SUBAGENTS: usize = 15;
 
+/// How many migrations there were before subagents had records.
+#[cfg(test)]
+pub(crate) const BEFORE_SUBAGENT_RECORDS: usize = 16;
+
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.
 pub(crate) fn migrate(conn: &mut Connection, backups_dir: &Path) -> Result<(), StoreError> {
