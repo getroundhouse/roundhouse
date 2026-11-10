@@ -1,10 +1,10 @@
 //! What a prompt looks like: what was typed, the files it carries, and whether the agent has it yet.
 
 use client_core::session_log::PromptState;
-use gpui_kit::component::text::TextView;
+use gpui_kit::component::text::TextViewState;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px, relative};
+use gpui_kit::{AnyElement, App, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, relative};
 use protocol::model::Seq;
 
 use super::row;
@@ -30,7 +30,8 @@ pub(crate) enum Progress {
 /// takes it, and one the agent never took says so.
 pub(super) fn prompt_bubble(
     key: &ItemKey,
-    text: String,
+    text: &str,
+    held: Option<&Entity<TextViewState>>,
     carried: &[Carried],
     progress: Progress,
     this: &WeakEntity<Transcript>,
@@ -55,9 +56,7 @@ pub(super) fn prompt_bubble(
                 .bg(look::prompt())
                 .when(faint, |d| d.opacity(0.6))
                 .children(attachments::view(seq, carried, this, cx))
-                .when(typed, |d| {
-                    d.child(TextView::markdown(key.element("prompt"), SharedString::from(text)).selectable(true))
-                }),
+                .when(typed, |d| d.child(super::markdown(key.element("prompt"), text, held))),
         )
         .when(dropped, |d| {
             d.child(

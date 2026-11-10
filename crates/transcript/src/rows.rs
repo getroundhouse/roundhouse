@@ -5,10 +5,13 @@ use std::rc::Rc;
 
 use client_core::OpenSession;
 use client_core::session_log::{PendingPrompt, Row};
-use gpui_kit::component::text::TextView;
+use gpui_kit::component::text::{TextView, TextViewState};
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, Div, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px};
+use gpui_kit::{
+    AnyElement, App, Div, ElementId, Entity, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div,
+    px,
+};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
@@ -16,6 +19,7 @@ use protocol::tail::Tail;
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::scroller::Unloaded;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -28,6 +32,8 @@ mod thinking;
 mod tools;
 mod turn_end;
 mod turn_times;
+
+pub(crate) use tail::texts_of as tail_texts;
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
@@ -63,11 +69,11 @@ pub(crate) fn render_row(
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
+    unloaded: &Unloaded,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
-    let row = render_row_inner(model, session, this, linked, ix, cx);
-    column(row).into_any_element()
+    column(render_row_inner(model, session, this, linked, unloaded, ix, cx)).into_any_element()
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
@@ -86,6 +92,7 @@ fn render_row_inner(
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
+    unloaded: &Unloaded,
     ix: usize,
     cx: &mut App,
 ) -> AnyElement {
@@ -103,30 +110,55 @@ fn render_row_inner(
             }
         })
     };
+    if !matches!(shown, Shown::Unloaded) {
+        unloaded.loaded(ix);
+    }
     match shown {
         Shown::Tail(tail) => {
             let m = model.borrow();
-            render_tail(&tail, &m.at_work, m.folds.thinking_open(), cx)
+            render_tail(&tail, &m.at_work, &m.long_texts, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, this, Some(event.seq), around.images(), cx);
             render_event(&event, &around, this, linked, cx)
         }
         Shown::Pending(prompt, carried) => {
-            prompt_bubble(&ItemKey::Prompt(prompt.client_msg_id), prompt.text, &carried, Progress::Sending, this, cx)
+            let key = ItemKey::Prompt(prompt.client_msg_id);
+            prompt_bubble(&key, &prompt.text, None, &carried, Progress::Sending, this, cx)
         }
         Shown::InCall => empty(),
-        Shown::Unloaded => {
-            session.want(ix);
-            // A guess at the height. The list keeps its anchor when the real one arrives.
-            div().h(px(120.)).into_any_element()
-        }
+        Shown::Unloaded => unloaded.placeholder(ix, session),
     }
 }
 
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.
-fn agent_text(key: &ItemKey, text: &str) -> TextView {
-    TextView::markdown(key.element("text"), SharedString::from(text.to_string())).selectable(true)
+/// `held` is its state, if the transcript keeps it, as `crate::long_texts` says it does for long text.
+fn agent_text(key: &ItemKey, text: &str, held: Option<&Entity<TextViewState>>) -> TextView {
+    markdown(key.element("text"), text, held)
+}
+
+/// Markdown under `id`, or showing `held` if the transcript keeps its state.
+fn markdown(id: ElementId, text: &str, held: Option<&Entity<TextViewState>>) -> TextView {
+    let view = held.map_or_else(|| TextView::markdown(id, SharedString::from(text.to_string())), TextView::new);
+    view.selectable(true)
+}
+
+/// The texts an event shows whole, each with what it's known by: a prompt's, and each block of text the agent wrote.
+pub(crate) fn texts_of(event: &SessionEvent) -> Vec<(ItemKey, &str)> {
+    if let EventBody::UserPrompt { text, client_msg_id, .. } = &event.body {
+        return vec![(ItemKey::prompt(event.seq, client_msg_id.as_ref()), text.as_str())];
+    }
+    let blocks = around::blocks_of(&event.body).iter().enumerate();
+    blocks
+        .filter_map(|(position, block)| match block {
+            ContentBlock::Text { text } => Some((around::block_key(event.seq, &event.body, position), text.as_str())),
+            ContentBlock::Thinking { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::ToolResult { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => None,
+        })
+        .collect()
 }
 
 pub(crate) fn row() -> Div {
@@ -183,7 +215,7 @@ fn render_event(
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
-            prompt_bubble(&key, text.clone(), &around.carried, progress, this, cx)
+            prompt_bubble(&key, text, around.prompt_text.as_ref(), &around.carried, progress, this, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks
@@ -250,7 +282,9 @@ fn render_block(
     let (key, expanded) = (&drawing.key, drawing.open);
     let toggle = Toggle { seq, key, open: expanded, this, linked };
     Some(match block {
-        ContentBlock::Text { text } => agent_text(key, text).image_source(linked.resolver(seq)).into_any_element(),
+        ContentBlock::Text { text } => {
+            agent_text(key, text, drawing.text.as_ref()).image_source(linked.resolver(seq)).into_any_element()
+        }
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These show as cards when they ask, with everything in them.

@@ -6,8 +6,14 @@
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"
 //!     cargo run -p desktop --example look -- some-workspace click:mode-picker
 //!
+//!     cargo run -p desktop --example look -- some-workspace scroll:40
+//!     cargo run -p desktop --example look -- some-workspace drag:3
+//!
 //! Selects the named workspace, whose sidebar of changes is open, as it is from the start. With `diff`, a further
-//! argument adds a comment on the first changed line. `--note TEXT` anywhere says why it's open, as it does for the app.
+//! argument adds a comment on the first changed line. `scroll:PX` turns the wheel over the transcript every 16 ms, up
+//! to its start and back down, and `drag:PX` drags the scrollbar's thumb up, each printing where the list and its
+//! scrollbar are after every step, then quits. `probes.rs` says why.
+//! `--note TEXT` anywhere says why it's open, as it does for the app.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -17,6 +23,8 @@ use desktop::app::{AppView, Connection, HubSource};
 use desktop::checkout::Checkout;
 use gpui_kit::SharedString;
 use gpui_kit::test::TestWindowExt as _;
+
+mod probes;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +55,11 @@ fn main() {
                     break;
                 }
             }
+            if let Some(probe) = args.get(1).and_then(|arg| probes::Probe::parse(arg)) {
+                probe.run(&handle, &view, cx).await;
+                cx.update(|cx| cx.quit());
+                return;
+            }
             // Opens a menu or presses a button, by its ID, for looking at what that shows.
             if let Some(target) = args.get(1).and_then(|arg| arg.strip_prefix("click:")) {
                 let target = SharedString::from(target.to_string());
@@ -56,28 +69,24 @@ fn main() {
             if args.get(1).map(String::as_str) != Some("diff") {
                 return;
             }
-            let (pane, client) = view
-                .read_with(cx, |v: &AppView, _| (v.panes[v.selected.as_ref().unwrap()].clone(), v.client().unwrap()));
             if let Some(text) = args.get(2) {
-                let id = pane.read_with(cx, |p, _| p.workspace.id.clone());
-                let diff = client.workspace_diff(&id).unwrap();
-                let parsed = first_added_line(&diff.patch);
-                if let Some((path, line)) = parsed {
-                    client
-                        .comment_add(
-                            &id,
-                            &path,
-                            protocol::model::DiffSide::New,
-                            line,
-                            text,
-                            Some(client_core::new_request_id()),
-                        )
-                        .unwrap();
-                }
+                comment_on_the_first_change(&view, text, cx);
             }
         })
         .detach();
     });
+}
+
+/// Adds a comment on the first line the workspace's diff adds.
+fn comment_on_the_first_change(view: &gpui_kit::Entity<AppView>, text: &str, cx: &mut gpui_kit::AsyncApp) {
+    let (pane, client) =
+        view.read_with(cx, |v: &AppView, _| (v.panes[v.selected.as_ref().unwrap()].clone(), v.client().unwrap()));
+    let id = pane.read_with(cx, |p, _| p.workspace.id.clone());
+    let diff = client.workspace_diff(&id).unwrap();
+    if let Some((path, line)) = first_added_line(&diff.patch) {
+        let request = Some(client_core::new_request_id());
+        client.comment_add(&id, &path, protocol::model::DiffSide::New, line, text, request).unwrap();
+    }
 }
 
 fn first_added_line(diff: &str) -> Option<(String, u32)> {
