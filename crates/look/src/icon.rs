@@ -158,13 +158,9 @@ fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &C
     }
 }
 
-/// Centred on what it reaches rather than on its box, which leaves room under the turntable.
+/// In the middle of the tile, as a fan is in the middle of its box.
 fn scaled(bounds: Bounds<Pixels>, style: IconStyle, rows: usize, width: Pixels, colors: &Colors, window: &mut Window) {
-    let placed = Fan::with_rows(Bounds::new(point(px(0.), px(0.)), size(width, width * ASPECT)), rows);
-    let (up, down) = placed.reach();
-    let middle = bounds.center();
-    let center = point(middle.x, middle.y + (up - down) * 0.5);
-    let fan = Fan::with_rows(Bounds::new(center - placed.center, size(width, width * ASPECT)), rows);
+    let fan = Fan::with_rows(Bounds::centered_at(bounds.center(), size(width, width * ASPECT)), rows);
     for dot in fan.dots() {
         fan::disc(window, dot.at, fan.dot, colors.copper);
         let glow = light(style, dot.along, dot.row, rows);

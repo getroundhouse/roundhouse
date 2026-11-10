@@ -7,7 +7,8 @@ use gpui_kit::{
     BorderStyle, Bounds, Corners, Edges, Hsla, Pixels, Point, Window, point, px, quad, size, transparent_black,
 };
 
-/// How tall a fan is, for its width: a half circle, with room under it for the turntable.
+/// How tall a fan's box is, for its width: a half circle, with room under it for the turntable. The fan sits in the
+/// middle of it, top to bottom.
 pub(crate) const ASPECT: f32 = 0.62;
 /// How many more dots each row has than the one inside it. A row one dot's spacing further out would fit π more, so
 /// with four the rows sit a little further apart than the dots in them. Four is even, so every row keeps the inner
@@ -21,9 +22,6 @@ const DOT: f32 = 0.32;
 const MARGIN: f32 = 1.25;
 /// The turntable's ring, to its outer edge, as a share of the fan's width, whatever its rows.
 const TURNTABLE: f32 = 0.07;
-/// How far above the bottom of the fan's box its centre sits, as a share of its width. The bottom dots of every row
-/// sit on the line through the centre, and the turntable's ring dips a little below the box.
-const BASE: f32 = 0.037;
 
 /// How many rows of dots a fan `width` wide has: more as it grows, so its dots stay fine. The status marks, 16 and 26
 /// wide, have four, and the empty state's, 72 wide, has five.
@@ -70,14 +68,25 @@ impl Fan {
         Fan::with_rows(bounds, rows_for(bounds.size.width))
     }
 
-    /// The outer row is as big as fits, with `MARGIN` outside it, and every other row follows from it.
+    /// The outer row is as big as fits, with `MARGIN` outside it, and every other row follows from it. What's drawn
+    /// sits in the middle of the box, top to bottom, from the top of the outer row to the bottom of the turntable, so
+    /// a fan centred beside a line of text looks level with it. The bottom dots of every row sit on the line through
+    /// the centre, and the turntable's ring dips below it.
     pub(crate) fn with_rows(bounds: Bounds<Pixels>, rows: usize) -> Self {
         let width = bounds.size.width;
         let spaces = as_f32(first_row(rows) - 1 + MORE * (rows - 1));
         let outer = width * 0.5 / (1.0 + (1.0 + MARGIN) * DOT * PI / spaces);
         let spacing = outer * PI / spaces;
-        let center = point(bounds.origin.x + width * 0.5, bounds.origin.y + bounds.size.height - width * BASE);
-        Fan { center, spacing, rows, dot: (spacing * DOT).max(px(0.45)), turntable: width * TURNTABLE }
+        let across = bounds.origin.x + width * 0.5;
+        let fan = Fan {
+            center: point(across, bounds.origin.y),
+            spacing,
+            rows,
+            dot: (spacing * DOT).max(px(0.45)),
+            turntable: width * TURNTABLE,
+        };
+        let (up, down) = fan.reach();
+        Fan { center: point(across, bounds.origin.y + (bounds.size.height + up - down) * 0.5), ..fan }
     }
 
     pub(crate) fn dots(&self) -> impl Iterator<Item = Dot> + use<> {
@@ -289,17 +298,23 @@ mod tests {
     }
 
     #[test]
-    fn more_rows_leave_the_turntable_as_it_was() {
-        let share = |width: f32| {
+    fn every_fan_sits_in_the_middle_of_its_box_from_top_to_bottom() {
+        for width in [16., 26., 72., 100., 320.] {
             let fan = fan(width);
-            (fan.turntable().radius / px(width), (fan.center.y - px(width * ASPECT)) / px(width))
-        };
+            let (up, down) = fan.reach();
+            let (above, below) = ((fan.center.y - up) / px(1.), (px(width * ASPECT) - fan.center.y - down) / px(1.));
+
+            assert!(above >= 0. && below >= 0., "{width} wide leaves {above} above and {below} below");
+            assert!((above - below).abs() < 1e-3, "{width} wide leaves {above} above and {below} below");
+        }
+    }
+
+    #[test]
+    fn more_rows_leave_the_turntable_as_big_as_it_was() {
+        let share = |width: f32| fan(width).turntable().radius / px(width);
 
         for width in [72., 100., 320.] {
-            let (radius, from_bottom) = share(width);
-            let (four_rows, four_rows_from_bottom) = share(30.);
-            assert!((radius - four_rows).abs() < 1e-5, "{width}: {radius} against {four_rows}");
-            assert!((from_bottom - four_rows_from_bottom).abs() < 1e-5, "{width}");
+            assert!((share(width) - share(30.)).abs() < 1e-5, "{width}: {} against {}", share(width), share(30.));
         }
     }
 }
