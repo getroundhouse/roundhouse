@@ -231,9 +231,9 @@ impl Provider for LocalProvider {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(log))
-            // Its own group, so Ctrl-C on a foreground hub goes through the hub's clean shutdown.
-            .process_group(0)
             .kill_on_drop(true);
+        // So Ctrl-C on a foreground hub goes through the hub's clean shutdown.
+        process::own_group(command.as_std_mut());
         if let Some(path) = merge_paths(login.as_deref(), own.as_deref()) {
             command.env("PATH", path);
         }

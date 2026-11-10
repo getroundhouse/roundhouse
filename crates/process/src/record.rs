@@ -1,12 +1,10 @@
 use std::io;
 use std::path::Path;
-use std::process::Command;
 
-/// When a process started, as `ps` prints it, or `None` if it isn't running.
+/// When a process started, or `None` if it isn't running. It's as `ps` prints it, or on Windows as a count from the
+/// system's own clock, and only ever compared with another from the same machine.
 pub fn start_time(pid: u32) -> Option<String> {
-    let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().ok()?;
-    let started = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!started.is_empty()).then_some(started)
+    crate::sys::start_time(pid)
 }
 
 /// A PID and its start time, kept in a file, because a PID alone could have been reused by the time

@@ -94,6 +94,9 @@ uuid = { version = "1", features = ["v4"] }
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
 velopack = { version = "=1.2.161", features = ["public-utils"] }
+# Already under tokio and GPUI. The Win32 API, for what std leaves out on Windows: a process's descendants and start
+# time.
+windows-sys = "0.61"
 
 # docs/rust.md says what each of these is for.
 [workspace.lints.rust]
