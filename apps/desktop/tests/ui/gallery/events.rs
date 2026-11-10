@@ -29,6 +29,25 @@ pub(crate) fn thought(message: &str, text: &str) -> EventBody {
     from_the_agent(message, ContentBlock::Thinking { text: text.to_string() })
 }
 
+/// What the advisor said. Its reply comes from the agent, in the call's message, since the API runs it.
+pub(crate) fn advised(message: &str, id: &str, text: &str) -> EventBody {
+    from_the_agent(message, answer(id, text, false, None))
+}
+
+/// The advisor's reply, encrypted for the model alone.
+pub(crate) fn advised_encrypted(message: &str, id: &str) -> EventBody {
+    let mut block = answer(id, "", false, None);
+    if let ContentBlock::ToolResult { encrypted, .. } = &mut block {
+        *encrypted = true;
+    }
+    from_the_agent(message, block)
+}
+
+/// Why asking the advisor failed.
+pub(crate) fn advice_failed(message: &str, id: &str, text: &str) -> EventBody {
+    from_the_agent(message, answer(id, text, true, None))
+}
+
 fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
     EventBody::Assistant {
         message_id: Some(MessageId::from(message)),
@@ -65,16 +84,12 @@ pub(crate) fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBod
 }
 
 fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> EventBody {
-    EventBody::AgentUser {
-        parent_tool_use_id: None,
-        blocks: vec![ContentBlock::ToolResult {
-            tool_use_id: ToolUseId::from(id),
-            is_error,
-            text: text.to_string(),
-            images: Vec::new(),
-            change,
-        }],
-    }
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![answer(id, text, is_error, change)] }
+}
+
+fn answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> ContentBlock {
+    let (tool_use_id, text, images) = (ToolUseId::from(id), text.to_string(), Vec::new());
+    ContentBlock::ToolResult { tool_use_id, is_error, text, images, change, encrypted: false }
 }
 
 /// The end of a turn that went well.

@@ -40,6 +40,12 @@ pub(crate) fn within(parent: &str, mut body: EventBody) -> EventBody {
     body
 }
 
+/// `body`'s blocks as the agent sends them itself, as it does the result of a tool the API runs, such as the advisor.
+pub(crate) fn from_the_agent(body: EventBody) -> EventBody {
+    let EventBody::AgentUser { parent_tool_use_id, blocks } = body else { return body };
+    EventBody::Assistant { message_id: None, parent_tool_use_id, model: None, blocks, first_index: None }
+}
+
 /// The result of the call `id`.
 pub(crate) fn result(id: &str) -> EventBody {
     let block = ContentBlock::ToolResult {
@@ -48,6 +54,7 @@ pub(crate) fn result(id: &str) -> EventBody {
         text: format!("from {id}"),
         images: Vec::new(),
         change: None,
+        encrypted: false,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }

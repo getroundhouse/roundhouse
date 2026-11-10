@@ -124,8 +124,15 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
+            // Such as the advisor, which takes none.
+            ContentBlock::ToolUse { name, input, .. } if input.as_object().is_some_and(serde_json::Map::is_empty) => {
+                self.line(seq, &format!("tool {name}"));
+            }
             ContentBlock::ToolUse { name, input, .. } => {
                 self.line(seq, &format!("tool {name}: {}", summarize_input(input)));
+            }
+            ContentBlock::ToolResult { encrypted: true, .. } => {
+                self.line(seq, "tool result: encrypted, for the model alone");
             }
             ContentBlock::ToolResult { is_error, text, images, .. } => {
                 let label = if *is_error { "tool error" } else { "tool result" };

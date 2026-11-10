@@ -14,6 +14,7 @@ use serde_json::Value;
 pub(crate) use prompt::PromptProgress;
 use tasks::StoppedTasks;
 
+mod advisor;
 mod file_change;
 mod images;
 mod prompt;
@@ -260,7 +261,8 @@ fn block(value: &Value) -> ContentBlock {
     match str_of(value, "type") {
         Some("text") => ContentBlock::Text { text: string_of(value, "text").unwrap_or_default() },
         Some("thinking") => ContentBlock::Thinking { text: string_of(value, "thinking").unwrap_or_default() },
-        Some("tool_use") => ContentBlock::ToolUse {
+        // A tool the API runs itself, such as the advisor, is called the same way.
+        Some("tool_use" | "server_tool_use") => ContentBlock::ToolUse {
             id: string_of(value, "id").unwrap_or_default(),
             name: string_of(value, "name").unwrap_or_default(),
             input: value.get("input").cloned().unwrap_or(Value::Null),
@@ -272,7 +274,9 @@ fn block(value: &Value) -> ContentBlock {
             // Only a user line's results have images, and `images` takes them from it.
             images: Vec::new(),
             change: None,
+            encrypted: false,
         },
+        Some("advisor_tool_result") => advisor::result(value),
         Some("image") => {
             ContentBlock::Image { media_type: value.get("source").and_then(|s| string_of(s, "media_type")) }
         }
@@ -355,7 +359,7 @@ fn stream_event(value: &Value) -> Parsed {
             let kind = match str_of(block, "type") {
                 Some("text") => BlockKind::Text,
                 Some("thinking") => BlockKind::Thinking,
-                Some("tool_use") => BlockKind::ToolUse,
+                Some("tool_use" | "server_tool_use") => BlockKind::ToolUse,
                 _ => BlockKind::Unknown,
             };
             DeltaChange::BlockStart { index, kind, tool_name: string_of(block, "name") }

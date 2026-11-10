@@ -283,3 +283,54 @@ fn a_prompts_lifecycle_names_it_by_the_uuid_it_was_sent_with() {
     let nameless = json!({"type":"command_lifecycle","state":"started"}).to_string();
     assert_eq!(parse_line(&nameless), Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into() }));
 }
+
+/// A line from the agent with only `block`, as Claude sends each block of a message.
+fn from_the_agent(block: &Value) -> String {
+    json!({"type":"assistant","message":{"id":"m","content":[block]}}).to_string()
+}
+
+#[test]
+fn a_call_to_the_advisor_is_a_call_like_any_other() {
+    let call = json!({"type":"server_tool_use","id":"srvtoolu_1","name":"advisor","input":{}});
+    let start = json!({"type":"stream_event","api_message_id":"m","event":{
+        "type":"content_block_start","index":2,"content_block":call
+    }});
+
+    let recorded = parse_line(&from_the_agent(&call));
+    let streamed = parse_line(&start.to_string());
+
+    let Parsed::Event(EventBody::Assistant { blocks, .. }) = recorded else { panic!("{recorded:?}") };
+    assert_eq!(blocks, [ContentBlock::ToolUse { id: "srvtoolu_1".into(), name: "advisor".into(), input: json!({}) }]);
+    let Parsed::Delta(StreamDelta { change: DeltaChange::BlockStart { kind, .. }, .. }) = streamed else {
+        panic!("{streamed:?}")
+    };
+    assert_eq!(kind, BlockKind::ToolUse);
+}
+
+#[test]
+fn the_advisor_s_result_has_its_advice_only_when_it_can_be_read() {
+    let result = |content: Value| {
+        let block = json!({"type":"advisor_tool_result","tool_use_id":"srvtoolu_1","content":content});
+        let parsed = parse_line(&from_the_agent(&block));
+        let Parsed::Event(EventBody::Assistant { blocks, .. }) = parsed else { panic!("{parsed:?}") };
+        let [ContentBlock::ToolResult { tool_use_id, is_error, text, encrypted, .. }] = blocks.as_slice() else {
+            panic!("{blocks:?}")
+        };
+        assert_eq!(tool_use_id.as_str(), "srvtoolu_1");
+        (*is_error, text.clone(), *encrypted)
+    };
+    let said = |text: &str| (false, text.to_string(), false);
+    let failed = |text: &str| (true, text.to_string(), false);
+    // Made up. A real one is an opaque string only the API can read.
+    let encrypted = json!({"type":"advisor_redacted_result","encrypted_content":"bm90IHJlYWwgYWR2aWNl"});
+    let refused = json!({"type":"advisor_redacted_result","encrypted_content":"eA==","stop_reason":"refusal"});
+    let unavailable = json!({"type":"advisor_tool_result_error","error_code":"overloaded"});
+
+    assert_eq!(result(encrypted), (false, String::new(), true));
+    assert_eq!(result(json!({"type":"advisor_result","text":"Test it first."})), said("Test it first."));
+    assert_eq!(result(unavailable), failed("overloaded"));
+    assert_eq!(result(refused), failed("refusal"));
+    // Nothing says these are encrypted, so they aren't taken to be.
+    assert_eq!(result(json!({"type":"advisor_result_v2","text":"Newer."})), said("Newer."));
+    assert_eq!(result(Value::Null), said(""));
+}

@@ -18,6 +18,8 @@ const COMMAND_LINE: &str = "Run";
 /// What the fake agent says its subagent is for, and the description of the call the subagent makes.
 const AGENT_LINE: &str = "Look around";
 const SUBAGENT_CALL: &str = "List what's here";
+/// Asking the advisor, which the API runs rather than the agent.
+const ADVISOR_LINE: &str = "Ask the advisor";
 /// Longer than GPUI waits to show a tooltip, and to hide one the pointer can move onto.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 
@@ -150,4 +152,21 @@ fn top(ui: &mut Ui<'_>, id: &'static str) -> Pixels {
 fn scrolled_to(ui: &Ui<'_>) -> ListOffset {
     let scroller = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().clone());
     ui.cx.read_entity(&scroller, |s, _| s.logical_scroll_top())
+}
+
+#[gpui_kit::test]
+fn asking_the_advisor_opens_to_its_advice_or_says_only_the_agent_can_read_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_full_access(cx, &stack);
+    ui.input("advise; advise:Test it first.; advise-failed:overloaded; say:done");
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 3, "a line for each call, the failed one too");
+    assert!(ui.shown("encrypted/").is_empty(), "a call starts closed");
+
+    ui.click_labelled(ADVISOR_LINE, 0);
+    ui.click_labelled(ADVISOR_LINE, 1);
+
+    assert_eq!(ui.shown("encrypted/").len(), 1, "the reply only the agent can read");
+    assert_eq!(ui.shown("advice/").len(), 1, "and the one that can be read");
 }

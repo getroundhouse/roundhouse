@@ -56,6 +56,8 @@ pub(super) struct Answer {
     pub(super) change: Option<FileChange>,
     /// The images it sent back, such as a screenshot the agent read.
     pub(super) images: Vec<Carried>,
+    /// Whether what it sent back is encrypted, for the model alone, so `text` holds none of it.
+    pub(super) encrypted: bool,
 }
 
 impl Answer {
@@ -152,16 +154,16 @@ impl BlockAround {
 impl Answer {
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
-        let ContentBlock::ToolResult { is_error, text, change, images, .. } = block else { return None };
+        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, .. } = block else { return None };
         let images = attachments::carried(m, images);
-        Some(Answer { is_error: *is_error, text: text.clone(), change: change.clone(), images })
+        Some(Answer { is_error: *is_error, text: text.clone(), change: change.clone(), images, encrypted: *encrypted })
     }
 }
 
-/// The result of the call `id`, if it's in `event`.
+/// The result of the call `id`, if it's in `event`. A tool's result comes on the user's side, except one the API ran
+/// itself, such as the advisor, whose comes from the agent.
 fn answer_in(event: &SessionEvent, id: &str, m: &Model) -> Option<Answer> {
-    let EventBody::AgentUser { blocks, .. } = &event.body else { return None };
-    let result = blocks
+    let result = blocks_of(&event.body)
         .iter()
         .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id.as_str() == id))?;
     Answer::of(result, m)
@@ -187,7 +189,7 @@ mod tests {
     use protocol::event::{ContentBlock, EventBody};
 
     use super::{Around, block_key};
-    use crate::fixtures::{calls, calls_to, event, log, result, within};
+    use crate::fixtures::{calls, calls_to, event, from_the_agent, log, result, within};
     use crate::item_key::ItemKey;
     use crate::transcript::Model;
 
@@ -256,6 +258,18 @@ mod tests {
         m.folds.choose(ItemKey::Event(1, 0), true);
 
         assert_eq!(Around::read(&log, &m, 1, &agent).images().len(), 1, "opened, it gathers its subagent's");
+    }
+
+    #[test]
+    fn a_result_from_the_agent_is_its_call_s_result_too() {
+        let sent = from_the_agent(result("a"));
+        let log = log([event(1, calls_to("advisor", &["a"])), event(2, sent.clone())]);
+        let m = Model::default();
+
+        let call = Around::read(&log, &m, 1, &calls_to("advisor", &["a"]));
+
+        assert_eq!(call.blocks[0].answer.as_ref().map(|answer| answer.text.as_str()), Some("from a"));
+        assert!(Around::read(&log, &m, 2, &sent).blocks[0].with_call, "so it isn't drawn twice");
     }
 
     #[test]

@@ -221,6 +221,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open("Search the web"), Step::Open("Fetch")],
     },
     Screen {
+        name: "tool-advisor",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::advisor())),
+        steps: &[Step::Select(FOCUS), Step::Open("Ask the advisor")],
+    },
+    Screen {
         name: "mode-picker",
         spec: "chats.md",
         world: Some(conversation),

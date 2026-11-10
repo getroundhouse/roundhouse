@@ -197,6 +197,8 @@ pub enum ContentBlock {
         name: String,
         input: Value,
     },
+    /// What a call sent back. It comes in an `AgentUser` event, except for a tool the API runs itself, such as Claude's
+    /// advisor, whose result comes in an `Assistant` event.
     ToolResult {
         tool_use_id: ToolUseId,
         is_error: bool,
@@ -209,6 +211,9 @@ pub enum ContentBlock {
         /// What the tool changed in a file, when the agent says, as with Claude's edits and writes.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         change: Option<FileChange>,
+        /// What came back is encrypted, for the model alone, as the advisor's reply can be, so `text` holds none of it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        encrypted: bool,
     },
     Image {
         media_type: Option<String>,

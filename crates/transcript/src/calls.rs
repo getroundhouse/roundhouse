@@ -33,6 +33,9 @@ pub(crate) enum ToolCall<'a> {
     Agent(Agent<'a>),
     Fetch(Fetch<'a>),
     WebSearch(WebSearch<'a>),
+    /// Asking the advisor, a stronger model that reads the whole conversation and advises the agent. It takes no
+    /// input.
+    Advisor,
     Other(Other),
 }
 
@@ -47,6 +50,7 @@ impl<'a> ToolCall<'a> {
             "Glob" => Search::read(input, Looks::ForNames).map(ToolCall::Search),
             "WebFetch" => Fetch::read(input).map(ToolCall::Fetch),
             "WebSearch" => WebSearch::read(input).map(ToolCall::WebSearch),
+            ADVISOR => Some(ToolCall::Advisor),
             // Always drawn as one, so the subagent's work, which its rows leave to the call, shows somewhere.
             name if agent::hands_off(name) => Some(ToolCall::Agent(Agent::read(input))),
             _ => None,
@@ -58,6 +62,8 @@ impl<'a> ToolCall<'a> {
 
 /// The tool that asks to leave plan mode, with the plan.
 pub(crate) const PLAN: &str = "ExitPlanMode";
+/// The advisor, which the API runs rather than the agent.
+const ADVISOR: &str = "advisor";
 /// Inputs that usually say what a call is about, in the order they're looked for.
 const MAIN_INPUTS: &[&str] = &["command", "file_path", "path", "pattern", "url", "query", "prompt"];
 
@@ -135,5 +141,11 @@ mod tests {
 
         assert!(matches!(ToolCall::read("Bash", &input), ToolCall::Command(_)));
         assert!(matches!(ToolCall::read("mcp__shell__run", &input), ToolCall::Other(_)));
+    }
+
+    #[test]
+    fn the_advisor_is_known_by_its_tool() {
+        assert!(matches!(ToolCall::read("advisor", &json!({})), ToolCall::Advisor));
+        assert!(matches!(ToolCall::read("mcp__team__advisor", &json!({})), ToolCall::Other(_)));
     }
 }

@@ -32,6 +32,9 @@
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.
+//!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.
+//!   advise:TEXT     Same, with TEXT as a reply that can be read.
+//!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
 //!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
@@ -59,6 +62,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 
+mod advisor;
 mod background;
 mod read;
 mod subagent;
