@@ -2,13 +2,11 @@
 
 #![cfg(test)]
 
-use std::path::PathBuf;
-
-use desktop::workspace_pane::Busy;
+use desktop::busy::Busy;
 use gpui_kit::{ElementId, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Stack, Ui, commit_settings, home_row, pull_request};
+use crate::support::{Held, Stack, Ui, home_row, pull_request};
 
 /// More than the sidebar has room for in the window.
 const WORKSPACES: usize = 40;
@@ -24,31 +22,6 @@ fn archive_button(id: &WorkspaceId) -> ElementId {
 fn archived(ui: &Ui, id: &WorkspaceId) -> bool {
     let listed = ui.view().workspaces.iter().any(|w| &w.id == id && w.status == WorkspaceStatus::Archived);
     listed && ui.view().busy == Busy::Free
-}
-
-/// An archive script that holds archiving open until the test lets it go, and counts how often it has run.
-struct HeldArchive {
-    released: PathBuf,
-    runs: PathBuf,
-}
-
-impl HeldArchive {
-    /// Commits the script, which every workspace made from now on runs.
-    fn commit(stack: &Stack) -> Self {
-        let (released, runs) = (stack.repo().with_file_name("released"), stack.repo().with_file_name("runs"));
-        let script =
-            format!("echo ran >> {}; until [ -f {} ]; do sleep 0.01; done", runs.display(), released.display());
-        commit_settings(stack, &format!("[scripts]\narchive = \"{script}\"\n"));
-        Self { released, runs }
-    }
-
-    fn release(&self) {
-        std::fs::write(&self.released, "").unwrap();
-    }
-
-    fn runs(&self) -> usize {
-        std::fs::read_to_string(&self.runs).map_or(0, |runs| runs.lines().count())
-    }
 }
 
 /// Waits until no call the app started is under way, then for the app to take their replies, so whatever a call
@@ -85,7 +58,7 @@ fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &
 #[gpui_kit::test]
 fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let held = HeldArchive::commit(&stack);
+    let held = Held::archive(&stack);
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let (going, showing) = (ui.new_workspace(), ui.new_workspace());
     ui.hover("send");
@@ -100,6 +73,9 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
     ui.wait("it to start archiving", |_| held.runs() == 1);
     // Held open, so nothing that comes once it's archived has moved the selection yet.
     assert_eq!(ui.view().selected.as_ref(), Some(&showing), "pressing it doesn't also open the workspace");
+    ui.hover("send");
+    assert!(ui.shows_label(&format!("doing-{going}"), "Archiving…"), "its row says so, wherever the pointer is");
+    assert!(!ui.has(SharedString::from(format!("doing-{showing}"))), "the workspace showing isn't going");
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
     assert!(!ui.has(row(&going)), "it leaves the list");
@@ -143,15 +119,18 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     let earlier = ui.new_workspace();
     stack.client().workspace_archive(&earlier, false).unwrap();
     ui.wait("the earlier one to be archived", |ui| archived(ui, &earlier));
-    let held = HeldArchive::commit(&stack);
+    let held = Held::archive(&stack);
+    let other = ui.new_workspace();
     let id = ui.new_workspace();
     ui.wait("the pull request's Archive", |ui| ui.shows_label("pull-request-action", "Archive"));
 
     ui.press("cmd-shift-a");
     ui.wait("it to start archiving", |_| held.runs() == 1);
     assert!(ui.disabled("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
-    ui.hover(row(&id));
-    assert!(ui.disabled(archive_button(&id)), "nor can the row's");
+    assert!(ui.shows_label("pull-request-action", "Archiving…"), "and says why");
+    assert!(ui.shows_label(&format!("doing-{id}"), "Archiving…"), "as its row does, in place of its button");
+    ui.hover(row(&other));
+    assert!(ui.disabled(archive_button(&other)), "another row's can't be pressed either");
     ui.press("cmd-shift-a");
     // Only Home lists an archived workspace, and pressing its row there brings it back.
     ui.click("home");

@@ -37,15 +37,16 @@ pub(crate) fn serve(socket: &Path, world: World) {
     });
 }
 
-/// Answers each request in turn. A subscription's events follow its reply straight away, and nothing comes
-/// later, because nothing here changes.
+/// Answers each request in turn, but for one left unanswered. A subscription's events follow its reply straight
+/// away, and nothing comes later, because nothing here changes.
 fn serve_connection(world: &World, stream: UnixStream) {
     let mut writer = stream.try_clone().unwrap();
     for line in BufReader::new(stream).split(b'\n') {
         let Ok(line) = line else { return };
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
         let (outcome, then) = match answer(world, request) {
-            Ok((response, then)) => (ReplyOutcome::Response(response), then),
+            Ok(Outcome::Reply(response, then)) => (ReplyOutcome::Response(response), then),
+            Ok(Outcome::Never) => continue,
             Err(error) => (ReplyOutcome::Error(error), Vec::new()),
         };
         for frame in std::iter::once(HubFrame::Reply { id, outcome }).chain(then) {
@@ -56,14 +57,21 @@ fn serve_connection(world: &World, stream: UnixStream) {
     }
 }
 
-/// The reply, and any frames that go after it.
-type Answer = Result<(ClientResponse, Vec<HubFrame>), ApiError>;
+type Answer = Result<Outcome, ApiError>;
+
+#[expect(clippy::large_enum_variant, reason = "one is made for each request and sent straight away, never kept")]
+enum Outcome {
+    /// The reply, and any frames that go after it.
+    Reply(ClientResponse, Vec<HubFrame>),
+    /// Left unanswered, so the app stays waiting, as for a screen that shows something under way.
+    Never,
+}
 
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 fn answer(world: &World, request: ClientRequest) -> Answer {
     use ClientRequest as R;
     use ClientResponse as C;
-    let reply = |response| Ok((response, Vec::new()));
+    let reply = |response| Ok(Outcome::Reply(response, Vec::new()));
     match request {
         R::Hello { .. } => {
             reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: version(world).to_string() })
@@ -115,7 +123,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::HubShutdown
         | R::RepoAdd { .. }
         | R::WorkspaceCreate { .. }
-        | R::WorkspaceArchive { .. }
         | R::WorkspaceRestore { .. }
         | R::WorkspaceRename { .. }
         | R::WorkspaceRerunSetup { .. }
@@ -136,6 +143,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionMarkRead { .. }
         | R::SessionMarkUnread { .. }
         | R::SessionRename { .. } => Err(read_only("change anything")),
+        // So a screen can show a workspace on its way.
+        R::WorkspaceArchive { .. } => Ok(Outcome::Never),
         R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
     }
 }
@@ -145,7 +154,7 @@ fn subscribe(world: &World, id: &SessionId, from_seq: u64, subscription_id: u64)
     world.session(id)?;
     let events = world.events_from(id, from_seq).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
     let tail = HubFrame::Tail { subscription_id, tail: world.tails.get(id).cloned().unwrap_or_default() };
-    Ok((ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
+    Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }
 
 fn version(world: &World) -> &'static str {

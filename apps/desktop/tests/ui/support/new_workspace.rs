@@ -2,8 +2,8 @@
 
 #![cfg(test)]
 
+use desktop::busy::Busy;
 use desktop::new_workspace::NewWorkspaceDialog;
-use desktop::workspace_pane::Busy;
 use gpui_kit::{AppContext as _, Entity, SharedString};
 use protocol::model::WorkspaceId;
 

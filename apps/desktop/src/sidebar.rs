@@ -20,6 +20,8 @@ mod footer;
 mod nav;
 mod row;
 
+pub(crate) use row::doing;
+
 /// Its right edge included. As wide as the sidebar `docs/inspiration.md` measures, so the layout feels familiar.
 /// Settings stands in for the sidebar at the same width.
 pub(crate) const WIDTH: f32 = 290.0;
@@ -80,7 +82,7 @@ fn lines(app: &AppView) -> Vec<Line> {
         lines.push(Line::Repo(r));
         let listed = app.workspaces.iter().enumerate().filter(|(_, w)| w.repo_id == repo.id && lists(w));
         lines.extend(listed.map(|(w, _)| Line::Workspace(w)));
-        if app.creating_in.as_ref() == Some(&repo.id) {
+        if app.busy.creating_in() == Some(&repo.id) {
             lines.push(Line::Creating);
         }
     }
@@ -162,7 +164,7 @@ pub(super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
 fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let repo_id = repo.id.clone();
-    let creating = app.creating_in.as_ref() == Some(&repo.id);
+    let creating = app.busy.creating_in() == Some(&repo.id);
     h_flex()
         .w_full()
         .h(REPO_HEIGHT)

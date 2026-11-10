@@ -6,14 +6,14 @@
 
 use std::sync::Arc;
 
+use desktop::busy::Busy;
 use desktop::pull_request::{self, Lookup};
-use desktop::workspace_pane::Busy;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
     Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
     Styled as _, Window, div, px, size,
 };
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
+use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing, WorkspaceId};
 
 use super::capture::Picture;
 use super::headless;
@@ -54,8 +54,8 @@ fn with(change: impl FnOnce(&mut PullRequest)) -> Lookup {
 }
 
 /// In the order the app looks for them, after the two with no pull request to show, and then the one it can't tell.
-/// Merged shows a second time while a workspace is being archived, which greys out its Archive. Every other state is
-/// drawn with nothing under way.
+/// Merged shows twice more: while another workspace is being archived, which greys out its Archive, and while this
+/// one is, when it says Archiving…. Every other state is drawn with nothing under way.
 fn states() -> Vec<(Lookup, Busy)> {
     let merged = || with(|pr| pr.state = PrState::Merged);
     let free = [
@@ -82,7 +82,8 @@ fn states() -> Vec<(Lookup, Busy)> {
         with(|pr| pr.merge_state = MergeState::Unknown),
     ];
     let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free)).collect();
-    states.insert(3, (merged(), Busy::Changing));
+    states.insert(3, (merged(), Busy::Archiving(WorkspaceId::from("another"))));
+    states.insert(4, (merged(), Busy::Archiving(WorkspaceId::from(THIS))));
     states
 }
 
@@ -127,6 +128,9 @@ pub(crate) fn missing() -> Vec<&'static str> {
     KINDS.iter().copied().filter(|k| !drawn.contains(k)).collect()
 }
 
+/// The workspace every bar is for.
+const THIS: &str = "this";
+
 struct Sheet {
     states: Vec<(Lookup, Busy)>,
 }
@@ -135,9 +139,10 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (pane, sidebar) = (theme.background, theme.sidebar);
+        let workspace = WorkspaceId::from(THIS);
         let rows = self.states.iter().enumerate().map(|(index, (lookup, busy))| {
-            let bar = pull_request::bar(lookup, *busy, |_, _, _| {}, cx);
-            let controls = pull_request::controls(lookup, *busy, |_, _, _| {}, cx);
+            let bar = pull_request::bar(lookup, busy, &workspace, |_, _, _| {}, cx);
+            let controls = pull_request::controls(lookup, busy, &workspace, |_, _, _| {}, cx);
             h_flex()
                 .id(ElementId::NamedInteger("state".into(), index as u64))
                 .gap(px(MARGIN))

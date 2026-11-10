@@ -5,7 +5,11 @@
 use gpui_kit::{SharedString, TestAppContext};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Stack, Ui, home_row};
+use crate::support::{Held, Stack, Ui, home_row};
+
+fn has(ui: &Ui, id: &WorkspaceId, status: WorkspaceStatus) -> bool {
+    ui.view().workspaces.iter().any(|w| &w.id == id && w.status == status)
+}
 
 /// A window with a repository and two workspaces, the second showing, and Home opened over it. Returns them.
 fn open_home<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, WorkspaceId, WorkspaceId) {
@@ -57,15 +61,35 @@ fn the_workspaces_keys_do_nothing_while_home_hides_it(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn archiving_from_home_leaves_home_showing_with_the_keys(cx: &mut TestAppContext) {
     let stack = Stack::new();
+    let held = Held::archive(&stack);
     let (mut ui, _, second) = open_home(cx, &stack);
-    let archived =
-        |ui: &Ui| ui.view().workspaces.iter().any(|w| w.id == second && w.status == WorkspaceStatus::Archived);
 
     // The one selected, so the selection moves to another under Home once it's archived.
     ui.click(SharedString::from(format!("home-archive-{second}")));
 
-    ui.wait("it to be archived", |ui| archived(ui) && !ui.has(home_row(&second)));
+    ui.wait("it to start archiving", |_| held.runs() == 1);
+    assert!(ui.shows_label(&format!("home-doing-{second}"), "Archiving…"), "its row says so in place of the button");
+    held.release();
+    ui.wait("it to be archived", |ui| has(ui, &second, WorkspaceStatus::Archived) && !ui.has(home_row(&second)));
     assert!(ui.has("home-page"), "the button doesn't also show the workspace, as its row would");
     ui.input("a name no workspace has");
     ui.wait("the search to still have the keys", |ui| ui.has("home-nothing"));
+}
+
+#[gpui_kit::test]
+fn an_archived_row_says_its_being_restored_until_it_is(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, first, _) = open_home(cx, &stack);
+    stack.client().workspace_archive(&first, false).unwrap();
+    ui.wait("it to be archived", |ui| has(ui, &first, WorkspaceStatus::Archived) && ui.view().busy.is_free());
+    let held = Held::checkout(&stack);
+    ui.click("home-archived");
+    ui.click_menu_item("Showing all");
+
+    ui.click(SharedString::from(format!("home-restore-{first}")));
+
+    ui.wait("it to start restoring", |_| held.runs() == 1);
+    assert!(ui.shows_label(&format!("home-doing-{first}"), "Restoring…"), "in place of the button");
+    held.release();
+    ui.wait("it to be restored", |ui| has(ui, &first, WorkspaceStatus::Ready) && ui.view().busy.is_free());
 }
