@@ -54,9 +54,10 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
                 .w_full()
                 .gap(MARK_GAP)
                 .text_sm()
-                .when(selected || unread, |d| d.font_weight(FontWeight::MEDIUM))
-                // Rows with nothing to read recede, so those with a reply stand out. The selected one is what's showing.
-                .when(!(selected || unread), |d| d.text_color(muted))
+                .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
+                // Rows with nothing to read recede, so those with a reply stand out. Selecting a row only changes its
+                // background: font smoothing thickens brighter text, so a name that brightened would look heavier too.
+                .when(!unread, |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                 .when_some(waiting, |d, waiting| d.child(doing(format!("doing-{}", workspace.id), waiting)))

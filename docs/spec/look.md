@@ -10,7 +10,8 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
-- **Emphasis is medium weight, never bold.** Bold shouts in a dense layout.
+- **Emphasis is medium weight, never bold,** for what should stand out from what's around it, such as the title that names what a card or section is about. Bold shouts in a dense layout. Medium is drawn as regular, since the text system gives a request for medium the system font's regular face. *Not built.*
+- **In a list of one kind of thing, such as the workspaces in the sidebar or the chat tabs, a name's colour and weight change only for state that needs you,** such as a reply you haven't read. Which one is selected or open shows in its background or underline instead, and its name looks as it does when it isn't. Names are read side by side, so any change to one reads as news, and macOS's font smoothing thickens brighter text, so a name that brightened would look heavier too.
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
 - **Code is Menlo at 12px,** set once in the theme.
 

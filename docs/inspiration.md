@@ -1,6 +1,6 @@
 # Inspiration
 
-What we've learned from Conductor, the app that inspired this one, from its docs and from screenshots of it. It's a source of ideas, not a spec, and no code or assets are copied. New users can no longer sign up or download it, so the installed copy is the only way left to try it.
+What we've learned from Conductor, the app that inspired this one, from its docs, screenshots of it and its installed app. It's a source of ideas, not a spec, and no code or assets are copied. New users can no longer sign up or download it, so the installed copy is the only way left to try it.
 
 ## Product model
 
@@ -22,6 +22,14 @@ Measured from screenshots of its chat, on a Retina display:
 - A prompt is a bubble at the right of the chat, only as wide as its text, with no edge and small corners, about 6px. A one-line prompt is about 44px tall, with about 16px of room beside its text.
 - A prompt has more room above it than below, about 40px against 20px, so each prompt starts a new stretch of the conversation.
 - In a screenshot of a window 1728px wide, the sidebar on the left is 290px wide and the one of changes on the right 432.5px, each counting its 1px edge against the chat.
+
+## How text looks
+
+From the stylesheets in the installed app, which is a web view:
+
+- **Font smoothing is off for every piece of text,** with `-webkit-font-smoothing: antialiased` on the page. So text is drawn the same weight whatever its colour. With smoothing on, macOS thickens brighter text more, so a name that turns white looks heavier.
+- **Selecting a sidebar row changes only its background.** A name with nothing unread stays muted, white at 60%, whether or not its row is selected. Only a name with an unread reply turns brighter, white at 90%, and heavier, in medium or semibold, which is a setting.
+- **The font is the system's, SF Pro, and a name with nothing unread is at weight 450,** between regular and medium.
 
 ## Sources
 
