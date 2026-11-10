@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, Rev, Seq, Session};
+use protocol::model::{AgentSessionId, Rev, Seq, Session, ToolUseId};
 use rusqlite::{Connection, Row};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -30,6 +30,7 @@ mod records;
 mod repos;
 mod schema;
 mod sessions;
+mod subagents;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;
@@ -69,6 +70,8 @@ pub struct Appended {
     pub dequeued: bool,
     /// The prompts the agent has yet to take, oldest first, if the event changed them.
     pub untaken: Option<Vec<Seq>>,
+    /// The subagents whose records the event changed.
+    pub subagents: Vec<ToolUseId>,
 }
 
 pub fn now_ms() -> i64 {

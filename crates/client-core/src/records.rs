@@ -114,7 +114,8 @@ impl HubRecords {
             HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
             HubNotice::Account(account) => self.apply_record(Record::Account(account)),
             HubNotice::Removed { record, rev } => self.remove(&record, rev),
-            HubNotice::Resync | HubNotice::Unknown => false,
+            // A session's subagents aren't among every record, so a view showing the session keeps them.
+            HubNotice::Subagent(_) | HubNotice::Resync | HubNotice::Unknown => false,
         }
     }
 

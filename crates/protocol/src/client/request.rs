@@ -179,6 +179,12 @@ pub enum ClientRequest {
         from_seq: Seq,
         subscription_id: u64,
     },
+    /// The records of the session's subagents, which the feed then says change, as `RecordsList` lists every other
+    /// record. They're listed by session rather than with the rest, since each holds what it was asked and its report,
+    /// in full. A hub older than this refuses it as unsupported.
+    SessionSubagents {
+        id: SessionId,
+    },
     /// Reads the agent's own events, or those of the subagent `subagent` started, from `from_place` on, as
     /// `SessionRead` reads every event. A hub older than this refuses it as unsupported, and a client reads by `seq`.
     SessionReadPlaces {

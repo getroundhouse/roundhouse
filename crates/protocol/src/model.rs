@@ -14,6 +14,7 @@ mod pull_request;
 mod queue;
 mod session;
 mod settings;
+mod subagent;
 mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
@@ -29,6 +30,7 @@ pub use pull_request::{
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
 pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
+pub use subagent::{Call, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
