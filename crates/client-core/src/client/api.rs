@@ -6,7 +6,7 @@ use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    GitStatus, Place, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, ToolUseId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -206,24 +206,62 @@ impl Client {
     }
 
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
-        // Registered before the request goes out, because events can arrive before the reply.
-        let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (items_tx, items) = subscription_channel();
-        self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        let reply = self.expect_ok(ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id });
-        if let Err(e) = reply {
-            self.inner.subscriptions.lock().remove(&subscription_id);
-            return Err(e);
-        }
-        Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
+        self.subscribe(|subscription_id| ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
+    }
+
+    /// Returns the agent's own events, or those of the subagent `subagent` started, from `from_place` on, and the place
+    /// of the newest of them. A hub from before places refuses it, which [`super::ClientError::is_unsupported`] says.
+    /// See [`ClientRequest::SessionReadPlaces`].
+    pub fn session_read_places(
+        &self,
+        id: &SessionId,
+        subagent: Option<&ToolUseId>,
+        from_place: Place,
+        limit: u32,
+    ) -> Result<(Vec<SessionEvent>, Place)> {
+        let request = ClientRequest::SessionReadPlaces {
+            id: id.clone(),
+            subagent: subagent.cloned(),
+            from_place,
+            limit,
+            max_bytes: None,
+            include_raw: false,
+        };
+        let reply = self.call(request)?;
+        let ClientResponse::PlacedEvents { events, last_place } = reply else {
+            return unexpected(&reply);
+        };
+        Ok((events, last_place))
+    }
+
+    /// Follows the agent's own events, or one subagent's, by place. See [`ClientRequest::SessionSubscribePlaces`].
+    pub fn session_subscribe_places(
+        &self,
+        id: &SessionId,
+        subagent: Option<&ToolUseId>,
+        from_place: Place,
+    ) -> Result<Subscription> {
+        let subagent = subagent.cloned();
+        self.subscribe(|subscription_id| ClientRequest::SessionSubscribePlaces {
+            id: id.clone(),
+            subagent,
+            from_place,
+            subscription_id,
+        })
     }
 
     /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
     pub fn feed_subscribe(&self) -> Result<Subscription> {
+        self.subscribe(|subscription_id| ClientRequest::FeedSubscribe { subscription_id })
+    }
+
+    /// Sends the subscription `request` makes for an ID of its own.
+    fn subscribe(&self, request: impl FnOnce(u64) -> ClientRequest) -> Result<Subscription> {
+        // Registered before the request goes out, because items can arrive before the reply.
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (items_tx, items) = subscription_channel();
         self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        if let Err(e) = self.expect_ok(ClientRequest::FeedSubscribe { subscription_id }) {
+        if let Err(e) = self.expect_ok(request(subscription_id)) {
             self.inner.subscriptions.lock().remove(&subscription_id);
             return Err(e);
         }

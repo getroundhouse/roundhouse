@@ -150,6 +150,13 @@ impl Tail {
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
+
+    /// What the agent itself is writing, or the subagent `subagent` started.
+    #[must_use]
+    pub fn of(&self, subagent: Option<&ToolUseId>) -> Tail {
+        let messages = self.messages.iter().filter(|message| message.parent_tool_use_id.as_ref() == subagent);
+        Tail { messages: messages.cloned().collect() }
+    }
 }
 
 fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut TailBlock {

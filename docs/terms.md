@@ -80,7 +80,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Stamped build | A build stamped with both a build version and a build number, as an install or a package does. Any other build says `-dev` whatever its code | `protocol::StampedBuild`, `protocol::STAMPED_BUILD` |
 | Checkout | A copy of this repository that the app is built from, such as one in a workspace. A build that isn't stamped names its checkout in the sidebar and the window's title, with the note it was opened with, so copies open at once can be told apart | `desktop::checkout::Checkout`, `--note` |
 | Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory | `Paths::hub_copy`, `Daemon` |
-| Subscription | A client following one session's log, from a given seq | `subscription_id` |
+| Subscription | A client following one session's log, from a given seq, or the agent's own events or one subagent's in it, from a given place | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
 | Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `DiffComment` |

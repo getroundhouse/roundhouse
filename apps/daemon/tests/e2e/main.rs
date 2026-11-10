@@ -23,6 +23,7 @@ mod queueing;
 mod reading;
 mod setup;
 mod steering;
+mod subagents;
 #[cfg(test)]
 mod support;
 mod titles;

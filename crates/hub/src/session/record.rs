@@ -3,6 +3,7 @@
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{AgentTask, EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Session, SessionStatus};
+use protocol::tail::Tail;
 use tracing::error;
 
 use super::status::{next_status, open_after, turn_edge};
@@ -108,11 +109,14 @@ fn apply(
     tasks: Vec<AgentTask>,
     held: Option<bool>,
 ) -> bool {
-    let (seq, body) = (appended.event.seq, &appended.event.body);
+    let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
     let closed = state.closed_at_ms.is_some();
     let was_ready = state.queue.ready(state.status, closed);
     state.last_seq = seq;
+    let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
+    let others_before = others(&state.tail);
     state.tail.on_event(origin.run(), body);
+    let ended_others = others(&state.tail) < others_before;
     match body {
         EventBody::ApprovalRequested { approval_id, .. } => {
             state.pending_approvals.insert(approval_id.clone(), origin.run());
@@ -148,6 +152,6 @@ fn apply(
     if let Some(held) = held {
         state.queue.hold(held);
     }
-    publish(state, LiveItem::Appended(seq));
+    publish(state, LiveItem::Appended { seq, subagent: subagent.clone(), ended_others });
     !was_ready && state.queue.ready(state.status, closed)
 }

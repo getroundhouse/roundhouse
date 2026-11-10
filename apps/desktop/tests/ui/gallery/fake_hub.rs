@@ -145,7 +145,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionRename { .. } => Err(read_only("change anything")),
         // So a screen can show a workspace on its way.
         R::WorkspaceArchive { .. } => Ok(Outcome::Never),
-        R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
+        // As a hub from before them, since nothing shown reads by place yet.
+        R::SessionReadPlaces { .. } | R::SessionSubscribePlaces { .. } | R::Unknown => {
+            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
+        }
     }
 }
 

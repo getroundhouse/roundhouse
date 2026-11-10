@@ -14,7 +14,7 @@ use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session, SessionId,
-    SessionOptions, SessionStatus, WorkspaceId,
+    SessionOptions, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -87,8 +87,14 @@ pub(crate) enum Command {
 
 #[derive(Clone, Debug)]
 pub(crate) enum LiveItem {
-    /// The log now reaches this `seq`.
-    Appended(Seq),
+    /// The log now reaches `seq`, with an event from the subagent `subagent` started, or the agent's own.
+    Appended {
+        seq: Seq,
+        subagent: Option<ToolUseId>,
+        /// It ended what another agent or subagent was writing, as the end of a turn ends a subagent's message, which
+        /// a subscriber following only that one doesn't see.
+        ended_others: bool,
+    },
     Delta(StreamDelta),
 }
 

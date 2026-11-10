@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, GitDiff, GitStatus, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError, Workspace,
+    DiffComment, GitDiff, GitStatus, Place, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, TitleError,
+    Workspace,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -58,6 +59,12 @@ pub enum ClientResponse {
         events: Vec<SessionEvent>,
         /// The session's newest event, so a reader knows how far the log goes.
         last_seq: Seq,
+    },
+    /// The agent's own events, or one subagent's.
+    PlacedEvents {
+        events: Vec<SessionEvent>,
+        /// The place of the newest of them, so a reader knows how far they go. 0 when there are none.
+        last_place: Place,
     },
     PromptRecorded {
         seq: Seq,

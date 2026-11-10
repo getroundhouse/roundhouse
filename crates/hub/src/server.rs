@@ -10,7 +10,7 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
 };
 use protocol::frame;
-use protocol::model::{Seq, SessionId};
+use protocol::model::{Place, SessionId};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{broadcast, mpsc};
@@ -18,7 +18,9 @@ use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
 use crate::hub::Hub;
-use crate::session::{LiveItem, LiveSession};
+use pump::{Following, pump};
+
+mod pump;
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const MAX_READ_EVENTS: u32 = 2000;
@@ -155,6 +157,23 @@ fn add_subscription(
     Ok(())
 }
 
+/// Starts feeding a subscription to a session's log.
+async fn subscribe(
+    hub: &Arc<Hub>,
+    connection: &Connection,
+    id: SessionId,
+    subscription_id: u64,
+    following: Following,
+) -> Result<ClientResponse, ApiError> {
+    let session = hub.live_session(&id).await?;
+    add_subscription(connection, subscription_id, || {
+        let live = session.subscribe();
+        let frames = connection.frames.clone();
+        tokio::spawn(pump(hub.clone(), session.clone(), id, subscription_id, following, live, frames)).abort_handle()
+    })?;
+    Ok(ClientResponse::Ok)
+}
+
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 async fn handle(
     hub: &Arc<Hub>,
@@ -214,14 +233,14 @@ async fn handle(
             hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => {
-            let session = hub.live_session(&id).await?;
-            add_subscription(connection, subscription_id, || {
-                let live = session.subscribe();
-                let frames = connection.frames.clone();
-                tokio::spawn(pump(hub.clone(), session.clone(), id, subscription_id, from_seq, live, frames))
-                    .abort_handle()
-            })?;
-            C::Ok
+            subscribe(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(1) }).await?
+        }
+        R::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw } => {
+            hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?
+        }
+        R::SessionSubscribePlaces { id, subagent, from_place, subscription_id } => {
+            let next = from_place.max(Place::new(1));
+            subscribe(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?
         }
         R::FeedSubscribe { subscription_id } => {
             add_subscription(connection, subscription_id, || {
@@ -274,73 +293,4 @@ async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u6
             return;
         }
     }
-}
-
-/// Feeds one subscription. The log is always the source of durable events: live items only say
-/// that the log has moved, so a slow client can fall behind and catch up without losing anything.
-async fn pump(
-    hub: Arc<Hub>,
-    session: Arc<LiveSession>,
-    id: SessionId,
-    subscription_id: u64,
-    from_seq: Seq,
-    mut live: broadcast::Receiver<crate::session::Live>,
-    frames: mpsc::Sender<HubFrame>,
-) {
-    let mut cursor = from_seq.max(1);
-    'resync: loop {
-        let snapshot = session.snapshot();
-        if send_log_through(&hub, &id, subscription_id, &mut cursor, snapshot.last_seq, &frames).await.is_err() {
-            return;
-        }
-        if frames.send(HubFrame::Tail { subscription_id, tail: snapshot.tail }).await.is_err() {
-            return;
-        }
-        loop {
-            let item = match live.recv().await {
-                Ok(item) => item,
-                // Missed live items. The log has every durable event, and a new snapshot replaces
-                // the tail, so this loses nothing.
-                Err(broadcast::error::RecvError::Lagged(_)) => continue 'resync,
-                Err(broadcast::error::RecvError::Closed) => return,
-            };
-            if item.version <= snapshot.version {
-                continue;
-            }
-            let sent = match item.item {
-                LiveItem::Appended(seq) => {
-                    send_log_through(&hub, &id, subscription_id, &mut cursor, seq, &frames).await
-                }
-                LiveItem::Delta(delta) => frames.send(HubFrame::Delta { subscription_id, delta }).await.map_err(|_| ()),
-            };
-            if sent.is_err() {
-                return;
-            }
-        }
-    }
-}
-
-async fn send_log_through(
-    hub: &Arc<Hub>,
-    id: &SessionId,
-    subscription_id: u64,
-    cursor: &mut Seq,
-    through: Seq,
-    frames: &mpsc::Sender<HubFrame>,
-) -> Result<(), ()> {
-    while *cursor <= through {
-        // Stopping at `through` matters. An event read early would overtake the live deltas that came
-        // before it, and those would then land on a tail the event had already cleared.
-        let page = hub.read_page(id.clone(), *cursor, through).await.map_err(|e| {
-            warn!(session = %id, "reading the log for a subscriber failed: {e}");
-        })?;
-        if page.is_empty() {
-            return Ok(());
-        }
-        for event in page {
-            *cursor = event.seq + 1;
-            frames.send(HubFrame::Event { subscription_id, event }).await.map_err(|_| ())?;
-        }
-    }
-    Ok(())
 }

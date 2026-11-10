@@ -93,6 +93,15 @@ fn change_session(
     Ok(())
 }
 
+/// Which events a read by place takes: the agent's own, or those of the subagent `subagent` started, from `from` on,
+/// and none recorded after `through`, if it's set.
+#[derive(Clone, Copy, Debug)]
+pub struct Places<'a> {
+    pub subagent: Option<&'a ToolUseId>,
+    pub from: Place,
+    pub through: Option<Seq>,
+}
+
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
     EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled }
@@ -186,18 +195,38 @@ impl Store {
         let mut statement = conn.prepare_cached(&format!(
             "SELECT {EVENT_COLUMNS}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
         ))?;
-        let mut rows = statement.query(params![session_id.as_str(), from_seq.cast_signed(), limit])?;
-        let mut events = Vec::new();
-        let mut bytes = 0u64;
-        while let Some(row) = rows.next()? {
-            let (event, size) = event_in(session_id, row)?;
-            events.push(event);
-            bytes += size;
-            if bytes >= max_bytes {
-                break;
-            }
-        }
-        Ok(events)
+        let rows = statement.query(params![session_id.as_str(), from_seq.cast_signed(), limit])?;
+        events_in(session_id, rows, max_bytes)
+    }
+
+    /// The events `places` names, with the place of the newest from the same agent or subagent, recorded after
+    /// `through` or not. Always returns at least one event if any exist there, however large, as
+    /// [`Store::read_events`] does.
+    pub fn read_places(
+        &self,
+        session_id: &SessionId,
+        places: Places<'_>,
+        limit: u32,
+        max_bytes: u64,
+        include_raw: bool,
+    ) -> Result<(Vec<SessionEvent>, Place), StoreError> {
+        let Places { subagent, from, through } = places;
+        let conn = lock(&self.reader);
+        let raw_column = if include_raw { "raw" } else { "NULL" };
+        let subagent = subagent.map(ToolUseId::as_str);
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {EVENT_COLUMNS}, {raw_column} FROM events
+             WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?"
+        ))?;
+        let through = through.map_or(i64::MAX, Seq::cast_signed);
+        let rows = statement.query(params![session_id.as_str(), subagent, from.get().cast_signed(), through, limit])?;
+        let events = events_in(session_id, rows, max_bytes)?;
+        let last: i64 = conn.query_row(
+            "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",
+            params![session_id.as_str(), subagent],
+            |row| row.get(0),
+        )?;
+        Ok((events, Place::new(last.cast_unsigned())))
     }
 
     /// The next run's ID. It's taken before the launch and never handed out again, so a run is
@@ -259,6 +288,26 @@ fn recorded_with(
     let mut rows = statement.query(params![session_id.as_str(), client_msg_id.as_str()])?;
     let Some(row) = rows.next()? else { return Ok(None) };
     Ok(Some(event_in(session_id, row)?.0))
+}
+
+/// The events in `rows`, which each have [`EVENT_COLUMNS`] then the raw line, until they take `max_bytes`, and at
+/// least one if there are any.
+fn events_in(
+    session_id: &SessionId,
+    mut rows: rusqlite::Rows<'_>,
+    max_bytes: u64,
+) -> Result<Vec<SessionEvent>, StoreError> {
+    let mut events = Vec::new();
+    let mut bytes = 0u64;
+    while let Some(row) = rows.next()? {
+        let (event, size) = event_in(session_id, row)?;
+        events.push(event);
+        bytes += size;
+        if bytes >= max_bytes {
+            break;
+        }
+    }
+    Ok(events)
 }
 
 /// What [`event_in`] reads, before the raw line or NULL.
