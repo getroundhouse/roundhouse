@@ -101,6 +101,13 @@ pub enum EventBody {
         parent_tool_use_id: Option<ToolUseId>,
         blocks: Vec<ContentBlock>,
     },
+    /// The agent went on without a result for the call `tool_use_id`: whoever made it began their next message with
+    /// something else. Nothing the agent sends says this, so its adapter does, from what came next, and it knows what
+    /// that means for its agent. A result recorded after this stands, and the call was answered after all. A call its
+    /// turn ended on gets none of these, since the turn's end says as much.
+    ToolCallDropped {
+        tool_use_id: ToolUseId,
+    },
     TurnEnded {
         outcome: TurnOutcome,
         result: Option<String>,
@@ -169,6 +176,7 @@ impl EventBody {
             EventBody::AgentLimits { .. } => "agent_limits",
             EventBody::Assistant { .. } => "assistant",
             EventBody::AgentUser { .. } => "agent_user",
+            EventBody::ToolCallDropped { .. } => "tool_call_dropped",
             EventBody::TurnEnded { .. } => "turn_ended",
             EventBody::ApprovalRequested { .. } => "approval_requested",
             EventBody::ApprovalResolved { .. } => "approval_resolved",

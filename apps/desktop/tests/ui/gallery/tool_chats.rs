@@ -106,7 +106,8 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
     ]
 }
 
-/// Asking the advisor: a reply encrypted for the model alone, one that can be read, and a call that failed.
+/// Asking the advisor: a reply encrypted for the model alone, a call the agent went on without and made again, whose
+/// reply can be read, and a call that failed.
 pub(crate) fn advisor() -> Vec<EventBody> {
     let reply = "`Aspect::may_pass` now says whether a train may pass, with a test for each aspect.";
     let advice = "Every aspect is covered now. Run `cargo test -p signals` before **finishing**.";
@@ -117,6 +118,8 @@ pub(crate) fn advisor() -> Vec<EventBody> {
         tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
         advised_encrypted("msg-2", "srvtoolu-1"),
         text("msg-3", "It suggests testing caution as well as stop, so I'll cover every aspect."),
+        tool_use("msg-3", "srvtoolu-0", "advisor", json!({})),
+        EventBody::ToolCallDropped { tool_use_id: "srvtoolu-0".into() },
         tool_use("msg-4", "srvtoolu-2", "advisor", json!({})),
         advised("msg-4", "srvtoolu-2", advice),
         tool_use("msg-5", "srvtoolu-3", "advisor", json!({})),

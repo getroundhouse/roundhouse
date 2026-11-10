@@ -139,6 +139,7 @@ impl Tail {
             | EventBody::AgentTasks { .. }
             | EventBody::AgentLimits { .. }
             | EventBody::AgentUser { .. }
+            | EventBody::ToolCallDropped { .. }
             | EventBody::ApprovalRequested { .. }
             | EventBody::ApprovalResolved { .. }
             | EventBody::Notice { .. }

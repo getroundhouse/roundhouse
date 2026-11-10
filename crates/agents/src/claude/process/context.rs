@@ -103,6 +103,7 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
         | EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }

@@ -172,3 +172,16 @@ fn a_workspace_tells_a_pull_request_not_looked_for_from_none() {
     assert_eq!(none, Some(PullRequestFound { pull_request: None }));
     assert_eq!(found.and_then(|found| found.pull_request).map(|pr| pr.number), Some(7));
 }
+
+/// A hub stores an event as this and finds it by this kind, so both have to stay as they are once one is recorded.
+#[test]
+fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {
+    let stored =
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"tool_call_dropped","tool_use_id":"srvtoolu_1"}}"#;
+
+    let event: SessionEvent = frame::decode(stored).unwrap();
+
+    assert_eq!(event.body, EventBody::ToolCallDropped { tool_use_id: "srvtoolu_1".into() });
+    assert_eq!(event.body.kind(), "tool_call_dropped");
+    assert_eq!(serde_json::to_value(&event.body).unwrap()["type"], "tool_call_dropped");
+}

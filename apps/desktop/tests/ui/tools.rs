@@ -363,3 +363,36 @@ fn asking_the_advisor_opens_to_its_advice_or_says_only_the_agent_can_read_it(cx:
     assert_eq!(ui.shown("encrypted/").len(), 1, "the reply only the agent can read");
     assert_eq!(ui.shown("advice/").len(), 1, "and the one that can be read");
 }
+
+#[gpui_kit::test]
+fn a_call_to_the_advisor_the_agent_went_on_without_says_so(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_full_access(cx, &stack);
+    ui.input("advise-unanswered; advise; say:done");
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 2, "the call with no reply, and the one the agent made again");
+
+    ui.click_labelled(ADVISOR_LINE, 0);
+    ui.click_labelled(ADVISOR_LINE, 1);
+
+    assert_eq!(ui.shown("dropped/").len(), 1, "the first says the agent went on without a reply");
+    assert!(ui.shown("no-reply/").is_empty(), "rather than that one might still come");
+    assert_eq!(ui.shown("encrypted/").len(), 1, "and the second opens to its reply");
+}
+
+#[gpui_kit::test]
+fn a_call_to_the_advisor_with_nothing_to_read_opens_to_a_line_saying_why(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_full_access(cx, &stack);
+    ui.input("advise:; say:done; advise-unanswered");
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 2, "a call the turn ended on stays, since nothing went on without it");
+
+    ui.click_labelled(ADVISOR_LINE, 0);
+    ui.click_labelled(ADVISOR_LINE, 1);
+
+    assert_eq!(ui.shown("empty-reply/").len(), 1, "a reply with nothing in it");
+    assert_eq!(ui.shown("no-reply/").len(), 1, "and no reply at all");
+}

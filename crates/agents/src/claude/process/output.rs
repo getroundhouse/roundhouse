@@ -13,7 +13,7 @@ use tracing::warn;
 
 use super::{STDERR_TAIL_LINES, Shared, context, write_line};
 use crate::AgentOutput;
-use crate::claude::normalize::{Normalizer, Parsed, PromptProgress};
+use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
 /// leave the agent blocked and the session stuck.
@@ -37,7 +37,14 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
         if line.trim().is_empty() {
             continue;
         }
-        let item = match normalizer.line(&line) {
+        let Normalized { dropped, parsed } = normalizer.line(&line);
+        for tool_use_id in dropped {
+            let said = AgentOutput::event(EventBody::ToolCallDropped { tool_use_id }, None);
+            if !deliver(&shared, &output, said).await {
+                return;
+            }
+        }
+        let item = match parsed {
             Parsed::Drop => continue,
             Parsed::ControlReply { request_id, answer } => {
                 if let Some(waiting) = shared.pending_controls.lock().remove(&request_id) {
@@ -76,12 +83,19 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 item
             }
         };
-        if !shared.confirmed.load(Ordering::SeqCst) {
-            shared.held_output.lock().push(item);
-        } else if output.send(item).await.is_err() {
+        if !deliver(&shared, &output, item).await {
             return;
         }
     }
+}
+
+/// Sends `item` on, or holds it until the CLI has confirmed the session. False once nobody is reading.
+async fn deliver(shared: &Shared, output: &mpsc::Sender<AgentOutput>, item: AgentOutput) -> bool {
+    if !shared.confirmed.load(Ordering::SeqCst) {
+        shared.held_output.lock().push(item);
+        return true;
+    }
+    output.send(item).await.is_ok()
 }
 
 /// What the CLI's report on a prompt means for the log. Only a prompt the CLI hasn't taken can be taken or dropped, so
@@ -121,6 +135,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }

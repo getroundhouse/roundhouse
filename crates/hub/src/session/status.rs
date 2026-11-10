@@ -59,6 +59,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         EventBody::AgentState { state: AgentRunState::Unknown }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
@@ -104,6 +105,7 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
         EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
@@ -131,6 +133,7 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentLimits { .. }

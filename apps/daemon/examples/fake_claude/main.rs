@@ -36,6 +36,7 @@
 //!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.
 //!   advise:TEXT     Same, with TEXT as a reply that can be read.
 //!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
+//!   advise-unanswered   Same, with no reply at all, as the real CLI's call after one of the agent's own tools gets.
 //!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
