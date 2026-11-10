@@ -71,11 +71,11 @@ fn after_thinking<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 fn settings_shows_in_place_of_the_workspace_and_goes_back_to_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "half");
-    assert!(ui.has("toggle-diff"));
+    assert!(ui.has("toggle-diff") && ui.has("add-project"));
 
     open_settings(&mut ui);
     assert!(!ui.has("toggle-diff"), "the workspace is hidden");
-    assert!(!ui.has("add-repository"), "and so is the sidebar");
+    assert!(!ui.has("add-project"), "and so is the sidebar");
     ui.click("settings-back");
 
     assert!(!settings_showing(&mut ui));

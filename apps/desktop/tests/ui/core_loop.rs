@@ -11,7 +11,7 @@ use protocol::model::{RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
 use desktop::workspace_pane::{Busy, Showing};
 
-use crate::support::{Stack, Ui, git};
+use crate::support::{Stack, Ui, git, home_row};
 
 #[gpui_kit::test]
 fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppContext) {
@@ -97,7 +97,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     ui.wait("the turn to finish", |ui| ui.session_status() == Some(SessionStatus::Idle));
 
     // Archive. Uncommitted work means asking first, and "keep working" leaves it all alone.
-    ui.click("archive");
+    ui.press("cmd-shift-a");
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Keep working");
     ui.frame();
@@ -106,7 +106,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
 
     git(&worktree, &["add", "."]);
     git(&worktree, &["commit", "-qm", "the agent's work"]);
-    ui.click("archive");
+    ui.press("cmd-shift-a");
     ui.wait("the workspace to be archived", |ui| {
         ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
             && ui.view().busy == Busy::Free
@@ -115,9 +115,12 @@ fn the_core_loop(cx: &mut TestAppContext) {
     assert!(ui.pane().is_none());
     assert!(!git(&stack.repo(), &["branch", "--list", &branch]).is_empty(), "the branch is kept");
 
-    // Restoring brings the worktree and the history back, and the conversation continues.
-    ui.click("toggle-archived");
-    ui.cx.update_entity(&ui.view.clone(), |v, cx| v.restore(id.clone(), cx));
+    // Only Home lists it now, and pressing its row there brings the worktree and the history back, and the
+    // conversation continues.
+    ui.click("home");
+    ui.click("home-archived");
+    ui.click_menu_item("Showing all");
+    ui.click(home_row(&id));
     ui.wait("the workspace to come back", |ui| ui.transcript().is_some() && ui.view().busy == Busy::Free);
     ui.wait("the history to load", |ui| !ui.events().is_empty());
     assert!(worktree.join("a.txt").exists());

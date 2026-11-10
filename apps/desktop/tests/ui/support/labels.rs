@@ -37,7 +37,7 @@ impl Ui<'_> {
     }
 
     /// Clicks the item labelled `label` in the menu that's open, rather than anything else with that label, such as
-    /// the header's button of the same name.
+    /// the pull request's button of the same name.
     pub(crate) fn click_menu_item(&mut self, label: &str) {
         self.frame();
         let id = self.cx.update_window(self.handle, |_, window, _| menu_item(window, label)).unwrap();

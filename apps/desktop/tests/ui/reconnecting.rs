@@ -242,3 +242,20 @@ fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
 }
+
+#[gpui_kit::test]
+fn the_heading_stays_over_the_repositories_while_the_hub_is_gone_and_add_project_waits_for_it(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    // So the app can't start another hub.
+    let _daemon = stack.without_a_daemon();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    assert!(!ui.disabled("add-project"));
+
+    lose_the_hub(&mut ui, &stack);
+
+    assert_eq!(ui.view().repos.len(), 1, "the repository is still listed");
+    assert!(ui.has("add-project"), "so the heading stays over it");
+    assert!(ui.disabled("add-project"), "with no hub to add one to");
+}

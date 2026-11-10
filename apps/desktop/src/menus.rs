@@ -63,7 +63,7 @@ fn file_menu(says: Says) -> Menu {
     Menu::new("File").items([
         MenuItem::action("New Workspace", NewWorkspace),
         MenuItem::action("New Chat", NewChat),
-        MenuItem::action("Add Repository…", AddRepository),
+        MenuItem::action("Add Project…", AddRepository),
         MenuItem::separator(),
         MenuItem::action(close, CloseChat),
     ])

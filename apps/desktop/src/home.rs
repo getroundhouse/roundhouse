@@ -166,7 +166,7 @@ pub(crate) fn page(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement
 }
 
 /// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back. Clicking the
-/// rest of the row shows the workspace, or brings an archived one back, as its row in the sidebar does.
+/// rest of the row shows the workspace, as its row in the sidebar does, or brings an archived one back.
 fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     let theme = cx.theme();
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);

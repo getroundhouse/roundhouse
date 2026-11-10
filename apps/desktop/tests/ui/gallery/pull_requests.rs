@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use desktop::pull_request::{self, Lookup};
+use desktop::workspace_pane::Busy;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
     Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
@@ -53,11 +54,14 @@ fn with(change: impl FnOnce(&mut PullRequest)) -> Lookup {
 }
 
 /// In the order the app looks for them, after the two with no pull request to show, and then the one it can't tell.
-fn states() -> Vec<Lookup> {
-    vec![
+/// Merged shows a second time while a workspace is being archived, which greys out its Archive. Every other state is
+/// drawn with nothing under way.
+fn states() -> Vec<(Lookup, Busy)> {
+    let merged = || with(|pr| pr.state = PrState::Merged);
+    let free = [
         Lookup::Looking,
         Lookup::Found(None),
-        with(|pr| pr.state = PrState::Merged),
+        merged(),
         with(|pr| pr.state = PrState::Closed),
         with(|pr| pr.queue = Some(QueueState::AwaitingChecks)),
         with(|pr| pr.queue = Some(QueueState::Queued)),
@@ -76,7 +80,10 @@ fn states() -> Vec<Lookup> {
         with(|pr| pr.merge_state = MergeState::Computing),
         with(|_| {}),
         with(|pr| pr.merge_state = MergeState::Unknown),
-    ]
+    ];
+    let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free)).collect();
+    states.insert(3, (merged(), Busy::Changing));
+    states
 }
 
 /// Names every kind of standing, as patterns, in one match, so a new kind of standing doesn't compile until it's
@@ -116,21 +123,21 @@ kinds![
 
 /// The kinds of standing the picture doesn't draw.
 pub(crate) fn missing() -> Vec<&'static str> {
-    let drawn: Vec<&str> = states().iter().filter_map(Lookup::standing).map(kind).collect();
+    let drawn: Vec<&str> = states().iter().filter_map(|(lookup, _)| lookup.standing()).map(kind).collect();
     KINDS.iter().copied().filter(|k| !drawn.contains(k)).collect()
 }
 
 struct Sheet {
-    states: Vec<Lookup>,
+    states: Vec<(Lookup, Busy)>,
 }
 
 impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (pane, sidebar) = (theme.background, theme.sidebar);
-        let rows = self.states.iter().enumerate().map(|(index, lookup)| {
-            let bar = pull_request::bar(lookup, |_, _, _| {}, cx);
-            let controls = pull_request::controls(lookup, |_, _, _| {}, cx);
+        let rows = self.states.iter().enumerate().map(|(index, (lookup, busy))| {
+            let bar = pull_request::bar(lookup, *busy, |_, _, _| {}, cx);
+            let controls = pull_request::controls(lookup, *busy, |_, _, _| {}, cx);
             h_flex()
                 .id(ElementId::NamedInteger("state".into(), index as u64))
                 .gap(px(MARGIN))

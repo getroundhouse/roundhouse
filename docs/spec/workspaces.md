@@ -2,12 +2,12 @@
 
 ## Creating and setting up
 
-**Before there's a repository.** *Unconfirmed.*
+**Before there's a project.** *Unconfirmed.*
 
-![No repositories](screens/first-run.png)
+![No projects](screens/first-run.png)
 
-- **New Workspace in the File menu, `Cmd-N`, Create in the sidebar and on Home, and the `+` beside a repository open a dialog that asks what to work on,** so the task is given as the workspace is made, and the agent starts on it at once. `Cmd-N` and Create open it for the repository `sidebar.md` says, and a `+` for its own. *Unconfirmed.*
-- **The dialog holds the repository, the first prompt, the model and its effort, and files to go with the prompt.** The repository's name at the top opens a menu of the others. Files are pasted, dropped or chosen with its `+`, as in a chat's composer. *Unconfirmed.*
+- **New Workspace in the File menu, `Cmd-N`, Create in the sidebar and on Home, and the `+` beside a project open a dialog that asks what to work on,** so the task is given as the workspace is made, and the agent starts on it at once. `Cmd-N` and Create open it for the project `sidebar.md` says, and a `+` for its own. *Unconfirmed.*
+- **The dialog holds the project, the first prompt, the model and its effort, and files to go with the prompt.** The project's name at the top opens a menu of the others. Files are pasted, dropped or chosen with its `+`, as in a chat's composer. *Unconfirmed.*
 - **Create is the dialog's main action, and Return presses it.** Shift-Return starts a new line. Create with nothing typed makes the workspace and sends nothing, so making one is still two keys. *Unconfirmed.*
 - **Create closes the dialog at once, and the sidebar shows the workspace being made,** since it fetches first and can take a while. Once it's made it's selected, and the prompt is its first chat's, sent with the model and effort chosen. If it can't be made, what was typed goes back to the dialog, which opens again to show it, and a prompt the new chat couldn't be sent goes to its composer, so nothing typed is lost. *Unconfirmed.*
 - **The dialog opens while another workspace is being made, and its Create waits until that one is.** A workspace that's made meanwhile is selected behind the dialog, and typing stays in the dialog until it closes. *Unconfirmed.*
@@ -56,6 +56,7 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 ## Archiving
 
 - **Archiving removes the worktree and keeps the branch,** following it if the agent renamed it. It refuses if there are uncommitted changes, or commits on no branch, unless forced. That's checked before anything changes, and again once the agents have stopped. Ignored files such as `.env` and `node_modules` go with the worktree. Committed work can't be lost, and uncommitted work can't be lost by accident. *Unconfirmed.*
+- **Archive is on a workspace's row, in the sidebar and in Home, and on its pull request's bar once the pull request is merged or closed,** where it's the next thing to do. `Cmd-Shift-A` archives the workspace showing, as `sidebar.md` says.
 
 ## Pull requests
 
@@ -68,6 +69,6 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **`Create PR` asks the agent to commit, push and run `gh pr create`,** and the app shows the result from `gh pr view`. The agent knows why the changes were made, so it writes the better description. *Unconfirmed.*
 - **The pull request is read again each time its workspace is shown, when a turn ends, and every 30 seconds while it shows, unless it's merged or closed,** because checks, reviews and the queue move on GitHub while nobody's looking, and a workspace with none gets one when the agent or someone on GitHub opens it. Until the first answer, the bar says it's looking, rather than offering to create a pull request the workspace may already have. Only the newest answer shows, since an older one can arrive after it, and a failure to ask keeps what was known. *Unconfirmed.*
 
-**Every state of the pull request's bar, as the sidebar of changes shows it, and beside it what the header shows while the sidebar is hidden.** *Unconfirmed.*
+**Every state of the pull request's bar, as the sidebar of changes shows it, and beside it what the header shows while the sidebar is hidden. Merged shows twice, the second time while a workspace is being archived.** *Unconfirmed.*
 
 ![Every state of the pull request's bar](screens/pull-request-states.png)

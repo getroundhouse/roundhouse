@@ -23,6 +23,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Term | Meaning | In code |
 |---|---|---|
 | Repository | A git repository added to a hub | `Repo` |
+| Project | What the interface calls a repository added to a hub: the entry that holds a codebase's workspaces and settings, with one git repository behind it | `Repo` |
 | Workspace | The unit of delegation: a name, a branch and a worktree in one repository, with its sessions and diff comments | `Workspace` |
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
 | Title | What a workspace or a chat is called on screen. It comes from the first prompt, or is typed by hand, and one typed by hand is never replaced | `Workspace.title`, `Session.title`, `TitleSource` |
@@ -89,6 +90,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 |---|---|---|
 | Session, chat, conversation | The same thing at three levels. A session is ours, a chat is what the interface shows, and a conversation is the agent's own record, which is what it resumes | "Session" in code and docs, "chat" in text people read, and "conversation" only for the agent's side, as in `agent_session_id` |
 | Workspace | Ours, or another tool's, such as a Cargo workspace | A bare "workspace" means ours. Always qualify the others |
+| Project, repository | The same record. A project is what people see, and a repository is the git codebase behind it | "Project" in the desktop app and its spec, and "repository" in code, the CLI and the other docs, and wherever git itself is meant, as in "repository settings" |
 | Claude, Claude Code | The agent, and Anthropic's own product. The Agent SDK's terms bar calling an agent in another product "Claude Code" | "Claude" or "Claude Agent" in the interface. "Claude CLI" for the `claude` binary in docs |
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
 | Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |

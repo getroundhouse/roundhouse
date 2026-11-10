@@ -4,13 +4,9 @@
 
 use desktop::pull_request::Lookup;
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::PrState;
+use protocol::model::{PrState, WorkspaceStatus};
 
-use crate::support::{Stack, Ui};
-
-fn pull_request(state: &str) -> String {
-    format!(r#"{{"number":7,"url":"https://example.com/pull/7","title":"T","state":"{state}","isDraft":false}}"#)
-}
+use crate::support::{Stack, Ui, pull_request};
 
 fn lookup(ui: &Ui<'_>) -> Lookup {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.pull_request.clone())
@@ -24,9 +20,7 @@ fn state(ui: &Ui<'_>) -> Option<PrState> {
 fn the_pull_request_showing_is_read_again_until_its_merged(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let gh = stack.start_hub_with_stand_in_gh();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     ui.wait("it to have no pull request", |ui| lookup(ui) == Lookup::Found(None));
 
@@ -46,4 +40,25 @@ fn the_pull_request_showing_is_read_again_until_its_merged(cx: &mut TestAppConte
     ui.wait_out_a_pull_request_look();
     ui.wait_out_a_pull_request_look();
     assert_eq!(state(&ui), Some(PrState::Merged));
+}
+
+#[gpui_kit::test]
+fn a_merged_pull_request_offers_archive_in_its_bar_and_in_the_header_while_the_bar_is_hidden(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let gh = stack.start_hub_with_stand_in_gh();
+    gh.report(&pull_request("MERGED"));
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let id = ui.new_workspace();
+    // The header stands in for the bar until the diff loads, so this waits for the bar itself.
+    ui.wait("the bar to offer Archive", |ui| ui.shows_label("pull-request-bar", "Archive"));
+    assert_eq!(ui.labelled("Archive").len(), 1, "only the bar offers it, and the header has none of its own");
+
+    ui.press("cmd-shift-d");
+    assert!(!ui.changes_open());
+    assert!(ui.shows_label("pull-request-controls", "Archive"), "the header offers it in the bar's place");
+    ui.click("pull-request-action");
+
+    ui.wait("it to be archived", |ui| {
+        ui.view().workspaces.iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived)
+    });
 }

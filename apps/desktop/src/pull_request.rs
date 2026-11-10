@@ -6,10 +6,16 @@ use std::time::Duration;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
-use gpui_kit::{AnyElement, App, FontWeight, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, Sizable as _, h_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window,
+    div,
+};
 use look::Work;
 use protocol::model::{PullRequest, Standing};
+
+use crate::workspace_pane::Busy;
 
 #[cfg(test)]
 mod tests;
@@ -67,11 +73,18 @@ impl Lookup {
 }
 
 /// The bar at the top of the sidebar: the pull request's number, which opens it, what stands in its way, and the
-/// one thing to do about it, all in its colour.
-pub fn bar(lookup: &Lookup, on_action: impl Fn(&Action, &mut Window, &mut App) + 'static, cx: &App) -> AnyElement {
+/// one thing to do about it, all in its colour. `busy` greys out Archive, as every button that archives is while a
+/// workspace is being made, archived or restored.
+pub fn bar(
+    lookup: &Lookup,
+    busy: Busy,
+    on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
+    cx: &App,
+) -> AnyElement {
     let work = lookup.work();
     let theme = cx.theme();
     let row = h_flex()
+        .id("pull-request-bar")
         .flex_none()
         .w_full()
         .h(HEIGHT)
@@ -101,25 +114,26 @@ pub fn bar(lookup: &Lookup, on_action: impl Fn(&Action, &mut Window, &mut App) +
                 .text_color(text)
                 .child(title),
         )
-        .children(words::action(standing).map(|action| action_button(action, work, on_action, cx)))
+        .children(words::action(standing).map(|action| action_button(action, work, busy, on_action, cx)))
         .into_any_element()
 }
 
 /// The same, for the header while the sidebar is hidden: the number and the action, without the words, which the
-/// sidebar has room for and the header doesn't. Archive is left to the header's own button.
+/// sidebar has room for and the header doesn't.
 pub fn controls(
     lookup: &Lookup,
+    busy: Busy,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> Option<AnyElement> {
     let standing = lookup.standing()?;
     let work = lookup.work();
     let pr = lookup.pull_request();
-    let action = words::action(standing).filter(|action| *action != Action::Archive);
     let controls = h_flex()
+        .id("pull-request-controls")
         .gap_2()
         .children(pr.map(|pr| number(pr, work, cx)))
-        .children(action.map(|action| action_button(action, work, on_action, cx)));
+        .children(words::action(standing).map(|action| action_button(action, work, busy, on_action, cx)));
     Some(controls.into_any_element())
 }
 
@@ -143,20 +157,25 @@ fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
 fn action_button(
     action: Action,
     work: Work,
+    busy: Busy,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> AnyElement {
-    let button = Button::new("pull-request-action").small().label(action.label());
+    // Greyed out while a workspace is being made, archived or restored, as every button that archives is, so it can't
+    // be pressed twice. The other actions only ask the agent.
+    let disabled = action == Action::Archive && busy == Busy::Changing;
+    let button = Button::new("pull-request-action").small().label(action.label()).disabled(disabled);
     let button = match work.hue() {
         // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
-        // press still change.
+        // press still change. Not while it's disabled, since the kit lays the button's own style over its disabled
+        // one, which would keep the fill.
         Some(fill) => {
             let style = ButtonCustomVariant::new(cx)
                 .color(fill)
                 .foreground(cx.theme().primary_foreground)
                 .hover(fill.opacity(0.85))
                 .active(fill.opacity(0.7));
-            button.custom(style).bg(fill)
+            button.custom(style).when(!disabled, |button| button.bg(fill))
         }
         None => button.primary(),
     };

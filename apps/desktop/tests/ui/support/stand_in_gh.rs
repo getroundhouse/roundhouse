@@ -11,6 +11,11 @@ use client_core::Client;
 
 use super::{Stack, TIMEOUT, Ui, binaries};
 
+/// What `gh pr view` prints for a pull request in this state, such as `OPEN` or `MERGED`, for [`StandInGh::report`].
+pub(crate) fn pull_request(state: &str) -> String {
+    format!(r#"{{"number":7,"url":"https://example.com/pull/7","title":"T","state":"{state}","isDraft":false}}"#)
+}
+
 /// The hub, and the file its `gh` prints. Stops the hub with the test, even a failed one.
 pub(crate) struct StandInGh {
     hub: Child,

@@ -5,11 +5,10 @@
 use std::path::PathBuf;
 
 use desktop::workspace_pane::Busy;
-use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, ElementId, ScrollDelta, SharedString, TestAppContext, point, px};
+use gpui_kit::{ElementId, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Stack, Ui, commit_settings};
+use crate::support::{Stack, Ui, commit_settings, home_row, pull_request};
 
 /// More than the sidebar has room for in the window.
 const WORKSPACES: usize = 40;
@@ -60,21 +59,6 @@ fn wait_for_every_call(ui: &mut Ui) {
     ui.frame();
 }
 
-/// Whether the last frame drew the element with ID `id` as a button that can't be pressed.
-fn disabled(ui: &mut Ui, id: impl Into<ElementId>) -> bool {
-    let id = id.into();
-    ui.frame();
-    let found = ui.cx.update_window(ui.handle, |_, window, _| window.try_find(id).and_then(|e| e.disabled())).unwrap();
-    found == Some(true)
-}
-
-fn open_with_a_repository<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
-    ui
-}
-
 #[gpui_kit::test]
 fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -102,7 +86,7 @@ fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &
 fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let held = HeldArchive::commit(&stack);
-    let mut ui = open_with_a_repository(cx, &stack);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
     let (going, showing) = (ui.new_workspace(), ui.new_workspace());
     ui.hover("send");
     assert!(!ui.visible(archive_button(&going)), "the pointer is elsewhere");
@@ -122,41 +106,58 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
 }
 
 #[gpui_kit::test]
-fn a_rows_menu_archives_it_and_an_archived_ones_doesnt_offer_to(cx: &mut TestAppContext) {
+fn a_rows_menu_archives_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = open_with_a_repository(cx, &stack);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
     let id = ui.new_workspace();
 
     ui.right_click(row(&id));
     ui.click_menu_item("Archive");
 
     ui.wait("it to be archived", |ui| archived(ui, &id));
-    ui.click("toggle-archived");
-    ui.right_click(row(&id));
-    assert!(ui.shows_label("popup-menu", "Rename…"), "its menu is open");
-    assert!(!ui.shows_label("popup-menu", "Archive"));
-    assert!(!ui.has(archive_button(&id)), "pressing the row restores it, so it has no button to archive it either");
+    assert!(!ui.has(row(&id)), "it leaves the list, and only Home shows it");
+}
+
+#[gpui_kit::test]
+fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    assert!(ui.view().repos.is_empty());
+
+    ui.click("add-project");
+    let folder = stack.repo();
+    ui.cx.simulate_path_prompt_response(move |_| Some(vec![folder]));
+
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    assert!(ui.has("add-project"), "it's still there to add another");
 }
 
 #[gpui_kit::test]
 fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = open_with_a_repository(cx, &stack);
+    // Merged, so the pull request's bar offers Archive too.
+    let gh = stack.start_hub_with_stand_in_gh();
+    gh.report(&pull_request("MERGED"));
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
     // Made before the script, so archiving it isn't held.
     let earlier = ui.new_workspace();
     stack.client().workspace_archive(&earlier, false).unwrap();
     ui.wait("the earlier one to be archived", |ui| archived(ui, &earlier));
     let held = HeldArchive::commit(&stack);
-    ui.click("toggle-archived");
     let id = ui.new_workspace();
+    ui.wait("the pull request's Archive", |ui| ui.shows_label("pull-request-action", "Archive"));
 
     ui.press("cmd-shift-a");
     ui.wait("it to start archiving", |_| held.runs() == 1);
-    assert!(disabled(&mut ui, "archive"), "the header's button can't be pressed meanwhile");
+    assert!(ui.disabled("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
     ui.hover(row(&id));
-    assert!(disabled(&mut ui, archive_button(&id)), "nor can the row's");
+    assert!(ui.disabled(archive_button(&id)), "nor can the row's");
     ui.press("cmd-shift-a");
-    ui.click(row(&earlier));
+    // Only Home lists an archived workspace, and pressing its row there brings it back.
+    ui.click("home");
+    ui.click("home-archived");
+    ui.click_menu_item("Showing all");
+    ui.click(home_row(&earlier));
     held.release();
 
     wait_for_every_call(&mut ui);

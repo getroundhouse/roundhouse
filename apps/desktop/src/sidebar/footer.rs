@@ -1,12 +1,11 @@
-//! The bottom of the sidebar: adding a repository, the archive, and the build line, with where updating has got to, and
-//! which checkout a build from one is from.
+//! The bottom of the sidebar: the build line, with where updating has got to, and which checkout a build from one is
+//! from.
 
 use std::path::Path;
 
 mod update_card;
 mod update_details;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -19,10 +18,6 @@ use crate::app::{AppView, BuildLine};
 use crate::checkout::Checkout;
 use crate::updates::{Kind, Problem};
 use update_card::update_card;
-
-fn footer_item(id: &'static str, icon: IconName, label: &'static str) -> Button {
-    Button::new(id).ghost().small().icon(icon).label(label)
-}
 
 /// What went wrong updating, under the build, with the detail in its own words on hover. A download that isn't what
 /// the release workflow signed is the one that's red, since it may be someone tampering with the update.
@@ -76,7 +71,6 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
     v_flex()
         .id("checkout-card")
         .w_full()
-        .mt_2()
         .p_2p5()
         .gap_0p5()
         .rounded(px(10.))
@@ -96,7 +90,7 @@ fn check_line(id: &'static str, text: &'static str) -> AnyElement {
 }
 
 pub(super) fn footer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
-    let (show_archived, build) = (app.show_archived, app.build_line(cx));
+    let build = app.build_line(cx);
     let border = cx.theme().sidebar_border;
     let checkout = app.checkout.as_ref().map(|checkout| checkout_card(checkout, &app.hub.paths.data_dir, cx));
     let card = update_card(&build, app.update_question.as_ref(), cx);
@@ -109,17 +103,6 @@ pub(super) fn footer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         .gap_px()
         .border_t_1()
         .border_color(border)
-        .child(
-            footer_item("add-repository", IconName::Plus, "Add repository")
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-        )
-        .child(
-            footer_item("toggle-archived", IconName::Inbox, if show_archived { "Hide archived" } else { "Archived" })
-                .on_click(cx.listener(|t, _, _, cx| {
-                    t.show_archived = !t.show_archived;
-                    cx.notify();
-                })),
-        )
         .when_some(checkout, ParentElement::child)
         .child(card.unwrap_or_else(|| version(&build)))
         .when(checking, |d| d.child(check_line("checking-for-updates", "Checking for updates…")))
