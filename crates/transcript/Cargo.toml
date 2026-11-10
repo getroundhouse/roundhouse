@@ -10,7 +10,6 @@ publish.workspace = true
 testing = []
 
 [dependencies]
-chrono.workspace = true
 protocol.workspace = true
 client-core.workspace = true
 gpui-kit.workspace = true

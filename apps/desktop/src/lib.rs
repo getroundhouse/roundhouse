@@ -12,6 +12,7 @@ pub mod changes;
 pub mod checkout;
 pub mod file_diff;
 mod home;
+mod hover;
 mod menus;
 mod model_picker;
 pub mod new_workspace;

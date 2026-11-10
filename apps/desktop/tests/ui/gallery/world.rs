@@ -10,7 +10,7 @@ use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
-    SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    SessionAccount, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::tail::Tail;
 
@@ -43,6 +43,8 @@ pub(crate) struct World {
     pub(crate) worktree_images: HashMap<String, Vec<u8>>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
+    /// Whose account the agents run under. `None` is a hub that can't say.
+    pub(crate) account: Option<SessionAccount>,
     records: i64,
 }
 

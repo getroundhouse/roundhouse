@@ -37,8 +37,7 @@ fn took_ms(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64
 
 fn finished(ended: &SessionEvent, took_ms: Option<u64>, result: Option<&str>, cx: &App) -> AnyElement {
     let took = took_ms.map(|ms| turn_times::took(Duration::from_millis(ms)));
-    let now = look::local_time(look::now_ms(cx), cx);
-    let when = look::local_time(ended.ts_ms, cx).zip(now).map(|(at, now)| turn_times::ended(at, now));
+    let when = look::day_and_time(ended.ts_ms, cx);
     let said = took.into_iter().chain(when).collect::<Vec<_>>().join(" · ");
     // The button is taller than the text. It's centred on the line without making the line taller, so the line sits
     // where any other muted line would.

@@ -26,6 +26,7 @@ mod attaching;
 mod chats;
 mod closed;
 mod composer;
+mod context;
 mod diff_tab;
 mod pull_request;
 mod queue;
@@ -93,6 +94,8 @@ pub struct WorkspacePane {
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
     closed_menu: closed::Menu,
+    /// Whose account the workspace's agents run under, for the card the context's ring shows.
+    account: context::AccountRead,
     busy: Busy,
     reading: Reading,
     pub composer: Entity<TextareaState>,
@@ -186,6 +189,7 @@ impl WorkspacePane {
             creating_chat: false,
             queue_edit: None,
             closed_menu: closed::Menu::Shut,
+            account: context::AccountRead::default(),
             busy: Busy::Free,
             reading: Reading::default(),
             composer,
@@ -245,6 +249,7 @@ impl WorkspacePane {
     /// the worktree waits for [`Self::catch_up`], so a reconnect doesn't start a worker for every pane at once.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
+        self.forget_account();
         for (transcript, _) in self.transcripts.values() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }

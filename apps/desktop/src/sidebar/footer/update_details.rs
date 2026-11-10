@@ -1,7 +1,5 @@
 //! The info mark in the update card's corner, and what it says on hover: which versions, and what happens next.
 
-use std::time::Duration;
-
 use gpui_kit::base::HoverCard;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::{
@@ -10,10 +8,8 @@ use gpui_kit::{
 };
 
 use crate::app::{Agents, BuildLine};
+use crate::hover::{CLOSES_AFTER, OPENS_AFTER};
 
-/// As long as GPUI waits before any other tooltip in the app shows, so this one doesn't feel slower. They go as soon
-/// as the pointer does, too.
-const DELAY: Duration = Duration::from_millis(500);
 /// Between the details and the top of the card they sit on.
 const GAP: Pixels = px(6.);
 /// What `border_1` draws around the card, outside where it's measured and where its corner is.
@@ -56,7 +52,7 @@ impl Details {
         // Only for when to show them. The kit keeps what a hover card shows clear of the window's edge by more than
         // the card is, so it couldn't line them up with the card.
         let hover =
-            HoverCard::new("details").open_delay(DELAY).close_delay(Duration::ZERO).trigger(icon).on_open_change(
+            HoverCard::new("details").open_delay(OPENS_AFTER).close_delay(CLOSES_AFTER).trigger(icon).on_open_change(
                 move |open, _, cx| {
                     shown.update(cx, |shown, cx| {
                         shown.open = *open;
@@ -88,16 +84,7 @@ impl Details {
             .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(format!("{} → {}", self.from, self.to)))
             .child(div().text_xs().text_color(theme.muted_foreground).child(self.what_happens.clone()))
             .test_support();
-        let details = div()
-            .w(shown.card_width + BORDER * 2.)
-            .px_3()
-            .py_2p5()
-            .rounded(px(10.))
-            .bg(theme.popover)
-            .text_color(theme.popover_foreground)
-            .border_1()
-            .border_color(theme.border)
-            .child(text);
+        let details = look::raised(cx).w(shown.card_width + BORDER * 2.).px_3().py_2p5().child(text);
         let above = anchored()
             .position_mode(AnchoredPositionMode::Local)
             .position(point(-BORDER, -(BORDER + GAP)))
