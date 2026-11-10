@@ -30,7 +30,7 @@ const REPO_HEIGHT: Pixels = px(32.);
 /// A workspace's row, and the note in its place while one is on its way.
 const ROW_HEIGHT: Pixels = px(36.);
 /// How far a workspace's row sets its mark in from a repository's, so the rows read as the repository's.
-const ROW_INSET: Pixels = px(20.);
+const ROW_INSET: Pixels = px(12.);
 /// The space between a mark and the name beside it.
 const MARK_GAP: Pixels = px(6.);
 /// The space between lines of one repository.
