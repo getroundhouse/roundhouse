@@ -1,0 +1,98 @@
+# What only Windows catches: the hub, the CLI or the app no longer compiling for it, which code that only knows Unix
+# does, and a hub that a client can't start, reach or stop. Nobody develops on Windows, so this is the only place any
+# of it runs. It lints the product's code, which compiles the app without linking it, runs the tests of the crates
+# whose tests build on Windows, builds the hub and the CLI, and runs the CLI against a hub it starts. Nothing here can
+# block a merge, since the ruleset requires only ci.yml's `checks`.
+name: Windows
+
+on:
+  pull_request:
+    paths:
+      - "**.rs"
+      - Cargo.lock
+      - "**/Cargo.toml"
+      - rust-toolchain.toml
+      - .cargo/**
+      - .github/workflows/windows.yml
+  # Only main saves caches, so PRs start warm.
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        # Git's, which the runner has, so the steps read like the other workflows'.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: windows-
+      # Not --all-targets: most tests and the programs that stand in for others still only build on Unix.
+      - run: cargo clippy --workspace --locked -- -D warnings
+      # The crates whose tests build here, which hold what Windows does differently below the hub: ending a process
+      # and what it started, a process's start time, and where a hub's files and pipe are.
+      - run: cargo test --locked -p process -p protocol
+      - run: cargo build --locked -p daemon -p cli --bins
+      # Short, because a hub left running by a step that failed could hold the step open.
+      - name: Run the CLI and a hub it starts
+        timeout-minutes: 5
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke"
+          export ROUNDHOUSE_HOME="$RUNNER_TEMP/smoke/home" ROUNDHOUSE_WORKSPACES="$RUNNER_TEMP/smoke/workspaces"
+          cli=target/debug/roundhouse.exe
+          # Whatever fails, no hub is left behind.
+          trap '"$cli" hub stop > /dev/null 2>&1 || true' EXIT
+          # Needs a hub, so it starts one.
+          "$cli" repo list
+          "$cli" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
+          grep -q "started on demand" "$RUNNER_TEMP/smoke/status.txt"
+          "$cli" hub stop
+          # The pipe goes with the hub, so a client finds nothing there. A hub can take a moment to go once it has
+          # let its client know, so this asks until it has.
+          for _ in $(seq 50); do
+            "$cli" hub status > "$RUNNER_TEMP/smoke/stopped.txt" 2>&1 || true
+            if grep -q "no hub is running" "$RUNNER_TEMP/smoke/stopped.txt"; then break; fi
+            sleep 0.2
+          done
+          cat "$RUNNER_TEMP/smoke/stopped.txt"
+          grep -q "no hub is running" "$RUNNER_TEMP/smoke/stopped.txt"
+      - name: Show the hub's log
+        if: always()
+        run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
