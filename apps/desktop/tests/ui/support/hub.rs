@@ -6,6 +6,8 @@ use std::process::Command;
 
 use client_core::{Client, Daemon};
 use desktop::app::Connection;
+use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::{AppContext as _, ElementId};
 
 use super::{Stack, Ui};
 
@@ -25,6 +27,13 @@ impl Stack {
 }
 
 impl Ui<'_> {
+    /// Clicks it in the window as last drawn, and leaves what that starts for the next frame to run, so a test can make
+    /// several such clicks and stop the hub while what they ask for is still to be sent.
+    pub(crate) fn click_and_leave(&mut self, id: impl Into<ElementId>) {
+        let id = id.into();
+        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+    }
+
     /// Waits for the app to be connected again, to a hub other than the one with this pid. It asks with
     /// `Client::connect`, never `stack.client()`, which would start that hub itself if it asked before the app had
     /// noticed the old one go. The test would then carry on while the app was still reconnecting.

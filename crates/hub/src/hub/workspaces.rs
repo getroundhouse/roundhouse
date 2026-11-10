@@ -1,13 +1,11 @@
-//! Making, archiving and restoring workspaces, and reading their git state.
+//! Making, archiving and restoring workspaces.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
-    ClientRequestId, GitDiff, GitStatus, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace,
-    WorkspaceId, WorkspaceStatus,
+    ClientRequestId, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -18,7 +16,6 @@ use super::{Hub, close_worker, new_id, not_ready, unexpected};
 use crate::error::{internal, provider_failed};
 use crate::session::Command;
 use crate::store::{Made, Store, now_ms};
-use crate::worker_link::WorkerLink;
 
 /// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
 pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
@@ -281,50 +278,5 @@ impl Hub {
         self.notify(HubNotice::Workspace(restored.clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
         self.start_setup(setup_repo, restored).await
-    }
-
-    pub(super) async fn ready_worktree(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-    ) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
-        let workspace = self.workspace(id).await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
-        let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
-        let link = self.ensure_worker(id).await?;
-        Ok((workspace, path, link))
-    }
-
-    pub(crate) async fn workspace_status(self: &Arc<Self>, id: WorkspaceId) -> Result<GitStatus, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::GitStatus { path }).await?;
-        let WorkerResponse::GitStatus(status) = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok(status)
-    }
-
-    pub(crate) async fn workspace_diff(self: &Arc<Self>, id: WorkspaceId) -> Result<GitDiff, ApiError> {
-        let (workspace, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await?;
-        let WorkerResponse::GitDiff(diff) = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok(diff)
-    }
-
-    /// An image in the workspace's worktree, as the worker finds it, for the transcript to draw.
-    pub(crate) async fn workspace_image_read(
-        self: &Arc<Self>,
-        id: WorkspaceId,
-        image: String,
-    ) -> Result<(MediaType, AttachmentBytes), ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::ImageRead { path, image }).await?;
-        let WorkerResponse::Image { media_type, data } = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok((media_type, data))
     }
 }

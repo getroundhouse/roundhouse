@@ -4,10 +4,12 @@
 
 pub mod attachments;
 mod deleting;
+mod files;
 pub mod git;
 mod images;
 mod serve;
 pub mod setup;
+mod worktree_file;
 
 pub use agents::ENV_CLAUDE_BIN;
 pub use deleting::{Deleter, delete_trees};

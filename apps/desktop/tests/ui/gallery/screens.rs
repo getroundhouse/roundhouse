@@ -8,11 +8,11 @@ use protocol::model::SessionStatus;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen, finishing_update,
-    own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled,
-    unread, working_background,
+    all_files, attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen,
+    finishing_update, own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming,
+    thinking_streaming, titled, unread, working_background,
 };
-use super::{chats, file_chats, long_chats, pictures, subagent_chats, tool_chats};
+use super::{chats, file_chats, long_chats, pictures, subagent_chats, tool_chats, worktree};
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";
@@ -242,6 +242,37 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "diff.md",
         world: Some(diff),
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::StartComment(99)],
+    },
+    Screen {
+        name: "all-files",
+        spec: "files.md",
+        world: Some(all_files),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::Click("all-folder-.context"),
+            Step::WaitFor("all-folder-.context/gallery"),
+            Step::Click("all-folder-crates"),
+            Step::Click("all-folder-crates/protocol"),
+            Step::Click("all-folder-crates/protocol/src"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "file-opened",
+        spec: "files.md",
+        world: Some(all_files),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::Click("all-folder-.context"),
+            Step::WaitFor("all-folder-.context/gallery"),
+            Step::Click("all-folder-crates"),
+            Step::Click("all-folder-crates/protocol"),
+            Step::Click("all-folder-crates/protocol/src"),
+            Step::ViewFile(worktree::OPENED),
+            Step::MoveAway,
+        ],
     },
     Screen { name: "unread", spec: "sidebar.md", world: Some(unread), steps: &[Step::Select(FOCUS)] },
     Screen { name: "home", spec: "home.md", world: Some(titled), steps: &[Step::Select(FOCUS), Step::Click("home")] },

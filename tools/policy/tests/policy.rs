@@ -39,6 +39,14 @@ const ALLOWED_UNCHANGED: &[&str] = &["MPL-2.0"];
 /// How `cargo metadata` names crates.io as a package's source.
 const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 
+/// Someone else's files kept in this repo rather than taken as a crate, as (the folder, its SPDX license, words its
+/// `LICENSE` has to hold). The dependency graph doesn't show them, so the license check can't see them unless they're
+/// listed here.
+const VENDORED: &[(&str, &str, &str)] = &[
+    // Catppuccin's icons, manifest and colours, which `tools/file-icons/update.py` writes.
+    ("apps/desktop/file-icons", "MIT", "Permission is hereby granted, free of charge"),
+];
+
 /// The most lines a Rust file can have, tests included. `docs/rust.md` has the reasoning.
 const MAX_FILE_LINES: usize = 400;
 
@@ -323,4 +331,65 @@ fn every_crate_inherits_the_lints() {
         })
         .collect();
     assert!(missing.is_empty(), "these need `[lints] workspace = true`: {missing:?}");
+}
+
+/// Folders `.gitignore` leaves out, which can hold what's installed or built, licenses and all. Hidden ones are left
+/// out too.
+const NOT_IN_THE_REPO: &[&str] = &["target", "node_modules", "dist"];
+
+/// Whether a file's name says it's a license, as `LICENSE`, `LICENSE-MIT`, `LICENSE.md`, `COPYING.LESSER` or `NOTICE`
+/// do, and `license.svg`, a picture, doesn't.
+fn is_license(name: &str) -> bool {
+    let name = name.to_lowercase();
+    let (stem, extension) = name.split_once('.').unwrap_or((&name, ""));
+    let kinds = ["license", "licence", "copying", "notice", "unlicense"];
+    let named = kinds
+        .iter()
+        .any(|kind| stem.strip_prefix(kind).is_some_and(|rest| rest.is_empty() || rest.starts_with(['-', '_'])));
+    named && ["", "md", "txt", "rst", "lesser", "lib"].contains(&extension)
+}
+
+/// The folder of every license file under `dir`, from `root`, leaving out links and what isn't in the repo.
+fn license_folders(root: &Path, dir: &Path, found: &mut Vec<PathBuf>) {
+    // A folder that's gone by the time it's read, such as one `tools/file-icons/update.py` works in, holds nothing.
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Ok(kind) = entry.file_type() else { continue };
+        if kind.is_dir() && !name.starts_with('.') && !NOT_IN_THE_REPO.contains(&name.as_str()) {
+            license_folders(root, &entry.path(), found);
+        } else if kind.is_file() && is_license(&name) {
+            found.push(dir.strip_prefix(root).unwrap().to_path_buf());
+        }
+    }
+}
+
+#[test]
+fn a_license_is_known_by_its_name() {
+    for name in ["LICENSE", "LICENSE-MIT", "LICENSE_APACHE.txt", "LICENSE.md", "COPYING.LESSER", "NOTICE", "UNLICENSE"]
+    {
+        assert!(is_license(name), "{name}");
+    }
+    for name in ["license.svg", "licenses.md", "notices.rs", "README.md"] {
+        assert!(!is_license(name), "{name}");
+    }
+}
+
+#[test]
+fn files_kept_from_elsewhere_ship_with_an_allowed_license() {
+    let metadata = metadata();
+    let root = Path::new(metadata["workspace_root"].as_str().unwrap());
+    for (dir, license, words) in VENDORED {
+        assert!(ALLOWED.contains(license), "{dir} is under {license}, which can't ship");
+        let text = std::fs::read_to_string(root.join(dir).join("LICENSE")).unwrap_or_default();
+        assert!(text.contains(words), "{dir}/LICENSE isn't the {license} license it's listed as");
+    }
+    let mut found = Vec::new();
+    license_folders(root, root, &mut found);
+    let listed = |dir: &PathBuf| VENDORED.iter().any(|(listed, _, _)| Path::new(listed) == dir);
+    let missed: Vec<_> = VENDORED.iter().filter(|(dir, _, _)| !found.iter().any(|f| Path::new(dir) == f)).collect();
+    assert!(missed.is_empty(), "the search for licenses didn't find these, so it isn't looking properly: {missed:?}");
+    // The repo's own license, once #9 picks one, is the only one that isn't someone else's.
+    let unlisted: Vec<_> = found.iter().filter(|dir| !dir.as_os_str().is_empty() && !listed(dir)).collect();
+    assert!(unlisted.is_empty(), "someone else's files, so add them to `VENDORED`: {unlisted:?}");
 }

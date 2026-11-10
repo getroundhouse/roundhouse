@@ -12,6 +12,7 @@ mod sessions;
 mod setup;
 mod titles;
 mod workspaces;
+mod worktree;
 
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;

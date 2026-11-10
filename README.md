@@ -40,7 +40,7 @@ Use `Add project` at the top of the sidebar, then the `+` beside the project. Th
 | `Cmd-N` | New workspace |
 | `Cmd-[`, `Cmd-]` | Move between workspaces |
 | `Cmd-T` | New chat |
-| `Cmd-W` | Close a chat, or the diff tab |
+| `Cmd-W` | Close a chat, or the file tab |
 | `Ctrl-Tab` | Move between chats |
 | `Cmd-Shift-D` | Show or hide the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |

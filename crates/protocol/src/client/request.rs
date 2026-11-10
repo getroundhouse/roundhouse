@@ -211,6 +211,26 @@ pub enum ClientRequest {
     SessionAccount {
         id: SessionId,
     },
+    /// The files in the workspace's worktree, for browsing them: tracked, new and ignored, apart from what's in a
+    /// folder git ignores whole, or that's a repository of its own, which is listed as a folder for
+    /// `WorkspaceFolderRead`. A hub older than this refuses it as unsupported.
+    WorkspaceFiles {
+        id: WorkspaceId,
+    },
+    /// What's directly in the folder at `path` in the workspace's worktree, its files and its folders, for opening one
+    /// that `WorkspaceFiles` lists as a folder. Refused unless it's a folder inside the worktree, links followed. A hub
+    /// older than this refuses it as unsupported.
+    WorkspaceFolderRead {
+        id: WorkspaceId,
+        path: String,
+    },
+    /// What the file at `path` in the workspace's worktree holds, for showing it. `path` is relative to the worktree,
+    /// as `WorkspaceFiles` gives it, and refused unless it's a file inside the worktree, links followed. A hub older
+    /// than this refuses it as unsupported.
+    WorkspaceFileRead {
+        id: WorkspaceId,
+        path: String,
+    },
     /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
     /// place. So sending it again changes nothing more. Refused with `Conflict` once that prompt has been sent, since
     /// the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the queue is

@@ -1,5 +1,5 @@
 //! A workspace's diff against its base, and the review comments the hub keeps on it. It draws nothing: the sidebar of
-//! changes lists its files, and the diff tab shows one of them, with its comments.
+//! changes lists its files, and the file tab shows one of them, with its comments.
 
 use std::collections::HashSet;
 

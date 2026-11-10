@@ -13,7 +13,7 @@ use gpui_kit::{AppContext as _, Entity, SharedString};
 
 use super::Ui;
 
-/// The selected workspace's diff, and what its diff tab shows.
+/// The selected workspace's diff, and what its file tab shows.
 #[derive(Clone)]
 pub(crate) struct Diff {
     pub(crate) review: Entity<Review>,
@@ -29,7 +29,7 @@ impl Ui<'_> {
     /// Shows the selected workspace's sidebar of changes, hiding it first if it shows, and waits for it to load the
     /// diff as it is now. It's open from the start, so what's changed since needs loading again to show, as hiding
     /// and showing it does.
-    pub(crate) fn open_diff(&mut self) -> Diff {
+    pub(crate) fn open_changes(&mut self) -> Diff {
         let pane = self.pane().unwrap();
         if self.changes_open() {
             self.click("toggle-diff");
@@ -62,10 +62,10 @@ impl Ui<'_> {
         diff
     }
 
-    /// Clicks a file in the sidebar of changes, and waits for the diff tab to show it.
-    pub(crate) fn open_file(&mut self, diff: &Diff, path: &str) {
+    /// Clicks a file in Changes, and waits for the file tab to show its diff.
+    pub(crate) fn open_diff_of(&mut self, diff: &Diff, path: &str) {
         self.click(SharedString::from(format!("file-{path}")));
-        self.wait("the diff tab to show it", |ui| {
+        self.wait("the file tab to show it", |ui| {
             ui.cx.read_entity(&diff.file, |f, cx| f.file(cx).is_some_and(|f| f.path() == path) && f.state.is_some())
         });
     }

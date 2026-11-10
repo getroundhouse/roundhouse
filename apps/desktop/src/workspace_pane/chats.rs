@@ -7,7 +7,6 @@ use transcript::{Transcript, TranscriptEvent};
 use super::attaching::Draft;
 use super::{PaneEvent, Showing, WorkspacePane};
 use crate::rename::{self, Renaming};
-use crate::review::Review;
 use client_core::records::Record;
 
 /// What a new chat starts with. It keeps the model and how edits are handled, but Plan belongs to the
@@ -93,7 +92,7 @@ impl WorkspacePane {
         self.show_chat(cx);
     }
 
-    /// Brings the active chat to the front, in place of the diff tab, with what was typed in it still there.
+    /// Brings the active chat to the front, in place of the file tab, with what was typed in it still there.
     pub(super) fn show_chat(&mut self, cx: &mut Context<Self>) {
         self.bring_to_front(Showing::Chat, cx);
     }
@@ -136,20 +135,18 @@ impl WorkspacePane {
                 if this.workspace.pull_request.is_none() {
                     this.refresh_pull_request(cx);
                 }
-                if let Some(diff) = &this.diff {
-                    diff.review.update(cx, Review::refresh);
-                }
+                this.turn_ended(cx);
             }
         });
         self.transcripts.insert(session.id, (view, events));
     }
 
-    /// Moves to the tab before or after this one, wrapping around. The diff tab is counted after the chats, which in a
+    /// Moves to the tab before or after this one, wrapping around. The file tab is counted after the chats, which in a
     /// ring is the same as before them, where it's drawn.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        let tabs = open.len() + usize::from(self.diff_tab().is_some());
-        let current = if self.showing() == Showing::Diff {
+        let tabs = open.len() + usize::from(self.file_tab().is_some());
+        let current = if self.showing() == Showing::File {
             open.len()
         } else {
             let Some(current) = open.iter().position(|id| Some(id) == self.active.as_ref()) else { return };
@@ -157,7 +154,7 @@ impl WorkspacePane {
         };
         match open.get(crate::app::wrapped_step(current, step, tabs)) {
             Some(id) => self.activate(id.clone(), cx),
-            None => self.show_diff_tab(cx),
+            None => self.show_file_tab(cx),
         }
     }
 

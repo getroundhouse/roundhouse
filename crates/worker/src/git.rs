@@ -9,10 +9,11 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
+pub(crate) mod files;
 mod pull_request;
 mod removal;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
@@ -41,8 +42,9 @@ struct GitOutput {
     stderr: String,
 }
 
-async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
-    let output = Command::new("git")
+/// Runs git, with what it prints as it printed it.
+async fn run(cwd: &Path, args: &[&str]) -> Result<std::process::Output, ApiError> {
+    Command::new("git")
         .args(args)
         .current_dir(cwd)
         // Never wait on a credentials prompt nobody can see.
@@ -55,7 +57,11 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
         .kill_on_drop(true)
         .output()
         .await
-        .map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))?;
+        .map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
+}
+
+async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
+    let output = run(cwd, args).await?;
     Ok(GitOutput {
         success: output.status.success(),
         code: output.status.code(),

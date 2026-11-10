@@ -1,5 +1,5 @@
-//! The sidebar on the right: every file the workspace changes against its base, as a list or in folders, with the
-//! comments waiting to be sent. Clicking a file shows its diff in the workspace's diff tab.
+//! The sidebar on the right's Changes: every file the workspace changes against its base, as a list or in folders, with
+//! the comments waiting to be sent. Clicking a file shows its diff in the workspace's file tab.
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -10,31 +10,25 @@ use gpui_kit::component::diff::{DiffFile, DiffFileStatus};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, Entity, EventEmitter, FontWeight, Global, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, SharedString, Stateful, StatefulInteractiveElement, Styled, Subscription,
-    TestSupportExt as _, Window, div, px, uniform_list,
+    AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, px, uniform_list,
 };
 
+use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::review::Review;
-use rows::{Layout, Row, rows, split};
+use rows::{Layout, rows};
 
 mod rows;
 
 /// Its left edge included. As wide as the sidebar of changes `docs/inspiration.md` measures, so the layout feels
 /// familiar, and wide enough for a long path and its counts on one line.
 pub(crate) const WIDTH: Pixels = px(432.);
-/// As tall as the chat tabs, so the two line up across the window.
-const BAR_HEIGHT: Pixels = px(40.);
-const ROW_HEIGHT: Pixels = px(28.);
-const PADDING: f32 = 12.;
-/// How far a folder's contents sit inside it.
-const INDENT: f32 = 16.;
-/// Where the line down a folder's contents sits, under the middle of its chevron.
-const GUIDE: f32 = 6.;
+/// As tall as the tabs above it.
+const BAR_HEIGHT: Pixels = crate::sidebar_tabs::HEIGHT;
 
 #[derive(Clone, Debug)]
 pub enum ChangesEvent {
-    /// Show this file in the diff tab.
+    /// Show this file in the file tab.
     Open(SharedString),
 }
 
@@ -57,12 +51,15 @@ fn toggle_layout(cx: &mut App) {
 
 pub struct Changes {
     review: Entity<Review>,
-    /// The file the diff tab shows, as the pane says, which its row marks.
+    /// The file the file tab shows, as the pane says, which its row marks.
     showing: Option<SharedString>,
     /// Folders closed in the tree, by path.
     closed: HashSet<String>,
-    /// The rows as last drawn, which the list draws from as it scrolls.
+    /// The rows as last laid out, which the list draws from as it scrolls, and the layout they're in. They're laid out
+    /// again only when the files, the layout or the folders closed change, rather than at every frame, since a branch
+    /// can change thousands of files.
     rows: Vec<Row>,
+    laid_out: Option<Layout>,
     _observing: Subscription,
 }
 
@@ -70,35 +67,67 @@ impl EventEmitter<ChangesEvent> for Changes {}
 
 impl Changes {
     pub fn new(review: Entity<Review>, cx: &mut Context<Self>) -> Self {
-        let observing = cx.observe(&review, |_, _, cx| cx.notify());
-        Self { review, showing: None, closed: HashSet::new(), rows: Vec::new(), _observing: observing }
+        let observing = cx.observe(&review, |t, _, cx| {
+            t.laid_out = None;
+            cx.notify();
+        });
+        Self { review, showing: None, closed: HashSet::new(), rows: Vec::new(), laid_out: None, _observing: observing }
     }
 
-    /// Marks the row of the file the diff tab shows, or none.
+    /// Marks the row of the file the file tab shows, or none.
     pub fn set_showing(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         self.showing = path;
         cx.notify();
     }
 
-    fn toggle_folder(&mut self, path: String, cx: &mut Context<Self>) {
-        if !self.closed.remove(&path) {
-            self.closed.insert(path);
+    /// Closes or opens a folder's row, and each folder it stands for, so it stays closed if a new file splits it.
+    fn toggle_folder(&mut self, path: &str, names: &[String], cx: &mut Context<Self>) {
+        let folders = chain(path, names);
+        if self.closed.contains(path) {
+            for folder in &folders {
+                self.closed.remove(folder);
+            }
+        } else {
+            self.closed.extend(folders);
         }
+        self.laid_out = None;
         cx.notify();
     }
 
     /// The rows in `range`, for the list to draw.
     fn draw_rows(&mut self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let (files, open) = (self.review.read(cx).files.clone().unwrap_or_default(), self.showing.clone());
-        let layout = layout(cx);
+        let (open, layout) = (self.showing.clone(), layout(cx));
         let rows: Vec<Row> = self.rows.get(range).map(<[Row]>::to_vec).unwrap_or_default();
+        // Only the files in view, rather than every file the branch changes.
+        let files: Vec<Option<DiffFile>> = {
+            let files = self.review.read(cx).files.as_deref().unwrap_or_default();
+            let file = |row: &Row| match row {
+                Row::File { index, .. } => files.get(*index).cloned(),
+                Row::Folder { .. } => None,
+            };
+            rows.iter().map(file).collect()
+        };
         rows.into_iter()
-            .filter_map(|row| match row {
-                Row::Folder { path, names, depth, open } => Some(folder_row(path, &names, depth, open, cx)),
-                Row::File { index, depth } => {
-                    let file = files.get(index)?;
+            .zip(files)
+            .filter_map(|(row, file)| match row {
+                Row::Folder { path, names, depth, open } => Some(
+                    folder_row(
+                        format!("folder-{path}"),
+                        List::Changes,
+                        &names,
+                        depth,
+                        open,
+                        plain_folder(open, cx),
+                        cx,
+                    )
+                    .on_click(cx.listener(move |t, _, _, cx| t.toggle_folder(&path, &names, cx)))
+                    .test_support()
+                    .into_any_element(),
+                ),
+                Row::File { depth, .. } => {
+                    let file = file?;
                     let showing = open.as_ref() == Some(file.path());
-                    Some(file_row(file, depth, layout, showing, cx))
+                    Some(file_row(&file, depth, layout, showing, cx))
                 }
             })
             .collect()
@@ -130,14 +159,21 @@ impl Changes {
 
 impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let layout = layout(cx);
         let review = self.review.read(cx);
-        let (files, truncated, comments) = (review.files.clone(), review.truncated, review.comments.len());
+        let (truncated, comments) = (review.truncated, review.comments.len());
+        let changed = review.files.as_ref().map(|files| {
+            if self.laid_out != Some(layout) {
+                self.rows = rows(layout, files.iter().map(|file| file.path().as_ref()), &self.closed);
+                self.laid_out = Some(layout);
+            }
+            files.len()
+        });
         let muted = cx.theme().muted_foreground;
-        let body = match &files {
+        let body = match changed {
             None => placeholder("Loading…", muted),
-            Some(files) if files.is_empty() => placeholder("No changes yet", muted),
-            Some(files) => {
-                self.rows = rows(layout(cx), files.iter().map(|file| file.path().as_ref()), &self.closed);
+            Some(0) => placeholder("No changes yet", muted),
+            Some(_) => {
                 uniform_list("changed-files", self.rows.len(), cx.processor(|t, range, _, cx| t.draw_rows(range, cx)))
                     .flex_1()
                     .w_full()
@@ -147,7 +183,6 @@ impl Render for Changes {
         };
         v_flex()
             .size_full()
-            .child(summary(files.as_deref(), cx))
             .when(comments > 0, |d| d.child(self.comments_bar(comments, cx)))
             .when(truncated, |d| {
                 d.child(
@@ -164,31 +199,18 @@ impl Render for Changes {
     }
 }
 
-/// How many files changed, and by how much, with a way to change the layout.
-fn summary(files: Option<&[DiffFile]>, cx: &mut Context<Changes>) -> impl IntoElement {
+/// How many lines the files add and remove, and a way to change the layout, for the right end of the tabs above the
+/// sidebar while Changes shows.
+pub(crate) fn controls(changes: &Entity<Changes>, cx: &App) -> AnyElement {
+    let files = changes.read(cx).review.read(cx).files.iter().flatten();
+    let (added, removed) =
+        files.fold((0, 0), |(added, removed), file| (added + file.additions(), removed + file.deletions()));
     let tree = layout(cx) == Layout::Tree;
-    let theme = cx.theme();
-    let (border, muted, mono) = (theme.border, theme.muted_foreground, theme.mono_font_family.clone());
-    let title = match files {
-        Some(files) if !files.is_empty() => {
-            format!("{} file{} changed", files.len(), if files.len() == 1 { "" } else { "s" })
-        }
-        _ => "Changes".to_string(),
-    };
-    let (added, removed) = files
-        .unwrap_or_default()
-        .iter()
-        .fold((0, 0), |(added, removed), file| (added + file.additions(), removed + file.deletions()));
+    let mono = cx.theme().mono_font_family.clone();
+    let changes = changes.downgrade();
     h_flex()
         .flex_none()
-        .w_full()
-        .h(BAR_HEIGHT)
-        .pl_3()
-        .pr_2()
         .gap_2()
-        .border_b_1()
-        .border_color(border)
-        .child(div().flex_1().min_w_0().text_sm().text_color(muted).whitespace_nowrap().child(title))
         .child(h_flex().flex_none().gap_1p5().text_xs().font_family(mono).children(counts(added, removed, cx)))
         .child(
             Button::new("changes-layout")
@@ -197,11 +219,12 @@ fn summary(files: Option<&[DiffFile]>, cx: &mut Context<Changes>) -> impl IntoEl
                 .icon(Lucide::ListTree)
                 .selected(tree)
                 .tooltip(if tree { "Show as a list" } else { "Show in folders" })
-                .on_click(cx.listener(|_, _, _, cx| {
+                .on_click(move |_, _, cx| {
                     toggle_layout(cx);
-                    cx.notify();
-                })),
+                    let _ = changes.update(cx, |_, cx| cx.notify());
+                }),
         )
+        .into_any_element()
 }
 
 /// Lines added and removed, leaving out whichever is none.
@@ -230,33 +253,6 @@ fn status_icon(status: DiffFileStatus, cx: &App) -> Icon {
     Icon::new(icon).xsmall().text_color(color)
 }
 
-#[expect(clippy::cast_precision_loss, reason = "folders are never nested deep enough to lose precision")]
-fn indent(depth: usize) -> f32 {
-    PADDING + depth as f32 * INDENT
-}
-
-/// A row, indented to its depth, with a line down the side for each folder it's in.
-fn row_frame(id: String, depth: usize, showing: bool, cx: &App) -> Stateful<gpui_kit::Div> {
-    let theme = cx.theme();
-    let (border, hover, raised) = (theme.border, theme.list_hover, theme.secondary);
-    let guides = (0..depth)
-        .map(move |level| div().absolute().top_0().bottom_0().left(px(indent(level) + GUIDE)).w(px(1.)).bg(border));
-    h_flex()
-        .id(ElementId::Name(id.into()))
-        .relative()
-        .flex_none()
-        .w_full()
-        .h(ROW_HEIGHT)
-        .pl(px(indent(depth)))
-        .pr_3()
-        .gap_1p5()
-        .text_sm()
-        .cursor_pointer()
-        .when(showing, |d| d.bg(raised))
-        .when(!showing, |d| d.hover(|s| s.bg(hover)))
-        .children(guides)
-}
-
 fn file_row(file: &DiffFile, depth: usize, layout: Layout, showing: bool, cx: &mut Context<Changes>) -> AnyElement {
     let theme = cx.theme();
     let (muted, mono) = (theme.muted_foreground, theme.mono_font_family.clone());
@@ -275,7 +271,7 @@ fn file_row(file: &DiffFile, depth: usize, layout: Layout, showing: bool, cx: &m
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status(), cx);
     let counts = counts(file.additions(), file.deletions(), cx);
-    row_frame(format!("file-{path}"), depth, showing, cx)
+    row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
         .child(h_flex().flex_none().gap_1p5().text_xs().font_family(mono).children(counts).child(status))
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
@@ -283,29 +279,11 @@ fn file_row(file: &DiffFile, depth: usize, layout: Layout, showing: bool, cx: &m
         .into_any_element()
 }
 
-fn folder_row(path: String, names: &[String], depth: usize, open: bool, cx: &mut Context<Changes>) -> AnyElement {
-    let theme = cx.theme();
-    let (muted, mono) = (theme.muted_foreground, theme.mono_font_family.clone());
-    let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
+/// The kit's small folder, open or closed. Changes leaves a file's or folder's kind to All files, so a row says only
+/// how it changed.
+fn plain_folder(open: bool, cx: &App) -> Icon {
     let folder = if open { IconName::FolderOpen } else { IconName::FolderClosed };
-    row_frame(format!("folder-{path}"), depth, false, cx)
-        .child(Icon::new(chevron).xsmall().text_color(look::faint()))
-        .child(Icon::new(folder).xsmall().text_color(muted))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_xs()
-                .font_family(mono)
-                .text_color(muted)
-                .child(names.join(" / ")),
-        )
-        .on_click(cx.listener(move |t, _, _, cx| t.toggle_folder(path.clone(), cx)))
-        .test_support()
-        .into_any_element()
+    Icon::new(folder).xsmall().text_color(cx.theme().muted_foreground)
 }
 
 fn placeholder(text: &'static str, color: gpui_kit::Hsla) -> AnyElement {

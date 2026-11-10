@@ -37,8 +37,8 @@ fn says_which_build_is_running(cx: &mut TestAppContext) {
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     // Review the diff, opening the changed file from the sidebar.
-    let diff = ui.open_diff();
-    ui.open_file(&diff, "a.txt");
+    let diff = ui.open_changes();
+    ui.open_diff_of(&diff, "a.txt");
 
     // Comment on a line. Enter saves it, and the hub keeps it.
     ui.start_comment(&diff, "a.txt", 2);

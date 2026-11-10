@@ -250,6 +250,19 @@ async fn handle(
                 .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading an image stopped: {e}")))??;
             Ok(WorkerResponse::Image { media_type, data: AttachmentBytes::new(data) })
         }
+        WorkerRequest::ListFiles { path } => Ok(WorkerResponse::Files(crate::files::list(Path::new(&path)).await?)),
+        WorkerRequest::FolderRead { path, folder } => {
+            let files = tokio::task::spawn_blocking(move || crate::files::read_folder(Path::new(&path), &folder))
+                .await
+                .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a folder stopped: {e}")))??;
+            Ok(WorkerResponse::Files(files))
+        }
+        WorkerRequest::FileRead { path, file } => {
+            let contents = tokio::task::spawn_blocking(move || crate::files::read(Path::new(&path), &file))
+                .await
+                .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a file stopped: {e}")))??;
+            Ok(WorkerResponse::FileContents(contents))
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, prompt, text, attachments } => {
             let agent = state.live_agent(&session_id);

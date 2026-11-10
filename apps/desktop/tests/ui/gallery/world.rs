@@ -11,6 +11,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
     SessionAccount, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    WorktreeFiles,
 };
 use protocol::tail::Tail;
 
@@ -41,6 +42,12 @@ pub(crate) struct World {
     pub(crate) attachments: HashMap<AttachmentId, Vec<u8>>,
     /// The images in the screen's worktree that the agent's text points to, by the path it gives.
     pub(crate) worktree_images: HashMap<String, Vec<u8>>,
+    /// The files and folders in the screen's worktree, as All files lists them.
+    pub(crate) worktree: WorktreeFiles,
+    /// What's in each folder of the screen's worktree that's read when it's opened, by its path.
+    pub(crate) worktree_folders: HashMap<String, WorktreeFiles>,
+    /// What the files in the screen's worktree that can be opened hold, by path.
+    pub(crate) worktree_texts: HashMap<String, String>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     /// Whose account the agents run under. `None` is a hub that can't say.

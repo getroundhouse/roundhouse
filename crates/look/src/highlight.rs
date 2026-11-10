@@ -76,6 +76,12 @@ pub fn try_highlight(language: &str, code: &str) -> Option<Spans> {
     READY.load(Ordering::Acquire).then(|| highlight(language, code))
 }
 
+/// What to highlight a file as, by its path: its extension, or its whole name for one like `Makefile`.
+pub fn language(path: &str) -> &str {
+    let name = path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(path);
+    name.rsplit_once('.').map_or(name, |(_, extension)| extension)
+}
+
 fn find_syntax<'a>(syntaxes: &'a SyntaxSet, language: &str) -> Option<&'a SyntaxReference> {
     let token = match language {
         "ts" | "tsx" | "typescript" => "ts",
@@ -121,6 +127,13 @@ mod tests {
 
         assert_eq!(spans.first().map(|(range, _)| range.clone()), Some(0..2), "`fn` has a colour of its own");
         assert!(spans.windows(2).all(|pair| pair[0].0.end <= pair[1].0.start), "in order, without overlapping");
+    }
+
+    #[test]
+    fn a_file_is_highlighted_by_its_extension_or_its_name() {
+        assert_eq!(language("/workspaces/aspen/src/signal.rs"), "rs");
+        assert_eq!(language("crates/look/src/theme.json"), "json");
+        assert_eq!(language("/workspaces/aspen/Makefile"), "Makefile");
     }
 
     #[test]
