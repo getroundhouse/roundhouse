@@ -33,6 +33,7 @@ mod settings;
 mod setup;
 mod sidebar;
 mod sidebar_tabs;
+mod sidebars;
 mod steering;
 mod streaming;
 #[cfg(test)]

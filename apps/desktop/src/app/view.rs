@@ -5,12 +5,14 @@ use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Render, Stateful, StatefulInteractiveElement, Styled, Window, div, px,
+    MouseMoveEvent, ParentElement, Pixels, Render, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _,
+    Window, div, px,
 };
 use look::Hand as _;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, hub_source};
+use super::{AppView, Connection, corner, hub_source};
+use crate::sides::{self, Side};
 use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
 use crate::{CloseSettings, OpenSettings};
 
@@ -23,14 +25,43 @@ impl Render for AppView {
         }
         self.keep_menus_current(cx);
         self.keep_dialog_current(cx);
+        self.place_sidebars(window, cx);
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
-            let hub = self.settings_of_hub();
-            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, back, hub, cx));
+            let (hub, width) = (self.settings_of_hub(), Side::Left.width(cx));
+            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, width, back, hub, cx));
         }
+        let inset = sides::corner_inset(cx);
+        let danger = cx.theme().danger;
+        let main = self.beside_the_sidebar(sides::header_inset(cx), cx);
+        // Built only while some of it shows.
+        let sidebar = Side::Left.shown(cx).map(|shown| {
+            let sidebar = crate::sidebar::render(self, cx).into_any_element();
+            sides::frame(Side::Left, shown, sidebar, cx)
+        });
+        let root = self.with_shortcuts(h_flex(), cx);
+        self.root(root, cx)
+            .children(sidebar)
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, inset, danger, cx)))
+                    .child(div().flex_1().min_h_0().child(main)),
+            )
+            .child(sides::corner(corner::sidebar_toggle(cx), window))
+    }
+}
+
+impl AppView {
+    /// What shows beside the sidebar: the selected workspace, Home, or what there is to say with neither. `inset` is
+    /// how far what's in the strip along the top starts from its left end, to clear the window's buttons while the
+    /// sidebar is hidden.
+    fn beside_the_sidebar(&self, inset: Pixels, cx: &mut Context<Self>) -> AnyElement {
         let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
-        let main: AnyElement = match &self.connection {
+        match &self.connection {
             Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, danger, cx),
             Connection::AcrossABreak(status) => {
@@ -38,7 +69,7 @@ impl Render for AppView {
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
             }
             Connection::Ready(_) | Connection::Connecting if self.home_showing() => {
-                crate::home::page(self, cx).into_any_element()
+                crate::home::page(self, inset, cx).into_any_element()
             }
             Connection::Ready(_) | Connection::Connecting => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
@@ -64,24 +95,13 @@ impl Render for AppView {
                     cx,
                 ),
             },
-        };
-        let root = self.with_shortcuts(h_flex(), cx);
-        self.root(root, cx).child(crate::sidebar::render(self, cx)).child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .h_full()
-                .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
-                .child(div().flex_1().min_h_0().child(main)),
-        )
+        }
     }
-}
 
-impl AppView {
     /// The workspace to draw: the selected one, which stays on screen while the app connects to a hub again, such as
     /// one it's restarting to finish an update. Otherwise what's typed for that moment would go nowhere. Unlike
     /// `selected_pane`, which is for acting on one, and so only gives one with a hub to act through.
-    fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
+    pub(super) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
         let drawn = matches!(self.connection, Connection::Ready(_) | Connection::Connecting);
         self.selected.as_ref().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }
@@ -106,7 +126,8 @@ impl AppView {
 /// The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
 /// dragging it moves the window, and double-clicking it does what the system's setting says. A press there that
 /// a control took, such as a button in the header, is the control's. Every one of the kit's buttons, and anything
-/// that takes focus, marks its press as taken before it gets here, since this is the outermost element.
+/// that takes focus, marks its press as taken before it gets here, since this is the outermost element. A press on
+/// a sidebar's edge never gets here at all, because the kit's resize handle hides what's under it from the pointer.
 fn moves_window(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
     root.on_mouse_down(
         MouseButton::Left,
@@ -131,11 +152,13 @@ fn moves_window(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div>
     .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.moving_window = false))
 }
 
-fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+/// `inset` is how far its words start from its left end, to clear the window's buttons while the sidebar is hidden.
+fn error_bar(error: String, inset: Pixels, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
     h_flex()
         .id("error-bar")
         .flex_none()
-        .px_3()
+        .pl(px(12.) + inset)
+        .pr_3()
         .py_2()
         .gap_2()
         .bg(danger.opacity(0.15))
@@ -148,7 +171,7 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
             t.error = None;
             cx.notify();
         }))
-        .child(div().flex_1().min_w_0().child(error))
+        .child(div().id("error-text").flex_1().min_w_0().child(error).test_support())
         .child(div().flex_none().child("Dismiss"))
 }
 

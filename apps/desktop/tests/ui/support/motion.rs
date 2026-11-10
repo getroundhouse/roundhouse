@@ -1,5 +1,7 @@
-//! Playing the frames the app asks for. A test's window draws when something in it changes, and not again for
-//! something that only asked for the next frame, such as a list measuring a few more rows, so a test plays those.
+//! Playing the frames the app asks for, and what moves in it. A test's window draws when something in it changes, and
+//! not again for something that only asked for the next frame, such as a list measuring a few more rows, so a test
+//! plays those. A test's clock stands still too, so the driver opens the app with Reduce Motion on, and a test of
+//! something that moves turns motion back on and plays it from here.
 
 #![cfg(test)]
 
@@ -18,6 +20,11 @@ impl Ui<'_> {
     /// the app has caught up, as after [`Ui::frame`]. Returns how many things were waiting for it.
     pub(crate) fn bring_the_next_frame(&mut self) -> usize {
         self.cx.update_window(self.handle, |_, window, cx| window.simulate_next_frame(cx)).unwrap()
+    }
+
+    /// Lets things move, as they do for someone whose Mac doesn't reduce motion.
+    pub(crate) fn allow_motion(&mut self) {
+        self.cx.update(|cx| cx.set_reduce_motion(false));
     }
 
     /// Lets `time` pass on the app's clock, and draws the frame that whatever asked for one is waiting on. Returns how

@@ -5,30 +5,42 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
-use gpui_kit::{Context, IntoElement, ParentElement, Styled, WeakEntity, Window};
+use gpui_kit::{
+    Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, Styled, TestSupportExt as _, WeakEntity,
+    Window, div, px,
+};
 use look::{Hand as _, Off as _};
 
 use super::{ArchiveFilter, Sort};
 use crate::app::AppView;
 use crate::workspace_pane::HEADER_HEIGHT;
 
-pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+/// `inset` is how far the search starts from the bar's left end, to clear the window's buttons while the sidebar is
+/// hidden.
+pub(super) fn bar(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (border, muted) = (theme.border, theme.muted_foreground);
     h_flex()
         .flex_none()
         .w_full()
         .h(HEADER_HEIGHT)
-        .pl_4()
+        .pl(px(16.) + inset)
         .pr_2()
         .gap_1()
         .border_b_1()
         .border_color(border)
         .child(
-            Input::new(&app.home.search)
-                .appearance(false)
-                .prefix(Icon::new(IconName::Search).text_color(muted))
-                .flex_1(),
+            // In a box of its own, so a test can see where the search starts.
+            div()
+                .id("home-search")
+                .flex_1()
+                .min_w_0()
+                .child(
+                    Input::new(&app.home.search)
+                        .appearance(false)
+                        .prefix(Icon::new(IconName::Search).text_color(muted)),
+                )
+                .test_support(),
         )
         .child(repos(app, cx))
         .child(archived(app, cx))

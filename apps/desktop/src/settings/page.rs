@@ -30,15 +30,16 @@ pub(crate) struct OfHub {
     pub(crate) client: Client,
 }
 
-/// Settings, with `back` going back to where the person was. Keys reach it through `focus`. `hub` is the settings
-/// the hub keeps, or `None` while they can't be read or changed.
+/// Settings, with `back` going back to where the person was. Keys reach it through `focus`. `width` is how wide the
+/// sidebar it stands in for is, whether or not that's showing. `hub` is the settings the hub keeps, or `None` while
+/// they can't be read or changed.
 pub(crate) fn page(
     focus: &FocusHandle,
+    width: Pixels,
     back: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     hub: Option<OfHub>,
     cx: &App,
 ) -> impl IntoElement {
-    let width = px(crate::sidebar::WIDTH);
     // The search starts below the strip along the top, where the main window's sidebar starts. The kit's sidebar
     // already puts 12px above it.
     let mut search = StyleRefinement::default();
