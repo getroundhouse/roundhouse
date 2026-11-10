@@ -10,10 +10,12 @@ use protocol::model::{GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
 mod pull_request;
+mod removal;
 #[cfg(test)]
 mod tests;
 
 pub use pull_request::pull_request;
+pub use removal::remove_workspace;
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 const GH_TIMEOUT: Duration = Duration::from_secs(15);
@@ -173,27 +175,6 @@ pub async fn restore_workspace(repo_path: &str, path: &str, branch: &str) -> Res
     // A worktree deleted outside this app stays registered, and would block re-adding this path.
     git_ok(&repo, &["worktree", "prune"]).await?;
     git_ok(&repo, &["worktree", "add", path, branch]).await?;
-    Ok(())
-}
-
-/// Keeps the branch, so committed work is never lost by archiving.
-pub async fn remove_workspace(repo_path: &str, path: &str, force: bool) -> Result<(), ApiError> {
-    let repo = PathBuf::from(repo_path);
-    let worktree = Path::new(path);
-    if !worktree.exists() {
-        // Already gone, perhaps deleted by hand. Only git's record of it is left to clean up.
-        git_ok(&repo, &["worktree", "prune"]).await?;
-        return Ok(());
-    }
-    if !force && let Some(loss) = status(path).await?.loss_if_removed() {
-        return Err(ApiError::new(ErrorCode::NeedsForce, loss));
-    }
-    let mut args = vec!["worktree", "remove"];
-    if force {
-        args.push("--force");
-    }
-    args.push(path);
-    git_ok(&repo, &args).await?;
     Ok(())
 }
 
