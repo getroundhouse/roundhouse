@@ -1,13 +1,16 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::{AgentTask, FileChange};
-use protocol::model::TaskId;
+use protocol::model::{TaskId, ToolUseId};
 use serde_json::json;
 
 use super::*;
 
 #[test]
 fn output_that_is_not_json_is_kept_rather_than_failing() {
-    assert_eq!(parse_line("Warning: something"), Parsed::Event(EventBody::AgentOther { kind: "unparsed".into() }));
+    assert_eq!(
+        parse_line("Warning: something"),
+        Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), parent_tool_use_id: None })
+    );
 }
 
 #[test]
@@ -47,11 +50,11 @@ fn surrogate_repair_only_touches_what_is_broken() {
 fn unknown_types_and_subtypes_are_kept() {
     assert_eq!(
         parse_line(r#"{"type":"brand_new"}"#),
-        Parsed::Event(EventBody::AgentOther { kind: "brand_new".into() })
+        Parsed::Event(EventBody::AgentOther { kind: "brand_new".into(), parent_tool_use_id: None })
     );
     assert_eq!(
         parse_line(r#"{"type":"system","subtype":"brand_new"}"#),
-        Parsed::Event(EventBody::AgentOther { kind: "system/brand_new".into() })
+        Parsed::Event(EventBody::AgentOther { kind: "system/brand_new".into(), parent_tool_use_id: None })
     );
 }
 
@@ -129,7 +132,10 @@ fn a_line_written_for_the_model_isn_t_shown() {
     let line =
         json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":note}]},"isSynthetic":true});
 
-    assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into() }));
+    assert_eq!(
+        parse_line(&line.to_string()),
+        Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id: None })
+    );
 }
 
 #[test]
@@ -172,7 +178,10 @@ fn a_mode_change_is_reported_by_the_name_a_launch_accepts() {
 #[test]
 fn a_status_about_something_else_isnt_a_mode_change() {
     let line = r#"{"type":"system","subtype":"status","status":"compacting"}"#;
-    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentOther { kind: "system/status".into() }));
+    assert_eq!(
+        parse_line(line),
+        Parsed::Event(EventBody::AgentOther { kind: "system/status".into(), parent_tool_use_id: None })
+    );
 }
 
 #[test]
@@ -217,7 +226,10 @@ fn a_list_of_background_tasks_it_cant_read_doesnt_say_theyre_done() {
     let line = json!({"type":"system","subtype":"background_tasks_changed"}).to_string();
     assert_eq!(
         parse_line(&line),
-        Parsed::Event(EventBody::AgentOther { kind: "system/background_tasks_changed".into() })
+        Parsed::Event(EventBody::AgentOther {
+            kind: "system/background_tasks_changed".into(),
+            parent_tool_use_id: None
+        })
     );
 }
 
@@ -281,7 +293,10 @@ fn a_prompts_lifecycle_names_it_by_the_uuid_it_was_sent_with() {
     assert_eq!(progress("completed"), PromptProgress::Other);
     assert_eq!(progress("something newer"), PromptProgress::Other);
     let nameless = json!({"type":"command_lifecycle","state":"started"}).to_string();
-    assert_eq!(parse_line(&nameless), Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into() }));
+    assert_eq!(
+        parse_line(&nameless),
+        Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into(), parent_tool_use_id: None })
+    );
 }
 
 /// A line from the agent with only `block`, as Claude sends each block of a message.
@@ -333,4 +348,24 @@ fn the_advisor_s_result_has_its_advice_only_when_it_can_be_read() {
     // Nothing says these are encrypted, so they aren't taken to be.
     assert_eq!(result(json!({"type":"advisor_result_v2","text":"Newer."})), said("Newer."));
     assert_eq!(result(Value::Null), said(""));
+}
+
+#[test]
+fn only_a_line_from_a_subagent_names_it() {
+    let note = json!({"type":"user","message":{"content":[]},"isSynthetic":true,"parent_tool_use_id":"agent"});
+    // About a call, the agent's own or one starting a subagent, which `parent_tool_use_id` names.
+    let progress = json!({"type":"tool_progress","tool_use_id":"t1","tool_name":"Bash","parent_tool_use_id":"bash"});
+    // About a subagent, but the agent's own: it names the call in `tool_use_id`.
+    let started = json!({"type":"system","subtype":"task_started","tool_use_id":"agent","parent_tool_use_id":null});
+
+    let subagent = |line: serde_json::Value| {
+        let Parsed::Event(body @ EventBody::AgentOther { .. }) = parse_line(&line.to_string()) else {
+            panic!("{line}")
+        };
+        body.subagent().map(ToolUseId::to_string)
+    };
+
+    assert_eq!(subagent(note).as_deref(), Some("agent"));
+    assert_eq!(subagent(progress), None);
+    assert_eq!(subagent(started), None);
 }

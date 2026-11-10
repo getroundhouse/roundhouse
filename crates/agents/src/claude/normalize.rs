@@ -106,7 +106,7 @@ fn value_of(line: &str) -> Option<Value> {
 }
 
 fn unparsed() -> Parsed {
-    Parsed::Event(EventBody::AgentOther { kind: "unparsed".into() })
+    Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), parent_tool_use_id: None })
 }
 
 fn parse_value(value: &Value) -> Parsed {
@@ -171,8 +171,10 @@ fn repair_lone_surrogates(line: &str) -> String {
     out
 }
 
+/// A line of `kind` with no normalized form, which isn't a subagent's. Not every line's `parent_tool_use_id` names a
+/// subagent: a `tool_progress` line's names the call that's making progress.
 fn other(kind: &str) -> Parsed {
-    Parsed::Event(EventBody::AgentOther { kind: kind.to_string() })
+    Parsed::Event(EventBody::AgentOther { kind: kind.to_string(), parent_tool_use_id: None })
 }
 
 fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {

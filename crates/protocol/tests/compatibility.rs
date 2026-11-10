@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{EventBody, SessionEvent};
 use protocol::frame;
-use protocol::model::{PullRequestFound, RecordKey, Rev};
+use protocol::model::{Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -145,4 +145,14 @@ fn a_workspace_tells_a_pull_request_not_looked_for_from_none() {
     assert_eq!(not_looked, None);
     assert_eq!(none, Some(PullRequestFound { pull_request: None }));
     assert_eq!(found.and_then(|found| found.pull_request).map(|pr| pr.number), Some(7));
+}
+
+#[test]
+fn an_event_from_a_hub_that_doesnt_record_subagents_is_the_agents_own_at_place_zero() {
+    let event: SessionEvent =
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_other","kind":"tool_progress"}}"#)
+            .unwrap();
+
+    assert_eq!((event.subagent, event.place), (None, Place::default()));
+    assert_eq!(event.body.subagent(), None);
 }

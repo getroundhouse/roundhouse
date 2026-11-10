@@ -119,6 +119,11 @@ counters!(
     /// hub restarts, so whatever a run produced can always be told apart from its replacement's. A
     /// later launch has a higher one.
     RunId,
+    /// An event's place among the events from the same agent or subagent in its session, so a client can follow one of
+    /// them apart from the rest. The first is 1, and there are no gaps. A hub that doesn't record it sends none, which
+    /// reads as 0.
+    #[derive(Default)]
+    Place,
 );
 
 /// A `seq` as a position in a list of events.

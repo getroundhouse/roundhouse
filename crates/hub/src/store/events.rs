@@ -1,7 +1,7 @@
 //! Each session's event log.
 
 use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
+use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SessionStatus, ToolUseId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::prompts::note_prompts;
@@ -101,7 +101,8 @@ pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
 impl Store {
     /// `change` commits with the event, so nobody can see one without the other. A client that reads status after an
     /// event gets at least that event's status, and the reply it made. A prompt recorded under the ID of one in the
-    /// queue comes out of the queue in the same commit, so no prompt is ever both sent and waiting to be.
+    /// queue comes out of the queue in the same commit, so no prompt is ever both sent and waiting to be. The event
+    /// takes the next place among those from its subagent, or the agent's own, in the same commit, so there's no gap.
     pub fn append(
         &self,
         session_id: &SessionId,
@@ -125,9 +126,15 @@ impl Store {
         let seq = last_seq + 1;
         let ts_ms = now_ms();
         let encoded = serde_json::to_string(body)?;
+        let subagent = body.subagent();
+        let place: i64 = tx.query_row(
+            "SELECT ifnull(max(place), 0) + 1 FROM events WHERE session_id = ? AND subagent IS ?",
+            params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
+            |row| row.get(0),
+        )?;
         tx.execute(
-            "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, body, raw)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, body, raw)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 session_id.as_str(),
                 seq,
@@ -135,6 +142,8 @@ impl Store {
                 body.kind(),
                 client_msg_id.map(ClientMessageId::as_str),
                 run.map(|run| run.get().cast_signed()),
+                subagent.map(ToolUseId::as_str),
+                place,
                 encoded,
                 raw
             ],
@@ -155,6 +164,8 @@ impl Store {
             seq: seq.cast_unsigned(),
             ts_ms,
             run,
+            subagent: subagent.cloned(),
+            place: Place::new(place.cast_unsigned()),
             body: body.clone(),
             raw: None,
         };
@@ -173,23 +184,15 @@ impl Store {
         let conn = lock(&self.reader);
         let raw_column = if include_raw { "raw" } else { "NULL" };
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT seq, ts_ms, run, body, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
+            "SELECT {EVENT_COLUMNS}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
         ))?;
         let mut rows = statement.query(params![session_id.as_str(), from_seq.cast_signed(), limit])?;
         let mut events = Vec::new();
         let mut bytes = 0u64;
         while let Some(row) = rows.next()? {
-            let body: String = row.get(3)?;
-            let raw: Option<String> = row.get(4)?;
-            bytes += (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
-            events.push(SessionEvent {
-                session_id: session_id.clone(),
-                seq: row.get::<_, i64>(0)?.cast_unsigned(),
-                ts_ms: row.get(1)?,
-                run: run_of(row, 2)?,
-                body: serde_json::from_str(&body)?,
-                raw,
-            });
+            let (event, size) = event_in(session_id, row)?;
+            events.push(event);
+            bytes += size;
             if bytes >= max_bytes {
                 break;
             }
@@ -250,22 +253,33 @@ fn recorded_with(
     session_id: &SessionId,
     client_msg_id: &ClientMessageId,
 ) -> Result<Option<SessionEvent>, StoreError> {
-    let existing = tx
-        .query_row(
-            "SELECT seq, ts_ms, run, body FROM events WHERE session_id = ? AND client_msg_id = ?",
-            params![session_id.as_str(), client_msg_id.as_str()],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, run_of(row, 2)?, row.get::<_, String>(3)?)),
-        )
-        .optional()?;
-    let Some((seq, ts_ms, run, body)) = existing else {
-        return Ok(None);
-    };
-    let body = serde_json::from_str(&body)?;
-    Ok(Some(SessionEvent { session_id: session_id.clone(), seq: seq.cast_unsigned(), ts_ms, run, body, raw: None }))
+    let mut statement = tx.prepare_cached(&format!(
+        "SELECT {EVENT_COLUMNS}, NULL FROM events WHERE session_id = ? AND client_msg_id = ?"
+    ))?;
+    let mut rows = statement.query(params![session_id.as_str(), client_msg_id.as_str()])?;
+    let Some(row) = rows.next()? else { return Ok(None) };
+    Ok(Some(event_in(session_id, row)?.0))
 }
 
-fn run_of(row: &rusqlite::Row<'_>, column: usize) -> rusqlite::Result<Option<RunId>> {
-    Ok(row.get::<_, Option<i64>>(column)?.map(|run| RunId::new(run.cast_unsigned())))
+/// What [`event_in`] reads, before the raw line or NULL.
+const EVENT_COLUMNS: &str = "seq, ts_ms, run, subagent, place, body";
+
+/// The event in a row of [`EVENT_COLUMNS`] and then its raw line, and how many bytes its body and raw line take.
+fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionEvent, u64), StoreError> {
+    let body: String = row.get(5)?;
+    let raw: Option<String> = row.get(6)?;
+    let size = (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
+    let event = SessionEvent {
+        session_id: session_id.clone(),
+        seq: row.get::<_, i64>(0)?.cast_unsigned(),
+        ts_ms: row.get(1)?,
+        run: row.get::<_, Option<i64>>(2)?.map(|run| RunId::new(run.cast_unsigned())),
+        subagent: row.get::<_, Option<String>>(3)?.map(ToolUseId::from),
+        place: Place::new(row.get::<_, i64>(4)?.cast_unsigned()),
+        body: serde_json::from_str(&body)?,
+        raw,
+    };
+    Ok((event, size))
 }
 
 #[cfg(test)]

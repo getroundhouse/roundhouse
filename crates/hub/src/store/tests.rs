@@ -111,8 +111,7 @@ fn a_repeated_client_msg_id_returns_the_original_and_adds_nothing() {
     store.append(&"s".into(), None, &notice("b"), None, None, None).unwrap();
     let again = store.append(&"s".into(), None, &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(again.duplicate);
-    assert_eq!(again.event.seq, first.event.seq);
-    assert_eq!(again.event.body, notice("a"));
+    assert_eq!(again.event, first.event, "the same event, in the same place");
     assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, 2);
 }
 

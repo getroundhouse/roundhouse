@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::attachment::Attachment;
-use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId};
+use crate::model::{
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, Place, RunId, Seq, SessionId, TaskId, ToolUseId,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
@@ -21,6 +23,13 @@ pub struct SessionEvent {
     /// events recorded before runs were.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
+    /// The subagent it's from, as the call that started it, or `None` for the agent's own. The hub records it from
+    /// [`EventBody::subagent`], or from the agent's line for an `AgentOther` recorded before that named its subagent. A
+    /// hub that doesn't record it sends none, and `place` as 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent: Option<ToolUseId>,
+    #[serde(default)]
+    pub place: Place,
     pub body: EventBody,
     /// The agent's original line. Only sent when a read asks for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -135,14 +144,18 @@ pub enum EventBody {
         level: NoticeLevel,
         message: String,
     },
-    /// An agent event with no normalized form. The stored raw line has the details.
     /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a
     /// plan leaves plan mode.
     AgentMode {
         permission_mode: String,
     },
+    /// An agent event with no normalized form. The stored raw line has the details.
     AgentOther {
         kind: String,
+        /// The call that started the subagent it's from, if the agent said. It's `None` in one recorded before this
+        /// was, whose `SessionEvent::subagent` says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<ToolUseId>,
     },
     #[serde(other)]
     Unknown,
@@ -169,6 +182,30 @@ impl EventBody {
             EventBody::AgentMode { .. } => "agent_mode",
             EventBody::AgentOther { .. } => "agent_other",
             EventBody::Unknown => "unknown",
+        }
+    }
+
+    /// The subagent it's from, as the call that started it, or `None` for the agent's own. Only what the agent sends
+    /// can come from a subagent, and only these say which.
+    pub fn subagent(&self) -> Option<&ToolUseId> {
+        match self {
+            EventBody::Assistant { parent_tool_use_id, .. }
+            | EventBody::AgentUser { parent_tool_use_id, .. }
+            | EventBody::AgentOther { parent_tool_use_id, .. } => parent_tool_use_id.as_ref(),
+            EventBody::UserPrompt { .. }
+            | EventBody::PromptTaken { .. }
+            | EventBody::PromptDropped { .. }
+            | EventBody::AgentStarted { .. }
+            | EventBody::AgentInit { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::AgentTasks { .. }
+            | EventBody::TurnEnded { .. }
+            | EventBody::ApprovalRequested { .. }
+            | EventBody::ApprovalResolved { .. }
+            | EventBody::AgentExited { .. }
+            | EventBody::Notice { .. }
+            | EventBody::AgentMode { .. }
+            | EventBody::Unknown => None,
         }
     }
 }

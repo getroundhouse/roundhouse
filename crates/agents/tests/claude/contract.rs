@@ -31,7 +31,7 @@ fn events() -> Vec<EventBody> {
 fn every_line_is_understood_or_deliberately_kept() {
     for (i, item) in parsed().into_iter().enumerate() {
         match item {
-            Parsed::Event(EventBody::AgentOther { kind }) => {
+            Parsed::Event(EventBody::AgentOther { kind, .. }) => {
                 assert_ne!(kind, "unparsed", "line {i} isn't JSON");
                 // New kinds are fine as long as they're recorded, but these need real handling.
                 assert!(!["assistant", "user", "result", "stream_event"].contains(&kind.as_str()), "line {i}: {kind}");

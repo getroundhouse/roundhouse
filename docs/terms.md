@@ -15,7 +15,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Instance | Where a provider runs one workspace's worker | `instance_id` |
 | Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
 | Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
-| Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its messages name the call that started it as their parent. The transcript draws them in that call | `parent_tool_use_id`, `transcript::calls::agent` |
+| Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its lines name the call that started it as their parent, which the hub records with each event. The transcript draws them in that call | `parent_tool_use_id`, `SessionEvent::subagent`, `transcript::calls::agent` |
 | Advisor | A stronger model the agent can ask for advice, which reads the whole conversation. The API runs it rather than the agent, so it's a tool call whose result comes in the agent's own messages, and the advice can come encrypted, for the model alone | `ToolCall::Advisor`, `agents::claude::normalize::advisor`, `ContentBlock::ToolResult.encrypted` |
 | Adapter | The code that runs one kind of agent and turns its output into events | `agents::claude` |
 
@@ -66,6 +66,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Event | One entry in a session's log | `SessionEvent`, `EventBody` |
 | Log | A session's events, in order. It's the source of truth for what happened | The `events` table |
 | Seq | An event's position in its log. The first is 1, and there are no gaps | `Seq` |
+| Place | An event's position among the events from the same agent or subagent in its log, as `seq` is among all of them. The first is 1, and there are no gaps | `Place`, `SessionEvent::place` |
 | Raw line | The agent's original output, stored beside the event made from it | `raw` |
 | Tail | Text the agent is still writing, which isn't in the log yet | `Tail` |
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |

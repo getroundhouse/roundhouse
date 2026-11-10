@@ -3,7 +3,7 @@
 use protocol::event::{ContentBlock, EventBody};
 use serde_json::Value;
 
-use super::{Parsed, blocks, file_change, id_of, images, other};
+use super::{Parsed, blocks, file_change, id_of, images};
 
 pub(super) fn line(value: &Value) -> Parsed {
     let content = value.get("message").and_then(|message| message.get("content"));
@@ -12,7 +12,9 @@ pub(super) fn line(value: &Value) -> Parsed {
     // a compacted conversation carries on from. A result is shown even so, or its call would never get one.
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
     if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
-        return other("user/synthetic");
+        // A subagent's names the call that started it, as every `user` line from one does.
+        let parent_tool_use_id = id_of(value, "parent_tool_use_id");
+        return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id });
     }
     // Claude says what an edit changed beside the line's one result, rather than in it.
     if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
