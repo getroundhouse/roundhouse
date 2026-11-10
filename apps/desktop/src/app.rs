@@ -27,7 +27,7 @@ mod shortcuts;
 mod view;
 mod workspaces;
 
-pub use build_line::BuildLine;
+pub use build_line::{Agents, BuildLine};
 pub use hub_source::HubSource;
 pub use restarts::UpdateQuestion;
 
@@ -167,7 +167,7 @@ impl AppView {
         let client = self.client();
         let hub = client.as_ref().map(Client::hub_version);
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = self.sessions.values().flatten().filter(|s| s.status.is_active()).count();
+        let agents = Agents::of(self.sessions.values().flatten().map(|s| s.status));
         BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 

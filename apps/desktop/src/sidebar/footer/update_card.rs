@@ -11,7 +11,7 @@ use gpui_kit::{
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
-use crate::app::{AppView, BuildLine, UpdateQuestion};
+use crate::app::{Agents, AppView, BuildLine, UpdateQuestion};
 
 /// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
 /// and a mark in its corner that says which versions, and what happens next, on hover. Installing an update is the
@@ -111,7 +111,7 @@ fn ready_card(
 
 /// The app has updated, and the older hub is still busy, so it finishes by itself later, or now if asked.
 fn finishing_card(
-    agents: usize,
+    agents: Agents,
     question: Option<&UpdateQuestion>,
     cx: &mut Context<AppView>,
 ) -> (Stateful<Div>, Option<AnyElement>) {
@@ -155,12 +155,21 @@ fn asking(
         .into_any_element()
 }
 
-/// What finishing an update is waiting on.
-fn waiting_on(agents: usize) -> String {
-    match agents {
-        0 => "Waiting on other work".to_string(),
-        1 => "Waiting on 1 agent".to_string(),
-        n => format!("Waiting on {n} agents"),
+/// What finishing an update is waiting on. An agent that's waiting on you is said apart, since the update waits on
+/// you then, and reads as stuck otherwise: nothing in the sidebar shows as working.
+fn waiting_on(agents: Agents) -> String {
+    let working = match agents.working {
+        0 => None,
+        1 => Some("Waiting on 1 agent".to_string()),
+        n => Some(format!("Waiting on {n} agents")),
+    };
+    match (working, agents.waiting_on_you) {
+        (None, 0) => "Waiting on other work".to_string(),
+        (Some(working), 0) => working,
+        (None, 1) => "1 agent is waiting on you".to_string(),
+        (None, n) => format!("{n} agents are waiting on you"),
+        (Some(working), 1) => format!("{working}. 1 more is waiting on you."),
+        (Some(working), n) => format!("{working}. {n} more are waiting on you."),
     }
 }
 
@@ -168,4 +177,33 @@ fn waiting_on(agents: usize) -> String {
 fn finish_now(cx: &mut Context<AppView>) -> Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
     Button::new("finish-update").ghost().xsmall().label("Finish now").on_click(finish)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn says(working: usize, waiting_on_you: usize) -> String {
+        waiting_on(Agents { working, waiting_on_you })
+    }
+
+    #[test]
+    fn agents_at_work_are_what_it_waits_on() {
+        assert_eq!(says(1, 0), "Waiting on 1 agent");
+        assert_eq!(says(3, 0), "Waiting on 3 agents");
+    }
+
+    /// Such an agent never finishes by itself, so "Waiting on 1 agent" would have the update wait for good.
+    #[test]
+    fn an_agent_waiting_on_you_is_said_to_be() {
+        assert_eq!(says(0, 1), "1 agent is waiting on you");
+        assert_eq!(says(0, 2), "2 agents are waiting on you");
+        assert_eq!(says(1, 1), "Waiting on 1 agent. 1 more is waiting on you.");
+        assert_eq!(says(2, 3), "Waiting on 2 agents. 3 more are waiting on you.");
+    }
+
+    #[test]
+    fn with_no_agents_it_waits_on_other_work() {
+        assert_eq!(says(0, 0), "Waiting on other work");
+    }
 }

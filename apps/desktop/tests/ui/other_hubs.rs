@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::app::{AppView, BuildLine, Connection, UpdateQuestion};
+use desktop::app::{Agents, AppView, BuildLine, Connection, UpdateQuestion};
 use gpui_kit::TestAppContext;
 
 use crate::support::{Stack, StandInHub, Ui};
@@ -77,7 +77,7 @@ fn an_update_finishes_by_itself_once_nothing_else_is_using_the_older_hub(cx: &mu
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
     let mut ui = Ui::open(cx, &stack);
     ui.send_to_back();
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { agents: 0, .. }));
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { agents: Agents { working: 0, waiting_on_you: 0 }, .. }));
 
     older.set_clients(1);
     ui.wait_out_a_look();

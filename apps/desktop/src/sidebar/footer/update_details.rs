@@ -9,7 +9,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, Styled as _, TestSupportExt as _, anchored, deferred, div, point, px,
 };
 
-use crate::app::BuildLine;
+use crate::app::{Agents, BuildLine};
 
 /// As long as GPUI waits before any other tooltip in the app shows, so this one doesn't feel slower. They go as soon
 /// as the pointer does, too.
@@ -42,23 +42,7 @@ impl Details {
                      running. Quitting installs it too."
                 ),
             ),
-            BuildLine::Finishing { app, hub, agents: 0 } => (
-                hub,
-                app,
-                format!(
-                    "You're on version {app} of the app, and a previous version, {hub}, is still busy, such as with \
-                     a setup script or the command line connected to it. The update finishes by itself once it's \
-                     free."
-                ),
-            ),
-            BuildLine::Finishing { app, hub, agents: _ } => (
-                hub,
-                app,
-                format!(
-                    "You're on version {app} of the app, and agents are still running on a previous version, {hub}. \
-                     The update finishes by itself once they're done."
-                ),
-            ),
+            BuildLine::Finishing { app, hub, agents } => (hub, app, finishing(app, hub, *agents)),
             BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
         };
         Some(Self { from: from.clone(), to: to.clone(), what_happens })
@@ -126,6 +110,29 @@ impl Details {
     }
 }
 
+/// What finishing an update waits for. Agents waiting on you don't get done by themselves, so it says what does it.
+fn finishing(app: &str, hub: &str, agents: Agents) -> String {
+    let start = format!("You're on version {app} of the app, and");
+    match (agents.working, agents.waiting_on_you) {
+        (0, 0) => format!(
+            "{start} a previous version, {hub}, is still busy, such as with a setup script or the command line \
+             connected to it. The update finishes by itself once it's free."
+        ),
+        (_, 0) => format!(
+            "{start} agents are still running on a previous version, {hub}. The update finishes by itself once \
+             they're done."
+        ),
+        (0, _) => format!(
+            "{start} agents on a previous version, {hub}, are waiting on you, for an answer or an approval. The \
+             update finishes by itself once they have it and are done."
+        ),
+        (_, _) => format!(
+            "{start} agents are still running on a previous version, {hub}. Some are waiting on you, for an answer \
+             or an approval. The update finishes by itself once they're all done."
+        ),
+    }
+}
+
 /// Whether the details show, and how wide the card was last drawn, inside its border, which they match.
 #[derive(Default)]
 pub(super) struct Shown {
@@ -150,23 +157,37 @@ mod tests {
 
     #[test]
     fn finishing_goes_from_the_hubs_build_to_the_apps() {
-        for agents in [0, 2] {
-            let line = BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents };
+        for working in [0, 2] {
+            let line = finishing_line(Agents { working, waiting_on_you: 0 });
 
-            assert_eq!(versions(&line), Some(("0.9.0".to_string(), "1.0.0".to_string())), "{agents} agents");
+            assert_eq!(versions(&line), Some(("0.9.0".to_string(), "1.0.0".to_string())), "{working} agents");
         }
     }
 
     #[test]
     fn a_hub_with_nothing_to_finish_says_what_else_it_waits_on() {
-        let line = BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents: 0 };
+        let what_happens = what_happens(Agents::default());
 
-        let details = Details::of(&line).unwrap();
+        assert!(what_happens.contains("is still busy, such as with a setup script"), "{what_happens}");
+    }
 
-        assert!(
-            details.what_happens.contains("is still busy, such as with a setup script"),
-            "{}",
-            details.what_happens
-        );
+    /// Only the agents that work get done by themselves, so "once they're done" alone would be wrong for the rest.
+    #[test]
+    fn agents_waiting_on_you_are_said_to_be() {
+        for (working, waiting_on_you) in [(0, 1), (2, 1)] {
+            let what_happens = what_happens(Agents { working, waiting_on_you });
+
+            assert!(what_happens.contains("waiting on you, for an answer or an approval"), "{what_happens}");
+        }
+        let what_happens = what_happens(Agents { working: 2, waiting_on_you: 0 });
+        assert!(!what_happens.contains("waiting on you"), "{what_happens}");
+    }
+
+    fn finishing_line(agents: Agents) -> BuildLine {
+        BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents }
+    }
+
+    fn what_happens(agents: Agents) -> String {
+        Details::of(&finishing_line(agents)).unwrap().what_happens
     }
 }
