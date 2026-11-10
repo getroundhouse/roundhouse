@@ -1,3 +1,6 @@
+// A release build opens no console window on Windows, which would otherwise give every program one.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use desktop::checkout::{Checkout, take_note};
 
 fn main() {

@@ -2,16 +2,15 @@
 //! it apart from this client. A stamped build's hubs run from its own copy of the daemon, for the reason "Updating
 //! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is.
 
-use std::fs::{File, OpenOptions, Permissions};
+use std::fs::{File, OpenOptions};
 use std::io;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use protocol::StampedBuild;
-use protocol::paths::{DAEMON_NAME, Paths};
+use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
 
 use super::{Client, Result, hub_is_missing};
 
@@ -68,7 +67,7 @@ impl Daemon {
     /// The one that ships next to `exe`, which is this build. Follows symlinks first, so a hub started through an
     /// install's `current` link stays on that version, whichever one the link names later.
     fn beside(exe: &Path) -> io::Result<Self> {
-        Ok(Self { path: exe.canonicalize()?.with_file_name(DAEMON_NAME), build: protocol::STAMPED_BUILD })
+        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: protocol::STAMPED_BUILD })
     }
 
     /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.
@@ -88,11 +87,19 @@ impl Daemon {
 }
 
 fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
-    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-    use std::os::unix::process::CommandExt;
-    // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere.
-    std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&paths.data_dir)?;
-    let log = OpenOptions::new().create(true).append(true).mode(0o600).open(&paths.log)?;
+    // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere. Windows has no
+    // modes: what's created there gets its directory's permissions.
+    let mut data_dir = std::fs::DirBuilder::new();
+    data_dir.recursive(true);
+    let mut log = OpenOptions::new();
+    log.create(true).append(true);
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::DirBuilderExt::mode(&mut data_dir, 0o700);
+        std::os::unix::fs::OpenOptionsExt::mode(&mut log, 0o600);
+    }
+    data_dir.create(&paths.data_dir)?;
+    let log = log.open(&paths.log)?;
     let exe = daemon.to_start(paths)?;
     let mut command = Command::new(&exe);
     command
@@ -103,8 +110,17 @@ fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
-    // SAFETY: setsid is async-signal-safe, which is all pre_exec requires. It detaches the hub from
-    // this terminal and process group, so closing the client doesn't reach it.
+    detach(&mut command, &paths.data_dir);
+    waiting_out_busy(|| command.spawn())
+        .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
+    Ok(())
+}
+
+/// Detaches the hub from this terminal and process group, so closing the client doesn't reach it.
+#[cfg(unix)]
+fn detach(command: &mut Command, _home: &Path) {
+    use std::os::unix::process::CommandExt;
+    // SAFETY: setsid is async-signal-safe, which is all pre_exec requires.
     unsafe {
         command.pre_exec(|| {
             if libc::setsid() == -1 {
@@ -113,9 +129,28 @@ fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
             Ok(())
         });
     }
-    waiting_out_busy(|| command.spawn())
-        .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
-    Ok(())
+}
+
+/// Gives the hub a console of its own with no window, so closing the client's doesn't reach it. It needs one, or
+/// everything it starts would open a console window each, where this way they share its hidden one. It also starts
+/// in `home`, because Windows won't let a directory be moved or deleted while a process is running in it, and the
+/// client's could be a workspace.
+#[cfg(windows)]
+fn detach(command: &mut Command, home: &Path) {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+    command.creation_flags(CREATE_NO_WINDOW).current_dir(home);
+    // A child on Windows gets every handle its parent can pass on, wanted or not, and this client's own input and
+    // output are among them when it was started with them. The hub would hold them for as long as it runs, so
+    // whatever reads this client's output to its end, such as the next command in a pipeline, would wait that long.
+    // The hub has the log for its own. Anything this client starts later still gets them, since std gives each
+    // child a copy made for it.
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: both calls take any value as a handle, and neither touches memory.
+        unsafe { SetHandleInformation(GetStdHandle(which), HANDLE_FLAG_INHERIT, 0) };
+    }
 }
 
 /// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for
@@ -158,7 +193,9 @@ static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 fn create_temporary(copy: &Path) -> io::Result<(PathBuf, File)> {
     loop {
         let n = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
-        let temporary = copy.with_file_name(format!(".{DAEMON_NAME}.{}.{n}", std::process::id()));
+        // With the extension Windows wants on a file it runs, which `check_build` does.
+        let name = format!(".{DAEMON_NAME}.{}.{n}{}", std::process::id(), std::env::consts::EXE_SUFFIX);
+        let temporary = copy.with_file_name(name);
         match OpenOptions::new().write(true).create_new(true).open(&temporary) {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             opened => return opened.map(|file| (temporary, file)),
@@ -170,7 +207,8 @@ fn create_temporary(copy: &Path) -> io::Result<(PathBuf, File)> {
 /// signature inside. Closes the file, which Linux needs before it will run it.
 fn write_executable(original: &Path, mut file: File) -> io::Result<()> {
     io::copy(&mut File::open(original)?, &mut file)?;
-    file.set_permissions(Permissions::from_mode(0o755))?;
+    #[cfg(unix)]
+    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
     // Before it's linked in, so a crash can't leave a copy in place that's missing part of what was written.
     file.sync_all()
 }

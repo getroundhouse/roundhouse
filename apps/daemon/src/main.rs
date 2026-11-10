@@ -47,6 +47,7 @@ enum Role {
 /// app starts a hub from a background thread that has them all blocked. This binary needs them: tokio
 /// only learns that a child exited from `SIGCHLD`, so without it the first `git` never returns, and
 /// `SIGTERM` is how it's asked to stop. Everything this starts inherits the result, agents included.
+#[cfg(unix)]
 fn unblock_signals() {
     let mut none = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
     // SAFETY: `sigemptyset` initializes the set it's given, and this runs on the main thread before any
@@ -67,6 +68,7 @@ fn forget_hub_variables() {
 }
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(unix)]
     unblock_signals();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
@@ -109,7 +111,7 @@ fn main() -> anyhow::Result<()> {
                 worker::Config {
                     workspaces_root,
                     state_dir,
-                    home: std::env::var_os("HOME").map(PathBuf::from),
+                    home: std::env::var_os(protocol::paths::HOME_VAR).map(PathBuf::from),
                     path: std::env::var_os("PATH"),
                     claude_bin,
                     scratch_dir: std::env::temp_dir(),
