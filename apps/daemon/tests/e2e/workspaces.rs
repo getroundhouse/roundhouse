@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use client_core::{ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, ClientRequestId, DiffSide, SessionOptions, SessionStatus, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, ClientRequestId, DiffSide, FileContents, SessionOptions, SessionStatus, WorkspaceStatus,
+};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, is_alive, read_all, wait_for_setup, wait_for_turn_end, wait_until,
@@ -117,6 +119,28 @@ fn status_and_diff_come_from_the_worker() {
     let diff = client.workspace_diff(&workspace.id).unwrap();
     assert!(diff.patch.contains("+changed"), "{}", diff.patch);
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
+}
+
+/// The worker lists and reads them, and its own tests cover what it leaves out and refuses.
+#[test]
+fn a_client_browses_the_worktree_s_files_through_the_hub() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    let script = "tool:mkdir -p src build/out && echo 'fn main() {}' > src/main.rs && echo built > build/out/app.txt \
+        && echo build/ >> .gitignore";
+    client.session_prompt(&session.id, script, None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    let files = client.workspace_files(&workspace.id).unwrap();
+    let folder = client.workspace_folder_read(&workspace.id, "build/out").unwrap();
+    let read = client.workspace_file_read(&workspace.id, "src/main.rs").unwrap();
+
+    assert!(files.paths.iter().any(|path| path == "a.txt"), "a tracked file: {:?}", files.paths);
+    assert!(files.paths.iter().any(|path| path == "src/main.rs"), "a new one: {:?}", files.paths);
+    assert_eq!(files.folders, ["build"], "an ignored one, by its folder");
+    assert_eq!(folder.paths, ["build/out/app.txt"]);
+    assert_eq!(read, FileContents::Text { text: "fn main() {}\n".to_string() });
 }
 
 #[test]

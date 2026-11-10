@@ -18,10 +18,16 @@ pub(crate) struct Screen {
 pub(crate) enum Step {
     /// Selects the workspace with this name, and waits for its chat, its diff and its pull request to load.
     Select(&'static str),
-    /// Clicks this file in the sidebar of changes, and waits for the diff tab to show it.
+    /// Clicks this file in the sidebar of changes, and waits for the file tab to show it.
     OpenFile(&'static str),
     /// Starts a comment on this line of the open file's new side, as the line's add button would.
     StartComment(usize),
+    /// Shows All files in the sidebar of changes, and waits for it to list them.
+    AllFiles,
+    /// Clicks this file in All files, and waits for the file tab to show its lines.
+    ViewFile(&'static str),
+    /// Waits for the element with this ID to be drawn, such as what's in a folder that's read when it opens.
+    WaitFor(&'static str),
     OpenSetupLog,
     /// Presses a button, such as one that opens a menu.
     Click(&'static str),

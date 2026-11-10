@@ -29,18 +29,27 @@ pub(super) struct Reading {
 }
 
 impl WorkspacePane {
-    /// Whether this is the pane showing, in the window in front. A chat that comes on screen is read.
+    /// Whether this is the pane showing, in the window in front. A chat that comes on screen is read, and the files
+    /// are listed again if a turn ended while it wasn't.
     pub fn set_on_screen(&mut self, on_screen: bool, cx: &mut Context<Self>) {
         if self.reading.on_screen != on_screen {
             self.reading.on_screen = on_screen;
             self.read_showing(cx);
+            if on_screen {
+                self.catch_up_files(cx);
+            }
         }
+    }
+
+    /// Whether this is the pane showing, in the window in front.
+    pub(super) fn on_screen(&self) -> bool {
+        self.reading.on_screen
     }
 
     /// Marks the chat showing read, when it's on screen with a reply that has just come, or that the screen hasn't
     /// shown it with yet. For after anything that changes which chat is showing, or what it holds.
     pub(super) fn read_showing(&mut self, cx: &mut Context<Self>) {
-        // The diff tab covers the chat while it shows.
+        // The file tab covers the chat while it shows.
         let showing = self.session().filter(|_| self.reading.on_screen && self.showing() == Showing::Chat).cloned();
         let Some(session) = showing else {
             self.reading.shown = None;

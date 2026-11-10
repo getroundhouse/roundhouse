@@ -23,6 +23,7 @@ mod screens;
 mod steps;
 mod subagent_chats;
 mod tool_chats;
+mod worktree;
 mod world;
 mod worlds;
 

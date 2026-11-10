@@ -14,7 +14,7 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
 use protocol::frame;
-use protocol::model::{GitDiff, GitStatus, PromptLine, SessionId, SessionStatus, WorkspaceStatus};
+use protocol::model::{FileContents, GitDiff, GitStatus, PromptLine, SessionId, SessionStatus, WorkspaceStatus};
 
 use super::world::World;
 
@@ -133,6 +133,19 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let unsupported =
                 || ApiError::new(ErrorCode::Unsupported, "this screen's hub can't say whose account it is");
             reply(C::SessionAccount(world.account.clone().ok_or_else(unsupported)?))
+        }
+        R::WorkspaceFiles { .. } => reply(C::WorktreeFiles(world.worktree.clone())),
+        R::WorkspaceFolderRead { path, .. } => {
+            let files = world
+                .worktree_folders
+                .get(&path)
+                .ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such folder"))?;
+            reply(C::WorktreeFiles(files.clone()))
+        }
+        R::WorkspaceFileRead { path, .. } => {
+            let text =
+                world.worktree_texts.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
+            reply(C::FileContents(FileContents::Text { text: text.clone() }))
         }
         R::HubShutdown
         | R::RepoAdd { .. }

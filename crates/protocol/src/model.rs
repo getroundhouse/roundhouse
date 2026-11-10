@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 mod account;
 mod context;
 mod effort;
+mod files;
 mod one_line;
 mod options;
 mod prompt_line;
@@ -16,6 +17,7 @@ mod title;
 pub use account::{AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use effort::Effort;
+pub use files::{FileContents, WorktreeFiles};
 pub use options::SessionOptions;
 pub use prompt_line::PromptLine;
 pub use pull_request::{

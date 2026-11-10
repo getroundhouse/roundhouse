@@ -195,6 +195,9 @@ async fn handle(
             let (media_type, data) = hub.workspace_image_read(id, path).await?;
             C::Image { media_type, data }
         }
+        R::WorkspaceFiles { id } => C::WorktreeFiles(hub.workspace_files(id).await?),
+        R::WorkspaceFolderRead { id, path } => C::WorktreeFiles(hub.workspace_folder_read(id, path).await?),
+        R::WorkspaceFileRead { id, path } => C::FileContents(hub.workspace_file_read(id, path).await?),
         R::WorkspaceSetupLog { id } => C::SetupLog { text: hub.workspace_setup_log(id).await? },
         R::WorkspaceRerunSetup { id } => C::Workspace(hub.workspace_rerun_setup(id).await?),
         R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },

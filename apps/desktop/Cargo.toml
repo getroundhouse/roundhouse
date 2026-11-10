@@ -38,6 +38,10 @@ image = { workspace = true, features = ["bmp", "png", "tiff"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
 
+# Reads the file icons' manifest into tables, so the app never parses it.
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }

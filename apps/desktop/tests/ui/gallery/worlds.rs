@@ -6,12 +6,12 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     AgentAccount, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
     Effort, GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus,
-    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus, WorktreeFiles,
 };
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, NOW_MS, World};
-use super::{chats, file_chats, image_chats, patch, pictures, pull_requests};
+use super::{chats, file_chats, image_chats, patch, pictures, pull_requests, worktree};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {
@@ -357,6 +357,21 @@ pub(super) fn diff() -> World {
             rev: Rev::default(),
         }],
     );
+    world
+}
+
+/// The diff's workspace, with every file in its worktree for All files to list, what's in the folders git ignores
+/// whole, and the text of the one opened.
+pub(super) fn all_files() -> World {
+    let mut world = diff();
+    let strings = |names: &[&str]| names.iter().map(ToString::to_string).collect::<Vec<_>>();
+    world.worktree =
+        WorktreeFiles { paths: strings(worktree::FILES), folders: strings(worktree::FOLDERS), truncated: false };
+    for (folder, paths, folders) in worktree::IN_FOLDERS {
+        let files = WorktreeFiles { paths: strings(paths), folders: strings(folders), truncated: false };
+        world.worktree_folders.insert((*folder).to_string(), files);
+    }
+    world.worktree_texts.insert(worktree::OPENED.to_string(), worktree::MODEL.to_string());
     world
 }
 

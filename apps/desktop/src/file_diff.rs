@@ -1,5 +1,5 @@
-//! One changed file's diff, on the kit's `Diff`, as the workspace's diff tab shows it, with the comments on it and the
-//! one being written. Which file is the pane's to say, since the diff tab is the pane's, and the files and comments
+//! One changed file's diff, on the kit's `Diff`, as the workspace's file tab shows it, with the comments on it and the
+//! one being written. Which file is the pane's to say, since the file tab is the pane's, and the files and comments
 //! are the workspace's [`Review`]'s.
 
 use gpui_kit::component::ActiveTheme as _;
@@ -41,13 +41,13 @@ fn our_side(side: KitSide) -> DiffSide {
 
 pub struct FileDiff {
     review: Entity<Review>,
-    /// The file the diff tab shows, while it's open.
+    /// The file the file tab shows, while it's open.
     pub path: Option<SharedString>,
     /// The kit's view of it, once there's been one.
     pub state: Option<Entity<DiffState>>,
     /// The comment being written. It's kept while another file shows, and shows again with its own.
     pub draft: Option<Draft>,
-    /// Where keys go while the diff tab shows, when no comment is being written, so the window's keys reach the app.
+    /// Where keys go while the file tab shows, when no comment is being written, so the window's keys reach the app.
     focus: FocusHandle,
     _subscriptions: [Subscription; 2],
 }
@@ -73,7 +73,7 @@ impl FileDiff {
         Self { review, path: None, state: None, draft: None, focus, _subscriptions: [observing, loading] }
     }
 
-    /// Shows a file, in place of the one it showed, or none, as the diff tab says.
+    /// Shows a file, in place of the one it showed, or none, as the file tab says.
     pub fn show(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.path != path {
             self.path = path;

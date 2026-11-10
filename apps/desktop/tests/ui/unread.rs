@@ -125,12 +125,12 @@ fn a_reply_while_home_shows_waits_until_its_workspace_does(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
-fn a_reply_while_the_diff_tab_shows_waits_until_the_chat_does(cx: &mut TestAppContext) {
+fn a_reply_while_the_file_tab_shows_waits_until_the_chat_does(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
-    let diff = ui.open_diff();
-    ui.open_file(&diff, "a.txt");
+    let diff = ui.open_changes();
+    ui.open_diff_of(&diff, "a.txt");
 
     stack.client().session_prompt(&chat, "say:while you were reading the diff", None).unwrap();
 

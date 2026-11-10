@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn run(cwd: &Path, args: &[&str]) -> String {
+pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
     let output = std::process::Command::new("git")
         .args(args)
         .current_dir(cwd)
@@ -14,7 +14,7 @@ pub(super) fn run(cwd: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-pub(super) fn new_repo(dir: &Path) -> PathBuf {
+pub(crate) fn new_repo(dir: &Path) -> PathBuf {
     let repo = dir.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     run(&repo, &["init", "-q", "-b", "main"]);

@@ -53,8 +53,8 @@ fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
     ui.frame();
     ui.input("say:from the first chat");
     std::fs::write(ui.worktree(&id).join("a.txt"), "one\ntwo\n").unwrap();
-    let diff = ui.open_diff();
-    ui.open_file(&diff, "a.txt");
+    let diff = ui.open_changes();
+    ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why");
 
@@ -159,7 +159,7 @@ fn lose_the_hub(ui: &mut Ui<'_>, stack: &Stack) {
 
 /// Opens the selected workspace's diff, which has nothing in it yet.
 fn open_empty_diff(ui: &mut Ui<'_>) -> Diff {
-    let diff = ui.open_diff();
+    let diff = ui.open_changes();
     assert!(!shows_changes(ui, &diff));
     diff
 }

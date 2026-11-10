@@ -51,11 +51,7 @@ pub(crate) fn file_name(path: &str) -> &str {
     path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(path)
 }
 
-/// What to highlight a file as: its extension, or its whole name for one like `Makefile`.
-pub(crate) fn language(path: &str) -> &str {
-    let name = file_name(path);
-    name.rsplit_once('.').map_or(name, |(_, extension)| extension)
-}
+pub(crate) use look::language;
 
 /// The lines of a read, each with its number in the file. Claude puts each line's number in front of it, then a tab,
 /// or an arrow in older versions. Whatever follows the numbered lines, such as a note to the agent, isn't the file.
@@ -76,7 +72,7 @@ fn numbered(line: &str) -> Option<(u32, &str)> {
 mod tests {
     use serde_json::json;
 
-    use super::{EditFile, file_name, language, numbered_lines};
+    use super::{EditFile, file_name, numbered_lines};
 
     #[test]
     fn a_read_s_lines_keep_their_numbers_and_leave_out_what_follows() {
@@ -102,9 +98,8 @@ mod tests {
     }
 
     #[test]
-    fn a_file_is_named_and_highlighted_by_its_last_part() {
+    fn a_file_is_named_by_its_last_part() {
         assert_eq!(file_name("/workspaces/aspen/src/signal.rs"), "signal.rs");
-        assert_eq!(language("/workspaces/aspen/src/signal.rs"), "rs");
-        assert_eq!(language("/workspaces/aspen/Makefile"), "Makefile");
+        assert_eq!(file_name("/workspaces/aspen/src/"), "src");
     }
 }

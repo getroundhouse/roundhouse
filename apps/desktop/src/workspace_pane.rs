@@ -1,4 +1,4 @@
-//! One workspace: its chats, the composer, the diff tab, and the sidebar of changes beside them when it's open.
+//! One workspace: its chats, the composer, the file tab, and the sidebar of changes beside them when it's open.
 
 use std::collections::HashMap;
 
@@ -6,28 +6,33 @@ use client_core::{Client, RecordsFeed};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, SharedString,
-    Subscription, Task, Window, px,
+    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, Subscription, Task,
+    Window, px,
 };
 use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, Workspace, WorkspaceId};
 use transcript::Transcript;
 
+use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
+use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
 use attaching::Draft;
+use file_tab::FileTab;
+pub use file_tab::Opened;
 pub use reading::Mark;
 use reading::Reading;
 
 mod attaching;
+mod changes_sidebar;
 mod chats;
 mod closed;
 mod composer;
 mod context;
-mod diff_tab;
+mod file_tab;
 mod pull_request;
 mod queue;
 mod reading;
@@ -42,25 +47,26 @@ pub enum Showing {
     /// The active chat.
     #[default]
     Chat,
-    /// The diff tab, in place of the active chat.
-    Diff,
+    /// The file tab, in place of the active chat.
+    File,
 }
 
-/// The workspace's diff and its two views, made together the first time the sidebar of changes opens, then kept.
+/// The workspace's diff and the views of its worktree, made together the first time the sidebar of changes opens, then
+/// kept.
 pub struct Diff {
     pub review: Entity<Review>,
-    /// What the diff tab shows.
+    /// What the file tab shows of a file opened from Changes.
     pub file: Entity<FileDiff>,
-    /// The sidebar of changes.
+    /// What the file tab shows of a file opened from All files.
+    pub viewer: Entity<FileView>,
+    /// The sidebar of changes' list of them.
     pub changes: Entity<Changes>,
-    /// The diff tab, while it's open. It's here so there's never a diff tab without a diff to show in it.
-    tab: Option<DiffTab>,
-}
-
-struct DiffTab {
-    path: SharedString,
-    /// It covers the active chat.
-    in_front: bool,
+    /// Every file in the worktree, which the sidebar of changes shows in place of the changes when it's chosen.
+    pub all_files: Entity<AllFiles>,
+    /// The file tab, while it's open. It's here so there's never a file tab without a view to show in it.
+    tab: Option<FileTab>,
+    /// A turn ended while the pane wasn't on screen, so the files are listed again once it is.
+    files_behind: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -255,6 +261,8 @@ impl WorkspacePane {
         }
         if let Some(diff) = &self.diff {
             diff.review.update(cx, |r, _| r.reconnect(client));
+            diff.all_files.update(cx, |a, _| a.reconnect(client));
+            diff.viewer.update(cx, |v, _| v.reconnect(client));
         }
         self.behind = true;
     }
@@ -267,7 +275,7 @@ impl WorkspacePane {
     }
 
     /// For each time the pane is shown. Reads the pull request again, since it changes on GitHub while nobody's
-    /// looking, and the diff, if the sidebar of changes or the diff tab shows it.
+    /// looking, and what the sidebar of changes and the file tab show of the worktree.
     pub fn shown(&mut self, cx: &mut Context<Self>) {
         self.behind = false;
         self.refresh_pull_request(cx);
@@ -326,14 +334,14 @@ impl WorkspacePane {
     /// What's in front under the tabs.
     pub fn showing(&self) -> Showing {
         let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
-        if tab.is_some_and(|tab| tab.in_front) { Showing::Diff } else { Showing::Chat }
+        if tab.is_some_and(|tab| tab.in_front) { Showing::File } else { Showing::Chat }
     }
 
-    /// Puts the active chat or the diff tab in front, as long as the diff tab is open. It's the only way either comes
+    /// Puts the active chat or the file tab in front, as long as the file tab is open. It's the only way either comes
     /// to the front, so what's read and what has focus always follow what's drawn.
     pub(super) fn bring_to_front(&mut self, front: Showing, cx: &mut Context<Self>) {
         if let Some(tab) = self.diff.as_mut().and_then(|diff| diff.tab.as_mut()) {
-            tab.in_front = front == Showing::Diff;
+            tab.in_front = front == Showing::File;
         }
         // The chat is read only while it's in front.
         self.read_showing(cx);
@@ -347,13 +355,15 @@ impl WorkspacePane {
         cx.notify();
     }
 
-    /// Focuses the diff while the diff tab shows, and the composer otherwise. The composer isn't drawn behind the diff
+    /// Focuses the file tab's view while it shows, and the composer otherwise. The composer isn't drawn behind the file
     /// tab, and focus on something that isn't drawn takes the window's keys, such as `Ctrl-Tab`, nowhere.
     pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
         match self.showing() {
-            Showing::Diff => {
-                if let Some(diff) = &self.diff {
-                    window.focus(&diff.file.focus_handle(cx), cx);
+            Showing::File => {
+                let Some(diff) = &self.diff else { return };
+                match diff.tab.as_ref().map(|tab| tab.opened) {
+                    Some(Opened::File) => window.focus(&diff.viewer.focus_handle(cx), cx),
+                    Some(Opened::Diff) | None => window.focus(&diff.file.focus_handle(cx), cx),
                 }
             }
             Showing::Chat => self.focus_composer(window, cx),

@@ -12,7 +12,6 @@ use desktop::pull_request::Lookup;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
@@ -23,6 +22,8 @@ use image::RgbaImage;
 use super::steps::{Screen, Step, Target};
 use super::{fake_hub, world};
 use crate::support::menu_item;
+
+mod files;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
 const TIMEOUT: Duration = Duration::from_secs(20);
@@ -124,6 +125,9 @@ impl Driver {
                 });
             }
             Step::OpenFile(path) => self.open_file(path),
+            Step::AllFiles => self.all_files(),
+            Step::ViewFile(path) => self.view_file(path),
+            Step::WaitFor(id) => self.wait_for(&gpui_kit::SharedString::from(*id).into()),
             Step::StartComment(line) => self.start_comment(*line),
             Step::Click(id) => self.click(*id),
             Step::MoveAway => self.move_away(),
@@ -197,41 +201,21 @@ impl Driver {
     /// Something drawn from what's still loading, such as an image, can't be clicked until it's there.
     fn click(&mut self, id: impl Into<gpui_kit::SharedString>) {
         let id = gpui_kit::ElementId::from(id.into());
+        self.wait_for(&id);
+        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+    }
+
+    fn wait_for(&mut self, id: &gpui_kit::ElementId) {
         let deadline = Instant::now() + TIMEOUT;
         loop {
             self.frame();
             let found = id.clone();
             if self.cx.update_window(self.handle, |_, window, _| window.try_find(found).is_some()).unwrap() {
-                break;
+                return;
             }
             assert!(Instant::now() < deadline, "timed out waiting for {id:?} to be drawn");
             std::thread::sleep(Duration::from_millis(10));
         }
-        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
-    }
-
-    fn open_file(&mut self, path: &str) {
-        self.click(format!("file-{path}"));
-        self.wait("the diff tab to show it", |view, cx| {
-            let file = selected_pane(view).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()));
-            file.is_some_and(|file| file.read(cx).file(cx).is_some_and(|file| file.path() == path))
-        });
-    }
-
-    fn start_comment(&mut self, line: usize) {
-        let view = self.view.clone();
-        let file = self.cx.update(|cx| {
-            selected_pane(view.read(cx)).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()))
-        });
-        self.cx
-            .update_window(self.handle, |_, window, cx| {
-                file.unwrap().update(cx, |f, cx| {
-                    let path = f.path.clone().unwrap();
-                    f.start_comment(DiffLinePosition::new(path, DiffSide::Modified, line), window, cx);
-                });
-            })
-            .unwrap();
-        self.frame();
     }
 
     /// As Cmd-V does, then waits for where it was pasted to have one more file: the new-workspace dialog while it's

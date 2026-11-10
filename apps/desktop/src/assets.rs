@@ -42,6 +42,9 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if let Some(icon) = crate::file_icons::load(path) {
+            return Ok(Some(Cow::Borrowed(icon)));
+        }
         match Extra.load(path)? {
             Some(icon) => Ok(Some(icon)),
             None => gpui_kit::assets::Assets.load(path),

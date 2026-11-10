@@ -9,8 +9,8 @@ use crate::attachment::{AttachmentBytes, AttachmentFile, MediaType, NewAttachmen
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
-    AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, GitDiff, GitStatus, PullRequest, RunId, Seq,
-    SessionId, SessionOptions,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, FileContents, GitDiff, GitStatus, PullRequest,
+    RunId, Seq, SessionId, SessionOptions, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
 
@@ -91,6 +91,22 @@ pub enum WorkerRequest {
     ImageRead {
         path: String,
         image: String,
+    },
+    /// The files in the worktree at `path`, as [`crate::client::ClientRequest::WorkspaceFiles`] says.
+    ListFiles {
+        path: String,
+    },
+    /// What's directly in the folder at `folder`, relative to the worktree at `path`. Refused unless it's a folder
+    /// inside the worktree once every link is followed.
+    FolderRead {
+        path: String,
+        folder: String,
+    },
+    /// What the file at `file` holds, relative to the worktree at `path`. Refused unless it's a file inside the
+    /// worktree once every link is followed.
+    FileRead {
+        path: String,
+        file: String,
     },
     AgentStart(AgentSpec),
     /// Each of `attachments` has been written into the worktree first. `prompt` is where it's recorded, which the
@@ -189,6 +205,8 @@ pub enum WorkerResponse {
         media_type: MediaType,
         data: AttachmentBytes,
     },
+    Files(WorktreeFiles),
+    FileContents(FileContents),
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {
         pid: u32,

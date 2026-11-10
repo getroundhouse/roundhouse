@@ -12,9 +12,9 @@ use gpui_kit::{
 };
 use protocol::model::{Session, SessionStatus};
 
-use super::diff_tab::Sidebar;
+use super::changes_sidebar::Sidebar;
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, Showing, WorkspacePane};
+use super::{HEADER_HEIGHT, Mark, Opened, Showing, WorkspacePane};
 use crate::right_click;
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -101,12 +101,12 @@ impl WorkspacePane {
         })
     }
 
-    /// The diff tab if there is one, then one tab for each open chat, and a way to start another chat. At the far end
+    /// The file tab if there is one, then one tab for each open chat, and a way to start another chat. At the far end
     /// are any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
-        let mut tabs: Vec<AnyElement> = self.diff_tab_element(cx).into_iter().collect();
+        let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
         tabs.extend(
             numbered
                 .iter()
@@ -217,9 +217,13 @@ impl Render for WorkspacePane {
         let sidebar = if changes.is_some() { Sidebar::Open } else { Sidebar::Hidden };
         let header = self.header(sidebar, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
-        let file = self.diff.as_ref().filter(|_| self.showing() == Showing::Diff).map(|diff| diff.file.clone());
-        let showing = match file {
-            Some(file) => div().flex_1().min_h_0().w_full().child(file).into_any_element(),
+        let tab =
+            self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {
+                Some(Opened::File) => diff.viewer.clone().into_any_element(),
+                Some(Opened::Diff) | None => diff.file.clone().into_any_element(),
+            });
+        let showing = match tab {
+            Some(tab) => div().flex_1().min_h_0().w_full().child(tab).into_any_element(),
             None => self.chat(cx),
         };
         h_flex()
