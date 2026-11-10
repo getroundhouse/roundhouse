@@ -6,7 +6,9 @@
 use protocol::event::EventBody;
 use serde_json::json;
 
-use super::events::{replied, taken, text, tool_failed, tool_result, tool_use, user_prompt};
+use super::events::{
+    advice_failed, advised, advised_encrypted, replied, taken, text, tool_failed, tool_result, tool_use, user_prompt,
+};
 
 /// What the chats about the signalling crate were asked.
 pub(crate) const ASK: &str = "Make signals say whether a train may pass, and add a test for it.";
@@ -101,6 +103,26 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
         tool_result("toolu-3", "Created issue #271: https://github.com/example/signals/issues/271"),
         text("msg-5", reply),
         replied(reply, 14, 0.05),
+    ]
+}
+
+/// Asking the advisor: a reply encrypted for the model alone, one that can be read, and a call that failed.
+pub(crate) fn advisor() -> Vec<EventBody> {
+    let reply = "`Aspect::may_pass` now says whether a train may pass, with a test for each aspect.";
+    let advice = "Every aspect is covered now. Run `cargo test -p signals` before **finishing**.";
+    vec![
+        user_prompt(ASK),
+        taken(1),
+        text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
+        tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
+        advised_encrypted("msg-2", "srvtoolu-1"),
+        text("msg-3", "It suggests testing caution as well as stop, so I'll cover every aspect."),
+        tool_use("msg-4", "srvtoolu-2", "advisor", json!({})),
+        advised("msg-4", "srvtoolu-2", advice),
+        tool_use("msg-5", "srvtoolu-3", "advisor", json!({})),
+        advice_failed("msg-5", "srvtoolu-3", "overloaded"),
+        text("msg-6", reply),
+        replied(reply, 48, 0.31),
     ]
 }
 

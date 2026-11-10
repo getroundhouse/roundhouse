@@ -15,6 +15,7 @@ use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::transcript::Transcript;
 
+mod advisor;
 mod agent;
 pub(super) mod block;
 mod command;
@@ -55,6 +56,7 @@ pub(super) fn call(
         ToolCall::Agent(call) => agent::draw(&call, answer, subagent, toggle, cx),
         ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
         ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
+        ToolCall::Advisor => advisor::draw(answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
 }

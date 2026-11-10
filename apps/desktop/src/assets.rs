@@ -17,6 +17,7 @@ gpui_kit::assets::icon_assets!(
         FilePen,
         FilePlus,
         House,
+        Lightbulb,
         ListTree,
         Mail,
         MailOpen,

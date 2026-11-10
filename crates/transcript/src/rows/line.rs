@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
-use crate::calls::{Failure, failure};
+use crate::calls::{Failure, failure, first_line};
 use crate::rows::around::Answer;
 
 const ICON: f32 = 15.0;
@@ -22,6 +22,8 @@ const ICON: f32 = 15.0;
 pub(super) const HEIGHT: f32 = 28.0;
 /// The hover group of one line, which turns its icon into the way to open it.
 const GROUP: &str = "tool-line";
+/// More of prose's start than a line has room for, so a long first line isn't copied to be cut off.
+const START_CHARS: usize = 160;
 
 pub(super) struct Line {
     icon: IconName,
@@ -109,6 +111,11 @@ impl Line {
 }
 
 impl Part {
+    /// The start of some prose, such as a thought, as a summary.
+    pub(super) fn start_of(text: &str) -> Self {
+        Part::Summary(start(text).into())
+    }
+
     fn render(self, cx: &App) -> AnyElement {
         let theme = cx.theme();
         match self {
@@ -232,4 +239,25 @@ fn failure(failure: &Failure, cx: &App) -> AnyElement {
             d.child(pill(failure.message.to_string().into(), danger, danger.opacity(0.09), cx))
         })
         .into_any_element()
+}
+
+/// The start of some prose, for a line: its first line with anything on it, without the marks for code and emphasis,
+/// which the line can't draw.
+fn start(text: &str) -> String {
+    first_line(text).chars().filter(|c| !matches!(c, '`' | '*')).take(START_CHARS).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::start;
+
+    #[test]
+    fn the_start_of_prose_leaves_out_markdown_s_marks() {
+        assert_eq!(start("`slow` takes a **target** speed\nand more"), "slow takes a target speed");
+    }
+
+    #[test]
+    fn prose_that_starts_with_a_blank_line_starts_where_its_words_do() {
+        assert_eq!(start("\n  \nThe test says a train should slow."), "The test says a train should slow.");
+    }
 }
