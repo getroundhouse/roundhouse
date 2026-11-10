@@ -184,12 +184,50 @@ fn any_pull_request() -> impl Strategy<Value = PullRequest> {
     )
 }
 
+/// That there's none, or any pull request.
+fn any_found() -> impl Strategy<Value = PullRequestFound> {
+    proptest::option::of(any_pull_request()).prop_map(|pull_request| PullRequestFound { pull_request })
+}
+
+/// A workspace whose hub found this of its pull request.
+fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace {
+    crate::model::Workspace {
+        id: "w".into(),
+        repo_id: "r".into(),
+        name: "n".to_string(),
+        branch: "n".to_string(),
+        base_ref: None,
+        path: None,
+        status: crate::model::WorkspaceStatus::Ready,
+        provider: "local".to_string(),
+        instance_id: "w".into(),
+        created_at_ms: 1,
+        archived_at_ms: None,
+        setup: crate::model::SetupStatus::Succeeded,
+        port_base: 55_000,
+        rev: crate::model::Rev::default(),
+        title: None,
+        title_source: crate::model::TitleSource::FirstLine,
+        pull_request,
+    }
+}
+
 proptest! {
     #![proptest_config(Config {
         rng_seed: RngSeed::Fixed(1),
         failure_persistence: None,
         ..Config::default()
     })]
+
+    /// Not looked, looked and found none, and found one each read back as themselves.
+    #[test]
+    fn what_the_hub_found_reads_back_as_it_was(found in proptest::option::of(any_found())) {
+        let written = serde_json::to_string(&workspace(found.clone())).unwrap();
+
+        let read: crate::model::Workspace = serde_json::from_str(&written).unwrap();
+
+        prop_assert_eq!(read.pull_request, found);
+    }
 
     /// Ready is only ever said of a pull request that could merge as it is here.
     #[test]

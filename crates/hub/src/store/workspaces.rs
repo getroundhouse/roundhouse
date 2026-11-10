@@ -1,17 +1,20 @@
 //! Workspaces.
 
 use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
-use protocol::model::{SetupStatus, Title, Workspace, WorkspaceStatus};
+use protocol::model::{PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
 
+#[cfg(test)]
+mod tests;
+
 const FIRST_PORT_BASE: u16 = 55_000;
 
 const PORTS_PER_WORKSPACE: u16 = 10;
 
-pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request";
 
 pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -30,8 +33,15 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         port_base: row.get(12)?,
         title: row.get::<_, Option<String>>(13)?.as_deref().and_then(Title::tidied),
         title_source: from_text(row.get(14)?)?,
-        rev: rev_of(row, 15)?,
+        // One that no longer reads, from a build whose idea of a pull request this one doesn't share, is looked for again.
+        pull_request: row.get::<_, Option<String>>(15)?.and_then(|found| serde_json::from_str(&found).ok()),
+        rev: rev_of(row, 16)?,
     })
+}
+
+/// What the hub found, as the column holds it: `None` until it has looked, which is SQL's NULL.
+fn found_text(found: Option<&PullRequestFound>) -> Result<Option<String>, StoreError> {
+    Ok(found.map(serde_json::to_string).transpose()?)
 }
 
 impl Store {
@@ -48,7 +58,7 @@ impl Store {
         let added = conn.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -67,6 +77,7 @@ impl Store {
                 i64::from(workspace.port_base),
                 workspace.title.as_deref(),
                 text_of(&workspace.title_source),
+                found_text(workspace.pull_request.as_ref())?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -103,6 +114,24 @@ impl Store {
             params![text_of(&status), archived_at, id.as_str()],
         )?;
         self.get_workspace(id)
+    }
+
+    /// Records what the hub found of the workspace's pull request. Returns the workspace only when that changed it, so
+    /// finding the same again moves no revision and announces nothing.
+    pub fn set_workspace_pull_request(
+        &self,
+        id: &WorkspaceId,
+        found: &PullRequestFound,
+    ) -> Result<Option<Workspace>, StoreError> {
+        let found = found_text(Some(found))?;
+        let changed = lock(&self.writer).execute(
+            "UPDATE workspaces SET pull_request = ?1 WHERE id = ?2 AND pull_request IS NOT ?1",
+            params![found, id.as_str()],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        self.get_workspace(id).map(Some)
     }
 
     pub fn set_workspace_setup(&self, id: &WorkspaceId, setup: SetupStatus) -> Result<Workspace, StoreError> {

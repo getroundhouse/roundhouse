@@ -221,8 +221,9 @@ async fn handle(
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
         }
         WorkerRequest::PullRequest { path } => {
-            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await })
+            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await? })
         }
+        WorkerRequest::GithubRateLimit { path } => Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&path).await?)),
         WorkerRequest::SetupWorkspace { repo_path, path, env } => run_setup(state, &repo_path, &path, &env).await,
         WorkerRequest::CancelSetup => {
             stop_setup_script(state);

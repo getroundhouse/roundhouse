@@ -290,6 +290,11 @@ const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // What the hub last found of each workspace's pull request, as JSON, which is `null` when it found none. NULL until
+    // it has looked, as for every workspace from before this. The workspaces' trigger takes every column.
+    r"
+    ALTER TABLE workspaces ADD COLUMN pull_request TEXT;
+",
 ];
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
@@ -314,6 +319,10 @@ pub(crate) const BEFORE_TITLES: usize = 9;
 /// How many migrations there were before sessions had an effort.
 #[cfg(test)]
 pub(crate) const BEFORE_EFFORT: usize = 13;
+
+/// How many migrations there were before workspaces kept their pull request.
+#[cfg(test)]
+pub(crate) const BEFORE_PULL_REQUESTS: usize = 14;
 
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.

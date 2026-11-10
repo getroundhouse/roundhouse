@@ -1,5 +1,5 @@
 //! A real hub with a stand-in for `gh` at the front of its `PATH`, which reports the pull request a test has it
-//! report, as the hub's own tests do in `apps/daemon/tests/e2e/workspaces.rs`.
+//! report, as the hub's own tests do in `apps/daemon/tests/e2e/pull_requests.rs`.
 
 #![cfg(test)]
 
@@ -24,13 +24,18 @@ pub(crate) struct StandInGh {
 }
 
 impl StandInGh {
-    /// Has `gh pr view` print this from now on, as GitHub would. Until a test calls this, it fails, as it does for a
-    /// branch with no pull request.
+    /// Has `gh pr view` print this from now on, as GitHub would. Until a test calls this, it says there's no pull
+    /// request, as it does for a branch with none.
     pub(crate) fn report(&self, json: &str) {
         // Whole or not at all, since the worker may run it at any moment.
         let next = self.answer.with_extension("next");
         std::fs::write(&next, json).unwrap();
         std::fs::rename(&next, &self.answer).unwrap();
+    }
+
+    /// Has `gh` fail from now on, as it does when it can't reach GitHub, which says nothing about the pull request.
+    pub(crate) fn go_offline(&self) {
+        std::fs::write(self.answer.with_extension("offline"), "").unwrap();
     }
 }
 
@@ -55,8 +60,20 @@ impl Stack {
         let bin = self.dir.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let answer = self.dir.path().join("gh-pr-view.json");
-        // Anything but `gh pr view` fails, so the merge queue says nothing.
-        let script = format!("#!/bin/sh\n[ \"$1 $2\" = 'pr view' ] && exec cat '{}'\nexit 1\n", answer.display());
+        // It's in no merge queue, and anything else fails, such as asking how much of GitHub's limit is left, which
+        // then goes unknown.
+        let (offline, answer_path) = (answer.with_extension("offline"), answer.display());
+        let script = format!(
+            r#"#!/bin/sh
+[ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
+[ "$1 $2" = 'pr view' ] || exit 1
+[ -f '{offline}' ] && {{ echo 'error connecting to api.github.com' >&2; exit 1; }}
+[ -f '{answer_path}' ] && exec cat '{answer_path}'
+echo 'no pull requests found for branch "x"' >&2
+exit 1
+"#,
+            offline = offline.display()
+        );
         let gh = bin.join("gh");
         std::fs::write(&gh, script).unwrap();
         std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();

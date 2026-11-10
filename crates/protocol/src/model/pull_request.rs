@@ -1,10 +1,24 @@
 //! A workspace's pull request, as GitHub reports it, and where its branch stands: what's in the way of merging it,
 //! most pressing first.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[cfg(test)]
 mod tests;
+
+/// What the hub found the last time it looked for a branch's pull request. Written as the pull request, or `null`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct PullRequestFound {
+    /// `None` when the branch has none.
+    pub pull_request: Option<PullRequest>,
+}
+
+/// Reads a field that's there as `Some`, even when it's `null`, so `null` says "looked, and there's none", apart from
+/// a missing field, which says "hasn't looked". The field is left out rather than written as `null` when it's `None`.
+pub(super) fn deserialize_found<'de, D: Deserializer<'de>>(from: D) -> Result<Option<PullRequestFound>, D::Error> {
+    PullRequestFound::deserialize(from).map(Some)
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PullRequest {

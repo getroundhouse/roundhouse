@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -36,6 +36,8 @@ pub(crate) struct WorkerLink {
     /// `None` once the connection has ended, so a call can't register for a reply that won't come.
     pending: Mutex<Option<HashMap<u64, Reply>>>,
     closed: watch::Sender<bool>,
+    /// Something other than a read nobody asked for has wanted it, so it's kept running.
+    kept: AtomicBool,
 }
 
 fn lost() -> ApiError {
@@ -66,6 +68,7 @@ impl WorkerLink {
             calls: Mutex::new(Some(calls_tx)),
             pending: Mutex::new(Some(HashMap::new())),
             closed: watch::channel(false).0,
+            kept: AtomicBool::new(false),
         });
         let WorkerStream { reader, writer } = stream;
         tokio::spawn(write_calls(writer, calls_rx));
@@ -110,6 +113,18 @@ impl WorkerLink {
         // after `close`, and it wouldn't find out that it should stop.
         drop(calls);
         Ok(async move { reply_rx.await.map_err(|_| lost())? })
+    }
+
+    /// Marks it wanted by something other than a read nobody asked for, so it isn't stopped after that read. Only
+    /// where no such read can be deciding to stop it: before it's in the hub's map of workers, or while that's locked,
+    /// which is where it's checked before one is stopped.
+    pub(crate) fn keep(&self) {
+        self.kept.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether anything but a read nobody asked for has wanted it.
+    pub(crate) fn kept(&self) -> bool {
+        self.kept.load(Ordering::Relaxed)
     }
 
     pub(crate) fn is_open(&self) -> bool {

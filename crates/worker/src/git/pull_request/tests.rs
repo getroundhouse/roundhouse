@@ -1,7 +1,7 @@
 use protocol::model::{Checks, Local, MergeState, PrState, QueueState, Review};
 
 use super::super::tests::{new_repo, run};
-use super::{local, parse_pull_request, parse_queue};
+use super::{Failing, failing, local, parse_pull_request, parse_queue, parse_rate_limit};
 
 #[test]
 fn a_pull_request_parses_from_what_gh_prints() {
@@ -58,6 +58,33 @@ fn what_gh_leaves_out_is_unknown_but_a_pull_request_needs_its_number_and_url() {
     assert_eq!(head, None);
     assert_eq!(parse_pull_request(b"not json"), None);
     assert_eq!(parse_pull_request(br#"{"state":"OPEN"}"#), None);
+}
+
+/// As `gh api rate_limit` prints it, cut to what's read.
+#[test]
+fn the_graphql_limit_is_read_from_githubs_rate_limit() {
+    let json = br#"{"resources":{"core":{"limit":5000,"remaining":4965,"reset":1794281542,"used":35},
+        "graphql":{"limit":5000,"remaining":4702,"reset":1794337867,"used":298}},
+        "rate":{"limit":5000,"remaining":4965,"reset":1794281542,"used":35}}"#;
+
+    let limit = parse_rate_limit(json).unwrap();
+
+    assert_eq!((limit.limit, limit.remaining, limit.resets_at_ms), (5000, 4702, 1_794_337_867_000));
+    assert_eq!(parse_rate_limit(br#"{"resources":{"core":{"limit":5000}}}"#), None);
+}
+
+/// In `gh`'s own words, as version 2.103 prints them. Only saying there's none is an answer, so only it can take the
+/// place of a pull request already known. Needing a login, and a repository with no GitHub remote, stay that way until
+/// someone changes them, and anything else might work next time.
+#[test]
+fn what_a_failing_gh_means() {
+    assert_eq!(failing(Some(1), "no pull requests found for branch \"persimmon\"\n"), Failing::NoneFound);
+    assert_eq!(failing(Some(1), "no git remotes found\n"), Failing::CantWorkHere);
+    let elsewhere = "none of the git remotes configured for this repository point to a known GitHub host.";
+    assert_eq!(failing(Some(1), elsewhere), Failing::CantWorkHere);
+    assert_eq!(failing(Some(4), "To get started with GitHub CLI, please run:  gh auth login\n"), Failing::CantWorkHere);
+    assert_eq!(failing(Some(1), "error connecting to api.github.com\n"), Failing::CouldntSay);
+    assert_eq!(failing(None, ""), Failing::CouldntSay);
 }
 
 #[test]

@@ -54,6 +54,10 @@ pub enum WorkerRequest {
     PullRequest {
         path: String,
     },
+    /// How much of GitHub's hourly limit is left for the `gh` that runs in this worktree. Asking costs none of it.
+    GithubRateLimit {
+        path: String,
+    },
     /// Copies local files and runs the setup script. Resolves when it's finished, however long that is.
     SetupWorkspace {
         repo_path: String,
@@ -161,6 +165,7 @@ pub enum WorkerResponse {
     PullRequest {
         pull_request: Option<PullRequest>,
     },
+    GithubRateLimit(RateLimit),
     SetupDone {
         /// `None` if it was stopped.
         code: Option<i32>,
@@ -221,4 +226,13 @@ pub enum WorkerFrame {
 pub enum WorkerOutcome {
     Response(WorkerResponse),
     Error(ApiError),
+}
+
+/// GitHub's hourly limit on the GraphQL calls `gh pr view` makes, as GitHub counted them when asked.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RateLimit {
+    pub limit: u32,
+    pub remaining: u32,
+    /// When it's back to `limit`.
+    pub resets_at_ms: i64,
 }

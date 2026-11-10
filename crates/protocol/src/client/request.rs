@@ -81,8 +81,12 @@ pub enum ClientRequest {
     WorkspaceRerunSetup {
         id: WorkspaceId,
     },
-    /// The pull request for this workspace's branch. The reply is `None` if there isn't one, or if
-    /// GitHub's CLI isn't available.
+    /// Reads the pull request for this workspace's branch now, and records it on the workspace, which every
+    /// client then hears of. Safe to send again, since one asked for while another read waits shares the answer
+    /// of the next. The reply is `None` if there isn't one, or if it can't be read here, such as without GitHub's
+    /// CLI, a login to it or a GitHub remote, and none was known. When it can't be read just now, such as while
+    /// GitHub can't be reached or its hourly limit is used up, the reply is what was known, and an error if
+    /// nothing was.
     WorkspacePullRequest {
         id: WorkspaceId,
     },

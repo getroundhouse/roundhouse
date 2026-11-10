@@ -9,7 +9,7 @@ use crate::workspace_pane::WorkspacePane;
 
 impl AppView {
     /// Reads the pull request of the workspace showing every [`READ_AGAIN`], unless it's merged or closed. Only that
-    /// one, since the others are read again when they're shown.
+    /// one, since the hub reads every workspace's itself, less often.
     pub(super) fn watch_pull_requests(cx: &mut Context<Self>) -> Task<()> {
         cx.spawn(async move |this, cx| {
             loop {

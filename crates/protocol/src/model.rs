@@ -11,7 +11,9 @@ mod title;
 
 pub use effort::Effort;
 pub use options::SessionOptions;
-pub use pull_request::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
+pub use pull_request::{
+    Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
+};
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
 pub use title::{Title, TitleError, TitleSource};
@@ -207,9 +209,18 @@ pub struct Workspace {
     pub title: Option<Title>,
     #[serde(default)]
     pub title_source: TitleSource,
+    /// Its branch's pull request, as the hub last found it, kept across restarts so every client can show it at once.
+    /// `None` until the hub has looked, and from a hub too old to look.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_found")]
+    pub pull_request: Option<PullRequestFound>,
 }
 
 impl Workspace {
+    /// Its pull request, if the hub has found one.
+    pub fn known_pull_request(&self) -> Option<&PullRequest> {
+        self.pull_request.as_ref().and_then(|found| found.pull_request.as_ref())
+    }
+
     /// What to call it on screen: its title, or its name until it has one.
     pub fn label(&self) -> &str {
         self.title.as_deref().unwrap_or(&self.name)

@@ -5,6 +5,7 @@ pub(crate) use workspaces::workspace_env;
 
 mod attachments;
 mod comments;
+mod pull_requests;
 mod repos;
 mod sessions;
 mod setup;
@@ -37,6 +38,15 @@ const FEED_CAPACITY: usize = 256;
 /// is stuck.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
 
+/// What a worker is wanted for, which says whether it's stopped again after.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Wanted {
+    /// Anything, such as a session, so it's kept running.
+    ForAnything,
+    /// Only a read nobody asked for, after which it's stopped, unless something else has wanted it meanwhile.
+    OnlyToRead,
+}
+
 pub(crate) struct Hub {
     store: Arc<Store>,
     attachment_files: AttachmentFiles,
@@ -51,6 +61,7 @@ pub(crate) struct Hub {
     sessions: Mutex<HashMap<SessionId, Arc<LiveSession>>>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
+    pull_requests: pull_requests::Reading,
     feed: broadcast::Sender<HubNotice>,
     on_demand: bool,
     started_at_ms: i64,
@@ -87,6 +98,7 @@ impl Hub {
             ensuring_session: AsyncMutex::new(()),
             sessions: Mutex::new(HashMap::new()),
             setup_gates: Mutex::new(HashMap::new()),
+            pull_requests: pull_requests::Reading::new(),
             feed: broadcast::channel(FEED_CAPACITY).0,
             started_at_ms: now_ms(),
             shutdown: Notify::new(),
@@ -145,32 +157,83 @@ impl Hub {
         self.worker_gates.lock().entry(workspace_id.clone()).or_default().clone()
     }
 
-    /// The running worker, if there is one.
+    /// The running worker, if there is one, which is then kept running.
     pub(crate) fn existing_worker(&self, workspace_id: &WorkspaceId) -> Option<Arc<WorkerLink>> {
-        self.workers.lock().get(workspace_id).filter(|link| link.is_open()).cloned()
+        self.open_worker(workspace_id, Wanted::ForAnything)
     }
 
-    /// The workspace's worker, starting it if needed.
+    /// The running worker, if there is one. One wanted for anything is marked kept while the map is locked, which is
+    /// what makes [`Hub::stop_worker_only_read`] safe.
+    fn open_worker(&self, workspace_id: &WorkspaceId, wanted: Wanted) -> Option<Arc<WorkerLink>> {
+        let workers = self.workers.lock();
+        let link = workers.get(workspace_id).filter(|link| link.is_open())?;
+        if wanted == Wanted::ForAnything {
+            link.keep();
+        }
+        Some(link.clone())
+    }
+
+    /// The workspace's worker, starting it if needed. It's kept running.
     pub(crate) async fn ensure_worker(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
     ) -> Result<Arc<WorkerLink>, ApiError> {
+        self.worker(workspace_id, Wanted::ForAnything).await
+    }
+
+    /// The same, for a read nobody asked for, after which [`Hub::stop_worker_only_read`] stops it again.
+    pub(super) async fn worker_to_read(
+        self: &Arc<Self>,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Arc<WorkerLink>, ApiError> {
+        self.worker(workspace_id, Wanted::OnlyToRead).await
+    }
+
+    async fn worker(self: &Arc<Self>, workspace_id: &WorkspaceId, wanted: Wanted) -> Result<Arc<WorkerLink>, ApiError> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub is shutting down"));
         }
-        if let Some(link) = self.existing_worker(workspace_id) {
+        if let Some(link) = self.open_worker(workspace_id, wanted) {
             return Ok(link);
         }
         let workspace = self.workspace(workspace_id).await?;
         let gate = self.worker_gate(workspace_id);
         let _starting = gate.lock().await;
-        if let Some(link) = self.existing_worker(workspace_id) {
+        if let Some(link) = self.open_worker(workspace_id, wanted) {
             return Ok(link);
         }
         let provider = self.provider(&workspace.provider)?;
         let link = WorkerLink::open(self.clone(), provider, workspace.id.clone(), workspace.instance_id).await?;
+        if wanted == Wanted::ForAnything {
+            link.keep();
+        }
         self.workers.lock().insert(workspace.id, link.clone());
         Ok(link)
+    }
+
+    /// Stops a worker that only a read nobody asked for has wanted, so a hub with many workspaces doesn't keep one
+    /// running for each. Under its gate, so a worker wanted meanwhile starts once this one has gone, rather than
+    /// finding its instance still taken.
+    pub(super) async fn stop_worker_only_read(&self, workspace: &Workspace, link: &Arc<WorkerLink>) {
+        let gate = self.worker_gate(&workspace.id);
+        let _stopping = gate.lock().await;
+        {
+            let mut workers = self.workers.lock();
+            let only_read =
+                workers.get(&workspace.id).is_some_and(|current| Arc::ptr_eq(current, link) && !link.kept());
+            if !only_read {
+                return;
+            }
+            workers.remove(&workspace.id);
+        }
+        link.close();
+        let stopped = match self.provider(&workspace.provider) {
+            Ok(provider) => provider.stop(&workspace.instance_id).await.map_err(|e| error_chain(&e)),
+            Err(e) => Err(e.message),
+        };
+        if let Err(e) = stopped {
+            warn!(id = %workspace.id, "stopping a worker started to read a pull request: {e}");
+        }
     }
 
     /// Called when a worker's stream ends, after everything it sent has been queued.
@@ -183,13 +246,16 @@ impl Hub {
     ) {
         let gate = self.worker_gate(workspace_id);
         let _cleaning_up = gate.lock().await;
-        {
+        let replaced = {
             let mut workers = self.workers.lock();
             if workers.get(workspace_id).is_some_and(|current| Arc::ptr_eq(current, link)) {
                 workers.remove(workspace_id);
             }
-        }
-        if let Err(e) = provider.stop(instance_id).await {
+            // By a newer worker, which has the instance now. That happens once one that only a background read wanted
+            // has been stopped, and another started before this one's output ended.
+            workers.contains_key(workspace_id)
+        };
+        if !replaced && let Err(e) = provider.stop(instance_id).await {
             warn!(%instance_id, "stopping a worker failed: {}", error_chain(&e));
         }
         // Still under the gate, so these are queued before a replacement worker can start.

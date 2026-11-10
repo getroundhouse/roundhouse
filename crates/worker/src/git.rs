@@ -14,7 +14,7 @@ mod removal;
 #[cfg(test)]
 mod tests;
 
-pub use pull_request::pull_request;
+pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);

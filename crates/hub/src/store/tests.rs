@@ -18,29 +18,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
     let repo =
         Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
     store.add_repo(&repo).unwrap();
-    store
-        .insert_workspace(
-            &Workspace {
-                id: "w".into(),
-                repo_id: "r".into(),
-                name: "alder".into(),
-                branch: "alder".into(),
-                base_ref: None,
-                path: None,
-                status: WorkspaceStatus::Ready,
-                provider: "local".into(),
-                instance_id: "w".into(),
-                created_at_ms: now,
-                archived_at_ms: None,
-                setup: SetupStatus::NotStarted,
-                port_base: 55_000,
-                rev: Rev::default(),
-                title: None,
-                title_source: TitleSource::FirstLine,
-            },
-            None,
-        )
-        .unwrap();
+    store.insert_workspace(&workspace_w(now), None).unwrap();
     store
         .insert_session(
             &StoredSession {
@@ -73,6 +51,29 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
         )
         .unwrap();
     store
+}
+
+/// The workspace `w`, ready in the repository `r`.
+fn workspace_w(now: i64) -> Workspace {
+    Workspace {
+        id: "w".into(),
+        repo_id: "r".into(),
+        name: "alder".into(),
+        branch: "alder".into(),
+        base_ref: None,
+        path: None,
+        status: WorkspaceStatus::Ready,
+        provider: "local".into(),
+        instance_id: "w".into(),
+        created_at_ms: now,
+        archived_at_ms: None,
+        setup: SetupStatus::NotStarted,
+        port_base: 55_000,
+        rev: Rev::default(),
+        title: None,
+        title_source: TitleSource::FirstLine,
+        pull_request: None,
+    }
 }
 
 pub(super) fn notice(text: &str) -> EventBody {
