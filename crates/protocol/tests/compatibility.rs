@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
-use protocol::model::{LimitWindow, ModelName, PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -156,7 +156,7 @@ fn a_turns_end_from_a_hub_that_doesnt_add_its_start_or_keep_its_models_and_token
 /// Spelled out, since the log holds this form for good.
 #[test]
 fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
-    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"body":{"type":"turn_ended","outcome":"success","result":null,"errors":[],"duration_ms":9,"cost_usd":null,"num_turns":null,"started_at_ms":1,"models":["claude-sonnet-5-5","claude-haiku-5-5"],"tokens":{"input_tokens":6,"output_tokens":550,"cache_read_tokens":1142851,"cache_write_tokens":1615}}}"#;
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":0,"body":{"type":"turn_ended","outcome":"success","result":null,"errors":[],"duration_ms":9,"cost_usd":null,"num_turns":null,"started_at_ms":1,"models":["claude-sonnet-5-5","claude-haiku-5-5"],"tokens":{"input_tokens":6,"output_tokens":550,"cache_read_tokens":1142851,"cache_write_tokens":1615}}}"#;
 
     let event: SessionEvent = frame::decode(stored).unwrap();
 
@@ -227,4 +227,14 @@ fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
     );
     let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor };
     assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);
+}
+
+#[test]
+fn an_event_from_a_hub_that_doesnt_record_subagents_is_the_agents_own_at_place_zero() {
+    let event: SessionEvent =
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_other","kind":"tool_progress"}}"#)
+            .unwrap();
+
+    assert_eq!((event.subagent, event.place), (None, Place::default()));
+    assert_eq!(event.body.subagent(), None);
 }

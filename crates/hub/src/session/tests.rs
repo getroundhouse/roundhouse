@@ -47,7 +47,7 @@ fn init() -> EventBody {
 }
 
 fn notified() -> EventBody {
-    EventBody::AgentOther { kind: "system/task_notification".into() }
+    EventBody::AgentOther { kind: "system/task_notification".into(), parent_tool_use_id: None }
 }
 
 /// The status after each event in turn, with what's open after each.

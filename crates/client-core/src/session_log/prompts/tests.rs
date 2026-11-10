@@ -1,10 +1,19 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
-use protocol::model::Seq;
+use protocol::model::{Place, Seq};
 
 use super::*;
 
 fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
+    SessionEvent {
+        session_id: "s".into(),
+        seq,
+        ts_ms: 0,
+        run: None,
+        subagent: None,
+        place: Place::default(),
+        body,
+        raw: None,
+    }
 }
 
 fn prompt() -> EventBody {

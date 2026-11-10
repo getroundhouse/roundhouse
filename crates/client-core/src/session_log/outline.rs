@@ -94,13 +94,23 @@ impl SessionLog {
 #[cfg(test)]
 mod tests {
     use protocol::event::EventBody;
+    use protocol::model::Place;
 
     use super::*;
     use crate::session_log::tests::page;
 
     fn prompt(seq: Seq, text: &str) -> SessionEvent {
         let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() };
-        SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
+        SessionEvent {
+            session_id: "s".into(),
+            seq,
+            ts_ms: 0,
+            run: None,
+            subagent: None,
+            place: Place::default(),
+            body,
+            raw: None,
+        }
     }
 
     fn line(seq: Seq) -> PromptLine {

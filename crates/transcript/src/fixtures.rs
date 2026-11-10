@@ -2,11 +2,20 @@
 
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::Seq;
+use protocol::model::{Place, Seq};
 use serde_json::json;
 
 pub(crate) fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent { session_id: "s".into(), seq, ts_ms: 0, run: None, body, raw: None }
+    SessionEvent {
+        session_id: "s".into(),
+        seq,
+        ts_ms: 0,
+        run: None,
+        subagent: None,
+        place: Place::default(),
+        body,
+        raw: None,
+    }
 }
 
 pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {

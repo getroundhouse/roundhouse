@@ -11,13 +11,15 @@ use serde_json::Value;
 
 use crate::attachment::Attachment;
 use crate::model::{
-    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, RunId, Seq, SessionId, TaskId, ToolUseId,
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, Place, RunId, Seq, SessionId, TaskId, ToolUseId,
     UsageLimit,
 };
 
+pub use content::{ContentBlock, LinkedImage};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
 pub use tokens::TokenUsage;
 
+mod content;
 mod file_change;
 mod tokens;
 
@@ -30,6 +32,13 @@ pub struct SessionEvent {
     /// events recorded before runs were.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
+    /// The subagent it's from, as the call that started it, or `None` for the agent's own. The hub records it from
+    /// [`EventBody::subagent`], or from the agent's line for an `AgentOther` recorded before that named its subagent. A
+    /// hub that doesn't record it sends none, and `place` as 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent: Option<ToolUseId>,
+    #[serde(default)]
+    pub place: Place,
     pub body: EventBody,
     /// The agent's original line. Only sent when a read asks for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -165,14 +174,18 @@ pub enum EventBody {
         level: NoticeLevel,
         message: String,
     },
-    /// An agent event with no normalized form. The stored raw line has the details.
     /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a
     /// plan leaves plan mode.
     AgentMode {
         permission_mode: String,
     },
+    /// An agent event with no normalized form. The stored raw line has the details.
     AgentOther {
         kind: String,
+        /// The call that started the subagent it's from, if the agent said. It's `None` in one recorded before this
+        /// was, whose `SessionEvent::subagent` says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<ToolUseId>,
     },
     #[serde(other)]
     Unknown,
@@ -203,6 +216,32 @@ impl EventBody {
             EventBody::Unknown => "unknown",
         }
     }
+
+    /// The subagent it's from, as the call that started it, or `None` for the agent's own. Only what the agent sends
+    /// can come from a subagent, and only these say which.
+    pub fn subagent(&self) -> Option<&ToolUseId> {
+        match self {
+            EventBody::Assistant { parent_tool_use_id, .. }
+            | EventBody::AgentUser { parent_tool_use_id, .. }
+            | EventBody::AgentOther { parent_tool_use_id, .. } => parent_tool_use_id.as_ref(),
+            EventBody::UserPrompt { .. }
+            | EventBody::PromptTaken { .. }
+            | EventBody::PromptDropped { .. }
+            | EventBody::AgentStarted { .. }
+            | EventBody::AgentInit { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::AgentTasks { .. }
+            | EventBody::AgentLimits { .. }
+            | EventBody::ToolCallDropped { .. }
+            | EventBody::TurnEnded { .. }
+            | EventBody::ApprovalRequested { .. }
+            | EventBody::ApprovalResolved { .. }
+            | EventBody::AgentExited { .. }
+            | EventBody::Notice { .. }
+            | EventBody::AgentMode { .. }
+            | EventBody::Unknown => None,
+        }
+    }
 }
 
 /// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
@@ -231,59 +270,6 @@ pub enum TaskKind {
     #[default]
     #[serde(other)]
     Command,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentBlock {
-    Text {
-        text: String,
-        /// The images the text points to in the worktree, as they were when it came, each by the address the text
-        /// gives it. The worker reads each, and the hub keeps it as an attachment of the session, so a client reads
-        /// its bytes with `AttachmentRead`, as it does a prompt's. One that wasn't there, or wasn't an image inside the
-        /// worktree, isn't named, and neither is any in a text recorded before the hub kept them.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        images: Vec<LinkedImage>,
-    },
-    Thinking {
-        text: String,
-    },
-    ToolUse {
-        id: String,
-        name: String,
-        input: Value,
-    },
-    /// What a call sent back. It comes in an `AgentUser` event, except for a tool the API runs itself, such as Claude's
-    /// advisor, whose result comes in an `Assistant` event.
-    ToolResult {
-        tool_use_id: ToolUseId,
-        is_error: bool,
-        text: String,
-        /// Images the tool sent back, such as a screenshot the agent read. Each is an attachment of the session, which
-        /// the hub keeps, so a client reads its bytes with `AttachmentRead`, as it does a prompt's. A result recorded
-        /// before the hub kept them names none.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        images: Vec<Attachment>,
-        /// What the tool changed in a file, when the agent says, as with Claude's edits and writes.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        change: Option<FileChange>,
-        /// What came back is encrypted, for the model alone, as the advisor's reply can be, so `text` holds none of it.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        encrypted: bool,
-    },
-    Image {
-        media_type: Option<String>,
-    },
-    #[serde(other)]
-    Unknown,
-}
-
-/// An image a text points to, and the attachment that keeps it.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct LinkedImage {
-    /// Where the text says the image is, as its Markdown gives it, before any decoding.
-    pub address: String,
-    pub attachment: Attachment,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
