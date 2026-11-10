@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{EventBody, SessionEvent};
 use protocol::frame;
-use protocol::model::{RecordKey, Rev};
+use protocol::model::{PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -125,4 +125,24 @@ fn a_turns_end_from_a_hub_that_doesnt_add_its_start_has_none() {
 
     let EventBody::TurnEnded { started_at_ms, .. } = event.body else { panic!("{event:?}") };
     assert_eq!(started_at_ms, None);
+}
+
+/// So a client tells a hub that hasn't looked for a workspace's pull request, which it waits for, from one that looked
+/// and found none, which it can offer to create.
+#[test]
+fn a_workspace_tells_a_pull_request_not_looked_for_from_none() {
+    let workspace = r#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":1,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000"#;
+    let read = |rest: &str| {
+        let notice: HubNotice = frame::decode(format!("{workspace}{rest}}}").as_bytes()).unwrap();
+        let HubNotice::Workspace(workspace) = notice else { panic!("{notice:?}") };
+        workspace.pull_request
+    };
+
+    let not_looked = read("");
+    let none = read(r#","pull_request":null"#);
+    let found = read(r#","pull_request":{"number":7,"url":"u","title":"T","state":"OPEN","is_draft":false}"#);
+
+    assert_eq!(not_looked, None);
+    assert_eq!(none, Some(PullRequestFound { pull_request: None }));
+    assert_eq!(found.and_then(|found| found.pull_request).map(|pr| pr.number), Some(7));
 }

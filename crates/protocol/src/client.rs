@@ -121,6 +121,9 @@ pub enum ErrorCode {
     NameTaken,
     /// A worker or provider failed.
     Worker,
+    /// What it needs isn't there, such as GitHub's CLI, a login to it, a GitHub remote, or what's left of GitHub's
+    /// hourly limit, so asking again won't help until that changes.
+    Unavailable,
     Internal,
     /// This hub doesn't know the request, usually because it's older than the client. The client
     /// hides or disables whatever needed it.

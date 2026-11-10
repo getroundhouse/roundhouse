@@ -170,6 +170,7 @@ impl WorkspacePane {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
             }
         });
+        let pull_request = Lookup::recorded(&workspace).unwrap_or(Lookup::Looking);
         let mut this = Self {
             client,
             records,
@@ -189,7 +190,7 @@ impl WorkspacePane {
             reading: Reading::default(),
             composer,
             diff: None,
-            pull_request: Lookup::Looking,
+            pull_request,
             pull_request_asks: 0,
             setup_log: None,
             setup_log_refresh: None,
@@ -277,6 +278,9 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) {
         if workspace != self.workspace {
+            if let Some(recorded) = Lookup::recorded(&workspace) {
+                self.pull_request = recorded;
+            }
             self.workspace = workspace;
             // Picks up the last lines of the log once setup has finished.
             if self.setup_log.is_some() {

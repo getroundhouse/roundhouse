@@ -11,7 +11,9 @@ use client_core::records::HubRecords;
 use client_core::{Client, ClientError, Ended, HubAdmin, RecordsFeed, Subscription, SubscriptionItem};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, DiffSide, RecordKey, SessionOptions, SessionStatus, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, DiffSide, PullRequestFound, RecordKey, SessionOptions, SessionStatus, WorkspaceStatus,
+};
 
 use crate::support::{
     Follower, Stack, TIMEOUT, assert_gapless, in_mode, terminate, wait_for_setup, wait_for_turn_end, wait_until,
@@ -60,6 +62,10 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let HubNotice::Session(idle) = next_notice(&feed, "idle") else { panic!() };
     assert_eq!(idle.status, SessionStatus::Idle);
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
+    // The turn's end reads its pull request, which a repository with no GitHub remote doesn't have.
+    let HubNotice::Workspace(looked) = next_notice(&feed, "its pull request") else { panic!() };
+    let none = Some(PullRequestFound { pull_request: None });
+    assert_eq!((looked.id.as_str(), looked.pull_request), (workspace.id.as_str(), none));
 
     let archived = client.workspace_archive(&workspace.id, true).unwrap();
     assert_eq!(next_notice(&feed, "the archive"), HubNotice::Workspace(archived));

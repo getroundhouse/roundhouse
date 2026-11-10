@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Output, Stdio};
 
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Checks, Local, PrState, PullRequest, QueueState};
+use protocol::worker::RateLimit;
 use serde_json::Value;
 use tokio::process::Command;
 
@@ -19,22 +21,100 @@ const FIELDS: &str =
 const QUEUE_QUERY: &str =
     "query($url: URI!) { resource(url: $url) { ... on PullRequest { mergeQueueEntry { state } } } }";
 
-/// The pull request for the current branch. `None` covers both "there isn't one" and "`gh` isn't installed or isn't
-/// logged in", because neither should stop anyone working. Anything more it can't find out, such as where it is in
-/// the merge queue, is left as it would be with nothing to report.
-pub async fn pull_request(path: &str) -> Option<PullRequest> {
-    let viewed = gh(path, &["pr", "view", "--json", FIELDS]).await?;
-    let (mut pr, head) = parse_pull_request(&viewed)?;
+/// The pull request for the current branch, or `None` when `gh` says it has none. An error means `gh` didn't say, so
+/// whoever asked can keep what it knew rather than take it as none: [`ErrorCode::Unavailable`] when `gh` can't work
+/// here at all, such as when it isn't installed or logged in, and [`ErrorCode::Worker`] when it couldn't this time,
+/// such as while GitHub can't be reached. Where it is in the merge queue counts as part of the answer, since a failure
+/// there would read as having left the queue. What the worktree can't say of itself is left at nothing to report.
+pub async fn pull_request(path: &str) -> Result<Option<PullRequest>, ApiError> {
+    let viewed = match run_gh(path, &["pr", "view", "--json", FIELDS]).await {
+        Ok(viewed) => viewed,
+        Err(Unran::Missing) => return Err(cant_work_here("gh isn't installed")),
+        Err(Unran::Failed(why)) => return Err(couldnt_say(&why)),
+    };
+    if !viewed.status.success() {
+        let said = String::from_utf8_lossy(&viewed.stderr);
+        return match failing(viewed.status.code(), &said) {
+            Failing::NoneFound => Ok(None),
+            Failing::CantWorkHere => Err(cant_work_here(said.trim())),
+            Failing::CouldntSay => Err(couldnt_say(said.trim())),
+        };
+    }
+    let (mut pr, head) =
+        parse_pull_request(&viewed.stdout).ok_or_else(|| couldnt_say("gh printed something other than one"))?;
     // Only an open pull request can still change, so only its queue and its worktree matter.
     if pr.state == PrState::Open {
-        let queue = async { if pr.is_draft { None } else { queue(path, &pr.url).await } };
+        let queue = async { if pr.is_draft { Ok(None) } else { queue(path, &pr.url).await } };
         let (queue, local) = tokio::join!(queue, local(path, head.as_deref()));
-        (pr.queue, pr.local) = (queue, local);
+        (pr.queue, pr.local) = (queue?, local);
     }
-    Some(pr)
+    Ok(Some(pr))
 }
 
+/// What a failed `gh pr view` means.
+#[derive(Debug, PartialEq, Eq)]
+enum Failing {
+    /// There's no pull request for the branch, which `gh` says with the same exit code as a failure.
+    NoneFound,
+    /// `gh` can't work here until something changes: it isn't logged in, or the repository isn't on GitHub.
+    CantWorkHere,
+    /// It might next time, such as once GitHub can be reached.
+    CouldntSay,
+}
+
+/// From its exit code, which is 4 when it needs a login, and its own words, as version 2.103 says them.
+fn failing(code: Option<i32>, stderr: &str) -> Failing {
+    const NOT_ON_GITHUB: [&str; 2] = ["no git remotes found", "none of the git remotes configured for this repository"];
+    if stderr.contains("no pull requests found") {
+        Failing::NoneFound
+    } else if code == Some(4) || NOT_ON_GITHUB.iter().any(|words| stderr.contains(words)) {
+        Failing::CantWorkHere
+    } else {
+        Failing::CouldntSay
+    }
+}
+
+/// How much of GitHub's hourly GraphQL limit is left, which is what `gh pr view` spends. GitHub's `rate_limit` endpoint
+/// says, in the same numbers as the headers on every answer, and asking it doesn't count against the limit.
+pub async fn rate_limit(path: &str) -> Result<RateLimit, ApiError> {
+    let said = gh(path, &["api", "rate_limit"]).await.ok_or_else(|| couldnt_count("gh couldn't ask"))?;
+    parse_rate_limit(&said).ok_or_else(|| couldnt_count("GitHub answered something else"))
+}
+
+fn parse_rate_limit(json: &[u8]) -> Option<RateLimit> {
+    let value: Value = serde_json::from_slice(json).ok()?;
+    let graphql = &value["resources"]["graphql"];
+    let count = |field: &str| graphql[field].as_u64().and_then(|n| u32::try_from(n).ok());
+    let reset_s = graphql["reset"].as_i64()?;
+    Some(RateLimit { limit: count("limit")?, remaining: count("remaining")?, resets_at_ms: reset_s.checked_mul(1000)? })
+}
+
+fn couldnt_count(why: &str) -> ApiError {
+    ApiError::new(ErrorCode::Worker, format!("couldn't tell how much of GitHub's limit is left: {why}"))
+}
+
+fn couldnt_say(why: &str) -> ApiError {
+    ApiError::new(ErrorCode::Worker, format!("couldn't tell whether there's a pull request: {why}"))
+}
+
+fn cant_work_here(why: &str) -> ApiError {
+    ApiError::new(ErrorCode::Unavailable, format!("gh can't say whether there's a pull request here: {why}"))
+}
+
+/// What it printed, if it succeeded.
 async fn gh(path: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let output = run_gh(path, args).await.ok()?;
+    output.status.success().then_some(output.stdout)
+}
+
+/// Why `gh` didn't run to the end.
+enum Unran {
+    Missing,
+    /// It couldn't start for another reason, or took too long.
+    Failed(String),
+}
+
+async fn run_gh(path: &str, args: &[&str]) -> Result<Output, Unran> {
     let output = Command::new("gh")
         .args(args)
         .current_dir(path)
@@ -42,8 +122,12 @@ async fn gh(path: &str, args: &[&str]) -> Option<Vec<u8>> {
         .stdin(Stdio::null())
         .kill_on_drop(true)
         .output();
-    let output = tokio::time::timeout(GH_TIMEOUT, output).await.ok()?.ok()?;
-    output.status.success().then_some(output.stdout)
+    match tokio::time::timeout(GH_TIMEOUT, output).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => Err(Unran::Missing),
+        Ok(Err(e)) => Err(Unran::Failed(e.to_string())),
+        Err(_) => Err(Unran::Failed(format!("gh took more than {GH_TIMEOUT:?}"))),
+    }
 }
 
 /// The pull request, with nothing yet about the queue or the worktree, and the commit at its head on GitHub.
@@ -124,9 +208,10 @@ fn outcome(check: &Value) -> Outcome {
     }
 }
 
-async fn queue(path: &str, url: &str) -> Option<QueueState> {
+async fn queue(path: &str, url: &str) -> Result<Option<QueueState>, ApiError> {
     let (query, url) = (format!("query={QUEUE_QUERY}"), format!("url={url}"));
-    parse_queue(&gh(path, &["api", "graphql", "-f", &query, "-f", &url]).await?)
+    let answer = gh(path, &["api", "graphql", "-f", &query, "-f", &url]).await;
+    Ok(parse_queue(&answer.ok_or_else(|| couldnt_say("its place in the merge queue couldn't be read"))?))
 }
 
 /// `None` when it isn't in a queue, which GitHub answers with no entry.

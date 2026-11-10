@@ -13,7 +13,7 @@ use gpui_kit::{
     div,
 };
 use look::Work;
-use protocol::model::{PullRequest, Standing, WorkspaceId};
+use protocol::model::{PullRequest, Standing, Workspace, WorkspaceId};
 
 use crate::busy::Busy;
 
@@ -24,7 +24,7 @@ mod words;
 pub use words::{Action, Ask};
 
 /// How often the pull request showing is read again. Soon enough to see a check finish or the queue merge it within
-/// a minute, and far from GitHub's limits, at two calls to it each time.
+/// a minute, and far from GitHub's limits, at two calls to it each time. The hub reads every workspace's less often.
 pub const READ_AGAIN: Duration = Duration::from_secs(30);
 
 /// As tall as the workspace's header, so the bar lines up with it across the window, and the window moves by it too.
@@ -39,6 +39,12 @@ pub enum Lookup {
 }
 
 impl Lookup {
+    /// What the hub last found, as the workspace's record has it. `None` until the hub has looked, and from a hub too
+    /// old to keep it there.
+    pub fn recorded(workspace: &Workspace) -> Option<Self> {
+        workspace.pull_request.clone().map(|found| Lookup::Found(found.pull_request))
+    }
+
     pub fn pull_request(&self) -> Option<&PullRequest> {
         match self {
             Lookup::Looking => None,
@@ -70,6 +76,11 @@ impl Lookup {
             Ok(_) | Err(_) => false,
         }
     }
+}
+
+/// Where a workspace's work stands, as its record says, for its mark. `None` where [`Lookup::recorded`] is.
+pub(crate) fn recorded_work(workspace: &Workspace) -> Option<Work> {
+    workspace.pull_request.as_ref().map(|found| words::work(Standing::of(found.pull_request.as_ref())))
 }
 
 /// The bar at the top of the sidebar: the pull request's number, which opens it, what stands in its way, and the

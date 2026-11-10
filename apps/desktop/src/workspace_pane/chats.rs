@@ -132,7 +132,10 @@ impl WorkspacePane {
                 cx.emit(PaneEvent::Error(message.clone()));
             }
             TranscriptEvent::TurnEnded => {
-                this.refresh_pull_request(cx);
+                // The hub reads the pull request again itself, and records it, except a hub too old to.
+                if this.workspace.pull_request.is_none() {
+                    this.refresh_pull_request(cx);
+                }
                 if let Some(diff) = &this.diff {
                     diff.review.update(cx, Review::refresh);
                 }

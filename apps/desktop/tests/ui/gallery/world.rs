@@ -91,6 +91,7 @@ impl World {
             rev: Rev::default(),
             title: None,
             title_source: TitleSource::FirstLine,
+            pull_request: None,
         });
         id
     }

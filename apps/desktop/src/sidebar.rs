@@ -150,9 +150,20 @@ pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standi
     let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
     let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
     let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
-    // Only a workspace whose pane is open knows its pull request, until the hub sends it with each workspace.
-    let work = app.panes.get(&workspace.id).map_or(Work::NoPr, |pane| pane.read(cx).work());
+    // The hub keeps it on the record, open or not. A hub too old to do that leaves it to the pane, if it's open.
+    let work = crate::pull_request::recorded_work(workspace)
+        .or_else(|| app.panes.get(&workspace.id).map(|pane| pane.read(cx).work()))
+        .unwrap_or(Work::NoPr);
     Standing { signal, work, unread }
+}
+
+#[cfg(feature = "testing")]
+impl AppView {
+    /// What a workspace's mark shows of its pull request, in the sidebar or in Home.
+    pub fn work_shown(&self, id: &protocol::model::WorkspaceId, cx: &App) -> Option<Work> {
+        let workspace = self.workspaces.iter().find(|w| &w.id == id)?;
+        Some(standing(self, workspace, cx).work)
+    }
 }
 
 /// An icon centred in a box as wide as a line of body text is tall, as the sidebar's items and repositories have.

@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
 use protocol::model::{
-    ClientRequestId, GitDiff, GitStatus, PullRequest, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
-    Workspace, WorkspaceId, WorkspaceStatus,
+    ClientRequestId, GitDiff, GitStatus, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace,
+    WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -108,6 +108,7 @@ impl Hub {
             rev: Rev::default(),
             title: None,
             title_source: TitleSource::FirstLine,
+            pull_request: None,
         };
         let record = workspace.clone();
         match self.blocking(move |store| store.insert_workspace(&record, client_request_id.as_ref())).await? {
@@ -154,6 +155,7 @@ impl Hub {
         }
         let id = workspace.id.clone();
         let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
+        self.nothing_to_read_yet(&ready.id);
         self.notify(HubNotice::Workspace(ready.clone()));
         self.start_setup(repo.clone(), ready).await
     }
@@ -324,17 +326,5 @@ impl Hub {
             return Err(unexpected(&reply));
         };
         Ok((media_type, data))
-    }
-
-    pub(crate) async fn workspace_pull_request(
-        self: &Arc<Self>,
-        id: WorkspaceId,
-    ) -> Result<Option<PullRequest>, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::PullRequest { path }).await?;
-        let WorkerResponse::PullRequest { pull_request } = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok(pull_request)
     }
 }

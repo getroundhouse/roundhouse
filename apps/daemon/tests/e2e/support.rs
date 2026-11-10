@@ -16,13 +16,11 @@ use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
-pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
-/// Returns what `kill` did. Signal 0 only checks that the process exists.
-pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
-    // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.
-    unsafe { libc::kill(i32::try_from(pid).unwrap(), signal) }
-}
+mod processes;
+
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// `cargo test --test e2e` doesn't build examples, so a plain path could run an out-of-date fake
 /// without saying so. Building here means tests always use the current one.
@@ -40,6 +38,10 @@ pub(crate) fn fake_agent() -> &'static Path {
         bin_dir.join("examples/fake_claude")
     })
 }
+
+/// Where `gh` finds a login other than in `HOME`.
+const GH_LOGINS: [&str; 6] =
+    ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME"];
 
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
@@ -109,7 +111,16 @@ impl Stack {
             .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // So `gh` can't reach GitHub as whoever runs the tests, any more than it finds their login in `HOME`.
+        for name in GH_LOGINS {
+            command.env_remove(name);
+        }
         command
+    }
+
+    /// Set for every hub started from now on, as [`Stack::start_with`] sets it for the first.
+    pub(crate) fn add_env(&mut self, name: &'static str, value: String) {
+        self.env.push((name, value));
     }
 
     pub(crate) fn start_hub(&mut self) {
@@ -165,21 +176,6 @@ impl Drop for Stack {
             let _ = hub.wait();
         }
     }
-}
-
-pub(crate) fn terminate(pid: u32) {
-    signal(pid, libc::SIGTERM);
-}
-
-pub(crate) fn is_alive(pid: u32) -> bool {
-    // A zombie still counts as existing, which is why
-    // tests also look at its state below.
-    if signal(pid, 0) != 0 {
-        return false;
-    }
-    let state = Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]).output().unwrap();
-    let state = String::from_utf8_lossy(&state.stdout);
-    !state.trim().is_empty() && !state.trim().starts_with('Z')
 }
 
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> String {
@@ -273,11 +269,6 @@ pub(crate) fn latest_started_pid(events: &[SessionEvent]) -> Option<u32> {
         EventBody::AgentStarted { pid, .. } => Some(*pid),
         _ => None,
     })
-}
-
-pub(crate) fn parent_of(pid: u32) -> u32 {
-    let out = Command::new("ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().unwrap();
-    String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
 }
 
 pub(crate) fn assert_gapless(events: &[SessionEvent]) {

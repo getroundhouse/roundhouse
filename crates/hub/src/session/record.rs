@@ -56,6 +56,7 @@ impl LiveSession {
         let run = origin.run();
         let After { body, status: next, change, tasks } = after(&self.state.lock(), origin, body);
         let (announce, held) = (!change.is_none(), change.queue_held);
+        let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
         let id = self.id.clone();
         let for_store = body.clone();
         let appended = hub
@@ -73,6 +74,9 @@ impl LiveSession {
             && let Err(e) = self.announce(&hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");
+        }
+        if turn_ended {
+            hub.read_pull_request_after_turn(&self.workspace_id);
         }
         Ok((appended.event, false))
     }

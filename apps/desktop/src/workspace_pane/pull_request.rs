@@ -37,13 +37,17 @@ impl WorkspacePane {
         from.strip_prefix("origin/").unwrap_or(from)
     }
 
+    /// Asks the hub to read it now. The hub records what it finds on the workspace's record, which brings it here in
+    /// order with everything else the hub says, so the answer is only taken from the reply while the record has none,
+    /// such as from a hub too old to keep it there.
     pub(super) fn refresh_pull_request(&mut self, cx: &mut Context<Self>) {
         self.pull_request_asks += 1;
         let (client, id, asked) = (self.client.clone(), self.workspace.id.clone(), self.pull_request_asks);
         cx.spawn(async move |this, cx| {
             let found = cx.background_spawn(async move { client.workspace_pull_request(&id) }).await;
             let _ = this.update(cx, |t, cx| {
-                if t.pull_request.answer(asked == t.pull_request_asks, found) {
+                let unrecorded = t.workspace.pull_request.is_none();
+                if unrecorded && t.pull_request.answer(asked == t.pull_request_asks, found) {
                     cx.notify();
                 }
             });

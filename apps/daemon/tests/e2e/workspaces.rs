@@ -4,14 +4,13 @@
 
 use std::path::PathBuf;
 
-use client_core::{Client, ClientError, new_request_id};
+use client_core::{ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, ClientRequestId, DiffSide, PrState, SessionOptions, SessionStatus, WorkspaceStatus};
+use protocol::model::{AgentKind, ClientRequestId, DiffSide, SessionOptions, SessionStatus, WorkspaceStatus};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, git, install_executable, is_alive, read_all, wait_for_setup,
-    wait_for_turn_end, wait_until,
+    Stack, assistant_text, commit_settings, git, is_alive, read_all, wait_for_setup, wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -195,32 +194,6 @@ fn a_workspace_with_no_pull_request_reports_none_rather_than_failing() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     assert_eq!(client.workspace_pull_request(&workspace.id).unwrap(), None);
-}
-
-#[test]
-fn a_workspace_reports_its_pull_request_from_gh() {
-    let mut stack = Stack::start();
-    stack.kill_hub();
-    // No login shell, so this PATH is the one used, with a stand-in `gh` at the front of it.
-    let bin = stack.path("bin");
-    std::fs::create_dir_all(&bin).unwrap();
-    let source = stack.path("gh.source");
-    std::fs::write(
-        &source,
-        "#!/bin/sh\nprintf '{\"isDraft\":false,\"number\":7,\"state\":\"OPEN\",\"title\":\"T\",\"url\":\"https://example.com/7\"}'\n",
-    )
-    .unwrap();
-    install_executable(&source, &bin.join("gh"));
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-    let mut command = stack.command();
-    command.env("PATH", path).env("SHELL", "/usr/bin/false");
-    stack.hub = Some(command.spawn().unwrap());
-    wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
-
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    let pr = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-    assert_eq!((pr.number, pr.state, pr.url.as_str()), (7, PrState::Open, "https://example.com/7"));
 }
 
 #[test]

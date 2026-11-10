@@ -133,6 +133,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let hub = hub.clone();
         tokio::spawn(crate::server::accept_loop(hub, listener))
     };
+    let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|e| HubError::io("listening for SIGTERM", e))?;
     tokio::select! {
@@ -141,6 +142,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         _ = terminate.recv() => info!("terminated"),
     }
     accept.abort();
+    watching_pull_requests.abort();
     let _ = std::fs::remove_file(&paths.socket);
     hub.stop_all_workers().await;
     drop(lock_file);
