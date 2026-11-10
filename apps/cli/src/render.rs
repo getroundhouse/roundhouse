@@ -5,7 +5,7 @@ use std::io::Write;
 
 use protocol::attachment::Attachment;
 use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, TurnOutcome};
-use protocol::model::{MessageId, Seq, TaskId};
+use protocol::model::{MessageId, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
@@ -44,6 +44,7 @@ impl Printer {
         self.line(seq, &format!("you: {text}{carried}"));
     }
 
+    #[expect(clippy::too_many_lines, reason = "a flat match, with one short arm per kind of event")]
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { text, attachments, .. } => self.prompt(event.seq, text, attachments),
@@ -97,6 +98,10 @@ impl Printer {
                 self.line(event.seq, &format!("approval mode: {permission_mode}"));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
+            EventBody::SubagentStarted { description, call, .. } => {
+                self.subagent(event.seq, description.as_deref(), call);
+            }
+            EventBody::SubagentEnded { outcome, .. } => self.line(event.seq, &format!("a subagent ended: {outcome:?}")),
             EventBody::PromptDropped { prompt } => {
                 self.line(event.seq, &format!("the agent stopped before reading the prompt at {prompt}"));
             }
@@ -105,6 +110,12 @@ impl Printer {
             | EventBody::AgentOther { .. }
             | EventBody::Unknown => {}
         }
+    }
+
+    /// That the agent started a subagent, by what it's for, or failing that its call.
+    fn subagent(&mut self, seq: u64, description: Option<&str>, call: &ToolUseId) {
+        let what = description.unwrap_or(call.as_str());
+        self.line(seq, &format!("started a subagent: {what}"));
     }
 
     fn background(&mut self, seq: u64, tasks: &[AgentTask], stopped: &[TaskId]) {

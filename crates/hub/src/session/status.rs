@@ -67,6 +67,8 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => current,
     }
@@ -115,6 +117,8 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => pending.len(),
     }
@@ -138,6 +142,8 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         | EventBody::ApprovalResolved { .. }
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => tasks.to_vec(),
     }

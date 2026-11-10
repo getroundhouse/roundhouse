@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use client_core::Client;
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome};
 use protocol::model::{Place, SessionId, ToolUseId};
 
 use crate::support::{Follower, Stack, read_all, wait_for_turn_end, wait_until};
@@ -63,6 +63,21 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     assert_eq!(work.events.len(), 3, "its call, the call's result, and its report");
     assert_placed(&agent.events, None);
     assert!(agent.events.iter().any(|event| matches!(event.body, EventBody::TurnEnded { .. })));
+    let about_it = |event: &&SessionEvent| match &event.body {
+        EventBody::SubagentStarted { call: started, .. } | EventBody::SubagentEnded { call: started, .. } => {
+            *started == call
+        }
+        _ => false,
+    };
+    let [started, ended] = agent.events.iter().filter(about_it).collect::<Vec<_>>()[..] else {
+        panic!("the agent says once that it started and once that it ended: {:?}", agent.events)
+    };
+    assert!(matches!(&started.body, EventBody::SubagentStarted { prompt: Some(prompt), in_background: true, .. }
+        if prompt == "Look around."));
+    assert!(
+        matches!(&ended.body, EventBody::SubagentEnded { outcome: SubagentOutcome::Finished, report: Some(report), .. }
+        if report == "There's a README here.")
+    );
     assert_eq!((&agent.events[..read.len()], last), (read.as_slice(), Place::new(u64::try_from(read.len()).unwrap())));
     let (rest, last) = client.session_read_places(&session.id, Some(&call), Place::new(2), 1000).unwrap();
     assert_eq!((rest.as_slice(), last), (&work.events[1..], Place::new(3)));

@@ -261,6 +261,8 @@ fn render_event(
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Unknown => empty(),

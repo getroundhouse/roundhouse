@@ -12,12 +12,15 @@ use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
 pub(crate) use prompt::PromptProgress;
+use subagents::Subagents;
 use tasks::StoppedTasks;
 
 mod advisor;
 mod file_change;
 mod images;
 mod prompt;
+mod subagents;
+mod surrogates;
 mod tasks;
 #[cfg(test)]
 mod tests;
@@ -47,17 +50,22 @@ pub enum Parsed {
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
 /// message, as its deltas did. It also says it stopped a background task before the list that leaves it
-/// out, so the list can say which left without finishing.
+/// out, so the list can say which left without finishing, and which task each subagent runs as, so the end of one
+/// can say which subagent it was.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     streaming: HashMap<MessageId, u32>,
     stopped_tasks: StoppedTasks,
+    subagents: Subagents,
 }
 
 impl Normalizer {
     pub fn line(&mut self, line: &str) -> Parsed {
         let Some(value) = value_of(line) else { return unparsed() };
         self.stopped_tasks.note(&value);
+        if let Some(body) = self.subagents.read(&value) {
+            return Parsed::Event(body);
+        }
         let mut parsed = parse_value(&value);
         if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
             *stopped = self.stopped_tasks.gone_from(tasks);
@@ -101,7 +109,7 @@ fn value_of(line: &str) -> Option<Value> {
     serde_json::from_str::<Value>(line)
         // JavaScript strings can hold half of a surrogate pair, and JSON.stringify writes it as an
         // escape. That's rare, and it can land in a line that matters, such as an approval.
-        .or_else(|_| serde_json::from_str::<Value>(&repair_lone_surrogates(line)))
+        .or_else(|_| serde_json::from_str::<Value>(&surrogates::repair(line)))
         .ok()
 }
 
@@ -130,45 +138,6 @@ fn parse_value(value: &Value) -> Parsed {
         "command_lifecycle" => prompt::command_lifecycle(value),
         _ => other(kind),
     }
-}
-
-/// Replaces `\\uD800`-style escapes that aren't half of a proper pair with U+FFFD.
-fn repair_lone_surrogates(line: &str) -> String {
-    fn escape_at(bytes: &[u8], at: usize) -> Option<u16> {
-        let hex = bytes.get(at + 2..at + 6)?;
-        if bytes[at] != b'\\' || bytes[at + 1] != b'u' {
-            return None;
-        }
-        u16::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()
-    }
-    const REPLACEMENT: &str = "\\ufffd";
-    let bytes = line.as_bytes();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0;
-    let mut copied_to = 0;
-    while i < bytes.len() {
-        if bytes[i] != b'\\' {
-            i += 1;
-            continue;
-        }
-        let Some(unit) = escape_at(bytes, i) else {
-            // Some other escape, such as an escaped backslash. Its second byte isn't an escape start.
-            i += 2;
-            continue;
-        };
-        match unit {
-            0xD800..=0xDBFF if matches!(escape_at(bytes, i + 6), Some(0xDC00..=0xDFFF)) => i += 12,
-            0xD800..=0xDFFF => {
-                out.push_str(&line[copied_to..i]);
-                out.push_str(REPLACEMENT);
-                i += 6;
-                copied_to = i;
-            }
-            _ => i += 6,
-        }
-    }
-    out.push_str(&line[copied_to..]);
-    out
 }
 
 /// A line of `kind` with no normalized form, which isn't a subagent's. Not every line's `parent_tool_use_id` names a
