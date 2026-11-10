@@ -7,8 +7,9 @@ use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PromptLine, RecordKey, Rev, Seq, Session,
-    SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Place, PromptLine, RecordKey, Rev, Seq,
+    Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource, ToolUseId, WorkspaceId,
+    WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 use tracing::warn;
@@ -16,7 +17,7 @@ use tracing::warn;
 use super::{Hub, new_id, not_ready};
 use crate::error::internal;
 use crate::session::{Command, LiveSession};
-use crate::store::{Made, Reading, Store, StoreError, StoredSession, now_ms};
+use crate::store::{Made, Places, Reading, Store, StoreError, StoredSession, now_ms};
 
 /// The sessions the hub has in memory, and the ones it has deleted since it started.
 #[derive(Default)]
@@ -167,6 +168,44 @@ impl Hub {
             .map_or(crate::server::PUMP_PAGE_EVENTS, |n| n.min(crate::server::PUMP_PAGE_EVENTS));
         self.blocking(move |store| store.read_events(&id, from_seq, limit, crate::server::DEFAULT_READ_BYTES, false))
             .await
+    }
+
+    /// Reads the agent's own events, or those of the subagent `subagent` started, by place, as
+    /// [`Hub::session_read`] reads every event by `seq`.
+    pub(crate) async fn session_read_places(
+        &self,
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        from_place: Place,
+        limit: u32,
+        max_bytes: Option<u64>,
+        include_raw: bool,
+    ) -> Result<ClientResponse, ApiError> {
+        let max_bytes = max_bytes.unwrap_or(crate::server::DEFAULT_READ_BYTES);
+        let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            let places = Places { subagent: subagent.as_ref(), from: from_place, through: None };
+            let (events, last_place) = store.read_places(&id, places, limit, max_bytes, include_raw)?;
+            Ok(ClientResponse::PlacedEvents { events, last_place })
+        })
+        .await
+    }
+
+    /// Reads by place for a subscriber, as [`Hub::read_page`] does by `seq`, never past `through`.
+    pub(crate) async fn read_places_page(
+        &self,
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        from: Place,
+        through: Seq,
+    ) -> Result<Vec<SessionEvent>, ApiError> {
+        self.blocking(move |store| {
+            let places = Places { subagent: subagent.as_ref(), from, through: Some(through) };
+            let limit = crate::server::PUMP_PAGE_EVENTS;
+            Ok(store.read_places(&id, places, limit, crate::server::DEFAULT_READ_BYTES, false)?.0)
+        })
+        .await
     }
 
     pub(crate) async fn session_prompt(

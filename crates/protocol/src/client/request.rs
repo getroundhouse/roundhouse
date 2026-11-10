@@ -10,7 +10,7 @@ use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
-    RepoId, Seq, SessionId, SessionSettingsChange, WorkspaceId,
+    Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -177,6 +177,26 @@ pub enum ClientRequest {
     SessionSubscribe {
         id: SessionId,
         from_seq: Seq,
+        subscription_id: u64,
+    },
+    /// Reads the agent's own events, or those of the subagent `subagent` started, from `from_place` on, as
+    /// `SessionRead` reads every event. A hub older than this refuses it as unsupported, and a client reads by `seq`.
+    SessionReadPlaces {
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        from_place: Place,
+        limit: u32,
+        max_bytes: Option<u64>,
+        #[serde(default)]
+        include_raw: bool,
+    },
+    /// Follows the agent's own events, or one subagent's, from `from_place` on, as `SessionSubscribe` follows every
+    /// event. The tail and deltas are only what that one is writing. To catch up after reconnecting, subscribe from
+    /// one past the last place received. A hub older than this refuses it as unsupported.
+    SessionSubscribePlaces {
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        from_place: Place,
         subscription_id: u64,
     },
     /// Works for any kind of subscription.

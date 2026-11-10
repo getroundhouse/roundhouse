@@ -29,6 +29,7 @@ mod setup;
 mod staying_awake;
 mod steering;
 mod stopping_if_idle;
+mod subagents;
 #[cfg(test)]
 mod support;
 mod titles;

@@ -242,24 +242,21 @@ impl Client {
     }
 
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
-        // Registered before the request goes out, because events can arrive before the reply.
-        let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (items_tx, items) = subscription_channel();
-        self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        let reply = self.expect_ok(ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id });
-        if let Err(e) = reply {
-            self.inner.subscriptions.lock().remove(&subscription_id);
-            return Err(e);
-        }
-        Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
+        self.subscribe(|subscription_id| ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
     }
 
     /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
     pub fn feed_subscribe(&self) -> Result<Subscription> {
+        self.subscribe(|subscription_id| ClientRequest::FeedSubscribe { subscription_id })
+    }
+
+    /// Sends the subscription `request` makes for an ID of its own.
+    pub(super) fn subscribe(&self, request: impl FnOnce(u64) -> ClientRequest) -> Result<Subscription> {
+        // Registered before the request goes out, because items can arrive before the reply.
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (items_tx, items) = subscription_channel();
         self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        if let Err(e) = self.expect_ok(ClientRequest::FeedSubscribe { subscription_id }) {
+        if let Err(e) = self.expect_ok(request(subscription_id)) {
             self.inner.subscriptions.lock().remove(&subscription_id);
             return Err(e);
         }

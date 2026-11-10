@@ -340,3 +340,23 @@ fn a_migrated_log_keeps_each_events_time_id_run_and_line_and_its_indexes() {
     assert!(lost.is_empty(), "lost {lost:?}, and has {has:?}");
     assert!(has.iter().any(|(name, _)| name == "events_by_subagent"), "{has:?}");
 }
+
+#[test]
+fn a_read_by_place_takes_one_agent_or_subagents_events_up_to_a_seq_and_says_how_far_they_go() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    for sent in [Sent::Message(Some(0)), Sent::Hub, Sent::Result(Some(0)), Sent::Other(Some(1)), Sent::Other(Some(0))] {
+        store.append(&"s".into(), None, &sent.body(), None, None, None).unwrap();
+    }
+    let call = Sent::Message(Some(0)).subagent();
+    let read = |from, through, limit| {
+        let places = Places { subagent: call.as_ref(), from: Place::new(from), through };
+        let (events, last) = store.read_places(&"s".into(), places, limit, u64::MAX, false).unwrap();
+        (events.iter().map(|event| (event.seq, event.place.get())).collect::<Vec<_>>(), last.get())
+    };
+
+    assert_eq!(read(1, None, 10), (vec![(1, 1), (3, 2), (5, 3)], 3));
+    assert_eq!(read(2, None, 1), (vec![(3, 2)], 3));
+    assert_eq!(read(2, Some(4), 10), (vec![(3, 2)], 3), "nothing recorded after the seq it stops at");
+    assert_eq!(read(4, None, 10), (vec![], 3));
+}

@@ -152,6 +152,13 @@ impl Tail {
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
+
+    /// What the agent itself is writing, or the subagent `subagent` started.
+    #[must_use]
+    pub fn of(&self, subagent: Option<&ToolUseId>) -> Tail {
+        let messages = self.messages.iter().filter(|message| message.parent_tool_use_id.as_ref() == subagent);
+        Tail { messages: messages.cloned().collect() }
+    }
 }
 
 fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut TailBlock {
@@ -222,6 +229,26 @@ mod tests {
         tail.on_event(None, &assistant("sub"));
         assert_eq!(tail.messages.len(), 1);
         assert_eq!(tail.messages[0].message_id, "m1".into());
+    }
+
+    #[test]
+    fn the_tail_of_the_agent_or_a_subagent_is_only_what_that_one_writes() {
+        let mut tail = Tail::default();
+        tail.apply(&delta(DeltaChange::Text { index: 0, text: "own".into() }));
+        for (message, call) in [("a1", "toolu_a"), ("b1", "toolu_b"), ("a2", "toolu_a")] {
+            let change = DeltaChange::Text { index: 0, text: message.into() };
+            tail.apply(&StreamDelta {
+                run: None,
+                message_id: message.into(),
+                parent_tool_use_id: Some(call.into()),
+                change,
+            });
+        }
+        let ids = |tail: Tail| tail.messages.into_iter().map(|m| m.message_id).collect::<Vec<_>>();
+        assert_eq!(ids(tail.of(None)), vec!["m1".into()]);
+        assert_eq!(ids(tail.of(Some(&"toolu_a".into()))), vec![MessageId::from("a1"), "a2".into()]);
+        assert_eq!(ids(tail.of(Some(&"toolu_b".into()))), vec![MessageId::from("b1")]);
+        assert!(tail.of(Some(&"toolu_c".into())).is_empty());
     }
 
     #[test]
