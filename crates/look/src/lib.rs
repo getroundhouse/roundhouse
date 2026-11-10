@@ -10,15 +10,17 @@ mod highlight;
 mod icon;
 mod mark;
 mod palette;
+mod raised;
 mod theme;
 mod work;
 
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
-pub use clock::{local_time, now_ms};
+pub use clock::{day_and_time, local_time, now_ms};
 pub use highlight::{Spans, highlight, preload_highlighting, try_highlight};
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, mark};
 pub use palette::{faint, prompt, tab_underline};
+pub use raised::raised;
 pub use theme::apply;
 pub use work::Work;

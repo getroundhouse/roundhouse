@@ -8,9 +8,9 @@ use protocol::model::SessionStatus;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, conversation, diff, effort_chosen, finishing_update, own_hub,
-    pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled, unread,
-    working_background,
+    attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen, finishing_update,
+    own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled,
+    unread, working_background,
 };
 use super::{chats, file_chats, long_chats, pictures, subagent_chats, tool_chats};
 
@@ -35,6 +35,12 @@ pub(crate) const SCREENS: &[Screen] = &[
     },
     Screen { name: "conversation", spec: "chats.md", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
     Screen { name: "streaming", spec: "chats.md", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "context",
+        spec: "chats.md",
+        world: Some(context),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "context-account" }],
+    },
     Screen {
         name: "attachments",
         spec: "chats.md",

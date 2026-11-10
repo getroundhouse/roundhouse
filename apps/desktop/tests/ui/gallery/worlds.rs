@@ -4,12 +4,13 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, Checks, CommentId, DiffComment, DiffSide, Effort, GitDiff, MergeState, PullRequest, QueuedPrompt,
-    Rev, SessionStatus, SetupStatus, Title, WorkspaceId, WorkspaceStatus,
+    AgentAccount, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
+    Effort, GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus,
+    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
-use super::world::{HubBuild, World};
+use super::world::{HubBuild, NOW_MS, World};
 use super::{chats, file_chats, image_chats, patch, pictures, pull_requests};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
@@ -61,6 +62,45 @@ pub(super) fn effort_chosen() -> World {
     let mut world = conversation();
     let chat = world.sessions.last_mut().unwrap();
     chat.effort = Some(Effort::Xhigh);
+    world
+}
+
+/// The conversation, in a chat whose agent has said how full its context is, on an account with a week's limit that
+/// starts again in six days.
+pub(super) fn context() -> World {
+    const HOUR_MS: i64 = 3_600_000;
+    let mut world = conversation();
+    let part = |name: &str, tokens, kind| ContextPart { name: name.to_string(), tokens, kind };
+    world.sessions.last_mut().unwrap().context = Some(ContextUsage {
+        used_tokens: 313_500,
+        max_tokens: 500_000,
+        parts: vec![
+            part("System prompt", 4_000, ContextPartKind::Used),
+            part("System tools", 4_500, ContextPartKind::Used),
+            part("System tools (deferred)", 19_500, ContextPartKind::Deferred),
+            part("MCP tools", 500, ContextPartKind::Used),
+            part("MCP tools (deferred)", 11_500, ContextPartKind::Deferred),
+            part("Skills", 6_000, ContextPartKind::Used),
+            part("Messages", 298_500, ContextPartKind::Used),
+            part("Autocompact buffer", 33_000, ContextPartKind::Buffer),
+            part("Free space", 153_500, ContextPartKind::Free),
+        ],
+    });
+    let week = UsageLimit {
+        window: LimitWindow::SevenDays,
+        used_percent: 4,
+        resets_at_ms: Some(NOW_MS + 150 * HOUR_MS),
+        heard_at_ms: Some(NOW_MS - HOUR_MS),
+    };
+    let account = AgentAccount {
+        id: Some("claude-0000000000000000".into()),
+        logged_in: true,
+        model_provider: Some("Anthropic API".to_string()),
+        plan: Some("Max".to_string()),
+        login: Some("Claude account".to_string()),
+        email: Some("ada@example.com".to_string()),
+    };
+    world.account = Some(SessionAccount { account, limits: vec![week] });
     world
 }
 

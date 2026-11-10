@@ -208,6 +208,19 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![The model picker's menu](screens/model-picker.png)
 
+## The context and the account
+
+- **A ring beside Send shows how full the agent's context is,** filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts. It follows the agent as it works: the agent says when a turn starts, a few times a minute during one, and when it ends. It's in muted text's colour however full it is, since amber and red already mean something, and it doesn't move by itself, since only a working agent moves anything. *Unconfirmed.*
+- **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes as soon as the pointer does. *Unconfirmed.*
+- **The card starts with what the context holds:** how much is used of how much, such as `313.5k/500.0k`, as a bar, then each part in the agent's own words, largest first, as its share of everything the context holds. The parts don't add up to what's used, since they include what's free and what's set aside, and the tools an agent loads only when it needs them are listed without being counted. *Unconfirmed.*
+- **Then how much of each of the account's limits is left,** such as `96% left` of the `7d limit`, as a bar that empties, and when the limit starts again. A limit is the account's and not the chat's, so the hub keeps what any agent under the account last heard, and every chat under that account says the same, in whichever workspace, and still says it after the hub restarts. A chat under another account has that account's own, even with the same model provider. Nothing shows for a limit that has started again since it was heard, for an account with no limits, or until an agent under the account has worked. *Unconfirmed.*
+- **Last, whose account it is:** the model provider, the plan, how it's logged in, and the email, or that nobody is logged in. It's read from the agent's CLI on the workspace's machine each time the card shows. An answer too long for its line, such as a long email, is cut off with an ellipsis, and what was asked always shows. When the hub can't say, this and the limits are left out, and the card is only what the context holds. *Unconfirmed.*
+- **How full a context is belongs to its chat's record,** so every client shows the same ring, and it's still there once the agent has gone or the hub has restarted, since the conversation the agent resumes is as full. It isn't in the chat's history: only the newest matters, and it answers the app's own question rather than being something the agent said. *Unconfirmed.*
+
+**The card, over a chat whose context is nearly two thirds full.** *Unconfirmed.*
+
+![The context's card, open above its ring](screens/context.png)
+
 ## Tabs
 
 - **The chat showing is underlined, not filled.** A 2px pale copper line runs under its tab, over the bar's bottom edge, and its title looks as it does when it isn't showing, as `look.md` says for lists. A fill would make the tab one more raised thing on the pane.

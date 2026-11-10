@@ -9,6 +9,7 @@ mod attachments;
 mod changes;
 mod chats;
 mod checkout;
+mod context;
 mod core_loop;
 #[cfg(target_os = "macos")]
 mod gallery;

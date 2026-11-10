@@ -7,6 +7,7 @@ mod chats;
 mod daemons;
 mod diff;
 mod held;
+mod hover;
 mod hub;
 mod labels;
 mod new_workspace;

@@ -130,7 +130,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::Image { media_type: MediaType::sniff(data), data: AttachmentBytes::new(data.clone()) })
         }
         R::SessionAccount { .. } => {
-            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub can't say whose account a chat is under"))
+            let unsupported =
+                || ApiError::new(ErrorCode::Unsupported, "this screen's hub can't say whose account it is");
+            reply(C::SessionAccount(world.account.clone().ok_or_else(unsupported)?))
         }
         R::HubShutdown
         | R::RepoAdd { .. }

@@ -26,8 +26,6 @@ const AGENT_LINE: &str = "Look around";
 const SUBAGENT_CALL: &str = "List what's here";
 /// Asking the advisor, which the API runs rather than the agent.
 const ADVISOR_LINE: &str = "Ask the advisor";
-/// Longer than GPUI waits to show a tooltip, and to hide one the pointer can move onto.
-const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Longer than a mouse wheel's notches come apart in one spin, so the next notch starts a new gesture.
 const A_PAUSE: Duration = Duration::from_secs(1);
 
@@ -229,11 +227,11 @@ fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppC
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     let edit = ui.labelled("Edit")[0].path().last().unwrap().clone();
     ui.hover(edit);
-    wait_out_a_tooltip(&mut ui);
+    ui.wait_out_a_tooltip();
     assert!(ui.visible("edit-preview"), "hovering the edit shows its diff");
 
     ui.hover("edit-preview");
-    wait_out_a_tooltip(&mut ui);
+    ui.wait_out_a_tooltip();
 
     assert!(ui.visible("edit-preview"), "the diff stays while the pointer is on it");
     let (lines, transcript) = (top(&mut ui, "edit-preview-lines"), scrolled_to(&ui));
@@ -243,7 +241,7 @@ fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppC
     assert_eq!(top(&mut ui, "edit-preview-lines"), lines - px(60.), "and scrolls the diff");
 
     ui.hover("new-chat");
-    wait_out_a_tooltip(&mut ui);
+    ui.wait_out_a_tooltip();
 
     assert!(!ui.visible("edit-preview"), "the diff goes once the pointer leaves it");
 }
@@ -306,11 +304,6 @@ fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
 /// Where each element with this label is drawn.
 fn bounds(ui: &mut Ui<'_>, label: &str) -> Vec<Bounds<Pixels>> {
     ui.labelled(label).iter().map(ElementSnapshot::bounds).collect()
-}
-
-fn wait_out_a_tooltip(ui: &mut Ui<'_>) {
-    ui.cx.executor().advance_clock(LONGER_THAN_A_TOOLTIP_WAITS);
-    ui.frame();
 }
 
 /// Turns the wheel over the element by `y`, down the page when it's negative.
