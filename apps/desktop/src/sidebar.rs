@@ -20,8 +20,9 @@ mod footer;
 mod nav;
 mod row;
 
+/// Its right edge included. As wide as the sidebar `docs/inspiration.md` measures, so the layout feels familiar.
 /// Settings stands in for the sidebar at the same width.
-pub(crate) const WIDTH: f32 = 260.0;
+pub(crate) const WIDTH: f32 = 290.0;
 const HEADING_HEIGHT: Pixels = px(28.);
 const REPO_HEIGHT: Pixels = px(32.);
 /// A workspace's row, and the note in its place while one is on its way.
