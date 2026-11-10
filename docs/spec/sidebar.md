@@ -27,10 +27,15 @@
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
 - **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*
 - **While a workspace is being made, archived or restored, none of those can start,** so a button or key pressed twice does it once, and the buttons that archive are greyed out. *Unconfirmed.*
+- **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu or `Cmd-Shift-A` started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. *Unconfirmed.*
 
 **Pointing at a row that isn't showing.** *Unconfirmed.*
 
 ![Pointing at a row that isn't showing](screens/archive-button.png)
+
+**Archiving a row that isn't showing, from its button, once the pointer has left it.** *Unconfirmed.*
+
+![Archiving a row that isn't showing](screens/archiving.png)
 
 **The menu of the workspace showing, whose other chat has a reply nobody has read.** *Unconfirmed.*
 

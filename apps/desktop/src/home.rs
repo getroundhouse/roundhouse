@@ -19,8 +19,7 @@ use gpui_kit::{
 use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
-use crate::sidebar::{Standing, standing};
-use crate::workspace_pane::Busy;
+use crate::sidebar::{Standing, doing, standing};
 
 const ROW_HEIGHT: Pixels = px(44.);
 /// The repository's column, wide enough for most names.
@@ -165,16 +164,15 @@ pub(crate) fn page(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement
         .test_support()
 }
 
-/// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back. Clicking the
-/// rest of the row shows the workspace, as its row in the sidebar does, or brings an archived one back.
+/// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back, which says so
+/// while it does. Clicking the rest of the row shows the workspace, as its row in the sidebar does, or brings an
+/// archived one back.
 fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     let theme = cx.theme();
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
-    let archived = workspace.status == WorkspaceStatus::Archived;
     let Standing { signal, work, unread } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
-    let (id, again) = (workspace.id.clone(), workspace.id.clone());
-    let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };
+    let id = workspace.id.clone();
     h_flex()
         .id(ElementId::Name(format!("home-{}", workspace.id).into()))
         .w_full()
@@ -197,25 +195,35 @@ fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyEl
                 .child(workspace.label().to_string()),
         )
         .child(div().flex_none().w(REPO_WIDTH).truncate().text_xs().text_color(muted).child(repo))
-        .child(
-            Button::new(ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()))
-                .ghost()
-                .small()
-                .icon(icon)
-                .text_color(muted)
-                .tooltip(what)
-                .disabled(app.busy == Busy::Changing)
-                .on_click(cx.listener(move |t, _, _, cx| {
-                    // The row under it would take the click too, and show the workspace.
-                    cx.stop_propagation();
-                    if archived {
-                        t.restore(again.clone(), cx);
-                    } else {
-                        t.archive(again.clone(), false, cx);
-                    }
-                })),
-        )
+        .child(row_button(app, workspace, cx))
         .test_support()
+        .into_any_element()
+}
+
+/// The button that archives the workspace or brings it back, or what the row says in its place while it does.
+fn row_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
+    if let Some(waiting) = app.busy.doing(&workspace.id) {
+        return doing(format!("home-doing-{}", workspace.id), waiting).into_any_element();
+    }
+    let archived = workspace.status == WorkspaceStatus::Archived;
+    let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };
+    let id = workspace.id.clone();
+    Button::new(ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()))
+        .ghost()
+        .small()
+        .icon(icon)
+        .text_color(cx.theme().muted_foreground)
+        .tooltip(what)
+        .disabled(!app.busy.is_free())
+        .on_click(cx.listener(move |t, _, _, cx| {
+            // The row under it would take the click too, and show the workspace.
+            cx.stop_propagation();
+            if archived {
+                t.restore(id.clone(), cx);
+            } else {
+                t.archive(id.clone(), false, cx);
+            }
+        }))
         .into_any_element()
 }
 

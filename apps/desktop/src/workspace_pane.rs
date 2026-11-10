@@ -13,6 +13,7 @@ use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, W
 use transcript::Transcript;
 
 use crate::attached::Attachments;
+use crate::busy::Busy;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
 use crate::pull_request::Lookup;
@@ -59,15 +60,6 @@ struct DiffTab {
     path: SharedString,
     /// It covers the active chat.
     in_front: bool,
-}
-
-/// Whether the app is waiting on the hub to make, archive or restore a workspace. None of those can start while
-/// another is under way, so a button or key pressed twice does it once.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Busy {
-    Free,
-    /// Making, archiving or restoring a workspace.
-    Changing,
 }
 
 #[derive(Clone, Debug)]

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use client_core::Client;
 use desktop::app::Connection;
-use desktop::workspace_pane::Busy;
+use desktop::busy::Busy;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 

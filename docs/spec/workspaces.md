@@ -69,6 +69,6 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **`Create PR` asks the agent to commit, push and run `gh pr create`,** and the app shows the result from `gh pr view`. The agent knows why the changes were made, so it writes the better description. *Unconfirmed.*
 - **The pull request is read again each time its workspace is shown, when a turn ends, and every 30 seconds while it shows, unless it's merged or closed,** because checks, reviews and the queue move on GitHub while nobody's looking, and a workspace with none gets one when the agent or someone on GitHub opens it. Until the first answer, the bar says it's looking, rather than offering to create a pull request the workspace may already have. Only the newest answer shows, since an older one can arrive after it, and a failure to ask keeps what was known. *Unconfirmed.*
 
-**Every state of the pull request's bar, as the sidebar of changes shows it, and beside it what the header shows while the sidebar is hidden. Merged shows twice, the second time while a workspace is being archived.** *Unconfirmed.*
+**Every state of the pull request's bar, as the sidebar of changes shows it, and beside it what the header shows while the sidebar is hidden. Merged shows three times: the second while another workspace is being archived, and the third while this one is.** *Unconfirmed.*
 
 ![Every state of the pull request's bar](screens/pull-request-states.png)

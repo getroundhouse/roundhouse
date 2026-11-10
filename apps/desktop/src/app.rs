@@ -8,11 +8,12 @@ use client_core::{Client, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Repo, RepoId, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
+use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
-use crate::workspace_pane::{Busy, PaneEvent, WorkspacePane};
+use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
 mod home;
@@ -75,8 +76,6 @@ pub struct AppView {
     /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
     pub(crate) pointing_at: Option<WorkspaceId>,
     pub busy: Busy,
-    /// The repository a new workspace is on its way in. It can take a while, as it fetches first.
-    pub creating_in: Option<RepoId>,
     /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
     pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
     /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
@@ -137,7 +136,6 @@ impl AppView {
             sidebar_scroll: VirtualListScrollHandle::new(),
             pointing_at: None,
             busy: Busy::Free,
-            creating_in: None,
             new_workspace: None,
             focus_after_dialog: None,
             moving_window: false,
@@ -356,7 +354,7 @@ impl AppView {
             let Some(records) = self.feed.clone() else { return };
             let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
             let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
-            let busy = self.busy;
+            let busy = self.busy.clone();
             pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),

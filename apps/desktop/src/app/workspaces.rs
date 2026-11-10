@@ -7,9 +7,9 @@ use protocol::client::ErrorCode;
 use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
+use crate::busy::Busy;
 use crate::new_workspace::Request;
 use crate::rename::{self, Renaming};
-use crate::workspace_pane::Busy;
 
 mod dialog;
 mod made;
@@ -48,7 +48,7 @@ impl AppView {
 
     /// Whether a workspace can be made now: there's a hub, and nothing else is being made, archived or restored.
     fn can_create(&self) -> bool {
-        self.client().is_some() && self.busy == Busy::Free
+        self.client().is_some() && self.busy.is_free()
     }
 
     /// Makes a workspace from what the dialog held, and sends its first chat the prompt, if there is one, with the
@@ -57,8 +57,7 @@ impl AppView {
     /// goes to the chat's composer. Returns the request, untouched, when a workspace can't be made now.
     pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
         let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
-        self.set_busy(Busy::Changing, cx);
-        self.creating_in = Some(request.repo.clone());
+        self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it.
         let typed = request.prompt.clone();
@@ -67,7 +66,6 @@ impl AppView {
             let made = creating.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.set_busy(Busy::Free, cx);
-                t.creating_in = None;
                 match made {
                     Ok(made) => t.made(made, cx),
                     // Making it stopped partway, so it may have been made.
@@ -162,10 +160,10 @@ impl AppView {
     /// restored, so a key pressed twice archives once.
     pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        if self.busy == Busy::Changing {
+        if !self.busy.is_free() {
             return;
         }
-        self.set_busy(Busy::Changing, cx);
+        self.set_busy(Busy::Archiving(id.clone()), cx);
         let target = id.clone();
         let archiving = client.start(move |client| client.workspace_archive(&target, force));
         cx.spawn(async move |this, cx| {
@@ -209,10 +207,10 @@ impl AppView {
     /// [`AppView::archive`] doesn't.
     pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        if self.busy == Busy::Changing {
+        if !self.busy.is_free() {
             return;
         }
-        self.set_busy(Busy::Changing, cx);
+        self.set_busy(Busy::Restoring(id.clone()), cx);
         let restoring = client.start(move |client| client.workspace_restore(&id));
         cx.spawn(async move |this, cx| {
             let result = restoring.recv().await;
@@ -233,12 +231,12 @@ impl AppView {
     }
 
     /// Says whether a workspace is being made, archived or restored, which greys out every button that archives: in
-    /// the sidebar, in Home, and on every pane's pull request bar.
+    /// the sidebar, in Home, and on every pane's pull request bar. The one it's for says so in place of its button.
     fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
-        self.busy = busy;
         for pane in self.panes.values() {
-            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
+            pane.update(cx, |pane, cx| pane.set_busy(busy.clone(), cx));
         }
+        self.busy = busy;
         cx.notify();
     }
 }

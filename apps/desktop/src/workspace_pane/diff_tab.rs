@@ -150,7 +150,7 @@ impl WorkspacePane {
     pub(super) fn changes_sidebar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let changes = self.diff.as_ref().filter(|_| self.changes_open(cx))?.changes.clone();
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
-        let bar = crate::pull_request::bar(&self.pull_request, self.busy, act, cx);
+        let bar = crate::pull_request::bar(&self.pull_request, &self.busy, &self.workspace.id, act, cx);
         let theme = cx.theme();
         let column = v_flex().flex_none().w(crate::changes::WIDTH).h_full().border_l_1().border_color(theme.border);
         Some(column.bg(theme.sidebar).child(bar).child(div().flex_1().min_h_0().child(changes)).into_any_element())

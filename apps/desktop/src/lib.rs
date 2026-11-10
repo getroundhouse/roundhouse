@@ -7,6 +7,7 @@ mod alert;
 pub mod app;
 mod assets;
 mod attached;
+pub mod busy;
 pub mod changes;
 pub mod checkout;
 pub mod file_diff;

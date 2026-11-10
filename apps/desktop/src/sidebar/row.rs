@@ -1,5 +1,5 @@
-//! A workspace's row in the sidebar: its mark and name, the button that archives it under the pointer, and what a
-//! right-click on it offers.
+//! A workspace's row in the sidebar: its mark and name, the button that archives it under the pointer, what it's
+//! waiting on the hub for, and what a right-click on it offers.
 
 use std::rc::Rc;
 
@@ -9,14 +9,14 @@ use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
+    Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Role,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
 };
 use protocol::model::Workspace;
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, standing};
 use crate::app::AppView;
 use crate::right_click;
-use crate::workspace_pane::Busy;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 
 pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
@@ -28,6 +28,7 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
     let menu = row_menu(app, workspace, cx);
     let label = workspace.label().to_string();
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
+    let waiting = app.busy.doing(&workspace.id);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .accessibility_label(label.clone())
         .ghost()
@@ -58,9 +59,17 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
                 .when(!(selected || unread), |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
-                .when(pointing, |d| d.child(archive_button(app, workspace, cx))),
+                .when_some(waiting, |d, waiting| d.child(doing(format!("doing-{}", workspace.id), waiting)))
+                .when(waiting.is_none() && pointing, |d| d.child(archive_button(app, workspace, cx))),
         );
     row.context_menu(menu).into_any_element()
+}
+
+/// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows
+/// whether a button, a menu or a key started it, and wherever the pointer is, so it's clear the press took.
+pub(crate) fn doing(id: String, waiting: &'static str) -> impl IntoElement {
+    let text = div().flex_none().text_xs().text_color(look::faint()).child(waiting);
+    div().id(ElementId::Name(id.into())).role(Role::Status).aria_label(waiting).child(text).test_support()
 }
 
 /// Archives the workspace without opening it. Drawn only while the pointer is over the row, so no name is cut short
@@ -75,7 +84,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
         .text_color(cx.theme().muted_foreground)
         .tooltip("Archive")
         // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
-        .disabled(app.busy == Busy::Changing)
+        .disabled(!app.busy.is_free())
         .on_click(cx.listener(move |t, _, _, cx| {
             // The row under it would take the click too, and open the workspace that's going.
             cx.stop_propagation();
@@ -108,7 +117,7 @@ fn row_menu(
     let shared = right_click::menu(marking, marking_key, move |window, cx| {
         let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
     });
-    let (busy, id) = (app.busy == Busy::Changing, workspace.id.clone());
+    let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
     let archive = Rc::new(move |cx: &mut App| {
         let _ = to_archive.update(cx, |t, cx| t.archive(id.clone(), false, cx));
     });

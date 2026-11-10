@@ -305,6 +305,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1")],
     },
     Screen {
+        name: "archiving",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        // The screen's hub never answers, so the first workspace stays archiving after the pointer leaves it.
+        steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1"), Step::Click("archive-ws-1"), Step::MoveAway],
+    },
+    Screen {
         name: "rename",
         spec: "workspaces.md",
         world: Some(titled),

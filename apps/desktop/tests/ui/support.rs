@@ -5,6 +5,7 @@
 mod attachments;
 mod chats;
 mod diff;
+mod held;
 mod hub;
 mod labels;
 mod new_workspace;
@@ -30,6 +31,7 @@ use tempfile::TempDir;
 use transcript::Transcript;
 
 pub(crate) use diff::Diff;
+pub(crate) use held::Held;
 pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]

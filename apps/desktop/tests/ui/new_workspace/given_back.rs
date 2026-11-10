@@ -3,7 +3,6 @@
 
 use client_core::FileToSend;
 use desktop::new_workspace::Request;
-use desktop::workspace_pane::Busy;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
 use protocol::model::{AgentKind, Effort, WorkspaceStatus};
@@ -36,7 +35,7 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
     ui.input("say:never sent");
     ui.press("enter");
 
-    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy == Busy::Free);
+    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
     assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
     assert!(ui.view().workspaces.is_empty());
     assert!(ui.has_dialog(), "the dialog opens again to show where the prompt went");
