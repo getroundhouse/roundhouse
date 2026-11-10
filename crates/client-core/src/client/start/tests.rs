@@ -1,5 +1,6 @@
+use std::fs::Permissions;
 use std::io::Write as _;
-use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
+use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 
 use super::*;
 

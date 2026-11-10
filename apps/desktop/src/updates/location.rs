@@ -1,7 +1,5 @@
 //! Whether the app is somewhere it can replace itself, which Velopack needs to update it.
 
-use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
 use super::problem::{Kind, Problem};
@@ -30,8 +28,16 @@ pub(super) fn cant_install(bundle: &Path) -> Option<Problem> {
     })
 }
 
+/// Nothing asks on Windows, where an app has no bundle, so nothing there is said to be in the way.
+#[cfg(windows)]
+fn writable(_path: &Path) -> bool {
+    true
+}
+
+#[cfg(unix)]
 fn writable(path: &Path) -> bool {
-    let Ok(path) = CString::new(path.as_os_str().as_bytes()) else { return false };
+    use std::os::unix::ffi::OsStrExt as _;
+    let Ok(path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
     // SAFETY: `path` is a NUL-terminated string that outlives the call, which only reads it.
     unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 }
 }

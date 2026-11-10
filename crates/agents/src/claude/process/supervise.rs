@@ -1,6 +1,5 @@
 //! Watching a running process until it's gone, starting it again if the launch needs correcting.
 
-use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::Arc;
@@ -111,10 +110,21 @@ async fn finish(
     for prompt in untaken {
         let _ = output.send(AgentOutput::event(EventBody::PromptDropped { prompt }, None)).await;
     }
-    let (code, signal) = status.map_or((None, None), |s| (s.code(), s.signal()));
+    let (code, signal) = status.map_or((None, None), |s| (s.code(), signal_of(s)));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
+}
+
+/// The signal that ended a process, which only Unix has.
+fn signal_of(status: ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    return std::os::unix::process::ExitStatusExt::signal(&status);
+    #[cfg(windows)]
+    {
+        let _ = status;
+        None
+    }
 }
 
 #[derive(Debug, PartialEq)]

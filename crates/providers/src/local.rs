@@ -83,6 +83,11 @@ impl LocalProvider {
 /// An app started from Finder gets a minimal `PATH`, without Homebrew or anything from the user's
 /// shell setup. The agent's tools need the real one, so ask the login shell for it.
 async fn read_login_path(shell: Option<String>) -> Option<String> {
+    // Every process on Windows gets the user's whole `PATH` already, and a shell that could be asked there, such
+    // as Git's, would give it in a form of its own.
+    if cfg!(windows) {
+        return None;
+    }
     let shell = shell.or_else(account_shell)?;
     // rc files can print anything, so the value is marked. `printenv` works in every shell, which
     // matters for fish, where `$PATH` expands to a list.
@@ -124,6 +129,13 @@ async fn read_until_second_marker<R: AsyncRead + Unpin>(mut reader: R) -> Option
     }
 }
 
+/// Windows gives an account no shell.
+#[cfg(windows)]
+fn account_shell() -> Option<String> {
+    None
+}
+
+#[cfg(unix)]
 fn account_shell() -> Option<String> {
     // SAFETY: getpwuid returns a pointer to static storage or null. The string is copied before
     // anything else can overwrite it, and this runs on one thread at a time in this process.
@@ -182,12 +194,16 @@ async fn stop_orphaned_agents(instance_dir: &Path) {
 /// user added for this launch.
 fn merge_paths(login: Option<&str>, own: Option<&str>) -> Option<String> {
     let mut seen = Vec::new();
-    for entry in login.into_iter().chain(own).flat_map(|p| p.split(':')) {
-        if !entry.is_empty() && !seen.contains(&entry) {
+    for entry in login.into_iter().chain(own).flat_map(std::env::split_paths) {
+        if !entry.as_os_str().is_empty() && !seen.contains(&entry) {
             seen.push(entry);
         }
     }
-    (!seen.is_empty()).then(|| seen.join(":"))
+    if seen.is_empty() {
+        return None;
+    }
+    // Both came in as text and were split where a `PATH` is, so the entries join again, and into text.
+    std::env::join_paths(seen).ok()?.into_string().ok()
 }
 
 #[async_trait]

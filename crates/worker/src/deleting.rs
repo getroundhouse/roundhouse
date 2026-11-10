@@ -4,7 +4,6 @@
 
 use std::ffi::OsString;
 use std::io;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -69,13 +68,21 @@ fn delete_tree(path: &Path) -> io::Result<()> {
 }
 
 /// Gives the owner write and search permission on every directory in the tree, without following links out of it.
+/// On Windows that's clearing its read-only mark, which is all a directory's permissions hold there.
 fn make_writable(dir: &Path) -> io::Result<()> {
     let metadata = std::fs::symlink_metadata(dir)?;
     if !metadata.is_dir() {
         return Ok(());
     }
     let mut permissions = metadata.permissions();
-    permissions.set_mode(permissions.mode() | 0o700);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        permissions.set_mode(permissions.mode() | 0o700);
+    }
+    #[cfg(windows)]
+    #[expect(clippy::permissions_set_readonly_false, reason = "it only warns about Unix, where this isn't built")]
+    permissions.set_readonly(false);
     std::fs::set_permissions(dir, permissions)?;
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
