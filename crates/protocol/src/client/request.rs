@@ -146,6 +146,11 @@ pub enum ClientRequest {
         #[serde(default)]
         include_raw: bool,
     },
+    /// Every prompt recorded in the session, oldest first, each as one line, for finding one in a long chat without
+    /// reading the whole log. A hub older than this refuses it as unsupported.
+    SessionPromptList {
+        id: SessionId,
+    },
     /// Sends every event from `from_seq` on, then keeps streaming as new ones are recorded. To
     /// catch up after reconnecting, subscribe from one past the last `seq` received. The client
     /// picks `subscription_id`, because events can arrive before the reply does.

@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 mod effort;
+mod one_line;
 mod options;
+mod prompt_line;
 mod pull_request;
 mod queue;
 mod session;
@@ -11,6 +13,7 @@ mod title;
 
 pub use effort::Effort;
 pub use options::SessionOptions;
+pub use prompt_line::PromptLine;
 pub use pull_request::{
     Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };

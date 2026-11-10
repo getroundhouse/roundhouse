@@ -20,7 +20,7 @@ use gpui_kit::{
 };
 use image::RgbaImage;
 
-use super::screens::{Screen, Step, Target};
+use super::steps::{Screen, Step, Target};
 use super::{fake_hub, world};
 use crate::support::menu_item;
 
@@ -29,6 +29,8 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 /// How many pictures in a row have to match before a screen counts as finished drawing.
 const SAME_IN_A_ROW: usize = 3;
 const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
+/// The kit's scrollbar shows for two seconds after a scroll by the wall clock, and then fades.
+const LONGER_THAN_THE_SCROLLBAR_SHOWS: Duration = Duration::from_secs(3);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
@@ -150,6 +152,7 @@ impl Driver {
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
             }
             Step::Open(label) => self.open(label),
+            Step::LetTheScrollbarFade => self.let_the_scrollbar_fade(),
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
@@ -280,6 +283,21 @@ impl Driver {
             let pane = selected_pane(view.read(cx)).unwrap();
             pane.update(cx, change);
         });
+    }
+
+    /// Draws until the picture has stayed the same for longer than the scrollbar shows. It shows, still, for a while
+    /// after a scroll, so a wait shorter than that could end before it fades.
+    fn let_the_scrollbar_fade(&mut self) {
+        let deadline = Instant::now() + TIMEOUT;
+        let (mut last, mut since) = (self.picture(), Instant::now());
+        while since.elapsed() < LONGER_THAN_THE_SCROLLBAR_SHOWS {
+            assert!(Instant::now() < deadline, "the screen kept changing, so the scrollbar's fade can't be told apart");
+            std::thread::sleep(BETWEEN_PICTURES);
+            let next = self.picture();
+            if next != last {
+                (last, since) = (next, Instant::now());
+            }
+        }
     }
 
     /// Draws until [`SAME_IN_A_ROW`] pictures match, or the time's up.

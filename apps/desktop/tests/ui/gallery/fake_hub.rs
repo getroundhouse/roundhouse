@@ -14,7 +14,7 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
 use protocol::frame;
-use protocol::model::{GitDiff, GitStatus, SessionId, SessionStatus, WorkspaceStatus};
+use protocol::model::{GitDiff, GitStatus, PromptLine, SessionId, SessionStatus, WorkspaceStatus};
 
 use super::world::World;
 
@@ -108,6 +108,15 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let session = world.session(&id)?;
             let events = world.events_from(&id, from_seq).take(usize::try_from(limit).unwrap_or(usize::MAX));
             reply(C::Events { events: events.cloned().collect(), last_seq: session.last_seq })
+        }
+        // An older hub's build is from before prompts were listed.
+        R::SessionPromptList { .. } if world.hub.is_some() => {
+            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list prompts"))
+        }
+        R::SessionPromptList { id } => {
+            world.session(&id)?;
+            let prompts = world.events_from(&id, 1).filter_map(|event| PromptLine::of(event.seq, &event.body));
+            reply(C::Prompts { prompts: prompts.collect() })
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),
         R::FeedSubscribe { .. } | R::SessionUnsubscribe { .. } => reply(C::Ok),

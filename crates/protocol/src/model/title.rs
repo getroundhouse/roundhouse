@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use super::one_line::one_line;
+
 #[cfg(test)]
 mod laws;
 
@@ -41,15 +43,7 @@ impl Title {
     /// A title as it was stored or sent, tidied, or `None` if nothing is left. Its length isn't checked, so one
     /// from an older hub still reads.
     pub fn tidied(text: &str) -> Option<Self> {
-        let shown: String = text
-            .chars()
-            .filter_map(|c| match c {
-                c if c.is_whitespace() => Some(' '),
-                c if c.is_control() || hides(c) => None,
-                c => Some(c),
-            })
-            .collect();
-        let words = shown.split_whitespace().collect::<Vec<_>>().join(" ");
+        let words = one_line(text, usize::MAX);
         (!words.is_empty()).then_some(Self(words))
     }
 
@@ -91,17 +85,6 @@ pub enum TitleError {
 /// line in a title.
 fn breaks_line(c: char) -> bool {
     matches!(c, '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}')
-}
-
-/// Characters that show as nothing or reorder what follows them: bidirectional controls, which can make a row read
-/// backwards, and zero-width spaces, which can make a title look empty. Joiners stay, since emoji and some scripts
-/// need them.
-fn hides(c: char) -> bool {
-    matches!(
-        c,
-        '\u{061C}' | '\u{200B}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}'
-            | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
-    )
 }
 
 /// Where a workspace's or a chat's title came from, so one typed by hand is never replaced.

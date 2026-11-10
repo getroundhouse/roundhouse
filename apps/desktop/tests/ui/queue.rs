@@ -170,6 +170,9 @@ fn the_arrow_on_a_queued_prompt_steers_the_agent_with_it(cx: &mut TestAppContext
 
     ui.wait("it to leave the queue", |ui| queued(ui).is_empty());
     ui.wait_idle_with("the steered answer", |text| text.contains("steered from the queue"));
+    // The record can say the agent is idle before the chat has the event that ended its turn, since the two come by
+    // different subscriptions.
+    ui.wait("the turn to end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
     let events = ui.events();
     let at = |found: fn(&EventBody) -> bool| events.iter().position(|e| found(&e.body)).unwrap();
     let sent = at(|body| matches!(body, EventBody::UserPrompt { text, .. } if text.contains("steered")));

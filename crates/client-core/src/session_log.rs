@@ -12,6 +12,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
+mod outline;
 mod prompts;
 
 pub use prompts::PromptState;
@@ -57,13 +58,15 @@ pub struct SessionLog {
     in_flight: BTreeSet<u64>,
     /// Pages whose fetch failed, which aren't asked for again until [`SessionLog::retry_failed`].
     failed: BTreeSet<u64>,
-    /// The row a view last wanted, which decides what stays loaded.
+    /// The row a view last wanted, which decides what stays loaded. It starts at the last row, where a view opens a
+    /// chat, so a log no view has asked of yet fetches nothing, since its end comes live.
     focus: usize,
     pending: Vec<PendingPrompt>,
     tail: Tail,
     changes: Changes,
     /// How many times events have been put in, live or by the page.
     events_added: u64,
+    outline: outline::Outline,
 }
 
 fn page_of(seq: Seq) -> u64 {
@@ -83,7 +86,8 @@ fn page_range(page: u64) -> Range<Seq> {
 impl SessionLog {
     /// A log that reaches `last_seq`, which a subscription fills from [`first_live_seq`] on.
     pub fn new(last_seq: Seq) -> Self {
-        Self { last_seq, received: first_live_seq(last_seq) - 1, ..Default::default() }
+        let focus = seq_index(last_seq).saturating_sub(1);
+        Self { last_seq, received: first_live_seq(last_seq) - 1, focus, ..Default::default() }
     }
 
     pub fn row_count(&self) -> usize {
@@ -186,6 +190,7 @@ impl SessionLog {
         let range = page_range(page);
         for event in events {
             self.last_seq = self.last_seq.max(event.seq);
+            self.outline.saw(&event);
             self.events.insert(event.seq, event);
         }
         self.events_added += 1;
@@ -199,9 +204,10 @@ impl SessionLog {
         self.failed.append(&mut self.in_flight);
     }
 
-    /// Lets failed pages be asked for again, such as on a new connection.
+    /// Lets failed pages, and a failed list of prompts, be asked for again, such as on a new connection.
     pub(crate) fn retry_failed(&mut self) {
         self.failed.clear();
+        self.outline.retry_failed();
     }
 
     /// Takes an event from a live subscription.
@@ -210,6 +216,7 @@ impl SessionLog {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
         self.tail.on_event(event.run, &event.body);
+        self.outline.saw(&event);
         self.received = self.received.max(event.seq);
         self.last_seq = self.last_seq.max(event.seq);
         if matches!(event.body, EventBody::TurnEnded { .. }) {

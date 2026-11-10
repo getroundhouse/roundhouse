@@ -1,7 +1,8 @@
 //! Each session's event log.
 
 use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, ClientMessageId, RunId, Seq, SessionId, SessionStatus};
+use protocol::model::{ApprovalId, ClientMessageId, PromptLine, RunId, Seq, SessionId, SessionStatus};
+use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::prompts::note_prompts;
@@ -241,6 +242,30 @@ impl Store {
             }
         }
         Ok(open)
+    }
+
+    /// Every prompt recorded in the session, oldest first, each as one line. It reads only prompts, by their kind, and
+    /// of each only its text and how many files it carries, so a long session costs no more than its prompts' text.
+    pub fn prompt_lines(&self, session_id: &SessionId) -> Result<Vec<PromptLine>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached(
+            "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments') FROM events \
+             WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq",
+        )?;
+        let mut rows = statement.query([session_id.as_str()])?;
+        let mut lines = Vec::new();
+        while let Some(row) = rows.next()? {
+            let seq = row.get::<_, i64>(0)?.cast_unsigned();
+            // Borrowed rather than copied, since a pasted log can be long and only its start is kept. A JSON string
+            // comes out as text, and a missing one as null.
+            let text = match row.get_ref(1)? {
+                ValueRef::Text(text) => String::from_utf8_lossy(text),
+                ValueRef::Null | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Blob(_) => "".into(),
+            };
+            let files = u32::try_from(row.get::<_, Option<i64>>(2)?.unwrap_or(0)).unwrap_or(u32::MAX);
+            lines.push(PromptLine::new(seq, &text, files));
+        }
+        Ok(lines)
     }
 }
 

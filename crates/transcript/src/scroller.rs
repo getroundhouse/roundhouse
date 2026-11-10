@@ -118,7 +118,7 @@ impl Scroller {
     }
 
     /// Whether someone has scrolled away from the latest row.
-    fn is_scrolled_up(&self) -> bool {
+    pub(crate) fn is_scrolled_up(&self) -> bool {
         self.list.max_offset_for_scrollbar().y > px(0.)
             && !self.list.is_following_tail()
             && !self.list.is_scrolled_to_end().unwrap_or(false)

@@ -8,11 +8,13 @@
 //!
 //!     cargo run -p desktop --example look -- some-workspace scroll:40
 //!     cargo run -p desktop --example look -- some-workspace drag:3
+//!     cargo run -p desktop --example look -- some-workspace jump:3
 //!
 //! Selects the named workspace, whose sidebar of changes is open, as it is from the start. With `diff`, a further
 //! argument adds a comment on the first changed line. `scroll:PX` turns the wheel over the transcript every 16 ms, up
 //! to its start and back down, and `drag:PX` drags the scrollbar's thumb up, each printing where the list and its
 //! scrollbar are after every step, then quits. `probes.rs` says why.
+//! `jump:K` rests the pointer on the outline and clicks its Kth prompt, printing where the list is before and after.
 //! `--note TEXT` anywhere says why it's open, as it does for the app.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]

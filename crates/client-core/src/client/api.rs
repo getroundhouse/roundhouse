@@ -6,7 +6,7 @@ use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
+    GitStatus, PromptLine, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -187,6 +187,15 @@ impl Client {
 
     pub fn session_get(&self, id: &SessionId) -> Result<Session> {
         self.expect_session(ClientRequest::SessionGet { id: id.clone() })
+    }
+
+    /// Every prompt in the session, oldest first, as a line each. A hub older than this refuses it as unsupported.
+    pub fn session_prompt_list(&self, id: &SessionId) -> Result<Vec<PromptLine>> {
+        let reply = self.call(ClientRequest::SessionPromptList { id: id.clone() })?;
+        let ClientResponse::Prompts { prompts } = reply else {
+            return unexpected(&reply);
+        };
+        Ok(prompts)
     }
 
     /// Returns the events and the session's newest `seq`.

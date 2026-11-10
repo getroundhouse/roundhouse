@@ -18,6 +18,7 @@ mod marks;
 mod menus;
 mod new_workspace;
 mod other_hubs;
+mod outline;
 mod pickers;
 mod pull_requests;
 mod questions;

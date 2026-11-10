@@ -31,6 +31,13 @@ From the stylesheets in the installed app, which is a web view:
 - **Selecting a sidebar row changes only its background.** A name with nothing unread stays muted, white at 60%, whether or not its row is selected. Only a name with an unread reply turns brighter, white at 90%, and heavier, in medium or semibold, which is a setting.
 - **The font is the system's, SF Pro, and a name with nothing unread is at weight 450,** between regular and medium.
 
+## Finding a prompt
+
+From screenshots of a long chat, on a Retina display:
+
+- At the top right of the chat, just left of its scrollbar, is a short tick for each prompt, about 20px wide and 8px apart, in grey, with the one in view in white. It reads as a map of the chat's prompts, and of where you are among them.
+- Resting the pointer on the ticks opens a raised list over them, which hides them while it's open, so the ticks themselves are never clicked. It's about 255px wide, with one row per prompt, about 26px tall, each cut short with an ellipsis. The prompt in view has a lighter row, and the list scrolls, with its own scrollbar, once there are more than about a dozen.
+
 ## Sources
 
 Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are on the owner's Mac, in `~/conductor/archived-contexts/conductor-clone/merged-state/conductor-docs/`. They're the best source of ideas for new features. Don't republish them.
