@@ -149,6 +149,7 @@ pub(crate) fn run_turn(
         json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
         "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
     );
+    emit(out, crate::account::rate_limit_event(&config.session_id));
 
     let mut turn = Turn { config, out, parent: None };
     let mut interrupted = false;

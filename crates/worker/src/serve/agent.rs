@@ -1,4 +1,5 @@
-//! Starting and stopping agents, forwarding what they say to the hub, and the one-off call that titles a prompt.
+//! Starting and stopping agents, forwarding what they say to the hub, and the one-off calls that title a prompt and
+//! read the agent's account.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -16,20 +17,37 @@ use super::{RunningAgent, State};
 
 /// Gives up once the worker is stopping, which ends the call, so a title nobody will see can't keep it running.
 pub(crate) async fn title_for(state: &State, agent: AgentKind, prompt: &str) -> Result<WorkerResponse, ApiError> {
+    let options = one_off(state, "title");
+    let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
+    let title = until_stopping(state, title).await?;
+    Ok(WorkerResponse::Title { title: title?.to_string() })
+}
+
+/// What a one-off call to an agent's CLI runs with: a record of its own, numbered, so the provider can stop the call
+/// if this worker is killed.
+fn one_off(state: &State, what: &str) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
-    let options = AgentOptions {
-        binary: binary(state),
-        pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("title-{call}.pid"))),
-    };
+    let record = |dir: &std::path::PathBuf| dir.join("agents").join(format!("{what}-{call}.pid"));
+    AgentOptions { binary: binary(state), pid_file: state.config.state_dir.as_ref().map(record) }
+}
+
+/// What `call` answers, unless the worker starts stopping first, which drops the call and so stops what it started.
+/// Nobody is left to hear the answer then, and waiting for it would hold the worker up.
+async fn until_stopping<T>(state: &State, call: impl Future<Output = T>) -> Result<T, ApiError> {
     let mut stopping = state.stopping.subscribe();
     tokio::select! {
-        title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir) => {
-            Ok(WorkerResponse::Title { title: title?.to_string() })
-        }
+        answer = call => Ok(answer),
         _ = stopping.wait_for(|stopping| *stopping) => {
-            Err(ApiError::new(ErrorCode::Worker, "the worker stopped before the title came"))
+            Err(ApiError::new(ErrorCode::Worker, "the worker stopped before the agent's CLI answered"))
         }
     }
+}
+
+/// The account the agent's CLI is logged in to here.
+pub(crate) async fn account_for(state: &State, agent: AgentKind) -> Result<WorkerResponse, ApiError> {
+    let options = one_off(state, "account");
+    let account = agents::account(agent, &options, &state.config.scratch_dir);
+    Ok(WorkerResponse::Account(until_stopping(state, account).await??))
 }
 
 pub(crate) async fn start_agent(
@@ -69,6 +87,7 @@ async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mu
                 WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments }
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
+            AgentOutput::Context(context) => WorkerFrame::AgentContext { session_id: session_id.clone(), run, context },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();

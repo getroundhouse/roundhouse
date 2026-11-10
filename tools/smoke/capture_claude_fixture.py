@@ -128,7 +128,8 @@ def capture(cwd):
 
 
 def capture_controls(cwd):
-    """A level it takes, one it doesn't, and a new model, each followed by what it then reports applying."""
+    """A level it takes, one it doesn't, and a new model, each followed by what it then reports applying. Then how
+    full its context is, and a request it doesn't know."""
     cli = Cli(cwd)
     requests = [
         ("settings-1", {"subtype": "get_settings"}),
@@ -138,6 +139,8 @@ def capture_controls(cwd):
         ("settings-3", {"subtype": "get_settings"}),
         ("model-1", {"subtype": "set_model", "model": "sonnet"}),
         ("settings-4", {"subtype": "get_settings"}),
+        ("context-1", {"subtype": "get_context_usage"}),
+        ("unknown-1", {"subtype": "not_a_request"}),
     ]
     exchanged = []
     for request_id, request in requests:
@@ -155,6 +158,36 @@ def keep_only_whats_applied(value):
     if value.get("type") == "control_response" and isinstance(answer, dict) and "applied" in answer:
         answer["effective"], answer["sources"] = {}, []
     return value
+
+
+def keep_only_what_the_context_holds(value):
+    """`get_context_usage` also lists the user's skills, memory files and MCP tools by name and path, and the grid
+    `/context` draws. The adapter reads only how much is used, of how much, and each category."""
+    answer = value.get("response", {}).get("response")
+    if value.get("type") == "control_response" and isinstance(answer, dict) and "categories" in answer:
+        kept = {key: answer[key] for key in ("totalTokens", "maxTokens") if key in answer}
+        kept["categories"] = [{key: category[key] for key in ("id", "name", "tokens", "kind") if key in category}
+                              for category in answer["categories"]]
+        value["response"]["response"] = kept
+    return value
+
+
+def made_up_limits(info):
+    """A `rate_limit_event` says how much of the account's limits is used, which is personal. This keeps which
+    windows it named, and only the keys the adapter reads, with made-up numbers, so the adapter's reading of it is
+    still checked and nothing new the CLI adds about the account gets in."""
+    made_up = {"utilization": 0.25, "resetsAt": 4102444800}
+
+    def kept(window):
+        return {key: made_up[key] for key in made_up if key in window}
+
+    limits = {"status": "allowed", **kept(info)}
+    if isinstance(info.get("rateLimitType"), str):
+        limits["rateLimitType"] = info["rateLimitType"]
+    if isinstance(info.get("unifiedWindows"), dict):
+        limits["unifiedWindows"] = {name: kept(window) for name, window in info["unifiedWindows"].items()
+                                    if isinstance(window, dict)}
+    return limits
 
 
 def scrub(text, cwd):
@@ -187,7 +220,7 @@ def sanitize(value, cwd):
         for key in ("memory_paths", "messaging_socket_path"):
             value.pop(key, None)
     if value.get("type") == "rate_limit_event":
-        value["rate_limit_info"] = {"status": "allowed", "rateLimitType": "seven_day"}
+        value["rate_limit_info"] = made_up_limits(value.get("rate_limit_info", {}))
     text = json.dumps(value)
     text = scrub(text, cwd)
     # Opaque and long. They're never read, so a stub keeps the file small.
@@ -232,7 +265,8 @@ def main():
                 if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
                     continue
                 kept.append(sanitize(value, cwd))
-        controls = [sanitize(keep_only_whats_applied(value), cwd) for value in capture_controls(cwd)]
+        controls = [sanitize(keep_only_what_the_context_holds(keep_only_whats_applied(value)), cwd)
+                    for value in capture_controls(cwd)]
         # The CLI keeps a conversation file per directory. The random name makes this exact.
         projects = pathlib.Path.home() / ".claude/projects"
         for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):

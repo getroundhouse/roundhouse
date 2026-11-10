@@ -3,6 +3,7 @@
 use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
+mod accounts;
 mod attachments;
 mod comments;
 mod pull_requests;

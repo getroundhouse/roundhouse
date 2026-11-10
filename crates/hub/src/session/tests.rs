@@ -1,5 +1,6 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TurnOutcome};
 
+use super::ingest::says_something_new;
 use super::status::{Open, next_status, turn_edge};
 use super::*;
 use crate::store::TurnEdge;
@@ -182,4 +183,31 @@ fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() 
     assert_eq!(turn_edge(Running, WaitingApproval), Neither, "asking is part of the turn");
     assert_eq!(turn_edge(WaitingApproval, Running), Neither);
     assert_eq!(turn_edge(Running, Interrupted), Neither, "a turn the agent was cut off from doesn't end");
+}
+
+fn context(used_tokens: u64) -> ContextUsage {
+    ContextUsage { used_tokens, max_tokens: 200_000, parts: Vec::new() }
+}
+
+#[test]
+fn only_the_run_going_says_how_full_the_context_is_and_only_a_change_counts() {
+    let (going, replaced) = (RunId::new(2), RunId::new(1));
+
+    assert!(says_something_new(Some(going), None, going, &context(1)), "the first report");
+    assert!(says_something_new(Some(going), Some(&context(1)), going, &context(2)));
+    assert!(
+        !says_something_new(Some(going), Some(&context(1)), going, &context(1)),
+        "the feed isn't told what it knows"
+    );
+    assert!(!says_something_new(Some(going), Some(&context(1)), replaced, &context(2)), "a replaced run's");
+    assert!(!says_something_new(None, Some(&context(1)), going, &context(2)), "a run that has exited");
+}
+
+#[test]
+fn hearing_of_the_accounts_limits_changes_no_status() {
+    let heard = EventBody::AgentLimits { limits: Vec::new() };
+
+    for status in [Idle, Running, WaitingApproval, Background, Interrupted] {
+        assert_eq!(next_status(status, &heard, NOTHING, false), status);
+    }
 }

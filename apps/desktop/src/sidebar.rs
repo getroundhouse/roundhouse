@@ -290,6 +290,7 @@ mod tests {
             read_seq: 0,
             turn_started_at_ms: None,
             background_tasks: Vec::new(),
+            context: None,
             queued: Vec::new(),
             queue_held: false,
             rev: protocol::model::Rev::default(),

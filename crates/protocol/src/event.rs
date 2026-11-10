@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::attachment::Attachment;
-use crate::model::{AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId};
+use crate::model::{
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId, UsageLimit,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
@@ -74,6 +76,11 @@ pub enum EventBody {
         /// itself is stopped.
         #[serde(default)]
         stopped: Vec<TaskId>,
+    },
+    /// How much of each limit on the account the agent runs under is used, as the agent just heard. A limit is the
+    /// account's rather than the session's, so the hub keeps the newest for every session under that account.
+    AgentLimits {
+        limits: Vec<UsageLimit>,
     },
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
@@ -159,6 +166,7 @@ impl EventBody {
             EventBody::AgentInit { .. } => "agent_init",
             EventBody::AgentState { .. } => "agent_state",
             EventBody::AgentTasks { .. } => "agent_tasks",
+            EventBody::AgentLimits { .. } => "agent_limits",
             EventBody::Assistant { .. } => "assistant",
             EventBody::AgentUser { .. } => "agent_user",
             EventBody::TurnEnded { .. } => "turn_ended",

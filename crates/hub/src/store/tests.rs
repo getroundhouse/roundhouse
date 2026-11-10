@@ -7,7 +7,7 @@ use protocol::model::{
 use super::*;
 
 /// The store in `dir`, with its backups beside it.
-fn open_in(dir: &Path) -> Store {
+pub(super) fn open_in(dir: &Path) -> Store {
     Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap()
 }
 
@@ -19,38 +19,39 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
         Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
     store.add_repo(&repo).unwrap();
     store.insert_workspace(&workspace_w(now), None).unwrap();
+    store.insert_session(&idle_session(now), None).unwrap();
     store
-        .insert_session(
-            &StoredSession {
-                session: Session {
-                    id: "s".into(),
-                    workspace_id: "w".into(),
-                    agent: AgentKind::Claude,
-                    model: None,
-                    permission_mode: None,
-                    effort: None,
-                    title: None,
-                    title_source: TitleSource::FirstLine,
-                    closed_at_ms: None,
-                    reply_seq: 0,
-                    read_seq: 0,
-                    turn_started_at_ms: None,
-                    background_tasks: Vec::new(),
-                    queued: Vec::new(),
-                    queue_held: false,
-                    rev: Rev::default(),
-                    status: SessionStatus::Idle,
-                    last_seq: 0,
-                    created_at_ms: now,
-                    updated_at_ms: now,
-                },
-                agent_session_id: "s".into(),
-                agent_opened: false,
-            },
-            None,
-        )
-        .unwrap();
-    store
+}
+
+/// The session `s`, in the workspace `w`, with nothing said in it.
+fn idle_session(now: i64) -> StoredSession {
+    StoredSession {
+        session: Session {
+            id: "s".into(),
+            workspace_id: "w".into(),
+            agent: AgentKind::Claude,
+            model: None,
+            permission_mode: None,
+            effort: None,
+            title: None,
+            title_source: TitleSource::FirstLine,
+            closed_at_ms: None,
+            reply_seq: 0,
+            read_seq: 0,
+            turn_started_at_ms: None,
+            background_tasks: Vec::new(),
+            context: None,
+            queued: Vec::new(),
+            queue_held: false,
+            rev: Rev::default(),
+            status: SessionStatus::Idle,
+            last_seq: 0,
+            created_at_ms: now,
+            updated_at_ms: now,
+        },
+        agent_session_id: "s".into(),
+        agent_opened: false,
+    }
 }
 
 /// The workspace `w`, ready in the repository `r`.

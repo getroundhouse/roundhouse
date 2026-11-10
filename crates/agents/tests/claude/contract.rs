@@ -362,3 +362,30 @@ fn a_new_model_keeps_the_effort_in_use() {
     assert!(settings["applied"]["model"].as_str().is_some_and(|model| model.contains("sonnet")), "{settings}");
     assert_eq!(agents::claude::applied_effort(&settings), Some("low"));
 }
+
+/// The CLI's answer to the request with this subtype.
+fn answer_to(subtype: &str) -> Result<Value, String> {
+    let (_, answer) = exchanges().into_iter().find(|(sent, _)| sent["subtype"] == subtype).unwrap();
+    answer
+}
+
+#[test]
+fn the_cli_says_how_full_its_context_is_and_what_its_made_of() {
+    let context = agents::claude::context_usage(&answer_to("get_context_usage").unwrap()).unwrap();
+
+    let tokens = |name: &str| context.parts.iter().find(|part| part.name == name).map(|part| part.tokens);
+    assert!(context.used_tokens > 0, "the system prompt and tools are there before anything is said");
+    assert!(tokens("System prompt").is_some() && tokens("Messages").is_some(), "{:?}", context.parts);
+    // What's used, what's kept for compacting and what's free are the whole context, so the ring's share is of
+    // everything the context holds. Tools loaded only when needed are listed too, and counted in none of them.
+    let (buffer, free) = (tokens("Autocompact buffer").unwrap(), tokens("Free space").unwrap());
+    assert_eq!(context.used_tokens + buffer + free, context.max_tokens);
+    assert!(tokens("System tools (deferred)").is_some());
+}
+
+#[test]
+fn a_request_the_cli_doesnt_know_is_refused_rather_than_left_unanswered() {
+    let refused = answer_to("not_a_request").unwrap_err();
+
+    assert!(refused.contains("Unsupported control request subtype"), "{refused}");
+}

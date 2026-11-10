@@ -1,5 +1,6 @@
 //! The connection to a hub.
 
+mod account;
 mod admin;
 mod api;
 mod commands;

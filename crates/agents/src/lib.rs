@@ -13,12 +13,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentKind, ApprovalId, Seq, SessionOptions, Title};
+use protocol::model::{AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionOptions, Title};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
 
-pub use error::{AgentError, NoTitle};
+pub use error::{AgentError, CallFailed, NoAccount, NoTitle};
 
 #[derive(Debug)]
 pub enum AgentOutput {
@@ -29,6 +29,9 @@ pub enum AgentOutput {
         attachments: Vec<NewAttachment>,
     },
     Delta(StreamDelta),
+    /// How full the agent's context is now. It answers the adapter's own question rather than being something the
+    /// agent said, and only the newest matters, so it isn't an event.
+    Context(ContextUsage),
     /// Always the last thing sent.
     Exited {
         code: Option<i32>,
@@ -99,6 +102,14 @@ pub fn spawn(
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options),
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
+    }
+}
+
+/// The account `kind`'s CLI is logged in to on this machine, from a one-off call that runs in `scratch_dir`.
+pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
+    match kind {
+        AgentKind::Claude => claude::account(options, scratch_dir).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

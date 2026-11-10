@@ -201,6 +201,9 @@ async fn read_frames(
             WorkerFrame::AgentDelta { session_id, run, delta } => {
                 hub.route(&session_id, Item::Delta { run, delta }).await;
             }
+            WorkerFrame::AgentContext { session_id, run, context } => {
+                hub.route(&session_id, Item::Context { run, context }).await;
+            }
         }
     }
     debug!(%instance_id, "worker connection ended");

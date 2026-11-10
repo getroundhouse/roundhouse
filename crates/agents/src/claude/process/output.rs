@@ -11,7 +11,7 @@ use tokio::process::{ChildStderr, ChildStdout};
 use tokio::sync::mpsc;
 use tracing::warn;
 
-use super::{STDERR_TAIL_LINES, Shared, write_line};
+use super::{STDERR_TAIL_LINES, Shared, context, write_line};
 use crate::AgentOutput;
 use crate::claude::normalize::{Normalizer, Parsed, PromptProgress};
 
@@ -59,6 +59,10 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
             Parsed::Event(body) => {
                 track_approval(&shared, &body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
+                // Not of a launch that hasn't opened, which may be about to be replaced by another.
+                if opened || shared.confirmed.load(Ordering::SeqCst) {
+                    context::after(&shared, &body, &output);
+                }
                 let item = AgentOutput::event(body, Some(line));
                 if opened && !shared.confirmed.swap(true, Ordering::SeqCst) {
                     shared.unconfirmed_prompts.lock().clear();
@@ -121,6 +125,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }

@@ -24,6 +24,7 @@ use tracing::warn;
 
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
+mod context;
 mod launch;
 mod output;
 mod prompt;
@@ -31,6 +32,7 @@ mod supervise;
 #[cfg(test)]
 mod tests;
 
+use context::ContextWatch;
 use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
@@ -73,6 +75,8 @@ struct Shared {
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
     /// tells whoever's waiting.
     pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
+    /// Where asking how full the context is has got to.
+    context: Mutex<ContextWatch>,
     stop_requested: AtomicBool,
     /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
     /// still being drained and delivered.
@@ -112,6 +116,7 @@ pub fn spawn_at(
         untaken: Mutex::new(HashMap::new()),
         pending_inputs: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
+        context: Mutex::new(ContextWatch::default()),
         stop_requested: AtomicBool::new(false),
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
