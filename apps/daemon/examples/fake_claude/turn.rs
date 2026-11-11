@@ -318,8 +318,8 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
     }
-    if let Some(lines) = command.strip_prefix("edit:") {
-        return edit_file(turn, lines.parse().unwrap());
+    if let Some(size) = command.strip_prefix("edit:") {
+        return edit_file(turn, size);
     }
     if let Some(ms) = command.strip_prefix("hang:") {
         return hang(turn, ms.parse().unwrap(), rx, queued, eof);

@@ -162,8 +162,18 @@ pub(crate) fn run_tool(
     execute(turn, &tool_use_id, command)
 }
 
-pub(crate) fn edit_file(turn: &mut Turn, lines: u32) -> bool {
-    let text = |word: &str| (1..=lines).map(|n| format!("{word} line {n}")).collect::<Vec<_>>().join("\n");
+/// Changes each of the lines of `notes.txt` that `size` says, `N` or `N:WIDTH`, each at least `WIDTH` characters long.
+pub(crate) fn edit_file(turn: &mut Turn, size: &str) -> bool {
+    let (lines, width) = size.split_once(':').unwrap_or((size, "0"));
+    let (lines, width): (u32, usize) = (lines.parse().unwrap(), width.parse().unwrap());
+    let line = |word: &str, n: u32| {
+        let mut line = format!("{word} line {n}");
+        while line.len() < width {
+            line.push_str(" and so on");
+        }
+        line
+    };
+    let text = |word: &str| (1..=lines).map(|n| line(word, n)).collect::<Vec<_>>().join("\n");
     let path = std::env::current_dir().unwrap().join("notes.txt");
     let input = json!({"file_path":path,"old_string":text("old"),"new_string":text("new")});
     let tool_use_id = turn.named_tool_use("Edit", input);

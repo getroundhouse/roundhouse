@@ -2,11 +2,11 @@
 //! still selects and copies as it was printed.
 
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
-use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, ElementId, TestAppContext, point, px};
 
 use protocol::event::EventBody;
 
-use super::{COMMAND_LINE, in_full_access, open_a_command};
+use super::{COMMAND_LINE, bounds, in_full_access, open_a_command};
 use crate::support::{Stack, Ui};
 
 /// Far too long for one line of the transcript.
@@ -98,10 +98,4 @@ fn a_command_that_printed_nothing_says_so_once_it_is_done(cx: &mut TestAppContex
 /// Whether the command labelled `command` says it's shown whole, as it tells assistive apps.
 fn whole(ui: &mut Ui<'_>, command: &str) -> Option<bool> {
     ui.labelled(command).first().and_then(ElementSnapshot::expanded)
-}
-
-fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
-    let id = id.into();
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }

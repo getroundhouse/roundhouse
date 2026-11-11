@@ -1,9 +1,11 @@
 //! Reading, writing and editing a file: what the call did and to which file, with how many lines where that helps.
-//! Opened, the file's lines with their numbers, and a change as a diff. Hovering an edit shows its diff, which scrolls.
+//! Opened, the file's lines with their numbers, and a change as a diff. Hovering an edit shows its diff, which scrolls
+//! both ways.
 
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
+use gpui_kit::base::InteractiveElementExt as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -17,6 +19,7 @@ use crate::calls::diff;
 use crate::calls::files::{file_name, language, numbered_lines};
 use crate::calls::lines::{Mark, NumberedLine, Section};
 use crate::calls::{EditFile, ReadFile, WriteFile, count};
+use crate::scroll_area::holding_wide;
 
 const PREVIEW_WIDTH: f32 = 560.0;
 /// A dozen lines and half of the next, so a preview never covers much of the transcript, and a longer diff shows that
@@ -114,12 +117,12 @@ impl Render for DiffPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, cx));
-        div()
+        let lines = div().id("edit-preview-lines").children(rows.collect::<Vec<_>>()).test_support();
+        let preview = div()
             .id("edit-preview")
             .w(px(PREVIEW_WIDTH))
             .max_h(px(PREVIEW_HEIGHT))
             .py_1()
-            .overflow_y_scroll()
             // The wheel scrolls the diff and not the transcript under it, which would carry the line away from it.
             .occlude()
             .rounded(px(10.))
@@ -128,7 +131,10 @@ impl Render for DiffPreview {
             .bg(theme.popover)
             .font_family(theme.mono_font_family.clone())
             .text_size(theme.mono_font_size)
-            .child(div().id("edit-preview-lines").children(rows.collect::<Vec<_>>()).test_support())
-            .test_support()
+            // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until
+            // it turns far enough.
+            .overflow_scroll()
+            .lock_scroll_axis();
+        holding_wide(preview, lines).test_support()
     }
 }

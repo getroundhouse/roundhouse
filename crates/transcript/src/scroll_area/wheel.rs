@@ -1,4 +1,4 @@
-//! The wheel as the transcript hears it: one gesture at a time, and what each gesture goes to.
+//! The wheel as the transcript hears it: one gesture at a time, which way each goes, and what it goes to.
 //!
 //! A gesture goes to what its first movement scrolls: an area under the pointer that can move that way, or else the
 //! transcript. It stays there, even as other areas pass under the pointer, so a gesture that starts on the transcript
@@ -9,12 +9,19 @@
 //! says when they touch and lift, and calls the fling a plain movement. A mouse wheel never touches or lifts, so a
 //! gesture is a run of its notches, which a pause ends.
 //!
+//! On a trackpad, a gesture goes the way its first movement went, down or sideways, until it ends, so a swipe down that
+//! wobbles doesn't drift a block sideways, and a swipe sideways doesn't scroll one down. The transcript's list decides
+//! that for itself, as GPUI does: by the gaps between events, and letting a gesture turn once it turns far enough.
+//!
 //! It's heard once, before anything in the transcript acts on it, since an area only hears the wheel while it's drawn:
 //! one that scrolls into view mid-gesture never heard it start.
 
 use std::time::{Duration, Instant};
 
-use gpui_kit::{DispatchPhase, ElementId, Global, IntoElement, ScrollEvent, Styled as _, TouchPhase, Window, canvas};
+use gpui_kit::{
+    Axis, DispatchPhase, ElementId, Global, IntoElement, Pixels, Point, ScrollEvent, Styled as _, TouchPhase, Window,
+    canvas, point, px,
+};
 
 /// A fling arrives once a frame until it stops, so a longer silence means it's over. The kit's own scroll areas wait
 /// as long, for the same reason.
@@ -52,6 +59,10 @@ pub(super) struct Wheel {
     fingers: Fingers,
     /// Whether the gesture has moved yet.
     moved: bool,
+    /// Which way the gesture goes, once it has moved.
+    axis: Option<Axis>,
+    /// How far the event being heard moves, along the way the gesture goes.
+    pub(super) delta: Point<Pixels>,
     /// Whether the event being heard is part of a fling.
     pub(super) flinging: bool,
     pub(super) owner: Owner,
@@ -60,8 +71,9 @@ pub(super) struct Wheel {
 impl Global for Wheel {}
 
 impl Wheel {
-    /// Notes the event at `phase` of a gesture, which `moves` the way an area scrolls or not, before any area acts.
-    fn hear(&mut self, phase: TouchPhase, moves: bool, now: Instant) {
+    /// Notes the event at `phase` of a gesture, which moves by `delta`, before any area acts. A trackpad's movement is
+    /// `precise`, and a mouse wheel's notches aren't.
+    fn hear(&mut self, phase: TouchPhase, delta: Point<Pixels>, precise: bool, now: Instant) {
         let quiet = |gap| self.last_at.is_none_or(|at| now.saturating_duration_since(at) >= gap);
         let fresh = phase == TouchPhase::Started
             || match self.fingers {
@@ -73,16 +85,31 @@ impl Wheel {
             self.fingers = if phase == TouchPhase::Started { Fingers::Down } else { Fingers::Away };
             self.owner = Owner::Undecided;
             self.moved = false;
+            self.axis = None;
         } else if self.moved && self.owner == Owner::Undecided {
             // No area took the gesture's first movement, so the transcript did.
             self.owner = Owner::Transcript;
         }
         self.flinging = self.fingers == Fingers::Lifted && phase == TouchPhase::Moved;
-        self.moved |= moves;
+        self.delta = self.along_the_way(delta, precise);
+        self.moved |= self.delta != Point::default();
         if matches!(phase, TouchPhase::Ended | TouchPhase::Cancelled) {
             self.fingers = Fingers::Lifted;
         }
         self.last_at = Some(now);
+    }
+
+    /// `delta` along the way the gesture goes, which its first movement decides. A mouse wheel's notches each go one
+    /// way, so they're taken as they come.
+    fn along_the_way(&mut self, delta: Point<Pixels>, precise: bool) -> Point<Pixels> {
+        if !precise || delta == Point::default() {
+            return delta;
+        }
+        let first = if delta.x.abs() > delta.y.abs() { Axis::Horizontal } else { Axis::Vertical };
+        match *self.axis.get_or_insert(first) {
+            Axis::Vertical => point(px(0.), delta.y),
+            Axis::Horizontal => point(delta.x, px(0.)),
+        }
     }
 }
 
@@ -97,7 +124,7 @@ pub(crate) fn hears_the_wheel() -> impl IntoElement {
                 }
                 let delta = event.delta.pixel_delta(window.line_height());
                 let now = cx.background_executor().now();
-                cx.default_global::<Wheel>().hear(event.touch_phase, delta.y.abs() > delta.x.abs(), now);
+                cx.default_global::<Wheel>().hear(event.touch_phase, delta, event.delta.precise(), now);
             });
         },
     )
@@ -108,8 +135,8 @@ pub(crate) fn hears_the_wheel() -> impl IntoElement {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use gpui_kit::ElementId;
     use gpui_kit::TouchPhase::{self, Ended, Moved, Started};
+    use gpui_kit::{ElementId, Pixels, Point, point, px};
 
     use super::{FLING_GAP, Owner, SPIN_GAP, Wheel};
 
@@ -124,13 +151,12 @@ mod tests {
             Self { wheel: Wheel::default(), now: Instant::now() }
         }
 
-        /// Whether each of `phases`, each moving, was heard as part of a fling.
+        /// Whether each of `phases`, each moving down, was heard as part of a fling.
         fn flinging(&mut self, phases: &[TouchPhase]) -> Vec<bool> {
             phases
                 .iter()
                 .map(|phase| {
-                    self.now += Duration::from_millis(16);
-                    self.wheel.hear(*phase, true, self.now);
+                    self.heard(*phase, point(px(0.), px(-10.)), true);
                     self.wheel.flinging
                 })
                 .collect()
@@ -138,8 +164,18 @@ mod tests {
 
         /// The fingers touching or lifting without moving, as a trackpad says they have.
         fn still(&mut self, phase: TouchPhase) {
+            self.heard(phase, Point::default(), true);
+        }
+
+        /// How far the fingers moving by `delta` move along the way the gesture goes.
+        fn swiped(&mut self, delta: Point<Pixels>) -> Point<Pixels> {
+            self.heard(Moved, delta, true);
+            self.wheel.delta
+        }
+
+        fn heard(&mut self, phase: TouchPhase, delta: Point<Pixels>, precise: bool) {
             self.now += Duration::from_millis(16);
-            self.wheel.hear(phase, false, self.now);
+            self.wheel.hear(phase, delta, precise, self.now);
         }
     }
 
@@ -186,6 +222,36 @@ mod tests {
         heard.flinging(&[Moved]);
 
         assert_eq!(heard.wheel.owner, area(), "through a pause with the fingers down, the lift and the fling");
+    }
+
+    #[test]
+    fn a_gesture_goes_the_way_it_first_moved_until_it_ends() {
+        let mut heard = Heard::new();
+        heard.still(Started);
+
+        assert_eq!(heard.swiped(point(px(-2.), px(-10.))), point(px(0.), px(-10.)), "down, as it mostly went");
+        assert_eq!(heard.swiped(point(px(30.), px(-4.))), point(px(0.), px(-4.)), "and not sideways, however far");
+
+        heard.still(Ended);
+        assert_eq!(heard.swiped(point(px(20.), px(-3.))), point(px(0.), px(-3.)), "through the fling");
+
+        heard.still(Started);
+        assert_eq!(
+            heard.swiped(point(px(-12.), px(-5.))),
+            point(px(-12.), px(0.)),
+            "and a new gesture can go sideways"
+        );
+        assert!(heard.wheel.moved, "which is moving, as going down is");
+    }
+
+    #[test]
+    fn a_mouse_wheel_s_notches_go_as_they_come() {
+        let mut heard = Heard::new();
+        heard.heard(Moved, point(px(0.), px(-40.)), false);
+
+        heard.heard(Moved, point(px(-40.), px(0.)), false);
+
+        assert_eq!(heard.wheel.delta, point(px(-40.), px(0.)), "a notch sideways, in the same spin as one down");
     }
 
     #[test]

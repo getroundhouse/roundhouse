@@ -1,5 +1,6 @@
 //! Lines of a file in a block, each with its number in the file, highlighted for the file's language, and marked
-//! when a change added or removed it, with the words that changed picked out.
+//! when a change added or removed it, with the words that changed picked out. A line is never cut short or wrapped,
+//! so the block scrolls sideways to the end of its longest, as the file tab does.
 //!
 //! The diff panel draws with the kit's diff view, but that's a view of its own, which keeps its state between frames
 //! and takes a whole diff's files. A call's few lines are drawn here instead, in the transcript's row, from what the
@@ -69,12 +70,13 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
     (shown, total - (room - left))
 }
 
-/// A block's numbered lines, `part`, scrolling past a dozen.
+/// A block's numbered lines, `part`, scrolling past a dozen, and sideways along a line too long for it.
 pub(super) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
-    block::scrolling(id, part).max_height(px(MAX_HEIGHT))
+    block::scrolling(id, part).max_height(px(MAX_HEIGHT)).both_ways()
 }
 
-/// A row for each of these lines, without a block around them.
+/// A row for each of these lines, without a block around them. A line's text is never cut short, so the rows go in an
+/// area that holds them as wide as the longest, as [`scrolling`] and the edit's preview do.
 pub(super) fn rows(language: &str, lines: &[NumberedLine], cx: &App) -> Vec<AnyElement> {
     let text: SharedString = lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n").into();
     let spans = spans(language, &text);
@@ -116,9 +118,8 @@ fn row(line: &NumberedLine, syntax: &[(Range<usize>, HighlightStyle)], cx: &App)
         )
         .child(
             div()
-                .min_w_0()
+                .flex_none()
                 .pr_3()
-                .overflow_hidden()
                 .whitespace_nowrap()
                 .text_color(theme.foreground)
                 .child(StyledText::new(text).with_highlights(styles)),

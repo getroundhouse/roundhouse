@@ -120,6 +120,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 - **Hovering an edit shows its diff,** so a change can be checked without opening it. The preview is a dozen lines tall at most, and stays while the pointer is on it, so a longer diff can be scrolled there. The wheel over it scrolls only the diff, so the transcript doesn't carry the edit away from it.
 - **A search shows its pattern, where it looked, and how much it found,** such as `4 matches in 3 files`, or `Nothing found`. Opened, matching lines under their file's path, with their numbers, or the files it found. Anything else it sends back, such as matches with lines of context around them, shows as it came, so nothing is lost. Finding files by name says `Find files`. *Unconfirmed.*
 - **A block of a file's lines is twelve and a half lines tall at most,** so a dozen fit whole and anything longer shows half a line as a sign that it scrolls. *Unconfirmed.*
+- **A line too long for its block scrolls sideways, rather than being cut off or wrapped,** so it can be read to its end and each row stays one line of the file, as in the file tab. The numbers move with the lines, as they do there. A swipe scrolls the way it started, so reading down a block doesn't drift it sideways. An edit's preview and a search's matching lines scroll the same way. *Unconfirmed.*
 
 **Each kind of file call: a read, an edit opened to its diff, a new file, an edit that failed, and a write over a file that was there.** *Unconfirmed.*
 
@@ -129,7 +130,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![An edit's diff in a preview](screens/tool-edit-preview.png)
 
-**A read of part of a file and a new file, both opened to their lines.** *Unconfirmed.*
+**A read of part of a file and a new file, both opened to their lines, one of which is too long to show whole.** *Unconfirmed.*
 
 ![A read and a new file, opened](screens/tool-file-contents.png)
 
