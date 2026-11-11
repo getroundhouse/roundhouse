@@ -27,6 +27,12 @@ impl AppView {
         self.read_on_screen(in_front, cx);
     }
 
+    /// Whether the window is the one in front: the key window, which another app takes when it comes in front, unlike
+    /// the main window. `None` when it can't tell, such as in the middle of updating the window.
+    fn in_front(&self, cx: &mut App) -> Option<bool> {
+        self.window.update(cx, |_, window, _| window.is_window_active()).ok()
+    }
+
     /// A workspace's open chats with a reply that hasn't been read, as the sidebar shows them.
     pub fn unread_chats(&self, id: &WorkspaceId, cx: &App) -> Vec<&Session> {
         let pane = self.panes.get(id).map(|pane| pane.read(cx));

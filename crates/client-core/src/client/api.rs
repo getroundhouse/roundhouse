@@ -29,6 +29,16 @@ impl Client {
         }
     }
 
+    /// Asks the hub to stop if nothing would notice, which it decides. A busy one refuses with `Conflict`, and one
+    /// older than this request refuses it, as `is_unsupported` says.
+    pub fn hub_shutdown_if_idle(&self) -> Result<()> {
+        match self.expect_ok(ClientRequest::HubShutdownIfIdle) {
+            // The hub did what was asked before its reply got out.
+            Err(e) if hub_is_missing(&e) => Ok(()),
+            other => other,
+        }
+    }
+
     /// Changes the hub's own settings, and returns them as they are now. A hub older than this refuses it, as
     /// `is_unsupported` says.
     pub fn hub_configure(&self, change: HubSettingsChange) -> Result<HubSettings> {

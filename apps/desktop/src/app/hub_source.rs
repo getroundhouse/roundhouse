@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use client_core::{Client, ClientError, Daemon};
+use client_core::{Client, ClientError, Daemon, IdleStop};
 use gpui_kit::Result;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
@@ -32,8 +32,7 @@ pub(super) fn may_restart(hub: &HubStatus, app_build: Option<u64>) -> bool {
 /// Whether to replace this hub with this app's own without asking: one it may restart, and only if nothing would
 /// notice. This app is the one client, and its request for the status is the one thing the hub is doing.
 pub(super) fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
-    let idle = hub.running_sessions == 0 && hub.running_setups == 0 && hub.requests <= 1;
-    may_restart(hub, app_build) && idle && hub.clients <= 1
+    may_restart(hub, app_build) && hub.is_idle()
 }
 
 impl HubSource {
@@ -46,15 +45,16 @@ impl HubSource {
     }
 
     /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to, which is only an
-    /// idle one, so nothing running is lost. The panes stay, with what's typed in them. Also returns the hub's status
-    /// as it connected.
+    /// idle one, so nothing running is lost. The hub has the last word on whether it's idle, and one that's busy
+    /// after all is kept. The panes stay, with what's typed in them. Also returns the hub's status as it connected.
     pub(super) fn connect(&self) -> Result<(Client, HubStatus), ClientError> {
         let mut client = self.connect_or_start()?;
         let mut status = client.hub_status()?;
         if should_replace(&status, self.build_number) {
-            drop(client);
-            client_core::stop_hub_if_still(&self.paths.socket, status.pid)?;
-            client = self.connect_or_start()?;
+            match client_core::stop_hub_if_idle(&client, &self.paths.socket, status.pid)? {
+                IdleStop::Stopped => client = self.connect_or_start()?,
+                IdleStop::Busy => {}
+            }
             status = client.hub_status()?;
         }
         Ok((client, status))

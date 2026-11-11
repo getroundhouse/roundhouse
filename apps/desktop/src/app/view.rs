@@ -4,14 +4,14 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-    ParentElement, Render, Stateful, StatefulInteractiveElement, Styled, Window, div, px,
+    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement, Render, Stateful, StatefulInteractiveElement, Styled, Window, div, px,
 };
 use look::Hand as _;
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, hub_source};
-use crate::workspace_pane::HEADER_HEIGHT;
+use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
 use crate::{CloseSettings, OpenSettings};
 
 impl Render for AppView {
@@ -31,14 +31,16 @@ impl Render for AppView {
         }
         let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
         let main: AnyElement = match &self.connection {
-            Connection::Connecting => centered("Connecting…", muted),
+            Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, danger, cx),
             Connection::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
             }
-            Connection::Ready(_) if self.home_showing() => crate::home::page(self, cx).into_any_element(),
-            Connection::Ready(_) => match self.selected_pane() {
+            Connection::Ready(_) | Connection::Connecting if self.home_showing() => {
+                crate::home::page(self, cx).into_any_element()
+            }
+            Connection::Ready(_) | Connection::Connecting => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
                 None if self.repos.is_empty() => empty_state(
                     "Add a project",
@@ -76,6 +78,14 @@ impl Render for AppView {
 }
 
 impl AppView {
+    /// The workspace to draw: the selected one, which stays on screen while the app connects to a hub again, such as
+    /// one it's restarting to finish an update. Otherwise what's typed for that moment would go nowhere. Unlike
+    /// `selected_pane`, which is for acting on one, and so only gives one with a hub to act through.
+    fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
+        let drawn = matches!(self.connection, Connection::Ready(_) | Connection::Connecting);
+        self.selected.as_ref().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
+    }
+
     /// The whole window, whatever it shows, and what it answers whatever it shows.
     fn root(&self, root: Div, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = cx.theme();
@@ -190,10 +200,13 @@ fn restart_note(status: &HubStatus) -> String {
     }
 }
 
-/// What the app asks before finishing an update by restarting the older hub.
+/// What the app asks before finishing an update by restarting the older hub. It only asks about a hub that's busy,
+/// so one with nothing running is busy with something else, which restarting cuts off too.
 pub(super) fn finish_question(status: &HubStatus) -> String {
     match running(status) {
-        None => "Nothing is running on the previous version.".to_string(),
+        None => "Nothing is running on the previous version, but something else is using it, such as the command \
+                 line. Restarting now cuts that off."
+            .to_string(),
         Some(running) => format!("This stops {running} still running on the previous version.{}", picks_up(status)),
     }
 }
@@ -330,7 +343,11 @@ mod tests {
 
     #[test]
     fn finishing_an_update_says_what_would_stop() {
-        assert_eq!(finish_question(&running_on(0, 0)), "Nothing is running on the previous version.");
+        assert_eq!(
+            finish_question(&running_on(0, 0)),
+            "Nothing is running on the previous version, but something else is using it, such as the command line. \
+             Restarting now cuts that off."
+        );
         assert_eq!(
             finish_question(&running_on(2, 1)),
             "This stops the 2 agents and 1 setup script still running on the previous version. Each agent picks up \

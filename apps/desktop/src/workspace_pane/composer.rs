@@ -9,7 +9,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, Context, Div, InteractiveElement, IntoElement, ParentElement, Pixels, Styled, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Off as _};
 use transcript::mode_label;
 
 use super::WorkspacePane;
@@ -19,7 +19,43 @@ use crate::model_picker::{Picked, model_picker};
 
 const MODES: [&str; 4] = ["manual", "plan", "acceptEdits", "bypassPermissions"];
 
+/// Whether there's a hub to send what's typed to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Hub {
+    Here,
+    /// The app is connecting to one again, with the pane still on screen.
+    Away,
+}
+
 impl WorkspacePane {
+    /// For when the app starts connecting to a hub again, with this still on screen, so what's typed meanwhile isn't
+    /// lost. Until [`Self::reconnect`], nothing typed is sent, and it stays in the composer: the hub may be one that's
+    /// being stopped, which would take a prompt and then cut its agent off.
+    pub fn hub_went_away(&mut self, cx: &mut Context<Self>) {
+        self.hub = Hub::Away;
+        cx.notify();
+    }
+
+    /// Sends what's typed, as Enter and Send do, unless the hub is away, when it stays typed for when it's back.
+    pub fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.hub == Hub::Away {
+            return;
+        }
+        let text = self.composer.read(cx).text().to_string();
+        let Some(transcript) = self.transcript() else { return };
+        // While the agent is waiting on a question, what's typed is the answer to it, and the files wait for the next
+        // prompt, since an answer can't carry them.
+        if transcript.update(cx, |t, cx| t.answer_with_text(&text, cx)) {
+            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            return;
+        }
+        let files = self.attached.take();
+        if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
+            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+        }
+        cx.notify();
+    }
+
     /// The model and its effort, and the approval mode, of the chat showing.
     fn pickers(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let session = self.session();
@@ -133,10 +169,11 @@ impl WorkspacePane {
                 .into_any_element()
         } else {
             Button::new("send")
-                .hand()
                 .primary()
                 .small()
                 .icon(IconName::ArrowUp)
+                // What's typed waits for the hub, as `hub_went_away` says.
+                .off_while(self.hub == Hub::Away)
                 .tooltip("Send")
                 .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
                 .into_any_element()

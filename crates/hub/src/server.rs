@@ -100,8 +100,10 @@ async fn serve_connection(
         }
         let hub = hub.clone();
         let connection = connection.clone();
+        // Counted as it's read, rather than once its task starts, so a request to stop if idle sees every request this
+        // connection sent before it, even one whose task hasn't started.
+        hub.requests.fetch_add(1, Ordering::Relaxed);
         tokio::spawn(async move {
-            hub.requests.fetch_add(1, Ordering::Relaxed);
             let outcome = match handle(&hub, &connection, request.request).await {
                 Ok(response) => ReplyOutcome::Response(response),
                 Err(error) => ReplyOutcome::Error(error),
@@ -175,6 +177,10 @@ async fn handle(
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_shutdown();
+            C::Ok
+        }
+        R::HubShutdownIfIdle => {
+            hub.shutdown_if_idle()?;
             C::Ok
         }
         R::HubConfigure { settings } => C::HubSettings(hub.hub_configure(settings).await?),

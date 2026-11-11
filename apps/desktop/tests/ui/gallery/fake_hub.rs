@@ -152,6 +152,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::FileContents(FileContents::Text { text: text.clone() }))
         }
         R::HubShutdown
+        | R::HubShutdownIfIdle
         | R::HubConfigure { .. }
         | R::RepoAdd { .. }
         | R::WorkspaceCreate { .. }

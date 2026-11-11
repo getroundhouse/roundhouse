@@ -26,6 +26,12 @@ pub enum ClientRequest {
     HubStatus,
     /// Stops the hub and its workers. Agents are stopped and resume on the next prompt.
     HubShutdown,
+    /// Stops the hub as `HubShutdown` does, but only if nothing would notice, as [`HubStatus::is_idle`] says of the
+    /// one asking. The hub decides as it stops, so nothing can start between a client seeing it idle and stopping it.
+    /// One that's busy refuses with `Conflict`, and carries on. Needs a hello, unlike `HubShutdown`.
+    ///
+    /// [`HubStatus::is_idle`]: super::HubStatus::is_idle
+    HubShutdownIfIdle,
     /// Changes the hub's own settings, which it keeps and every client shows. A setting left out is left as it is. Sent
     /// again, it sets the same again.
     HubConfigure {

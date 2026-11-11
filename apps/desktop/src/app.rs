@@ -93,7 +93,7 @@ pub struct AppView {
     /// Held so these tasks stop when the view goes away.
     connecting: Option<Task<()>>,
     following: Option<Task<()>>,
-    /// What the update's card asks before going ahead, while it asks.
+    /// What the update's card, or the dialog before restarting the hub now, asks before going ahead, while it asks.
     pub update_question: Option<UpdateQuestion>,
     /// Reading what's running on the older hub, to ask about finishing the update or to go ahead with it, so pressing
     /// again doesn't read it twice.
@@ -113,13 +113,8 @@ impl AppView {
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
-        // Someone going to another app is the moment to finish an update without interrupting them, and coming back is
-        // when they read the chat showing.
-        cx.observe_window_activation(window, |t, window, cx| {
-            t.finish_update_when_idle(cx);
-            t.read_on_screen(window.is_window_active(), cx);
-        })
-        .detach();
+        // Coming back from another app is when someone reads the chat showing.
+        cx.observe_window_activation(window, |t, window, cx| t.read_on_screen(window.is_window_active(), cx)).detach();
         let mut this = Self {
             hub,
             checkout,
@@ -182,12 +177,10 @@ impl AppView {
     /// Connects. Everything already shown carries on on the new connection, and the first time, client-core
     /// starts following the hub's records. Comes back here if the connection goes, which starts a new hub.
     pub fn connect(&mut self, cx: &mut Context<Self>) {
-        self.connection = Connection::Connecting;
+        self.show_connecting(cx);
         // What it was connected to says nothing about what it connects to next.
         (self.restartable_hub, self.finishing, self.looking) = (None, None, None);
-        if matches!(self.update_question, Some(UpdateQuestion::Finish(_))) {
-            self.update_question = None;
-        }
+        self.drop_restart_question(cx);
         cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
@@ -253,6 +246,7 @@ impl AppView {
             // is made again.
             if let Some(error) = errors.first() {
                 self.joining = None;
+                self.drop_restart_question(cx);
                 self.connection = Connection::Failed(error.to_string());
                 cx.notify();
             } else if matches!(self.connection, Connection::Ready(_)) {

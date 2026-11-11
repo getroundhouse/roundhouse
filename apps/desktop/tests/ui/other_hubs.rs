@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::app::{Agents, AppView, BuildLine, Connection, UpdateQuestion};
+use desktop::app::{Agents, BuildLine, Connection, UpdateQuestion};
 use gpui_kit::TestAppContext;
 
 use crate::support::{Stack, StandInHub, Ui};
@@ -46,22 +46,22 @@ fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
 
     let mut ui = Ui::open(cx, &stack);
-    // Nor when the app looks again, with the window in the back.
-    ui.send_to_back();
+    // Nor when the app looks again.
     ui.wait_out_a_look();
 
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
 }
 
-/// An agent finishing is usually what lets an update finish, and the app hears of that at once.
+/// An agent finishing is usually what lets an update finish, and the app hears of that at once. It takes the chance
+/// even with the window in front, since waiting for someone to leave had the update look stuck.
 #[gpui_kit::test]
 fn an_update_finishes_by_itself_once_the_agents_on_the_older_hub_are_done(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     stack.hub.build_number = Some(2);
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
     let mut ui = Ui::open(cx, &stack);
-    ui.send_to_back();
+    ui.bring_to_front();
 
     older.set_running(0);
 
@@ -76,7 +76,7 @@ fn an_update_finishes_by_itself_once_nothing_else_is_using_the_older_hub(cx: &mu
     stack.hub.build_number = Some(2);
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
     let mut ui = Ui::open(cx, &stack);
-    ui.send_to_back();
+    ui.bring_to_front();
     assert!(matches!(ui.build_line(), BuildLine::Finishing { agents: Agents { working: 0, waiting_on_you: 0 }, .. }));
 
     older.set_clients(1);
@@ -85,38 +85,92 @@ fn an_update_finishes_by_itself_once_nothing_else_is_using_the_older_hub(cx: &mu
     wait_for_the_apps_own_hub(&mut ui, &mut older);
 }
 
-/// Finishing swaps what's on screen for a moment, so it waits for someone to go to another app.
+/// Finishing an idle hub stops nothing, so the dialog left open doesn't hold it up, and goes with the hub it asked
+/// about.
 #[gpui_kit::test]
-fn an_update_waits_to_finish_by_itself_until_the_window_is_not_in_front(cx: &mut TestAppContext) {
+fn an_update_finishes_by_itself_while_the_dialog_asks_whether_to_restart_now(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
+    let mut ui = Ui::open(cx, &stack);
+    ask_to_finish(&mut ui);
+
+    older.set_running(0);
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+    assert_eq!(ui.view().update_question, None);
+    assert!(!ui.has_dialog(), "the dialog goes with the hub it asked about");
+}
+
+/// Nothing is using it, so there's nothing to ask, and asking would read as if something would stop. Another client
+/// is what kept this one, which the app only hears has gone when it next looks.
+#[gpui_kit::test]
+fn restart_now_finishes_at_once_when_nothing_is_using_the_older_hub(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     stack.hub.build_number = Some(2);
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
     let mut ui = Ui::open(cx, &stack);
-    ui.bring_to_front();
     older.set_clients(1);
 
-    ui.wait_out_a_look();
+    ui.click("finish-update");
 
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
-    ui.send_to_back();
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+    assert!(!ui.has_dialog());
+}
+
+/// The card says "Waiting on other work" then, and restarting cuts that off, so it still asks, and says that rather
+/// than that it stops agents.
+#[gpui_kit::test]
+fn restart_now_says_when_what_it_cuts_off_is_something_else_using_the_older_hub(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
+    let mut ui = Ui::open(cx, &stack);
+
+    let detail = ask_to_finish(&mut ui);
+
+    assert!(detail.ends_with("something else is using it, such as the command line. Restarting now cuts that off."));
+    assert!(older.0.try_wait().unwrap().is_none());
+    ui.click("restart-now-confirm");
     wait_for_the_apps_own_hub(&mut ui, &mut older);
 }
 
-/// Finishing an idle hub stops nothing, so a question left open in the card doesn't hold it up.
+/// A hub from the update before this one can't be asked to stop only if it's idle, so the app goes by what the hub
+/// said was running, as it did before hubs could decide.
 #[gpui_kit::test]
-fn an_update_finishes_by_itself_while_the_card_asks_whether_to_finish_it_now(cx: &mut TestAppContext) {
+fn an_update_finishes_on_a_hub_from_before_one_could_decide_whether_it_is_idle(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     stack.hub.build_number = Some(2);
-    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
+    let args = ["--speaks-this-protocol", "--build", "1", "--running", "1", "--asked-to-stop-if-idle", "unknown"];
+    let mut older = stack.start_stand_in_hub(&args);
     let mut ui = Ui::open(cx, &stack);
-    ui.send_to_back();
-    ask_to_finish(&mut ui);
-    older.set_clients(1);
 
-    ui.wait_out_a_look();
+    older.set_running(0);
 
     wait_for_the_apps_own_hub(&mut ui, &mut older);
-    assert_eq!(ui.view().update_question, None, "the question goes with the card");
+}
+
+/// A prompt sent between the app seeing the hub idle and stopping it starts an agent, which finishing the update by
+/// itself mustn't stop. The hub refuses, and the app carries on with it, and waits on the agent.
+#[gpui_kit::test]
+fn an_older_hub_that_is_busy_once_asked_to_stop_is_kept(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let args = ["--speaks-this-protocol", "--build", "1", "--running", "1", "--asked-to-stop-if-idle", "busy"];
+    let mut older = stack.start_stand_in_hub(&args);
+    let mut ui = Ui::open(cx, &stack);
+
+    older.set_running(0);
+
+    // It says an agent is running again once it has been asked to stop and refused.
+    let socket = stack.hub.paths.socket.clone();
+    ui.wait("the app to be back on the older hub after it refused", |ui| {
+        let refused =
+            client_core::HubAdmin::connect(&socket).is_ok_and(|hub| hub.status().unwrap().running_sessions == 1);
+        refused && matches!(ui.view().connection, Connection::Ready(_))
+    });
+    assert!(older.0.try_wait().unwrap().is_none());
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
 }
 
 fn wait_for_the_apps_own_hub(ui: &mut Ui<'_>, older: &mut StandInHub) {
@@ -137,9 +191,9 @@ fn an_update_can_be_finished_from_the_sidebar_while_agents_run_on_the_older_hub(
 
     let detail = ask_to_finish(&mut ui);
     assert!(detail.starts_with("This stops the 3 agents still running on the previous version."), "{detail}");
-    assert!(ui.has("update-question"));
-    assert!(!ui.cx.has_pending_prompt(), "the card asks, never a dialog");
-    ui.click("update-go-ahead");
+    assert!(ui.has_dialog());
+    assert!(!ui.cx.has_pending_prompt(), "the app's own dialog asks, never the system's");
+    ui.click("restart-now-confirm");
 
     ui.wait("a new hub", |ui| {
         older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection, Connection::Ready(_))
@@ -156,13 +210,21 @@ fn not_now_leaves_the_older_hub_running(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
 
     ask_to_finish(&mut ui);
-    assert!(!ui.has("finish-update"), "the question takes its place");
-    ui.click("update-not-now");
+    ui.click("restart-now-not-now");
 
-    assert!(!ui.has("update-question"));
+    assert!(!ui.has_dialog());
+    assert_eq!(ui.view().update_question, None);
     assert!(matches!(ui.view().connection, Connection::Ready(_)));
     assert!(older.0.try_wait().unwrap().is_none());
-    assert!(ui.has("finish-update"), "it can still be finished later");
+    assert!(ui.has("finish-update"), "the card is as it was, so it can still be restarted later");
+
+    // Escape is the same as Not now.
+    ask_to_finish(&mut ui);
+    ui.press("escape");
+
+    assert!(!ui.has_dialog());
+    assert_eq!(ui.view().update_question, None);
+    assert!(older.0.try_wait().unwrap().is_none());
 }
 
 /// The hub it asked about went, and the app started its own, which finishing mustn't stop.
@@ -173,21 +235,22 @@ fn finishing_after_the_older_hub_has_gone_leaves_the_new_one_alone(cx: &mut Test
     let _older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
     let mut ui = Ui::open(cx, &stack);
     ask_to_finish(&mut ui);
+    let Some(UpdateQuestion::Finish(said)) = ui.view().update_question.clone() else { panic!("no question") };
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app's own hub", |ui| {
         matches!(ui.view().connection, Connection::Ready(_)) && matches!(ui.build_line(), BuildLine::Current { .. })
     });
     let pid = stack.client().hub_status().unwrap().pid;
-    assert!(!ui.has("update-go-ahead"), "the question went with the card");
-    ui.cx.update(|cx| ui.view.update(cx, AppView::finish_update_now));
+    assert!(!ui.has_dialog(), "the dialog went with the hub it asked about");
+    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.finish_update_now(&said, cx)));
     ui.frame();
 
     assert!(matches!(ui.view().connection, Connection::Ready(_)));
     assert_eq!(stack.client().hub_status().unwrap().pid, pid);
 }
 
-/// The card doesn't hold anything else up, so more can start while it asks, and it says so before stopping it.
+/// More can start while it asks, and it says so before stopping it.
 #[gpui_kit::test]
 fn finishing_now_asks_again_when_more_has_started_since_it_asked(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
@@ -197,11 +260,11 @@ fn finishing_now_asks_again_when_more_has_started_since_it_asked(cx: &mut TestAp
     assert!(ask_to_finish(&mut ui).starts_with("This stops the 1 agent "));
     older.set_running(2);
 
-    ui.click("update-go-ahead");
+    ui.click("restart-now-confirm");
 
     ui.wait("the question again", |ui| question_detail(ui).is_some_and(|d| d.starts_with("This stops the 2 agents ")));
     assert!(older.0.try_wait().unwrap().is_none());
-    ui.click("update-go-ahead");
+    ui.click("restart-now-confirm");
     ui.wait("a new hub", |ui| {
         older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection, Connection::Ready(_))
     });
@@ -219,18 +282,18 @@ fn an_older_hub_started_by_hand_is_not_offered_to_finish(cx: &mut TestAppContext
     assert!(!ui.has("finish-update"));
 }
 
-/// Presses Finish now in the sidebar, and returns what the card says finishing stops.
+/// Presses Restart now in the sidebar, and returns what the dialog says that stops.
 fn ask_to_finish(ui: &mut Ui<'_>) -> String {
     ui.click("finish-update");
     ui.wait("the question", |ui| question_detail(ui).is_some());
     question_detail(ui).unwrap()
 }
 
-/// What the card says finishing the update stops, while it asks.
+/// What the dialog says restarting now stops, while it asks.
 fn question_detail(ui: &Ui<'_>) -> Option<String> {
     let question = ui.view().update_question.clone()?;
     assert!(matches!(question, UpdateQuestion::Finish(_)));
-    assert_eq!(question.title(), "Finish the update now?");
+    assert_eq!(question.title(), "Restart now?");
     Some(question.detail())
 }
 
