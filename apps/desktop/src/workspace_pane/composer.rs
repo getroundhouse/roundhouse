@@ -9,6 +9,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, Context, Div, InteractiveElement, IntoElement, ParentElement, Pixels, Styled, Window, div, px,
 };
+use look::Hand as _;
 use transcript::mode_label;
 
 use super::WorkspacePane;
@@ -60,6 +61,7 @@ impl WorkspacePane {
             .child(model_picker("model-picker", model.as_deref(), effort, models))
             .child(
                 Button::new("mode-picker")
+                    .hand()
                     .ghost()
                     .xsmall()
                     .dropdown_caret(true)
@@ -93,24 +95,16 @@ impl WorkspacePane {
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the attach button,
     /// then the pickers, which take whatever room is left. The right one is the agent's: what it says of itself,
     /// each in a [`Slot`], and last the one main action, twice as far from them as they are from each other, so it
-    /// stands a little apart.
+    /// stands apart.
     fn bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let attach =
             attached::attach_button("attach", cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx)).xsmall();
         let pickers = self.pickers(cx).into_any_element();
         let beside = self.beside_the_main_action(cx);
         // Left out when there's nothing in it, so it doesn't push the main action in by a gap.
-        let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap_1().children(beside));
-        h_flex()
-            .w_full()
-            .px_3()
-            .pt_2()
-            .pb_3()
-            .gap_2()
-            .child(attach)
-            .child(pickers)
-            .children(beside)
-            .child(self.main_action(cx))
+        let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap_2().children(beside));
+        let agents = h_flex().flex_none().gap_4().children(beside).child(self.main_action(cx));
+        h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(pickers).child(agents)
     }
 
     /// What sits beside the main action, in the order it's drawn. Something new for the bar's right end goes here,
@@ -127,6 +121,7 @@ impl WorkspacePane {
             let stop_mark = cx.theme().button_primary_foreground;
             // The same square as Send, with a filled square rather than an icon, which would only be outlined.
             Button::new("stop")
+                .hand()
                 .primary()
                 .small()
                 .size_6()
@@ -138,6 +133,7 @@ impl WorkspacePane {
                 .into_any_element()
         } else {
             Button::new("send")
+                .hand()
                 .primary()
                 .small()
                 .icon(IconName::ArrowUp)

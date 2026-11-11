@@ -11,6 +11,7 @@ use gpui_kit::{
     AnyElement, App, Global, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
     relative,
 };
+use look::Hand as _;
 
 /// As tall as the chat tabs, so the two rows of tabs line up across the window.
 pub(crate) const HEIGHT: Pixels = px(40.);
@@ -90,6 +91,7 @@ fn tab_element(
         .h_full()
         .child(
             Tab::new(id)
+                .hand()
                 .selected(selected)
                 .accessibility_label(label)
                 .h_full()

@@ -10,6 +10,7 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
+use look::Hand as _;
 use protocol::client::ErrorCode;
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
 
@@ -210,6 +211,7 @@ impl WorkspacePane {
         let (to_edit, to_remove, to_send) = (prompt.clone(), id.clone(), id.clone());
         let button = |name: &str, icon: IconName, tooltip: &'static str| {
             Button::new(ElementId::Name(format!("{name}-queued-{id}").into()))
+                .hand()
                 .ghost()
                 .xsmall()
                 .icon(icon)

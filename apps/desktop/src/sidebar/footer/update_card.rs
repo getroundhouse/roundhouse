@@ -8,6 +8,7 @@ use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     Stateful, Styled as _, TestSupportExt as _, Window, div, px,
 };
+use look::Hand as _;
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
@@ -99,6 +100,7 @@ fn ready_card(
     } else {
         let restart = cx.listener(|t, _, _, cx| t.restart_to_update(cx));
         Button::new("restart-to-update")
+            .hand()
             .primary()
             .small()
             .w_full()
@@ -135,12 +137,14 @@ fn asking(
 ) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let stay = Button::new("update-not-now")
+        .hand()
         .ghost()
         .small()
         .flex_1()
         .label(stay)
         .on_click(cx.listener(|t, _, _, cx| t.dismiss_update_question(cx)));
     let go = Button::new("update-go-ahead")
+        .hand()
         .primary()
         .small()
         .flex_1()
@@ -176,7 +180,7 @@ fn waiting_on(agents: Agents) -> String {
 /// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
 fn finish_now(cx: &mut Context<AppView>) -> Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
-    Button::new("finish-update").ghost().xsmall().label("Finish now").on_click(finish)
+    Button::new("finish-update").hand().ghost().xsmall().label("Finish now").on_click(finish)
 }
 
 #[cfg(test)]

@@ -2,8 +2,9 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, IconNamed, Selectable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, IconNamed, Selectable as _, h_flex, v_flex};
 use gpui_kit::{Context, IntoElement, ParentElement, Pixels, Styled, px};
+use look::{Hand as _, Off as _};
 
 use super::icon_box;
 use crate::app::AppView;
@@ -26,11 +27,12 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .child(
             item("home", Lucide::House, "Home", cx)
                 .selected(app.home_showing())
+                .hand()
                 .on_click(cx.listener(|t, _, window, cx| t.open_home(window, cx))),
         )
         .child(
             item("create", IconName::Plus, "Create", cx)
-                .disabled(!can_create)
+                .off_while(!can_create)
                 .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
         )
         // Search isn't built, so it's only a place for it.

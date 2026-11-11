@@ -11,6 +11,7 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, px, relative,
 };
+use look::Hand as _;
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
@@ -119,14 +120,17 @@ impl WorkspacePane {
             Opened::Diff => format!("Diff of {path}"),
             Opened::File => path.to_string(),
         };
-        let close =
-            Button::new("close-file-tab").ghost().xsmall().icon(IconName::Close).tooltip("Close file tab").on_click(
-                cx.listener(|t, _, _, cx| {
-                    // The tab under it would take the click too, and show the file that's closing.
-                    cx.stop_propagation();
-                    t.close_file_tab(cx);
-                }),
-            );
+        let close = Button::new("close-file-tab")
+            .hand()
+            .ghost()
+            .xsmall()
+            .icon(IconName::Close)
+            .tooltip("Close file tab")
+            .on_click(cx.listener(|t, _, _, cx| {
+                // The tab under it would take the click too, and show the file that's closing.
+                cx.stop_propagation();
+                t.close_file_tab(cx);
+            }));
         let tab = div()
             .id("file-tab")
             .group(TAB_GROUP)
@@ -136,6 +140,7 @@ impl WorkspacePane {
             .h_full()
             .child(
                 Tab::new("show-file-tab")
+                    .hand()
                     .selected(selected)
                     .accessibility_label(label)
                     // Two files can share a name, so the whole path is a hover away.

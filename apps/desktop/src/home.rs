@@ -9,13 +9,14 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_virtual_list;
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, VirtualListScrollHandle, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, VirtualListScrollHandle, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
     size,
 };
+use look::{Hand as _, Off as _};
 use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
@@ -182,6 +183,7 @@ fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyEl
         .border_b_1()
         .border_color(border)
         .hover(|d| d.bg(hover))
+        .hand()
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(look::mark(signal, work, look::Size::Inline, cx))
         .child(
@@ -214,7 +216,7 @@ fn row_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -
         .icon(icon)
         .text_color(cx.theme().muted_foreground)
         .tooltip(what)
-        .disabled(!app.busy.is_free())
+        .off_while(!app.busy.is_free())
         .on_click(cx.listener(move |t, _, _, cx| {
             // The row under it would take the click too, and show the workspace.
             cx.stop_propagation();

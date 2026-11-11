@@ -5,11 +5,12 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     Anchor, Context, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render, Styled as _, Window,
     div, px, transparent_black,
 };
+use look::{Hand as _, Off as _};
 
 use super::{NewWorkspaceDialog, RADIUS};
 use crate::attached;
@@ -47,6 +48,7 @@ impl NewWorkspaceDialog {
         };
         h_flex().w_full().h(px(48.)).px_2().border_b_1().border_color(cx.theme().border).child(
             Button::new("new-workspace-repo")
+                .hand()
                 .ghost()
                 .dropdown_caret(true)
                 .label(name)
@@ -76,7 +78,7 @@ impl NewWorkspaceDialog {
             .small()
             .label("Create")
             .children(enter)
-            .disabled(!self.offer.can_create)
+            .off_while(!self.offer.can_create)
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         h_flex()
             .w_full()

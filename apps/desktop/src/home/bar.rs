@@ -4,8 +4,9 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{Context, IntoElement, ParentElement, Styled, WeakEntity, Window};
+use look::{Hand as _, Off as _};
 
 use super::{ArchiveFilter, Sort};
 use crate::app::AppView;
@@ -40,14 +41,21 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
                 .label("Create")
                 // In the repository the list shows, as `current_repo` says. The dialog opens while another workspace
                 // is being made, and its Create waits.
-                .disabled(app.current_repo().is_none())
+                .off_while(app.current_repo().is_none())
                 .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
         )
 }
 
 /// A filter: borderless, muted, with what it's set to and a menu to change it.
 fn filter(id: &'static str, icon: impl Into<Icon>, label: String, cx: &Context<AppView>) -> Button {
-    Button::new(id).ghost().small().icon(icon).label(label).dropdown_caret(true).text_color(cx.theme().muted_foreground)
+    Button::new(id)
+        .hand()
+        .ghost()
+        .small()
+        .icon(icon)
+        .label(label)
+        .dropdown_caret(true)
+        .text_color(cx.theme().muted_foreground)
 }
 
 fn repos(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {

@@ -18,6 +18,7 @@ use gpui_kit::{
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
+use look::Hand as _;
 use protocol::attachment::{Attachment, MediaType, describe_size};
 use protocol::model::Seq;
 
@@ -161,7 +162,7 @@ fn picture(seq: Option<Seq>, file: &Carried, this: &WeakEntity<Transcript>, cx: 
     let frame = match seq {
         Some(seq) => {
             let (this, key, opened) = (this.clone(), file.key.clone(), file.opened);
-            frame.cursor_pointer().on_click(move |_, _, cx| {
+            frame.hand().on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !opened, cx));
             })
         }

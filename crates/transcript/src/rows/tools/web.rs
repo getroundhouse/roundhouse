@@ -9,6 +9,7 @@ use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, div, px,
 };
+use look::Hand as _;
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
@@ -80,7 +81,7 @@ fn link_row(id: ElementId, link: &Link, cx: &App) -> AnyElement {
         .h(px(LINK_HEIGHT))
         .px_3()
         .gap_2()
-        .cursor_pointer()
+        .hand()
         .hover(move |d| d.bg(hover))
         .on_click(move |_, _, cx| cx.open_url(&url))
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_sm().child(title))

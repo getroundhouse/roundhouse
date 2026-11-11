@@ -10,6 +10,7 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
+use look::Hand as _;
 use protocol::model::{Session, SessionStatus};
 
 use super::changes_sidebar::Sidebar;
@@ -35,6 +36,7 @@ impl WorkspacePane {
         let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
+            .hand()
             .ghost()
             .xsmall()
             .icon(IconName::Close)
@@ -54,6 +56,7 @@ impl WorkspacePane {
             .h_full()
             .child(
                 Tab::new(ElementId::Name(format!("chat-{}", session.id).into()))
+                    .hand()
                     .selected(selected)
                     .accessibility_label(title.clone())
                     .size_full()
@@ -131,6 +134,7 @@ impl WorkspacePane {
                     .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
                     .child(
                         Button::new("new-chat")
+                            .hand()
                             .ghost()
                             .xsmall()
                             .icon(IconName::Plus)
@@ -167,6 +171,7 @@ impl WorkspacePane {
             .children(controls)
             .child(
                 Button::new("toggle-diff")
+                    .hand()
                     .ghost()
                     .small()
                     .icon(IconName::PanelRight)

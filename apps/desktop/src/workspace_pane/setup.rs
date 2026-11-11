@@ -6,6 +6,7 @@ use gpui_kit::{
     AnyElement, App, AppContext, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, div, px,
 };
+use look::Hand as _;
 use protocol::model::SetupStatus;
 
 use client_core::records::Record;
@@ -111,6 +112,7 @@ impl WorkspacePane {
                 .child(div().flex_1().min_w_0().child(message))
                 .child(
                     Button::new("setup-log")
+                        .hand()
                         .ghost()
                         .xsmall()
                         .label(log_label)
@@ -118,6 +120,7 @@ impl WorkspacePane {
                 )
                 .child(if running {
                     Button::new("stop-setup")
+                        .hand()
                         .ghost()
                         .xsmall()
                         .label("Stop")
@@ -125,6 +128,7 @@ impl WorkspacePane {
                         .into_any_element()
                 } else {
                     Button::new("rerun-setup")
+                        .hand()
                         .ghost()
                         .xsmall()
                         .label("Run again")

@@ -11,6 +11,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
     Styled, Window, div, px,
 };
+use look::Hand as _;
 use protocol::model::SessionId;
 
 use super::WorkspacePane;
@@ -67,6 +68,7 @@ impl WorkspacePane {
             .child(Icon::new(IconName::RotateCcwClock).xsmall());
         let (this, on_open) = (cx.weak_entity(), cx.weak_entity());
         let button = Button::new("closed-chats")
+            .hand()
             .custom(ButtonCustomVariant::new(cx))
             .xsmall()
             .child(icon)

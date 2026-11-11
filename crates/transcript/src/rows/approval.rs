@@ -7,6 +7,7 @@ use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Styled,
     WeakEntity, Window, div,
 };
+use look::Hand as _;
 use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
@@ -41,7 +42,7 @@ pub(super) fn approval_card(
     };
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
     let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
-        Button::new(ElementId::NamedInteger(name.into(), seq)).label(label).on_click(answer(decision))
+        Button::new(ElementId::NamedInteger(name.into(), seq)).hand().label(label).on_click(answer(decision))
     };
     let (title, content, buttons): (String, AnyElement, Div) = if tool_name == calls::PLAN {
         let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
