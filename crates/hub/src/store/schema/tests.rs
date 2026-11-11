@@ -1,6 +1,6 @@
 use std::fs;
 
-use protocol::event::AgentTask;
+use protocol::event::{AgentTask, TaskKind};
 
 use super::*;
 use crate::store::backup::files_in;
@@ -115,7 +115,7 @@ fn writing_whats_running_in_the_background_gives_the_session_a_newer_revision() 
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let before = store.get_session(&"s".into()).unwrap().session.rev;
-    let task = AgentTask { id: "t".into(), description: Some("Run the tests".into()) };
+    let task = AgentTask { id: "t".into(), description: Some("Run the tests".into()), kind: TaskKind::Monitor };
     let listed = serde_json::to_string(&[&task]).unwrap();
     store.writer.lock().execute("UPDATE sessions SET background_tasks = ? WHERE id = 's'", [listed]).unwrap();
     let after = store.get_session(&"s".into()).unwrap().session;

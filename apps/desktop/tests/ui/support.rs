@@ -197,6 +197,13 @@ impl<'a> Ui<'a> {
         self.cx.run_until_parked();
     }
 
+    /// Brings the window's next frame, as a display would. A test has no display, so what waits for the next frame
+    /// otherwise waits until something else is drawn, however much later that is. What the frame brings shows once
+    /// the app has caught up, as after [`Ui::frame`].
+    pub(crate) fn bring_the_next_frame(&mut self) {
+        self.cx.update_window(self.handle, |_, window, cx| window.simulate_next_frame(cx)).unwrap();
+    }
+
     /// Makes the window the one in front, as going back to the app does.
     pub(crate) fn bring_to_front(&mut self) {
         self.cx.update_window(self.handle, |_, window, _| window.activate_window()).unwrap();

@@ -1,15 +1,17 @@
-//! The end of the transcript: text the agent is still writing, the working line while it works, and what it's running
-//! in the background.
+//! The end of the transcript: text the agent is still writing, the working line while it works, and a line for each
+//! task it's running in the background.
 
 use std::time::Duration;
 
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
-    div, px,
+    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Signal, Work};
+use look::{Signal, TaskRing, Work};
+use protocol::event::{AgentTask, TaskKind};
 use protocol::tail::{BlockKind, Tail};
 
 use super::line::{HEIGHT, still_icon};
@@ -48,13 +50,8 @@ pub(super) fn render_tail(
         }
     }
     out = out.when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, cx)));
-    // Left going by a turn, or started during one, and still the agent's work.
-    for task in &at_work.background {
-        let text = format!("In the background · {}", task.description.as_deref().unwrap_or("a task"));
-        let id = ElementId::Name(format!("background-{}", task.id).into());
-        out = out.child(going(text, cx).id(id).test_support());
-    }
-    out.into_any_element()
+    // Left going by a turn, or started during one.
+    out.children(at_work.background.iter().map(|task| going(task, cx))).into_any_element()
 }
 
 /// The text the agent is still writing, each block with what it's known by.
@@ -78,9 +75,26 @@ fn thought(text: String, cx: &App) -> Div {
     tail_line(cx).child(still_icon(thinking::ICON)).child(clipped(text))
 }
 
-/// Work in the background, beside its mark with the light sweeping, since it goes on after the turn.
-fn going(text: String, cx: &App) -> Div {
-    tail_line(cx).child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx)).child(clipped(text))
+/// A background task: its ring, and what the agent said it's for. The ring says it's in the background, so the words
+/// don't, and pointing at the line does. The fan is the agent's, so no task has one.
+fn going(task: &AgentTask, cx: &App) -> impl IntoElement + use<> {
+    let (ring, what, pointed_at) = match task.kind {
+        TaskKind::Command => (TaskRing::Running, "A command", "Running in the background"),
+        TaskKind::Subagent => (TaskRing::Running, "A subagent", "Running in the background"),
+        TaskKind::Monitor => (TaskRing::Watching, "A monitor", "Watching in the background"),
+    };
+    let text = task.description.clone().unwrap_or_else(|| what.to_string());
+    tail_line(cx)
+        .id(ElementId::Name(format!("background-{}", task.id).into()))
+        .child(look::task_ring(ring, cx))
+        .child(clipped(text))
+        .tooltip(move |window, cx| Tooltip::element(move |_, _| said(pointed_at)).build(window, cx))
+        .test_support()
+}
+
+/// What pointing at a background task's line says.
+fn said(words: &'static str) -> impl IntoElement {
+    div().id("background-pointed-at").aria_label(words).child(words).test_support()
 }
 
 fn clipped(text: String) -> impl IntoElement {

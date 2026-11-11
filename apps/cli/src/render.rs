@@ -20,6 +20,9 @@ pub(crate) struct Printer {
     /// held, as when following starts again, and then the finished block, only print what's new.
     printed: HashMap<(MessageId, u32), usize>,
     mid_line: bool,
+    /// What the newest list of background tasks printed as, so one that says the same isn't printed again. The agent
+    /// lists a monitor's task twice, since it only learns it's a monitor after the first.
+    background: Option<String>,
 }
 
 impl Printer {
@@ -110,14 +113,22 @@ impl Printer {
     }
 
     fn background(&mut self, seq: u64, tasks: &[AgentTask], stopped: &[TaskId]) {
-        let what: Vec<&str> =
-            tasks.iter().map(|task| task.description.as_deref().unwrap_or(task.id.as_str())).collect();
-        let running = if what.is_empty() { "nothing".to_string() } else { what.join(", ") };
-        self.line(seq, &format!("running in the background: {running}"));
+        if let Some(running) = self.newly_running(tasks) {
+            self.line(seq, &running);
+        }
         if !stopped.is_empty() {
             let stopped: Vec<&str> = stopped.iter().map(TaskId::as_str).collect();
             self.line(seq, &format!("  stopped: {}", stopped.join(", ")));
         }
+    }
+
+    /// The line for a list of background tasks, unless it says what the last one did.
+    fn newly_running(&mut self, tasks: &[AgentTask]) -> Option<String> {
+        let what: Vec<&str> =
+            tasks.iter().map(|task| task.description.as_deref().unwrap_or(task.id.as_str())).collect();
+        let running = if what.is_empty() { "nothing".to_string() } else { what.join(", ") };
+        let line = format!("running in the background: {running}");
+        (self.background.as_ref() != Some(&line)).then(|| self.background.insert(line).clone())
     }
 
     fn block(&mut self, seq: u64, block: &ContentBlock) {
@@ -224,4 +235,28 @@ fn summarize_input(input: &Value) -> String {
     }
     let text = input.to_string();
     text.chars().take(120).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::event::{AgentTask, TaskKind};
+
+    use super::Printer;
+
+    fn task(id: &str, kind: TaskKind) -> AgentTask {
+        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind }
+    }
+
+    #[test]
+    fn a_list_of_background_tasks_said_again_with_a_kind_changed_prints_once() {
+        let mut printer = Printer::default();
+        let listed = [task("a", TaskKind::Command), task("b", TaskKind::Command)];
+        let again = [task("a", TaskKind::Command), task("b", TaskKind::Monitor)];
+
+        assert_eq!(printer.newly_running(&listed).as_deref(), Some("running in the background: Do a, Do b"));
+        assert_eq!(printer.newly_running(&again), None);
+        assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
+        assert_eq!(printer.newly_running(&[]).as_deref(), Some("running in the background: nothing"));
+        assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
+    }
 }

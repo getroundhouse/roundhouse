@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{AgentRunState, AgentTask, EventBody, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
@@ -40,21 +40,29 @@ pub(crate) fn background() -> Vec<EventBody> {
     events
 }
 
-/// Partway through a turn, with the test run it started, and a watch on it, going in the background.
+/// Partway through a turn, with the test run it started, and a monitor watching it, going in the background.
 pub(crate) fn started_in_background() -> Vec<EventBody> {
     let mut events = looked_around();
     let command = json!({ "command": "cargo test --workspace", "description": "Run the full test suite",
         "run_in_background": true });
     events.push(tool_use("msg-3", "toolu-3", "Bash", command));
-    let suite = AgentTask { id: TaskId::from("b1"), description: Some("Run the full test suite".to_string()) };
+    let suite = AgentTask {
+        id: TaskId::from("b1"),
+        description: Some("Run the full test suite".to_string()),
+        kind: TaskKind::Command,
+    };
     events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
     events.push(tool_result("toolu-3", "Command running in background with ID: b1"));
     let watch = json!({ "command": "tail -f target/test.log | grep --line-buffered FAILED",
-        "description": "Watch the run for failures", "run_in_background": true });
-    events.push(tool_use("msg-4", "toolu-4", "Bash", watch));
-    let watcher = AgentTask { id: TaskId::from("b2"), description: Some("Watch the run for failures".to_string()) };
+        "description": "Watch the run for failures", "timeout_ms": 600_000 });
+    events.push(tool_use("msg-4", "toolu-4", "Monitor", watch));
+    let watcher = AgentTask {
+        id: TaskId::from("b2"),
+        description: Some("Watch the run for failures".to_string()),
+        kind: TaskKind::Monitor,
+    };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
-    events.push(tool_result("toolu-4", "Command running in background with ID: b2"));
+    events.push(tool_result("toolu-4", "Monitor started (task b2). You will be notified on each event."));
     events
 }
 

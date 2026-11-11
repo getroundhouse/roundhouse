@@ -327,8 +327,8 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(description) = command.strip_prefix("agent:") {
         return subagent::start(turn, description, rx, queued, eof);
     }
-    if let Some(file) = command.strip_prefix("background:") {
-        return background::start(turn, file);
+    if let Some((call, file)) = background::Call::read(command) {
+        return background::start(turn, call, file);
     }
     if let Some(file) = command.strip_prefix("read:") {
         read::image(turn, file);

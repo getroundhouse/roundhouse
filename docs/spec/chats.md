@@ -2,10 +2,12 @@
 
 ## A turn
 
-- **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, the agent counts as working: its mark moves, an update waits for it, and closing its chat asks first. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
+- **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, an update waits for it and closing its chat asks first, and its mark shows something is running, as `look.md` says. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
 - **The Mac stays awake while there's work,** so it doesn't go to sleep by itself partway through. Work is a turn, what an agent left running in the background, and a workspace being set up. An agent that's only waiting on you isn't, since it could wait all night. The Mac is let go half a minute after the last of the work, so it stays awake between one turn and a queued prompt's. The display still sleeps, and closing the lid or a low battery still puts the Mac to sleep. `Keep computer awake while agents are working`, in Settings, turns it off.
 - **What the agent's CLI writes only for the model isn't shown,** such as how much it shrank an image it read, or the summary a compacted conversation carries on from. *Unconfirmed.*
-- **What's running in the background shows where the conversation ends,** a line for each task, with its mark moving and what the agent said it's for. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
+- **What's running in the background shows where the conversation ends,** a line for each task: a ring, and what the agent said it's for. The ring says it's in the background, so the line's words don't, and pointing at the line does. The fan stays the agent's, one to a chat, so a line under the working line isn't taken for another agent at work. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
+- **A ring's light goes round while its task runs, and a monitor's ring holds still with its hub lit,** since a monitor does nothing until what it's watching for happens. A command and a subagent both run. *Unconfirmed.*
+- **Every task has a line, however many there are,** in the order the agent started them, since what each is for is the reason to look. *Unconfirmed.*
 - **While the agent works, the chat ends with the working line:** its mark with the light sweeping, and how long the turn has taken so far, to a tenth of a second, so the count moving says it's still at it. The time is in the code font, so its digits stay put as they count. It counts from when the turn started, by the hub's clock, so every client counts the same. When the agent picks up again by itself after work in the background, or takes a prompt sent as its last turn ended, that's a new turn, and the count starts again.
 - **The working line is above the lines for work in the background,** so when the turn ends, its end takes the working line's place and they stay where they are.
 - **The working line goes while the agent waits on you,** since the card says so, and when it comes back its time counts the wait too.
@@ -17,11 +19,11 @@
 
 ![A finished turn](screens/conversation.png)
 
-**A turn that ended with the test suite running in the background, and a watch on it for failures.** *Unconfirmed.*
+**A turn that ended with the test suite running in the background, and a monitor watching it for failures.** *Unconfirmed.*
 
 ![Work in the background](screens/background.png)
 
-**The agent still working, with the test suite it started running in the background.** *Unconfirmed.*
+**The agent still working, with the test suite it started and a monitor watching it in the background.** *Unconfirmed.*
 
 ![Working with work in the background](screens/working-background.png)
 

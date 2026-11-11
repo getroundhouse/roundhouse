@@ -171,7 +171,7 @@ pub(crate) fn page(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement
 fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     let theme = cx.theme();
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
-    let Standing { signal, work, unread } = standing(app, workspace, cx);
+    let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
     let id = workspace.id.clone();
     h_flex()
@@ -191,9 +191,9 @@ fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyEl
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                // As in the sidebar, a reply nobody has read stands out, and everything else recedes.
-                .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
-                .when(!unread, |d| d.text_color(muted))
+                // As in the sidebar, what needs a look stands out, and everything else recedes.
+                .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+                .when(!needs_a_look, |d| d.text_color(muted))
                 .child(workspace.label().to_string()),
         )
         .child(div().flex_none().w(REPO_WIDTH).truncate().text_xs().text_color(muted).child(repo))

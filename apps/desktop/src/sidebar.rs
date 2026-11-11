@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Off as _};
 use look::{Signal, Work};
-use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
 use crate::workspace_pane::HEADER_HEIGHT;
@@ -18,6 +18,7 @@ use crate::workspace_pane::HEADER_HEIGHT;
 mod footer;
 mod nav;
 mod row;
+pub(crate) mod signal;
 
 pub(crate) use row::doing;
 
@@ -113,47 +114,25 @@ fn line(app: &AppView, line: Line, cx: &mut Context<AppView>) -> AnyElement {
     }
 }
 
-/// The open chat that most needs attention speaks for the workspace.
-pub(crate) fn workspace_status(sessions: &[Session]) -> Option<SessionStatus> {
-    let urgency = |status: &SessionStatus| match status {
-        SessionStatus::WaitingApproval => 3,
-        SessionStatus::Running | SessionStatus::Background => 2,
-        SessionStatus::Interrupted => 1,
-        SessionStatus::Idle | SessionStatus::Unknown => 0,
-    };
-    sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.status).max_by_key(urgency)
-}
-
-/// A chat's or workspace's mark. A reply nobody has read only shows once nothing more pressing does: an agent at work
-/// will reply again, and amber or red needs dealing with first.
-pub(crate) fn signal(status: Option<SessionStatus>, unread: bool) -> Signal {
-    match status {
-        // Work left in the background picks the agent up again, so it's still at work.
-        Some(SessionStatus::Running | SessionStatus::Background) => Signal::Working,
-        Some(SessionStatus::WaitingApproval) => Signal::NeedsYou,
-        Some(SessionStatus::Interrupted) => Signal::Failed,
-        None | Some(SessionStatus::Idle | SessionStatus::Unknown) if unread => Signal::Unread,
-        None | Some(SessionStatus::Idle | SessionStatus::Unknown) => Signal::Idle,
-    }
-}
-
 /// Where a workspace stands, as its row shows it, in the sidebar or in Home.
 pub(crate) struct Standing {
     pub(crate) signal: Signal,
     pub(crate) work: Work,
-    /// It has a reply nobody has read, so its name stands out.
-    pub(crate) unread: bool,
+    /// It needs a look, so its name stands out: it has a reply nobody has read, or a chat waiting on an answer or an
+    /// approval.
+    pub(crate) needs_a_look: bool,
 }
 
 pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standing {
-    let status = app.sessions.get(&workspace.id).and_then(|s| workspace_status(s));
+    let chats = app.sessions.get(&workspace.id).map_or(&[][..], |chats| chats);
     let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
-    let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal(status, unread) };
+    let needs_a_look = unread || signal::waiting_on_you(chats);
+    let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal::workspace(chats) };
     // The hub keeps it on the record, open or not. A hub too old to do that leaves it to the pane, if it's open.
     let work = crate::pull_request::recorded_work(workspace)
         .or_else(|| app.panes.get(&workspace.id).map(|pane| pane.read(cx).work()))
         .unwrap_or(Work::NoPr);
-    Standing { signal, work, unread }
+    Standing { signal, work, needs_a_look }
 }
 
 #[cfg(feature = "testing")]
@@ -267,36 +246,8 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
 
 #[cfg(test)]
 mod tests {
-    use super::{Line, signal, sizes, workspace_status};
+    use super::{Line, sizes};
     use gpui_kit::px;
-    use look::Signal;
-    use protocol::model::{AgentKind, Session, SessionStatus};
-
-    fn session(status: SessionStatus, closed: bool) -> Session {
-        Session {
-            id: "s".into(),
-            workspace_id: "w".into(),
-            agent: AgentKind::Claude,
-            model: None,
-            permission_mode: None,
-            effort: None,
-            status,
-            last_seq: 0,
-            created_at_ms: 0,
-            updated_at_ms: 0,
-            title: None,
-            closed_at_ms: closed.then_some(1),
-            reply_seq: 0,
-            read_seq: 0,
-            turn_started_at_ms: None,
-            background_tasks: Vec::new(),
-            context: None,
-            queued: Vec::new(),
-            queue_held: false,
-            rev: protocol::model::Rev::default(),
-            title_source: protocol::model::TitleSource::FirstLine,
-        }
-    }
 
     #[test]
     fn each_line_takes_its_height_and_the_gap_below_it() {
@@ -314,35 +265,5 @@ mod tests {
         let heights: Vec<_> = sizes(&lines).iter().map(|s| s.height).collect();
 
         assert_eq!(heights, [px(32.), px(38.), px(40.), px(40.), px(44.), px(40.), px(38.), px(36.)]);
-    }
-
-    #[test]
-    fn the_chat_needing_attention_speaks_for_the_workspace_wherever_it_is() {
-        use SessionStatus::*;
-        let chats = [session(WaitingApproval, false), session(Running, false), session(Idle, false)];
-        assert_eq!(workspace_status(&chats), Some(WaitingApproval));
-        let chats = [session(Idle, false), session(Running, false), session(Interrupted, false)];
-        assert_eq!(workspace_status(&chats), Some(Running));
-        let chats = [session(Interrupted, false), session(Background, false), session(Idle, false)];
-        assert_eq!(workspace_status(&chats), Some(Background));
-    }
-
-    #[test]
-    fn a_closed_chat_doesnt_count() {
-        use SessionStatus::*;
-        assert_eq!(workspace_status(&[session(Running, true), session(Idle, false)]), Some(Idle));
-        assert_eq!(workspace_status(&[session(Running, true)]), None);
-    }
-
-    #[test]
-    fn a_reply_nobody_has_read_shows_only_once_nothing_more_pressing_does() {
-        use SessionStatus::*;
-        assert_eq!(signal(Some(Idle), true), Signal::Unread);
-        assert_eq!(signal(None, true), Signal::Unread);
-        assert_eq!(signal(Some(Running), true), Signal::Working);
-        assert_eq!(signal(Some(Background), true), Signal::Working);
-        assert_eq!(signal(Some(WaitingApproval), true), Signal::NeedsYou);
-        assert_eq!(signal(Some(Interrupted), true), Signal::Failed);
-        assert_eq!(signal(Some(Idle), false), Signal::Idle);
     }
 }

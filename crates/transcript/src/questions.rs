@@ -14,7 +14,6 @@ use serde_json::Value;
 
 use crate::Transcript;
 use crate::rows::{row, waiting_card};
-use look::Signal;
 
 pub(crate) const TOOL_NAME: &str = "AskUserQuestion";
 
@@ -257,17 +256,10 @@ pub(crate) fn card(
             waiting_card(open, cx)
                 .gap_3()
                 .child(
-                    h_flex()
-                        .gap_2()
+                    div()
                         .text_xs()
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(if open { amber } else { muted })
-                        .child(look::mark(
-                            if open { Signal::NeedsYou } else { Signal::Idle },
-                            look::Work::NoPr,
-                            look::Size::Inline,
-                            cx,
-                        ))
                         .child(if open { format!("The agent is asking · {header}") } else { header }),
                 )
                 .children(rendered)

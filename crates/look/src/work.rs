@@ -34,13 +34,15 @@ pub enum Work {
 }
 
 impl Work {
-    /// The fan's colour, while nobody needs you. Every open pull request is green there, as GitHub shows it: a mark
-    /// is too small to say more, and amber on it already means it's your turn.
+    /// The fan's colour, whatever else the mark says. An open pull request is green there whether or not something's
+    /// in the way of merging it, as GitHub shows it, since a mark is too small to say what. One in the merge queue is
+    /// yellow, as the bar is.
     pub(crate) fn fan(self) -> Hsla {
         match self {
             Work::NoPr => faint(),
             Work::Draft => hex(GREY),
-            Work::Open | Work::Ready | Work::Queued => hex(GREEN),
+            Work::Open | Work::Ready => hex(GREEN),
+            Work::Queued => hex(YELLOW),
             Work::Merged => hex(PURPLE),
             Work::Closed => hex(RED),
         }
@@ -78,5 +80,24 @@ impl Work {
     /// The outline of the button that opens the pull request.
     pub fn edge(self, cx: &App) -> Hsla {
         self.hue().map_or(cx.theme().input, |hue| hue.opacity(EDGE))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Work;
+
+    #[test]
+    fn the_fan_is_the_bars_colour_wherever_the_bar_has_one() {
+        for work in [Work::Draft, Work::Ready, Work::Queued, Work::Merged, Work::Closed] {
+            assert_eq!(Some(work.fan()), work.hue(), "{work:?}");
+        }
+    }
+
+    #[test]
+    fn the_fan_tells_the_merge_queue_from_any_other_open_pull_request() {
+        assert_eq!(Work::Open.fan(), Work::Ready.fan(), "open is green whether or not something's in the way");
+        assert_ne!(Work::Queued.fan(), Work::Ready.fan());
+        assert_ne!(Work::Open.fan(), Work::NoPr.fan());
     }
 }

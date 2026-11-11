@@ -25,7 +25,7 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
     let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
     let (id, pointed) = (workspace.id.clone(), workspace.id.clone());
     let muted = cx.theme().muted_foreground;
-    let Standing { signal: mark, work, unread } = standing(app, workspace, cx);
+    let Standing { signal: mark, work, needs_a_look } = standing(app, workspace, cx);
     let menu = row_menu(app, workspace, cx);
     let label = workspace.label().to_string();
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
@@ -57,10 +57,11 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
                 .w_full()
                 .gap(MARK_GAP)
                 .text_sm()
-                .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
-                // Rows with nothing to read recede, so those with a reply stand out. Selecting a row only changes its
-                // background: font smoothing thickens brighter text, so a name that brightened would look heavier too.
-                .when(!unread, |d| d.text_color(muted))
+                .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+                // Rows with nothing to look at recede, so those with a reply or a question stand out. Selecting a row
+                // only changes its background: font smoothing thickens brighter text, so a name that brightened would
+                // look heavier too.
+                .when(!needs_a_look, |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                 .when_some(waiting, |d, waiting| d.child(doing(format!("doing-{}", workspace.id), waiting)))

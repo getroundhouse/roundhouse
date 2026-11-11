@@ -2,7 +2,7 @@
 //! its approved image in the spec. Each screen gets a fake hub that answers from fixed data, in
 //! `gallery/screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. What each
 //! screen looks like now goes in `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and
-//! checked the same way, in `gallery/icon.rs`.
+//! checked the same way, in `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark.
 
 #![cfg(test)]
 
@@ -16,6 +16,7 @@ mod headless;
 mod icon;
 mod image_chats;
 mod long_chats;
+mod mark_states;
 mod patch;
 mod pictures;
 mod pull_requests;
@@ -52,6 +53,15 @@ fn every_state_of_a_pull_request_looks_as_approved() {
 }
 
 #[test]
+fn every_state_of_the_mark_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = mark_states::draw(&text_system);
+
+    report(&look_at(mark_states::NAME, mark_states::SPEC, &picture));
+}
+
+#[test]
 fn every_screen_looks_as_approved() {
     // Made once, since it's the slow part of starting, and every screen shapes text the same way. On its own,
     // because the platform it otherwise comes with has to be made on the main thread, and a test isn't on it.
@@ -60,7 +70,7 @@ fn every_screen_looks_as_approved() {
     for screen in SCREENS {
         problems.extend(look_at(screen.name, screen.spec, &capture::take(screen, &text_system)));
     }
-    let names: Vec<&str> = SCREENS.iter().map(|s| s.name).chain([pull_requests::NAME]).collect();
+    let names: Vec<&str> = SCREENS.iter().map(|s| s.name).chain([pull_requests::NAME, mark_states::NAME]).collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
     report(&problems);
 }

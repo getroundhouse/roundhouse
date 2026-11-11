@@ -58,6 +58,13 @@ impl LongTexts {
         });
     }
 
+    /// Whether every long text in a recorded event has been read, so each row has the height it will keep.
+    #[cfg(feature = "testing")]
+    pub(crate) fn all_read(&self, cx: &App) -> bool {
+        let recorded = self.held.values().filter(|held| held.seq.get().is_some());
+        recorded.into_iter().all(|held| !held.state.read(cx).rendered_text().is_empty())
+    }
+
     /// Keeps the long texts of the events in `rows`, and of any that were kept while they streamed, which go on
     /// with what they've read.
     fn hold_rows(

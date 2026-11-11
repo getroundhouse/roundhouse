@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use protocol::event::EventBody;
+use protocol::event::{EventBody, TaskKind};
 use protocol::model::SessionStatus;
 
 use crate::support::{
@@ -22,8 +22,8 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     assert_eq!(client.hub_status().unwrap().running_sessions, 1);
     let waiting = client.session_get(&session.id).unwrap();
     assert!(waiting.reply_seq > 0);
-    let described: Vec<_> = waiting.background_tasks.iter().map(|t| t.description.clone()).collect();
-    assert_eq!(described, [Some(format!("Wait for {}", done.display()))]);
+    let described: Vec<_> = waiting.background_tasks.iter().map(|t| (t.description.clone(), t.kind)).collect();
+    assert_eq!(described, [(Some(format!("Wait for {}", done.display())), TaskKind::Command)]);
 
     // The turn it starts by itself begins with no state event, and is a turn all the same, with a reply of its own.
     std::fs::write(&done, "").unwrap();
@@ -35,6 +35,23 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     assert_eq!(finished.status, SessionStatus::Idle);
     assert!(finished.background_tasks.is_empty());
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
+}
+
+/// The agent only says a task is a monitor's a line after it first lists it, so the record has to follow the list
+/// said again with the kind, though the same tasks are in it.
+#[test]
+fn a_task_a_monitor_call_started_is_recorded_as_a_monitor_beside_a_commands() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let (suite, watch) = (stack.path("suite"), stack.path("watch"));
+    let script = format!("background:{}; monitor:{}; say:started", suite.display(), watch.display());
+
+    client.session_prompt(&session.id, &script, None).unwrap();
+    wait_for_status(&client, &session.id, SessionStatus::Background);
+
+    let kinds: Vec<_> = client.session_get(&session.id).unwrap().background_tasks.iter().map(|t| t.kind).collect();
+    assert_eq!(kinds, [TaskKind::Command, TaskKind::Monitor]);
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
 
 use super::ingest::says_something_new;
 use super::status::{Open, next_status, turn_edge, works_unattended};
@@ -30,7 +30,7 @@ fn exited() -> EventBody {
 }
 
 fn tasks(count: usize) -> EventBody {
-    let task = |i: usize| AgentTask { id: format!("t{i}").into(), description: None };
+    let task = |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command };
     EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
 }
 

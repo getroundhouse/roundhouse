@@ -127,6 +127,13 @@ impl Transcript {
         self.session.read(SessionLog::loaded_events)
     }
 
+    /// Whether every long text of the loaded events has been read. One is read on another thread once its row
+    /// loads, and its row is measured again when that's done, so until then the session's height isn't settled.
+    #[cfg(feature = "testing")]
+    pub fn long_texts_read(&self, cx: &gpui_kit::App) -> bool {
+        self.model.borrow().long_texts.all_read(cx)
+    }
+
     /// The event at a row, if it's loaded.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
         self.session.read(|log| match log.row(row) {
