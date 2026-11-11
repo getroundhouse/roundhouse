@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput};
-use protocol::event::{ContentBlock, EventBody, NoticeLevel};
+use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
 use protocol::model::{AgentKind, PermissionMode, RunId, SessionSettings};
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -246,4 +246,42 @@ exec sleep 100"#;
     let started = seen.iter().any(|item| matches!(item, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. }));
     assert!(!started, "{seen:?}");
     assert!(matches!(seen.last(), Some(AgentOutput::Exited { signal: Some(15), requested: false, .. })), "{seen:?}");
+}
+
+/// Only the adapter knows how Claude is asked to compact, and which recorded request each line it sent is, so the
+/// compaction names the request, and what it said to keep, and the turn's end says it was only that.
+#[tokio::test]
+async fn a_compaction_names_the_request_for_it_and_its_turn_says_it_was_only_that() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(64);
+    // Takes the first prompt it's sent, by the uuid it came with, and compacts as the CLI does, if it's `/compact`.
+    let body = r#"
+while read -r line; do case "$line" in *'"type":"user"'*) break;; esac; done
+case "$line" in *'"/compact Keep the API design"'*) ;; *) exit 1;; esac
+uuid=$(printf '%s' "$line" | sed 's/.*"uuid":"\([^"]*\)".*/\1/')
+printf '{"type":"command_lifecycle","command_uuid":"%s","state":"started"}\n' "$uuid"
+printf '{"type":"system","subtype":"status","status":"compacting"}\n'
+printf '{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":75284}}\n'
+printf '{"type":"user","isSynthetic":true,"message":{"role":"user","content":"Continued.\\nSummary:\\n1. What was asked"}}\n'
+printf '{"type":"result","subtype":"success","num_turns":0,"result":""}\n'
+"#;
+    let agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    agent.compact(7, Some("Keep the API design")).await.unwrap();
+
+    let seen = until_exit(&mut rx).await;
+    let compacted = seen.iter().find_map(|item| match item {
+        AgentOutput::Event { body: EventBody::AgentCompacted { asked, keeping, outcome }, .. } => {
+            Some((*asked, keeping.clone(), outcome.clone()))
+        }
+        _ => None,
+    });
+    let only = seen
+        .iter()
+        .any(|item| matches!(item, AgentOutput::Event { body: EventBody::TurnEnded { only_compacted: true, .. }, .. }));
+    let (asked, keeping, outcome) = compacted.expect("a compaction");
+    assert_eq!((asked, keeping.as_deref()), (Some(7), Some("Keep the API design")));
+    let CompactionOutcome::Compacted { by, summary, .. } = outcome else { panic!("{outcome:?}") };
+    assert_eq!((by, summary.as_deref()), (CompactedBy::Asked, Some("1. What was asked")));
+    assert!(only, "{seen:?}");
 }

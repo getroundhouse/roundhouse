@@ -64,6 +64,10 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
             let session = find_session(&client, &session)?;
             client.session_cancel(&session.id)?;
         }
+        Cmd::Compact { session, keep } => {
+            let session = find_session(&client, &session)?;
+            client.session_compact(&session.id, keep.as_deref())?;
+        }
     }
     Ok(())
 }

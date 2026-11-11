@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::EventBody;
-use crate::model::{MessageId, RunId, ToolUseId};
+use crate::model::{MessageId, RunId, Seq, ToolUseId};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -65,6 +65,24 @@ pub struct Tail {
     /// leaves what they're writing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub in_background: Vec<InBackground>,
+    /// The agent is compacting its conversation, as it last said, or has been asked to and hasn't said yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compacting: Option<Compacting>,
+}
+
+/// A compaction under way, or asked for.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+pub struct Compacting {
+    /// The run compacting, so the end of an earlier run's turn can't say it's over. None for one only asked for so
+    /// far, which the hub records itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
+    /// Where the request for it is recorded, until the agent says it has begun, so the request being dropped ends it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asked: Option<Seq>,
+    /// How much of the summary is written so far, in characters, when the agent says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub written_chars: Option<u64>,
 }
 
 /// A subagent working in the background, and the run that started it, whose end it goes with.
@@ -127,26 +145,36 @@ impl Tail {
         }
     }
 
-    /// Updates the tail for a durable event from `run`. Claude sends a finished block as an
+    /// Updates the tail for a durable event from `run`, recorded at `seq`. Claude sends a finished block as an
     /// `Assistant` event before starting the next block, so everything open for that message is now
     /// in the log. The end of a turn clears what that run or an earlier one left open, but for what a
     /// subagent in the background is writing, since it carries on. The end of the agent clears that
     /// too, and a subagent's end clears what it was writing. Neither end clears what a later run is
     /// writing: a replaced agent's last events can arrive after its replacement has started. An event
-    /// with no run, which the hub recorded itself, is taken to come after every run.
-    pub fn on_event(&mut self, run: Option<RunId>, body: &EventBody) {
+    /// with no run, which the hub recorded itself, is taken to come after every run. A compaction starts when it's
+    /// asked for, so the wait for an agent to start isn't a bare wait, or when the agent says it has. It's over when it
+    /// says so, when its request is dropped, when its turn or its agent ends, or when the agent writes again, which it
+    /// can't while compacting.
+    pub fn on_event(&mut self, seq: Seq, run: Option<RunId>, body: &EventBody) {
         match body {
-            EventBody::Assistant { message_id: Some(id), .. } => {
-                self.messages.retain(|m| m.message_id != *id);
+            EventBody::Assistant { message_id, parent_tool_use_id, .. } => {
+                if let Some(id) = message_id {
+                    self.messages.retain(|m| m.message_id != *id);
+                }
+                if parent_tool_use_id.is_none() {
+                    self.compacted(run);
+                }
             }
             EventBody::TurnEnded { .. } => {
                 let in_background = &self.in_background;
                 let carries_on = |call: &ToolUseId| in_background.iter().any(|b| b.call == *call);
                 self.messages.retain(|m| later(run, m.run) || m.parent_tool_use_id.as_ref().is_some_and(carries_on));
+                self.compacted(run);
             }
             EventBody::AgentExited { .. } => {
                 self.messages.retain(|m| later(run, m.run));
                 self.in_background.retain(|b| later(run, b.run));
+                self.compacted(run);
             }
             EventBody::SubagentStarted { call, in_background: true, .. } => {
                 if !self.in_background.iter().any(|b| b.call == *call) {
@@ -157,10 +185,18 @@ impl Tail {
                 self.messages.retain(|m| m.parent_tool_use_id.as_ref() != Some(call));
                 self.in_background.retain(|b| b.call != *call);
             }
-            EventBody::Assistant { message_id: None, .. }
-            | EventBody::UserPrompt { .. }
+            EventBody::CompactionAsked { .. } => {
+                self.compacting = Some(Compacting { run, asked: Some(seq), written_chars: None });
+            }
+            EventBody::AgentCompacting { written_chars } => {
+                self.compacting = Some(Compacting { run, asked: None, written_chars: *written_chars });
+            }
+            EventBody::AgentCompacted { .. } => self.compacted(run),
+            EventBody::PromptDropped { prompt } => {
+                self.compacting = self.compacting.take().filter(|compacting| compacting.asked != Some(*prompt));
+            }
+            EventBody::UserPrompt { .. }
             | EventBody::PromptTaken { .. }
-            | EventBody::PromptDropped { .. }
             | EventBody::AgentStarted { .. }
             | EventBody::AgentInit { .. }
             | EventBody::AgentState { .. }
@@ -178,9 +214,14 @@ impl Tail {
         }
     }
 
+    /// `run`'s compaction is over, or an earlier run's.
+    fn compacted(&mut self, run: Option<RunId>) {
+        self.compacting = self.compacting.take().filter(|compacting| later(run, compacting.run));
+    }
+
     /// Whether nothing is being written.
     pub fn is_empty(&self) -> bool {
-        self.messages.is_empty()
+        self.messages.is_empty() && self.compacting.is_none()
     }
 
     /// What the agent itself is writing, or the subagent `subagent` started. It holds no other's messages for the
@@ -188,7 +229,9 @@ impl Tail {
     #[must_use]
     pub fn of(&self, subagent: Option<&ToolUseId>) -> Tail {
         let messages = self.messages.iter().filter(|message| message.parent_tool_use_id.as_ref() == subagent);
-        Tail { messages: messages.cloned().collect(), in_background: Vec::new() }
+        // Only the agent compacts its conversation, so a subagent's tail never says it's compacting.
+        let compacting = self.compacting.clone().filter(|_| subagent.is_none());
+        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting }
     }
 }
 
@@ -206,160 +249,9 @@ fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut Tai
 }
 
 #[cfg(test)]
+mod compacting;
+#[cfg(test)]
 mod laws;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::event::{ExitReason, SubagentOutcome};
-
-    fn delta(change: DeltaChange) -> StreamDelta {
-        StreamDelta { run: None, message_id: "m1".into(), parent_tool_use_id: None, change }
-    }
-
-    fn assistant(id: &str) -> EventBody {
-        EventBody::Assistant {
-            message_id: Some(id.into()),
-            parent_tool_use_id: None,
-            model: None,
-            blocks: vec![],
-            first_index: None,
-        }
-    }
-
-    #[test]
-    fn deltas_build_up_text_even_without_a_block_start() {
-        let mut tail = Tail::default();
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "hel".into() }));
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "lo".into() }));
-        assert_eq!(tail.messages[0].blocks[0].text, "hello");
-        assert_eq!(tail.messages[0].blocks[0].kind, BlockKind::Text);
-    }
-
-    #[test]
-    fn a_finished_block_leaves_the_tail_and_the_next_block_starts_clean() {
-        let mut tail = Tail::default();
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "first".into() }));
-        tail.on_event(None, &assistant("m1"));
-        assert!(tail.is_empty());
-        tail.apply(&delta(DeltaChange::BlockStart {
-            index: 1,
-            kind: BlockKind::ToolUse,
-            tool_name: Some("Bash".into()),
-        }));
-        tail.apply(&delta(DeltaChange::ToolInput { index: 1, json: "{\"c".into() }));
-        let block = &tail.messages[0].blocks[0];
-        assert_eq!((block.index, block.kind, block.text.as_str()), (1, BlockKind::ToolUse, "{\"c"));
-    }
-
-    #[test]
-    fn messages_stay_separate_and_only_the_named_one_is_cleared() {
-        let mut tail = Tail::default();
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "main".into() }));
-        tail.apply(&StreamDelta {
-            run: None,
-            message_id: "sub".into(),
-            parent_tool_use_id: Some("toolu_1".into()),
-            change: DeltaChange::Text { index: 0, text: "sub".into() },
-        });
-        assert_eq!(tail.messages.len(), 2);
-        tail.on_event(None, &assistant("sub"));
-        assert_eq!(tail.messages.len(), 1);
-        assert_eq!(tail.messages[0].message_id, "m1".into());
-    }
-
-    #[test]
-    fn the_tail_of_the_agent_or_a_subagent_is_only_what_that_one_writes() {
-        let mut tail = Tail::default();
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "own".into() }));
-        for (message, call) in [("a1", "toolu_a"), ("b1", "toolu_b"), ("a2", "toolu_a")] {
-            let change = DeltaChange::Text { index: 0, text: message.into() };
-            tail.apply(&StreamDelta {
-                run: None,
-                message_id: message.into(),
-                parent_tool_use_id: Some(call.into()),
-                change,
-            });
-        }
-        let ids = |tail: Tail| tail.messages.into_iter().map(|m| m.message_id).collect::<Vec<_>>();
-        assert_eq!(ids(tail.of(None)), vec!["m1".into()]);
-        assert_eq!(ids(tail.of(Some(&"toolu_a".into()))), vec![MessageId::from("a1"), "a2".into()]);
-        assert_eq!(ids(tail.of(Some(&"toolu_b".into()))), vec![MessageId::from("b1")]);
-        assert!(tail.of(Some(&"toolu_c".into())).is_empty());
-    }
-
-    fn turn_ended() -> EventBody {
-        EventBody::TurnEnded {
-            outcome: crate::event::TurnOutcome::Cancelled,
-            result: None,
-            errors: vec![],
-            duration_ms: None,
-            cost_usd: None,
-            num_turns: None,
-            started_at_ms: None,
-            models: vec![],
-            tokens: None,
-        }
-    }
-
-    fn started(call: &str, in_background: bool) -> EventBody {
-        EventBody::SubagentStarted { call: call.into(), kind: None, description: None, prompt: None, in_background }
-    }
-
-    /// Text that `call`'s subagent writes, in its message `message`.
-    fn writes(tail: &mut Tail, call: &str, message: &str, text: &str) {
-        let change = DeltaChange::Text { index: 0, text: text.into() };
-        let run = Some(RunId::new(1));
-        tail.apply(&StreamDelta { run, message_id: message.into(), parent_tool_use_id: Some(call.into()), change });
-    }
-
-    fn text(tail: &Tail) -> String {
-        tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
-    }
-
-    #[test]
-    fn the_end_of_a_turn_clears_what_the_agent_was_writing() {
-        let mut tail = Tail::default();
-        tail.apply(&delta(DeltaChange::Text { index: 0, text: "cut off".into() }));
-        tail.on_event(None, &turn_ended());
-        assert!(tail.is_empty());
-    }
-
-    #[test]
-    fn the_end_of_a_turn_leaves_what_a_subagent_in_the_background_writes_and_clears_one_in_the_foreground() {
-        let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-        tail.on_event(run, &started("toolu_bg", true));
-        tail.on_event(run, &started("toolu_fg", false));
-        writes(&mut tail, "toolu_bg", "bg", "There's ");
-        writes(&mut tail, "toolu_fg", "fg", "Half");
-
-        tail.on_event(run, &turn_ended());
-        writes(&mut tail, "toolu_bg", "bg", "a README ");
-
-        assert_eq!(text(&tail.of(Some(&"toolu_bg".into()))), "There's a README ");
-        assert!(tail.of(Some(&"toolu_fg".into())).is_empty());
-    }
-
-    #[test]
-    fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest() {
-        let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-        tail.on_event(run, &started("toolu_a", true));
-        tail.on_event(run, &started("toolu_b", true));
-        writes(&mut tail, "toolu_a", "a", "Cut off");
-        writes(&mut tail, "toolu_b", "b", "Going on");
-
-        tail.on_event(
-            run,
-            &EventBody::SubagentEnded { call: "toolu_a".into(), outcome: SubagentOutcome::Stopped, report: None },
-        );
-        assert_eq!(text(&tail), "Going on");
-        writes(&mut tail, "toolu_a", "a2", "Late");
-        tail.on_event(run, &turn_ended());
-        assert_eq!(text(&tail), "Going on", "an ended subagent is no longer in the background");
-
-        let exited =
-            EventBody::AgentExited { reason: ExitReason::Requested, code: Some(0), signal: None, stderr_tail: vec![] };
-        tail.on_event(run, &exited);
-        assert_eq!(tail, Tail::default(), "nothing is left, nor which subagents were in the background");
-    }
-}
+mod tests;

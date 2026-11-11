@@ -16,6 +16,7 @@ gpui_kit::assets::icon_assets!(
         CornerDownRight,
         FilePen,
         FilePlus,
+        FoldVertical,
         House,
         Lightbulb,
         ListTree,

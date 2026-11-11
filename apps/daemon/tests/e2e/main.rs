@@ -9,6 +9,7 @@ mod background;
 mod cancelling;
 mod chats;
 mod client_restart;
+mod compacting;
 mod connection;
 mod context;
 mod core_loop;

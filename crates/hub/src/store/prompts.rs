@@ -20,7 +20,7 @@ pub(super) fn note_prompts(
 ) -> Result<Option<Vec<Seq>>, StoreError> {
     let settled = if let EventBody::PromptTaken { prompt } | EventBody::PromptDropped { prompt } = body {
         Some(*prompt)
-    } else if matches!(body, EventBody::UserPrompt { .. }) {
+    } else if matches!(body, EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. }) {
         None
     } else {
         return Ok(None);

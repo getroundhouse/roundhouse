@@ -88,6 +88,10 @@ pub(crate) enum Command {
     Cancel {
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
+    Compact {
+        keeping: Option<String>,
+        reply: oneshot::Sender<Result<(), ApiError>>,
+    },
     Stop {
         reply: oneshot::Sender<Result<(), ApiError>>,
     },

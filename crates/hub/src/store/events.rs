@@ -261,6 +261,7 @@ impl Store {
                 EventBody::ApprovalRequested { approval_id, .. } => open.push(approval_id),
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(|id| *id != approval_id),
                 EventBody::UserPrompt { .. }
+                | EventBody::CompactionAsked { .. }
                 | EventBody::PromptTaken { .. }
                 | EventBody::PromptDropped { .. }
                 | EventBody::ToolCallDropped { .. }
@@ -278,6 +279,8 @@ impl Store {
                 | EventBody::SubagentStarted { .. }
                 | EventBody::SubagentEnded { .. }
                 | EventBody::AgentOther { .. }
+                | EventBody::AgentCompacting { .. }
+                | EventBody::AgentCompacted { .. }
                 | EventBody::Unknown => {}
             }
         }

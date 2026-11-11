@@ -4,7 +4,8 @@
 #![cfg(test)]
 
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::ContextUsage;
+use protocol::event::EventBody;
+use protocol::model::{ContextUsage, SessionStatus};
 
 use crate::support::{Stack, Ui};
 
@@ -48,7 +49,9 @@ fn a_chat_has_a_ring_once_its_agent_says_how_full_its_context_is_and_the_ring_fo
 }
 
 #[gpui_kit::test]
-fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_as_soon_as_it_leaves(cx: &mut TestAppContext) {
+fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_once_it_could_have_reached_the_card(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let mut ui = after_a_turn(cx, &stack);
 
@@ -57,9 +60,84 @@ fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_as_soon_as_it
     ui.wait_out_a_tooltip();
     assert!(ui.visible("context-card"), "resting on it does");
 
-    // No time passes here, so the card going is the pointer's doing.
+    // It holds a button, so it waits for the pointer to cross to it.
     ui.hover("new-chat");
+    assert!(ui.visible("context-card"), "the pointer could still be on its way");
+    ui.wait_out_a_tooltip();
     ui.wait("the card to go", |ui| !ui.has("context-card"));
+}
+
+/// Whether the chat's log holds a request to compact that said `keeping`, and the compaction that answers it.
+fn compacted(ui: &Ui<'_>, keeping: Option<&str>) -> bool {
+    let events = ui.events();
+    let asked =
+        events.iter().find(|e| matches!(&e.body, EventBody::CompactionAsked { keeping: k } if k.as_deref() == keeping));
+    asked.is_some_and(|asked| {
+        events
+            .iter()
+            .any(|e| matches!(e.body, EventBody::AgentCompacted { asked: Some(named), .. } if named == asked.seq))
+    })
+}
+
+#[gpui_kit::test]
+fn the_cards_button_asks_the_agent_to_compact(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+    ui.hover("context");
+    ui.wait_out_a_tooltip();
+    assert!(!ui.disabled("context-compact"));
+
+    // Off the ring, and onto the card, which waits for the pointer to cross.
+    ui.click("context-compact");
+
+    ui.wait("the agent to compact", |ui| compacted(ui, None));
+    let seq = ui.events().iter().find(|e| matches!(e.body, EventBody::AgentCompacted { .. })).map(|e| e.seq).unwrap();
+    let rule = format!("compaction/event/{seq}/0");
+    ui.wait("the chat to draw it", |ui| ui.has(gpui_kit::SharedString::from(rule.clone())));
+}
+
+/// So it's recorded and drawn the same whichever way it's asked.
+#[gpui_kit::test]
+fn typing_compact_asks_the_same_way_with_what_follows_it_as_what_to_keep(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+
+    ui.input("/compact Keep the greeting");
+    ui.press("enter");
+
+    ui.wait("the agent to compact", |ui| compacted(ui, Some("Keep the greeting")));
+    assert_eq!(ui.composer_text(), "");
+    let typed = ui.events().iter().any(|e| matches!(e.body, EventBody::UserPrompt { .. } if e.seq > 2));
+    assert!(!typed, "it isn't a prompt");
+}
+
+#[gpui_kit::test]
+fn compact_typed_while_the_agent_is_on_a_turn_is_refused_and_stays_typed(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+    ui.input("hang:4000");
+    ui.press("enter");
+    ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
+
+    ui.input("/compact");
+    ui.press("enter");
+
+    ui.wait("it to come back", |ui| ui.composer_text() == "/compact");
+    assert!(ui.view().error.as_deref().is_some_and(|error| error.starts_with("couldn't compact")));
+}
+
+#[gpui_kit::test]
+fn the_cards_button_is_off_while_the_agent_is_on_a_turn(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+    ui.input("hang:4000");
+    ui.press("enter");
+    ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
+
+    ui.hover("context");
+    ui.wait_out_a_tooltip();
+
+    assert!(ui.disabled("context-compact"));
 }
 
 #[gpui_kit::test]

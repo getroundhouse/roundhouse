@@ -59,6 +59,7 @@ fn only_what_the_log_says_about_the_prompt_settles_it() {
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
+        only_compacted: false,
     };
     let exited =
         EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };

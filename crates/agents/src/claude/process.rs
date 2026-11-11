@@ -25,6 +25,7 @@ use tracing::{debug, warn};
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
 mod asking;
+mod compact;
 mod context;
 mod launch;
 mod output;
@@ -35,6 +36,7 @@ mod supervise;
 mod tests;
 mod usage;
 
+use compact::{AskedToCompact, ToCompact};
 use context::ContextWatch;
 use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
@@ -75,6 +77,8 @@ struct Shared {
     unconfirmed_prompts: Mutex<Vec<Value>>,
     /// Prompts the CLI hasn't taken yet, by the `uuid` each was sent with, and where each is recorded.
     untaken: Mutex<HashMap<String, Seq>>,
+    /// Which of them is a `/compact`, and which one the CLI took, so its compaction can name it.
+    compacts: Mutex<AskedToCompact>,
     /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
     pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
@@ -124,6 +128,7 @@ pub async fn spawn_at(
         held_output: Mutex::new(Vec::new()),
         unconfirmed_prompts: Mutex::new(Vec::new()),
         untaken: Mutex::new(HashMap::new()),
+        compacts: Mutex::new(AskedToCompact::default()),
         pending_inputs: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
         context: Mutex::new(ContextWatch::default()),
@@ -220,6 +225,47 @@ async fn write_line(shared: &Shared, value: &Value) -> Result<(), AgentError> {
     write_to(&mut *shared.stdin.lock().await, value).await
 }
 
+/// Writes `message` as what's recorded at `prompt`, so the CLI says when it takes it and when it drops it, and notes
+/// it's a compaction someone asked for when it's `asked`.
+async fn send(
+    process: &ClaudeProcess,
+    prompt: Seq,
+    mut message: Value,
+    asked: Option<ToCompact>,
+) -> Result<(), AgentError> {
+    // With it, the CLI says when it takes the prompt, and when it drops one it never took.
+    let uuid = uuid::Uuid::new_v4().to_string();
+    message["uuid"] = json!(uuid);
+    let mut stdin = process.shared.stdin.lock().await;
+    let confirmed = process.shared.confirmed.load(Ordering::SeqCst);
+    if !confirmed {
+        process.shared.unconfirmed_prompts.lock().push(message.clone());
+    }
+    // Before writing, since the CLI can say it took the prompt before the write returns.
+    process.shared.untaken.lock().insert(uuid.clone(), prompt);
+    if let Some(asked) = asked {
+        process.shared.compacts.lock().sent(&uuid, asked);
+    }
+    match write_to(&mut stdin, &message).await {
+        // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
+        Err(e) if !confirmed => {
+            debug!("prompt not delivered before the agent opened: {e:#}");
+            Ok(())
+        }
+        Err(e) => {
+            // Its stdin is broken, so it can't be told anything more. If it's somehow still
+            // running, it mustn't be working alongside the replacement that's coming. The prompt
+            // goes to that replacement, so this one mustn't say it dropped it.
+            process.shared.untaken.lock().remove(&uuid);
+            process.shared.compacts.lock().dropped(&uuid);
+            process.shared.gone.store(true, Ordering::SeqCst);
+            signal_group(process.pid(), Signal::Terminate);
+            Err(e)
+        }
+        Ok(()) => Ok(()),
+    }
+}
+
 #[async_trait]
 impl AgentProcess for ClaudeProcess {
     fn pid(&self) -> u32 {
@@ -231,7 +277,7 @@ impl AgentProcess for ClaudeProcess {
     }
 
     async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError> {
-        let mut message = if attachments.is_empty() {
+        let message = if attachments.is_empty() {
             user_message(text, attachments)
         } else {
             let (text, attachments) = (text.to_string(), attachments.to_vec());
@@ -241,33 +287,14 @@ impl AgentProcess for ClaudeProcess {
                 Err(e) => std::panic::resume_unwind(e.into_panic()),
             }
         };
-        // With it, the CLI says when it takes the prompt, and when it drops one it never took.
-        let uuid = uuid::Uuid::new_v4().to_string();
-        message["uuid"] = json!(uuid);
-        let mut stdin = self.shared.stdin.lock().await;
-        let confirmed = self.shared.confirmed.load(Ordering::SeqCst);
-        if !confirmed {
-            self.shared.unconfirmed_prompts.lock().push(message.clone());
-        }
-        // Before writing, since the CLI can say it took the prompt before the write returns.
-        self.shared.untaken.lock().insert(uuid.clone(), prompt);
-        match write_to(&mut stdin, &message).await {
-            // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
-            Err(e) if !confirmed => {
-                debug!("prompt not delivered before the agent opened: {e:#}");
-                Ok(())
-            }
-            Err(e) => {
-                // Its stdin is broken, so it can't be told anything more. If it's somehow still
-                // running, it mustn't be working alongside the replacement that's coming. The prompt
-                // goes to that replacement, so this one mustn't say it dropped it.
-                self.shared.untaken.lock().remove(&uuid);
-                self.shared.gone.store(true, Ordering::SeqCst);
-                signal_group(self.pid(), Signal::Terminate);
-                Err(e)
-            }
-            Ok(()) => Ok(()),
-        }
+        send(self, prompt, message, None).await
+    }
+
+    /// Claude is asked by typing `/compact`, with what to keep after it.
+    async fn compact(&self, asked: Seq, keeping: Option<&str>) -> Result<(), AgentError> {
+        let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
+        let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
+        send(self, asked, user_message(&text, &[]), Some(asked_for)).await
     }
 
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {

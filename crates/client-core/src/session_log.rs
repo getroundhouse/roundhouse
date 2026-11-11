@@ -243,7 +243,7 @@ impl SessionLog {
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
-        self.tail.on_event(event.run, &event.body);
+        self.tail.on_event(event.seq, event.run, &event.body);
         self.outline.saw(&event);
         let position = self.position(&event);
         self.received = self.received.max(position);

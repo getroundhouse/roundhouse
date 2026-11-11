@@ -157,7 +157,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                                     snapshots_mid_stream += u32::from(!snapshot.is_empty());
                                     tail = snapshot;
                                 }
-                                SubscriptionItem::Event(event) => tail.on_event(event.run, &event.body),
+                                SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
                                 SubscriptionItem::Notice(_) => {}
                             }
                         }
@@ -232,7 +232,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
         match serde_json::from_str::<HubFrame>(&line).unwrap() {
             HubFrame::Event { event, .. } => {
                 ended |= matches!(event.body, EventBody::AgentExited { .. });
-                tail.on_event(event.run, &event.body);
+                tail.on_event(event.seq, event.run, &event.body);
             }
             HubFrame::Delta { delta, .. } => tail.apply(&delta),
             HubFrame::Tail { tail: snapshot, .. } => tail = snapshot,

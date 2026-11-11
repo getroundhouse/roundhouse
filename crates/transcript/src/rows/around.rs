@@ -44,6 +44,8 @@ pub(super) struct Around {
     pub(super) agent: AgentKind,
     /// For a change of mode: the mode before it, when the log says.
     pub(super) mode_before: Option<PermissionMode>,
+    /// For a compaction: whether it's open to its summary.
+    pub(super) open: bool,
 }
 
 /// What drawing a question that's no longer waiting needs.
@@ -87,9 +89,13 @@ impl Around {
             prompt: PromptState::Taken,
             agent: m.agent,
             mode_before: None,
+            open: false,
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);
+        }
+        if matches!(body, EventBody::AgentCompacted { .. }) {
+            around.open = m.folds.is_open(&ItemKey::Event(seq, 0), Fold::Output);
         }
         if let EventBody::UserPrompt { attachments, .. } = body {
             around.carried = attachments::carried(m, attachments);

@@ -49,6 +49,27 @@ impl Transcript {
         true
     }
 
+    /// Asks the agent to compact its conversation, keeping what `keeping` says. `typed` is what was typed to ask, if it
+    /// was, which [`TranscriptEvent::NotSent`] hands back if the hub refuses, so it isn't lost. Otherwise a refusal is
+    /// a [`TranscriptEvent::Error`].
+    pub fn compact(&mut self, keeping: Option<String>, typed: Option<String>, cx: &mut Context<Self>) {
+        let id = self.session_id.clone();
+        let asking = self.client.start(move |client| client.session_compact(&id, keeping.as_deref()));
+        cx.spawn(async move |this, cx| {
+            let Err(e) = asking.recv().await else { return };
+            let message = if e.is_unsupported() {
+                "couldn't compact: the hub is older than the app, and can't until it's updated".to_string()
+            } else {
+                format!("couldn't compact: {e}")
+            };
+            let _ = this.update(cx, |_, cx| match typed {
+                Some(text) => cx.emit(TranscriptEvent::NotSent { message, text, files: Vec::new() }),
+                None => cx.emit(TranscriptEvent::Error(message)),
+            });
+        })
+        .detach();
+    }
+
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         let stopping = self.client.start(move |client| client.session_cancel(&id));

@@ -112,6 +112,7 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
         started_at_ms: None,
         models: vec![ModelName::named("claude-opus-5-5")],
         tokens: Some(tokens),
+        only_compacted: false,
     }
 }
 

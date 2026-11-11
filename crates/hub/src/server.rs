@@ -300,6 +300,10 @@ async fn handle(
             hub.session_cancel(id).await?;
             C::Ok
         }
+        R::SessionCompact { id, keeping } => {
+            hub.session_compact(id, keeping).await?;
+            C::Ok
+        }
     })
 }
 

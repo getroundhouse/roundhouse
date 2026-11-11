@@ -137,7 +137,7 @@ fn remember(config: &Config, prompt: &str) {
 }
 
 /// What the real CLI writes as a turn begins: that it's ready, and in its first, what's left of the account's limits.
-fn begin(config: &Config, out: &Out) {
+pub(crate) fn begin(config: &Config, out: &Out) {
     emit(
         out,
         json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),

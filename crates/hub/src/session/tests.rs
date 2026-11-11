@@ -20,6 +20,7 @@ fn turn_ended() -> EventBody {
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
+        only_compacted: false,
     }
 }
 
@@ -66,6 +67,14 @@ fn a_prompt_starts_running_from_any_state() {
     let prompt = EventBody::UserPrompt { text: "x".into(), client_msg_id: None, attachments: Vec::new() };
     for from in [Idle, Running, WaitingApproval, Interrupted, Background] {
         assert_eq!(next_status(from, &prompt, NOTHING, false), Running);
+    }
+}
+
+/// It starts a turn of its own, so the hub refuses anything else that needs the agent to be done until it ends.
+#[test]
+fn asking_to_compact_sets_running_as_a_prompt_does() {
+    for from in [Idle, Interrupted, Background] {
+        assert_eq!(next_status(from, &EventBody::CompactionAsked { keeping: None }, NOTHING, false), Running);
     }
 }
 

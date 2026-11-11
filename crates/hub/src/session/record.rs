@@ -52,10 +52,29 @@ impl LiveSession {
         raw: Option<String>,
         client_msg_id: Option<ClientMessageId>,
     ) -> Result<(SessionEvent, bool), ApiError> {
+        self.record_unless(origin, body, raw, client_msg_id, |_| None).await
+    }
+
+    /// Records `body` unless `refused` says why not, of the session as everything recorded before it left it. It's
+    /// asked in the same order as everything is recorded, so nothing recorded meanwhile can make its answer wrong.
+    pub(super) async fn record_unless(
+        &self,
+        origin: Origin,
+        body: EventBody,
+        raw: Option<String>,
+        client_msg_id: Option<ClientMessageId>,
+        refused: impl FnOnce(&LiveState) -> Option<ApiError>,
+    ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let After { body, status: next, change, tasks } = after(&self.state.lock(), origin, body);
+        let After { body, status: next, change, tasks } = {
+            let state = self.state.lock();
+            if let Some(refusal) = refused(&state) {
+                return Err(refusal);
+            }
+            after(&state, origin, body)
+        };
         let (announce, held) = (!change.is_none(), change.queue_held);
         let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
         let id = self.id.clone();
@@ -139,7 +158,7 @@ fn apply(
     state.last_seq = seq;
     let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
     let others_before = others(&state.tail);
-    state.tail.on_event(origin.run(), body);
+    state.tail.on_event(seq, origin.run(), body);
     let ended_others = others(&state.tail) < others_before;
     match body {
         EventBody::ApprovalRequested { approval_id, .. } => {
@@ -149,6 +168,7 @@ fn apply(
             state.pending_approvals.remove(approval_id);
         }
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
@@ -166,6 +186,8 @@ fn apply(
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => {}
     }
     // The same rule decided what was committed, so this is the start the record now has.

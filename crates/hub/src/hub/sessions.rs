@@ -301,6 +301,17 @@ impl Hub {
         Ok(session.session)
     }
 
+    pub(crate) async fn session_compact(
+        self: &Arc<Self>,
+        id: SessionId,
+        keeping: Option<String>,
+    ) -> Result<(), ApiError> {
+        let session = self.live_session(&id).await?;
+        let (reply, done) = oneshot::channel();
+        session.command(Command::Compact { keeping, reply }).await?;
+        done.await.map_err(|_| internal("the session has stopped"))?
+    }
+
     pub(crate) async fn session_cancel(self: &Arc<Self>, id: SessionId) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
         // A prompt waiting on setup holds this session's commands, so stopping has to reach setup directly.

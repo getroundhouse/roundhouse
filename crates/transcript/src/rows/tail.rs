@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 use look::{Signal, TaskRing, Work};
 use protocol::event::{AgentTask, TaskKind};
-use protocol::tail::{BlockKind, Tail};
+use protocol::tail::{BlockKind, Compacting, Tail};
 
 use super::line::{HEIGHT, still_icon};
 use super::{empty, row, text_id, thinking, turn_times};
@@ -50,7 +50,8 @@ pub(super) fn render_tail(
             };
         }
     }
-    out = out.when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, cx)));
+    out = out
+        .when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), cx)));
     // Left going by a turn, or started during one.
     out.children(at_work.background.iter().map(|task| going(task, cx))).into_any_element()
 }
@@ -93,7 +94,9 @@ fn clipped(text: String) -> impl IntoElement {
 }
 
 /// The mark with its light sweeping, and how long the turn has taken so far, in the code font so the digits stay put.
-fn working_line(started_at_ms: Option<i64>, cx: &App) -> impl IntoElement {
+/// While the agent compacts its conversation, it says so after the time, and how much of the summary it has written
+/// when it says, since that's the only sign a compaction is getting on.
+fn working_line(started_at_ms: Option<i64>, compacting: Option<&Compacting>, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     let so_far = started_at_ms.map(|started| {
         let elapsed = look::now_ms(cx) - started;
@@ -106,6 +109,17 @@ fn working_line(started_at_ms: Option<i64>, cx: &App) -> impl IntoElement {
         .text_size(theme.mono_font_size)
         .child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx))
         .children(so_far)
+        .children(compacting.map(|compacting| {
+            // Counted as tokens are, since it's said beside them.
+            let written = compacting.written_chars.filter(|chars| *chars > 0);
+            let written = written.map(|chars| format!(" · {} characters written", look::tokens(chars)));
+            // Cut off where the line ends, rather than running past the pane.
+            div()
+                .min_w_0()
+                .font_family(theme.font_family.clone())
+                .text_sm()
+                .child(clipped(format!("Compacting the conversation{}", written.unwrap_or_default())))
+        }))
         .test_support()
 }
 

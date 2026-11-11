@@ -3,15 +3,17 @@
 //! told, so a part nobody has said is left out.
 
 use gpui_kit::base::ObservedElement;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
-    Stateful, Styled, TestSupportExt as _, div, px, relative,
+    Stateful, Styled, TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{InRegion as _, Region};
+use look::{InRegion as _, Off as _, Region};
 use protocol::model::{Account, AgentKind, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
 use super::{Usage, words};
+use crate::workspace_pane::WorkspacePane;
 
 const WIDTH: Pixels = px(300.);
 /// How tall a bar is.
@@ -23,10 +25,30 @@ fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
 }
 
 /// The ring's card: the chat's context. `account` is given only when the bars aren't drawn, since this is then the
-/// one card there is to say whose account it is.
-pub(super) fn context_card(context: &ContextUsage, account: Option<&Account>, cx: &App) -> AnyElement {
+/// one card there is to say whose account it is. `off` turns its button off.
+pub(super) fn context_card(
+    context: &ContextUsage,
+    account: Option<&Account>,
+    pane: &WeakEntity<WorkspacePane>,
+    off: bool,
+    cx: &App,
+) -> AnyElement {
     let whose = account.and_then(|account| whose(account, Plan::WithWhose, cx));
-    surface(Region::ContextCard, cx).child(room(context, cx)).children(whose).into_any_element()
+    let card = surface(Region::ContextCard, cx).child(room(context, cx)).child(compact(pane, off, cx));
+    card.children(whose).into_any_element()
+}
+
+/// Under a rule, what compacting does, and a button that asks the agent to now rather than when the room runs out.
+fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
+    let pane = pane.clone();
+    let button = Button::new("context-compact").off_while(off).outline().xsmall().label("Compact now").on_click(
+        move |_, _, cx| {
+            let _ = pane.update(cx, WorkspacePane::compact);
+        },
+    );
+    let said = div().min_w_0().truncate().text_xs().text_color(look::faint()).child("Summarize to make room");
+    let under = h_flex().justify_between().items_center().gap_3().child(said).child(button);
+    v_flex().child(div().my_2().h(px(1.)).bg(cx.theme().border)).child(under)
 }
 
 /// The bars' card: the plan beside its heading, how much of each limit shown is left, as a bar that empties, and

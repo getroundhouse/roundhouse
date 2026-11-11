@@ -64,11 +64,11 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 let kind = format!("control_request/{subtype}");
                 AgentOutput::event(EventBody::AgentOther { kind, parent_tool_use_id: None }, Some(line))
             }
-            Parsed::Event(body) => {
+            Parsed::Event(mut body) => {
                 if !plan::passed_on(&shared, &output, &body).await {
                     continue;
                 }
-                track_approval(&shared, &body);
+                note(&shared, &mut body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
                 if opened || shared.confirmed.load(Ordering::SeqCst) {
@@ -120,6 +120,11 @@ fn prompt_progress(shared: &Shared, uuid: &str, progress: PromptProgress) -> Eve
         PromptProgress::Started | PromptProgress::Cancelled => shared.untaken.lock().remove(uuid),
         PromptProgress::Other => None,
     };
+    match progress {
+        PromptProgress::Started => moved.iter().for_each(|prompt| shared.compacts.lock().taken(uuid, *prompt)),
+        PromptProgress::Cancelled => shared.compacts.lock().dropped(uuid),
+        PromptProgress::Other => {}
+    }
     match (progress, moved) {
         (PromptProgress::Started, Some(prompt)) => EventBody::PromptTaken { prompt },
         (PromptProgress::Cancelled, Some(prompt)) => EventBody::PromptDropped { prompt },
@@ -137,6 +142,13 @@ async fn refuse_control(shared: &Shared, request_id: &str, subtype: &str) {
     }
 }
 
+/// Keeps what the adapter needs of an event before it goes on, and adds what only the adapter knows: which prompt
+/// asked for a compaction.
+fn note(shared: &Shared, body: &mut EventBody) {
+    shared.compacts.lock().answer(body);
+    track_approval(shared, body);
+}
+
 /// Keeps each open approval's input, which is what answering it sends back.
 fn track_approval(shared: &Shared, body: &EventBody) {
     match body {
@@ -147,6 +159,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
             shared.pending_inputs.lock().remove(approval_id);
         }
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
@@ -164,6 +177,8 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => {}
     }
 }

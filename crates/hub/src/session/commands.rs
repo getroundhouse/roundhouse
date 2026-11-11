@@ -15,6 +15,14 @@ use crate::hub::Hub;
 use crate::store::Store;
 use crate::worker_link::WorkerLink;
 
+mod compact;
+
+/// What the agent is asked, once it's recorded.
+enum Asking {
+    Prompt { text: String, attachments: Vec<Attachment> },
+    Compact { keeping: Option<String> },
+}
+
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
         match command {
@@ -27,6 +35,7 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             Command::Cancel { reply } => {
                 let _ = reply.send(session.handle_cancel().await);
             }
+            Command::Compact { keeping, reply } => session.handle_compact(keeping, reply).await,
             Command::Stop { reply } => {
                 let _ = reply.send(session.handle_stop().await);
             }
@@ -124,19 +133,20 @@ impl LiveSession {
         Ok(())
     }
 
-    async fn forward_prompt(&self, prompt: Seq, text: String, attachments: Vec<Attachment>) -> Result<(), ApiError> {
-        // Only now, after waiting on setup, since the worktree has to be ready for them.
-        let attachments = self.hub()?.place_attachments(&self.id, &self.workspace_id, &attachments).await?;
+    async fn forward(&self, seq: Seq, asking: Asking) -> Result<(), ApiError> {
+        let session_id = self.id.clone();
+        let request = match asking {
+            Asking::Prompt { text, attachments } => {
+                // Only now, after waiting on setup, since the worktree has to be ready for them.
+                let attachments = self.hub()?.place_attachments(&self.id, &self.workspace_id, &attachments).await?;
+                WorkerRequest::AgentPrompt { session_id, prompt: seq, text, attachments }
+            }
+            Asking::Compact { keeping } => WorkerRequest::AgentCompact { session_id, asked: seq, keeping },
+        };
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            let request = WorkerRequest::AgentPrompt {
-                session_id: self.id.clone(),
-                prompt,
-                text: text.clone(),
-                attachments: attachments.clone(),
-            };
-            let WorkerResponse::AgentNotRunning = link.call(request).await? else {
+            let WorkerResponse::AgentNotRunning = link.call(request.clone()).await? else {
                 return Ok(());
             };
             let mut state = self.state.lock();
@@ -144,7 +154,18 @@ impl LiveSession {
                 state.agent = None;
             }
         }
-        Err(ApiError::new(ErrorCode::Worker, "the agent keeps exiting before it can take the prompt"))
+        Err(ApiError::new(ErrorCode::Worker, "the agent keeps exiting before it can be asked"))
+    }
+
+    /// Whether the agent can be asked anything: its chat is open, and its workspace is ready.
+    async fn can_be_asked(&self, hub: &Hub) -> Result<(), ApiError> {
+        if self.is_closed() {
+            return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
+        }
+        if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
+            return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
+        }
+        Ok(())
     }
 
     /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
@@ -170,12 +191,7 @@ impl LiveSession {
         client_msg_id: Option<ClientMessageId>,
         attachments: &[Attachment],
     ) -> Result<(Seq, bool), ApiError> {
-        if self.is_closed() {
-            return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
-        }
-        if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
-            return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
-        }
+        self.can_be_asked(hub).await?;
         let body = EventBody::UserPrompt {
             text: text.to_string(),
             client_msg_id: client_msg_id.clone(),
@@ -217,21 +233,25 @@ impl LiveSession {
         }
     }
 
-    /// Gets a recorded prompt to the agent, starting one if it has to. Failures go in the log, and so does a prompt
-    /// that never reaches an agent, since no agent will say so.
     pub(super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, text: String, attachments: Vec<Attachment>) {
+        self.deliver(hub, seq, Asking::Prompt { text, attachments }).await;
+    }
+
+    /// Gets what was recorded at `seq` to the agent, starting one if it has to. Failures go in the log, and so does
+    /// what never reaches an agent, since no agent will say so.
+    async fn deliver(&self, hub: &Hub, seq: Seq, asking: Asking) {
         let dropped = EventBody::PromptDropped { prompt: seq };
         hub.wait_for_setup(&self.workspace_id).await;
         if self.is_closed() {
             return self.record_or_log(Origin::Hub, dropped).await;
         }
         self.warn_if_setup_failed(hub).await;
-        if let Err(e) = self.forward_prompt(seq, text, attachments).await {
+        if let Err(e) = self.forward(seq, asking).await {
             self.record_or_log(Origin::Hub, dropped).await;
             if self.is_closed() {
                 return;
             }
-            warn!(session = %self.id, "could not deliver a prompt: {e}");
+            warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
             self.cancel_approvals(None).await;
             self.record_or_log(
                 Origin::Hub,

@@ -8,8 +8,8 @@ use super::{Parsed, blocks, file_change, id_of, images};
 pub(super) fn line(value: &Value) -> Parsed {
     let content = value.get("message").and_then(|message| message.get("content"));
     let mut blocks = blocks(content);
-    // Written for the model rather than the person, such as an image's size once the CLI has shrunk it, or the summary
-    // a compacted conversation carries on from. A result is shown even so, or its call would never get one.
+    // Written for the model rather than the person, such as an image's size once the CLI has shrunk it. A compaction's
+    // summary is one too, but `compaction` reads it first. A result is shown even so, or its call would never get one.
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
     if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
         // A subagent's names the call that started it, as every `user` line from one does.

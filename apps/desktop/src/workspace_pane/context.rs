@@ -17,7 +17,7 @@ use gpui_kit::{
 use protocol::model::{Account, AccountId, Session, UsageLimit};
 
 use super::WorkspacePane;
-use super::composer::{Slot, middle};
+use super::composer::{Hub, Slot, middle};
 
 mod card;
 mod words;
@@ -26,6 +26,8 @@ mod words;
 const RING: Pixels = px(16.);
 /// How thick the ring's line is.
 const LINE: f32 = 2.;
+/// How long the context's card waits after the pointer leaves the ring, so it can reach the card's button.
+const CROSSING: std::time::Duration = std::time::Duration::from_millis(300);
 /// How tall a limit's bar is, and how far it is from the next. The same, and on the grid, so one bar or two come to a
 /// whole number of pixels either side of the slot's middle.
 const LIMIT: Pixels = px(4.);
@@ -76,8 +78,12 @@ impl WorkspacePane {
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
         let ring = middle().size(Slot::SIZE).child(div().size(RING).child(ring(used, cx)));
+        // There's no asking while the agent is on a turn, or with no hub to ask.
+        let (pane, off) = (cx.weak_entity(), session.status.in_turn() || self.hub == Hub::Away);
+        // It holds a button, so it waits a moment for the pointer to cross the gap between the ring and the card.
         let hover = card_over("context-hover", ring)
-            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), cx));
+            .close_delay(CROSSING)
+            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), &pane, off, cx));
         // Said in words too, since the ring alone says nothing to someone who can't see it.
         let said = format!("Context {} used", words::percent(used));
         Some(Slot::holding(div().id("context").role(Role::Status).aria_label(said).child(hover).test_support()))
@@ -97,6 +103,15 @@ impl WorkspacePane {
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{} {} left", words::usage_heading(agent), words::whole_percent(least));
         Some(Slot::holding(div().id("usage").role(Role::Status).aria_label(said).child(hover).test_support()))
+    }
+}
+
+impl WorkspacePane {
+    /// Asks the agent in the chat showing to compact its conversation now.
+    pub(super) fn compact(&mut self, cx: &mut Context<Self>) {
+        if let Some(transcript) = self.transcript() {
+            transcript.update(cx, |t, cx| t.compact(None, None, cx));
+        }
     }
 }
 

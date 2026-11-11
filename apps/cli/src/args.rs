@@ -77,6 +77,14 @@ pub(crate) enum Cmd {
     Answer { session: String, approval_id: ApprovalId, question: String, answer: String },
     /// Stop the agent's current turn. The session stays usable.
     Cancel { session: String },
+    /// Ask the agent to compact its conversation now, rather than when its context fills. Refused while it's on a
+    /// turn.
+    Compact {
+        session: String,
+        /// What to keep, in your own words.
+        #[arg(long)]
+        keep: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

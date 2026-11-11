@@ -88,6 +88,7 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
             Ok(changed(rows, call))
         }
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::AgentStarted { .. }
@@ -102,6 +103,8 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => Ok(Vec::new()),
     }
 }

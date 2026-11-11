@@ -125,6 +125,14 @@ pub enum WorkerRequest {
     AgentCancel {
         session_id: SessionId,
     },
+    /// Asks the agent to compact its conversation. `asked` is where that's recorded, which the agent's
+    /// [`crate::event::EventBody::PromptTaken`] and its compaction name.
+    AgentCompact {
+        session_id: SessionId,
+        asked: Seq,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keeping: Option<String>,
+    },
     /// A setting left out is left as it is.
     AgentConfigure {
         session_id: SessionId,

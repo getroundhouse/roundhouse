@@ -185,6 +185,7 @@ pub(crate) fn stopped() -> Vec<EventBody> {
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
+        only_compacted: false,
     });
     events
 }
@@ -236,7 +237,7 @@ fn thought_then_read() -> Vec<EventBody> {
 }
 
 /// The start every chat here shares: the prompt, a search and a file read.
-pub(super) fn looked_around() -> Vec<EventBody> {
+pub(crate) fn looked_around() -> Vec<EventBody> {
     let mut events = vec![
         user_prompt(ASK),
         taken(1),
