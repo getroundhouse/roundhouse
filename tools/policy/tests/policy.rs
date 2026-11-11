@@ -169,11 +169,11 @@ fn metadata_for(target: &str) -> Value {
 fn only_allowed_licenses_ship() {
     const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
     const LINUX: [&str; 2] = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
-    const WINDOWS: &str = "x86_64-pc-windows-msvc";
+    const WINDOWS: [&str; 2] = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"];
     for (root, targets) in [
-        ("desktop", &[MAC[0], MAC[1], WINDOWS][..]),
-        ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS][..]),
-        ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS][..]),
+        ("desktop", &[MAC[0], MAC[1], WINDOWS[0], WINDOWS[1]][..]),
+        ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
+        ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
     ] {
         for target in targets {
             let shipped = shipped_packages(&metadata_for(target), root);
