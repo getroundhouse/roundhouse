@@ -100,6 +100,7 @@ async fn forward_output(
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
             AgentOutput::Context(context) => WorkerFrame::AgentContext { session_id: session_id.clone(), run, context },
+            AgentOutput::Limits(limits) => WorkerFrame::AgentLimits { session_id: session_id.clone(), run, limits },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();

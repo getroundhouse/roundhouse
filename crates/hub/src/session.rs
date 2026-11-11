@@ -14,7 +14,7 @@ use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, ContextUsage, RunId, Seq, Session, SessionId,
-    SessionSettings, SessionSettingsChange, SessionStatus, WorkspaceId,
+    SessionSettings, SessionSettingsChange, SessionStatus, UsageLimit, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -58,6 +58,12 @@ pub(crate) enum Item {
     Context {
         run: RunId,
         context: ContextUsage,
+    },
+    /// What's used of the account's limits, as the agent answered when its worker asked. It comes in the queue with
+    /// the agent's events for the same reason.
+    Limits {
+        run: RunId,
+        limits: Vec<UsageLimit>,
     },
     /// The worker connection ended. Everything it sent has been queued ahead of this.
     WorkerLost(u64),

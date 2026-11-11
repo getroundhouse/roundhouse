@@ -8,6 +8,7 @@ use serde_json::json;
 use tokio::sync::mpsc;
 use tracing::debug;
 
+use super::asking::{Over, Work, work};
 use super::{Shared, control};
 use crate::claude::context::context_usage;
 use crate::{AgentError, AgentOutput};
@@ -16,9 +17,6 @@ use crate::{AgentError, AgentOutput};
 /// log, and a turn's requests to the model can come every few seconds, so this keeps them to a few a minute while
 /// the ring still moves as the agent works.
 const MID_TURN_GAP: Duration = Duration::from_secs(15);
-
-/// How the CLI refuses a request it doesn't know, as `docs/claude-cli.md` records and a contract test checks.
-const UNKNOWN_REQUEST: &str = "Unsupported control request subtype";
 
 /// Where asking has got to.
 #[derive(Default)]
@@ -38,14 +36,6 @@ enum Ask {
     /// A turn ended while an ask was on its way, so what that one answers may be from before the end, and it's
     /// asked once more.
     OnItsWayAndWantedAgain,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Over {
-    /// The CLI said it doesn't know the request, so there's nothing to ask.
-    Unsupported,
-    /// The process has exited and said so, and nothing is reported after that.
-    Exited,
 }
 
 impl ContextWatch {
@@ -95,27 +85,11 @@ impl ContextWatch {
 /// Asks after an event that says the context has moved: the start of a turn, something the agent itself wrote, and
 /// a turn's end. The answer comes through the loop that calls this, so the ask runs on a task of its own.
 pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sender<AgentOutput>) {
-    let turn_ended = match body {
-        EventBody::TurnEnded { .. } => true,
-        EventBody::AgentInit { .. } | EventBody::Assistant { parent_tool_use_id: None, .. } => false,
+    let turn_ended = match work(body) {
+        Work::TurnEnded => true,
+        Work::Started | Work::Wrote { subagent: false } => false,
         // A subagent's work is in a context of its own.
-        EventBody::Assistant { parent_tool_use_id: Some(_), .. }
-        | EventBody::UserPrompt { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::AgentLimits { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::ApprovalRequested { .. }
-        | EventBody::ApprovalResolved { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::Notice { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::Unknown => return,
+        Work::Wrote { subagent: true } | Work::HeardLimits | Work::Other => return,
     };
     if !shared.context.lock().begin(turn_ended, Instant::now()) {
         return;
@@ -132,11 +106,6 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
     });
 }
 
-/// Whether a refusal means the CLI doesn't know the request, so asking again is pointless.
-fn never_answers(refusal: &str) -> bool {
-    refusal.contains(UNKNOWN_REQUEST)
-}
-
 /// Reports what the CLI answered. It's sent under the lock, without waiting, so it can't come after the process's
 /// exit, and a report there's no room for is dropped, since only the newest matters and the next ask brings one.
 /// Whether it's a change is the hub's to say, which knows what the session's record has.
@@ -144,14 +113,11 @@ fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<se
     let mut watch = shared.context.lock();
     let context = match answer {
         Ok(reply) => context_usage(&reply),
-        // Only a CLI that doesn't know the request is never asked again. Any other refusal may not come twice.
-        Err(AgentError::Refused(why)) if never_answers(&why) => {
-            debug!("the agent doesn't say how full its context is: {why}");
-            watch.over.get_or_insert(Over::Unsupported);
-            None
-        }
         Err(e) => {
             debug!("the agent didn't say how full its context is: {e}");
+            if let Some(over) = Over::after(&e) {
+                watch.over.get_or_insert(over);
+            }
             None
         }
     };
@@ -207,12 +173,6 @@ mod tests {
         assert!(!unsupported.begin(true, start));
         assert!(!closed.finish(), "the ask that was wanted again isn't made");
         assert!(!closed.begin(true, start));
-    }
-
-    #[test]
-    fn only_a_cli_that_doesnt_know_the_request_is_never_asked_again() {
-        assert!(never_answers("Unsupported control request subtype: get_context_usage"));
-        assert!(!never_answers("Internal error"), "any other refusal may not come twice");
     }
 
     #[test]

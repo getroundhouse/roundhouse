@@ -30,27 +30,34 @@ fn limits(info: &Value) -> Vec<UsageLimit> {
 }
 
 fn limit(name: &str, window: &Value) -> Option<UsageLimit> {
-    let window_kind = match name {
-        "five_hour" => LimitWindow::FiveHours,
-        "seven_day" => LimitWindow::SevenDays,
-        _ => return None,
-    };
-    let used = window.get("utilization")?.as_f64()?;
+    let window_kind = window_named(name)?;
+    let share = window.get("utilization")?.as_f64()?;
     let resets_at_ms = window.get("resetsAt").and_then(Value::as_i64).map(|s| s.saturating_mul(1000));
-    Some(UsageLimit { window: window_kind, used_percent: percent(used), resets_at_ms, heard_at_ms: None })
+    // A share from 0 to 1, unlike the whole percent `get_usage` answers with.
+    Some(UsageLimit { window: window_kind, used_percent: whole_percent(share * 100.), resets_at_ms, heard_at_ms: None })
 }
 
-/// A share from 0 to 1, as a whole percent. More than all of a limit reads as all of it.
+/// The window the CLI calls `name`, in this line and in what it answers `get_usage` alike. `None` for one with no
+/// name here.
+pub(in crate::claude) fn window_named(name: &str) -> Option<LimitWindow> {
+    match name {
+        "five_hour" => Some(LimitWindow::FiveHours),
+        "seven_day" => Some(LimitWindow::SevenDays),
+        _ => None,
+    }
+}
+
+/// A percent of a limit used, as a whole one. More than all of it reads as all of it.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "clamped to 0 to 100 first, and a share that isn't a number reads as none used"
+    reason = "clamped to 0 to 100 first, and a percent that isn't a number reads as none used"
 )]
-fn percent(used: f64) -> u8 {
+pub(in crate::claude) fn whole_percent(used: f64) -> u8 {
     if used.is_nan() {
         return 0;
     }
-    (used * 100.).round().clamp(0., 100.) as u8
+    used.round().clamp(0., 100.) as u8
 }
 
 #[cfg(test)]

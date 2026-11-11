@@ -1,6 +1,7 @@
 //! What the real CLI says of its context, its account's limits and its login, with made-up numbers.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
 
@@ -44,8 +45,8 @@ pub(crate) fn context_usage(conversation: &Path) -> Value {
     })
 }
 
-/// The line the real CLI writes once a turn has asked the model for something, saying how much of the account's
-/// week is used.
+/// The line the real CLI writes once its first turn has asked the model for something, saying how much of the
+/// account's week is used. It writes it once a process, so a later turn has to ask with `get_usage`.
 pub(crate) fn rate_limit_event(session_id: &str) -> Value {
     json!({"type": "rate_limit_event", "session_id": session_id, "rate_limit_info": {
         "status": "allowed", "resetsAt": RESETS_AT_S, "rateLimitType": "seven_day", "overageStatus": "allowed",
@@ -57,11 +58,39 @@ pub(crate) fn rate_limit_event(session_id: &str) -> Value {
     }})
 }
 
-/// Whether the agent hears of its account's limits as it works. It doesn't once `$FAKE_CLAUDE_STATE/no-limits` exists,
-/// as for a login that has none, so a test can tell what the hub learns when an agent launches from what it learns
-/// when the agent hears of a limit. `conversation` is in the state directory.
-pub(crate) fn hears_limits(conversation: &Path) -> bool {
-    conversation.parent().is_none_or(|state| !state.join("no-limits").exists())
+/// Whether this turn says what's left of the account's limits by itself, as only a process's first does. None does
+/// once `$FAKE_CLAUDE_STATE/no-limits` exists, as for a login that has none, so a test can tell what the hub learns
+/// when an agent launches from what it learns of the limits. None does either once `limits-unsaid` exists, though
+/// `get_usage` still answers, so a test can tell what's asked from what's said. `conversation` is in the state
+/// directory.
+pub(crate) fn says_limits(conversation: &Path) -> bool {
+    static SAID: AtomicBool = AtomicBool::new(false);
+    let quiet = ["no-limits", "limits-unsaid"].iter().any(|file| in_state(conversation, file));
+    !quiet && !SAID.swap(true, Ordering::SeqCst)
+}
+
+/// What `get_usage` answers: the week's limit, as `rate_limit_event` says it but as a whole percent and an ISO time, and
+/// more that the worker doesn't keep, such as what the account was used for. A login with no limits says so.
+pub(crate) fn usage(conversation: &Path) -> Value {
+    if in_state(conversation, "no-limits") {
+        return json!({"subscription_type": null, "rate_limits_available": false, "rate_limits": null});
+    }
+    json!({
+        "session": {"total_cost_usd": 0.0, "model_usage": {}},
+        "subscription_type": "max",
+        "rate_limits_available": true,
+        "rate_limits": {
+            "five_hour": null,
+            "seven_day": {"utilization": 4, "resets_at": "2100-01-01T00:00:00.000000+00:00", "limit_dollars": null},
+            "model_scoped": [],
+        },
+        "behaviors": {"day": {"request_count": 1, "session_count": 1, "skills": [{"name": "deploy"}]}},
+    })
+}
+
+/// Whether `$FAKE_CLAUDE_STATE` has `file`, which `conversation` is beside.
+fn in_state(conversation: &Path, file: &str) -> bool {
+    conversation.parent().is_some_and(|state| state.join(file).exists())
 }
 
 /// What `claude auth status --json` prints: whatever `$FAKE_CLAUDE_STATE/auth-status` holds, so a test can log in as
