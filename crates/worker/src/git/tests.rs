@@ -123,6 +123,7 @@ async fn diff_covers_commits_uncommitted_and_untracked_work() {
     let repo = new_repo(dir.path());
     let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
     let path = Path::new(&prepared.path);
+    let merge_base = CommitId::from(run(path, &["rev-parse", "HEAD"]));
     std::fs::write(path.join("committed.txt"), "from a commit\n").unwrap();
     run(path, &["add", "."]);
     run(path, &["commit", "-qm", "work"]);
@@ -134,12 +135,33 @@ async fn diff_covers_commits_uncommitted_and_untracked_work() {
     run(&repo, &["commit", "-qm", "main moved"]);
 
     let diff = diff(&prepared.path, Some("main")).await.unwrap();
-    assert!(diff.base_commit.is_some());
+    assert_eq!(diff.base_commit, Some(merge_base));
     assert!(diff.patch.contains("+from a commit"), "{}", diff.patch);
     assert!(diff.patch.contains("+uncommitted"), "{}", diff.patch);
     assert!(diff.patch.contains("+brand new"), "{}", diff.patch);
     assert!(!diff.patch.contains("elsewhere"), "{}", diff.patch);
     assert!(!diff.truncated);
+}
+
+/// HEAD's commit is what such a diff is taken from, so it's named, and a client can read what the diff replaced.
+#[tokio::test]
+async fn a_diff_with_no_base_names_head_s_commit() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let worktree = repo.to_str().unwrap();
+    std::fs::write(repo.join("a.txt"), "uncommitted\n").unwrap();
+    let head = Some(CommitId::from(run(&repo, &["rev-parse", "HEAD"])));
+    let empty = dir.path().join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    run(&empty, &["init", "-q"]);
+
+    let no_base = diff(worktree, None).await.unwrap();
+    let gone = diff(worktree, Some("gone")).await.unwrap();
+
+    assert_eq!(no_base.base_commit, head);
+    assert!(no_base.patch.contains("+uncommitted"), "{}", no_base.patch);
+    assert_eq!(gone.base_commit, head, "a base ref git finds no merge base with");
+    assert!(diff(empty.to_str().unwrap(), None).await.is_err(), "no commit at HEAD, so nothing to diff from");
 }
 
 #[tokio::test]

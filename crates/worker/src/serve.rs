@@ -256,6 +256,9 @@ async fn handle(
                 .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a file stopped: {e}")))??;
             Ok(WorkerResponse::FileContents(contents))
         }
+        WorkerRequest::FileReadAt { path, commit, file } => {
+            Ok(WorkerResponse::FileContents(crate::files::read_at(Path::new(&path), &commit, &file).await?))
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, prompt, text, attachments } => {
             let agent = state.live_agent(&session_id);

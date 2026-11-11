@@ -130,7 +130,8 @@ impl FileView {
             let text = match contents {
                 Ok(FileContents::Text { text }) if text.is_empty() => Err(Contents::Empty),
                 Ok(FileContents::Text { text }) => Ok(text),
-                Ok(FileContents::Binary | FileContents::Unknown) => Err(Contents::Binary),
+                // An image shows as a file that isn't text, as it did before images were sent.
+                Ok(FileContents::Binary | FileContents::Image { .. } | FileContents::Unknown) => Err(Contents::Binary),
                 Ok(FileContents::TooBig { bytes }) => Err(Contents::TooBig(bytes)),
                 Err(e) if e.is_unsupported() => Err(Contents::Unsupported),
                 Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => Err(Contents::Gone),

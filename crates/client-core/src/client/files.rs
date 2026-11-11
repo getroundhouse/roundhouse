@@ -3,7 +3,7 @@
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ClientRequest, ClientResponse};
-use protocol::model::{AttachmentId, FileContents, SessionId, WorkspaceId, WorktreeFiles};
+use protocol::model::{AttachmentId, CommitId, FileContents, SessionId, WorkspaceId, WorktreeFiles};
 
 use super::{Client, Result, unexpected};
 
@@ -60,6 +60,18 @@ impl Client {
     /// See [`ClientRequest::WorkspaceFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_file_read(&self, id: &WorkspaceId, path: &str) -> Result<FileContents> {
         let reply = self.call(ClientRequest::WorkspaceFileRead { id: id.clone(), path: path.to_string() })?;
+        let ClientResponse::FileContents(contents) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(contents)
+    }
+
+    /// What a file held in `commit`, such as the diff's base, to show what a change replaced. A hub older than this
+    /// refuses it, as `is_unsupported` says.
+    pub fn workspace_file_read_at(&self, id: &WorkspaceId, commit: &CommitId, path: &str) -> Result<FileContents> {
+        let request =
+            ClientRequest::WorkspaceFileReadAt { id: id.clone(), commit: commit.clone(), path: path.to_string() };
+        let reply = self.call(request)?;
         let ClientResponse::FileContents(contents) = reply else {
             return unexpected(&reply);
         };

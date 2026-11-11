@@ -6,9 +6,10 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GitDiff, GitFile, GitStatus};
+use protocol::model::{CommitId, GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
+pub(crate) mod blob;
 pub(crate) mod files;
 mod pull_request;
 mod removal;
@@ -44,7 +45,13 @@ struct GitOutput {
 
 /// Runs git, with what it prints as it printed it.
 async fn run(cwd: &Path, args: &[&str]) -> Result<std::process::Output, ApiError> {
-    Command::new("git")
+    command(cwd, args).output().await.map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
+}
+
+/// Git, ready to start, as everything here starts it.
+fn command(cwd: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new("git");
+    command
         .args(args)
         .current_dir(cwd)
         // Never wait on a credentials prompt nobody can see.
@@ -53,11 +60,9 @@ async fn run(cwd: &Path, args: &[&str]) -> Result<std::process::Output, ApiError
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("LC_ALL", "C")
         .stdin(Stdio::null())
-        // So a fetch that times out doesn't keep running.
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
+        // So a fetch that times out doesn't keep running, and nor does a read that's had what it needs.
+        .kill_on_drop(true);
+    command
 }
 
 async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
@@ -243,15 +248,10 @@ fn parse_status(output: &str) -> GitStatus {
 /// Everything the branch changes against its base, including uncommitted and untracked files.
 pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
     let worktree = Path::new(worktree_path);
-    let base = match base_ref {
-        Some(base) => {
-            let merge_base = git(worktree, &["merge-base", base, "HEAD"]).await?;
-            merge_base.success.then(|| merge_base.stdout.trim().to_string())
-        }
-        None => None,
-    };
-    let from = base.clone().unwrap_or_else(|| "HEAD".to_string());
-    let mut patch = git_ok(worktree, &["diff", "--no-color", "--no-ext-diff", &from]).await?;
+    let base = diff_base(worktree, base_ref).await?;
+    // With no commit at HEAD, git refuses to diff from it, and so there's no diff.
+    let from = base.as_ref().map_or("HEAD", CommitId::as_str);
+    let mut patch = git_ok(worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
 
     let untracked = git_ok(worktree, &["ls-files", "--others", "--exclude-standard", "-z"]).await?;
     let mut truncated = false;
@@ -270,4 +270,18 @@ pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff
         }
     }
     Ok(GitDiff { base_commit: base, patch, truncated })
+}
+
+/// The commit a diff is taken from, by its full object ID, so a client can read a file as it was there: the merge base
+/// with `base_ref`, or HEAD's commit when there's no base ref or git finds no merge base with it. `None` only when
+/// HEAD has no commit yet.
+async fn diff_base(worktree: &Path, base_ref: Option<&str>) -> Result<Option<CommitId>, ApiError> {
+    if let Some(base) = base_ref {
+        let merge_base = git(worktree, &["merge-base", base, "HEAD"]).await?;
+        if merge_base.success {
+            return Ok(Some(CommitId::from(merge_base.stdout.trim())));
+        }
+    }
+    let head = git(worktree, &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).await?;
+    Ok(head.success.then(|| CommitId::from(head.stdout.trim())))
 }

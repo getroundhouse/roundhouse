@@ -159,6 +159,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
                 world.worktree_texts.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::FileContents(FileContents::Text { text: text.clone() }))
         }
+        // No screen shows a file as a commit held it.
+        R::WorkspaceFileReadAt { .. } => Err(ApiError::new(ErrorCode::NotFound, "not in the base")),
         R::HubShutdown
         | R::HubShutdownIfIdle
         | R::HubConfigure { .. }

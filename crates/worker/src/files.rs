@@ -1,19 +1,23 @@
 //! A worktree's files, for a client to browse: tracked, new and ignored, what's in one of its folders, and what one
-//! file holds.
+//! file holds, now or in a commit.
 
 use std::collections::HashSet;
 use std::io::{self, Read as _};
 use std::path::{Component, Path};
 
+use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{FileContents, WorktreeFiles};
+use protocol::model::{CommitId, FileContents, WorktreeFiles};
 
 use crate::git::files::{Tracked, entries};
 
 /// Far more than a repository an agent works in usually has, and few enough that a client lays them out in a moment.
 const MAX_FILES: usize = 50_000;
 /// About a hundred thousand lines, more than anyone reads in a viewer, and small enough to send at once.
-const MAX_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
+/// Far bigger than a screenshot or a photo, since an image can't be shown in part, and still a third of a frame once
+/// it's base64, as [`protocol::frame::MAX_FRAME_BYTES`] caps it.
+const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
 /// How far into a file git looks for a NUL byte, which says it isn't text.
 const SNIFF_BYTES: usize = 8000;
 
@@ -130,20 +134,58 @@ pub(crate) fn read(worktree: &Path, path: &str) -> Result<FileContents, ApiError
     let failed = |e: io::Error| ApiError::new(ErrorCode::Worker, format!("couldn't read {path}: {e}"));
     let opened = std::fs::File::open(&file).map_err(failed)?;
     let size = |opened: &std::fs::File| opened.metadata().map(|metadata| metadata.len()).map_err(failed);
+    let mut data = Vec::new();
+    (&opened).take(length(SNIFF_BYTES)).read_to_end(&mut data).map_err(failed)?;
+    let most = most_sent(&data);
     let bytes = size(&opened)?;
-    if bytes > MAX_BYTES {
+    if bytes > most {
         return Ok(FileContents::TooBig { bytes });
     }
-    let mut data = Vec::new();
     // A byte past the limit, so a file that has grown since it was measured is caught rather than cut short.
-    (&opened).take(MAX_BYTES + 1).read_to_end(&mut data).map_err(failed)?;
-    if u64::try_from(data.len()).unwrap_or(u64::MAX) > MAX_BYTES {
+    (&opened).take((most + 1).saturating_sub(length(data.len()))).read_to_end(&mut data).map_err(failed)?;
+    if length(data.len()) > most {
         return Ok(FileContents::TooBig { bytes: size(&opened)? });
     }
-    if data[..data.len().min(SNIFF_BYTES)].contains(&0) {
-        return Ok(FileContents::Binary);
+    Ok(contents(data))
+}
+
+/// What the file at `path` held in `commit`, from the repository of the worktree at `worktree`, as [`read`] gives a
+/// file as it is now. A link isn't followed, so it holds the path it leads to.
+pub(crate) async fn read_at(worktree: &Path, commit: &CommitId, path: &str) -> Result<FileContents, ApiError> {
+    relative(path)?;
+    let blob = crate::git::blob::find(worktree, commit, path).await?;
+    // Only an image is sent past text's limit, and its start says whether it is one, so a big file that isn't is
+    // refused without reading the rest.
+    if blob.bytes > MAX_TEXT_BYTES && blob.bytes > most_sent(&blob.start(worktree, SNIFF_BYTES).await?) {
+        return Ok(FileContents::TooBig { bytes: blob.bytes });
     }
-    Ok(FileContents::Text { text: String::from_utf8_lossy(&data).into_owned() })
+    Ok(contents(blob.read(worktree).await?))
+}
+
+/// The most of a file that starts with `start` that a client is sent: an image's limit, or text's.
+fn most_sent(start: &[u8]) -> u64 {
+    if MediaType::sniff(&start[..start.len().min(SNIFF_BYTES)]).is_image() { MAX_IMAGE_BYTES } else { MAX_TEXT_BYTES }
+}
+
+/// What a file holds, from all of it: an image by what it starts with, and otherwise text, unless it's too big for
+/// text or has a NUL byte near its start.
+fn contents(data: Vec<u8>) -> FileContents {
+    let start = &data[..data.len().min(SNIFF_BYTES)];
+    let media_type = MediaType::sniff(start);
+    if media_type.is_image() {
+        return FileContents::Image { media_type, data: AttachmentBytes::new(data) };
+    }
+    if length(data.len()) > MAX_TEXT_BYTES {
+        return FileContents::TooBig { bytes: length(data.len()) };
+    }
+    if start.contains(&0) {
+        return FileContents::Binary;
+    }
+    FileContents::Text { text: String::from_utf8_lossy(&data).into_owned() }
+}
+
+fn length(bytes: usize) -> u64 {
+    u64::try_from(bytes).unwrap_or(u64::MAX)
 }
 
 /// Refuses a path that isn't written as a list gives it, names between single slashes: one that's absolute, or that

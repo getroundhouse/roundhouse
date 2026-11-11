@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
-    Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, CommitId, DiffSide,
+    HubSettingsChange, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -272,6 +272,19 @@ pub enum ClientRequest {
     /// than this refuses it as unsupported.
     WorkspaceFileRead {
         id: WorkspaceId,
+        path: String,
+    },
+    /// What the file at `path` held in `commit`, in the repository of the workspace's worktree, for showing what a
+    /// change replaced: the diff's `base_commit`, so it's the side the diff was taken from. `path` is relative, as
+    /// `WorkspaceFiles` gives it, and a link there isn't followed, so it reads as the path it leads to. Refused with
+    /// `InvalidRequest` when `commit` isn't a full object ID, such as a short one or a branch's name, when `path`
+    /// isn't written as a list gives it, and when the commit has a folder or a submodule there. Refused with
+    /// `NotFound` when the repository has no commit by that ID, or the commit has nothing at `path`. A hub older than
+    /// this refuses it as unsupported, rather than reading the file as it is now, which a field added to
+    /// `WorkspaceFileRead` would get.
+    WorkspaceFileReadAt {
+        id: WorkspaceId,
+        commit: CommitId,
         path: String,
     },
     /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
