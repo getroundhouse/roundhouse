@@ -6,6 +6,7 @@
 //! and read it again every time it came back into view. Kept here, a long message is read once, when its row
 //! loads, and its row is measured again as soon as that's done.
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -16,11 +17,13 @@ use gpui_kit::{App, AppContext as _, Entity, Subscription, WeakEntity};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
+use crate::images_apart::images_apart;
 use crate::item_key::ItemKey;
 use crate::rows::{tail_texts, texts_of};
 use crate::transcript::Transcript;
 
-/// The most the kit's text view reads before it first draws: its `MAX_SYNC_FULL_REPLACE_BYTES`.
+/// The most the kit's text view reads before it first draws: its `MAX_SYNC_FULL_REPLACE_BYTES`. It goes by the length
+/// of the text it's given.
 const AT_ONCE: usize = 4 * 1024;
 
 #[derive(Default)]
@@ -77,8 +80,9 @@ impl LongTexts {
         for row in rows.start..rows.end.min(log.row_count()) {
             let Row::Event(event) = log.row(row) else { continue };
             for (key, text) in texts_of(event) {
-                if text.len() > AT_ONCE || self.held.contains_key(&key) {
-                    self.hold(key, Some(event.seq), text, this, cx);
+                let (drawn, too_long) = as_drawn(text);
+                if too_long || self.held.contains_key(&key) {
+                    self.hold(key, Some(event.seq), &drawn, this, cx);
                 }
             }
         }
@@ -88,12 +92,12 @@ impl LongTexts {
     /// it's recorded and it doesn't go blank as it grows past what's read at once.
     fn hold_streaming(&mut self, tail: &Tail, this: &WeakEntity<Transcript>, cx: &mut App) {
         for (key, text) in tail_texts(tail) {
-            self.hold(key, None, text, this, cx);
+            self.hold(key, None, &images_apart(text), this, cx);
         }
     }
 
-    /// Keeps `text` under `key`, or brings what's kept there up to it. `seq` is the event it's recorded in, if it
-    /// is yet.
+    /// Keeps `text` under `key`, or brings what's kept there up to it. `text` is as it's drawn, with images one after
+    /// another apart, and `seq` is the event it's recorded in, if it is yet.
     fn hold(&mut self, key: ItemKey, seq: Option<Seq>, text: &str, this: &WeakEntity<Transcript>, cx: &mut App) {
         if let Some(held) = self.held.get(&key) {
             held.seq.set(seq.or(held.seq.get()));
@@ -118,5 +122,32 @@ impl LongTexts {
             }
         });
         self.held.insert(key, Held { state, seq, _watch: watch });
+    }
+}
+
+/// `text` as the kit's text view is given it, with images one after another apart, as `crate::images_apart` says, and
+/// whether it's longer than the view reads at once. Images apart make a text longer than it was written, and the view
+/// goes by what it's given, so this does too: a text written a little under [`AT_ONCE`] can be over it as it's drawn.
+fn as_drawn(text: &str) -> (Cow<'_, str>, bool) {
+    let drawn = images_apart(text);
+    let too_long = drawn.len() > AT_ONCE;
+    (drawn, too_long)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AT_ONCE, as_drawn};
+
+    #[test]
+    fn a_text_is_long_by_its_length_with_its_images_apart() {
+        let images = "\n\n![Before](before.png)\n![After](after.png)";
+        let written = "x".repeat(AT_ONCE - images.len()) + images;
+        let plain = "x".repeat(AT_ONCE);
+
+        let (drawn, too_long) = as_drawn(&written);
+
+        assert_eq!((written.len(), drawn.len()), (AT_ONCE, AT_ONCE + 1));
+        assert!(too_long, "a text only longer than what's read at once with its images apart is long");
+        assert!(!as_drawn(&plain).1, "a text of exactly what's read at once is read at once");
     }
 }

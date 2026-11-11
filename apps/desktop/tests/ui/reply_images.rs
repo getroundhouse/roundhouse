@@ -58,3 +58,21 @@ fn an_image_pointed_to_again_after_it_changed_shows_as_it_is_then(cx: &mut TestA
     assert!(drawn[1] >= px(300.), "the second reply shows the file as it is now, not as it was: {drawn:?}");
     assert_eq!(drawn[0], first, "the first reply keeps the picture it showed");
 }
+
+/// Each on a line of its own, with nothing else between them, as an agent shows a before and an after.
+#[gpui_kit::test]
+fn images_one_after_another_are_each_drawn_as_tall_as_they_are(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let workspace = ui.new_workspace();
+    for name in ["before.png", "after.png"] {
+        write_png(&ui.worktree(&workspace).join(name), 100);
+    }
+
+    ui.input("say:![Before](before.png)\n![After](after.png)");
+    ui.press("enter");
+
+    ui.wait("both pictures, one under the other", |ui| replies(ui).first().is_some_and(|height| *height >= px(200.)));
+}
