@@ -32,6 +32,17 @@ pub(crate) fn draw<V: Render>(
     size: Size<Pixels>,
     view: impl FnOnce(&mut Context<V>) -> V + 'static,
 ) -> Picture {
+    draw_at(cx, size, None, view)
+}
+
+/// As [`draw`], and at `scale` device pixels to each of the window's where it's given, rather than at the app's. The
+/// picture stays as big as it is at the app's scale, with what's drawn at a smaller scale in its top left corner.
+pub(crate) fn draw_at<V: Render>(
+    cx: &mut HeadlessAppContext,
+    size: Size<Pixels>,
+    scale: Option<f32>,
+    view: impl FnOnce(&mut Context<V>) -> V + 'static,
+) -> Picture {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(0.), px(0.)), size))),
         focus: false,
@@ -39,6 +50,9 @@ pub(crate) fn draw<V: Render>(
         ..Default::default()
     };
     let handle = cx.update(|cx| cx.open_window(options, |_, cx| cx.new(view))).unwrap();
+    if let Some(scale) = scale {
+        cx.update_window(handle.into(), |_, window, _| window.set_scale_factor(scale)).unwrap();
+    }
     let mut frame = || {
         cx.run_until_parked();
         cx.update_window(handle.into(), |_, window, cx| window.render_frame(cx)).unwrap();

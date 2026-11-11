@@ -16,7 +16,7 @@ use gpui_kit::{
     ParentElement, Pixels, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
     size,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, LineText, Off as _, Placed};
 use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
@@ -153,8 +153,9 @@ pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> i
     let empty = rows.is_empty();
     let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); rows.len()]);
     // A moving mark builds this view again on every frame, so only the rows on screen are built.
-    let list = v_virtual_list(cx.entity(), "home-rows", sizes, move |app, range, _, cx| {
-        range.map(|ix| row(app, &app.workspaces[rows[ix]], cx)).collect::<Vec<_>>()
+    let list = v_virtual_list(cx.entity(), "home-rows", sizes, move |app, range, window, cx| {
+        let line_text = LineText::new(window, cx);
+        range.map(|ix| row(app, &app.workspaces[rows[ix]], &line_text, cx)).collect::<Vec<_>>()
     });
     v_flex()
         .id("home-page")
@@ -167,8 +168,8 @@ pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> i
 
 /// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back, which says so
 /// while it does. Clicking the rest of the row shows the workspace, as its row in the sidebar does, or brings an
-/// archived one back.
-fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
+/// archived one back. The repository and what the row says are smaller, on the name's baseline.
+fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
     let theme = cx.theme();
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
@@ -187,25 +188,24 @@ fn row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyEl
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(look::mark(signal, work, look::Size::Inline, cx))
         .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
+            line_text
+                .body
+                .set(div().flex_1().min_w_0().truncate())
                 // As in the sidebar, what needs a look stands out, and everything else recedes.
                 .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(workspace.label().to_string()),
         )
-        .child(div().flex_none().w(REPO_WIDTH).truncate().text_xs().text_color(muted).child(repo))
-        .child(row_button(app, workspace, cx))
+        .child(line_text.small.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
+        .child(row_button(app, workspace, &line_text.small, cx))
         .test_support()
         .into_any_element()
 }
 
 /// The button that archives the workspace or brings it back, or what the row says in its place while it does.
-fn row_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
+fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Context<AppView>) -> AnyElement {
     if let Some(waiting) = app.busy.doing(&workspace.id) {
-        return doing(format!("home-doing-{}", workspace.id), waiting).into_any_element();
+        return doing(format!("home-doing-{}", workspace.id), waiting, small).into_any_element();
     }
     let archived = workspace.status == WorkspaceStatus::Archived;
     let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };

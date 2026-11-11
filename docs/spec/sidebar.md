@@ -17,7 +17,7 @@
 - **A sidebar dragged to within 8px of its usual width takes it,** which is 290px for this one and 432px for the sidebar of changes, so the usual layout is easy to get back to.
 - **A Mac's trackpad taps as the edge takes its usual width,** as Keynote's does when what's dragged lines up with a guide, so the place can be felt without looking. It taps once as the edge arrives, and not again while the pointer moves on within reach of it, or as the edge leaves. A mouse feels nothing, and macOS decides from the trackpad, accessibility settings and the person's preferences whether it plays. *Unconfirmed.*
 
-**The sidebar hidden, with the workspace's header starting after the button that shows it again.**
+**The sidebar hidden, with the workspace's header starting after the button that shows it again.** *Unconfirmed.*
 
 ![The sidebar hidden](screens/sidebar-hidden.png)
 

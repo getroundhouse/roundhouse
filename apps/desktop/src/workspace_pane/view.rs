@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, LineText, Off as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -159,7 +159,13 @@ impl WorkspacePane {
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
     /// its bar's action instead. `inset` is how far the workspace's name starts from the header's left end, to clear
     /// the window's buttons while the sidebar on the left is hidden.
-    fn header(&self, sidebar: Sidebar, inset: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
+    fn header(
+        &self,
+        sidebar: Sidebar,
+        inset: Pixels,
+        line_text: &LineText,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let border = cx.theme().border;
         let controls = match sidebar {
             Sidebar::Open => None,
@@ -177,7 +183,7 @@ impl WorkspacePane {
             .gap_2()
             .border_b_1()
             .border_color(border)
-            .child(self.heading(cx))
+            .child(self.heading(line_text, cx))
             .children(controls)
             .child(
                 Button::new("toggle-diff")
@@ -194,51 +200,29 @@ impl WorkspacePane {
     }
 
     /// What the workspace is called, and the branch it's on and where that started. When they don't fit, the words
-    /// give way and end in an ellipsis, so the button beside the title is never pushed out of view.
-    fn heading(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (mono, muted) = (theme.mono_font_family.clone(), theme.muted_foreground);
+    /// give way and end in an ellipsis, so the button beside the title is never pushed out of view. The branch and
+    /// where it started are smaller, and the branch is in the code font, so they're set on the title's baseline, as
+    /// words on one line are, rather than centred, which would leave them sitting higher.
+    fn heading(&self, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
+        let muted = cx.theme().muted_foreground;
+        let LineText { body, small, code } = line_text;
+        let words = || div().min_w_0().overflow_hidden().text_ellipsis();
         let title = self.workspace.label().to_string();
+        let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
+        let branch = words().text_color(muted).child(self.workspace.branch.clone());
+        let base = words().text_color(look::faint());
+        let base = base.child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?")));
         h_flex()
             .flex_1()
             .min_w_0()
             .gap_2()
             .overflow_hidden()
             .whitespace_nowrap()
-            .child(
-                div()
-                    .id("workspace-title")
-                    .role(gpui_kit::Role::Heading)
-                    .aria_label(title.clone())
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(title)
-                    .test_support(),
-            )
+            .child(body.set(title).font_weight(FontWeight::MEDIUM).test_support())
             .child(div().flex_none().child(self.regenerate_title_button(cx)))
-            .child(div().flex_none().text_color(look::faint()).child("/"))
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_xs()
-                    .font_family(mono)
-                    .text_color(muted)
-                    .child(self.workspace.branch.clone()),
-            )
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_xs()
-                    .text_color(look::faint())
-                    .child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?"))),
-            )
+            .child(body.set(div().flex_none().text_color(look::faint()).child("/")))
+            .child(code.set(branch))
+            .child(small.set(base))
     }
 
     /// Titles the workspace again from what's been asked in it, beside the title it replaces. It spins while the hub
@@ -262,12 +246,14 @@ impl WorkspacePane {
 impl Render for WorkspacePane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.keep_focus_drawn(window, cx);
-        let changes = self.changes_sidebar(cx);
+        // Once for the frame, for everything in the pane that mixes text.
+        let line_text = LineText::new(window, cx);
+        let changes = self.changes_sidebar(&line_text, cx);
         // What the header says goes by what's chosen, from the moment it is, rather than by how far the sidebar has
         // slid. Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
         let sidebar = if self.diff.is_some() { Side::Right.chosen(cx).sidebar } else { Sidebar::Hidden };
         let inset = sides::header_inset(cx);
-        let header = self.header(sidebar, inset, cx).into_any_element();
+        let header = self.header(sidebar, inset, &line_text, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let tab =
             self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {

@@ -5,16 +5,15 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, WeakEntity};
+use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
 use protocol::model::Seq;
 use serde_json::Value;
 
+use super::Shared;
 use super::around::{Answer, Reply, Subagent};
 use crate::calls::{ToolCall, count};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::linked_images::LinkedImages;
-use crate::transcript::Transcript;
 
 mod advisor;
 pub(super) mod agent;
@@ -29,7 +28,8 @@ mod web;
 
 use super::line::{self, Line, Part};
 
-/// Where a call is drawn and whether it's open, which its line needs to open and close it.
+/// Where a call is drawn and whether it's open, which its line needs to open and close it, and what every row is drawn
+/// with, which a subagent's work, drawn in its call, needs too.
 pub(super) struct Toggle<'a> {
     pub(super) seq: Seq,
     pub(super) key: &'a ItemKey,
@@ -37,9 +37,7 @@ pub(super) struct Toggle<'a> {
     pub(super) open: bool,
     /// For a command: whether it's shown whole, as [`crate::folds::Fold::Command`] says.
     pub(super) whole: bool,
-    pub(super) this: &'a WeakEntity<Transcript>,
-    /// The images text can point to, for a subagent's work, which is drawn in its call.
-    pub(super) linked: &'a LinkedImages,
+    pub(super) shared: &'a Shared,
 }
 
 /// A call's line, with its result under it once it's back, as its kind draws it. Only a tool the API runs itself is

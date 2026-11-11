@@ -317,22 +317,21 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
-        let (this, wanted) = (cx.weak_entity(), self.session.clone());
+        let (model, session, wanted) = (self.model.clone(), self.session.clone(), self.session.clone());
+        let line_text = look::LineText::new(window, cx);
+        let shared =
+            crate::rows::Shared { this: cx.weak_entity(), linked: self.linked.clone(), line_text: line_text.clone() };
         // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
         // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
         let tail = self.list.row_count().saturating_sub(1);
         let rows = self.list.render(
             ElementId::Name(self.list_id.clone().into()),
-            move |ix, _, cx| {
-                let item = crate::rows::Item { ix, tail };
-                crate::rows::render_row(&model, &session, &this, &linked, item, cx)
-            },
+            move |ix, _, cx| crate::rows::render_row(&model, &session, &shared, crate::rows::Item { ix, tail }, cx),
             move |row| wanted.want(row),
             window,
             cx,
         );
-        self.with_outline(rows.into_any_element(), window, cx)
+        self.with_outline(rows.into_any_element(), line_text, window, cx)
     }
 }
 

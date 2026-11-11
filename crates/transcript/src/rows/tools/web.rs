@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, LineText};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
@@ -49,11 +49,10 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
         .part(Part::Pill(search.query.to_string().into()))
         .part(results.as_ref().map(|results| Part::Note(results.summary().into())));
     let opened = results.filter(|_| toggle.open).map(|results| {
-        let links = results
-            .links
-            .iter()
-            .enumerate()
-            .map(|(i, link)| link_row(toggle.key.element(&format!("link-{i}")), link, cx));
+        let links =
+            results.links.iter().enumerate().map(|(i, link)| {
+                link_row(toggle.key.element(&format!("link-{i}")), link, &toggle.shared.line_text, cx)
+            });
         let summary = Some(results.summary).filter(|s| !s.is_empty());
         block::frame(cx)
             .when(!results.links.is_empty(), |d| {
@@ -69,8 +68,8 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
     line::drawn(line, answer, opened, toggle, cx)
 }
 
-/// A page it found: its title, then its site, faint. Clicking it opens the page.
-fn link_row(id: ElementId, link: &Link, cx: &App) -> AnyElement {
+/// A page it found: its title, then its site, faint and smaller, on the title's baseline. Clicking it opens the page.
+fn link_row(id: ElementId, link: &Link, line_text: &LineText, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let (url, title): (SharedString, SharedString) = (link.url.clone().into(), link.title.clone().into());
     let hover = theme.muted_foreground.opacity(0.12);
@@ -84,7 +83,7 @@ fn link_row(id: ElementId, link: &Link, cx: &App) -> AnyElement {
         .hand()
         .hover(move |d| d.bg(hover))
         .on_click(move |_, _, cx| cx.open_url(&url))
-        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_sm().child(title))
-        .child(div().flex_none().text_xs().text_color(look::faint()).child(site(&link.url).to_string()))
+        .child(line_text.body.set(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title)))
+        .child(line_text.small.set(div().flex_none().text_color(look::faint()).child(site(&link.url).to_string())))
         .into_any_element()
 }

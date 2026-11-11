@@ -3,10 +3,12 @@
 //! `gallery/screens.rs` and `gallery/tool_screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. What each
 //! screen looks like now goes in `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and
 //! checked the same way, in `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark.
+//! Text of each kind is drawn the same way at several scales, in `gallery/baselines.rs`, to check it lines up.
 
 #![cfg(test)]
 
 mod approved;
+mod baselines;
 mod capture;
 mod chats;
 mod events;
@@ -62,6 +64,22 @@ fn every_state_of_the_mark_looks_as_approved() {
     let picture = mark_states::draw(&text_system);
 
     report(&look_at(mark_states::NAME, mark_states::SPEC, &picture));
+}
+
+#[test]
+fn text_of_every_kind_sits_on_body_texts_baseline_at_every_scale() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+    let mut problems = Vec::new();
+
+    for scale in baselines::SCALES {
+        for (row, [body, small, code]) in baselines::bottoms(&text_system, scale).into_iter().enumerate() {
+            if (small, code) != (body, body) {
+                problems.push(format!("at {scale}x, row {row}: body ends on {body}, small on {small}, code on {code}"));
+            }
+        }
+    }
+
+    assert!(problems.is_empty(), "text off body text's baseline:\n{}", problems.join("\n"));
 }
 
 #[test]

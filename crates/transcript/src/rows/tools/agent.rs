@@ -64,7 +64,7 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
 
 /// The button that asks for the subagent's work in the subagent tab.
 fn open_tab(call: ToolUseId, title: &str, toggle: &Toggle) -> AnyElement {
-    let (this, title) = (toggle.this.clone(), title.to_string());
+    let (this, title) = (toggle.shared.this.clone(), title.to_string());
     Button::new(ElementId::Name(format!("open-subagent/{call}").into()))
         .ghost()
         .xsmall()
@@ -107,7 +107,7 @@ pub(in crate::rows) fn report_block(
 /// Kept apart: the blocks the subagent tab starts and ends with, and its newest call between them while it works.
 fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Toggle, cx: &App) -> AnyElement {
     let latest = subagent.latest.as_deref().and_then(|(block, drawing)| {
-        let drawn = render_block(toggle.seq, block, drawing, toggle.this, toggle.linked, cx)?;
+        let drawn = render_block(toggle.seq, block, drawing, toggle.shared, cx)?;
         Some(v_flex().child(div().text_xs().text_color(look::faint()).child("Working on")).child(drawn))
     });
     let report = match &subagent.record {
@@ -121,7 +121,9 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .gap_2()
         .children(prompt_block(call, toggle, cx))
         .children(latest)
-        .when_some(report, |d, report| d.child(report_block(toggle.key, report, Some((toggle.linked, toggle.seq)), cx)))
+        .when_some(report, |d, report| {
+            d.child(report_block(toggle.key, report, Some((&toggle.shared.linked, toggle.seq)), cx))
+        })
         .into_any_element()
 }
 
@@ -141,7 +143,7 @@ fn gathered(
         let drawn = blocks_of(&event.body)
             .iter()
             .zip(&around.blocks)
-            .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.this, toggle.linked, cx));
+            .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.shared, cx));
         work.extend(drawn);
     }
     // A subagent run in the foreground reports in its call's result. Its own words say the same, when they came.
@@ -161,7 +163,7 @@ fn gathered(
         .children(work)
         .when_some(report, |d, report| {
             // A call's result names no images, so only one written into the report is drawn.
-            d.child(agent_text(toggle.key, report, None).image_source(toggle.linked.resolver(toggle.seq, &[])))
+            d.child(agent_text(toggle.key, report, None).image_source(toggle.shared.linked.resolver(toggle.seq, &[])))
         })
         .into_any_element()
 }

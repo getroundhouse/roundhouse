@@ -69,7 +69,7 @@ fn shown(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
     // Whether it's cut off is only known once it's laid out, so a press asks then.
     let layout = styled.layout().clone();
     let pressable = move || several_lines || if whole { wraps(&layout) } else { layout.text() != text.as_ref() };
-    let (this, key, seq) = (toggle.this.clone(), toggle.key.clone(), toggle.seq);
+    let (this, key, seq) = (toggle.shared.this.clone(), toggle.key.clone(), toggle.seq);
     let id = toggle.key.element("command");
     let part = div()
         .id(id.clone())

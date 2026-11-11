@@ -13,7 +13,7 @@ use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
     SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
-use look::Hand as _;
+use look::{Hand as _, LineText, Placed};
 
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::review::Review;
@@ -93,8 +93,9 @@ impl Changes {
     }
 
     /// The rows in `range`, for the list to draw.
-    fn draw_rows(&mut self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn draw_rows(&mut self, range: Range<usize>, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (open, layout) = (self.showing.clone(), layout(cx));
+        let line_text = LineText::new(window, cx);
         let rows: Vec<Row> = self.rows.get(range).map(<[Row]>::to_vec).unwrap_or_default();
         // Only the files in view, rather than every file the branch changes.
         let files: Vec<Option<DiffFile>> = {
@@ -125,7 +126,7 @@ impl Changes {
                 Row::File { depth, .. } => {
                     let file = file?;
                     let showing = open.as_ref() == Some(file.path());
-                    Some(file_row(&file, depth, layout, showing, cx))
+                    Some(file_row(&file, depth, layout, showing, &line_text, cx))
                 }
             })
             .collect()
@@ -173,13 +174,15 @@ impl Render for Changes {
         let body = match changed {
             None => placeholder("Loading…", muted),
             Some(0) => placeholder("No changes yet", muted),
-            Some(_) => {
-                uniform_list("changed-files", self.rows.len(), cx.processor(|t, range, _, cx| t.draw_rows(range, cx)))
-                    .flex_1()
-                    .w_full()
-                    .py_1()
-                    .into_any_element()
-            }
+            Some(_) => uniform_list(
+                "changed-files",
+                self.rows.len(),
+                cx.processor(|t, range, window, cx| t.draw_rows(range, window, cx)),
+            )
+            .flex_1()
+            .w_full()
+            .py_1()
+            .into_any_element(),
         };
         v_flex()
             .size_full()
@@ -201,17 +204,17 @@ impl Render for Changes {
 
 /// How many lines the files add and remove, and a way to change the layout, for the right end of the tabs above the
 /// sidebar while Changes shows.
-pub(crate) fn controls(changes: &Entity<Changes>, cx: &App) -> AnyElement {
+pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> AnyElement {
     let files = changes.read(cx).review.read(cx).files.iter().flatten();
     let (added, removed) =
         files.fold((0, 0), |(added, removed), file| (added + file.additions(), removed + file.deletions()));
     let tree = layout(cx) == Layout::Tree;
-    let mono = cx.theme().mono_font_family.clone();
     let changes = changes.downgrade();
     h_flex()
         .flex_none()
         .gap_2()
-        .child(h_flex().flex_none().gap_1p5().text_xs().font_family(mono).children(counts(added, removed, cx)))
+        // On the baseline of the tabs' names beside it.
+        .child(code.set(h_flex().flex_none().gap_1p5().children(counts(added, removed, cx))))
         .child(
             Button::new("changes-layout")
                 .hand()
@@ -254,13 +257,23 @@ fn status_icon(status: DiffFileStatus, cx: &App) -> Icon {
     Icon::new(icon).xsmall().text_color(color)
 }
 
-fn file_row(file: &DiffFile, depth: usize, layout: Layout, showing: bool, cx: &mut Context<Changes>) -> AnyElement {
-    let theme = cx.theme();
-    let (muted, mono) = (theme.muted_foreground, theme.mono_font_family.clone());
+/// A changed file's row: where it is, then its name, and at the right end how many lines it adds and removes, on the
+/// name's baseline, and how it changed.
+fn file_row(
+    file: &DiffFile,
+    depth: usize,
+    layout: Layout,
+    showing: bool,
+    line_text: &LineText,
+    cx: &mut Context<Changes>,
+) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
     let path = file.path().clone();
     let (folders, name) = split(&path);
     let (folders, name) = (folders.to_string(), name.to_string());
-    let label = h_flex()
+    let label = line_text
+        .body
+        .set(h_flex())
         .flex_1()
         .min_w_0()
         .overflow_hidden()
@@ -274,7 +287,9 @@ fn file_row(file: &DiffFile, depth: usize, layout: Layout, showing: bool, cx: &m
     let counts = counts(file.additions(), file.deletions(), cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
-        .child(h_flex().flex_none().gap_1p5().text_xs().font_family(mono).children(counts).child(status))
+        .child(
+            h_flex().flex_none().gap_1p5().child(line_text.code.set(h_flex().gap_1p5().children(counts))).child(status),
+        )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
         .test_support()
         .into_any_element()

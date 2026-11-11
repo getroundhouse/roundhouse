@@ -8,9 +8,9 @@ use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px, relative,
+    AnyElement, App, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, LineText};
 
 /// As tall as the chat tabs, so the two rows of tabs line up across the window.
 pub(crate) const HEIGHT: Pixels = px(40.);
@@ -109,6 +109,7 @@ pub(crate) fn bar(
     changed: Option<usize>,
     controls: Option<AnyElement>,
     on_pick: impl Fn(&SidebarTab, &mut Window, &mut App) + 'static,
+    line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
     let on_pick = Rc::new(on_pick);
@@ -116,7 +117,8 @@ pub(crate) fn bar(
     let tabs = [(SidebarTab::AllFiles, "All files", None), (SidebarTab::Changes, "Changes", count)].into_iter().map(
         |(tab, label, count)| {
             let on_pick = on_pick.clone();
-            tab_element(tab, label, count, chosen == Some(tab), move |window, cx| on_pick(&tab, window, cx), cx)
+            let on_click = move |window: &mut Window, cx: &mut App| on_pick(&tab, window, cx);
+            tab_element(tab, label, count, chosen == Some(tab), on_click, line_text, cx)
         },
     );
     h_flex()
@@ -142,6 +144,7 @@ fn tab_element(
     count: Option<String>,
     selected: bool,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
+    line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
     let muted = cx.theme().muted_foreground;
@@ -161,12 +164,11 @@ fn tab_element(
                 .h_full()
                 .px_3()
                 .gap_1p5()
-                .text_sm()
-                .line_height(relative(1.25))
                 .when(!selected, |d| d.text_color(muted))
                 .on_click(move |_, window, cx| on_click(window, cx))
-                .child(label)
-                .when_some(count, |d, count| d.child(div().text_xs().text_color(muted).child(count))),
+                // Its count is smaller, so it's set on the name's baseline.
+                .child(line_text.body.set(div().child(label)))
+                .when_some(count, |d, count| d.child(line_text.small.set(div().text_color(muted).child(count)))),
         )
         .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline())))
         .into_any_element()

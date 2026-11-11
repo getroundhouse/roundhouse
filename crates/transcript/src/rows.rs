@@ -12,6 +12,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div,
     px,
 };
+use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
@@ -73,16 +74,23 @@ pub(crate) struct Item {
     pub(crate) tail: usize,
 }
 
+/// What every row is drawn with: the transcript it's in, the images its text can point to, and where each kind of
+/// text on a line goes. Made once for each frame, since it's the same for every row.
+pub(crate) struct Shared {
+    pub(crate) this: WeakEntity<Transcript>,
+    pub(crate) linked: LinkedImages,
+    pub(crate) line_text: LineText,
+}
+
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
-    this: &WeakEntity<Transcript>,
-    linked: &LinkedImages,
+    shared: &Shared,
     item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let Item { ix, tail } = item;
-    let drawn = render_row_inner(model, session, this, linked, item, cx)?;
+    let drawn = render_row_inner(model, session, shared, item, cx)?;
     let m = model.borrow();
     if m.alone.is_none() {
         return Some(column(drawn).into_any_element());
@@ -108,8 +116,7 @@ enum Shown {
 fn render_row_inner(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
-    this: &WeakEntity<Transcript>,
-    linked: &LinkedImages,
+    shared: &Shared,
     item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -136,12 +143,12 @@ fn render_row_inner(
             render_tail(&tail, &m.at_work, &m.long_texts, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
-            attachments::fetch_missing(model, this, Some(event.seq), around.images(), cx);
-            render_event(&event, &around, this, linked, cx)
+            attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
+            render_event(&event, &around, shared, cx)
         }
         Shown::Pending(prompt, carried) => {
             let key = ItemKey::Prompt(prompt.client_msg_id);
-            prompt_bubble(&key, &prompt.text, None, &carried, Progress::Sending, this, cx)
+            prompt_bubble(&key, &prompt.text, None, &carried, Progress::Sending, &shared.this, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => return None,
@@ -218,14 +225,8 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
     }
 }
 
-fn render_event(
-    event: &SessionEvent,
-    around: &Around,
-    this: &WeakEntity<Transcript>,
-    linked: &LinkedImages,
-    cx: &App,
-) -> AnyElement {
-    let (seq, body) = (event.seq, &event.body);
+fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App) -> AnyElement {
+    let (seq, body, this) = (event.seq, &event.body, &shared.this);
     let approval_open = around.approval_open;
     match body {
         // Asked in the composer's place while it waits, so it's drawn here once it's answered.
@@ -243,7 +244,7 @@ fn render_event(
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, this, linked, cx))
+                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, shared, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -300,16 +301,15 @@ fn render_block(
     seq: Seq,
     block: &ContentBlock,
     drawing: &BlockAround,
-    this: &WeakEntity<Transcript>,
-    linked: &LinkedImages,
+    shared: &Shared,
     cx: &App,
 ) -> Option<AnyElement> {
     let key = &drawing.key;
-    let toggle = Toggle { seq, key, fold: drawing.fold, open: drawing.open, whole: drawing.whole, this, linked };
+    let toggle = Toggle { seq, key, fold: drawing.fold, open: drawing.open, whole: drawing.whole, shared };
     Some(match block {
-        ContentBlock::Text { text, images } => {
-            agent_text(key, text, drawing.text.as_ref()).image_source(linked.resolver(seq, images)).into_any_element()
-        }
+        ContentBlock::Text { text, images } => agent_text(key, text, drawing.text.as_ref())
+            .image_source(shared.linked.resolver(seq, images))
+            .into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These show as cards when they ask, with everything in them.

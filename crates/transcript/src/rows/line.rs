@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::Hand as _;
+use look::{Hand as _, LineText};
 
 use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
@@ -87,9 +87,10 @@ impl Line {
     pub(super) fn render(self, toggle: &Toggle, cx: &App) -> AnyElement {
         let theme = cx.theme();
         let (this, key, seq, fold, open) =
-            (toggle.this.clone(), toggle.key.clone(), toggle.seq, toggle.fold, toggle.open);
+            (toggle.shared.this.clone(), toggle.key.clone(), toggle.seq, toggle.fold, toggle.open);
         let hover = theme.muted;
-        let parts = self.parts.into_iter().map(|part| part.render(cx));
+        let line_text = &toggle.shared.line_text;
+        let parts = self.parts.into_iter().map(|part| part.render(line_text, cx));
         h_flex()
             .id(toggle.key.element("call"))
             .group(GROUP)
@@ -112,7 +113,11 @@ impl Line {
                 d.hoverable_tooltip(move |window, cx| preview(window, cx))
             })
             .child(icon(self.icon, open, cx))
-            .child(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title))
+            .child(
+                line_text
+                    .body
+                    .set(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title)),
+            )
             .children(parts)
             .when_some(self.action, |d, action| {
                 let hidden = |d: Div| d.invisible().group_hover(GROUP, Styled::visible);
@@ -129,7 +134,8 @@ impl Part {
         Part::Summary(start(text).into())
     }
 
-    fn render(self, cx: &App) -> AnyElement {
+    /// Code, a note, a summary and counts go on the title's baseline. A pill and a chip are shapes, so they're centred.
+    fn render(self, line_text: &LineText, cx: &App) -> AnyElement {
         let theme = cx.theme();
         match self {
             Part::Pill(text) => pill(text, theme.muted_foreground, theme.secondary, cx),
@@ -143,30 +149,26 @@ impl Part {
                 .text_color(theme.muted_foreground)
                 .child(text)
                 .into_any_element(),
-            Part::Code(text) => div()
-                .min_w_0()
-                .overflow_hidden()
-                .text_ellipsis()
-                .font_family(theme.mono_font_family.clone())
-                .text_size(theme.mono_font_size)
-                .text_color(look::faint())
-                .child(text)
+            Part::Code(text) => line_text
+                .code
+                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(look::faint()).child(text))
                 .into_any_element(),
-            Part::Note(text) => div().flex_none().text_color(look::faint()).child(text).into_any_element(),
-            Part::Summary(text) => div()
-                .min_w_0()
-                .overflow_hidden()
-                .text_ellipsis()
-                .text_color(look::faint())
-                .child(text)
+            Part::Note(text) => {
+                line_text.body.set(div().flex_none().text_color(look::faint()).child(text)).into_any_element()
+            }
+            Part::Summary(text) => line_text
+                .body
+                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(look::faint()).child(text))
                 .into_any_element(),
-            Part::Counts(Counts { added, removed }) => h_flex()
-                .flex_none()
-                .gap_1()
-                .font_family(theme.mono_font_family.clone())
-                .text_size(theme.mono_font_size)
-                .child(div().text_color(theme.success).child(format!("+{added}")))
-                .child(div().text_color(theme.danger).child(format!("−{removed}")))
+            Part::Counts(Counts { added, removed }) => line_text
+                .code
+                .set(
+                    h_flex()
+                        .flex_none()
+                        .gap_1()
+                        .child(div().text_color(theme.success).child(format!("+{added}")))
+                        .child(div().text_color(theme.danger).child(format!("−{removed}"))),
+                )
                 .into_any_element(),
         }
     }

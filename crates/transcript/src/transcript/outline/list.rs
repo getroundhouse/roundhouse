@@ -11,7 +11,7 @@ use gpui_kit::{
     ListState, ParentElement, Pixels, Role, SharedString, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, div, list, px,
 };
-use look::Hand as _;
+use look::{Hand as _, LineText};
 use protocol::model::PromptLine;
 
 use super::{Jumps, Prompt};
@@ -87,6 +87,7 @@ pub(super) fn draw(
     rows: &Rows,
     jumps: Jumps,
     on_hover: impl Fn(&bool, &mut Window, &mut App) + 'static,
+    line_text: LineText,
     cx: &App,
 ) -> AnyElement {
     let theme = cx.theme();
@@ -94,7 +95,7 @@ pub(super) fn draw(
     let rows = list(rows.state.clone(), move |ix, _, cx| {
         div()
             .when(ix + 1 < count, |d| d.pb(GAP))
-            .child(row(ix, &lines[ix], ix == being_read, &jumps, cx))
+            .child(row(ix, &lines[ix], ix == being_read, &jumps, &line_text, cx))
             .into_any_element()
     })
     .with_sizing_behavior(ListSizingBehavior::Infer)
@@ -123,28 +124,23 @@ pub(super) fn draw(
         .into_any_element()
 }
 
-/// The prompt `ix` places from the first: its number, and up to two lines of it, quieter than the one being read.
-fn row(ix: usize, prompt: &Prompt, lit: bool, jumps: &Jumps, cx: &App) -> AnyElement {
+/// The prompt `ix` places from the first: its number, smaller, on the baseline of its first line, and up to two lines
+/// of it, quieter than the one being read.
+fn row(ix: usize, prompt: &Prompt, lit: bool, jumps: &Jumps, line_text: &LineText, cx: &App) -> AnyElement {
     let row = prompt.row;
     let theme = cx.theme();
     let fill = theme.secondary_hover;
     let label = label(&prompt.line);
-    let number = div()
-        .w(NUMBER_WIDTH)
-        .flex_none()
-        .pt(px(2.))
-        .text_xs()
-        .text_right()
-        .text_color(look::faint())
-        .child((ix + 1).to_string());
+    let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(look::faint()).child((ix + 1).to_string());
+    let number = line_text.small.set(number);
     let text = div()
         .flex_1()
         .min_w_0()
-        .text_sm()
         .line_clamp(2)
         .text_ellipsis()
         .text_color(if lit { theme.foreground } else { theme.muted_foreground })
         .child(label.clone());
+    let text = line_text.body.set(text);
     div()
         .id(ElementId::Name(format!("outline-prompt/{row}").into()))
         .role(Role::ListBoxOption)
