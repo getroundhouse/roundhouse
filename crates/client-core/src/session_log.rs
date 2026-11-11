@@ -117,10 +117,12 @@ impl SessionLog {
     }
 
     /// Open approvals among what's loaded. An approval blocks its agent, so an open one is always
-    /// near the tail, which is always loaded.
+    /// near the tail, which is always loaded. Only the events that run unbroken back from the newest
+    /// count, since an older request's answer can be in a page that isn't loaded, such as when a page
+    /// is fetched for scrolling back.
     pub fn open_approvals(&self) -> Vec<&SessionEvent> {
         let mut open: Vec<&SessionEvent> = Vec::new();
-        for event in self.events.values() {
+        for event in self.unbroken_from_newest() {
             match &event.body {
                 EventBody::ApprovalRequested { .. } => open.push(event),
                 EventBody::ApprovalResolved { approval_id, .. } => open.retain(
@@ -146,6 +148,18 @@ impl SessionLog {
             }
         }
         open
+    }
+
+    /// The loaded events with every event after them loaded too, oldest first.
+    fn unbroken_from_newest(&self) -> impl Iterator<Item = &SessionEvent> {
+        let mut wanted = self.last_seq;
+        let unbroken = |seq: &&Seq| {
+            let next = **seq == wanted;
+            wanted = seq.saturating_sub(1);
+            next
+        };
+        let first = self.events.keys().rev().take_while(unbroken).last().copied();
+        first.into_iter().flat_map(|first| self.events.range(first..).map(|(_, event)| event))
     }
 
     /// The newest event the subscription has delivered, so a new one carries on after it.

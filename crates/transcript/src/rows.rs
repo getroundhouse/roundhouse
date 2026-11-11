@@ -205,8 +205,10 @@ fn render_event(
     let (seq, body) = (event.seq, &event.body);
     let approval_open = around.approval_open;
     match body {
-        EventBody::ApprovalRequested { approval_id, tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-            questions::card(seq, approval_id, input, approval_open, &around.picks, this, cx)
+        // Asked in the composer's place while it waits, so it's drawn here once it's answered.
+        EventBody::ApprovalRequested { tool_name, .. } if tool_name == questions::TOOL_NAME && approval_open => empty(),
+        EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
+            questions::record(input, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =

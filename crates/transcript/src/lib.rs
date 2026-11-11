@@ -21,5 +21,10 @@ mod transcript;
 
 pub use attachments::{file_card, image_format};
 pub use list::{Place, TranscriptList};
+pub use questions::QuestionPanel;
 pub use rows::{around_column, in_column};
 pub use transcript::{Transcript, TranscriptEvent, mode_label};
+
+/// How long a new question ignores keys, which a test can wait out.
+#[cfg(feature = "testing")]
+pub const QUESTION_SETTLES: std::time::Duration = questions::SETTLE;

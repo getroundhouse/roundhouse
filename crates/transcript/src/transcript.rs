@@ -1,15 +1,15 @@
 //! The transcript view: what it's showing, and how it answers.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use client_core::session_log::{PromptState, Row, SessionLog};
 use client_core::{Client, FileToSend, OpenSession};
-use gpui_kit::{AppContext, Context, ElementId, EventEmitter, IntoElement, Render, Task, Window};
+use gpui_kit::{AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, IntoElement, Render, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ApprovalId, AttachmentId, Seq, Session, SessionId, seq_index};
+use protocol::model::{AttachmentId, Seq, Session, SessionId, seq_index};
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
@@ -17,6 +17,7 @@ use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::long_texts::LongTexts;
+use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
 
 mod answers;
@@ -35,14 +36,14 @@ pub enum TranscriptEvent {
     NotSent { message: String, text: String, files: Vec<FileToSend> },
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
+    /// The question in the composer's place changed: one came, or the one there was answered. `left` is the focus of
+    /// the one that went, if one did, so focus that was in it can move to what's drawn now.
+    Asking { left: Option<FocusHandle> },
 }
 
 #[derive(Default)]
 pub(crate) struct Model {
     pub folds: Folds,
-    /// What's been chosen so far on questions with more than one thing to choose, by the approval's
-    /// ID and then the question's text.
-    pub picks: HashMap<ApprovalId, BTreeMap<String, Vec<String>>>,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
     /// Where the calls that started subagents are, as rows have looked for them.
@@ -66,6 +67,10 @@ pub struct Transcript {
     /// Draws the time so far again while the agent works.
     ticking: Option<Task<()>>,
     prompts: outline::Prompts,
+    /// The oldest question waiting on an answer, to be asked in the composer's place.
+    asking: Option<Entity<QuestionPanel>>,
+    /// Where every question waiting on an answer is in the log. The transcript draws them once they're answered.
+    waiting: Vec<Seq>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -98,6 +103,8 @@ impl Transcript {
             _changes: following,
             ticking,
             prompts: outline::Prompts::default(),
+            asking: None,
+            waiting: Vec::new(),
         }
     }
 
@@ -173,10 +180,16 @@ impl Transcript {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
         let (rows, loaded) = self.session.read(rows_and_loaded);
+        // A question opens and closes with an event, which is a row of its own rather than the tail.
+        let events = self.session.read(SessionLog::row_count);
+        let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
         self.read_ahead(changes.rows.clone().unwrap_or_default(), cx);
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed);
+        }
+        if events_changed {
+            self.follow_question(cx);
         }
         for error in errors {
             cx.emit(TranscriptEvent::Error(error.to_string()));

@@ -254,7 +254,8 @@ impl WorkspacePane {
 }
 
 impl Render for WorkspacePane {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.keep_focus_drawn(window, cx);
         let changes = self.changes_sidebar(cx);
         // What the header says goes by what's chosen, from the moment it is, rather than by how far the sidebar has
         // slid. Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.

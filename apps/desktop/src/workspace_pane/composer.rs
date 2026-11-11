@@ -43,12 +43,6 @@ impl WorkspacePane {
         }
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
-        // While the agent is waiting on a question, what's typed is the answer to it, and the files wait for the next
-        // prompt, since an answer can't carry them.
-        if transcript.update(cx, |t, cx| t.answer_with_text(&text, cx)) {
-            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-            return;
-        }
         let files = self.attached.take();
         if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
@@ -111,10 +105,15 @@ impl WorkspacePane {
 
     /// What's attached, what's typed, and below them the bar. Files dropped anywhere on it are attached, and so is a
     /// paste that holds images or files. It's centred under the transcript's column and a little wider, so the
-    /// transcript's text sits inside its edges.
+    /// transcript's text sits inside its edges. While the agent waits on a question, the question is asked here
+    /// instead, and what's typed and attached waits for it to go.
     pub(super) fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let attached = self.attached_tiles(cx);
         let queue = self.queue_card(cx);
+        let around = |inside: AnyElement| transcript::around_column(v_flex().w_full().children(queue).child(inside));
+        if let Some(question) = self.transcript().and_then(|t| t.read(cx).question().cloned()) {
+            return around(question.into_any_element()).flex_none().pb_4().pt_1();
+        }
+        let attached = self.attached_tiles(cx);
         let bar = self.bar(cx).into_any_element();
         let theme = cx.theme();
         let (surface, border) = (theme.muted, theme.input);
@@ -127,7 +126,7 @@ impl WorkspacePane {
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
             .child(bar);
-        transcript::around_column(v_flex().w_full().children(queue).child(composer)).flex_none().pb_4().pt_1()
+        around(composer.into_any_element()).flex_none().pb_4().pt_1()
     }
 
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the attach button,

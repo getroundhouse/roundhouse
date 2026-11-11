@@ -124,7 +124,7 @@ impl WorkspacePane {
             transcript
         });
         let chat = session.id.clone();
-        let events = cx.subscribe(&view, move |this, _, event: &TranscriptEvent, cx| match event {
+        let events = cx.subscribe(&view, move |this, transcript, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             TranscriptEvent::NotSent { message, text, files } => {
                 this.give_back(Some(&chat), text.clone(), files.clone(), cx);
@@ -136,6 +136,13 @@ impl WorkspacePane {
                     this.refresh_pull_request(cx);
                 }
                 this.turn_ended(cx);
+            }
+            TranscriptEvent::Asking { left } => {
+                if this.transcript().as_ref() == Some(&transcript) {
+                    let left = left.clone();
+                    this.with_window(cx, move |t, window, cx| t.follow_question(left.as_ref(), window, cx));
+                }
+                cx.notify();
             }
         });
         self.transcripts.insert(session.id, (view, events));

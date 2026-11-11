@@ -6,8 +6,7 @@ use client_core::{Client, RecordsFeed};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, Subscription, Task,
-    Window, px,
+    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
 };
 use protocol::model::{
     Account, AccountId, DiffComment, Effort, ModelName, Session, SessionId, SessionSettingsChange, Workspace,
@@ -38,6 +37,7 @@ mod closed;
 mod composer;
 mod context;
 mod file_tab;
+mod focus;
 mod pull_request;
 mod queue;
 mod reading;
@@ -141,15 +141,22 @@ pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 impl WorkspacePane {
     /// What's typed here and not sent, which goes when the app quits: how many chats have something in their
-    /// composer, and how many comments on the diff are being written.
+    /// composer or typed as an answer to a question, and how many comments on the diff are being written.
     pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
         let typed = |text: &str| !text.trim().is_empty();
-        let showing = usize::from(typed(&self.composer.read(cx).text().to_string()) || !self.attached.is_empty());
-        let waiting = self.waiting.iter();
-        let others = self.drafts.values().chain(waiting).filter(|draft| draft.has_anything()).count();
+        let answering = |id: &SessionId| {
+            let question = self.transcripts.get(id).and_then(|(transcript, _)| transcript.read(cx).question());
+            question.is_some_and(|question| question.read(cx).has_typed(cx))
+        };
+        let in_composer = typed(&self.composer.read(cx).text().to_string()) || !self.attached.is_empty();
+        let showing = usize::from(in_composer || self.active.as_ref().is_some_and(answering));
+        let drafted = |id: &SessionId| self.drafts.get(id).is_some_and(Draft::has_anything);
+        let ids = self.drafts.keys().chain(self.transcripts.keys().filter(|id| !self.drafts.contains_key(*id)));
+        let others = ids.filter(|id| self.active.as_ref() != Some(*id) && (drafted(id) || answering(id))).count();
+        let waiting = usize::from(self.waiting.as_ref().is_some_and(Draft::has_anything));
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
-        (showing + others, usize::from(comment))
+        (showing + others + waiting, usize::from(comment))
     }
 
     /// Where the workspace's work stands, as its mark and the pull request's bar show it.
@@ -342,10 +349,6 @@ impl WorkspacePane {
         });
     }
 
-    pub fn focus_composer(&self, window: &mut Window, cx: &mut Context<Self>) {
-        self.composer.update(cx, |c, cx| c.focus(window, cx));
-    }
-
     /// What's in front under the tabs.
     pub fn showing(&self) -> Showing {
         let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
@@ -368,21 +371,6 @@ impl WorkspacePane {
             }
         });
         cx.notify();
-    }
-
-    /// Focuses the file tab's view while it shows, and the composer otherwise. The composer isn't drawn behind the file
-    /// tab, and focus on something that isn't drawn takes the window's keys, such as `Ctrl-Tab`, nowhere.
-    pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
-        match self.showing() {
-            Showing::File => {
-                let Some(diff) = &self.diff else { return };
-                match diff.tab.as_ref().map(|tab| tab.opened) {
-                    Some(Opened::File) => window.focus(&diff.viewer.focus_handle(cx), cx),
-                    Some(Opened::Diff) | None => window.focus(&diff.file.focus_handle(cx), cx),
-                }
-            }
-            Showing::Chat => self.focus_composer(window, cx),
-        }
     }
 
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {

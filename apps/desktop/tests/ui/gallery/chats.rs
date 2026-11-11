@@ -180,8 +180,7 @@ pub(crate) fn stopped() -> Vec<EventBody> {
 
 /// Waiting for an answer to a question with choices.
 pub(crate) fn question() -> Vec<EventBody> {
-    let mut events = looked_around();
-    let input = json!({ "questions": [{
+    asking(json!({ "questions": [{
         "question": "Where should the PR state be fetched?",
         "header": "PR state",
         "multiSelect": false,
@@ -189,7 +188,44 @@ pub(crate) fn question() -> Vec<EventBody> {
             { "label": "In the hub", "description": "Asked once, and every client gets it from the feed" },
             { "label": "In each client", "description": "Simpler, but every window asks GitHub on its own" },
         ],
-    }]});
+    }]}))
+}
+
+/// Waiting for answers to three questions, the second of which takes several.
+pub(crate) fn questions() -> Vec<EventBody> {
+    asking(json!({ "questions": [
+        {
+            "question": "Where should the PR state be fetched?",
+            "header": "PR state",
+            "multiSelect": false,
+            "options": [
+                { "label": "In the hub", "description": "Asked once, and every client gets it from the feed" },
+                { "label": "In each client", "description": "Simpler, but every window asks GitHub on its own" },
+            ],
+        },
+        {
+            "question": "Which states should the sidebar's mark show?",
+            "header": "Mark",
+            "multiSelect": true,
+            "options": [
+                { "label": "Open", "description": "Green, while it waits for review" },
+                { "label": "Merged", "description": "Purple, until the workspace is archived" },
+                { "label": "Closed", "description": "A muted red" },
+                { "label": "Draft", "description": "A grey of its own" },
+            ],
+        },
+        {
+            "question": "How often should the hub ask GitHub again?",
+            "header": "Refresh",
+            "multiSelect": false,
+            "options": [{ "label": "Every minute" }, { "label": "Every five minutes" }],
+        },
+    ]}))
+}
+
+/// The agent asking, with `input` as the question tool's input, after looking around.
+fn asking(input: serde_json::Value) -> Vec<EventBody> {
+    let mut events = looked_around();
     events.push(tool_use("msg-3", "toolu-3", "AskUserQuestion", input.clone()));
     events.push(EventBody::ApprovalRequested {
         approval_id: ApprovalId::from("approval-1"),
