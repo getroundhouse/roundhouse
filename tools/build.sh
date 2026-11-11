@@ -57,13 +57,14 @@ target_dir() {
   (cd "$ROOT" && cargo metadata --no-deps --format-version 1 --locked) | jq -r .target_directory
 }
 
-# Builds the binaries in release with the stamp `stamp` set, and copies them into DEST.
+# Builds the binaries in release with the stamp `stamp` set, and copies them into DEST. For another target than this
+# machine's, CARGO_BUILD_TARGET names it, as cargo takes it, and cargo keeps what it builds for one under its name.
 build_release() {
   local dest=$1 target bin
   : "${BUILD:?stamp comes first}" "${NUMBER:?stamp comes first}"
   (cd "$ROOT" && ROUNDHOUSE_BUILD="$BUILD" ROUNDHOUSE_BUILD_NUMBER="$NUMBER" \
     cargo build --release --locked -p desktop -p daemon -p cli --bins)
-  target="$(target_dir)"
+  target="$(target_dir)${CARGO_BUILD_TARGET:+/$CARGO_BUILD_TARGET}"
   mkdir -p "$dest"
   for bin in "${BINARIES[@]}"; do
     cp "$target/release/$bin$EXE" "$dest/$bin$EXE"

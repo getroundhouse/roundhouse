@@ -7,7 +7,8 @@
 #
 # The Windows app goes the same way in jobs of its own, so neither platform's release waits on the other's or fails
 # with it: built on Windows, with no secrets, then packaged by vpk on Linux, which packages for Windows, and published
-# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer.
+# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. x64 and
+# ARM64 each go through those jobs, and one failing leaves the other's release alone.
 #
 # The `release` environment's secrets:
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
@@ -251,10 +252,24 @@ jobs:
           tools/package/publish.py check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
 
-  # The Windows binaries, built where they run, on the org's 8-core Windows runner, since a cold build took half an
+  # The Windows binaries, built where they run, on the org's 8-core Windows runners, since a cold build took half an
   # hour on the standard one. It compiles every dependency, so no key is here.
   build-windows:
-    runs-on: windows-latest-amd64-8cores
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+            runner: windows-latest-amd64-8cores
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+            runner: windows-latest-arm64-8cores
+    runs-on: ${{ matrix.runner }}
+    env:
+      # Named, so the binaries are for this processor whichever one the runner's own toolchain is for. build.sh
+      # reads it too.
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     timeout-minutes: 90
     defaults:
       run:
@@ -275,11 +290,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           # Not windows-, which windows.yml restores from, since this target/ holds release builds.
-          key: release-windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: release-windows-
+          key: release-windows-${{ matrix.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: release-windows-${{ matrix.arch }}-
       - name: Build
         id: build
         run: |
+          rustup target add "$CARGO_BUILD_TARGET"
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
       # What package.sh checks of the Mac's binaries, which packaging on Linux can't run. A package's build is its
@@ -310,7 +326,7 @@ jobs:
       # On a PR too, since packaging is checked from them.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-binaries
+          name: windows-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}/binaries
           if-no-files-found: error
           retention-days: 7
@@ -325,10 +341,15 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   # On a PR, packages the Windows binaries as the release job below does, so the PR shows packaging still works. The
-  # runner image has .NET's SDK.
+  # runner image has .NET's SDK. It runs even if one processor's build failed, and then only that one's fails here,
+  # for want of its binaries.
   package-windows:
     needs: build-windows
-    if: github.ref != 'refs/heads/main'
+    if: ${{ !cancelled() && github.ref != 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -338,20 +359,35 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: windows-binaries
+          name: windows-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}/binaries
-      - run: tools/package/package-windows.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package"
+      - env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          tools/package/package-windows.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" \
+            --out "$RUNNER_TEMP/package"
       - run: ls -l "$RUNNER_TEMP/package/releases"
 
   # Packages and publishes the Windows binaries. It compiles nothing, and each key is only in the steps that use it.
-  # Running it again is safe, as for the Mac's.
+  # Running it again is safe, as for the Mac's. Each processor's goes to a channel of its own, and runs even if the
+  # other's build failed.
   release-windows:
     needs: build-windows
-    if: github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            channel: win
+          - arch: arm64
+            channel: win-arm64
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      ARCH: ${{ matrix.arch }}
+      CHANNEL: ${{ matrix.channel }}
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
@@ -364,7 +400,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: windows-binaries
+          name: windows-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}/binaries
       # Outside the checkout, and empty, since publish.py starts from an empty directory.
       - run: |
@@ -384,20 +420,21 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
         run: |
-          state="$(tools/package/publish.py --channel win prepare --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+          state="$(tools/package/publish.py --channel "$CHANNEL" prepare --store "$STORE" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE")"
           echo "$VERSION is $state"
           echo "state=$state" >> "$GITHUB_OUTPUT"
       # vpk makes a delta from the newest full package, which prepare put in releases/.
       - name: Package
         if: steps.feed.outputs.state == 'new'
-        run: tools/package/package-windows.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$PACKAGE"
+        run: tools/package/package-windows.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" --out "$PACKAGE"
       - name: Sign the new feed
         if: steps.feed.outputs.state == 'new'
         env:
           FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
         run: |
-          feed="$(tools/package/publish.py --channel win merge --version "$VERSION" --keep "$KEEP" --work "$PACKAGE")"
+          feed="$(tools/package/publish.py --channel "$CHANNEL" merge --version "$VERSION" --keep "$KEEP" \
+            --work "$PACKAGE")"
           trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
           (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
           tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
@@ -407,9 +444,9 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
         run: |
-          tools/package/publish.py --channel win upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+          tools/package/publish.py --channel "$CHANNEL" upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"
       - name: Check what apps read
         run: |
-          tools/package/publish.py --channel win check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
+          tools/package/publish.py --channel "$CHANNEL" check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"

@@ -42,8 +42,9 @@ def make_key(directory: Path) -> tuple[Path, str]:
 
 
 def package_name(version: str, kind: str) -> str:
-    """As vpk names a package, which says its channel unless that's Windows'."""
-    channel = "" if publish.FEED == "releases.win.json" else "-osx"
+    """As vpk names a package, which says its channel unless that's `win`, the one Windows starts with."""
+    channel = publish.FEED.removeprefix("releases.").removesuffix(".json")
+    channel = "" if channel == "win" else f"-{channel}"
     return f"Roundhouse-{version}{channel}-{kind.lower()}.nupkg"
 
 
@@ -354,11 +355,16 @@ class Publishing(unittest.TestCase):
 
 class Windows(Publishing):
     """Windows' releases, which go in the bucket macOS's are in, under a feed of their own. Every test above runs
-    again for them, since `Publishing`'s are inherited, and the ones here are about the two side by side."""
+    again for them, since `Publishing`'s are inherited, and the ones here are about two platforms side by side."""
+
+    CHANNEL = "win"
+    # Another platform's, published into the same bucket first.
+    BESIDE = "osx"
+    PACKAGE = "Roundhouse-0.1.1-full.nupkg"
 
     def setUp(self) -> None:
         super().setUp()
-        publish.use_channel("win")
+        publish.use_channel(self.CHANNEL)
         self.addCleanup(publish.use_channel, "osx")
 
     def test_the_first_release_publishes_a_signed_feed_with_its_package(self) -> None:
@@ -366,25 +372,34 @@ class Windows(Publishing):
 
         self.assertEqual(self.published(), [("0.1.1", "Full")])
         self.assert_packages_match()
-        for name in ("releases.win.json", "releases.win.json.sig", "Roundhouse-win-Setup.exe",
-                     "Roundhouse-win-Portable.zip", "Roundhouse-0.1.1-full.nupkg"):
+        feed = f"releases.{self.CHANNEL}.json"
+        for name in (feed, feed + ".sig", f"Roundhouse-{self.CHANNEL}-Setup.exe",
+                     f"Roundhouse-{self.CHANNEL}-Portable.zip", self.PACKAGE):
             self.assertTrue((self.bucket / name).exists(), name)
 
     def test_a_platform_s_releases_leave_the_other_s_alone(self) -> None:
-        publish.use_channel("osx")
+        publish.use_channel(self.BESIDE)
         self.release("0.1.1")
         self.release("0.1.2")
-        mac = {path.name: path.read_bytes() for path in self.bucket.iterdir() if path.is_file()}
+        beside = {path.name: path.read_bytes() for path in self.bucket.iterdir() if path.is_file()}
 
         # The same versions, since each platform publishes every merge, and few enough kept that some are deleted.
-        publish.use_channel("win")
+        publish.use_channel(self.CHANNEL)
         self.release("0.1.1", keep=1)
         self.release("0.1.2", keep=1)
 
         self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full")])
-        self.assertFalse((self.bucket / "Roundhouse-0.1.1-full.nupkg").exists())
-        for name, content in mac.items():
+        self.assertFalse((self.bucket / self.PACKAGE).exists())
+        for name, content in beside.items():
             self.assertEqual((self.bucket / name).read_bytes(), content, name)
+
+
+class WindowsOnArm(Windows):
+    """ARM64 Windows' releases, a third feed in the same bucket, beside x64 Windows'."""
+
+    CHANNEL = "win-arm64"
+    BESIDE = "win"
+    PACKAGE = "Roundhouse-0.1.1-win-arm64-full.nupkg"
 
 
 if __name__ == "__main__":
