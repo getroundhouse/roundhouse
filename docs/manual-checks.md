@@ -18,7 +18,7 @@ Start with trackpad feel, then IME, then selection and copy.
 - Links open, and right-click menus exist where expected
 - VoiceOver reads messages and sidebar rows
 - Font rendering next to native apps at your usual size
-- Status marks: a working agent's light sweeps smoothly at the display's rate, nothing else moves, Reduce Motion holds it still, and with every agent idle the window draws nothing, which Activity Monitor shows as no CPU
+- Status marks: a working agent's light sweeps smoothly at the display's rate, as do the smaller light of one that left something running and the ring of a running background task, nothing else moves, Reduce Motion holds them still, and with every agent idle and nothing in the background the window draws nothing, which Activity Monitor shows as no CPU
 - Resize and window snapping stay smooth during streaming
 - The menu bar's items and keys that macOS carries out: ⌘H and Hide Roundhouse, ⌥⌘H and Hide Others, Show All, ⌘M and Minimize, and Zoom
 - The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen

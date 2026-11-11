@@ -1,6 +1,5 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
-use protocol::event::{AgentTask, FileChange};
-use protocol::model::TaskId;
+use protocol::event::FileChange;
 use serde_json::json;
 
 use super::*;
@@ -173,52 +172,6 @@ fn a_mode_change_is_reported_by_the_name_a_launch_accepts() {
 fn a_status_about_something_else_isnt_a_mode_change() {
     let line = r#"{"type":"system","subtype":"status","status":"compacting"}"#;
     assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentOther { kind: "system/status".into() }));
-}
-
-#[test]
-fn background_tasks_are_listed_whole_each_time_they_change() {
-    let line = json!({"type":"system","subtype":"background_tasks_changed","tasks":[
-        {"task_id":"b1","run_id":"r1","task_type":"local_bash","description":"Run the tests"},
-        {"task_id":"a2","run_id":"r2","task_type":"local_agent","subagent_type":"Explore"}]});
-    let tasks = vec![
-        AgentTask { id: "b1".into(), description: Some("Run the tests".into()) },
-        AgentTask { id: "a2".into(), description: None },
-    ];
-    assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentTasks { tasks, stopped: vec![] }));
-    let done = json!({"type":"system","subtype":"background_tasks_changed","tasks":[]}).to_string();
-    assert_eq!(parse_line(&done), Parsed::Event(EventBody::AgentTasks { tasks: vec![], stopped: vec![] }));
-}
-
-#[test]
-fn a_task_that_leaves_the_list_stopped_rather_than_finished_says_so() {
-    let ended = |id: &str, status: &str| {
-        json!({"type":"system","subtype":"task_notification","task_id":id,"status":status}).to_string()
-    };
-    let listed = |ids: &[&str]| {
-        let tasks: Vec<_> = ids.iter().map(|id| json!({"task_id":id})).collect();
-        json!({"type":"system","subtype":"background_tasks_changed","tasks":tasks}).to_string()
-    };
-    let stopped = |parsed: Parsed| {
-        let Parsed::Event(EventBody::AgentTasks { stopped, .. }) = parsed else { panic!("{parsed:?}") };
-        stopped
-    };
-    let mut normalizer = Normalizer::default();
-
-    // As the CLI does on SIGTERM: the notice first, then the list without it.
-    normalizer.line(&ended("a", "stopped"));
-    normalizer.line(&ended("b", "completed"));
-    assert_eq!(stopped(normalizer.line(&listed(&["a", "c"])).parsed), Vec::<TaskId>::new(), "still listed");
-    assert_eq!(stopped(normalizer.line(&listed(&["c"])).parsed), vec![TaskId::from("a")]);
-    assert_eq!(stopped(normalizer.line(&listed(&[])).parsed), Vec::<TaskId>::new(), "said once");
-}
-
-#[test]
-fn a_list_of_background_tasks_it_cant_read_doesnt_say_theyre_done() {
-    let line = json!({"type":"system","subtype":"background_tasks_changed"}).to_string();
-    assert_eq!(
-        parse_line(&line),
-        Parsed::Event(EventBody::AgentOther { kind: "system/background_tasks_changed".into() })
-    );
 }
 
 #[test]

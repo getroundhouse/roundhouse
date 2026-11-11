@@ -30,6 +30,7 @@
 //!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
 //!                   SIGTERM stops it, and lists none left.
+//!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.

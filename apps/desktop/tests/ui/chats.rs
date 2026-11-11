@@ -207,6 +207,36 @@ fn whats_running_in_the_background_shows_until_it_finishes(cx: &mut TestAppConte
     assert!(!ui.has(line));
 }
 
+/// A line is only what its task is for, so pointing at it says where it's running, and that a monitor is only
+/// watching.
+#[gpui_kit::test]
+fn pointing_at_a_background_tasks_line_says_whether_its_running_or_watching(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    let never = |name: &str| stack.dir.path().join(name).display().to_string();
+    ui.input(&format!("background:{}; monitor:{}", never("suite"), never("watch")));
+    ui.press("enter");
+    ui.wait("its turn to end with work left going", |ui| ui.session_status() == Some(SessionStatus::Background));
+    let tasks = stack.client().session_get(&chat).unwrap().background_tasks;
+    let line = |position: usize| SharedString::from(format!("background-{}", tasks[position].id));
+    ui.wait("their lines", |ui| ui.has(line(0)) && ui.has(line(1)));
+    assert!(!ui.has("background-pointed-at"));
+
+    for (position, said) in [(0, "Running in the background"), (1, "Watching in the background")] {
+        // The pointer is put on the line each time round, since the line moves when the turn's end is drawn above it,
+        // which comes by another way than the session's status and can come after it.
+        ui.wait(said, |ui| {
+            ui.hover(line(position));
+            ui.wait_out_a_tooltip();
+            ui.shows_label("background-pointed-at", said)
+        });
+    }
+}
+
 #[gpui_kit::test]
 fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();

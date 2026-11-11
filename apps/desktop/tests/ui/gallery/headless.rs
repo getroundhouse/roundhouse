@@ -1,5 +1,5 @@
 //! A view of its own, rather than the whole app, drawn in a window that's never on screen, at the app's scale. The
-//! app icon and the pull request's states are drawn this way.
+//! app icon, the pull request's states and the mark's are drawn this way.
 
 #![cfg(test)]
 

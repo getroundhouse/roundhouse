@@ -6,7 +6,7 @@
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
 };
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
 use protocol::model::{LimitWindow, PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
@@ -184,4 +184,31 @@ fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {
     assert_eq!(event.body, EventBody::ToolCallDropped { tool_use_id: "srvtoolu_1".into() });
     assert_eq!(event.body.kind(), "tool_call_dropped");
     assert_eq!(serde_json::to_value(&event.body).unwrap()["type"], "tool_call_dropped");
+}
+
+/// A list the hub stored before it kept kinds, or sent by a hub that doesn't, has none. Everything left running was
+/// drawn alike then, and a command is the kind that claims least.
+#[test]
+fn a_background_task_from_a_hub_that_doesnt_keep_kinds_is_a_command() {
+    let task: AgentTask = serde_json::from_str(r#"{"id":"t1","description":"Run the tests"}"#).unwrap();
+
+    assert_eq!(task.kind, TaskKind::Command);
+}
+
+/// A newer hub's kind mustn't cost the list: the hub reads a stored list it can't parse as empty, which would say
+/// nothing is running.
+#[test]
+fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
+    let kind = |kind: &str| -> TaskKind {
+        let task: AgentTask = serde_json::from_str(&format!(r#"{{"id":"t1","kind":"{kind}"}}"#)).unwrap();
+        task.kind
+    };
+
+    assert_eq!(kind("something_newer"), TaskKind::Command);
+    assert_eq!(
+        (kind("subagent"), kind("monitor"), kind("command")),
+        (TaskKind::Subagent, TaskKind::Monitor, TaskKind::Command)
+    );
+    let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor };
+    assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);
 }

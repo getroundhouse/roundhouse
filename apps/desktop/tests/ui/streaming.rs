@@ -101,7 +101,7 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
     while top(&ui) != ListOffset::default() {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(150.))));
         let row = top(&ui).item_ix;
-        ui.wait("the rows there to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
+        wait_for_the_list_to_settle(&mut ui, &transcript, row);
         steps.push(thumb(&ui));
         lengths.push(ui.cx.read_entity(&transcript, |t, _| t.scroller().thumb().1));
         loaded.push(ui.cx.read_entity(&transcript, |t, _| t.loaded_events()));
@@ -256,6 +256,25 @@ fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thum
 fn press(ui: &mut Ui<'_>, event: impl gpui_kit::InputEvent) {
     ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(event.to_platform_input(), cx)).unwrap();
     ui.frame();
+}
+
+/// Waits for `row` to be loaded and for the list to settle with it. A page changes the session's height in three
+/// goes: as its rows are measured, a frame on as the guess at the rows still unloaded is worked out again, and as each
+/// long prompt in it is read on another thread and measured again. So the list has settled once a frame comes and
+/// goes with nothing changed. Waiting for that keeps all three with the page, whenever the frame and the thread come.
+/// Nothing is drawn after it, since that could bring another page.
+fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, transcript: &gpui_kit::Entity<transcript::Transcript>, row: usize) {
+    ui.wait("the rows there to load and the list to settle", |ui| {
+        let now = |ui: &Ui<'_>| {
+            ui.cx.read_entity(transcript, |t, cx| {
+                (t.scroller().thumb().1, t.loaded_events(), t.event_at(row).is_some() && t.long_texts_read(cx))
+            })
+        };
+        let before = now(ui);
+        ui.bring_the_next_frame();
+        ui.frame();
+        before == now(ui) && before.2
+    });
 }
 
 /// How far down the session the transcript's scrollbar says it is.

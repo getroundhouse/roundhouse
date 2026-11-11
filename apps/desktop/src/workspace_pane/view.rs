@@ -33,7 +33,8 @@ impl WorkspacePane {
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
-        let mark = crate::sidebar::signal(Some(session.status), unread);
+        let needs_a_look = unread || crate::sidebar::signal::waiting_on_you([session]);
+        let mark = crate::sidebar::signal::chat(session);
         let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
@@ -67,10 +68,11 @@ impl WorkspacePane {
                     .pr_1p5()
                     .text_sm()
                     .line_height(relative(1.25))
-                    // Only a reply that hasn't been read stands out. The open chat shows in its underline, so moving
-                    // between chats doesn't change how their titles look.
-                    .when(!unread, |d| d.text_color(muted))
-                    .when(unread, |d| d.font_weight(FontWeight::MEDIUM))
+                    // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question
+                    // waiting on an answer. The open chat shows in its underline, so moving between chats doesn't
+                    // change how their titles look.
+                    .when(!needs_a_look, |d| d.text_color(muted))
+                    .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
                     .child(look::mark(mark, work, look::Size::Inline, cx))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))

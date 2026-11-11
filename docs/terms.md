@@ -32,7 +32,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
 | Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded`, `Session.turn_started_at_ms`, `SessionStatus::in_turn` |
-| Background task | Work an agent started that carries on after its turn ends, such as a command or a subagent. The agent is still at work until it finishes | `AgentTasks`, `SessionStatus::Background` |
+| Background task | Work an agent started that carries on after its turn ends: a command, a subagent or a monitor. Until it finishes the session is active, so an update waits and closing asks, and only a subagent counts as the agent itself working | `AgentTasks`, `AgentTask`, `TaskKind`, `SessionStatus::Background` |
+| Monitor | A background task that watches for something, such as a check failing, and wakes the agent each time it happens. It does nothing meanwhile, and may never end | `TaskKind::Monitor` |
 | Reply | What the agent said in a turn, as of the event that ended it. A turn the agent was cut off from isn't one | `Session.reply_seq` |
 | Prompt | What a person sends to an agent. It's real once it's recorded, and until then a client shows it as pending | `UserPrompt`, `PendingPrompt` |
 | Attachment | A file a prompt carries, of any kind, or an image a tool sent the agent, such as a screenshot it read. The worker puts a prompt's files in the worktree's `.context/attachments/`, and the hub keeps every image. The interface says "file" or "image" | `Attachment`, `AttachmentId`, `AttachmentFile`, `NewAttachment`, the `attachments` table |
@@ -54,8 +55,9 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works, amber or red when it needs you, and all white for a reply you haven't read. `docs/spec/look.md` has the rules | `look::mark` |
-| Your turn | A chat waiting on the person for an answer or an approval. Its mark turns amber | `Signal::NeedsYou` |
+| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works or has left something running, and a turntable that's red when its agent stopped short. `docs/spec/look.md` has the rules | `look::mark` |
+| Task ring | What a background task's line starts with: a small circle of dots around a hub, with a light going round while the task runs, and still with its hub lit for a monitor. It isn't the ring beside Send, which shows how full the agent's context is | `look::task_ring`, `TaskRing` |
+| Your turn | A chat waiting on the person for an answer or an approval. Its name stands out, as one with an unread reply does, and its card is amber | `SessionStatus::WaitingApproval`, `sidebar::signal::waiting_on_you` |
 | Sidebar of changes | The sidebar on the right. Its tabs switch it between All files and Changes, the files a workspace changes against its base. `docs/spec/diff.md` has the rules | `Changes`, `SidebarTab` |
 | All files | The sidebar of changes' first tab, which lists every file in a workspace's worktree, ignored ones too, and reads a folder git ignores whole only when it's opened. `docs/spec/files.md` has the rules | `AllFiles`, `WorkspaceFiles`, `WorkspaceFolderRead` |
 | Home | Every workspace in one list, which shows in place of the workspace from the top of the sidebar. `docs/spec/home.md` has the rules | `home::Home`, `AppView::open_home` |

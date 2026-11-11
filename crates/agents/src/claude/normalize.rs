@@ -11,12 +11,14 @@ use protocol::model::{MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
+use calls::OpenCalls;
 use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
 use surrogates::repair_lone_surrogates;
-use tasks::StoppedTasks;
+use tasks::Tasks;
 
 mod advisor;
+mod calls;
 mod file_change;
 mod images;
 mod limits;
@@ -60,24 +62,26 @@ pub enum Parsed {
 
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
-/// message, as its deltas did. It also says it stopped a background task before the list that leaves it
-/// out, so the list can say which left without finishing. And it never says a call was dropped, so what follows the
-/// call has to show it.
+/// message, as its deltas did. It keeps which calls are open, from each call to its result. It says what a
+/// background task is, and that it stopped one, apart from the list of them, so the list can say which are monitors,
+/// by the call that started each, and which left without finishing. And it never says a call was dropped, so what
+/// follows the call has to show it.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     streaming: HashMap<MessageId, u32>,
-    stopped_tasks: StoppedTasks,
+    calls: OpenCalls,
+    tasks: Tasks,
     pending_calls: PendingCalls,
 }
 
 impl Normalizer {
     pub fn line(&mut self, line: &str) -> Normalized {
         let Some(value) = value_of(line) else { return Normalized { dropped: Vec::new(), parsed: unparsed() } };
-        self.stopped_tasks.note(&value);
+        self.calls.note(&value);
         let dropped = self.pending_calls.note(&value);
-        let mut parsed = parse_value(&value);
+        let mut parsed = self.tasks.note(&value, &self.calls).unwrap_or_else(|| parse_value(&value));
         if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
-            *stopped = self.stopped_tasks.gone_from(tasks);
+            *stopped = self.tasks.listed(tasks);
         }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {
@@ -103,13 +107,14 @@ impl Normalizer {
         if let Parsed::Event(EventBody::TurnEnded { .. }) = &parsed {
             self.streaming.clear();
             self.pending_calls.turn_ended();
+            self.calls.turn_ended();
         }
         Normalized { dropped, parsed }
     }
 }
 
 /// One line on its own, for tests of what needs nothing before it. A [`Normalizer`] also says where a finished
-/// block sits in its message, and which background tasks were stopped.
+/// block sits in its message, and which background tasks are monitors or were stopped.
 #[cfg(test)]
 fn parse_line(line: &str) -> Parsed {
     value_of(line).map_or_else(unparsed, |value| parse_value(&value))
