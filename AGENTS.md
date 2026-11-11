@@ -4,7 +4,7 @@ An open source app for running many coding agents in parallel, each in its own w
 
 ## Docs
 
-Start with `README.md`. `docs/documentation.md` lists every doc, and says what goes in a doc and what goes on GitHub, so read it before writing either. Read `docs/rust.md` before writing Rust, `docs/gpui.md` before writing UI code, `docs/performance.md` before running a timing test, and `docs/pull-requests.md` before opening a PR or writing its commit.
+Start with `README.md`. `docs/documentation.md` lists every doc, and says what goes in a doc and what goes on GitHub, so read it before writing either. Read "State ownership" in `docs/architecture.md` before deciding where a change goes, `docs/rust.md` before writing Rust, `docs/gpui.md` before writing UI code, `docs/performance.md` before running a timing test, and `docs/pull-requests.md` before opening a PR or writing its commit.
 
 ## Building and testing
 
@@ -47,6 +47,7 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 
 - **Put what you learn and decide where `docs/documentation.md` says,** as part of the same work. Not in agent memory, and not only in chat.
 - **Owner docs, and the files that enforce the standards, change only with the owner's approval, but propose a change whenever you see a better way.** `docs/documentation.md` says which they are, how to propose, and how an agent's choice gets in before the owner confirms it.
+- **Decide who owns the state before choosing where a change goes.** A bug in what a client shows often comes from a client keeping or working out what the hub should record, and the fix goes to the owner, with a protocol change if it needs one, even when fixing the client would be smaller. When the cause is an *Unconfirmed* design, question the design, not just the bug.
 - **Commit only when the user asks.**
 - **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
 - **Report only what you've verified.** Say what's unverified. "Running" only means an agent hasn't exited, so check processes and file timestamps before describing what it's doing.
