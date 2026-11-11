@@ -13,6 +13,7 @@ use gpui_kit::{
     IntoElement, ParentElement, Pixels, Role, ScrollEvent, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, canvas, deferred, div, px,
 };
+use look::LineText;
 use protocol::model::PromptLine;
 
 use super::Transcript;
@@ -111,7 +112,13 @@ impl Jumps {
 
 impl Transcript {
     /// The chat, with the ticks over it, and the list while it's open, if it has more than one prompt to move between.
-    pub(super) fn with_outline(&mut self, chat: AnyElement, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    pub(super) fn with_outline(
+        &mut self,
+        chat: AnyElement,
+        line_text: LineText,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let around = div().relative().size_full();
         let lines = self.prompts.read(&self.session);
         if lines.len() < 2 {
@@ -129,7 +136,7 @@ impl Transcript {
                 h.hovered(Part::List, *hovered, cx);
             });
             let jumps = Jumps { hover: hover.clone(), chat_list: self.list.clone(), transcript: cx.entity_id() };
-            let list = list::draw(lines, at, &self.prompts.rows, jumps, on_hover, cx);
+            let list = list::draw(lines, at, &self.prompts.rows, jumps, on_hover, line_text, cx);
             // Over the ticks, which it hides while it's open, with its right edge on theirs.
             let over = div().absolute().top(-LIST_ABOVE).right_0().child(list);
             deferred(over).with_priority(PRIORITY)

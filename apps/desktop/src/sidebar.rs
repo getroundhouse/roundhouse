@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
     px, size,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, LineText, Off as _};
 use look::{Signal, Work};
 use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceStatus};
 
@@ -103,11 +103,11 @@ fn connected(app: &AppView) -> bool {
     matches!(app.connection, Connection::Ready(_))
 }
 
-fn line(app: &AppView, line: Line, cx: &mut Context<AppView>) -> AnyElement {
+fn line(app: &AppView, line: Line, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
     match line {
         Line::Heading => heading(connected(app), cx),
         Line::Repo(r) => repo_header(app, &app.repos[r], cx),
-        Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], cx),
+        Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], line_text, cx),
         Line::Creating => creating(cx),
     }
 }
@@ -225,8 +225,9 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
     // costs no more than a short one.
     let lines: Rc<[Line]> = lines(app).into();
     let sizes = Rc::new(sizes(&lines));
-    let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, _, cx| {
-        range.map(|ix| line(app, lines[ix], cx)).collect::<Vec<_>>()
+    let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, window, cx| {
+        let line_text = LineText::new(window, cx);
+        range.map(|ix| line(app, lines[ix], &line_text, cx)).collect::<Vec<_>>()
     });
     v_flex()
         .size_full()

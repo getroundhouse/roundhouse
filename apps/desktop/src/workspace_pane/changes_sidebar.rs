@@ -3,6 +3,7 @@
 
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{AnyElement, App, AppContext as _, Context, IntoElement as _, ParentElement as _, Styled as _, div};
+use look::LineText;
 
 use super::{Diff, Opened, PaneEvent, WorkspacePane};
 use crate::all_files::{AllFiles, AllFilesEvent};
@@ -159,7 +160,7 @@ impl WorkspacePane {
     /// The sidebar of changes, beside the chat and the file tab, with the pull request's bar at its top, level with the
     /// workspace's header, and the tabs that choose what it lists under that, level with the chat tabs. `None` while
     /// none of it shows, or there's nothing to show in it yet.
-    pub(super) fn changes_sidebar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn changes_sidebar(&self, line_text: &LineText, cx: &mut Context<Self>) -> Option<AnyElement> {
         let diff = self.diff.as_ref()?;
         let shown = Side::Right.shown(cx)?;
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
@@ -167,15 +168,16 @@ impl WorkspacePane {
         let changed = diff.review.read(cx).files.as_ref().map(Vec::len);
         let chosen = diff.sidebar_tab.tab();
         let (controls, list) = match chosen {
-            Some(SidebarTab::Changes) => {
-                (Some(crate::changes::controls(&diff.changes, cx)), Some(diff.changes.clone().into_any_element()))
-            }
+            Some(SidebarTab::Changes) => (
+                Some(crate::changes::controls(&diff.changes, &line_text.code, cx)),
+                Some(diff.changes.clone().into_any_element()),
+            ),
             Some(SidebarTab::AllFiles) => (None, Some(diff.all_files.clone().into_any_element())),
             // Neither, for the moment until the changes are read, rather than one that the other then replaces.
             None => (None, None),
         };
         let on_pick = cx.listener(|t, tab: &SidebarTab, _, cx| t.show_sidebar_tab(*tab, cx));
-        let tabs = sidebar_tabs::bar(chosen, changed, controls, on_pick, cx);
+        let tabs = sidebar_tabs::bar(chosen, changed, controls, on_pick, line_text, cx);
         let theme = cx.theme();
         let column = v_flex().size_full().border_l_1().border_color(theme.border).bg(theme.sidebar);
         let column = column.child(bar).child(tabs).child(div().flex_1().min_h_0().children(list));

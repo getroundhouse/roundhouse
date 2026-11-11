@@ -12,7 +12,7 @@ use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, LineText, Off as _, Placed};
 use protocol::model::Workspace;
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, standing};
@@ -20,7 +20,12 @@ use crate::app::AppView;
 use crate::right_click;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 
-pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
+pub(super) fn workspace_row(
+    app: &AppView,
+    workspace: &Workspace,
+    line_text: &LineText,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
     // While Home shows, it's what's showing, rather than the workspace still selected under it.
     let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
     let (id, pointed) = (workspace.id.clone(), workspace.id.clone());
@@ -63,17 +68,25 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
                 // look heavier too.
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
-                .when_some(waiting, |d, waiting| d.child(doing(format!("doing-{}", workspace.id), waiting)))
+                .child(
+                    line_text
+                        .body
+                        .set(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis())
+                        .child(label),
+                )
+                .when_some(waiting, |d, waiting| {
+                    d.child(doing(format!("doing-{}", workspace.id), waiting, &line_text.small))
+                })
                 .when(waiting.is_none() && pointing, |d| d.child(archive_button(app, workspace, cx))),
         );
     row.context_menu(menu).into_any_element()
 }
 
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows
-/// whether a button, a menu or a key started it, and wherever the pointer is, so it's clear the press took.
-pub(crate) fn doing(id: String, waiting: &'static str) -> impl IntoElement {
-    let text = div().flex_none().text_xs().text_color(look::faint()).child(waiting);
+/// whether a button, a menu or a key started it, and wherever the pointer is, so it's clear the press took. It's
+/// smaller than the workspace's name, so it's set on the name's baseline.
+pub(crate) fn doing(id: String, waiting: &'static str, small: &Placed) -> impl IntoElement {
+    let text = small.set(div().flex_none().text_color(look::faint()).child(waiting));
     div().id(ElementId::Name(id.into())).role(Role::Status).aria_label(waiting).child(text).test_support()
 }
 
