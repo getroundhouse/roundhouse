@@ -362,4 +362,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     UPDATE sessions SET permission_mode = 'bypassPermissions'
         WHERE permission_mode IS NULL OR permission_mode NOT IN ('plan', 'bypassPermissions');
 ",
+    // What each subagent has done lately, which its record shows while it works.
+    subagents::RECENT_WORK,
 ];

@@ -1,14 +1,16 @@
 //! Each subagent's record, changed in the transaction that records the event that changes it.
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, Rev, SessionId, Subagent, SubagentStatus, ToolUseId};
+use protocol::model::{Call, RecentWork, Rev, SessionId, Subagent, SubagentStatus, ToolUseId};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
 
+mod recent;
+
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, latest_call, report, rev";
+     ended_at_ms, calls, latest_call, report, rev, recent";
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -36,12 +38,14 @@ impl Store {
 const STARTED: &str = "INSERT OR IGNORE INTO subagents
      (session_id, call, kind, description, prompt, in_background, status, started_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
-const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?
+// What it's done lately is only shown while it works.
+const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL
      WHERE session_id = ? AND call = ? AND status = ?";
 
 /// Changes the records of the subagents `event` says something about, in the transaction that records it, and says
 /// which. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with
-/// the agent, which takes its subagents with it, and counts the calls in between from the subagent's own events.
+/// the agent, which takes its subagents with it, and counts the calls in between from the subagent's own events,
+/// which also say what it's done lately.
 pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<ToolUseId>, StoreError> {
     let (session, at) = (event.session_id.as_str(), event.ts_ms);
     let working = text_of(&SubagentStatus::Working);
@@ -57,19 +61,29 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         }
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
-                "UPDATE subagents SET status = ?, ended_at_ms = ? WHERE session_id = ? AND status = ? RETURNING call",
+                "UPDATE subagents SET status = ?, ended_at_ms = ?, recent = NULL WHERE session_id = ? AND status = ?
+                 RETURNING call",
             )?;
             let stopped = text_of(&SubagentStatus::Stopped);
             let calls = statement.query_map(params![stopped, at, session, working], |row| row.get::<_, String>(0))?;
             Ok(calls.map(|call| call.map(ToolUseId::from)).collect::<rusqlite::Result<_>>()?)
         }
-        EventBody::Assistant { blocks, .. } => {
+        // Its calls and what it wrote come from its side, and what came back for its calls from the user's.
+        EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let Some(call) = &event.subagent else { return Ok(Vec::new()) };
             let made: Vec<Call> = blocks.iter().filter_map(call_in).collect();
-            let Some(latest) = made.last() else { return Ok(Vec::new()) };
+            let latest = made.last().map(serde_json::to_string).transpose()?;
+            let mut recent = recent_work(tx, session, call)?;
+            let wrote = matches!(event.body, EventBody::Assistant { .. });
+            let added = recent.as_mut().is_some_and(|work| recent::add(work, blocks, wrote));
+            if made.is_empty() && !added {
+                return Ok(Vec::new());
+            }
+            let recent = recent.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
             let rows = tx.execute(
-                "UPDATE subagents SET calls = calls + ?, latest_call = ? WHERE session_id = ? AND call = ?",
-                params![made.len(), serde_json::to_string(latest)?, session, call.as_str()],
+                "UPDATE subagents SET calls = calls + ?, latest_call = coalesce(?, latest_call),
+                     recent = coalesce(?, recent) WHERE session_id = ? AND call = ?",
+                params![made.len(), latest, recent, session, call.as_str()],
             )?;
             Ok(changed(rows, call))
         }
@@ -81,7 +95,6 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
-        | EventBody::AgentUser { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::TurnEnded { .. }
         | EventBody::ApprovalRequested { .. }
@@ -91,6 +104,21 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => Ok(Vec::new()),
     }
+}
+
+/// What the subagent `call` started has done lately, if it's still working, since that's only kept while it works.
+fn recent_work(tx: &Connection, session: &str, call: &ToolUseId) -> Result<Option<RecentWork>, StoreError> {
+    let working = text_of(&SubagentStatus::Working);
+    let recent = tx
+        .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND call = ? AND status = ?")?
+        .query_row(params![session, call.as_str(), working], |row| row.get::<_, Option<String>>(0))
+        .optional()?;
+    Ok(recent.map(|recent| read_recent(recent.as_deref())))
+}
+
+/// Written only by this hub, as JSON. What it can't read is nothing it knows of.
+fn read_recent(json: Option<&str>) -> RecentWork {
+    json.and_then(|json| serde_json::from_str(json).ok()).unwrap_or_default()
 }
 
 fn call_in(block: &ContentBlock) -> Option<Call> {
@@ -114,6 +142,7 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         latest_call: row.get::<_, Option<String>>(10)?.and_then(|call| serde_json::from_str(&call).ok()),
         report: text_at(row, 11)?,
         rev: rev_of(row, 12)?,
+        recent: read_recent(row.get::<_, Option<String>>(13)?.as_deref()),
     })
 }
 

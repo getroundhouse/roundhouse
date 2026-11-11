@@ -118,3 +118,7 @@ pub(super) const RECORDS: &str = r"
     DROP TABLE started;
     DROP TABLE made;
 ";
+
+/// What each subagent has done lately, as JSON, which its record shows while it works and empties when it ends. One
+/// still working has none until its next event.
+pub(super) const RECENT_WORK: &str = "ALTER TABLE subagents ADD COLUMN recent TEXT;";

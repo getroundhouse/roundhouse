@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{Rev, SessionId, ToolUseId};
+use crate::attachment::Attachment;
 use crate::event::SubagentOutcome;
 
 /// One subagent, named by its session and the call that started it, which its events name as their parent.
@@ -31,9 +32,12 @@ pub struct Subagent {
     /// How many calls it's made.
     #[serde(default)]
     pub calls: u32,
-    /// The newest of them.
+    /// The newest of them. A client from before `recent` shows this, so it's still kept.
     #[serde(default)]
     pub latest_call: Option<Call>,
+    /// What it's done lately, which its call shows while it works. Only while it works: it's emptied when it ends.
+    #[serde(default)]
+    pub recent: RecentWork,
     /// What it reported, once it finished.
     #[serde(default)]
     pub report: Option<String>,
@@ -72,4 +76,103 @@ pub struct Call {
     pub id: ToolUseId,
     pub name: String,
     pub input: Value,
+}
+
+/// What a subagent has done lately: its newest calls, each with the text it wrote just before it and what came back
+/// once something has, then what it's written since the newest. Every change to a subagent's record goes to every
+/// client, so the hub keeps only a few calls and cuts each text short. A call's input is whole, as `latest_call`'s is,
+/// so a write's holds the file it wrote.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct RecentWork {
+    /// Oldest first.
+    #[serde(default)]
+    pub calls: Vec<RecentCall>,
+    /// What it's written since its newest call.
+    #[serde(default)]
+    pub since: Option<Said>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RecentCall {
+    /// What it wrote just before the call.
+    #[serde(default)]
+    pub before: Option<Said>,
+    pub call: Call,
+    /// What came back, once something has.
+    #[serde(default)]
+    pub result: Option<CallResult>,
+}
+
+/// Text a subagent wrote, or its start, if it was long.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Said {
+    pub text: String,
+    /// `text` is only its start.
+    #[serde(default)]
+    pub cut: bool,
+}
+
+/// What came back for a call, as its result block had it, or the start of it, if it was long. What it changed in a
+/// file isn't kept, since that can be as long as the file.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct CallResult {
+    #[serde(default)]
+    pub is_error: bool,
+    #[serde(default)]
+    pub text: String,
+    /// `text` is only its start, which a client draws only when it says what went wrong, since a call's line counts
+    /// what came back, and the start of a long read would say it read fewer lines than it did.
+    #[serde(default)]
+    pub cut: bool,
+    #[serde(default)]
+    pub images: Vec<Attachment>,
+    /// What came back is encrypted, for the model alone, so `text` holds none of it.
+    #[serde(default)]
+    pub encrypted: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// A record as a hub from before `recent` sent it.
+    fn older() -> Value {
+        json!({ "session_id": "s", "call": "c", "status": "working", "started_at_ms": 1, "calls": 1,
+            "latest_call": { "id": "read", "name": "Read", "input": { "file_path": "a.rs" } } })
+    }
+
+    #[test]
+    fn a_record_from_an_older_hub_has_done_nothing_lately_that_it_says() {
+        let subagent: Subagent = serde_json::from_value(older()).unwrap();
+
+        assert_eq!(subagent.recent, RecentWork::default());
+        assert_eq!(subagent.latest_call.map(|call| call.name), Some("Read".to_string()));
+    }
+
+    /// Its form on the wire and in the hub's column, which a change of shape would fail.
+    #[test]
+    fn what_a_subagent_has_done_lately_has_one_form() {
+        let call = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.rs" }) };
+        let result =
+            CallResult { is_error: false, text: "1→fn main".into(), cut: true, images: Vec::new(), encrypted: false };
+        let before = Some(Said { text: "I'll read it.".into(), cut: false });
+        let since = Some(Said { text: "It's there.".into(), cut: false });
+        let work = RecentWork { calls: vec![RecentCall { before, call, result: Some(result) }], since };
+
+        let form = json!({
+            "calls": [{
+                "before": { "text": "I'll read it.", "cut": false },
+                "call": { "id": "read", "name": "Read", "input": { "file_path": "a.rs" } },
+                "result": { "is_error": false, "text": "1→fn main", "cut": true, "images": [],
+                    "encrypted": false },
+            }],
+            "since": { "text": "It's there.", "cut": false },
+        });
+        assert_eq!(serde_json::to_value(&work).unwrap(), form);
+        assert_eq!(serde_json::from_value::<RecentWork>(form).unwrap(), work);
+        let sparse = json!({ "calls": [{ "call": { "id": "read", "name": "Read", "input": {} } }] });
+        assert_eq!(serde_json::from_value::<RecentWork>(sparse).unwrap().calls[0].result, None, "only what it has");
+    }
 }

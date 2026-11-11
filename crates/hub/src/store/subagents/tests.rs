@@ -68,8 +68,8 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
 
     assert_eq!(record(&store, &message(None, vec![tool_use("own")])).1, Vec::<String>::new(), "the agent's own");
     assert_eq!(record(&store, &message(Some("other"), vec![tool_use("x")])).1, Vec::<String>::new(), "no record");
-    let text = vec![ContentBlock::Text { text: "x".into(), images: Vec::new() }];
-    assert_eq!(record(&store, &message(Some("agent"), text)).1, Vec::<String>::new(), "no call");
+    let text = vec![ContentBlock::Thinking { text: "x".into() }];
+    assert_eq!(record(&store, &message(Some("agent"), text)).1, Vec::<String>::new(), "nothing it shows");
     let blocks =
         vec![tool_use("read-1"), ContentBlock::Text { text: "x".into(), images: Vec::new() }, tool_use("read-2")];
     assert_eq!(record(&store, &message(Some("agent"), blocks)).1, ["agent"]);
@@ -89,6 +89,77 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
     assert_eq!(record(&store, &ended("agent", SubagentOutcome::Failed, None)).1, Vec::<String>::new(), "ended once");
     assert_eq!(record(&store, &started("agent")).1, Vec::<String>::new(), "started once");
     assert_eq!(subagent(&store, "agent"), finished);
+}
+
+fn said(text: &str) -> ContentBlock {
+    ContentBlock::Text { text: text.into(), images: Vec::new() }
+}
+
+/// What came back for the call `id`, to the agent, or to the subagent `to` started.
+fn answer(to: Option<&str>, id: &str, text: &str) -> EventBody {
+    let result = ContentBlock::ToolResult {
+        tool_use_id: id.into(),
+        is_error: false,
+        text: text.into(),
+        images: Vec::new(),
+        change: None,
+        encrypted: false,
+    };
+    EventBody::AgentUser { parent_tool_use_id: to.map(Into::into), blocks: vec![result] }
+}
+
+/// What the subagent has said since its newest call, and each of its calls kept, with what came back for it.
+fn recent(store: &Store, call: &str) -> (Option<String>, Vec<(String, Option<String>)>) {
+    let work = subagent(store, call).recent;
+    let calls = work.calls.into_iter().map(|made| (made.call.id.to_string(), made.result.map(|r| r.text))).collect();
+    (work.since.map(|said| said.text), calls)
+}
+
+#[test]
+fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_when_it_ends() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    record(&store, &started("agent"));
+    record(&store, &started("other"));
+    // The prompt the CLI sends a subagent run in the foreground, which its call already shows.
+    let prompt = EventBody::AgentUser { parent_tool_use_id: Some("agent".into()), blocks: vec![said("Find it.")] };
+    assert_eq!(record(&store, &prompt).1, Vec::<String>::new(), "what it was asked isn't what it wrote");
+
+    assert_eq!(record(&store, &message(Some("agent"), vec![said("I'll read it."), tool_use("read")])).1, ["agent"]);
+    assert_eq!(record(&store, &answer(Some("agent"), "read", "1→fn main() {}")).1, ["agent"], "what came back");
+    assert_eq!(record(&store, &answer(None, "read", "the agent's own")).1, Vec::<String>::new());
+    assert_eq!(record(&store, &message(Some("agent"), vec![said("It's there.")])).1, ["agent"], "what it said");
+    assert_eq!(record(&store, &message(Some("other"), vec![tool_use("grep")])).1, ["other"]);
+
+    let made = subagent(&store, "agent");
+    assert_eq!(made.recent.calls[0].before.as_ref().map(|said| said.text.as_str()), Some("I'll read it."));
+    assert_eq!(
+        recent(&store, "agent"),
+        (Some("It's there.".into()), vec![("read".into(), Some("1→fn main() {}".into()))])
+    );
+    assert_eq!(made.latest_call.as_ref().map(|call| call.id.as_str()), Some("read"), "for a client from before");
+
+    record(&store, &ended("agent", SubagentOutcome::Finished, Some("Found it.")));
+    let finished = subagent(&store, "agent");
+    assert_eq!(finished.recent, RecentWork::default(), "it's only shown while it works");
+    assert_eq!(finished.latest_call, made.latest_call);
+    assert_eq!(record(&store, &message(Some("agent"), vec![said("Late.")])).1, Vec::<String>::new());
+    record(&store, &exited());
+    assert_eq!(subagent(&store, "other").recent, RecentWork::default(), "nor once it's gone with its agent");
+}
+
+/// A record from before has done nothing lately that it knows of, and fills in as it goes on.
+#[test]
+fn a_migrated_record_starts_with_nothing_done_lately() {
+    let dir = tempfile::tempdir().unwrap();
+    let old = "INSERT INTO subagents (session_id, call, status, started_at_ms) VALUES ('s', 'old', 'working', 1);";
+    let rows = format!("{}{old}", rows(&[]));
+
+    let store = older::store_from_before(dir.path(), schema::BEFORE_RECENT_WORK, &rows);
+
+    assert_eq!(subagent(&store, "old").recent, RecentWork::default());
+    record(&store, &message(Some("old"), vec![tool_use("read")]));
+    assert_eq!(recent(&store, "old"), (None, vec![("read".into(), None)]));
 }
 
 #[test]

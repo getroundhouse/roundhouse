@@ -32,7 +32,7 @@ pub use pull_request::{
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
 pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
-pub use subagent::{Call, Subagent, SubagentStatus};
+pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
