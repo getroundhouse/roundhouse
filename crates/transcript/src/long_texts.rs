@@ -12,6 +12,9 @@
 //! whenever what's been read of it changes. Nothing lists ahead of time which texts a row shows, so a text view
 //! added to a row can't be left out, and `clippy.toml` disallows the kit's own ways to make one anywhere else.
 //!
+//! A view draws matches over what it renders, so it keeps any text that has matches of what's being found too, and has
+//! it draw them, as `marks` says.
+//!
 //! A text is kept while the row that last drew it is loaded and still draws it. The text the agent is still writing
 //! is drawn with [`LongTexts::streaming`], which keeps it from its first word, so it doesn't go blank as it grows past
 //! what's read at once, and what's been read of it carries over when it's recorded, since it keeps its ID. The tail
@@ -20,7 +23,7 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use client_core::session_log::{Row, SessionLog};
 use gpui_kit::component::text::{TextView, TextViewState};
@@ -28,6 +31,9 @@ use gpui_kit::{App, AppContext as _, ElementId, Entity, SharedString, Subscripti
 
 use crate::images_apart::images_apart;
 use crate::transcript::Transcript;
+use marks::Marked;
+
+mod marks;
 
 /// The most the kit's text view reads before it first draws: its `MAX_SYNC_FULL_REPLACE_BYTES`. It goes by the length
 /// of the text it's given. The kit doesn't say what it is, so a test checks it hasn't changed. Keeping every text
@@ -43,6 +49,8 @@ struct Texts {
     kept: HashMap<ElementId, Kept>,
     /// What the row being drawn has drawn so far, for [`LongTexts::draw_row`] to act on once it's done.
     drawn: Vec<Drawn>,
+    /// The texts with matches of what's being found, by the IDs of the views they're drawn in, which keep them.
+    marked: HashMap<ElementId, Marked>,
 }
 
 struct Kept {
@@ -94,10 +102,11 @@ impl LongTexts {
             texts.drawn.push(Drawn { id, text });
             return view.selectable(true);
         }
-        let keeps = match keep {
-            Keep::Long => long,
-            Keep::Written => !text.is_empty(),
-        };
+        let keeps = texts.marked.contains_key(&id)
+            || match keep {
+                Keep::Long => long,
+                Keep::Written => !text.is_empty(),
+            };
         if !keeps {
             return kit_view(id, &text);
         }
@@ -174,6 +183,7 @@ impl LongTexts {
             if let Some(kept) = self.0.borrow_mut().kept.get_mut(&id) {
                 kept.text = text;
             }
+            self.text_changed(&id);
             return;
         }
         #[expect(clippy::disallowed_methods, reason = "a text view's state is made here, and only here")]
@@ -184,18 +194,23 @@ impl LongTexts {
         // a selection too, and a fade, which don't change its height.
         let read = Cell::new(read_up_to(&state, cx));
         let watch = cx.observe(&state, {
-            let (row, this) = (row.clone(), this.clone());
+            let (row, this, texts, watched) = (row.clone(), this.clone(), Rc::downgrade(&self.0), id.clone());
             move |state, cx| {
                 let now = read_up_to(&state, cx);
                 if read.replace(now) == now {
                     return;
+                }
+                if let Some(texts) = Weak::upgrade(&texts) {
+                    LongTexts(texts).newly_read(&watched, cx);
                 }
                 if let Some(row) = row.get() {
                     let _ = this.update(cx, |transcript, cx| transcript.remeasure_row(row, cx));
                 }
             }
         });
+        let kept = id.clone();
         self.0.borrow_mut().kept.insert(id, Kept { state, text, row, _watch: watch });
+        self.newly_read(&kept, cx);
     }
 }
 

@@ -172,6 +172,15 @@ pub enum ClientRequest {
     SessionPromptList {
         id: SessionId,
     },
+    /// Which of the agent's own events, or those of the subagent `subagent` started, hold `query`, by place, as
+    /// [`crate::find::Needle::is_in_event`] says, for finding text in a long chat without reading the whole log. It
+    /// only reads. An empty query, or one longer than [`crate::find::Needle::MOST_CHARS`], is refused as invalid, and a
+    /// hub older than this refuses it as unsupported.
+    SessionFind {
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        query: String,
+    },
     /// Sends every event from `from_seq` on, then keeps streaming as new ones are recorded. To
     /// catch up after reconnecting, subscribe from one past the last `seq` received. The client
     /// picks `subscription_id`, because events can arrive before the reply does.

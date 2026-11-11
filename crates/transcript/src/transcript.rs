@@ -6,12 +6,16 @@ use std::rc::Rc;
 
 use client_core::session_log::{PromptState, Row, SessionLog};
 use client_core::{Client, FileToSend, OpenSession, View};
-use gpui_kit::{AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, IntoElement, Render, Task, Window};
+use gpui_kit::{
+    AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, IntoElement, ParentElement as _, Render, Task,
+    Window,
+};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
+use crate::find::{FindLook, TextId};
 use crate::folds::{Fold, Folds};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
@@ -19,8 +23,10 @@ use crate::list::TranscriptList;
 use crate::long_texts::LongTexts;
 use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
+use find::Finding;
 
 mod answers;
+mod find;
 mod outline;
 mod record;
 mod sending;
@@ -43,6 +49,8 @@ pub enum TranscriptEvent {
     /// Someone asked to see the work of the subagent the call `call` started, in the subagent tab. `title` is what the
     /// call says it's for, for a subagent whose record hasn't come.
     OpenSubagent { call: ToolUseId, title: String },
+    /// The bar for finding text in the chat closed, so focus can go back where it was.
+    FindClosed,
 }
 
 pub(crate) struct Model {
@@ -64,6 +72,11 @@ pub(crate) struct Model {
     pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
     /// In the subagent tab, the call that started the subagent it shows, alone.
     pub alone: Option<ToolUseId>,
+    /// What's being found in the chat, for rows to draw.
+    pub find: Rc<FindLook>,
+    /// The Markdown with matches in each row the log holds, as counting found it, which a row keeps views of once
+    /// it's drawn, so they draw them.
+    pub found_markdown: HashMap<usize, FoundMarkdown>,
 }
 
 impl Model {
@@ -78,6 +91,8 @@ impl Model {
             subagents: HashMap::new(),
             subagent_rows: RefCell::default(),
             alone: None,
+            find: Rc::default(),
+            found_markdown: HashMap::new(),
         }
     }
 }
@@ -89,6 +104,9 @@ impl Default for Model {
         Model::with(AgentKind::Claude, AtWork::default())
     }
 }
+
+/// The Markdown texts in a row with matches.
+pub(crate) type FoundMarkdown = Rc<[TextId]>;
 
 pub struct Transcript {
     client: Client,
@@ -111,6 +129,8 @@ pub struct Transcript {
     asking: Option<Entity<QuestionPanel>>,
     /// Where every question waiting on an answer is in the log. The transcript draws them once they're answered.
     waiting: Vec<Seq>,
+    /// Finding text in the chat, while its bar is open.
+    finding: Option<Finding>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -164,6 +184,7 @@ impl Transcript {
             prompts: outline::Prompts::default(),
             asking: None,
             waiting: Vec::new(),
+            finding: None,
         }
     }
 
@@ -179,6 +200,7 @@ impl Transcript {
     pub fn reconnect(&mut self, client: &Client) {
         self.session.reconnect(client);
         self.client = client.clone();
+        self.find_on_new_connection();
         // Asked for again the next time they're drawn, in case the connection was what failed.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client);
@@ -253,11 +275,15 @@ impl Transcript {
         self.list.set_rows(rows, loaded);
         self.session.read(|log| self.texts.let_go(log));
         if let Some(changed) = changes.rows {
-            self.list.out_of_date(changed);
+            self.list.out_of_date(changed.clone());
+            self.find_in_changes(changed, cx);
         }
         if events_changed {
             self.follow_question(cx);
         }
+        // What the search has read since, and a match whose row was loading, which may be here now.
+        self.find_news(cx);
+        self.go_on(cx);
         for error in errors {
             cx.emit(TranscriptEvent::Error(error.to_string()));
         }
@@ -282,6 +308,8 @@ impl Transcript {
         // Not loaded, so not measured either.
         if let Some(row) = self.session.read(|log| log.row_of(seq)) {
             self.list.out_of_date(row..row + 1);
+            // What it draws has changed too.
+            self.find_in_changes(row..row + 1, cx);
         }
         cx.notify();
     }
@@ -330,6 +358,7 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.keep_revealing(cx);
         let (model, session, wanted) = (self.model.clone(), self.session.clone(), self.session.clone());
         let line_text = look::LineText::new(window, cx);
         let shared = crate::rows::Shared {
@@ -353,7 +382,8 @@ impl Render for Transcript {
             window,
             cx,
         );
-        self.with_outline(rows.into_any_element(), line_text, window, cx)
+        let bar = self.find_bar(cx);
+        self.with_outline(rows.into_any_element(), line_text, window, cx).children(bar)
     }
 }
 

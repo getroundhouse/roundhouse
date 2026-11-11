@@ -13,6 +13,7 @@ pub mod attachment;
 mod build;
 pub mod client;
 pub mod event;
+pub mod find;
 pub mod frame;
 pub mod model;
 pub mod paths;

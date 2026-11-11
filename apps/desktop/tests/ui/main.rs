@@ -12,6 +12,7 @@ mod chats;
 mod checkout;
 mod context;
 mod core_loop;
+mod finding;
 #[cfg(target_os = "macos")]
 mod gallery;
 mod home;

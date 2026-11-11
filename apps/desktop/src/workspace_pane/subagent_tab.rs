@@ -123,9 +123,12 @@ impl WorkspacePane {
                 TranscriptEvent::OpenSubagent { call, title } => {
                     this.open_subagent_tab(chat.clone(), call.clone(), title.clone(), cx);
                 }
-                // Nothing is sent from it, a subagent's work has no turns, and no question is asked in it, since
-                // approvals are the agent's own.
-                TranscriptEvent::NotSent { .. } | TranscriptEvent::TurnEnded | TranscriptEvent::Asking { .. } => {}
+                // Nothing is sent from it, a subagent's work has no turns, no question is asked in it, since
+                // approvals are the agent's own, and nothing's found in it.
+                TranscriptEvent::NotSent { .. }
+                | TranscriptEvent::TurnEnded
+                | TranscriptEvent::Asking { .. }
+                | TranscriptEvent::FindClosed => {}
             });
             let focus = cx.focus_handle();
             self.subagents.tab =

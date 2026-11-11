@@ -12,13 +12,15 @@ use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    SharedString, Styled, StyledText, TestSupportExt as _, div, px,
+    SharedString, Styled, TestSupportExt as _, div, px,
 };
 
-use super::block;
 use super::highlight::{Spans, spans};
+use super::{Toggle, block};
 use crate::calls::count;
 use crate::calls::lines::{Mark, NumberedLine, Section};
+use crate::find::{self, FindLook, Marks, Part, behind};
+use crate::log_block::{TAB, tabbed};
 use crate::scroll_area::ScrollArea;
 
 /// More than a block is for. Past this, the rest of a file is left to the diff and the editor.
@@ -30,18 +32,22 @@ const NUMBERS_WIDTH: f32 = 44.0;
 const BAR_WIDTH: f32 = 3.0;
 /// Colours for parts of a line, by where they are in it.
 type Styles = Vec<(Range<usize>, HighlightStyle)>;
-/// What a tab is drawn as, since the line's width is measured in spaces.
-const TAB: &str = "    ";
 
-/// The lines of `sections`, in a block that scrolls, with a gap between sections.
-pub(super) fn lines(id: ElementId, language: &str, sections: &[Section], cx: &App) -> AnyElement {
+/// The lines of `sections`, the call's `part`, in a block that scrolls, with a gap between sections.
+pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Section], cx: &App) -> AnyElement {
+    let id = part.element(toggle.key);
+    let area = block::scroll_id(&id);
+    let marks = toggle.find.marks_of(&(toggle.key.clone(), part), || shown_text(sections).into());
     let (shown, more) = fitted(sections, SHOWN_LINES);
-    let mut drawn = Vec::new();
+    let (mut drawn, mut at) = (Vec::new(), 0);
     for (i, (section, shown)) in sections.iter().zip(shown).filter(|(_, shown)| *shown > 0).enumerate() {
         if i > 0 {
             drawn.push(gap());
         }
-        drawn.extend(rows(language, &section[..shown], cx));
+        let lines = &section[..shown];
+        let len = joined_len(lines);
+        drawn.extend(rows(language, lines, &marks.within(at, at + len), Some(&area), cx));
+        at += len + 1;
     }
     let more = (more > 0).then(|| format!("and {}", count(more, "more line", "more lines")));
     let part = div()
@@ -52,7 +58,24 @@ pub(super) fn lines(id: ElementId, language: &str, sections: &[Section], cx: &Ap
         .children(drawn)
         .when_some(more, |d, more| d.child(block::label(more, cx).pb_2()))
         .test_support();
-    scrolling(id, part).into_any_element()
+    scrolling(toggle.find, &id, part).into_any_element()
+}
+
+/// What [`lines`] draws of `sections`, for finding: each line it shows, one after another.
+pub(super) fn shown_text(sections: &[Section]) -> String {
+    let (shown, _) = fitted(sections, SHOWN_LINES);
+    let lines = sections.iter().zip(shown).flat_map(|(section, shown)| &section[..shown]);
+    lines.map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n")
+}
+
+/// What [`rows`] draws of `lines`, for finding.
+pub(super) fn rows_text(lines: &[NumberedLine]) -> String {
+    lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n")
+}
+
+/// How long `lines` are, with a line break between each.
+fn joined_len(lines: &[NumberedLine]) -> usize {
+    lines.iter().map(|line| line.text.len()).sum::<usize>() + lines.len().saturating_sub(1)
 }
 
 /// How many of each section's lines fit in `room` lines, in order, and how many are left out.
@@ -71,14 +94,21 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
 }
 
 /// A block's numbered lines, `part`, scrolling past a dozen, and sideways along a line too long for it.
-pub(super) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
-    block::scrolling(id, part).max_height(px(MAX_HEIGHT)).both_ways()
+pub(super) fn scrolling(find: &FindLook, id: &ElementId, part: impl IntoElement) -> ScrollArea {
+    block::scrolling(find, id, part).max_height(px(MAX_HEIGHT)).both_ways()
 }
 
-/// A row for each of these lines, without a block around them. A line's text is never cut short, so the rows go in an
-/// area that holds them as wide as the longest, as [`scrolling`] and the edit's preview do.
-pub(super) fn rows(language: &str, lines: &[NumberedLine], cx: &App) -> Vec<AnyElement> {
-    let text: SharedString = lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n").into();
+/// A row for each of these lines, without a block around them, with `marks`, which are where the matches are in
+/// [`rows_text`], in `area` if it's an area that scrolls. A line's text is never cut short, so the rows go in an area
+/// that holds them as wide as the longest, as [`scrolling`] and the edit's preview do.
+pub(super) fn rows(
+    language: &str,
+    lines: &[NumberedLine],
+    marks: &Marks,
+    area: Option<&ElementId>,
+    cx: &App,
+) -> Vec<AnyElement> {
+    let text: SharedString = rows_text(lines).into();
     let spans = spans(language, &text);
     let mut start = 0;
     lines
@@ -86,21 +116,31 @@ pub(super) fn rows(language: &str, lines: &[NumberedLine], cx: &App) -> Vec<AnyE
         .map(|line| {
             let range = start..start + line.text.len();
             start = range.end + 1;
-            row(line, &styles_within(&spans, &range), cx)
+            let marks = marks.within(range.start, range.end);
+            row(line, &styles_within(&spans, &range), &marks, area.cloned(), cx)
         })
         .collect()
 }
 
-fn row(line: &NumberedLine, syntax: &[(Range<usize>, HighlightStyle)], cx: &App) -> AnyElement {
+fn row(
+    line: &NumberedLine,
+    syntax: &[(Range<usize>, HighlightStyle)],
+    marks: &Marks,
+    area: Option<ElementId>,
+    cx: &App,
+) -> AnyElement {
     let theme = cx.theme();
     let (tint, numbers) = match line.mark {
         Mark::Same => (None, look::faint()),
         Mark::Added => (Some(theme.success), theme.success.opacity(0.75)),
         Mark::Removed => (Some(theme.danger), theme.danger.opacity(0.75)),
     };
-    let (text, syntax, changed) = expand_tabs(&line.text, syntax, line.changed.clone());
+    let styles = with_changed(syntax, line.changed.clone(), tint.map(|t| t.opacity(0.3)), line.text.len());
+    let styles = marks.over(&styles, line.text.len());
+    let here =
+        marks.here().zip(marks.reveal()).map(|(range, reveal)| (tabbed(&line.text, range.start), reveal.clone()));
+    let (text, styles) = expand_tabs(&line.text, &styles);
     let text: SharedString = text.into();
-    let styles = with_changed(&syntax, changed, tint.map(|t| t.opacity(0.3)), text.len());
     h_flex()
         .h(px(LINE_HEIGHT))
         .flex_none()
@@ -122,27 +162,20 @@ fn row(line: &NumberedLine, syntax: &[(Range<usize>, HighlightStyle)], cx: &App)
                 .pr_3()
                 .whitespace_nowrap()
                 .text_color(theme.foreground)
-                .child(StyledText::new(text).with_highlights(styles)),
+                .child(find::styled(text, styles, here, area)),
         )
         .into_any_element()
 }
 
-/// A line with each tab drawn as spaces, and its colours and changed part moved to match. They're worked out on the
-/// line as it is, so without moving they'd fall short of where they belong, and could cut a character in two.
-fn expand_tabs(
-    text: &str,
-    syntax: &[(Range<usize>, HighlightStyle)],
-    changed: Option<Range<usize>>,
-) -> (String, Styles, Option<Range<usize>>) {
+/// A line with each tab drawn as spaces, and its colours moved to match. They're worked out on the line as it is, so
+/// without moving they'd fall short of where they belong, and could cut a character in two.
+fn expand_tabs(text: &str, styles: &[(Range<usize>, HighlightStyle)]) -> (String, Styles) {
     if !text.contains('\t') {
-        return (text.to_string(), syntax.to_vec(), changed);
+        return (text.to_string(), styles.to_vec());
     }
-    let tabs_before =
-        |offset: usize| text.char_indices().take_while(|(i, _)| *i < offset).filter(|(_, c)| *c == '\t').count();
-    let at = |offset: usize| offset + tabs_before(offset) * (TAB.len() - 1);
-    let moved = |range: &Range<usize>| at(range.start)..at(range.end);
-    let syntax = syntax.iter().map(|(range, style)| (moved(range), *style)).collect();
-    (text.replace('\t', TAB), syntax, changed.as_ref().map(moved))
+    let moved = |range: &Range<usize>| tabbed(text, range.start)..tabbed(text, range.end);
+    let styles = styles.iter().map(|(range, style)| (moved(range), *style)).collect();
+    (text.replace('\t', TAB), styles)
 }
 
 /// The faint mark between two sections of a file that aren't next to each other, where their numbers go.
@@ -165,8 +198,7 @@ fn styles_within(spans: &Spans, range: &Range<usize>) -> Vec<(Range<usize>, High
         .collect()
 }
 
-/// The syntax colours, with a background added over the part of the line that changed. GPUI wants the pieces in
-/// order and not overlapping, so they're cut at the changed part's edges.
+/// The syntax colours, with a background added over the part of the line that changed.
 fn with_changed(
     syntax: &[(Range<usize>, HighlightStyle)],
     changed: Option<Range<usize>>,
@@ -174,23 +206,7 @@ fn with_changed(
     len: usize,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
     let (Some(changed), Some(background)) = (changed, background) else { return syntax.to_vec() };
-    let changed = changed.start.min(len)..changed.end.min(len);
-    let mut cuts = vec![0, len, changed.start, changed.end];
-    cuts.extend(syntax.iter().flat_map(|(range, _)| [range.start, range.end]));
-    cuts.sort_unstable();
-    cuts.dedup();
-    cuts.windows(2)
-        .filter_map(|pair| {
-            let piece = pair[0]..pair[1];
-            let color = syntax.iter().find(|(range, _)| range.start <= piece.start && piece.end <= range.end);
-            let mut style = color.map_or_else(HighlightStyle::default, |(_, style)| *style);
-            let inside = changed.start <= piece.start && piece.end <= changed.end;
-            if inside {
-                style.background_color = Some(background);
-            }
-            (inside || color.is_some()).then_some((piece, style))
-        })
-        .collect()
+    behind(syntax, &[(changed.start.min(len)..changed.end.min(len), background)], len)
 }
 
 #[cfg(test)]
@@ -213,10 +229,9 @@ mod tests {
         let line = "\tlet x = \"ééé\";";
         let string = line.find('"').unwrap()..line.rfind('"').unwrap() + 1;
 
-        let (shown, syntax, changed) = expand_tabs(line, &[(string.clone(), HighlightStyle::default())], Some(string));
+        let (shown, styles) = expand_tabs(line, &[(string, HighlightStyle::default())]);
 
         assert_eq!(shown, "    let x = \"ééé\";");
-        assert_eq!(&shown[syntax[0].0.clone()], "\"ééé\"", "the colour still covers the string, on whole characters");
-        assert_eq!(&shown[changed.unwrap()], "\"ééé\"");
+        assert_eq!(&shown[styles[0].0.clone()], "\"ééé\"", "the colour still covers the string, on whole characters");
     }
 }

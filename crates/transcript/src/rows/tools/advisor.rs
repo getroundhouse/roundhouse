@@ -10,6 +10,10 @@ use gpui_kit::{
 
 use super::line::{Line, Part};
 use super::{Answer, Reply, Toggle, block, line};
+use crate::find::Part as Text;
+use crate::folds::Fold;
+use crate::item_key::ItemKey;
+use crate::rows::shown::Gather;
 
 /// What the call opens to when the advisor's reply is encrypted.
 const ENCRYPTED: &str = "The advisor's reply is encrypted, so only the agent can read it.";
@@ -26,7 +30,7 @@ const EMPTY: &str = "The advisor's reply was empty.";
 
 pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
     let answer = reply.result();
-    let advice = answer.and_then(Answer::success).map(str::trim).filter(|advice| !advice.is_empty());
+    let advice = advice(answer);
     // Its start, while it's closed, as a thought's is, so it isn't shown twice.
     let start = advice.filter(|_| !toggle.open).map(Part::start_of);
     let dropped = matches!(reply, Reply::Dropped).then(|| Part::Note(DROPPED_NOTE.into()));
@@ -36,11 +40,24 @@ pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
     line::drawn(line, answer, opened, toggle, cx)
 }
 
+/// What [`draw`] shows open, for finding.
+pub(super) fn shown(reply: &Reply, key: &ItemKey, gather: &mut Gather) {
+    line::shown_failure(reply.result(), false, key, gather);
+    if let Some(advice) = advice(reply.result()) {
+        gather.inside(key, Fold::Output, |gather| gather.markdown(key, Text::Advice, advice));
+    }
+}
+
+/// What the advisor said, if it can be read and holds something.
+fn advice(answer: Option<&Answer>) -> Option<&str> {
+    answer.and_then(Answer::success).map(str::trim).filter(|advice| !advice.is_empty())
+}
+
 /// What an open call shows: the advice, or why there's none to read. A call that failed shows nothing here, since the
 /// line under it says what went wrong.
 fn said(reply: &Reply, advice: Option<&str>, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
     if let Some(advice) = advice {
-        return Some(block::prose(&toggle.shared.texts, toggle.key, "advice", advice));
+        return Some(block::prose(toggle, Text::Advice, advice));
     }
     let (name, why) = match reply {
         Reply::Nothing => ("no-reply", NO_REPLY),

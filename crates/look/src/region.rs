@@ -27,6 +27,8 @@ pub enum Region {
     Transcript,
     /// The ticks at the right of a chat with several prompts, one for each, at the pane's edge.
     Outline,
+    /// The bar that finds text in the chat, over its top.
+    FindBar,
     /// A question the agent asked, in the composer's place.
     Question,
     /// What an edit changed, shown while the pointer is on its line.
@@ -58,6 +60,7 @@ impl Region {
             Region::SetupLog => "setup-log-text",
             Region::Transcript => "transcript",
             Region::Outline => "outline",
+            Region::FindBar => "find-bar",
             Region::Question => "question",
             Region::EditPreview => "edit-preview",
             Region::TurnCard => "turn-card",

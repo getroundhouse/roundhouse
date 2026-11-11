@@ -9,7 +9,11 @@ use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line, numbered};
 use crate::calls::files::{file_name, language};
 use crate::calls::lines::NumberedLine;
-use crate::calls::{Found, Search};
+use crate::calls::{FileLines, Found, Search};
+use crate::find::Part as Text;
+use crate::folds::Fold;
+use crate::item_key::ItemKey;
+use crate::rows::shown::Gather;
 
 /// More files than are worth listing in a block.
 const LISTED_FILES: usize = 200;
@@ -17,31 +21,53 @@ const LISTED_FILES: usize = 200;
 pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let found = answer.and_then(Answer::success).map(Found::read);
     let line = Line::new(IconName::Search, search.title())
-        .part(Part::Pill(search.pattern.to_string().into()))
+        .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
         .part(search.path.map(|path| Part::Chip(file_name(path).to_string().into())))
         .part(found.as_ref().map(|found| Part::Note(found.summary().into())));
     let opened = found.filter(|_| toggle.open).and_then(|found| opened(&found, toggle, cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
+/// What [`draw`] shows open, for finding.
+pub(super) fn shown(search: &Search, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    gather.plain(key, Text::Pill, search.pattern);
+    line::shown_failure(answer, false, key, gather);
+    let Some(found) = answer.and_then(Answer::success).map(Found::read) else { return };
+    gather.inside(key, Fold::Output, |gather| match &found {
+        Found::Lines(files) => {
+            for (i, file) in files.iter().enumerate() {
+                gather.plain(key, Text::nth(Text::FoundPath, i), file.path);
+                gather.plain(key, Text::nth(Text::FoundLines, i), &numbered::rows_text(&lines(file)));
+            }
+        }
+        Found::Files(_) | Found::Raw(_) => {
+            if let Some(text) = listed(&found) {
+                gather.plain(key, Text::Found, &block::output_text(&text));
+            }
+        }
+        Found::Nothing => {}
+    });
+}
+
 fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
-    let id = toggle.key.element("found");
+    let id = Text::Found.element(toggle.key);
     let shown = match found {
         Found::Lines(files) => {
+            let area = block::scroll_id(&id);
             let mut rows = Vec::new();
-            for file in files {
-                rows.push(block::label(file.path.to_string(), cx).into_any_element());
-                let lines: Vec<NumberedLine> =
-                    file.lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
-                rows.extend(numbered::rows(language(file.path), &lines, cx));
+            for (i, file) in files.iter().enumerate() {
+                rows.push(block::found_label(toggle, Text::nth(Text::FoundPath, i), file.path, cx).into_any_element());
+                let lines = lines(file);
+                let marks = toggle.find.marks_of(&(toggle.key.clone(), Text::nth(Text::FoundLines, i)), || {
+                    numbered::rows_text(&lines).into()
+                });
+                rows.extend(numbered::rows(language(file.path), &lines, &marks, Some(&area), cx));
             }
-            numbered::scrolling(id.clone(), div().id(id).pb_2().children(rows)).into_any_element()
+            numbered::scrolling(toggle.find, &id, div().id(id.clone()).pb_2().children(rows)).into_any_element()
         }
-        Found::Files(files) => {
-            let listed = files.iter().take(LISTED_FILES).copied().collect::<Vec<_>>().join("\n");
-            block::output(id, &listed, cx.theme().foreground, cx)
+        Found::Files(_) | Found::Raw(_) => {
+            block::output(toggle, Text::Found, &listed(found)?, cx.theme().foreground, cx)
         }
-        Found::Raw(text) => block::output(id, text, cx.theme().foreground, cx),
         Found::Nothing => return None,
     };
     Some(
@@ -51,4 +77,18 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
             .child(shown)
             .into_any_element(),
     )
+}
+
+/// A file's matching lines, with their numbers.
+fn lines(file: &FileLines) -> Vec<NumberedLine> {
+    file.lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect()
+}
+
+/// What a search that found files, or something else, shows: the files, one to a line, or what came.
+fn listed(found: &Found) -> Option<String> {
+    match found {
+        Found::Files(files) => Some(files.iter().take(LISTED_FILES).copied().collect::<Vec<_>>().join("\n")),
+        Found::Raw(text) => Some((*text).to_string()),
+        Found::Lines(_) | Found::Nothing => None,
+    }
 }

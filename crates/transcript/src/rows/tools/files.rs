@@ -20,6 +20,10 @@ use crate::calls::diff;
 use crate::calls::files::{file_name, language, numbered_lines};
 use crate::calls::lines::{Mark, NumberedLine, Section};
 use crate::calls::{EditFile, ReadFile, WriteFile, count};
+use crate::find::{Marks, Part as Text};
+use crate::folds::Fold;
+use crate::item_key::ItemKey;
+use crate::rows::shown::Gather;
 use crate::scroll_area::holding_wide;
 
 const PREVIEW_WIDTH: f32 = 560.0;
@@ -28,31 +32,66 @@ const PREVIEW_WIDTH: f32 = 560.0;
 const PREVIEW_HEIGHT: f32 = 260.0;
 
 pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let lines = answer.and_then(Answer::success).map(numbered_lines).unwrap_or_default();
-    let images = answer.map(Answer::images).unwrap_or_default();
-    let title = amount(lines.len(), images.len()).map_or_else(|| "Read".to_string(), |amount| format!("Read {amount}"));
+    let read = Read::of(answer);
+    let title = amount(read.lines.len(), read.images.len()).map_or_else(|| "Read".to_string(), |n| format!("Read {n}"));
     let line = Line::new(IconName::FileText, title).part(chip(file.path));
-    // What came back that isn't the file's lines, if it isn't blank. A read with nothing to show opens to nothing, as
-    // one of an image recorded before the hub kept a tool's images does. A failure is shown under the line.
-    let text = answer.and_then(Answer::success).filter(|text| lines.is_empty() && !text.trim().is_empty());
-    let output = |text| block::output(toggle.key.element("output"), text, cx.theme().muted_foreground, cx);
+    let output = |text| block::output(toggle, Text::Output, text, cx.theme().muted_foreground, cx);
     let opened = if !toggle.open {
         None
-    } else if lines.is_empty() && images.is_empty() {
-        text.map(|text| block::frame(cx).child(output(text)).into_any_element())
+    } else if read.lines.is_empty() && read.images.is_empty() {
+        read.text.map(|text| block::frame(cx).child(output(text)).into_any_element())
     } else {
         // Its lines, or what else came back, then any images, such as a notebook's.
-        let section: Section = lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect();
         let shown = block::frame(cx)
-            .child(block::label(file.path.to_string(), cx))
-            .when(!lines.is_empty(), |d| {
-                d.child(numbered::lines(toggle.key.element("file"), language(file.path), &[section], cx))
+            .child(block::found_label(toggle, Text::Label, file.path, cx))
+            .when(!read.lines.is_empty(), |d| {
+                d.child(numbered::lines(toggle, Text::File, language(file.path), &[read.section()], cx))
             })
-            .when_some(text, |d, text| d.child(output(text)))
-            .when(!images.is_empty(), |d| d.child(block::images(images, cx)));
+            .when_some(read.text, |d, text| d.child(output(text)))
+            .when(!read.images.is_empty(), |d| d.child(block::images(read.images, cx)));
         Some(shown.into_any_element())
     };
     line::drawn(line, answer, opened, toggle, cx)
+}
+
+/// What [`read`] shows open, for finding.
+pub(super) fn shown_read(file: &ReadFile, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    let read = Read::of(answer);
+    line::shown_failure(answer, false, key, gather);
+    gather.inside(key, Fold::Output, |gather| {
+        if !read.lines.is_empty() || !read.images.is_empty() {
+            gather.plain(key, Text::Label, file.path);
+        }
+        if !read.lines.is_empty() {
+            gather.plain(key, Text::File, &numbered::shown_text(&[read.section()]));
+        }
+        if let Some(text) = read.text {
+            gather.plain(key, Text::Output, &block::output_text(text));
+        }
+    });
+}
+
+/// What a read sent back that it shows.
+struct Read<'a> {
+    /// The file's lines, with their numbers.
+    lines: Vec<(u32, &'a str)>,
+    images: &'a [crate::attachments::Carried],
+    /// What came back that isn't the file's lines, if it isn't blank. A read with nothing to show opens to nothing, as
+    /// one of an image recorded before the hub kept a tool's images does. A failure is shown under the line.
+    text: Option<&'a str>,
+}
+
+impl<'a> Read<'a> {
+    fn of(answer: Option<&'a Answer>) -> Self {
+        let lines = answer.and_then(Answer::success).map(numbered_lines).unwrap_or_default();
+        let images = answer.map(Answer::images).unwrap_or_default();
+        let text = answer.and_then(Answer::success).filter(|text| lines.is_empty() && !text.trim().is_empty());
+        Self { lines, images, text }
+    }
+
+    fn section(&self) -> Section {
+        self.lines.iter().map(|(number, text)| NumberedLine::same(*number, text)).collect()
+    }
 }
 
 pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
@@ -63,18 +102,22 @@ pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, 
     let line = Line::new(icon, title)
         .part(chip(file.path))
         .part(replaced.map(|hunks| Part::Counts(diff::change_counts(hunks))));
-    let opened = toggle.open.then(|| {
-        let sections = replaced.map_or_else(|| vec![whole(file.content)], diff::from_hunks);
-        shown_file(toggle, file.path, &sections, cx)
-    });
+    let opened = toggle.open.then(|| shown_file(toggle, file.path, &written(file, answer), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
+/// What [`write`] shows open, for finding.
+pub(super) fn shown_write(file: &WriteFile, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    shown_lines(file.path, &written(file, answer), answer, key, gather);
+}
+
+/// What a write did: changed a file that was there, or made all of a new one.
+fn written(file: &WriteFile, answer: Option<&Answer>) -> Vec<Section> {
+    answer.and_then(Answer::hunks).map_or_else(|| vec![whole(file.content)], diff::from_hunks)
+}
+
 pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let sections: Vec<Section> = answer
-        .and_then(Answer::hunks)
-        .map_or_else(|| file.edits.iter().map(|(old, new)| diff::from_text(old, new)).collect(), diff::from_hunks);
-    let sections = Rc::new(sections);
+    let sections = Rc::new(edited(file, answer));
     let line = Line::new(IconName::FilePen, "Edit")
         .part(chip(file.path))
         .part(Part::Counts(diff::counts(&sections)))
@@ -83,12 +126,33 @@ pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx
     line::drawn(line, answer, opened, toggle, cx)
 }
 
+/// What [`edit`] shows open, for finding.
+pub(super) fn shown_edit(file: &EditFile, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    shown_lines(file.path, &edited(file, answer), answer, key, gather);
+}
+
+/// What an edit did, from the patch the agent sent back, or worked out from the call before it has.
+fn edited(file: &EditFile, answer: Option<&Answer>) -> Vec<Section> {
+    answer
+        .and_then(Answer::hunks)
+        .map_or_else(|| file.edits.iter().map(|(old, new)| diff::from_text(old, new)).collect(), diff::from_hunks)
+}
+
 /// A file's lines in a block, under its path.
 fn shown_file(toggle: &Toggle, path: &str, sections: &[Section], cx: &App) -> AnyElement {
     block::frame(cx)
-        .child(block::label(path.to_string(), cx))
-        .child(numbered::lines(toggle.key.element("file"), language(path), sections, cx))
+        .child(block::found_label(toggle, Text::Label, path, cx))
+        .child(numbered::lines(toggle, Text::File, language(path), sections, cx))
         .into_any_element()
+}
+
+/// What [`shown_file`] shows, under what went wrong, for finding.
+fn shown_lines(path: &str, sections: &[Section], answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    line::shown_failure(answer, false, key, gather);
+    gather.inside(key, Fold::Output, |gather| {
+        gather.plain(key, Text::Label, path);
+        gather.plain(key, Text::File, &numbered::shown_text(sections));
+    });
 }
 
 fn chip(path: &str) -> Part {
@@ -117,7 +181,9 @@ struct DiffPreview {
 impl Render for DiffPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, cx));
+        // It isn't in the transcript, so it has nothing to find in.
+        let none = Marks::default();
+        let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, &none, None, cx));
         let lines = div().id("edit-preview-lines").children(rows.collect::<Vec<_>>()).test_support();
         let preview = div()
             .region(Region::EditPreview)

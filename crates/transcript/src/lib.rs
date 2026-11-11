@@ -6,6 +6,7 @@
 
 mod attachments;
 mod calls;
+mod find;
 #[cfg(test)]
 mod fixtures;
 mod folds;

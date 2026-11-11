@@ -21,6 +21,11 @@ impl<'a> Command<'a> {
         self.description.unwrap_or("Run")
     }
 
+    /// What the agent said it's doing, if it said, which is the title then.
+    pub(crate) fn described(&self) -> Option<&'a str> {
+        self.description
+    }
+
     /// The command on one line, for beside the title.
     pub(crate) fn summary(&self) -> &'a str {
         first_line(self.command)

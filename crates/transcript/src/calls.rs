@@ -21,7 +21,7 @@ pub(crate) use command::Command;
 pub(crate) use failure::Failure;
 pub(crate) use files::{EditFile, ReadFile, WriteFile};
 pub(crate) use other::Other;
-pub(crate) use search::{Found, Looks, Search};
+pub(crate) use search::{FileLines, Found, Looks, Search};
 pub(crate) use web::{Fetch, WebSearch};
 
 /// A call, by what kind of thing it does.

@@ -4,13 +4,13 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::text::TextView;
 use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
 
 use super::line::{self, Line, Part};
 use super::tools::Toggle;
+use crate::find::{self, Part as Text};
 use crate::item_key::ItemKey;
 
 /// What a thought's line starts with, recorded or still streaming.
@@ -20,15 +20,16 @@ pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::start_of(thought));
     let line = Line::new(ICON, "Thinking").part(summary);
     let opened = toggle.open.then(|| {
-        let text_view = toggle.shared.texts.markdown(text_id(toggle.key), thought);
-        text(toggle.key, text_view, cx).into_any_element()
+        let (id, view) =
+            ((toggle.key.clone(), Text::Thinking), toggle.shared.texts.markdown(text_id(toggle.key), thought));
+        text(toggle.key, find::markdown_view(view, &id, toggle.find, None), cx).into_any_element()
     });
     line::drawn(line, None, opened, toggle, cx)
 }
 
 /// All of what the agent thought, in its text view, which is under [`text_id`] while it streams and once it's
 /// recorded.
-pub(super) fn text(key: &ItemKey, text_view: TextView, cx: &App) -> impl IntoElement + use<> {
+pub(super) fn text(key: &ItemKey, text_view: impl IntoElement, cx: &App) -> impl IntoElement {
     div().id(key.element("thinking")).mb_1().text_color(cx.theme().muted_foreground).child(text_view).test_support()
 }
 

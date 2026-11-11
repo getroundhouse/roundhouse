@@ -32,3 +32,14 @@ pub fn tab_underline() -> Hsla {
 pub fn prompt() -> Hsla {
     hex(0x0037_281f)
 }
+
+/// Behind each match of what's being found in a chat: the pale copper the chat showing is marked with, faint, so the
+/// matches read as a trail through the text without hiding it.
+pub fn found() -> Hsla {
+    hex(0x00d8_c2b3).opacity(0.22)
+}
+
+/// Behind the match being shown, in the brand's copper, so it stands out from the rest.
+pub fn found_here() -> Hsla {
+    hex(0x00d0_8a5c).opacity(0.55)
+}

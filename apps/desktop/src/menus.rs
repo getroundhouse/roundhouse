@@ -6,8 +6,8 @@ use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Windo
 use crate::workspace_pane::Showing;
 
 use crate::{
-    About, AddRepository, CheckForUpdates, CloseChat, Hide, HideOthers, Minimize, NewChat, NewWorkspace, NextWorkspace,
-    OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
+    About, AddRepository, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, Hide, HideOthers, Minimize,
+    NewChat, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
 };
 
 /// What the menu bar says about the selected workspace. macOS shows only what it was last given, so the window gives
@@ -75,9 +75,10 @@ fn file_menu(says: Says) -> Menu {
     ])
 }
 
-/// The kit's text boxes handle these, so each works on whichever has focus, and is greyed out where none does. Each is
-/// also the system's own, which macOS sends to its own text fields first. macOS adds its own items at the bottom,
-/// such as Emoji & Symbols.
+/// The kit's text boxes handle the first of these, so each works on whichever has focus, and is greyed out where none
+/// does. Each is also the system's own, which macOS sends to its own text fields first. Find is the window's, for the
+/// chat showing, in a menu of its own as a Mac app has it. macOS adds its own items at the bottom, such as Emoji &
+/// Symbols.
 fn edit_menu() -> Menu {
     Menu::new("Edit").items([
         MenuItem::os_action("Undo", Undo, OsAction::Undo),
@@ -87,6 +88,12 @@ fn edit_menu() -> Menu {
         MenuItem::os_action("Copy", Copy, OsAction::Copy),
         MenuItem::os_action("Paste", Paste, OsAction::Paste),
         MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
+        MenuItem::separator(),
+        MenuItem::submenu(Menu::new("Find").items([
+            MenuItem::action("Find…", FindInChat),
+            MenuItem::action("Find Next", FindNext),
+            MenuItem::action("Find Previous", FindPrevious),
+        ])),
     ])
 }
 

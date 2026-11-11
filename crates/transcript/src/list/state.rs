@@ -34,6 +34,8 @@ pub(super) struct State {
     keeping: Keeping,
     /// Where the rows are drawn, as of the last frame.
     pub(super) viewport: Bounds<Pixels>,
+    /// The rows any of which showed in the last frame.
+    pub(super) shown: Range<usize>,
     /// The runs of rows that are loaded, in order, which are the ones there's anything to measure of.
     loaded: Vec<Range<usize>>,
     /// Which measuring each row's height is from, by [`State::measuring`], or 0 for one whose height has gone out of

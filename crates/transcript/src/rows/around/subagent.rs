@@ -13,7 +13,7 @@ use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
 
-use super::{Around, BlockAround, Reply, blocks_of, nearby};
+use super::{Around, BlockAround, Opening, Reply, blocks_of, nearby};
 use crate::calls::agent;
 use crate::transcript::Model;
 use lately::Lately;
@@ -22,7 +22,7 @@ mod lately;
 
 /// How far after its call a subagent's events are looked for: as many as the log holds at once. A subagent can work
 /// for hundreds of events, and the agent goes on with its own work alongside it.
-const REACH: usize = MAX_LOADED_EVENTS;
+pub(crate) const REACH: usize = MAX_LOADED_EVENTS;
 
 /// What a subagent has done so far.
 pub(in crate::rows) struct Subagent {
@@ -44,7 +44,7 @@ pub(in crate::rows) struct Subagent {
 
 impl Subagent {
     /// What the subagent started by the call `id`, in the event at `seq`, has done.
-    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool) -> Self {
+    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool, opening: Opening) -> Self {
         if log.by() == By::Place {
             let id = ToolUseId::from(id);
             let record = m.subagents.get(&id).cloned();
@@ -56,7 +56,7 @@ impl Subagent {
                 .into_iter()
                 .map(|Lately { block, key, result }| {
                     // What came back is in the subagent's events, which the chat doesn't hold, so it's the record's.
-                    let mut around = BlockAround::read(log, m, seq, &block, key);
+                    let mut around = BlockAround::read(log, m, seq, &block, key, opening);
                     if let Some(result) = &result {
                         around.reply = Reply::of(result, m);
                     }
@@ -78,7 +78,7 @@ impl Subagent {
             let blocks = blocks_of(&event.body);
             subagent.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
             if let Some(events) = &mut subagent.events {
-                events.push((event.clone(), Around::read(log, m, event.seq, &event.body)));
+                events.push((event.clone(), Around::read_as(log, m, event.seq, &event.body, opening)));
             }
         }
         subagent
@@ -88,15 +88,21 @@ impl Subagent {
 /// Whether `event` is a subagent's, and drawn in the call that started it, so its own row is empty. It is when the
 /// call is close enough before it to have gathered it. Otherwise, such as when the call is further back than the log
 /// holds, it's drawn where it is, so it shows somewhere.
-pub(in crate::rows) fn drawn_in_its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> bool {
+pub(crate) fn drawn_in_its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> bool {
+    its_call(log, m, event).is_some()
+}
+
+/// The call `event` is drawn in, if it's a subagent's drawn in the call that started it, as [`drawn_in_its_call`]
+/// says.
+pub(crate) fn its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> Option<Seq> {
     // A log by place holds one agent's or subagent's events, so a call and its subagent's work are never both in it.
     if log.by() == By::Place {
-        return false;
+        return None;
     }
-    let Some(parent) = parent_of(&event.body) else { return false };
-    let Some(call) = m.subagent_calls.borrow_mut().find(log, event.seq, parent) else { return false };
+    let parent = parent_of(&event.body)?;
+    let call = m.subagent_calls.borrow_mut().find(log, event.seq, parent)?;
     // The same reach as `Subagent::read`, which gathers the events after its call's row.
-    call < event.seq && seq_index(event.seq - call) <= REACH
+    (call < event.seq && seq_index(event.seq - call) <= REACH).then_some(call)
 }
 
 /// Where the calls that started subagents are, as rows have looked for them. A subagent's events, which can fill a
@@ -158,7 +164,7 @@ mod tests {
     use protocol::model::Seq;
 
     use super::nearby::is_loaded;
-    use super::{Subagent, drawn_in_its_call};
+    use super::{Opening, Subagent, drawn_in_its_call};
     use crate::fixtures::{calls, calls_to, event, log, result, within};
     use crate::transcript::Model;
 
@@ -173,7 +179,7 @@ mod tests {
         assert!(!drawn_in_its_call(&log, &m, &report(2002)), "too far for the call to gather");
         let orphan = event(3, within("a call that isn't here", calls(&["x"])));
         assert!(!drawn_in_its_call(&log, &m, &orphan), "with no call to draw it");
-        let gathered = Subagent::read(&log, &m, 1, "agent", true).events.unwrap();
+        let gathered = Subagent::read(&log, &m, 1, "agent", true, Opening::AsChosen).events.unwrap();
         let seqs: Vec<Seq> = gathered.iter().map(|(event, _)| event.seq).collect();
         assert_eq!(seqs, [2, 2001], "the call gathers exactly what's drawn in it");
     }
@@ -228,8 +234,8 @@ mod tests {
         let log = log((1..).zip(events).map(|(seq, body)| event(seq, body)));
         let m = Model::default();
 
-        let open = Subagent::read(&log, &m, 1, "agent", true);
-        let closed = Subagent::read(&log, &m, 1, "agent", false);
+        let open = Subagent::read(&log, &m, 1, "agent", true, Opening::AsChosen);
+        let closed = Subagent::read(&log, &m, 1, "agent", false, Opening::AsChosen);
 
         assert_eq!(open.calls, 2);
         let seqs: Vec<Seq> = open.events.unwrap().iter().map(|(event, _)| event.seq).collect();

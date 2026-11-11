@@ -9,8 +9,8 @@ use super::AppView;
 use crate::menus;
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
-    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, MarkWorkspace, NewChat, NewWorkspace, NextChat,
-    NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
+    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, FindInChat, FindNext, FindPrevious, MarkWorkspace,
+    NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
 };
 
 impl AppView {
@@ -27,6 +27,13 @@ impl AppView {
         })
         // Home hides the selected workspace, so nothing acts on it unseen.
         .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
+        .when(self.chat_showing(cx), |root| with_find_shortcuts(root, cx))
+    }
+
+    /// Whether a chat shows, in front of the selected workspace's tabs, to find text in.
+    fn chat_showing(&self, cx: &Context<Self>) -> bool {
+        let pane = self.selected_pane().filter(|_| !self.home_showing()).map(|pane| pane.read(cx));
+        pane.is_some_and(|pane| pane.showing() == Showing::Chat && pane.transcript().is_some())
     }
 
     /// Gives the menu bar again when what it says about the selected workspace changes, such as Show Diff becoming
@@ -54,6 +61,19 @@ impl AppView {
             pane.update(cx, update);
         }
     }
+}
+
+/// Finding text in the chat showing, which there has to be.
+fn with_find_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
+    root.on_action(cx.listener(|t, _: &FindInChat, window, cx| {
+        t.update_selected_pane(cx, |pane, cx| pane.find_in_chat(window, cx));
+    }))
+    .on_action(cx.listener(|t, _: &FindNext, window, cx| {
+        t.update_selected_pane(cx, |pane, cx| pane.find_next(true, window, cx));
+    }))
+    .on_action(cx.listener(|t, _: &FindPrevious, window, cx| {
+        t.update_selected_pane(cx, |pane, cx| pane.find_next(false, window, cx));
+    }))
 }
 
 /// What acts on the selected workspace, which there has to be.

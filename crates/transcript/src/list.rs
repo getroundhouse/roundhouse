@@ -97,6 +97,21 @@ impl TranscriptList {
         self.state.borrow_mut().go_to_row(row);
     }
 
+    /// Whether any of the row at `row` showed in the last frame.
+    pub(crate) fn shows(&self, row: usize) -> bool {
+        self.state.borrow().shown.contains(&row)
+    }
+
+    /// Where the rows were drawn in the last frame, in the window.
+    pub(crate) fn viewport(&self) -> Bounds<Pixels> {
+        self.state.borrow().viewport
+    }
+
+    /// Scrolls down by `by`, or up for less than nothing, as the wheel would.
+    pub(crate) fn scroll_down(&self, by: Pixels) {
+        self.state.borrow_mut().scroll_by(-by);
+    }
+
     /// Goes to the latest row, and keeps to it as more arrives.
     pub fn go_to_latest(&self) {
         self.state.borrow_mut().go_to_latest();

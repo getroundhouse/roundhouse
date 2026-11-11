@@ -38,7 +38,7 @@ pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub(crate) use lines::Place;
-pub use open_session::{OpenSession, View};
+pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use start::Daemon;
 
 #[derive(Debug, thiserror::Error)]

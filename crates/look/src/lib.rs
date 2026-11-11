@@ -34,7 +34,7 @@ pub use highlight::{Spans, highlight, language, preload_highlighting, try_highli
 pub use hover::hover_card;
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, mark};
-pub use palette::{faint, field_edge, prompt, tab_underline};
+pub use palette::{faint, field_edge, found, found_here, prompt, tab_underline};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;
 pub use region::{InRegion, Region};

@@ -8,6 +8,7 @@ use protocol::model::Seq;
 
 use super::{Shared, row};
 use crate::attachments::{self, Carried};
+use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
 
 /// The widest a prompt is, as a share of the column. What was asked sits at the right, as wide as it needs, so it
@@ -23,17 +24,25 @@ pub(crate) enum Progress {
     Recorded(Seq, PromptState),
 }
 
+/// What a prompt says, and what's being found in it.
+#[derive(Clone, Copy)]
+pub(super) struct Prompt<'a> {
+    pub(super) text: &'a str,
+    pub(super) find: &'a FindLook,
+}
+
 /// What was sent, on a bubble at the right of the column, with the files it carries above its text, in the order the
 /// agent was given them. It's faint until the agent has it, so one sent mid-turn reads as not yet seen until the agent
 /// takes it, and one the agent never took says so.
 pub(super) fn prompt_bubble(
     key: &ItemKey,
-    text: &str,
+    text: Prompt,
     carried: &[Carried],
     progress: Progress,
     shared: &Shared,
     cx: &App,
 ) -> AnyElement {
+    let Prompt { text, find } = text;
     let typed = !text.trim().is_empty();
     let (seq, state) = match progress {
         Progress::Sending => (None, None),
@@ -53,7 +62,11 @@ pub(super) fn prompt_bubble(
                 .bg(look::prompt())
                 .when(faint, |d| d.opacity(0.6))
                 .children(attachments::view(seq, carried, &shared.this, cx))
-                .when(typed, |d| d.child(shared.texts.markdown(key.element("prompt"), text))),
+                .when(typed, |d| {
+                    let id = (key.clone(), Part::Prompt);
+                    let view = shared.texts.markdown(find::view_id(&id), text);
+                    d.child(find::markdown_view(view, &id, find, None))
+                }),
         )
         .when(dropped, |d| {
             d.child(

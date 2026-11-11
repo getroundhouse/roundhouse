@@ -19,6 +19,7 @@ mod backup;
 mod comments;
 mod error;
 mod events;
+mod find;
 mod hub_settings;
 mod made;
 #[cfg(test)]
@@ -51,6 +52,8 @@ pub struct Store {
     writer: Mutex<Connection>,
     /// A separate connection, so a large read doesn't delay an agent's events. WAL allows this.
     reader: Mutex<Connection>,
+    /// Another, for finding text in a session, which reads all of it, so every client's reads go on meanwhile.
+    finder: Mutex<Connection>,
 }
 
 /// A session record, plus the fields only the hub needs.
@@ -124,7 +127,8 @@ impl Store {
         let mut writer = open_connection(path)?;
         migrate(&mut writer, backups_dir)?;
         let reader = open_connection(path)?;
-        Ok(Self { writer: Mutex::new(writer), reader: Mutex::new(reader) })
+        let finder = open_connection(path)?;
+        Ok(Self { writer: Mutex::new(writer), reader: Mutex::new(reader), finder: Mutex::new(finder) })
     }
 
     // Repos ---------------------------------------------------------------------------------------

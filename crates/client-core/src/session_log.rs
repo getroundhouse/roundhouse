@@ -153,8 +153,8 @@ impl SessionLog {
         Some(seq_index(position) - 1)
     }
 
-    /// Where `event` goes in this log.
-    fn position(&self, event: &SessionEvent) -> u64 {
+    /// Where `event` goes in this log: its `seq`, or its place.
+    pub fn position(&self, event: &SessionEvent) -> u64 {
         match self.by {
             By::Seq => event.seq,
             By::Place => event.place.get(),
@@ -344,6 +344,23 @@ impl SessionLog {
 
     pub fn loaded_events(&self) -> usize {
         self.events.len()
+    }
+
+    /// The events that are loaded, oldest first.
+    pub fn loaded(&self) -> impl Iterator<Item = &SessionEvent> {
+        self.events.values()
+    }
+
+    /// Whether every event it follows is loaded, so looking through them looks through it all. One that doesn't know
+    /// yet how far its events go, as one by place doesn't until the hub says, holds none.
+    pub fn holds_every_event(&self) -> bool {
+        self.last > 0 && self.events.len() as u64 == self.last
+    }
+
+    /// Whether every event at `positions` that the log goes to is loaded.
+    pub fn holds(&self, positions: Range<u64>) -> bool {
+        let positions = positions.start..positions.end.min(self.last + 1);
+        self.events.range(positions.clone()).count() as u64 == positions.end.saturating_sub(positions.start)
     }
 
     /// How many times events have been added to what's held. It changes whenever looking through the events again

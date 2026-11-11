@@ -317,6 +317,20 @@ impl WorkspacePane {
         });
     }
 
+    /// Opens the bar for finding text in the chat showing, or puts focus back in it, as `Cmd-F` does.
+    pub fn find_in_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(transcript) = self.transcript() {
+            transcript.update(cx, |t, cx| t.open_find(window, cx));
+        }
+    }
+
+    /// Shows the next match in the chat showing, or the one before, as `Cmd-G` and `Cmd-Shift-G` do.
+    pub fn find_next(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(transcript) = self.transcript() {
+            transcript.update(cx, |t, cx| t.find_next(forward, window, cx));
+        }
+    }
+
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {
         if let Some(transcript) = self.transcript() {
             transcript.update(cx, Transcript::cancel);
