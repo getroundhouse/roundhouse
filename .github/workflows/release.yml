@@ -5,6 +5,10 @@
 # tests. The keys are in the `release` environment, which only main can use, so signing, notarizing and publishing
 # only run after a merge. The merge queue has already run the checks by then.
 #
+# The Windows app goes the same way in jobs of its own, so neither platform's release waits on the other's or fails
+# with it: built on Windows, with no secrets, then packaged by vpk on Linux, which packages for Windows, and published
+# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer.
+#
 # The `release` environment's secrets:
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
 #                                                            in base64, and its password
@@ -246,3 +250,165 @@ jobs:
         run: |
           tools/package/publish.py check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
+
+  # The Windows binaries, built where they run. It compiles every dependency, so no key is here.
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        # Git's, which the runner has, so tools/build.sh runs as it does on a Mac.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # build.sh counts the commits for the version.
+          fetch-depth: 0
+          persist-credentials: false
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Not windows-, which windows.yml restores from, since this target/ holds release builds.
+          key: release-windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: release-windows-
+      - name: Build
+        id: build
+        run: |
+          build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      # What package.sh checks of the Mac's binaries, which packaging on Linux can't run. A package's build is its
+      # version, so this is what the hub and the CLI will say they are. Short, because a hub left running by a step
+      # that failed could hold the step open.
+      - name: Run the built CLI and a hub from the build
+        timeout-minutes: 5
+        env:
+          BUILD: ${{ steps.build.outputs.build }}
+        run: |
+          bins="$RUNNER_TEMP/binaries"
+          mkdir -p "$RUNNER_TEMP/smoke"
+          export ROUNDHOUSE_HOME="$RUNNER_TEMP/smoke/home" ROUNDHOUSE_WORKSPACES="$RUNNER_TEMP/smoke/workspaces"
+          # Whatever fails, no hub is left behind.
+          trap '"$bins/roundhouse.exe" hub stop > /dev/null 2>&1 || true' EXIT
+          for bin in roundhoused roundhouse; do
+            said="$("$bins/$bin.exe" --version)"
+            [ "$said" = "$bin $BUILD" ] || { echo "::error::$bin says it's \"$said\", not $BUILD"; exit 1; }
+          done
+          # Needs a hub, so it starts one, from the copy of the daemon a stamped build makes.
+          "$bins/roundhouse.exe" repo list
+          "$bins/roundhouse.exe" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
+          "$bins/roundhouse.exe" hub stop
+          grep -q " version $BUILD " "$RUNNER_TEMP/smoke/status.txt"
+      - name: Show the hub's log
+        if: always()
+        run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
+      # On a PR too, since packaging is checked from them.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-binaries
+          path: ${{ runner.temp }}/binaries
+          if-no-files-found: error
+          retention-days: 7
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  # On a PR, packages the Windows binaries as the release job below does, so the PR shows packaging still works. The
+  # runner image has .NET's SDK.
+  package-windows:
+    needs: build-windows
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-binaries
+          path: ${{ runner.temp }}/binaries
+      - run: tools/package/package-windows.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package"
+      - run: ls -l "$RUNNER_TEMP/package/releases"
+
+  # Packages and publishes the Windows binaries. It compiles nothing, and each key is only in the steps that use it.
+  # Running it again is safe, as for the Mac's.
+  release-windows:
+    needs: build-windows
+    if: github.ref == 'refs/heads/main'
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STORE: s3://${{ vars.RELEASES_BUCKET }}
+      S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
+      S3_REGION: ${{ vars.RELEASES_REGION }}
+      # How many releases the feed lists, and the bucket keeps packages for.
+      KEEP: "10"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-binaries
+          path: ${{ runner.temp }}/binaries
+      # Outside the checkout, and empty, since publish.py starts from an empty directory.
+      - run: |
+          echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
+          version="$(tools/package/package-windows.sh --print-version)"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
+          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
+
+      # Before the feed's key is set up, so a version no app would take stops here, and only once the published feed
+      # matches its signature, so nothing in the bucket gets into the feed this signs.
+      - name: Read the published feed
+        id: feed
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
+        run: |
+          state="$(tools/package/publish.py --channel win prepare --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE")"
+          echo "$VERSION is $state"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+      # vpk makes a delta from the newest full package, which prepare put in releases/.
+      - name: Package
+        if: steps.feed.outputs.state == 'new'
+        run: tools/package/package-windows.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$PACKAGE"
+      - name: Sign the new feed
+        if: steps.feed.outputs.state == 'new'
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+        run: |
+          feed="$(tools/package/publish.py --channel win merge --version "$VERSION" --keep "$KEEP" --work "$PACKAGE")"
+          trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
+          (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
+          tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
+      - name: Publish
+        if: steps.feed.outputs.state == 'new'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
+        run: |
+          tools/package/publish.py --channel win upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE"
+      - name: Check what apps read
+        run: |
+          tools/package/publish.py --channel win check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE"

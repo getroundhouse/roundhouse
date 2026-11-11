@@ -164,19 +164,16 @@ fn metadata_for(target: &str) -> Value {
 
 /// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
 /// holds build tools, proc macros and other platforms' crates. Add each platform here as it starts
-/// shipping, such as iOS or Windows.
+/// shipping, such as iOS.
 #[test]
 fn only_allowed_licenses_ship() {
+    const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
+    const LINUX: [&str; 2] = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
+    const WINDOWS: &str = "x86_64-pc-windows-msvc";
     for (root, targets) in [
-        ("desktop", &["aarch64-apple-darwin", "x86_64-apple-darwin"][..]),
-        (
-            "daemon",
-            &["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"][..],
-        ),
-        (
-            "cli",
-            &["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"][..],
-        ),
+        ("desktop", &[MAC[0], MAC[1], WINDOWS][..]),
+        ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS][..]),
+        ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS][..]),
     ] {
         for target in targets {
             let shipped = shipped_packages(&metadata_for(target), root);
