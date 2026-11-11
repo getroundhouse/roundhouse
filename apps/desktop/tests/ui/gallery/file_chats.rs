@@ -47,7 +47,7 @@ const SIGNAL_TEST_RS: &str = "use crate::signal::Aspect;
 
 #[test]
 fn stop_may_not_pass() {
-    assert!(!Aspect::Stop.may_pass());
+    assert!(!Aspect::Stop.may_pass(), \"a train waits at a stop signal until the block ahead of it is clear again\");
 }
 
 #[test]
