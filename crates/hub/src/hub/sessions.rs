@@ -7,7 +7,7 @@ use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PromptLine, Rev, Seq, Session, SessionId,
-    SessionOptions, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
+    SessionSettings, SessionSettingsChange, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
 
@@ -21,7 +21,7 @@ impl Hub {
         self: &Arc<Self>,
         workspace_id: WorkspaceId,
         agent: AgentKind,
-        options: SessionOptions,
+        options: SessionSettingsChange,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Session, ApiError> {
         if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
@@ -37,7 +37,7 @@ impl Hub {
         }
         let id = new_id();
         let now = now_ms();
-        let SessionOptions { model, permission_mode, effort } = options;
+        let SessionSettings { model, permission_mode, effort } = SessionSettings::default().changed(options);
         let stored = StoredSession {
             session: Session {
                 id: id.clone().into(),
@@ -85,7 +85,7 @@ impl Hub {
         let sessions = self.session_list(workspace_id.clone()).await?;
         match sessions.into_iter().rfind(|s| s.closed_at_ms.is_none()) {
             Some(open) => Ok(open),
-            None => self.session_create(workspace_id, agent, SessionOptions::default(), None).await,
+            None => self.session_create(workspace_id, agent, SessionSettingsChange::default(), None).await,
         }
     }
 
@@ -214,7 +214,7 @@ impl Hub {
     pub(crate) async fn session_configure(
         self: &Arc<Self>,
         id: SessionId,
-        options: SessionOptions,
+        options: SessionSettingsChange,
     ) -> Result<Session, ApiError> {
         known_effort(&options)?;
         // Not through the session's queue, because a prompt waiting on setup holds that. The choice
@@ -263,7 +263,7 @@ impl Hub {
 }
 
 /// A level from a newer client can't be passed on to the agent, which wouldn't know it either.
-fn known_effort(options: &SessionOptions) -> Result<(), ApiError> {
+fn known_effort(options: &SessionSettingsChange) -> Result<(), ApiError> {
     match options.effort {
         Some(effort) if effort.known().is_none() => {
             Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that effort"))

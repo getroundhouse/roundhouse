@@ -10,7 +10,7 @@ use std::time::Instant;
 use client_core::{Client, ClientError, Ended, HubAdmin};
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, DiffSide, SessionOptions};
+use protocol::model::{AgentKind, DiffSide, SessionSettingsChange};
 
 use crate::support::{Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_turn_end, wait_until};
 
@@ -251,7 +251,7 @@ fn a_kind_of_agent_or_side_of_a_diff_this_hub_doesnt_know_is_refused_and_not_sav
     let (workspace, _) = stack.workspace(&client);
 
     let refused =
-        client.session_create(&workspace.id, AgentKind::Unknown, SessionOptions::default(), None).unwrap_err();
+        client.session_create(&workspace.id, AgentKind::Unknown, SessionSettingsChange::default(), None).unwrap_err();
     assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
 

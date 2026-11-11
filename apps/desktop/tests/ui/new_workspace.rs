@@ -4,7 +4,7 @@
 
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::Effort;
+use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName};
 
 use crate::support::{Stack, Ui, git};
 
@@ -63,22 +63,24 @@ fn the_model_and_effort_picked_in_the_dialog_are_the_first_chats(cx: &mut TestAp
     let before = ui.view().workspaces.len();
 
     ui.open_new_workspace();
+    let at_first = ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen());
+    assert_eq!(at_first, (DEFAULT_MODEL, DEFAULT_EFFORT), "what the hub gives a chat that names neither");
     ui.pick_item("new-workspace-model", "Sonnet");
-    ui.pick_item("new-workspace-model", "Extra high");
+    ui.pick_item("new-workspace-model", "High");
     ui.input("effort");
     ui.click("new-workspace-create");
 
     ui.wait_for_a_new_workspace(before);
-    ui.wait_idle_with("the agent to say its effort", |text| text == "effort=xhigh");
+    ui.wait_idle_with("the agent to say its effort", |text| text == "effort=high");
     let chat = stack.client().session_get(&ui.active_chat()).unwrap();
-    assert_eq!((chat.model.as_deref(), chat.effort), (Some("sonnet"), Some(Effort::Xhigh)));
+    assert_eq!((chat.model, chat.effort), (ModelName::named("sonnet"), Effort::High));
     let launched = ui.events().into_iter().find_map(|e| match e.body {
         EventBody::AgentInit { model, .. } => model,
         _ => None,
     });
     assert_eq!(launched.as_deref(), Some("sonnet"), "the agent ran with it from its first prompt");
     let kept = ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen());
-    assert_eq!(kept, (Some("sonnet".to_string()), Some(Effort::Xhigh)), "the next workspace starts with them too");
+    assert_eq!(kept, (ModelName::named("sonnet"), Effort::High), "the next workspace starts with them too");
 }
 
 #[gpui_kit::test]

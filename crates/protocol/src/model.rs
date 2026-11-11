@@ -7,12 +7,13 @@ mod context;
 mod effort;
 mod files;
 mod hub_settings;
+mod model_name;
 mod one_line;
-mod options;
 mod prompt_line;
 mod pull_request;
 mod queue;
 mod session;
+mod settings;
 mod title;
 
 pub use account::{AgentAccount, LimitWindow, SessionAccount, UsageLimit};
@@ -20,13 +21,14 @@ pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use effort::Effort;
 pub use files::{FileContents, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};
-pub use options::SessionOptions;
+pub use model_name::{ModelName, ModelNameError};
 pub use prompt_line::PromptLine;
 pub use pull_request::{
     Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
+pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
 pub use title::{Title, TitleError, TitleSource};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one

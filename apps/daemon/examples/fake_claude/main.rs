@@ -158,7 +158,7 @@ static LIVE_EFFORT: Mutex<Option<String>> = Mutex::new(None);
 /// After `keep-effort`, a change of effort is answered as if it took, and changes nothing.
 static KEEPS_EFFORT: Mutex<bool> = Mutex::new(false);
 
-/// With no `--effort`, the real CLI takes the user's own settings. This stands in for them.
+/// With a level it doesn't know, the real CLI takes the user's own settings. This stands in for them.
 fn current_effort() -> String {
     LIVE_EFFORT.lock().clone().unwrap_or_else(|| "high".to_string())
 }
@@ -176,6 +176,19 @@ fn apply_flag_settings(settings: &Value) {
 fn set_mode(out: &Out, mode: &str) {
     *LIVE_MODE.lock() = Some(mode.to_string());
     emit(out, json!({"type":"system","subtype":"status","status":null,"permissionMode":mode}));
+}
+
+/// Changes the model, refusing what the real CLI would, and `default`, which it takes as the account's own model, and
+/// which the hub never leaves it to choose.
+fn set_model(model: &str) -> Result<Value, String> {
+    match model {
+        "not-a-model" => Err(format!("Model '{model}' not found")),
+        "default" => Err("fake claude: asked for `default`".to_string()),
+        _ => {
+            *LIVE_MODEL.lock() = Some(model.to_string());
+            Ok(json!({"model": model}))
+        }
+    }
 }
 
 fn answer_control(out: &Out, request_id: &Value, result: Result<Value, String>) {
@@ -212,8 +225,16 @@ fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).map(|i| args[i + 1].clone())
 }
 
-/// Takes the mode, model and effort the flags give, refusing or ignoring what the real CLI would.
+/// Takes the mode, model and effort the flags give, refusing or ignoring what the real CLI would. A launch with no model
+/// or effort, which the real CLI would take, is refused, so every test that starts an agent shows the hub always names
+/// both.
 fn start_as_launched(args: &[String]) {
+    for chosen in ["--model", "--effort"] {
+        if flag(args, chosen).is_none() {
+            eprintln!("fake claude: launched without {chosen}, which leaves it to the CLI");
+            std::process::exit(2);
+        }
+    }
     // The real CLI's flag doesn't list `default`, although that's what it calls the mode once running.
     let launch_mode = flag(args, "--permission-mode");
     if launch_mode.as_deref() == Some("default") {
@@ -321,12 +342,7 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
                 }
                 Some("set_model") => {
                     let model = value["request"]["model"].as_str().unwrap_or_default();
-                    if model == "not-a-model" {
-                        answer_control(&out, &value["request_id"], Err(format!("Model '{model}' not found")));
-                    } else {
-                        *LIVE_MODEL.lock() = Some(model.to_string());
-                        answer_control(&out, &value["request_id"], Ok(json!({"model":model})));
-                    }
+                    answer_control(&out, &value["request_id"], set_model(model));
                     continue;
                 }
                 Some("apply_flag_settings") => {

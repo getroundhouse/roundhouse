@@ -155,9 +155,10 @@ impl World {
             id: id.clone(),
             workspace_id: workspace.clone(),
             agent: AgentKind::Claude,
-            model: Some("opus".to_string()),
+            // As the hub gives a chat that names neither.
+            model: protocol::model::DEFAULT_MODEL,
             permission_mode: Some("acceptEdits".to_string()),
-            effort: None,
+            effort: protocol::model::DEFAULT_EFFORT,
             status,
             last_seq,
             created_at_ms,

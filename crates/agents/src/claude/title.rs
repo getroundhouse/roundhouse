@@ -39,12 +39,16 @@ pub async fn title_for(prompt: &str, options: &AgentOptions, scratch_dir: &Path)
 }
 
 /// No tools, MCP servers, slash commands, hooks or project settings, and nothing saved, so the call only writes a
-/// title. The user's hooks are for their own sessions, such as one that announces a finished turn, so none runs.
+/// title. The user's hooks are for their own sessions, such as one that announces a finished turn, so none runs. The
+/// effort is named, as an agent's always is, so the user's own level doesn't apply. Haiku at High named tasks as well
+/// as Sonnet at Low did, judged blind, at a seventeenth of the cost, and about as fast.
 fn title_args() -> Vec<String> {
     [
         "-p",
         "--model",
         "haiku",
+        "--effort",
+        "high",
         "--output-format",
         "json",
         "--tools",
@@ -149,7 +153,7 @@ mod tests {
         let after = |flag: &str| args.iter().position(|arg| arg == flag).map(|i| args[i + 1].as_str());
 
         assert_eq!(after("--tools"), Some(""), "no tools");
-        assert_eq!(after("--model"), Some("haiku"));
+        assert_eq!((after("--model"), after("--effort")), (Some("haiku"), Some("high")), "never the user's own");
         assert_eq!(after("--settings"), Some(r#"{"disableAllHooks":true}"#));
         assert_eq!(after("--setting-sources"), Some("user"), "no project's settings");
         for flag in ["-p", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands"] {

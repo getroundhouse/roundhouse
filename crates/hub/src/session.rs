@@ -14,7 +14,7 @@ use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, ContextUsage, RunId, Seq, Session, SessionId,
-    SessionOptions, SessionStatus, WorkspaceId,
+    SessionSettings, SessionSettingsChange, SessionStatus, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerRequest;
@@ -167,7 +167,7 @@ struct LiveState {
     agent: Option<AgentRun>,
     agent_opened: bool,
     /// What the next agent launches with.
-    options: SessionOptions,
+    settings: SessionSettings,
     closed_at_ms: Option<i64>,
     /// Whether the agent can take a queued prompt yet.
     queue: QueueWatch,
@@ -234,7 +234,7 @@ impl LiveSession {
                 turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent: None,
                 agent_opened: stored.agent_opened,
-                options: stored.session.options(),
+                settings: stored.session.settings(),
                 closed_at_ms: stored.session.closed_at_ms,
                 queue: QueueWatch::starting(stored.session.queue_held),
                 live: None,
@@ -291,7 +291,7 @@ impl LiveSession {
     }
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
-    pub(crate) async fn configure(&self, options: SessionOptions) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(&self, options: SessionSettingsChange) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
@@ -301,12 +301,12 @@ impl LiveSession {
         self.announce(&hub).await
     }
 
-    /// Saves the settings `newer` changes, and launches the next agent with them.
-    async fn keep_options(&self, hub: &Hub, newer: SessionOptions) -> Result<(), ApiError> {
-        let (id, saved) = (self.id.clone(), newer.clone());
+    /// Saves the settings `change` sets, and launches the next agent with them.
+    async fn keep_options(&self, hub: &Hub, change: SessionSettingsChange) -> Result<(), ApiError> {
+        let (id, saved) = (self.id.clone(), change.clone());
         hub.blocking(move |store| store.set_session_options(&id, &saved)).await?;
         let mut state = self.state.lock();
-        state.options = std::mem::take(&mut state.options).merged(newer);
+        state.settings = state.settings.clone().changed(change);
         Ok(())
     }
 

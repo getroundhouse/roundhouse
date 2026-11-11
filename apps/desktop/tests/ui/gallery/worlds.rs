@@ -5,8 +5,8 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     AgentAccount, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
-    Effort, GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus,
-    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus, SetupStatus,
+    Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -56,14 +56,6 @@ pub(super) fn conversation() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     converse(&mut world, &focus);
-    world
-}
-
-/// The conversation, in a chat whose effort was chosen.
-pub(super) fn effort_chosen() -> World {
-    let mut world = conversation();
-    let chat = world.sessions.last_mut().unwrap();
-    chat.effort = Some(Effort::Xhigh);
     world
 }
 

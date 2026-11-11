@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ContextUsage, Effort, QueuedPrompt, Rev, Seq, SessionId, SessionOptions, Title, TitleSource, WorkspaceId};
+use super::{
+    ContextUsage, Effort, ModelName, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource,
+    WorkspaceId,
+};
 use crate::event::AgentTask;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,12 +67,11 @@ pub struct Session {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     pub agent: AgentKind,
-    pub model: Option<String>,
+    pub model: ModelName,
     /// Passed through to the agent. `None` leaves the choice to the user's own agent settings.
     pub permission_mode: Option<String>,
-    /// How hard the agent thinks. `None` leaves it to the user's own agent settings.
-    #[serde(default)]
-    pub effort: Option<Effort>,
+    /// How hard the agent thinks.
+    pub effort: Effort,
     pub status: SessionStatus,
     /// The newest event when this copy was read, and `updated_at_ms` its time. Every event moves them,
     /// and the feed doesn't announce that, or its revision, so the log says how far a session has got.
@@ -115,8 +117,12 @@ pub struct Session {
 
 impl Session {
     /// What it runs with.
-    pub fn options(&self) -> SessionOptions {
-        SessionOptions { model: self.model.clone(), permission_mode: self.permission_mode.clone(), effort: self.effort }
+    pub fn settings(&self) -> SessionSettings {
+        SessionSettings {
+            model: self.model.clone(),
+            permission_mode: self.permission_mode.clone(),
+            effort: self.effort,
+        }
     }
 
     /// The agent has replied since the person last read this chat.

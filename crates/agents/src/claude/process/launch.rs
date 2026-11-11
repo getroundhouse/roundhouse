@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use process::ProcessRecord;
+use protocol::model::SessionSettings;
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
@@ -27,7 +28,11 @@ pub const SCRUBBED_ENV: &[&str] = &[
     "CLAUDE_PID",
 ];
 
-pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
+/// The CLI's arguments, which always name the model and the effort, so the CLI never picks either for itself. A level
+/// this build has no name for is refused rather than left out, which would leave it to the CLI.
+pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentError> {
+    let SessionSettings { model, permission_mode, effort } = &spec.settings;
+    let level = crate::claude::effort::level(*effort).ok_or(AgentError::UnknownEffort)?;
     let mut args: Vec<String> = [
         "-p",
         "--input-format",
@@ -48,19 +53,11 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Vec<String> {
     .to_vec();
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
     args.push(spec.agent_session_id.to_string());
-    // `default` is what the picker offers for the account's own default, and only the running CLI
-    // has a name for it.
-    if let Some(model) = spec.options.model.as_ref().filter(|model| *model != "default") {
-        args.extend(["--model".to_string(), model.clone()]);
-    }
-    if let Some(mode) = &spec.options.permission_mode {
+    args.extend(["--model".to_string(), model.as_str().to_string(), "--effort".to_string(), level.to_string()]);
+    if let Some(mode) = permission_mode {
         args.extend(["--permission-mode".to_string(), mode.clone()]);
     }
-    // A level this build doesn't know is left out, which the CLI would ignore anyway, with a warning.
-    if let Some(level) = spec.options.effort.and_then(crate::claude::effort::level) {
-        args.extend(["--effort".to_string(), level.to_string()]);
-    }
-    args
+    Ok(args)
 }
 
 /// `PATH` first, then the places the installers use. A hub started from Finder may have neither
@@ -109,7 +106,7 @@ pub(super) fn launch(
     let cwd = Path::new(&spec.cwd);
     let mut command = command(bin, cwd);
     command
-        .args(build_args(spec, resume))
+        .args(build_args(spec, resume)?)
         // Reports idle, running and waiting directly. Counting `result` events can't, because a
         // prompt sent mid-turn folds into the running turn and produces no result of its own.
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")

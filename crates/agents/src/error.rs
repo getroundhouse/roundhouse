@@ -23,8 +23,11 @@ pub enum AgentError {
     /// The agent understood the request and said no. This is its own wording.
     #[error("{0}")]
     Refused(String),
-    /// A level of effort this agent has no name for, such as one from a newer peer.
-    #[error("the agent has no such effort")]
+    /// A level of effort this agent has no name for, such as one a newer build chose. The way out is to update, or to
+    /// choose another level, since running at one nobody chose would be wrong.
+    #[error(
+        "this build has no name for that effort, so the agent can't use it. Update Roundhouse, or choose another level"
+    )]
     UnknownEffort,
     /// The agent said yes to a level of effort, then reported using `applied` instead, or said nothing of one.
     #[error("the agent kept its effort at {}, rather than {asked}", applied.as_deref().unwrap_or("what it was"))]

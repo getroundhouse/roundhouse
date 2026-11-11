@@ -11,6 +11,7 @@
 - **Create is the dialog's main action, and Return presses it.** Shift-Return starts a new line. Create with nothing typed makes the workspace and sends nothing, so making one is still two keys. *Unconfirmed.*
 - **Create closes the dialog at once, and the sidebar shows the workspace being made,** since it fetches first and can take a while. Once it's made it's selected, and the prompt is its first chat's, sent with the model and effort chosen. If it can't be made, what was typed goes back to the dialog, which opens again to show it, and a prompt the new chat couldn't be sent goes to its composer, so nothing typed is lost. *Unconfirmed.*
 - **The dialog opens while another workspace is being made, and its Create waits until that one is.** A workspace that's made meanwhile is selected behind the dialog, and typing stays in the dialog until it closes. *Unconfirmed.*
+- **The model and effort start as a chat nobody has chosen for would run, Opus at Extra high,** as `chats.md` says. *Unconfirmed.*
 - **Closing the dialog keeps what's in it for the next time it opens,** whether with Escape or a click outside it. The model and effort stay as chosen for the next workspace too. *Unconfirmed.*
 - **The dialog's header also starts a workspace from another branch or a pull request, and links an issue to it.** *Not built.*
 

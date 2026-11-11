@@ -198,9 +198,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ## The model and approval mode
 
 - **A new chat keeps the model, its effort and how edits are handled, but not Plan or Full access.** Plan belongs to the task at hand, and Full access should be chosen on purpose each time. *Unconfirmed.*
-- **The model picker offers aliases:** `default`, `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
+- **Every chat names its model and its effort, and never leaves either to the agent's CLI,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
+- **The model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
 - **The model and its effort are one picker,** since how hard the agent thinks is part of choosing what thinks. It shows the model's name, then the effort in muted text, such as `Opus Extra high`, and its menu lists the models, then the levels: Low, Medium, High, Extra high and Max, which are the CLI's own. *Unconfirmed.*
-- **Until a level is picked, the effort is the user's own Claude setting,** and the picker shows only the model. Once one is picked, the chat keeps a level, as it keeps an approval mode. *Unconfirmed.*
+- **A chat nobody has chosen for runs Opus at Extra high,** the owner's usual choice. *Unconfirmed.*
 - **A new level reaches an agent that's already working without stopping it,** and shows once the agent has said it's using it, so the picker is never ahead of the agent. *Unconfirmed.*
 
 **The approval mode's menu, open.** *Unconfirmed.*

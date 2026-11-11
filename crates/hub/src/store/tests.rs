@@ -1,7 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientRequestId, DiffComment, Repo, Rev, SessionOptions, SessionStatus, SetupStatus, Title,
-    TitleSource, Workspace, WorkspaceStatus,
+    AgentKind, ApprovalId, ClientRequestId, DiffComment, ModelName, Repo, Rev, SessionSettingsChange, SessionStatus,
+    SetupStatus, Title, TitleSource, Workspace, WorkspaceStatus,
 };
 
 use super::*;
@@ -30,9 +30,9 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             id: "s".into(),
             workspace_id: "w".into(),
             agent: AgentKind::Claude,
-            model: None,
+            model: protocol::model::DEFAULT_MODEL,
             permission_mode: None,
-            effort: None,
+            effort: protocol::model::DEFAULT_EFFORT,
             title: None,
             title_source: TitleSource::FirstLine,
             closed_at_ms: None,
@@ -202,14 +202,14 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
     assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, 2);
-    // Records from before revisions are at the first one, and anything after moves past it.
+    // Records from before revisions are at the first one, and anything after moves past it, as a later migration
+    // naming the session's model and effort does.
     let records = store.list_records().unwrap();
-    assert_eq!(
-        (records.repos[0].rev, records.workspaces[0].rev, records.sessions[0].rev),
-        (Rev::new(1), Rev::new(1), Rev::new(1))
-    );
+    assert_eq!((records.repos[0].rev, records.workspaces[0].rev), (Rev::new(1), Rev::new(1)));
+    let migrated = records.sessions[0].rev;
+    assert!(migrated > Rev::new(1));
     store.retitle_session(&"s".into(), &Title::typed("t").unwrap(), Retitle::ByHand).unwrap();
-    assert!(store.get_session(&"s".into()).unwrap().session.rev > Rev::new(1));
+    assert!(store.get_session(&"s".into()).unwrap().session.rev > migrated);
 }
 
 /// Every way a record changes moves its revision past everything before it, and a list says how far
@@ -231,7 +231,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(status_changed, "a change of status");
     store.append(&"s".into(), None, &notice("y"), None, None, None).unwrap();
     assert_eq!(session(&store), status_changed, "an event alone isn't announced, so it leaves the revision");
-    let model = SessionOptions { model: Some("model".into()), ..SessionOptions::default() };
+    let model = SessionSettingsChange { model: Some(ModelName::named("model")), ..SessionSettingsChange::default() };
     store.set_session_options(&"s".into(), &model).unwrap();
     newer(session(&store), "a model");
     let title = Title::typed("title").unwrap();

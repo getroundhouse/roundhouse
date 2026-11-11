@@ -331,6 +331,15 @@ pub(super) const MIGRATIONS: &[&str] = &[
     END;
     INSERT INTO hub_settings (id) VALUES (1);
 ",
+    // Every session names its model and effort from here on, so the agent's CLI never picks either for itself, and a
+    // session that doesn't won't read. One that left either to the CLI gets what the hub gives a new session that names
+    // neither. A model names none as `ModelName` says: empty, `default`, which was the picker's name for the CLI's own
+    // choice, or with anything but printable ASCII, which the GLOB's range matches.
+    r"
+    UPDATE sessions SET model = 'opus'
+        WHERE model IS NULL OR model = '' OR model = 'default' OR model GLOB '*[^!-~]*';
+    UPDATE sessions SET effort = 'xhigh' WHERE effort IS NULL;
+",
 ];
 
 /// How many migrations there were before events recorded their run, so a test can make an older database.
@@ -356,3 +365,7 @@ pub(crate) const BEFORE_CONTEXT: usize = 15;
 /// How many migrations there were before the hub kept settings of its own.
 #[cfg(test)]
 pub(crate) const BEFORE_HUB_SETTINGS: usize = 17;
+
+/// How many migrations there were before every session named its model and effort.
+#[cfg(test)]
+pub(crate) const BEFORE_CHOSEN_MODELS: usize = 18;

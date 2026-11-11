@@ -6,15 +6,15 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::SessionOptions;
+use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, ModelName, SessionSettings, SessionSettingsChange};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
 };
 
 /// Settings that set only the model.
-fn on_model(model: &str) -> SessionOptions {
-    SessionOptions { model: Some(model.into()), ..SessionOptions::default() }
+fn on_model(model: &'static str) -> SessionSettingsChange {
+    SessionSettingsChange { model: Some(ModelName::named(model)), ..SessionSettingsChange::default() }
 }
 
 #[test]
@@ -29,10 +29,13 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
     wait_for_turn_end(&client, &session.id, 1);
 
     let changed = client
-        .session_configure(&session.id, SessionOptions { model: Some("opus".into()), ..in_mode("bypassPermissions") })
+        .session_configure(
+            &session.id,
+            SessionSettingsChange { model: Some(ModelName::named("sonnet")), ..in_mode("bypassPermissions") },
+        )
         .unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("bypassPermissions"));
-    assert_eq!(changed.model.as_deref(), Some("opus"));
+    assert_eq!(changed.model, ModelName::named("sonnet"));
 
     // The same process, and it no longer asks.
     client.session_prompt(&session.id, "tool:echo second > second.txt", None).unwrap();
@@ -45,7 +48,7 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
         EventBody::AgentInit { model, permission_mode, .. } => Some((model.clone(), permission_mode.clone())),
         _ => None,
     });
-    assert_eq!(last_init, Some((Some("opus".to_string()), Some("bypassPermissions".to_string()))));
+    assert_eq!(last_init, Some((Some("sonnet".to_string()), Some("bypassPermissions".to_string()))));
 
     // A new process starts with what was chosen, from the hub's own record.
     drop(client);
@@ -56,7 +59,7 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
     client.session_prompt(&session.id, "tool:echo third > third.txt", None).unwrap();
     wait_until("the third file", || path.join("third.txt").exists());
     let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
-    assert!(args.contains("--permission-mode bypassPermissions") && args.contains("--model opus"), "{args}");
+    assert!(args.contains("--permission-mode bypassPermissions") && args.contains("--model sonnet"), "{args}");
 }
 
 #[test]
@@ -66,11 +69,26 @@ fn a_change_with_no_agent_running_just_saves_it() {
     let (_, session) = stack.workspace_with_mode(&client, None);
     let changed = client.session_configure(&session.id, in_mode("plan")).unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("plan"));
-    assert_eq!(changed.model, None, "None leaves a setting as it is");
+    assert_eq!(changed.model, DEFAULT_MODEL, "None leaves a setting as it is");
     let changed = client.session_configure(&session.id, on_model("haiku")).unwrap();
     assert_eq!(changed.permission_mode.as_deref(), Some("plan"), "None leaves a setting as it is");
     let saved = client.session_get(&session.id).unwrap();
-    assert_eq!((saved.model.as_deref(), saved.permission_mode.as_deref()), (Some("haiku"), Some("plan")));
+    assert_eq!((saved.model, saved.permission_mode.as_deref()), (ModelName::named("haiku"), Some("plan")));
+}
+
+#[test]
+fn a_chat_made_with_no_model_or_effort_names_the_defaults_to_its_agent() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace_with_mode(&client, None);
+    assert_eq!(session.settings(), SessionSettings::default());
+
+    client.session_prompt(&session.id, "say:ready", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    let launched = format!("--model {} --effort {}", DEFAULT_MODEL.as_str(), DEFAULT_EFFORT.as_str().unwrap());
+    assert!(args.contains(&launched), "{args}");
 }
 
 #[test]
@@ -85,7 +103,7 @@ fn a_change_the_agent_refuses_changes_nothing() {
     assert!(refused.to_string().contains("not found"), "{refused}");
     client.session_configure(&session.id, in_mode("nonsense")).unwrap_err();
     let after = client.session_get(&session.id).unwrap();
-    assert_eq!((after.model, after.permission_mode.as_deref()), (None, Some("bypassPermissions")));
+    assert_eq!((after.model, after.permission_mode.as_deref()), (DEFAULT_MODEL, Some("bypassPermissions")));
 
     client.session_prompt(&session.id, "say:still fine", None).unwrap();
     assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 2)).contains("still fine"));

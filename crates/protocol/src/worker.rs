@@ -10,7 +10,7 @@ use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
     AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, FileContents, GitDiff, GitStatus, PullRequest,
-    RunId, Seq, SessionId, SessionOptions, WorktreeFiles,
+    RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
 
@@ -123,7 +123,7 @@ pub enum WorkerRequest {
     AgentConfigure {
         session_id: SessionId,
         #[serde(flatten)]
-        options: SessionOptions,
+        options: SessionSettingsChange,
     },
     /// Resolves once the process has exited.
     AgentStop {
@@ -155,9 +155,9 @@ pub struct AgentSpec {
     pub agent_session_id: AgentSessionId,
     /// Continue that conversation rather than starting it.
     pub resume: bool,
-    /// What it runs with. A setting left out is left to the user's own agent settings.
+    /// What it runs with.
     #[serde(flatten)]
-    pub options: SessionOptions,
+    pub settings: SessionSettings,
     /// Set in the agent's environment, along with the worker's own.
     pub env: Vec<(String, String)>,
 }

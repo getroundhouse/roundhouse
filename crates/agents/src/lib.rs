@@ -13,7 +13,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionOptions, Title};
+use protocol::model::{AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionSettingsChange, Title};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -90,7 +90,7 @@ pub trait AgentProcess: Send + Sync {
     /// Changes the model, approval mode or effort of the running process, and resolves once it has agreed. A setting
     /// that's `None` is left alone. An error with [`AgentProcess::is_gone`] false is a refusal, of the first setting
     /// refused, and the ones before it may already have been taken.
-    async fn configure(&self, options: &SessionOptions) -> Result<(), AgentError>;
+    async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError>;
     /// Asks the process to stop, and forces it if it doesn't. Resolves once it has exited.
     async fn stop(&self);
 }

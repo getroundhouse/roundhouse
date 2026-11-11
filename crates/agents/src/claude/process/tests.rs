@@ -1,6 +1,6 @@
 use std::os::unix::fs::PermissionsExt as _;
 
-use protocol::model::{AgentKind, RunId};
+use protocol::model::{AgentKind, Effort, ModelName, RunId, SessionSettings};
 
 use super::supervise::{LaunchFailure, classify_launch_failure};
 use super::*;
@@ -48,7 +48,7 @@ fn a_file_that_cant_be_run_is_not_the_binary() {
     assert_ne!(resolve_binary(&lookup), Some(not_runnable));
 }
 
-fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
+fn spec(model: Option<&'static str>, mode: Option<&str>) -> AgentSpec {
     AgentSpec {
         session_id: "s".into(),
         run: RunId::new(1),
@@ -56,13 +56,17 @@ fn spec(model: Option<&str>, mode: Option<&str>) -> AgentSpec {
         cwd: "/tmp".into(),
         agent_session_id: "abc".into(),
         resume: false,
-        options: SessionOptions {
-            model: model.map(String::from),
+        settings: SessionSettings {
+            model: ModelName::named(model.unwrap_or("sonnet")),
             permission_mode: mode.map(String::from),
-            effort: None,
+            effort: Effort::High,
         },
         env: vec![],
     }
+}
+
+fn args(spec: &AgentSpec, resume: bool) -> Vec<String> {
+    build_args(spec, resume).unwrap()
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -71,57 +75,54 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 #[test]
 fn first_launch_names_the_conversation_and_later_ones_resume_it() {
-    let first = build_args(&spec(None, None), false);
+    let first = args(&spec(None, None), false);
     assert_eq!(flag_value(&first, "--session-id").as_deref(), Some("abc"));
     assert!(!first.contains(&"--resume".to_string()));
-    let later = build_args(&spec(None, None), true);
+    let later = args(&spec(None, None), true);
     assert_eq!(flag_value(&later, "--resume").as_deref(), Some("abc"));
     assert!(!later.contains(&"--session-id".to_string()));
 }
 
 #[test]
 fn with_no_mode_the_users_own_agent_settings_decide() {
-    assert!(!build_args(&spec(None, None), false).contains(&"--permission-mode".to_string()));
-    let args = build_args(&spec(Some("haiku"), Some("manual")), false);
+    assert!(!args(&spec(None, None), false).contains(&"--permission-mode".to_string()));
+    let args = args(&spec(Some("haiku"), Some("manual")), false);
     assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("manual"));
     assert_eq!(flag_value(&args, "--model").as_deref(), Some("haiku"));
 }
 
 #[test]
 fn full_access_is_available_but_never_on_by_itself() {
-    let args = build_args(&spec(None, None), false);
+    let args = args(&spec(None, None), false);
     assert!(args.iter().any(|a| a == "--allow-dangerously-skip-permissions"));
     assert!(!args.iter().any(|a| a == "--dangerously-skip-permissions"));
     assert_eq!(flag_value(&args, "--permission-mode"), None);
 }
 
 #[test]
-fn the_default_model_has_no_flag() {
-    let mut default = spec(None, None);
-    default.options.model = Some("default".to_string());
-    assert_eq!(flag_value(&build_args(&default, false), "--model"), None);
-    let mut chosen = spec(None, None);
-    chosen.options.model = Some("opus".to_string());
-    assert_eq!(flag_value(&build_args(&chosen, false), "--model").as_deref(), Some("opus"));
+fn every_launch_names_its_model_and_effort() {
+    for effort in Effort::ALL {
+        let mut chosen = spec(Some("opus"), None);
+        chosen.settings.effort = effort;
+
+        let launched = args(&chosen, true);
+
+        assert_eq!(flag_value(&launched, "--model").as_deref(), Some("opus"));
+        assert_eq!(flag_value(&launched, "--effort").as_deref(), crate::claude::effort::level(effort));
+    }
 }
 
 #[test]
-fn an_effort_is_launched_with_and_none_leaves_it_to_the_users_settings() {
-    assert_eq!(flag_value(&build_args(&spec(None, None), false), "--effort"), None);
-    for effort in protocol::model::Effort::ALL {
-        let mut chosen = spec(None, None);
-        chosen.options.effort = Some(effort);
-        let level = crate::claude::effort::level(effort);
-        assert_eq!(flag_value(&build_args(&chosen, true), "--effort").as_deref(), level);
-    }
+fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
     let mut unknown = spec(None, None);
-    unknown.options.effort = Some(protocol::model::Effort::Unknown);
-    assert_eq!(flag_value(&build_args(&unknown, false), "--effort"), None, "the CLI couldn't take it");
+    unknown.settings.effort = Effort::Unknown;
+
+    assert!(matches!(build_args(&unknown, false), Err(AgentError::UnknownEffort)));
 }
 
 #[test]
 fn approvals_always_come_back_to_the_host() {
-    let args = build_args(&spec(None, None), false);
+    let args = args(&spec(None, None), false);
     assert_eq!(flag_value(&args, "--permission-prompt-tool").as_deref(), Some("stdio"));
 }
 

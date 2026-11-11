@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use protocol::PROTOCOL_VERSION;
 use protocol::frame;
-use protocol::model::{AgentKind, RunId, SessionOptions};
+use protocol::model::{AgentKind, RunId, SessionSettings};
 use protocol::worker::{AgentSpec, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::time::timeout;
@@ -48,7 +48,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
                 cwd: dir.path().to_string_lossy().into_owned(),
                 agent_session_id: "a".into(),
                 resume: false,
-                options: SessionOptions::default(),
+                settings: SessionSettings::default(),
                 env: vec![],
             }),
         ];
