@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::model::{
-    DiffComment, FileContents, GitDiff, GitStatus, HubSettings, PromptLine, PullRequest, RecordKey, Records, Repo, Rev,
-    Seq, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, GitDiff, GitStatus, HubSettings, PromptLine, PullRequest, RecordKey, Records,
+    Repo, Rev, Seq, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -204,6 +204,7 @@ pub enum HubNotice {
     Session(Session),
     Comment(DiffComment),
     HubSettings(HubSettings),
+    Account(Account),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,

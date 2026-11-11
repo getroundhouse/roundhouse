@@ -2,10 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::AccountId;
+use super::{AccountId, Rev};
 
-/// The account an agent's CLI is logged in to on its worker's machine. Every part is `None` when the agent doesn't
-/// say, such as a plan for a login with an API key.
+/// The account an agent's CLI is logged in to on its worker's machine, as the worker reads it. Every part is `None`
+/// when the agent doesn't say, such as a plan for a login with an API key. Who it is, from `model_provider` on, is
+/// what an [`Account`]'s record says of it too, so a part added here is added there.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentAccount {
     /// Which account it is. Agents under the same account share its limits, and an agent under another, even with
@@ -30,8 +31,44 @@ pub struct AgentAccount {
     pub email: Option<String>,
 }
 
+impl AgentAccount {
+    /// Which account it is, when someone is logged in to one that can be told from another. Only such an account has
+    /// a record, and limits kept for it.
+    pub fn logged_in_as(&self) -> Option<&AccountId> {
+        self.id.as_ref().filter(|_| self.logged_in)
+    }
+}
+
+/// An account agents run under, as a record the hub keeps, so every client shows the same of it and it's there once
+/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches. What's left of
+/// its limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather
+/// than a session's. Only a login that can be told from another has a record, so whoever it is is logged in. Who it
+/// is, from `model_provider` on, is what [`AgentAccount`] says.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Account {
+    pub id: AccountId,
+    /// Who serves the model, for a person to read, as [`AgentAccount`] says.
+    #[serde(default)]
+    pub model_provider: Option<String>,
+    /// The subscription, for a person to read.
+    #[serde(default)]
+    pub plan: Option<String>,
+    /// How it's logged in, for a person to read.
+    #[serde(default)]
+    pub login: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    /// Shortest window first. Empty until an agent under the account has heard of one, and for an account with none.
+    /// None says when it was heard, since hearing the same again isn't a change to the record.
+    #[serde(default)]
+    pub limits: Vec<UsageLimit>,
+    #[serde(default)]
+    pub rev: Rev,
+}
+
 /// What a session's agent runs under: the account, and what the hub has heard of that account's limits, from any
-/// agent under it.
+/// agent under it. Kept for clients from before accounts were records, which ask for it. A client now reads
+/// [`Session::account`](super::Session::account) and that account's record.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionAccount {
     pub account: AgentAccount,
@@ -50,7 +87,7 @@ pub struct UsageLimit {
     #[serde(default)]
     pub resets_at_ms: Option<i64>,
     /// When an agent heard this, by the hub's clock, which the hub adds as it keeps it. `None` from the agent, which
-    /// says it as it hears it.
+    /// says it as it hears it, and in an [`Account`]'s record.
     #[serde(default)]
     pub heard_at_ms: Option<i64>,
 }
@@ -97,6 +134,14 @@ mod tests {
         let newer: UsageLimit = serde_json::from_str(r#"{"window":"thirty_days","used_percent":3}"#).unwrap();
 
         assert_eq!(newer.window, LimitWindow::Unknown);
+    }
+
+    #[test]
+    fn an_account_record_that_says_only_who_it_is_still_reads() {
+        let account: Account = serde_json::from_str(r#"{"id":"claude-1"}"#).unwrap();
+
+        assert_eq!(account.id, AccountId::from("claude-1"));
+        assert_eq!((account.email, account.limits, account.rev), (None, Vec::new(), Rev::default()));
     }
 
     #[test]

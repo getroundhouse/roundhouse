@@ -40,6 +40,7 @@ impl Hub {
         let SessionSettings { model, permission_mode, effort } = SessionSettings::default().changed(options);
         let stored = StoredSession {
             session: Session {
+                account: None,
                 id: id.clone().into(),
                 workspace_id,
                 agent,

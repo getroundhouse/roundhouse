@@ -1,4 +1,4 @@
-//! The database's migrations, and how many there were before some of them, for tests of what migrating keeps.
+//! The database's migrations. `before.rs` has how many there were before some of them, for tests.
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 pub(super) const MIGRATIONS: &[&str] = &[
@@ -302,7 +302,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     END;
 ",
     // What agents have heard of each account's limits, one row for each window of each account, with when it was
-    // heard. It's not a record the feed announces: a client reads it when it shows it.
+    // heard. It's not a record the feed announces: a client reads it when it shows it. Accounts became records later.
     r"
     CREATE TABLE account_limits (
         account_id TEXT NOT NULL,
@@ -340,32 +340,49 @@ pub(super) const MIGRATIONS: &[&str] = &[
         WHERE model IS NULL OR model = '' OR model = 'default' OR model GLOB '*[^!-~]*';
     UPDATE sessions SET effort = 'xhigh' WHERE effort IS NULL;
 ",
+    // Each account agents run under is a record the feed announces, so the hub keeps who it is beside what its agents
+    // have heard of its limits. `heard_at_ms` is when an agent under it last heard of any, and changes whenever what's
+    // kept of them does, which is what gives the record a newer revision. Every account whose limits were kept gets
+    // one, without who it is until an agent under it next launches. Each session names the account its agent's newest
+    // launch runs under, which a Session record shows, so the trigger names it.
+    r"
+    CREATE TABLE accounts (
+        id TEXT PRIMARY KEY,
+        model_provider TEXT,
+        plan TEXT,
+        login TEXT,
+        email TEXT,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER accounts_rev_on_insert AFTER INSERT ON accounts BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE accounts SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER accounts_rev_on_update AFTER UPDATE ON accounts WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE accounts SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    -- What's left of its limits is part of an account's record, so a change to it is a change to the record. Hearing
+    -- the same again only says when it was heard, which is kept so something heard earlier never replaces it.
+    CREATE TRIGGER account_limits_rev_on_insert AFTER INSERT ON account_limits BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE accounts SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.account_id;
+    END;
+    CREATE TRIGGER account_limits_rev_on_update AFTER UPDATE OF used_percent, resets_at_ms ON account_limits
+        WHEN NEW.used_percent IS NOT OLD.used_percent OR NEW.resets_at_ms IS NOT OLD.resets_at_ms BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE accounts SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.account_id;
+    END;
+    INSERT INTO accounts (id) SELECT DISTINCT account_id FROM account_limits;
+    ALTER TABLE sessions ADD COLUMN account_id TEXT;
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+",
 ];
-
-/// How many migrations there were before events recorded their run, so a test can make an older database.
-#[cfg(test)]
-pub(crate) const BEFORE_RUNS: usize = 4;
-
-/// How many migrations there were before workspaces had titles.
-#[cfg(test)]
-pub(crate) const BEFORE_TITLES: usize = 9;
-
-/// How many migrations there were before sessions had an effort.
-#[cfg(test)]
-pub(crate) const BEFORE_EFFORT: usize = 13;
-
-/// How many migrations there were before workspaces kept their pull request.
-#[cfg(test)]
-pub(crate) const BEFORE_PULL_REQUESTS: usize = 14;
-
-/// How many migrations there were before sessions kept how full their agent's context is.
-#[cfg(test)]
-pub(crate) const BEFORE_CONTEXT: usize = 15;
-
-/// How many migrations there were before the hub kept settings of its own.
-#[cfg(test)]
-pub(crate) const BEFORE_HUB_SETTINGS: usize = 17;
-
-/// How many migrations there were before every session named its model and effort.
-#[cfg(test)]
-pub(crate) const BEFORE_CHOSEN_MODELS: usize = 18;

@@ -57,10 +57,23 @@ pub(crate) fn rate_limit_event(session_id: &str) -> Value {
     }})
 }
 
+/// Whether the agent hears of its account's limits as it works. It doesn't once `$FAKE_CLAUDE_STATE/no-limits` exists,
+/// as for a login that has none, so a test can tell what the hub learns when an agent launches from what it learns
+/// when the agent hears of a limit. `conversation` is in the state directory.
+pub(crate) fn hears_limits(conversation: &Path) -> bool {
+    conversation.parent().is_none_or(|state| !state.join("no-limits").exists())
+}
+
 /// What `claude auth status --json` prints: whatever `$FAKE_CLAUDE_STATE/auth-status` holds, so a test can log in as
-/// someone else or log out, or else someone logged in with a subscription.
+/// someone else, log out or make the answer unreadable, or else someone logged in with a subscription. Each call adds
+/// a line to `$FAKE_CLAUDE_STATE/auth-status-calls` once it has read what to say, so a test knows what it was told.
 pub(crate) fn auth_status(state: Option<&Path>) -> String {
     let set = state.and_then(|state| std::fs::read_to_string(state.join("auth-status")).ok());
+    if let Some(state) = state {
+        std::fs::create_dir_all(state).unwrap();
+        let calls = std::fs::OpenOptions::new().create(true).append(true).open(state.join("auth-status-calls"));
+        calls.and_then(|mut calls| std::io::Write::write_all(&mut calls, b"asked\n")).unwrap();
+    }
     set.unwrap_or_else(|| {
         json!({
             "loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "email": "ada@example.com",

@@ -16,7 +16,7 @@ mod session;
 mod settings;
 mod title;
 
-pub use account::{AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use effort::Effort;
 pub use files::{FileContents, WorktreeFiles};
@@ -165,6 +165,9 @@ pub enum RecordKey {
     },
     /// A hub has one record of its settings.
     HubSettings,
+    Account {
+        id: AccountId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -179,6 +182,9 @@ pub struct Records {
     /// `None` from a hub from before it kept any.
     #[serde(default)]
     pub hub_settings: Option<HubSettings>,
+    /// Empty from a hub from before it kept them.
+    #[serde(default)]
+    pub accounts: Vec<Account>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,

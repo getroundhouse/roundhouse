@@ -40,7 +40,12 @@ async fn ingest_event(
     }
     let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
     match &body {
-        EventBody::AgentInit { .. } => mark_opened(session).await,
+        EventBody::AgentInit { .. } => {
+            if current {
+                session.launched(run);
+            }
+            mark_opened(session).await;
+        }
         EventBody::AgentMode { permission_mode } if current => session.note_mode(permission_mode.clone()).await,
         EventBody::AgentExited { .. } => {
             if current {

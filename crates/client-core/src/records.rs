@@ -1,4 +1,5 @@
-//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, and its settings.
+//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, and
+//! the accounts its agents run under.
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy
 //! has the newer revision, so the result is the same however they interleave. A hub that doesn't keep
@@ -8,7 +9,9 @@
 use std::collections::HashMap;
 
 use protocol::client::HubNotice;
-use protocol::model::{DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId};
+use protocol::model::{
+    Account, AccountId, DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId,
+};
 
 #[cfg(test)]
 mod laws;
@@ -21,6 +24,7 @@ pub enum Record {
     Session(Session),
     Comment(DiffComment),
     HubSettings(HubSettings),
+    Account(Account),
 }
 
 impl Record {
@@ -31,6 +35,7 @@ impl Record {
             Record::Session(session) => RecordKey::Session { id: session.id.clone() },
             Record::Comment(comment) => RecordKey::Comment { id: comment.id.clone() },
             Record::HubSettings(_) => RecordKey::HubSettings,
+            Record::Account(account) => RecordKey::Account { id: account.id.clone() },
         }
     }
 
@@ -41,6 +46,7 @@ impl Record {
             Record::Session(session) => session.rev,
             Record::Comment(comment) => comment.rev,
             Record::HubSettings(settings) => settings.rev,
+            Record::Account(account) => account.rev,
         }
     }
 }
@@ -74,6 +80,7 @@ impl HubRecords {
         let listed = listed.chain(list.sessions.into_iter().map(Record::Session));
         let listed = listed.chain(list.comments.into_iter().map(Record::Comment));
         let listed = listed.chain(list.hub_settings.into_iter().map(Record::HubSettings));
+        let listed = listed.chain(list.accounts.into_iter().map(Record::Account));
         let mut next: HashMap<RecordKey, Record> = HashMap::new();
         for record in listed {
             let key = record.key();
@@ -105,6 +112,7 @@ impl HubRecords {
             HubNotice::Session(session) => self.apply_record(Record::Session(session)),
             HubNotice::Comment(comment) => self.apply_record(Record::Comment(comment)),
             HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
+            HubNotice::Account(account) => self.apply_record(Record::Account(account)),
             HubNotice::Removed { record, rev } => self.remove(&record, rev),
             HubNotice::Resync | HubNotice::Unknown => false,
         }
@@ -173,6 +181,12 @@ impl HubRecords {
     pub fn hub_settings(&self) -> Option<HubSettings> {
         let Some(Record::HubSettings(settings)) = self.held.get(&RecordKey::HubSettings) else { return None };
         Some(settings.clone())
+    }
+
+    /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.
+    pub fn account(&self, id: &AccountId) -> Option<Account> {
+        let Some(Record::Account(account)) = self.held.get(&RecordKey::Account { id: id.clone() }) else { return None };
+        Some(account.clone())
     }
 
     fn of_kind<T>(&self, pick: impl Fn(&Record) -> Option<T>) -> Vec<T> {

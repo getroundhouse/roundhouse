@@ -97,7 +97,15 @@ fn list_records(client: &Client) -> Result<Records> {
                 comments.extend(client.comment_list(&workspace.id)?);
             }
             let repos = client.repo_list()?;
-            Ok(Records { repos, workspaces, sessions, comments, hub_settings: None, rev: Rev::default() })
+            Ok(Records {
+                repos,
+                workspaces,
+                sessions,
+                comments,
+                hub_settings: None,
+                accounts: Vec::new(),
+                rev: Rev::default(),
+            })
         }
         listed => listed,
     }

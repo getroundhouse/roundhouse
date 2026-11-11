@@ -113,6 +113,7 @@ impl World {
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
             hub_settings: Some(protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
+            accounts: Vec::new(),
             rev: Rev::default(),
         }
     }
@@ -152,6 +153,7 @@ impl World {
             })
             .unwrap_or_default();
         self.sessions.push(Session {
+            account: None,
             id: id.clone(),
             workspace_id: workspace.clone(),
             agent: AgentKind::Claude,

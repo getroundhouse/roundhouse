@@ -27,6 +27,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
 pub(super) fn idle_session(now: i64) -> StoredSession {
     StoredSession {
         session: Session {
+            account: None,
             id: "s".into(),
             workspace_id: "w".into(),
             agent: AgentKind::Claude,

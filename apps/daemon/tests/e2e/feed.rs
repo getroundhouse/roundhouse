@@ -39,12 +39,16 @@ fn apart_from_the_log(session: &Session) -> Session {
 
 impl Sidebar {
     /// The next notice that changes what a sidebar shows. A chat's record also says how full its agent's context is,
-    /// which the agent says whenever it gets to it, so a notice of only that comes anywhere among the others. Each
+    /// which the agent says whenever it gets to it, and which account it runs under, so a notice of only that comes
+    /// anywhere among the others, and so does one of the account's own record, which a sidebar doesn't show. Each
     /// notice of a chat has to be a newer copy than the last and say something the last didn't, so nothing is
     /// announced twice, or for an event that changed nothing.
     fn next_notice(&mut self, feed: &Subscription, what: &str) -> HubNotice {
         loop {
             let notice = next_notice(feed, what);
+            if matches!(notice, HubNotice::Account(_)) {
+                continue;
+            }
             if let HubNotice::Session(session) = &notice {
                 if let Some(last) = &self.told {
                     assert!(session.rev > last.rev, "a copy no newer than the last: {session:?}");

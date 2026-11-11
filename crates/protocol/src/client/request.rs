@@ -221,6 +221,9 @@ pub enum ClientRequest {
     /// has heard of that account's limits. It records nothing, so asking again only reads again, and like any read
     /// from a worker it starts the workspace's worker if none is running. Refused unless the workspace is ready. A
     /// hub older than this refuses it as unsupported.
+    ///
+    /// Kept for clients from before accounts were records. A client now reads the session's `account` and that
+    /// account's record, which the feed announces.
     SessionAccount {
         id: SessionId,
     },

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ContextUsage, Effort, ModelName, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource,
+    AccountId, ContextUsage, Effort, ModelName, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource,
     WorkspaceId,
 };
 use crate::event::AgentTask;
@@ -103,6 +103,12 @@ pub struct Session {
     /// doesn't keep it. It stays once the agent has gone, since the conversation it resumes is as full.
     #[serde(default)]
     pub context: Option<ContextUsage>,
+    /// The account the agent's newest launch runs under, as the worker said when it launched, and the record of it
+    /// says who that is and what's left of its limits. `None` until an agent has launched, when nobody was logged in
+    /// or the login can't be told from another, and from a hub that doesn't keep it. It stays once the agent has
+    /// gone, as the context does.
+    #[serde(default)]
+    pub account: Option<AccountId>,
     /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.
     #[serde(default)]
     pub queued: Vec<QueuedPrompt>,
