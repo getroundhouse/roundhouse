@@ -6,9 +6,11 @@
 
 use agents::claude::{Normalizer, Parsed};
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, FileChange, TurnOutcome};
-use protocol::model::ApprovalId;
+use protocol::model::{ApprovalId, PermissionMode};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
+
+mod modes;
 
 const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");
 
@@ -51,8 +53,8 @@ fn init_reports_what_the_hub_shows_and_relies_on() {
     assert!(agent_session_id.is_some_and(|id| !id.as_str().is_empty()));
     assert!(model.is_some_and(|m| m.contains("haiku")));
     assert_eq!(cwd.as_deref(), Some("/tmp/fixture"));
-    // The CLI's flag is "manual", and it reports the same mode as "default".
-    assert_eq!(permission_mode.as_deref(), Some("default"));
+    // Captured launched with `--permission-mode manual`, which the CLI reports as `default`, a mode a chat can't have.
+    assert_eq!(permission_mode, Some(PermissionMode::Unknown));
     assert!(agent_version.is_some_and(|v| !v.is_empty()));
 }
 
@@ -106,18 +108,6 @@ fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
         })
         .collect();
     assert_eq!(outcomes[..3], [TurnOutcome::Success, TurnOutcome::Success, TurnOutcome::Cancelled]);
-}
-
-#[test]
-fn every_mode_change_is_reported_by_the_name_a_launch_accepts() {
-    let modes: Vec<String> = events()
-        .into_iter()
-        .filter_map(|e| match e {
-            EventBody::AgentMode { permission_mode } => Some(permission_mode),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(modes, ["plan", "manual"], "chosen, then left by the CLI itself when the plan was approved");
 }
 
 #[test]

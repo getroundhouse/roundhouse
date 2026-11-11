@@ -11,7 +11,7 @@ use tokio::process::{ChildStderr, ChildStdout};
 use tokio::sync::mpsc;
 use tracing::warn;
 
-use super::{STDERR_TAIL_LINES, Shared, context, usage, write_line};
+use super::{STDERR_TAIL_LINES, Shared, context, plan, usage, write_line};
 use crate::AgentOutput;
 use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
 
@@ -65,6 +65,9 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 AgentOutput::event(EventBody::AgentOther { kind, parent_tool_use_id: None }, Some(line))
             }
             Parsed::Event(body) => {
+                if !plan::passed_on(&shared, &output, &body).await {
+                    continue;
+                }
                 track_approval(&shared, &body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
@@ -73,14 +76,8 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                     usage::after(&shared, &body, &output);
                 }
                 let item = AgentOutput::event(body, Some(line));
-                if opened && !shared.confirmed.swap(true, Ordering::SeqCst) {
-                    shared.unconfirmed_prompts.lock().clear();
-                    let held: Vec<_> = shared.held_output.lock().drain(..).collect();
-                    for item in held {
-                        if output.send(item).await.is_err() {
-                            return;
-                        }
-                    }
+                if opened && !confirm(&shared, &output).await {
+                    return;
                 }
                 item
             }
@@ -91,8 +88,23 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
     }
 }
 
+/// The CLI has opened the session, so what was held for it goes on. False once nobody is reading.
+async fn confirm(shared: &Shared, output: &mpsc::Sender<AgentOutput>) -> bool {
+    if shared.confirmed.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    shared.unconfirmed_prompts.lock().clear();
+    let held: Vec<_> = shared.held_output.lock().drain(..).collect();
+    for item in held {
+        if output.send(item).await.is_err() {
+            return false;
+        }
+    }
+    true
+}
+
 /// Sends `item` on, or holds it until the CLI has confirmed the session. False once nobody is reading.
-async fn deliver(shared: &Shared, output: &mpsc::Sender<AgentOutput>, item: AgentOutput) -> bool {
+pub(super) async fn deliver(shared: &Shared, output: &mpsc::Sender<AgentOutput>, item: AgentOutput) -> bool {
     if !shared.confirmed.load(Ordering::SeqCst) {
         shared.held_output.lock().push(item);
         return true;

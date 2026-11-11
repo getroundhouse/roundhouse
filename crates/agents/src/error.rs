@@ -33,6 +33,9 @@ pub enum AgentError {
         "this build has no name for that effort, so the agent can't use it. Update Roundhouse, or choose another level"
     )]
     UnknownEffort,
+    /// A chat can't be given [`protocol::model::PermissionMode::Unknown`], and the hub refuses it before it gets here.
+    #[error("this build has no name for that approval mode, so the agent can't use it")]
+    UnknownMode,
     /// The agent said yes to a level of effort, then reported using `applied` instead, or said nothing of one.
     #[error("the agent kept its effort at {}, rather than {asked}", applied.as_deref().unwrap_or("what it was"))]
     NotApplied { asked: &'static str, applied: Option<String> },

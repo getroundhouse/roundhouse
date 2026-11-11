@@ -1,6 +1,6 @@
 use std::os::unix::fs::PermissionsExt as _;
 
-use protocol::model::{AgentKind, Effort, ModelName, RunId, SessionSettings};
+use protocol::model::{AgentKind, Effort, ModelName, PermissionMode, RunId, SessionSettings};
 
 use super::supervise::{LaunchFailure, classify_launch_failure};
 use super::*;
@@ -48,7 +48,7 @@ fn a_file_that_cant_be_run_is_not_the_binary() {
     assert_ne!(resolve_binary(&lookup), Some(not_runnable));
 }
 
-fn spec(model: Option<&'static str>, mode: Option<&str>) -> AgentSpec {
+fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
     AgentSpec {
         session_id: "s".into(),
         run: RunId::new(1),
@@ -58,7 +58,7 @@ fn spec(model: Option<&'static str>, mode: Option<&str>) -> AgentSpec {
         resume: false,
         settings: SessionSettings {
             model: ModelName::named(model.unwrap_or("sonnet")),
-            permission_mode: mode.map(String::from),
+            permission_mode: mode,
             effort: Effort::High,
         },
         env: vec![],
@@ -75,34 +75,31 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 #[test]
 fn first_launch_names_the_conversation_and_later_ones_resume_it() {
-    let first = args(&spec(None, None), false);
+    let first = args(&spec(None, PermissionMode::FullAccess), false);
     assert_eq!(flag_value(&first, "--session-id").as_deref(), Some("abc"));
     assert!(!first.contains(&"--resume".to_string()));
-    let later = args(&spec(None, None), true);
+    let later = args(&spec(None, PermissionMode::FullAccess), true);
     assert_eq!(flag_value(&later, "--resume").as_deref(), Some("abc"));
     assert!(!later.contains(&"--session-id".to_string()));
 }
 
+/// A chat that's planning too, since a launch straight into plan mode would leave it for a mode that asks before every
+/// tool, and a chat in a mode of the CLI's own, since a chat can't be given that.
 #[test]
-fn with_no_mode_the_users_own_agent_settings_decide() {
-    assert!(!args(&spec(None, None), false).contains(&"--permission-mode".to_string()));
-    let args = args(&spec(Some("haiku"), Some("manual")), false);
-    assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("manual"));
-    assert_eq!(flag_value(&args, "--model").as_deref(), Some("haiku"));
-}
+fn every_launch_has_full_access() {
+    for mode in [PermissionMode::FullAccess, PermissionMode::Plan, PermissionMode::Unknown] {
+        let args = args(&spec(None, mode), false);
 
-#[test]
-fn full_access_is_available_but_never_on_by_itself() {
-    let args = args(&spec(None, None), false);
-    assert!(args.iter().any(|a| a == "--allow-dangerously-skip-permissions"));
-    assert!(!args.iter().any(|a| a == "--dangerously-skip-permissions"));
-    assert_eq!(flag_value(&args, "--permission-mode"), None);
+        assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("bypassPermissions"), "{mode:?}");
+        assert!(args.iter().any(|a| a == "--allow-dangerously-skip-permissions"));
+        assert!(!args.iter().any(|a| a == "--dangerously-skip-permissions"));
+    }
 }
 
 #[test]
 fn every_launch_names_its_model_and_effort() {
     for effort in Effort::ALL {
-        let mut chosen = spec(Some("opus"), None);
+        let mut chosen = spec(Some("opus"), PermissionMode::FullAccess);
         chosen.settings.effort = effort;
 
         let launched = args(&chosen, true);
@@ -114,7 +111,7 @@ fn every_launch_names_its_model_and_effort() {
 
 #[test]
 fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
-    let mut unknown = spec(None, None);
+    let mut unknown = spec(None, PermissionMode::FullAccess);
     unknown.settings.effort = Effort::Unknown;
 
     assert!(matches!(build_args(&unknown, false), Err(AgentError::UnknownEffort)));
@@ -122,7 +119,7 @@ fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
 
 #[test]
 fn approvals_always_come_back_to_the_host() {
-    let args = args(&spec(None, None), false);
+    let args = args(&spec(None, PermissionMode::FullAccess), false);
     assert_eq!(flag_value(&args, "--permission-prompt-tool").as_deref(), Some("stdio"));
 }
 

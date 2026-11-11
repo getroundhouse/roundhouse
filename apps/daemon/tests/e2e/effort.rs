@@ -5,9 +5,9 @@
 use client_core::ClientError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AgentKind, DEFAULT_EFFORT, Effort, ModelName, SessionSettingsChange};
+use protocol::model::{AgentKind, DEFAULT_EFFORT, Effort, ModelName, PermissionMode, SessionSettingsChange};
 
-use crate::support::{Stack, assistant_text, in_mode, wait_for_turn_end};
+use crate::support::{Stack, assistant_text, wait_for_turn_end};
 
 /// Settings that set only the effort.
 fn at(effort: Effort) -> SessionSettingsChange {
@@ -53,7 +53,7 @@ fn a_new_chat_starts_with_the_effort_it_was_made_with() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
 
-    let options = SessionSettingsChange { effort: Some(Effort::Max), ..in_mode("bypassPermissions") };
+    let options = SessionSettingsChange { effort: Some(Effort::Max), ..SessionSettingsChange::default() };
 
     let made = client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap();
     assert_eq!(made.effort, Effort::Max);
@@ -69,7 +69,7 @@ fn an_effort_with_no_agent_running_is_saved_and_leaves_the_rest() {
     let (_, session) = stack.workspace(&client);
 
     let changed = client.session_configure(&session.id, at(Effort::Low)).unwrap();
-    assert_eq!((changed.effort, changed.permission_mode.as_deref()), (Effort::Low, Some("bypassPermissions")));
+    assert_eq!((changed.effort, changed.permission_mode), (Effort::Low, PermissionMode::FullAccess));
     let haiku = SessionSettingsChange { model: Some(ModelName::named("haiku")), ..SessionSettingsChange::default() };
     let changed = client.session_configure(&session.id, haiku).unwrap();
     assert_eq!(changed.effort, Effort::Low, "None leaves it as it is");

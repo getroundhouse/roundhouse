@@ -5,7 +5,9 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, Effort, Seq, Session, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{
+    AgentKind, Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus,
+};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -77,14 +79,19 @@ pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, r
     Ok(())
 }
 
-/// What the session runs with, with `-` for an approval mode left to the user's own Claude settings.
+/// What the session runs with.
 fn options(session: &Session) -> String {
     format!(
         "model={} mode={} effort={}",
         session.model.as_str(),
-        session.permission_mode.as_deref().unwrap_or("-"),
+        mode_name(session.permission_mode),
         effort_name(session.effort),
     )
+}
+
+/// A mode an agent went into by itself, or one from a newer hub, has no name here.
+pub(crate) fn mode_name(mode: PermissionMode) -> &'static str {
+    mode.as_str().unwrap_or("unknown")
 }
 
 /// A level from a newer hub has no name here.
@@ -184,5 +191,12 @@ mod tests {
         let shown = [Effort::Max, Effort::Unknown].map(effort_name);
 
         assert_eq!(shown, ["max", "unknown"]);
+    }
+
+    #[test]
+    fn a_mode_a_chat_cant_have_is_shown_as_unknown() {
+        let shown = [PermissionMode::Plan, PermissionMode::Unknown].map(mode_name);
+
+        assert_eq!(shown, ["plan", "unknown"]);
     }
 }

@@ -25,7 +25,7 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,
             model: from_text(row.get(3)?)?,
-            permission_mode: row.get(4)?,
+            permission_mode: from_text(row.get(4)?)?,
             status: from_text(row.get(5)?)?,
             last_seq: row.get::<_, i64>(6)?.cast_unsigned(),
             created_at_ms: row.get(7)?,
@@ -73,7 +73,7 @@ impl Store {
                 session.workspace_id.as_str(),
                 text_of(&session.agent),
                 session.model.as_str(),
-                session.permission_mode,
+                text_of(&session.permission_mode),
                 text_of(&session.status),
                 session.last_seq.cast_signed(),
                 session.created_at_ms,
@@ -127,7 +127,12 @@ impl Store {
                  SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode),
                      effort = COALESCE(?, effort)
                  WHERE id = ?",
-            params![model.as_ref().map(ModelName::as_str), permission_mode, effort.as_ref().map(text_of), id.as_str()],
+            params![
+                model.as_ref().map(ModelName::as_str),
+                permission_mode.as_ref().map(text_of),
+                effort.as_ref().map(text_of),
+                id.as_str()
+            ],
         )?;
         Ok(())
     }

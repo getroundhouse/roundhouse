@@ -8,9 +8,9 @@ use protocol::model::SessionStatus;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation, diff,
-    finishing_update, own_hub, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled,
-    working_background,
+    approval, attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation, diff,
+    finishing_update, own_hub, planning, queue_held, queued, setup_failed, steered, streaming, titled, unread,
+    unread_titled, working_background,
 };
 use super::{chats, long_chats, pictures, worktree};
 
@@ -91,12 +91,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(attachments),
         steps: &[Step::Select(FOCUS), Step::Click("picture/attachment/shot-1")],
     },
-    Screen {
-        name: "approval",
-        spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::approval())),
-        steps: &[Step::Select(FOCUS)],
-    },
+    Screen { name: "approval", spec: "chats.md", world: Some(approval), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "background",
         spec: "chats.md",
@@ -163,10 +158,10 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen {
-        name: "mode-picker",
+        name: "plan-mode",
         spec: "chats.md",
-        world: Some(conversation),
-        steps: &[Step::Select(FOCUS), Step::Click("mode-picker")],
+        world: Some(planning),
+        steps: &[Step::Select(FOCUS), Step::Type("Plan how a workspace's row shows its pull request")],
     },
     Screen {
         name: "model-picker",

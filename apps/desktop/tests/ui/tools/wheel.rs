@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 use transcript::Place;
 
-use super::{COMMAND_LINE, bounds, in_full_access, open_a_call, open_a_command};
+use super::{COMMAND_LINE, bounds, in_a_new_workspace, open_a_call, open_a_command};
 use crate::support::{Stack, Ui};
 
 /// Longer than a mouse wheel's notches come apart in one spin, so the next notch starts a new gesture.
@@ -22,7 +22,7 @@ const LONG_LINE: usize = 400;
 #[gpui_kit::test]
 fn a_call_s_output_scrolls_under_the_wheel_and_leaves_the_transcript(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (_, output) = open_a_command(&mut ui, "seq 1 20");
     let (lines, transcript) = (top(&mut ui, output.clone()), scrolled_to(&ui));
 
@@ -36,7 +36,7 @@ fn a_call_s_output_scrolls_under_the_wheel_and_leaves_the_transcript(cx: &mut Te
 #[gpui_kit::test]
 fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     // How far the output has scrolled in its block, which the transcript moving doesn't change.
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
@@ -68,7 +68,7 @@ fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut Test
 #[gpui_kit::test]
 fn a_fling_of_a_call_s_output_stops_at_its_end(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     let top_of_output = scrolled_in(&mut ui);
@@ -94,7 +94,7 @@ fn a_fling_of_a_call_s_output_stops_at_its_end(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_fling_of_the_transcript_passes_over_a_call_s_output(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     // Partway down the output, so it has room to catch a fling up if it would.
@@ -113,7 +113,7 @@ fn a_fling_of_the_transcript_passes_over_a_call_s_output(cx: &mut TestAppContext
 #[gpui_kit::test]
 fn a_swipe_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     // Partway down the output, so it has room to take the swipe up if it would.
@@ -131,7 +131,7 @@ fn a_swipe_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mu
 #[gpui_kit::test]
 fn a_spin_of_the_wheel_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     wheel(&mut ui, &over(&output), -60.);
@@ -154,7 +154,7 @@ fn a_spin_of_the_wheel_that_starts_on_the_transcript_carries_on_over_a_call_s_ou
 #[gpui_kit::test]
 fn the_wheel_over_output_that_fits_scrolls_the_transcript(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (_, output) = open_a_command(&mut ui, "echo short");
     let transcript = scrolled_to(&ui);
 
@@ -166,7 +166,7 @@ fn the_wheel_over_output_that_fits_scrolls_the_transcript(cx: &mut TestAppContex
 #[gpui_kit::test]
 fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     open_a_call(&mut ui, &format!("edit:20:{LONG_LINE}"), "Edit");
     let lines = ui.shown("file/").remove(0);
     let (start, transcript) = (bounds(&mut ui, lines.clone()).origin, scrolled_to(&ui));
@@ -201,7 +201,7 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn a_block_of_long_lines_moves_sideways_only_for_a_gesture_that_went_to_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     // Its two lines fit, so the block has nothing to scroll down.
     open_a_call(&mut ui, &format!("edit:1:{LONG_LINE}"), "Edit");
     let (lines, line) = (ui.shown("file/").remove(0), ui.labelled("Edit")[0].path().last().unwrap().clone());
@@ -221,7 +221,7 @@ fn a_block_of_long_lines_moves_sideways_only_for_a_gesture_that_went_to_it(cx: &
 #[gpui_kit::test]
 fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     // Enough words first that the transcript itself could scroll, then a diff longer and wider than its preview.
     ui.input(&format!("burst:3000; edit:20:{LONG_LINE}; say:done"));
     ui.press("enter");

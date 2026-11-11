@@ -6,7 +6,7 @@ use std::sync::mpsc::Receiver;
 use serde_json::{Value, json};
 
 use crate::turn::{Turn, state_event};
-use crate::{Input, Prompt, current_mode, emit, set_mode};
+use crate::{BEFORE_PLAN, Input, Prompt, current_mode, emit, set_mode};
 
 /// The result reads like the real CLI's, which goes by whether it was given answers.
 pub(crate) fn ask_questions(
@@ -70,7 +70,7 @@ pub(crate) fn ask_questions(
     }
 }
 
-/// Approving a plan leaves plan mode, and the CLI says so itself.
+/// Approving a plan leaves plan mode for the mode it was entered from, and the CLI says so itself.
 pub(crate) fn present_plan(
     turn: &mut Turn,
     plan: &str,
@@ -96,7 +96,8 @@ pub(crate) fn present_plan(
                     turn.tool_result(&tool_use_id, message, true);
                     return false;
                 }
-                set_mode(turn.out, "default");
+                let back_to = BEFORE_PLAN.lock().clone().unwrap_or_else(|| "default".to_string());
+                set_mode(turn.out, &back_to);
                 turn.tool_result(&tool_use_id, "User has approved your plan.", false);
                 return false;
             }

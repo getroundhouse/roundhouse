@@ -74,7 +74,7 @@ pub(crate) async fn start_agent(
         // after its replacement has started.
         pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
     };
-    let process = agents::spawn(spec, tx, options)?;
+    let process = agents::spawn(spec, tx, options).await?;
     let pid = process.pid();
     info!(pid, %session_id, %run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.

@@ -1,23 +1,28 @@
-//! Where a prompt is written: what's attached, what's typed, and the bar under them, with the model and approval mode
-//! pickers at one end, and at the other what the agent says of itself, then Send or Stop.
+//! Where a prompt is written: what's attached, what's typed, and the bar under them, with the model picker at one end,
+//! and at the other what the agent says of itself, then Send or Stop. Shift-Tab turns plan mode on and off, and the
+//! composer shows it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, Div, InteractiveElement, IntoElement, ParentElement, Pixels, Styled, Window, div, px,
+    AnyElement, App, Context, Div, InteractiveElement, IntoElement, ParentElement, Pixels, Rems, Role,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px, rems,
 };
 use look::{Hand as _, Off as _};
-use transcript::mode_label;
+use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 
-use super::WorkspacePane;
-use crate::StopAgent;
+use super::{PaneEvent, WorkspacePane};
 use crate::attached;
 use crate::model_picker::{Picked, model_picker};
+use crate::{StopAgent, TogglePlanMode};
 
-const MODES: [&str; 4] = ["manual", "plan", "acceptEdits", "bypassPermissions"];
+/// Where Shift-Tab turns plan mode on and off, in place of the text field's own outdent.
+pub(crate) const KEY_CONTEXT: &str = "Composer";
+const PLAN_LABEL: &str = "Plan mode";
+/// Its corners, which plan mode's texture stays inside.
+const CORNER: Rems = rems(0.5);
 
 /// Whether there's a hub to send what's typed to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,38 +55,87 @@ impl WorkspacePane {
         cx.notify();
     }
 
-    /// The model and its effort, and the approval mode, of the chat showing.
-    fn pickers(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let session = self.session();
-        let model_and_effort = session.map(|s| (s.model.clone(), s.effort));
-        let mode = session.and_then(|s| s.permission_mode.clone());
-        let full_access = mode.as_deref() == Some("bypassPermissions");
-        let warning = cx.theme().warning;
-        let mode_text = mode.as_deref().map_or("Your settings", mode_label).to_string();
-        let this = cx.weak_entity();
-        let models = {
-            let this = this.clone();
-            move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
-                let _ = this.update(cx, |t, cx| match picked {
-                    Picked::Model(model) => t.configure(Some(model), None, None, cx),
-                    Picked::Effort(effort) => t.configure(None, None, Some(effort), cx),
-                });
-            }
-        };
-        let approval_modes = {
-            let current = mode.clone();
-            move |mut menu: gpui_kit::component::menu::PopupMenu, _: &mut Window, _: &mut Context<_>| {
-                for id in MODES {
-                    let this = this.clone();
-                    let checked = current.as_deref() == Some(id);
-                    menu = menu.item(PopupMenuItem::new(mode_label(id).to_string()).checked(checked).on_click(
-                        move |_, _, cx| {
-                            let _ = this.update(cx, |t, cx| t.configure(None, Some(id.to_string()), None, cx));
-                        },
-                    ));
+    /// Changes the showing chat's model or effort. The hub only agrees once a running agent has, so the picker changes
+    /// when this comes back, and a refusal leaves it as it was.
+    pub fn configure(&mut self, model: Option<ModelName>, effort: Option<Effort>, cx: &mut Context<Self>) {
+        let Some(id) = self.active.clone() else { return };
+        let change = SessionSettingsChange { model, permission_mode: None, effort };
+        self.configure_chat(id, change, cx, |_, _, _| {});
+    }
+
+    /// Changes what `id` runs with, then calls `answered` with the mode the hub says the chat has now, or `None` if it
+    /// refused.
+    fn configure_chat(
+        &mut self,
+        id: SessionId,
+        change: SessionSettingsChange,
+        cx: &mut Context<Self>,
+        answered: impl FnOnce(&mut Self, Option<PermissionMode>, &mut Context<Self>) + 'static,
+    ) {
+        let changing = self.client.start(move |client| client.session_configure(&id, change));
+        cx.spawn(async move |this, cx| {
+            let changed = changing.recv().await;
+            let _ = this.update(cx, |t, cx| {
+                let now = match changed {
+                    Ok(session) => {
+                        let mode = session.permission_mode;
+                        t.took_reply(session, cx);
+                        Some(mode)
+                    }
+                    Err(e) => {
+                        cx.emit(PaneEvent::Error(format!("couldn't change that: {e}")));
+                        None
+                    }
+                };
+                answered(t, now, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Whether the chat showing is planning. Its agent has full access otherwise.
+    fn planning(&self) -> bool {
+        self.session().is_some_and(|s| s.permission_mode == PermissionMode::Plan)
+    }
+
+    /// Plan mode on or off for the chat showing, as Shift-Tab does. It changes once the agent has agreed. A press while
+    /// the hub hasn't answered the one before goes from what that asked, so it undoes it.
+    fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
+        let Some(session) = self.active.clone() else { return };
+        let asked = self.plan_asked.get(&session).copied();
+        let planning = !asked.unwrap_or_else(|| self.planning());
+        self.plan_asked.insert(session.clone(), planning);
+        if asked.is_none() {
+            self.ask_plan_mode(session, planning, cx);
+        }
+    }
+
+    /// Asks for plan mode on or off in `session`, and once the hub has answered, for what the presses meanwhile asked,
+    /// if that's different. One at a time, so the hub takes them in the order they were pressed.
+    fn ask_plan_mode(&mut self, session: SessionId, planning: bool, cx: &mut Context<Self>) {
+        let mode = if planning { PermissionMode::Plan } else { PermissionMode::FullAccess };
+        let change = SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
+        self.configure_chat(session.clone(), change, cx, move |t, now, cx| {
+            match (now, t.plan_asked.get(&session).copied()) {
+                (Some(now), Some(wanted)) if (now == PermissionMode::Plan) != wanted => {
+                    t.ask_plan_mode(session, wanted, cx);
                 }
-                menu
+                _ => {
+                    t.plan_asked.remove(&session);
+                }
             }
+        });
+    }
+
+    /// The model and its effort of the chat showing.
+    fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let model_and_effort = self.session().map(|s| (s.model.clone(), s.effort));
+        let this = cx.weak_entity();
+        let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
+            let _ = this.update(cx, |t, cx| match picked {
+                Picked::Model(model) => t.configure(Some(model), None, cx),
+                Picked::Effort(effort) => t.configure(None, Some(effort), cx),
+            });
         };
         h_flex()
             .flex_1()
@@ -91,38 +145,40 @@ impl WorkspacePane {
             .when_some(model_and_effort, |row, (model, effort)| {
                 row.child(model_picker("model-picker", &model, effort, models))
             })
-            .child(
-                Button::new("mode-picker")
-                    .hand()
-                    .ghost()
-                    .xsmall()
-                    .dropdown_caret(true)
-                    .when(full_access, |b| b.text_color(warning))
-                    .label(mode_text)
-                    .dropdown_menu_with_anchor(Anchor::BottomLeft, approval_modes),
-            )
     }
 
-    /// What's attached, what's typed, and below them the bar. Files dropped anywhere on it are attached, and so is a
-    /// paste that holds images or files. It's centred under the transcript's column and a little wider, so the
-    /// transcript's text sits inside its edges. While the agent waits on a question, the question is asked here
-    /// instead, and what's typed and attached waits for it to go.
+    /// What's attached, what's typed, and below them the bar, over plan mode's texture while the agent is planning.
+    /// Files dropped anywhere on it are attached, and so is a paste that holds images or files. It's centred under the
+    /// transcript's column and a little wider, so the transcript's text sits inside its edges. While the agent waits on
+    /// a question, the question is asked here instead, and what's typed and attached waits for it to go.
     pub(super) fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let queue = self.queue_card(cx);
         let around = |inside: AnyElement| transcript::around_column(v_flex().w_full().children(queue).child(inside));
         if let Some(question) = self.transcript().and_then(|t| t.read(cx).question().cloned()) {
             return around(question.into_any_element()).flex_none().pb_4().pt_1();
         }
+        let planning = self.planning();
+        let texture = planning.then(|| plan_texture(cx));
         let attached = self.attached_tiles(cx);
         let bar = self.bar(cx).into_any_element();
         let theme = cx.theme();
-        let (surface, border) = (theme.muted, theme.input);
+        let (surface, border) = if planning { look::plan_colors(theme.muted, cx) } else { (theme.muted, theme.input) };
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
-        let composer = v_flex().id("composer").w_full().rounded_lg().border_1().border_color(border).bg(surface);
+        let composer = v_flex()
+            .id("composer")
+            .key_context(KEY_CONTEXT)
+            .relative()
+            .w_full()
+            .rounded(CORNER)
+            .border_1()
+            .border_color(border)
+            .bg(surface)
+            .on_action(cx.listener(|t, _: &TogglePlanMode, _, cx| t.toggle_plan_mode(cx)));
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
+            .children(texture)
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
             .child(bar);
@@ -130,18 +186,18 @@ impl WorkspacePane {
     }
 
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the attach button,
-    /// then the pickers, which take whatever room is left. The right one is the agent's: what it says of itself,
+    /// then the model picker, which takes whatever room is left. The right one is the agent's: what it says of itself,
     /// each in a [`Slot`], and last the one main action, twice as far from them as they are from each other, so it
     /// stands apart.
     fn bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let attach =
             attached::attach_button("attach", cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx)).xsmall();
-        let pickers = self.pickers(cx).into_any_element();
+        let picker = self.picker(cx).into_any_element();
         let beside = self.beside_the_main_action(cx);
         // Left out when there's nothing in it, so it doesn't push the main action in by a gap.
         let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap_2().children(beside));
         let agents = h_flex().flex_none().gap_4().children(beside).child(self.main_action(cx));
-        h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(pickers).child(agents)
+        h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(attach).child(picker).child(agents)
     }
 
     /// What sits beside the main action, in the order it's drawn. Something new for the bar's right end goes here,
@@ -208,4 +264,16 @@ impl IntoElement for Slot {
 /// Something with whatever it's given in its middle.
 pub(super) fn middle() -> Div {
     div().flex().items_center().justify_center()
+}
+
+/// Under everything in the composer, and named, so assistive apps can say what it shows.
+fn plan_texture(cx: &App) -> impl IntoElement + use<> {
+    div()
+        .id("plan-texture")
+        .role(Role::Status)
+        .aria_label(PLAN_LABEL)
+        .absolute()
+        .inset_0()
+        .child(look::plan_texture(cx, CORNER))
+        .test_support()
 }

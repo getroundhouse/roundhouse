@@ -5,21 +5,17 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::{AppContext as _, SharedString};
-use protocol::model::{AgentKind, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{AgentKind, PermissionMode, SessionId, SessionSettingsChange, SessionStatus};
 
 use super::{Stack, TIMEOUT, Ui};
 
 impl Stack {
-    /// A chat whose agent doesn't ask, in a new workspace in the stack's repository.
-    pub(crate) fn chat_in_full_access(&self) -> SessionId {
+    /// A chat in a new workspace in the stack's repository.
+    pub(crate) fn chat_in_a_new_workspace(&self) -> SessionId {
         let client = self.client();
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-        let options = SessionSettingsChange {
-            permission_mode: Some("bypassPermissions".into()),
-            ..SessionSettingsChange::default()
-        };
-        client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap().id
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap().id
     }
 
     /// Sends the script to the chat as a prompt, and waits for its agent to finish it.
@@ -35,13 +31,14 @@ impl Stack {
 }
 
 impl Ui<'_> {
-    /// Has the chat showing run a command once its agent is free, with nothing asked. What the command changes
-    /// shows when its turn ends. The fake agent takes `;` to start its next step, so the command has none.
+    /// Has the chat showing run a command once its agent is free, with nothing asked, which takes it out of plan mode
+    /// if it's in it. What the command changes shows when its turn ends. The fake agent takes `;` to start its next
+    /// step, so the command has none.
     pub(crate) fn have_the_agent_run(&mut self, command: &str) {
         self.wait("the agent to be free", |ui| ui.session_status() == Some(SessionStatus::Idle));
-        if self.chat_mode().as_deref() != Some("bypassPermissions") {
-            self.pick("mode-picker", 3);
-            self.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
+        if self.chat_mode() == Some(PermissionMode::Plan) {
+            self.press("shift-tab");
+            self.wait("full access", |ui| ui.chat_mode() == Some(PermissionMode::FullAccess));
         }
         self.input(&format!("tool:{command}"));
         self.press("enter");

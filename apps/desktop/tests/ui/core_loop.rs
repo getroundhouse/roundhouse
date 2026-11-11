@@ -5,7 +5,7 @@
 use desktop::app::BuildLine;
 use desktop::new_workspace::Request;
 use gpui_kit::component::Theme;
-use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
@@ -75,14 +75,11 @@ fn the_core_loop(cx: &mut TestAppContext) {
     assert!(worktree.join("a.txt").exists());
     let branch = git(&worktree, &["branch", "--show-current"]);
 
-    // Work with the agent, approving a tool on the way.
+    // Work with the agent, which has full access, so its call runs without asking.
     ui.input("say:starting; tool:echo changed >> a.txt; say:finished");
     ui.press("enter");
-    let approval_seq = ui.next_open_approval();
-    ui.wait("the session to wait for an answer", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\n", "not until it's approved");
-    ui.click(ElementId::NamedInteger("allow".into(), approval_seq));
     ui.wait_idle_with("the turn to finish", |text| text.contains("finished"));
+    assert!(!ui.events().iter().any(|e| matches!(e.body, EventBody::ApprovalRequested { .. })));
     assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\nchanged\n");
 
     review_and_comment(&mut ui, &stack, &id);

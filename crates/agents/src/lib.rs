@@ -100,13 +100,13 @@ pub trait AgentProcess: Send + Sync {
     async fn stop(&self);
 }
 
-pub fn spawn(
+pub async fn spawn(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
-        AgentKind::Claude => claude::spawn(spec, output, options),
+        AgentKind::Claude => claude::spawn(spec, output, options).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

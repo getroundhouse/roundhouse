@@ -11,8 +11,8 @@ use serde_json::Value;
 
 use crate::attachment::Attachment;
 use crate::model::{
-    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, Place, RunId, Seq, SessionId, TaskId, ToolUseId,
-    UsageLimit,
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
+    TaskId, ToolUseId, UsageLimit,
 };
 
 pub use content::{ContentBlock, LinkedImage};
@@ -79,7 +79,7 @@ pub enum EventBody {
         agent_session_id: Option<AgentSessionId>,
         model: Option<String>,
         cwd: Option<String>,
-        permission_mode: Option<String>,
+        permission_mode: Option<PermissionMode>,
         agent_version: Option<String>,
     },
     AgentState {
@@ -199,10 +199,10 @@ pub enum EventBody {
         level: NoticeLevel,
         message: String,
     },
-    /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a
-    /// plan leaves plan mode.
+    /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a plan leaves plan
+    /// mode. The hub records one when the mode is changed with no agent running, for the next agent to start in.
     AgentMode {
-        permission_mode: String,
+        permission_mode: PermissionMode,
     },
     /// An agent event with no normalized form. The stored raw line has the details.
     AgentOther {

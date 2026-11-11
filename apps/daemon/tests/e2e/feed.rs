@@ -5,9 +5,12 @@
 use client_core::records::HubRecords;
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
-use protocol::model::{AgentKind, DiffSide, PullRequestFound, RecordKey, Rev, Session, SessionStatus, WorkspaceStatus};
+use protocol::model::{
+    AgentKind, DiffSide, PullRequestFound, RecordKey, Rev, Session, SessionSettingsChange, SessionStatus,
+    WorkspaceStatus,
+};
 
-use crate::support::{Stack, in_mode, next_notice, wait_for_setup, wait_for_turn_end, wait_until};
+use crate::support::{Stack, next_notice, wait_for_setup, wait_for_turn_end, wait_until};
 
 /// What a sidebar shows of the chat the feed last told of, its status and title, and the copy of its record that
 /// said so.
@@ -68,7 +71,8 @@ fn the_feed_reports_what_a_sidebar_shows() {
     for _ in 0..2 {
         assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));
     }
-    let session = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
+    let session =
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
 
     // One notice per change of status, not one per event. Once the first prompt is recorded, it titles the

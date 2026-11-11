@@ -11,12 +11,6 @@ use super::{PaneEvent, Showing, WorkspacePane};
 use crate::rename::{self, Renaming};
 use client_core::records::Record;
 
-/// What a new chat starts with. It keeps the model and how edits are handled, but Plan belongs to the
-/// task at hand, and full access should be chosen on purpose each time.
-pub(super) fn inherited_mode(mode: Option<&str>) -> Option<String> {
-    mode.filter(|mode| !matches!(*mode, "plan" | "bypassPermissions")).map(String::from)
-}
-
 /// What to show once `gone`, which was open, isn't: the first chat after it that's still open, or else the last open.
 /// It counts from the chats open before, since one closed before anything was sent in it is deleted, and so is in
 /// neither list now.
@@ -50,11 +44,11 @@ impl WorkspacePane {
         }
         self.creating_chat = true;
         let id = self.workspace.id.clone();
+        // It keeps the model and effort, but not plan mode, which belongs to the task at hand.
         let (model, effort) = (self.session().map(|s| s.model.clone()), self.session().map(|s| s.effort));
-        let mode = inherited_mode(self.session().and_then(|s| s.permission_mode.as_deref()));
         // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets the hub's
         // default.
-        let options = SessionSettingsChange { model, permission_mode: mode, effort: effort.and_then(Effort::known) };
+        let options = SessionSettingsChange { model, permission_mode: None, effort: effort.and_then(Effort::known) };
         let creating = self.client.start(move |client| {
             client.session_create(&id, AgentKind::Claude, options, Some(client_core::new_request_id()))
         });

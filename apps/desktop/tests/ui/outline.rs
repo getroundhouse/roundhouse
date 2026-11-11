@@ -17,7 +17,7 @@ const LONGER_THAN_THE_LIST_WAITS: Duration = Duration::from_secs(1);
 #[gpui_kit::test]
 fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:the first turn");
     stack.run(&session, "say:the second turn");
     // Far more events than the transcript loads to start with, so the prompts before it aren't among them.
@@ -49,7 +49,7 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
 #[gpui_kit::test]
 fn from_the_end_of_a_chat_any_prompt_with_a_screen_below_it_is_jumped_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     // Long replies, so every prompt but the last few has more than a screen of chat below it.
     for turn in 0..12 {
         stack.run(&session, &format!("prose:4:{turn}"));
@@ -69,7 +69,7 @@ fn from_the_end_of_a_chat_any_prompt_with_a_screen_below_it_is_jumped_to(cx: &mu
 #[gpui_kit::test]
 fn a_prompt_on_the_last_screen_cant_come_to_the_top_so_the_chat_stays_at_its_end(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     for turn in 0..6 {
         stack.run(&session, &format!("prose:4:{turn}"));
     }
@@ -95,7 +95,7 @@ fn a_prompt_on_the_last_screen_cant_come_to_the_top_so_the_chat_stays_at_its_end
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "burst:3000; say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -116,7 +116,7 @@ fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut T
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_list(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "burst:3000; say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -142,7 +142,7 @@ fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_l
 #[gpui_kit::test]
 fn the_wheel_over_the_list_scrolls_the_list_and_not_the_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     // More than the list has room for, and long enough that the chat can move.
     for turn in 0..16 {
         stack.run(&session, &format!("prose:2:{turn}"));
@@ -164,7 +164,7 @@ fn the_wheel_over_the_list_scrolls_the_list_and_not_the_chat(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -185,7 +185,7 @@ fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     // More than the list has room for.
     for turn in 0..16 {
         stack.run(&session, &format!("say:turn {turn}"));
@@ -207,7 +207,7 @@ fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_list_stays_while_the_pointer_is_on_it_and_goes_once_it_leaves(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -226,7 +226,7 @@ fn the_list_stays_while_the_pointer_is_on_it_and_goes_once_it_leaves(cx: &mut Te
 #[gpui_kit::test]
 fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -250,7 +250,7 @@ fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there(cx: &mu
 #[gpui_kit::test]
 fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -278,7 +278,7 @@ fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(
 #[gpui_kit::test]
 fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
@@ -304,7 +304,7 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
 #[gpui_kit::test]
 fn a_chat_with_one_prompt_has_no_outline(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:only");
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the reply", |ui| ui.assistant_text().contains("only"));

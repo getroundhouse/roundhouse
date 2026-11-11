@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput};
-use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{AgentKind, RunId, SessionSettings};
+use protocol::event::{ContentBlock, EventBody, NoticeLevel};
+use protocol::model::{AgentKind, PermissionMode, RunId, SessionSettings};
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -54,7 +54,7 @@ async fn until_exit(output: &mut mpsc::Receiver<AgentOutput>) -> Vec<AgentOutput
 async fn stopping_an_agent_that_has_already_exited_returns_at_once() {
     let dir = tempfile::tempdir().unwrap();
     let (tx, mut rx) = mpsc::channel(16);
-    let agent = spawn_at(script(dir.path(), "exit 3"), spec(dir.path()), tx, AgentOptions::default()).unwrap();
+    let agent = spawn_at(script(dir.path(), "exit 3"), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
     until_exit(&mut rx).await;
     timeout(Duration::from_secs(5), agent.stop()).await.expect("stop must not wait on a process that's gone");
 }
@@ -63,7 +63,8 @@ async fn stopping_an_agent_that_has_already_exited_returns_at_once() {
 async fn stopping_an_agent_ends_it_and_reports_that_it_was_asked_to() {
     let dir = tempfile::tempdir().unwrap();
     let (tx, mut rx) = mpsc::channel(16);
-    let agent = spawn_at(script(dir.path(), "exec sleep 100"), spec(dir.path()), tx, AgentOptions::default()).unwrap();
+    let agent =
+        spawn_at(script(dir.path(), "exec sleep 100"), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
     timeout(Duration::from_secs(5), agent.stop()).await.expect("stop to finish");
     let last = until_exit(&mut rx).await.pop().unwrap();
     assert!(matches!(last, AgentOutput::Exited { requested: true, signal: Some(15), .. }), "{last:?}");
@@ -78,7 +79,7 @@ printf '{"type":"system","subtype":"init","session_id":"s"}\n'
 printf '\377\376 not text\n'
 printf '{"type":"assistant","message":{"id":"m","content":[{"type":"text","text":"after"}]}}\n'
 "#;
-    let _agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).unwrap();
+    let _agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
     let seen = until_exit(&mut rx).await;
     let got_it = seen.iter().any(|item| match item {
         AgentOutput::Event { body: EventBody::Assistant { blocks, .. }, .. } => {
@@ -95,7 +96,7 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
     let (tx, mut rx) = mpsc::channel(16);
     let pid_file = dir.path().join("agents/s.pid");
     let options = AgentOptions { pid_file: Some(pid_file.clone()), ..AgentOptions::default() };
-    let agent = spawn_at(script(dir.path(), "exec sleep 100"), spec(dir.path()), tx, options).unwrap();
+    let agent = spawn_at(script(dir.path(), "exec sleep 100"), spec(dir.path()), tx, options).await.unwrap();
 
     let recorded = std::fs::read_to_string(&pid_file).unwrap();
     let mut lines = recorded.lines();
@@ -105,4 +106,144 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
     agent.stop().await;
     until_exit(&mut rx).await;
     assert!(!pid_file.exists());
+}
+
+fn in_plan_mode(dir: &Path) -> AgentSpec {
+    let mut spec = spec(dir);
+    spec.settings.permission_mode = PermissionMode::Plan;
+    spec
+}
+
+/// Reads the first two lines the agent is sent into `lines`, then waits to be stopped.
+const READS_TWO_LINES: &str = "read first; read second; printf '%s\\n%s\\n' \"$first\" \"$second\" > lines.tmp; mv lines.tmp lines; exec sleep 100";
+
+/// The two lines [`READS_TWO_LINES`] read.
+async fn two_lines_read(dir: &Path) -> Vec<serde_json::Value> {
+    let read = dir.join("lines");
+    timeout(Duration::from_secs(10), async {
+        while !read.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the script to read two lines");
+    let text = std::fs::read_to_string(&read).unwrap();
+    text.lines().map(|line| serde_json::from_str(line).unwrap()).collect()
+}
+
+fn asked_into_plan_mode_then_prompted(lines: &[serde_json::Value]) {
+    assert_eq!(lines[0]["request"], serde_json::json!({"subtype": "set_permission_mode", "mode": "plan"}));
+    assert_eq!(lines[1]["type"], "user", "the prompt comes second");
+}
+
+#[tokio::test]
+async fn an_agent_starting_in_plan_mode_is_asked_into_it_before_its_first_prompt() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = mpsc::channel(16);
+
+    let agent = spawn_at(script(dir.path(), READS_TWO_LINES), in_plan_mode(dir.path()), tx, AgentOptions::default())
+        .await
+        .unwrap();
+    agent.send_prompt(1, "go", &[]).await.unwrap();
+
+    asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
+    agent.stop().await;
+}
+
+/// A launch that has to be corrected, here because the conversation to resume isn't there, is a new process, which
+/// starts with full access too.
+#[tokio::test]
+async fn an_agent_relaunched_in_plan_mode_is_asked_into_it_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = mpsc::channel(16);
+    let body = format!(
+        r#"case " $* " in *" --resume "*) read line; echo "No conversation found with session ID: s" >&2; exit 1;; esac
+{READS_TWO_LINES}"#
+    );
+    let mut resumed = in_plan_mode(dir.path());
+    resumed.resume = true;
+
+    let agent = spawn_at(script(dir.path(), &body), resumed, tx, AgentOptions::default()).await.unwrap();
+    agent.send_prompt(1, "go", &[]).await.unwrap();
+
+    asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
+    agent.stop().await;
+}
+
+/// Its switch into plan mode is how it starts there, not a change to report. A later one is.
+#[tokio::test]
+async fn an_agent_starting_in_plan_mode_reports_only_the_changes_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    let status = |mode: &str| format!(r#"printf '{{"type":"system","subtype":"status","permissionMode":"{mode}"}}\n'"#);
+    let body = format!(
+        r#"read line
+id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+printf '{{"type":"control_response","response":{{"subtype":"success","request_id":"%s","response":{{}}}}}}\n' "$id"
+{}
+printf '{{"type":"system","subtype":"init","session_id":"s","permissionMode":"plan"}}\n'
+{}
+{}"#,
+        status("plan"),
+        status("bypassPermissions"),
+        status("plan"),
+    );
+
+    let _agent =
+        spawn_at(script(dir.path(), &body), in_plan_mode(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    let reported: Vec<PermissionMode> = until_exit(&mut rx)
+        .await
+        .into_iter()
+        .filter_map(|item| match item {
+            AgentOutput::Event { body: EventBody::AgentMode { permission_mode }, .. } => Some(permission_mode),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reported, [PermissionMode::FullAccess, PermissionMode::Plan]);
+}
+
+#[tokio::test]
+async fn an_agent_that_refuses_plan_mode_is_stopped_and_says_why() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    let body = r#"read line
+id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+printf '{"type":"control_response","response":{"subtype":"error","request_id":"%s","error":"no plans here"}}\n' "$id"
+exec sleep 100"#;
+
+    let _agent =
+        spawn_at(script(dir.path(), body), in_plan_mode(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    let seen = until_exit(&mut rx).await;
+    let said = seen.iter().any(|item| {
+        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message }, .. }
+            if message.contains("no plans here"))
+    });
+    assert!(said, "{seen:?}");
+    assert!(matches!(seen.last(), Some(AgentOutput::Exited { signal: Some(15), requested: false, .. })), "{seen:?}");
+}
+
+/// One that starts a turn first may be about to use a tool with full access. It's stopped before the turn's start goes
+/// on, since that would say the chat isn't planning.
+#[tokio::test]
+async fn an_agent_that_starts_on_a_prompt_before_going_into_plan_mode_is_stopped_and_says_why() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    let body = r#"read line
+printf '{"type":"system","subtype":"init","session_id":"s","permissionMode":"bypassPermissions"}\n'
+exec sleep 100"#;
+
+    let _agent =
+        spawn_at(script(dir.path(), body), in_plan_mode(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    let seen = until_exit(&mut rx).await;
+    let said = seen.iter().any(|item| {
+        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message }, .. }
+            if message.contains("plan mode"))
+    });
+    assert!(said, "{seen:?}");
+    let started = seen.iter().any(|item| matches!(item, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. }));
+    assert!(!started, "{seen:?}");
+    assert!(matches!(seen.last(), Some(AgentOutput::Exited { signal: Some(15), requested: false, .. })), "{seen:?}");
 }

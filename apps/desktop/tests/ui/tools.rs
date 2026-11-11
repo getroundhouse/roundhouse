@@ -25,7 +25,7 @@ const ADVISOR_LINE: &str = "Ask the advisor";
 #[gpui_kit::test]
 fn a_call_opens_to_what_it_did_and_closes_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("tool:echo printed-by-the-tool; say:done");
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
@@ -64,14 +64,12 @@ fn a_read_of_an_image_opens_to_the_image_the_hub_kept(cx: &mut TestAppContext) {
     ui.wait("the image, from the hub", |ui| ui.shown("picture/").len() == 1);
 }
 
-/// A new workspace in full access, so the fake agent's calls run without waiting to be allowed.
-pub(crate) fn in_full_access<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+/// A new workspace, open in the app.
+pub(crate) fn in_a_new_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
     ui.new_workspace();
-    ui.pick("mode-picker", 3);
-    ui.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
     ui
 }
 
@@ -114,7 +112,7 @@ fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
 #[gpui_kit::test]
 fn asking_the_advisor_opens_to_its_advice_or_says_only_the_agent_can_read_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("advise; advise:Test it first.; advise-failed:overloaded; say:done");
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
@@ -131,7 +129,7 @@ fn asking_the_advisor_opens_to_its_advice_or_says_only_the_agent_can_read_it(cx:
 #[gpui_kit::test]
 fn a_call_to_the_advisor_the_agent_went_on_without_says_so(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("advise-unanswered; advise; say:done");
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
@@ -148,7 +146,7 @@ fn a_call_to_the_advisor_the_agent_went_on_without_says_so(cx: &mut TestAppConte
 #[gpui_kit::test]
 fn a_call_to_the_advisor_with_nothing_to_read_opens_to_a_line_saying_why(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("advise:; say:done; advise-unanswered");
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));

@@ -1,5 +1,5 @@
 use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{AttachmentId, ContextUsage, Effort, ModelName};
+use protocol::model::{AttachmentId, ContextUsage, Effort, ModelName, PermissionMode};
 
 use super::super::tests::{notice, store_with_session};
 use super::super::{older, schema};
@@ -25,7 +25,7 @@ fn an_effort_is_kept_until_another_is_set() {
 
     let others = SessionSettingsChange {
         model: Some(ModelName::named("haiku")),
-        permission_mode: Some("plan".into()),
+        permission_mode: Some(PermissionMode::Plan),
         effort: None,
     };
     store.set_session_options(&"s".into(), &others).unwrap();
@@ -33,6 +33,22 @@ fn an_effort_is_kept_until_another_is_set() {
 
     store.set_session_options(&"s".into(), &at(Effort::Low)).unwrap();
     assert_eq!(effort(&store), Effort::Low);
+}
+
+#[test]
+fn a_mode_is_kept_until_another_is_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let mode = || store.get_session(&"s".into()).unwrap().session.permission_mode;
+    assert_eq!(mode(), PermissionMode::FullAccess);
+
+    for chosen in [PermissionMode::Plan, PermissionMode::FullAccess] {
+        let change = SessionSettingsChange { permission_mode: Some(chosen), ..SessionSettingsChange::default() };
+        store.set_session_options(&"s".into(), &change).unwrap();
+        assert_eq!(mode(), chosen);
+    }
+    store.set_session_options(&"s".into(), &at(Effort::Low)).unwrap();
+    assert_eq!(mode(), PermissionMode::FullAccess, "changing the others leaves it");
 }
 
 /// The trigger names the column. Setting options also sets the model, which it names already, so this sets the effort

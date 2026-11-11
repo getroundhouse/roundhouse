@@ -19,7 +19,7 @@ use crate::support::{
 fn a_hub_crash_stops_the_agent_and_the_next_hub_resumes_the_conversation() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (_, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "say:remember mango; tool:echo x", None).unwrap();
     wait_for_approval(&client, &session.id);
     let events = read_all(&client, &session.id);
@@ -138,7 +138,7 @@ fn a_worker_crash_is_reported_and_the_next_prompt_gets_a_new_worker() {
 fn an_agent_dying_during_an_approval_closes_it() {
     let stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (_, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo x", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     let agent_pid = read_all(&client, &session.id)

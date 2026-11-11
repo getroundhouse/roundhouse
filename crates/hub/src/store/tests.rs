@@ -32,7 +32,7 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             workspace_id: "w".into(),
             agent: AgentKind::Claude,
             model: protocol::model::DEFAULT_MODEL,
-            permission_mode: None,
+            permission_mode: protocol::model::PermissionMode::FullAccess,
             effort: protocol::model::DEFAULT_EFFORT,
             title: None,
             title_source: TitleSource::FirstLine,

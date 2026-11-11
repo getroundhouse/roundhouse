@@ -5,7 +5,7 @@ use std::io::Write;
 
 use protocol::attachment::Attachment;
 use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, SubagentOutcome, TurnOutcome};
-use protocol::model::{MessageId, Seq, TaskId, ToolUseId};
+use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
@@ -50,8 +50,9 @@ impl Printer {
     }
 
     /// What the agent says it's running as, with `?` for what it left out.
-    fn ready(&mut self, seq: Seq, model: Option<&str>, permission_mode: Option<&str>, cwd: Option<&str>) {
-        let (model, mode, cwd) = (model.unwrap_or("?"), permission_mode.unwrap_or("?"), cwd.unwrap_or("?"));
+    fn ready(&mut self, seq: Seq, model: Option<&str>, permission_mode: Option<PermissionMode>, cwd: Option<&str>) {
+        let mode = permission_mode.map_or("?", crate::session::mode_name);
+        let (model, cwd) = (model.unwrap_or("?"), cwd.unwrap_or("?"));
         self.line(seq, &format!("agent ready: model {model}, permissions {mode}, in {cwd}"));
     }
 
@@ -63,7 +64,7 @@ impl Printer {
                 self.line(event.seq, &format!("agent {how}, pid {pid}"));
             }
             EventBody::AgentInit { model, permission_mode, cwd, .. } => {
-                self.ready(event.seq, model.as_deref(), permission_mode.as_deref(), cwd.as_deref());
+                self.ready(event.seq, model.as_deref(), *permission_mode, cwd.as_deref());
             }
             EventBody::Assistant { message_id, blocks, first_index, .. } => {
                 for (position, block) in blocks.iter().enumerate() {
@@ -99,7 +100,7 @@ impl Printer {
             }
             EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
             EventBody::AgentMode { permission_mode } => {
-                self.line(event.seq, &format!("approval mode: {permission_mode}"));
+                self.line(event.seq, &format!("approval mode: {}", crate::session::mode_name(*permission_mode)));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
             EventBody::SubagentStarted { description, call, .. } => {

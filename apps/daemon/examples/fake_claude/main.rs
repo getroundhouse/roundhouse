@@ -9,7 +9,8 @@
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
 //!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
-//!   tool:COMMAND    Ask for approval if the mode requires it, then run COMMAND with `sh -c`.
+//!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
+//!                   writes, then run COMMAND with `sh -c`.
 //!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result
 //!                   comes back without a patch, so the edit is drawn from what it replaced.
 //!   edit:N:WIDTH    Same, with each line at least WIDTH characters long.
@@ -23,7 +24,8 @@
 //!   env:NAME        Say the value of an environment variable.
 //!   effort          Say the effort it's using, as `get_settings` reports it.
 //!   keep-effort     From now on, answer a change of effort as if it took, and change nothing.
-//!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved.
+//!   plan:TEXT       Present a plan for approval, which leaves plan mode if it's approved, for the mode it was
+//!                   entered from. A launch straight into plan mode leaves it for `default`, as the real CLI's does.
 //!   ask:Q?=A/B|*R?=C/D  Ask questions with those options. `*` lets a question take several.
 //!   attached        Say what the newest prompt carried besides its script: each image's type and size, each
 //!                   file given in the prompt by its name and first line, and each file given by its path by its
@@ -75,12 +77,15 @@ mod background;
 mod prompt;
 mod read;
 mod result;
+mod settings;
 mod subagent;
 mod title;
 mod tools;
 mod turn;
 
 use prompt::{attached, read_prompt};
+pub(crate) use settings::{BEFORE_PLAN, KEEPS_EFFORT, current_effort, current_mode, current_model, set_mode};
+use settings::{apply_flag_settings, flag, set_model, start_as_launched};
 use turn::run_turn;
 
 type Out = Arc<Mutex<std::io::Stdout>>;
@@ -98,57 +103,6 @@ struct Config {
     conversation: PathBuf,
     /// Reaches the agent the way stdin does, for what it's told by its own work, such as a task finishing.
     input: mpsc::Sender<Input>,
-}
-
-/// What a control request changed. Starts as what the flags said.
-static LIVE_MODE: Mutex<Option<String>> = Mutex::new(None);
-static LIVE_MODEL: Mutex<Option<String>> = Mutex::new(None);
-
-fn current_mode() -> String {
-    LIVE_MODE.lock().clone().unwrap_or_else(|| "default".to_string())
-}
-
-fn current_model() -> String {
-    LIVE_MODEL.lock().clone().unwrap_or_else(|| "fake-model".to_string())
-}
-
-/// The real CLI's levels. It ignores any other, with a warning at launch and silently when it's changed.
-const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
-static LIVE_EFFORT: Mutex<Option<String>> = Mutex::new(None);
-/// After `keep-effort`, a change of effort is answered as if it took, and changes nothing.
-static KEEPS_EFFORT: Mutex<bool> = Mutex::new(false);
-
-/// With a level it doesn't know, the real CLI takes the user's own settings. This stands in for them.
-fn current_effort() -> String {
-    LIVE_EFFORT.lock().clone().unwrap_or_else(|| "high".to_string())
-}
-
-/// `apply_flag_settings` answers success whatever it's given, as the real CLI does, so only `get_settings` says
-/// whether an effort took.
-fn apply_flag_settings(settings: &Value) {
-    let level = settings["effortLevel"].as_str().filter(|level| EFFORTS.contains(level));
-    if let Some(level) = level.filter(|_| !*KEEPS_EFFORT.lock()) {
-        *LIVE_EFFORT.lock() = Some(level.to_string());
-    }
-}
-
-/// Reported the way the real CLI does: in order, and for changes it makes itself.
-fn set_mode(out: &Out, mode: &str) {
-    *LIVE_MODE.lock() = Some(mode.to_string());
-    emit(out, json!({"type":"system","subtype":"status","status":null,"permissionMode":mode}));
-}
-
-/// Changes the model, refusing what the real CLI would, and `default`, which it takes as the account's own model, and
-/// which the hub never leaves it to choose.
-fn set_model(model: &str) -> Result<Value, String> {
-    match model {
-        "not-a-model" => Err(format!("Model '{model}' not found")),
-        "default" => Err("fake claude: asked for `default`".to_string()),
-        _ => {
-            *LIVE_MODEL.lock() = Some(model.to_string());
-            Ok(json!({"model": model}))
-        }
-    }
 }
 
 fn answer_control(out: &Out, request_id: &Value, result: Result<Value, String>) {
@@ -179,37 +133,6 @@ enum Input {
     Approval(Value),
     Interrupt,
     Eof,
-}
-
-fn flag(args: &[String], name: &str) -> Option<String> {
-    args.iter().position(|a| a == name).map(|i| args[i + 1].clone())
-}
-
-/// Takes the mode, model and effort the flags give, refusing or ignoring what the real CLI would. A launch with no model
-/// or effort, which the real CLI would take, is refused, so every test that starts an agent shows the hub always names
-/// both.
-fn start_as_launched(args: &[String]) {
-    for chosen in ["--model", "--effort"] {
-        if flag(args, chosen).is_none() {
-            eprintln!("fake claude: launched without {chosen}, which leaves it to the CLI");
-            std::process::exit(2);
-        }
-    }
-    // The real CLI's flag doesn't list `default`, although that's what it calls the mode once running.
-    let launch_mode = flag(args, "--permission-mode");
-    if launch_mode.as_deref() == Some("default") {
-        eprintln!("error: option '--permission-mode <mode>' argument 'default' is invalid.");
-        std::process::exit(1);
-    }
-    *LIVE_MODE.lock() = launch_mode.map(|mode| if mode == "manual" { "default".to_string() } else { mode });
-    *LIVE_MODEL.lock() = flag(args, "--model");
-    if let Some(level) = flag(args, "--effort") {
-        if EFFORTS.contains(&level.as_str()) {
-            *LIVE_EFFORT.lock() = Some(level);
-        } else {
-            eprintln!("Warning: Unknown --effort value '{level}' — ignoring it and using the default effort.");
-        }
-    }
 }
 
 fn main() {

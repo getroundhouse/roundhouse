@@ -1,6 +1,6 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::{FileChange, TurnOutcome};
-use protocol::model::ToolUseId;
+use protocol::model::{PermissionMode, ToolUseId};
 use serde_json::json;
 
 use super::*;
@@ -185,11 +185,11 @@ fn a_command_that_printed_nothing_has_an_empty_result() {
 }
 
 #[test]
-fn a_mode_change_is_reported_by_the_name_a_launch_accepts() {
+fn a_mode_change_is_reported_as_a_mode_a_chat_can_have_or_as_unknown() {
     let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"plan"}"#;
-    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: "plan".into() }));
+    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: PermissionMode::Plan }));
     let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"default"}"#;
-    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: "manual".into() }));
+    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: PermissionMode::Unknown }));
 }
 
 #[test]

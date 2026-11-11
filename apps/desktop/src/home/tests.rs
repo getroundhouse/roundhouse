@@ -32,7 +32,7 @@ fn session(workspace: &str, updated_at_ms: i64) -> Session {
         workspace_id: workspace.into(),
         agent: AgentKind::Claude,
         model: protocol::model::DEFAULT_MODEL,
-        permission_mode: None,
+        permission_mode: protocol::model::PermissionMode::FullAccess,
         effort: protocol::model::DEFAULT_EFFORT,
         status: SessionStatus::Idle,
         last_seq: 0,

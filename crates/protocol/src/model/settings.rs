@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Effort, ModelName};
+use super::{Effort, ModelName, PermissionMode};
 
 /// The model a session runs with until another is chosen. An alias, so it stays the newest of its kind without a release
 /// here. `docs/spec/chats.md` has why it's this one.
@@ -12,20 +12,20 @@ pub const DEFAULT_MODEL: ModelName = ModelName::named("opus");
 /// The effort a session runs with until another is chosen.
 pub const DEFAULT_EFFORT: Effort = Effort::Xhigh;
 
-/// What a session runs with. It always names a model and an effort, so the agent's CLI never picks either for itself.
+/// What a session runs with. It always names a model, an approval mode and an effort, so the agent's CLI never picks
+/// any of them for itself.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SessionSettings {
     pub model: ModelName,
-    /// Passed through to the agent. `None` leaves it to the user's own agent settings.
-    pub permission_mode: Option<String>,
+    pub permission_mode: PermissionMode,
     pub effort: Effort,
 }
 
 impl Default for SessionSettings {
-    /// What a session runs with until something else is chosen: [`DEFAULT_MODEL`] and [`DEFAULT_EFFORT`], in the user's
-    /// own approval mode.
+    /// What a session runs with until something else is chosen: [`DEFAULT_MODEL`] and [`DEFAULT_EFFORT`], with full
+    /// access.
     fn default() -> Self {
-        SessionSettings { model: DEFAULT_MODEL, permission_mode: None, effort: DEFAULT_EFFORT }
+        SessionSettings { model: DEFAULT_MODEL, permission_mode: PermissionMode::FullAccess, effort: DEFAULT_EFFORT }
     }
 }
 
@@ -35,7 +35,7 @@ impl SessionSettings {
     pub fn changed(self, change: SessionSettingsChange) -> SessionSettings {
         SessionSettings {
             model: change.model.unwrap_or(self.model),
-            permission_mode: change.permission_mode.or(self.permission_mode),
+            permission_mode: change.permission_mode.unwrap_or(self.permission_mode),
             effort: change.effort.unwrap_or(self.effort),
         }
     }
@@ -45,8 +45,8 @@ impl SessionSettings {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionSettingsChange {
     pub model: Option<ModelName>,
-    /// Passed through to the agent.
-    pub permission_mode: Option<String>,
+    /// Full access or plan mode, since the hub refuses [`PermissionMode::Unknown`].
+    pub permission_mode: Option<PermissionMode>,
     #[serde(default)]
     pub effort: Option<Effort>,
 }

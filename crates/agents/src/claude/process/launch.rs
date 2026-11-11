@@ -28,10 +28,13 @@ pub const SCRUBBED_ENV: &[&str] = &[
     "CLAUDE_PID",
 ];
 
-/// The CLI's arguments, which always name the model and the effort, so the CLI never picks either for itself. A level
-/// this build has no name for is refused rather than left out, which would leave it to the CLI.
+/// The CLI's arguments, which always name the model, the approval mode and the effort, so the CLI never picks any of
+/// them for itself. A level this build has no name for is refused rather than left out, which would leave it to the
+/// CLI.
 pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentError> {
-    let SessionSettings { model, permission_mode, effort } = &spec.settings;
+    // Every launch has full access, even one for a chat that's planning, which `plan` asks into plan mode once it's
+    // running, or one for a chat in a mode of the CLI's own, which can't be chosen.
+    let SessionSettings { model, permission_mode: _, effort } = &spec.settings;
     let level = crate::claude::effort::level(*effort).ok_or(AgentError::UnknownEffort)?;
     let mut args: Vec<String> = [
         "-p",
@@ -46,17 +49,16 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentEr
         // Sends approvals to us as control requests. Without it, anything needing approval is denied.
         "--permission-prompt-tool",
         "stdio",
-        // Lets full access be chosen later. It doesn't turn it on.
+        // Lets full access be chosen again after the CLI has left it, and come back after a plan.
         "--allow-dangerously-skip-permissions",
+        "--permission-mode",
+        crate::claude::mode::FULL_ACCESS,
     ]
     .map(String::from)
     .to_vec();
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
     args.push(spec.agent_session_id.to_string());
     args.extend(["--model".to_string(), model.as_str().to_string(), "--effort".to_string(), level.to_string()]);
-    if let Some(mode) = permission_mode {
-        args.extend(["--permission-mode".to_string(), mode.clone()]);
-    }
     Ok(args)
 }
 

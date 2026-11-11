@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
-use protocol::model::{ApprovalId, ContextUsage, RunId, SessionSettingsChange};
+use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
 use protocol::tail::StreamDelta;
 use tokio::sync::mpsc;
 use tracing::error;
@@ -49,7 +49,7 @@ async fn ingest_event(
             }
             mark_opened(session).await;
         }
-        EventBody::AgentMode { permission_mode } if current => session.note_mode(permission_mode.clone()).await,
+        EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
         EventBody::AgentExited { .. } => {
             if current {
                 session.state.lock().agent = None;
@@ -157,10 +157,11 @@ impl LiveSession {
         }
     }
 
-    /// The agent changed mode, or confirmed a change. The next launch has to start in this one.
-    async fn note_mode(&self, mode: String) {
+    /// The agent changed mode, or confirmed a change. The next launch has to start in this one, so a chat that was
+    /// planning when its agent went is still planning when it comes back.
+    async fn note_mode(&self, mode: PermissionMode) {
         let Ok(hub) = self.hub() else { return };
-        if self.state.lock().settings.permission_mode.as_deref() == Some(mode.as_str()) {
+        if self.state.lock().settings.permission_mode == mode {
             return;
         }
         let newer = SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };

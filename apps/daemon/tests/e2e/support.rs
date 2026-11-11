@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, PermissionMode, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace,
+    WorkspaceId,
 };
 use protocol::paths::Paths;
 use protocol::tail::Tail;
@@ -145,22 +146,25 @@ impl Stack {
     }
 
     pub(crate) fn workspace(&self, client: &Client) -> (Workspace, Session) {
-        self.workspace_with_mode(client, Some("bypassPermissions"))
+        self.workspace_with(client, SessionSettingsChange::default())
     }
 
-    pub(crate) fn workspace_with_mode(&self, client: &Client, mode: Option<&str>) -> (Workspace, Session) {
+    /// A workspace, with a chat in it that's planning, so its agent asks before a call that changes anything.
+    pub(crate) fn workspace_planning(&self, client: &Client) -> (Workspace, Session) {
+        self.workspace_with(client, in_mode(PermissionMode::Plan))
+    }
+
+    fn workspace_with(&self, client: &Client, options: SessionSettingsChange) -> (Workspace, Session) {
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-        let options =
-            SessionSettingsChange { permission_mode: mode.map(String::from), ..SessionSettingsChange::default() };
         let session = client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap();
         (workspace, session)
     }
 }
 
 /// Settings that set only the approval mode.
-pub(crate) fn in_mode(mode: &str) -> SessionSettingsChange {
-    SessionSettingsChange { permission_mode: Some(mode.into()), ..SessionSettingsChange::default() }
+pub(crate) fn in_mode(mode: PermissionMode) -> SessionSettingsChange {
+    SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() }
 }
 
 impl Drop for Stack {

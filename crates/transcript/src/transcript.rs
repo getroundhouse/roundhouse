@@ -343,14 +343,3 @@ fn rows_and_loaded(log: &SessionLog) -> (usize, Vec<std::ops::Range<usize>>) {
     loaded.push(rows - 1..rows);
     (rows, loaded)
 }
-
-/// What the user calls an approval mode.
-pub fn mode_label(mode: &str) -> &str {
-    match mode {
-        "manual" | "default" => "Ask first",
-        "plan" => "Plan",
-        "acceptEdits" => "Accept edits",
-        "bypassPermissions" => "Full access",
-        other => other,
-    }
-}

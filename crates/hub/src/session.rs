@@ -17,7 +17,7 @@ use protocol::model::{
     SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, UsageLimit, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
-use protocol::worker::WorkerRequest;
+use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::warn;
 
@@ -316,14 +316,22 @@ impl LiveSession {
         self.state.lock().agent.is_some()
     }
 
-    /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true.
+    /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
+    /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
+    /// made.
     pub(crate) async fn configure(&self, options: SessionSettingsChange) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
+        let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
-            link.call(WorkerRequest::AgentConfigure { session_id: self.id.clone(), options: options.clone() }).await?;
+            let request = WorkerRequest::AgentConfigure { session_id: self.id.clone(), options: options.clone() };
+            agent_took_it = !matches!(link.call(request).await?, WorkerResponse::AgentNotRunning);
         }
-        self.keep_options(&hub, options).await?;
+        let was = self.state.lock().settings.permission_mode;
+        self.keep_options(&hub, options.clone()).await?;
+        if let Some(mode) = options.permission_mode.filter(|mode| *mode != was && !agent_took_it) {
+            self.record_or_log(Origin::Hub, EventBody::AgentMode { permission_mode: mode }).await;
+        }
         self.announce(&hub).await
     }
 

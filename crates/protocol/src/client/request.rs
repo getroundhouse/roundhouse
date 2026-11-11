@@ -134,7 +134,8 @@ pub enum ClientRequest {
         id: CommentId,
     },
 
-    /// Sending the same `client_request_id` again returns the session it made.
+    /// Sending the same `client_request_id` again returns the session it made. With no `permission_mode`, its agent
+    /// has full access. It's refused for [`PermissionMode::Unknown`](crate::model::PermissionMode::Unknown).
     SessionCreate {
         workspace_id: WorkspaceId,
         agent: AgentKind,
@@ -309,7 +310,9 @@ pub enum ClientRequest {
     },
     /// Changes the model, approval mode or effort, on the running agent too if there is one. A setting left out is left
     /// as it is. Fails if the agent refuses, saving nothing, though a running agent may already have taken the
-    /// settings it was given before the one it refused. Sent again, it sets the same again.
+    /// settings it was given before the one it refused. It's refused, changing nothing, for a mode a new chat would be
+    /// refused. With no agent running, a change of mode goes in the log as an `AgentMode`, as a running agent's report
+    /// of one does. Sent again, it sets the same again.
     SessionConfigure {
         id: SessionId,
         #[serde(flatten)]

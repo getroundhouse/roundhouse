@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
@@ -28,6 +28,7 @@ mod asking;
 mod context;
 mod launch;
 mod output;
+mod plan;
 mod prompt;
 mod supervise;
 #[cfg(test)]
@@ -83,6 +84,9 @@ struct Shared {
     /// Where asking what's left of the account's limits has got to.
     usage: Mutex<UsageWatch>,
     stop_requested: AtomicBool,
+    /// Set from asking a launch into plan mode until the CLI next reports its mode, starts a turn or refuses. `plan` says
+    /// what each of those means.
+    entering_plan: AtomicBool,
     /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
     /// still being drained and delivered.
     gone: AtomicBool,
@@ -95,17 +99,17 @@ pub(super) struct ClaudeProcess {
     shared: Arc<Shared>,
 }
 
-pub fn spawn(
+pub async fn spawn(
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
-    spawn_at(bin, spec, output, options)
+    spawn_at(bin, spec, output, options).await
 }
 
 /// Runs a specific binary, without looking for one.
-pub fn spawn_at(
+pub async fn spawn_at(
     bin: PathBuf,
     spec: AgentSpec,
     output: mpsc::Sender<AgentOutput>,
@@ -124,9 +128,11 @@ pub fn spawn_at(
         context: Mutex::new(ContextWatch::default()),
         usage: Mutex::new(UsageWatch::default()),
         stop_requested: AtomicBool::new(false),
+        entering_plan: AtomicBool::new(false),
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
     });
+    plan::start_in(spec.settings.permission_mode, &shared, &mut *shared.stdin.lock().await, &output).await;
     tokio::spawn(supervise(
         bin,
         spec,
@@ -141,33 +147,37 @@ pub fn spawn_at(
 }
 
 async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
+    let stdin = stdin.as_mut().ok_or(AgentError::Exited)?;
     let mut line = serde_json::to_vec(value)?;
     line.push(b'\n');
-    let stdin = stdin.as_mut().ok_or(AgentError::Exited)?;
     stdin.write_all(&line).await?;
     stdin.flush().await?;
     Ok(())
 }
 
-/// Sends a control request and waits for the CLI's answer, which is what it sent back, or `null` if nothing.
-async fn control(shared: &Shared, request: Value) -> Result<Value, AgentError> {
+/// A control request, registered for its answer before it's written, so an answer can't arrive first and be missed.
+struct Asked {
+    request_id: String,
+    line: Value,
+    answer: oneshot::Receiver<Result<Value, String>>,
+}
+
+fn ask(shared: &Shared, request: &Value) -> Asked {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (answered, answer) = oneshot::channel();
     shared.pending_controls.lock().insert(request_id.clone(), answered);
     let line = json!({"type": "control_request", "request_id": request_id, "request": request});
-    let result = match write_line(shared, &line).await {
-        Ok(()) => tokio::time::timeout(CONTROL_REPLY_TIMEOUT, answer).await,
-        Err(e) => {
-            shared.pending_controls.lock().remove(&request_id);
-            return Err(e);
-        }
-    };
-    match result {
+    Asked { request_id, line, answer }
+}
+
+/// Waits for the CLI's answer to `asked`, once it has been written: what it sent back, or `null` if nothing.
+async fn answered(shared: &Shared, asked: Asked) -> Result<Value, AgentError> {
+    match tokio::time::timeout(CONTROL_REPLY_TIMEOUT, asked.answer).await {
         Ok(Ok(Ok(answer))) => Ok(answer),
         Ok(Ok(Err(refusal))) => Err(refused(refusal)),
         Ok(Err(_)) => Err(AgentError::Exited),
         Err(_) => {
-            shared.pending_controls.lock().remove(&request_id);
+            shared.pending_controls.lock().remove(&asked.request_id);
             Err(AgentError::NoAnswer)
         }
     }
@@ -180,6 +190,16 @@ const UNKNOWN_REQUEST: &str = "Unsupported control request subtype";
 /// to.
 fn refused(why: String) -> AgentError {
     if why.contains(UNKNOWN_REQUEST) { AgentError::UnknownRequest(why) } else { AgentError::Refused(why) }
+}
+
+/// Sends a control request and waits for the CLI's answer, which is what it sent back, or `null` if nothing.
+async fn control(shared: &Shared, request: Value) -> Result<Value, AgentError> {
+    let asked = ask(shared, &request);
+    if let Err(e) = write_line(shared, &asked.line).await {
+        shared.pending_controls.lock().remove(&asked.request_id);
+        return Err(e);
+    }
+    answered(shared, asked).await
 }
 
 /// Changes the effort, and reads it back. The CLI answers success to a level it doesn't know, and changes nothing, so
@@ -233,7 +253,7 @@ impl AgentProcess for ClaudeProcess {
         match write_to(&mut stdin, &message).await {
             // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
             Err(e) if !confirmed => {
-                tracing::debug!("prompt not delivered before the agent opened: {e:#}");
+                debug!("prompt not delivered before the agent opened: {e:#}");
                 Ok(())
             }
             Err(e) => {
@@ -286,7 +306,8 @@ impl AgentProcess for ClaudeProcess {
         if let Some(model) = &options.model {
             control(&self.shared, json!({"subtype": "set_model", "model": model.as_str()})).await?;
         }
-        if let Some(mode) = &options.permission_mode {
+        if let Some(mode) = options.permission_mode {
+            let mode = super::mode::name(mode).ok_or(AgentError::UnknownMode)?;
             control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
         }
         if let Some(effort) = options.effort {

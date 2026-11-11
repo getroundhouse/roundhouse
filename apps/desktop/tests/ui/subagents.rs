@@ -13,7 +13,7 @@ use protocol::model::{SessionId, seq_index};
 
 use crate::menus::items;
 use crate::support::{Stack, Ui};
-use crate::tools::in_full_access;
+use crate::tools::in_a_new_workspace;
 
 /// What the fake agent says its subagent is for, and the description of the call the subagent makes.
 const AGENT_LINE: &str = "Look around";
@@ -57,7 +57,7 @@ fn a_finished_subagent(ui: &mut Ui<'_>) -> SharedString {
 #[gpui_kit::test]
 fn a_subagent_s_call_shows_none_of_its_work_which_opens_in_the_subagent_tab(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let open = a_finished_subagent(&mut ui);
     assert!(ui.labelled(SUBAGENT_CALL).is_empty(), "the subagent's call isn't in the chat");
 
@@ -72,7 +72,7 @@ fn a_subagent_s_call_shows_none_of_its_work_which_opens_in_the_subagent_tab(cx: 
 #[gpui_kit::test]
 fn ctrl_tab_comes_to_the_subagent_tab_after_its_chat_and_cmd_w_closes_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let open = a_finished_subagent(&mut ui);
     let first = ui.active_chat();
     ui.click(open);
@@ -100,7 +100,7 @@ fn ctrl_tab_comes_to_the_subagent_tab_after_its_chat_and_cmd_w_closes_it(cx: &mu
 #[gpui_kit::test]
 fn the_subagent_tab_closes_with_its_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let open = a_finished_subagent(&mut ui);
     let chat = ui.active_chat();
     ui.click(open);
@@ -119,7 +119,7 @@ fn the_subagent_tab_closes_with_its_chat(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn an_archived_workspace_s_chats_let_go_of_their_subagents_records(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     a_finished_subagent(&mut ui);
     let chat = ui.active_chat();
     let workspace = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.workspace.id.clone());
@@ -134,7 +134,7 @@ fn an_archived_workspace_s_chats_let_go_of_their_subagents_records(cx: &mut Test
 #[gpui_kit::test]
 fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     a_finished_subagent(&mut ui);
     stack.run(&ui.active_chat(), "say:after it");
     ui.wait_idle_with("the second turn", |text| text.contains("after it"));
@@ -156,7 +156,7 @@ fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAp
 #[gpui_kit::test]
 fn a_subagent_s_call_opened_while_it_works_makes_room_for_its_report(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("agent:Look around; tool:echo after; say:done");
     ui.press("enter");
     // The subagent works for a second before its call and its report, so its call is open, and measured, first.

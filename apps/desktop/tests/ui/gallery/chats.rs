@@ -5,7 +5,7 @@
 
 use protocol::attachment::Attachment;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
-use protocol::model::{ApprovalId, MessageId, TaskId, ToolUseId};
+use protocol::model::{ApprovalId, MessageId, PermissionMode, TaskId, ToolUseId};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
@@ -136,9 +136,14 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
     }
 }
 
-/// Waiting for someone to allow a command.
+/// Waiting for someone to allow a command, which only an agent that's planning asks for.
 pub(crate) fn approval() -> Vec<EventBody> {
     let mut events = looked_around();
+    for event in &mut events {
+        if let EventBody::AgentInit { permission_mode, .. } = event {
+            *permission_mode = Some(PermissionMode::Plan);
+        }
+    }
     events
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
     events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
@@ -299,7 +304,7 @@ fn looked_around() -> Vec<EventBody> {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),
             cwd: Some("/workspaces/aspen".to_string()),
-            permission_mode: Some("acceptEdits".to_string()),
+            permission_mode: Some(protocol::model::PermissionMode::FullAccess),
             agent_version: None,
         },
         text("msg-1", "I'll start with how the sidebar gets its records."),

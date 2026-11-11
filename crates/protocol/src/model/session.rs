@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountId, ContextUsage, Effort, ModelName, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource,
-    WorkspaceId,
+    AccountId, ContextUsage, Effort, ModelName, PermissionMode, QueuedPrompt, Rev, Seq, SessionId, SessionSettings,
+    Title, TitleSource, WorkspaceId,
 };
 use crate::event::AgentTask;
 
@@ -68,8 +68,8 @@ pub struct Session {
     pub workspace_id: WorkspaceId,
     pub agent: AgentKind,
     pub model: ModelName,
-    /// Passed through to the agent. `None` leaves the choice to the user's own agent settings.
-    pub permission_mode: Option<String>,
+    /// The agent's approval mode, as it last reported it or was told.
+    pub permission_mode: PermissionMode,
     /// How hard the agent thinks.
     pub effort: Effort,
     pub status: SessionStatus,
@@ -124,11 +124,7 @@ pub struct Session {
 impl Session {
     /// What it runs with.
     pub fn settings(&self) -> SessionSettings {
-        SessionSettings {
-            model: self.model.clone(),
-            permission_mode: self.permission_mode.clone(),
-            effort: self.effort,
-        }
+        SessionSettings { model: self.model.clone(), permission_mode: self.permission_mode, effort: self.effort }
     }
 
     /// The agent has replied since the person last read this chat.
