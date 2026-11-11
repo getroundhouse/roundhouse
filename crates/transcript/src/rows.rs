@@ -5,12 +5,11 @@ use std::rc::Rc;
 
 use client_core::OpenSession;
 use client_core::session_log::{PendingPrompt, Row};
-use gpui_kit::component::text::{TextView, TextViewState};
+use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Entity, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div,
-    px,
+    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -18,9 +17,9 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
-use crate::images_apart::images_apart;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::long_texts::LongTexts;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -39,7 +38,6 @@ mod turn_times;
 
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
-pub(crate) use tail::texts_of as tail_texts;
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
@@ -83,6 +81,8 @@ pub(crate) struct Shared {
     pub(crate) this: WeakEntity<Transcript>,
     pub(crate) linked: LinkedImages,
     pub(crate) line_text: LineText,
+    /// Where every text view the rows draw is made.
+    pub(crate) texts: LongTexts,
 }
 
 pub(crate) fn render_row(
@@ -99,8 +99,8 @@ pub(crate) fn render_row(
         return Some(column(drawn).into_any_element());
     }
     // The subagent tab starts with what it was asked and ends with its report.
-    let head = (ix == 0).then(|| alone::head(&m, cx)).flatten();
-    let foot = (ix == tail).then(|| alone::foot(&m, cx)).flatten();
+    let head = (ix == 0).then(|| alone::head(&m, &shared.texts, cx)).flatten();
+    let foot = (ix == tail).then(|| alone::foot(&m, &shared.texts, cx)).flatten();
     Some(column(v_flex().w_full().children(head).child(drawn).children(foot)).into_any_element())
 }
 
@@ -143,7 +143,7 @@ fn render_row_inner(
     Some(match shown {
         Shown::Tail(tail) => {
             let m = model.borrow();
-            render_tail(&tail, &m.at_work, &m.long_texts, m.folds.thinking_open(), cx)
+            render_tail(&tail, &m.at_work, &shared.texts, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
@@ -151,7 +151,7 @@ fn render_row_inner(
         }
         Shown::Pending(prompt, carried) => {
             let key = ItemKey::Prompt(prompt.client_msg_id);
-            prompt_bubble(&key, &prompt.text, None, &carried, Progress::Sending, &shared.this, cx)
+            prompt_bubble(&key, &prompt.text, &carried, Progress::Sending, shared, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => return None,
@@ -159,37 +159,13 @@ fn render_row_inner(
 }
 
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.
-/// `held` is its state, if the transcript keeps it, as `crate::long_texts` says it does for long text.
-fn agent_text(key: &ItemKey, text: &str, held: Option<&Entity<TextViewState>>) -> TextView {
-    markdown(key.element("text"), text, held)
+fn agent_text(texts: &LongTexts, key: &ItemKey, text: &str) -> TextView {
+    texts.markdown(text_id(key), text)
 }
 
-/// Markdown under `id`, or showing `held` if the transcript keeps its state, with images one after another apart, as
-/// `crate::images_apart` says.
-fn markdown(id: ElementId, text: &str, held: Option<&Entity<TextViewState>>) -> TextView {
-    let view =
-        held.map_or_else(|| TextView::markdown(id, SharedString::from(images_apart(text).into_owned())), TextView::new);
-    view.selectable(true)
-}
-
-/// The texts an event shows whole, each with what it's known by: a prompt's, and each block of text the agent wrote.
-pub(crate) fn texts_of(event: &SessionEvent) -> Vec<(ItemKey, &str)> {
-    if let EventBody::UserPrompt { text, client_msg_id, .. } = &event.body {
-        return vec![(ItemKey::prompt(event.seq, client_msg_id.as_ref()), text.as_str())];
-    }
-    let blocks = around::blocks_of(&event.body).iter().enumerate();
-    blocks
-        .filter_map(|(position, block)| match block {
-            ContentBlock::Text { text, .. } => {
-                Some((around::block_key(event.seq, &event.body, position), text.as_str()))
-            }
-            ContentBlock::Thinking { .. }
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::ToolResult { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => None,
-        })
-        .collect()
+/// What the text the agent wrote under `key` is drawn by.
+fn text_id(key: &ItemKey) -> ElementId {
+    key.element("text")
 }
 
 fn row() -> Div {
@@ -218,7 +194,7 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
 }
 
 fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App) -> AnyElement {
-    let (seq, body, this) = (event.seq, &event.body, &shared.this);
+    let (seq, body) = (event.seq, &event.body);
     match body {
         // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
         EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
@@ -230,7 +206,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
-            prompt_bubble(&key, text, around.prompt_text.as_ref(), &around.carried, progress, this, cx)
+            prompt_bubble(&key, text, &around.carried, progress, shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks
@@ -248,7 +224,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
-            approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, this, cx)
+            approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, shared, cx)
         }
         // A question's line says what became of it.
         EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),
@@ -300,9 +276,9 @@ fn render_block(
     let key = &drawing.key;
     let toggle = Toggle { seq, key, fold: drawing.fold, open: drawing.open, whole: drawing.whole, shared };
     Some(match block {
-        ContentBlock::Text { text, images } => agent_text(key, text, drawing.text.as_ref())
-            .image_source(shared.linked.resolver(seq, images))
-            .into_any_element(),
+        ContentBlock::Text { text, images } => {
+            agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images)).into_any_element()
+        }
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These are drawn from their approvals, which have everything that was asked.

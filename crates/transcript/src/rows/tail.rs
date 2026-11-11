@@ -15,7 +15,7 @@ use protocol::event::{AgentTask, TaskKind};
 use protocol::tail::{BlockKind, Tail};
 
 use super::line::{HEIGHT, still_icon};
-use super::{agent_text, empty, row, thinking, turn_times};
+use super::{empty, row, text_id, thinking, turn_times};
 use crate::item_key::ItemKey;
 use crate::long_texts::LongTexts;
 use crate::transcript::AtWork;
@@ -40,9 +40,10 @@ pub(super) fn render_tail(
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             out = match block.kind {
-                BlockKind::Text => out.child(agent_text(&key, &block.text, texts.get(&key))),
+                BlockKind::Text => out.child(texts.streaming(text_id(&key), &block.text)),
                 BlockKind::Thinking if thinking_open => {
-                    out.child(thought("Thinking…".to_string(), cx)).child(thinking::text(&key, &block.text, cx))
+                    let text = texts.streaming(thinking::text_id(&key), &block.text);
+                    out.child(thought("Thinking…".to_string(), cx)).child(thinking::text(&key, text, cx))
                 }
                 BlockKind::Thinking => out.child(thought(format!("Thinking… {}", last_line(&block.text)), cx)),
                 BlockKind::ToolUse | BlockKind::Unknown => out,
@@ -52,16 +53,6 @@ pub(super) fn render_tail(
     out = out.when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, cx)));
     // Left going by a turn, or started during one.
     out.children(at_work.background.iter().map(|task| going(task, cx))).into_any_element()
-}
-
-/// The text the agent is still writing, each block with what it's known by.
-pub(crate) fn texts_of(tail: &Tail) -> Vec<(ItemKey, &str)> {
-    let messages = tail.messages.iter().filter(|m| m.parent_tool_use_id.is_none());
-    let blocks = messages.flat_map(|m| m.blocks.iter().map(move |block| (m, block)));
-    blocks
-        .filter(|(_, block)| block.kind == BlockKind::Text)
-        .map(|(m, block)| (ItemKey::Block(m.message_id.clone(), block.index), block.text.as_str()))
-        .collect()
 }
 
 /// A line as tall as a call's, at body size, so nothing jumps when what's above it is recorded.

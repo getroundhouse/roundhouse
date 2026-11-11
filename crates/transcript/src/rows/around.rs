@@ -2,8 +2,6 @@
 //! while it's drawn.
 
 use client_core::session_log::{PromptState, SessionLog};
-use gpui_kit::Entity;
-use gpui_kit::component::text::TextViewState;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{AgentKind, PermissionMode, Seq};
 
@@ -42,8 +40,6 @@ pub(super) struct Around {
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
     pub(super) prompt: PromptState,
-    /// For a prompt: its text view's state, if the transcript keeps it.
-    pub(super) prompt_text: Option<Entity<TextViewState>>,
     /// For a turn's end: the agent the chat runs, which its card names.
     pub(super) agent: AgentKind,
     /// For a change of mode: the mode before it, when the log says.
@@ -73,8 +69,6 @@ pub(super) struct BlockAround {
     pub(super) subagent: Option<Subagent>,
     /// For a result: whether it's drawn with its call instead.
     pub(super) with_call: bool,
-    /// For text: its text view's state, if the transcript keeps it.
-    pub(super) text: Option<Entity<TextViewState>>,
 }
 
 impl Around {
@@ -91,17 +85,15 @@ impl Around {
             closes_a_question: false,
             carried: Vec::new(),
             prompt: PromptState::Taken,
-            prompt_text: None,
             agent: m.agent,
             mode_before: None,
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);
         }
-        if let EventBody::UserPrompt { attachments, client_msg_id, .. } = body {
+        if let EventBody::UserPrompt { attachments, .. } = body {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);
-            around.prompt_text = m.long_texts.get(&ItemKey::prompt(seq, client_msg_id.as_ref())).cloned();
         }
         if let EventBody::ApprovalRequested { approval_id, tool_name, .. } = body {
             around.approval_open = log
@@ -158,8 +150,7 @@ impl BlockAround {
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => (Reply::Nothing, None),
         };
-        let text = m.long_texts.get(&key).cloned();
-        Self { key, fold, open, whole, reply, subagent, with_call, text }
+        Self { key, fold, open, whole, reply, subagent, with_call }
     }
 }
 

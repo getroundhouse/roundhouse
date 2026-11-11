@@ -1,21 +1,18 @@
 //! The card that asks for a tool's approval, or a plan's.
 
-use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Styled,
-    WeakEntity, Window, div,
+    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
 };
 use look::Hand as _;
 use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
-use super::row;
+use super::{Shared, row};
 use crate::calls::{self, summarize_input};
 use crate::item_key::ItemKey;
-use crate::transcript::Transcript;
 
 #[expect(
     clippy::too_many_arguments,
@@ -28,14 +25,14 @@ pub(super) fn approval_card(
     input: &Value,
     description: Option<&str>,
     open: bool,
-    this: &WeakEntity<Transcript>,
+    shared: &Shared,
     cx: &App,
 ) -> AnyElement {
     use gpui_kit::component::button::{Button, ButtonVariants as _};
     let theme = cx.theme();
     let summary = description.map_or_else(|| summarize_input(input), str::to_string);
     let answer = |decision: ApprovalDecision| {
-        let (this, approval_id) = (this.clone(), approval_id.clone());
+        let (this, approval_id) = (shared.this.clone(), approval_id.clone());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             let _ = this.update(cx, |t, cx| t.answer_approval(approval_id.clone(), decision.clone(), cx));
         }
@@ -52,9 +49,7 @@ pub(super) fn approval_card(
         };
         (
             "Plan".to_string(),
-            TextView::markdown(ItemKey::Event(seq, 0).element("plan"), SharedString::from(plan))
-                .selectable(true)
-                .into_any_element(),
+            shared.texts.markdown(ItemKey::Event(seq, 0).element("plan"), &plan).into_any_element(),
             h_flex()
                 .gap_2()
                 .child(answer_button("approve-plan", "Approve plan", allow).primary())

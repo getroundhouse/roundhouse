@@ -6,8 +6,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::text::TextView;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled, TestSupportExt as _,
-    div,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
 
 use super::line::{self, Line, Part};
@@ -20,17 +19,20 @@ pub(super) const ICON: IconName = IconName::Brain;
 pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::start_of(thought));
     let line = Line::new(ICON, "Thinking").part(summary);
-    let opened = toggle.open.then(|| text(toggle.key, thought, cx).into_any_element());
+    let opened = toggle.open.then(|| {
+        let text_view = toggle.shared.texts.markdown(text_id(toggle.key), thought);
+        text(toggle.key, text_view, cx).into_any_element()
+    });
     line::drawn(line, None, opened, toggle, cx)
 }
 
-/// All of what the agent thought, under the same ID while it streams and once it's recorded.
-pub(super) fn text(key: &ItemKey, thought: &str, cx: &App) -> impl IntoElement {
-    let text = TextView::markdown(key.element("thinking-text"), SharedString::from(thought.to_string()));
-    div()
-        .id(key.element("thinking"))
-        .mb_1()
-        .text_color(cx.theme().muted_foreground)
-        .child(text.selectable(true))
-        .test_support()
+/// All of what the agent thought, in its text view, which is under [`text_id`] while it streams and once it's
+/// recorded.
+pub(super) fn text(key: &ItemKey, text_view: TextView, cx: &App) -> impl IntoElement + use<> {
+    div().id(key.element("thinking")).mb_1().text_color(cx.theme().muted_foreground).child(text_view).test_support()
+}
+
+/// What all of the thought under `key` is drawn by.
+pub(super) fn text_id(key: &ItemKey) -> ElementId {
+    key.element("thinking-text")
 }

@@ -288,6 +288,11 @@ pub(crate) fn run_command(
         let chunks = prose(paragraphs.parse().unwrap(), seed.parse().unwrap());
         return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
+    if let Some(rest) = command.strip_prefix("ponder:") {
+        let (paragraphs, seed) = rest.split_once(':').unwrap();
+        let chunks = prose(paragraphs.parse().unwrap(), seed.parse().unwrap());
+        return turn.say(Block::Thinking, chunks, Duration::ZERO, rx, queued, eof);
+    }
     if let Some(rest) = command.strip_prefix("late:") {
         return late(turn, rest);
     }

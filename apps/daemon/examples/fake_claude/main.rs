@@ -9,6 +9,7 @@
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
 //!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
+//!   ponder:N:SEED   Think N paragraphs of the same made-up prose, as fast as possible.
 //!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
 //!                   writes, then run COMMAND with `sh -c`.
 //!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result
