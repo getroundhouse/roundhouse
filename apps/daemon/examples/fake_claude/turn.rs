@@ -198,11 +198,7 @@ pub(crate) fn run_turn(
             "errors":["[ede_diagnostic]"],"session_id":config.session_id}),
         );
     } else {
-        emit(
-            out,
-            json!({"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed",
-            "result":"done","duration_ms":1,"num_turns":1,"total_cost_usd":0.0,"session_id":config.session_id}),
-        );
+        emit(out, crate::result::success(&config.session_id));
     }
     let ended = if interrupted { "cancelled" } else { "completed" };
     for prompt in &taken {

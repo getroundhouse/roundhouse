@@ -18,6 +18,8 @@ fn turn_ended() -> EventBody {
         cost_usd: None,
         num_turns: None,
         started_at_ms: None,
+        models: Vec::new(),
+        tokens: None,
     }
 }
 

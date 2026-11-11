@@ -34,6 +34,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSetupLog],
     },
     Screen { name: "conversation", spec: "chats.md", world: Some(conversation), steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "turn-card",
+        spec: "chats.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(chats::FINISHED_TURN_END), shows: "turn-card" }],
+    },
+    Screen {
+        name: "turn-card-midnight",
+        spec: "chats.md",
+        world: Some(|| conversation().last_turn_past_midnight()),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(chats::FINISHED_TURN_END), shows: "turn-card" }],
+    },
     Screen { name: "streaming", spec: "chats.md", world: Some(streaming), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "context",

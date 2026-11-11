@@ -234,7 +234,7 @@ fn render_event(
             });
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), approval_open, this, cx)
         }

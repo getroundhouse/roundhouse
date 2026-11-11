@@ -238,6 +238,8 @@ mod tests {
                 cost_usd: None,
                 num_turns: None,
                 started_at_ms: None,
+                models: vec![],
+                tokens: None,
             },
         );
         assert!(tail.is_empty());

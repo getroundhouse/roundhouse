@@ -17,7 +17,6 @@ mod file_tree;
 pub mod file_view;
 mod haptics;
 mod home;
-mod hover;
 mod menus;
 mod model_picker;
 pub mod new_workspace;

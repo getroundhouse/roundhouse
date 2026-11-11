@@ -11,8 +11,15 @@ use serde_json::Value;
 
 use crate::attachment::Attachment;
 use crate::model::{
-    AgentSessionId, ApprovalId, ClientMessageId, MessageId, RunId, Seq, SessionId, TaskId, ToolUseId, UsageLimit,
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, RunId, Seq, SessionId, TaskId, ToolUseId,
+    UsageLimit,
 };
+
+pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
+pub use tokens::TokenUsage;
+
+mod file_change;
+mod tokens;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionEvent {
@@ -115,6 +122,7 @@ pub enum EventBody {
         errors: Vec<String>,
         /// How long the turn took, by the agent's own count.
         duration_ms: Option<u64>,
+        /// What the agent says its process has cost so far, which counts the turns before this one too.
         cost_usd: Option<f64>,
         num_turns: Option<u64>,
         /// When the turn started, by the hub's clock, which the hub adds as it records the end. So every turn is timed
@@ -122,6 +130,14 @@ pub enum EventBody {
         /// agent, which doesn't know it, and from a hub that doesn't add it.
         #[serde(default)]
         started_at_ms: Option<i64>,
+        /// The models the agent's own replies in the turn came from, in the order they first did, its subagents'
+        /// left out. Empty from an agent that doesn't say, and in a turn recorded before it was kept.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        models: Vec<ModelName>,
+        /// How many tokens the agent's own requests in the turn took, its subagents' left out. `None` from an agent
+        /// that doesn't say, and in a turn recorded before it was kept.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens: Option<TokenUsage>,
     },
     ApprovalRequested {
         approval_id: ApprovalId,
@@ -268,48 +284,6 @@ pub struct LinkedImage {
     /// Where the text says the image is, as its Markdown gives it, before any decoding.
     pub address: String,
     pub attachment: Attachment,
-}
-
-/// What a tool changed in a file, as its agent reported it, so a client can show the change with the file's own line
-/// numbers rather than work it out from the call. A kind this build doesn't know reads as `Unknown`.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum FileChange {
-    /// The file didn't exist before. What it holds is in the call that wrote it.
-    Created,
-    /// The file was there, and these parts of it changed, in order.
-    Changed { hunks: Vec<Hunk> },
-    #[serde(other)]
-    Unknown,
-}
-
-/// One changed part of a file, as a unified diff's hunk has it.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Hunk {
-    /// The line the hunk starts on in the file before, from 1.
-    pub old_start: u32,
-    /// The line the hunk starts on in the file after, from 1.
-    pub new_start: u32,
-    pub lines: Vec<HunkLine>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct HunkLine {
-    pub mark: LineMark,
-    /// The line, without the mark a unified diff puts before it.
-    pub text: String,
-}
-
-/// Whether a line of a hunk was kept, removed or added. A mark this build doesn't know reads as `Unknown`.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum LineMark {
-    /// In the file both before and after.
-    Same,
-    Removed,
-    Added,
-    #[serde(other)]
-    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

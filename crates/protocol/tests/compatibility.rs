@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
-use protocol::model::{LimitWindow, PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, ModelName, PullRequestFound, RecordKey, Rev};
 use protocol::tail::StreamDelta;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
@@ -144,13 +144,29 @@ fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_
 }
 
 #[test]
-fn a_turns_end_from_a_hub_that_doesnt_add_its_start_has_none() {
+fn a_turns_end_from_a_hub_that_doesnt_add_its_start_or_keep_its_models_and_tokens_has_none() {
     let event: SessionEvent =
         frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":9,"cost_usd":null,"num_turns":null}}"#)
             .unwrap();
 
-    let EventBody::TurnEnded { started_at_ms, .. } = event.body else { panic!("{event:?}") };
-    assert_eq!(started_at_ms, None);
+    let EventBody::TurnEnded { started_at_ms, models, tokens, .. } = event.body else { panic!("{event:?}") };
+    assert_eq!((started_at_ms, models, tokens), (None, Vec::new(), None));
+}
+
+/// Spelled out, since the log holds this form for good.
+#[test]
+fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"body":{"type":"turn_ended","outcome":"success","result":null,"errors":[],"duration_ms":9,"cost_usd":null,"num_turns":null,"started_at_ms":1,"models":["claude-sonnet-5-5","claude-haiku-5-5"],"tokens":{"input_tokens":6,"output_tokens":550,"cache_read_tokens":1142851,"cache_write_tokens":1615}}}"#;
+
+    let event: SessionEvent = frame::decode(stored).unwrap();
+
+    let EventBody::TurnEnded { models, tokens, .. } = &event.body else { panic!("{event:?}") };
+    let models: Vec<&str> = models.iter().map(ModelName::as_str).collect();
+    assert_eq!(models, ["claude-sonnet-5-5", "claude-haiku-5-5"]);
+    let tokens = tokens.unwrap();
+    let counts = (tokens.input_tokens, tokens.output_tokens, tokens.cache_read_tokens, tokens.cache_write_tokens);
+    assert_eq!(counts, (6, 550, 1_142_851, 1_615));
+    assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
 }
 
 /// So a client tells a hub that hasn't looked for a workspace's pull request, which it waits for, from one that looked

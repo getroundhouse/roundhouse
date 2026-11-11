@@ -18,7 +18,6 @@ use protocol::model::{Account, AccountId, Session, UsageLimit};
 
 use super::WorkspacePane;
 use super::composer::{Slot, middle};
-use crate::hover::{CLOSES_AFTER, OPENS_AFTER};
 
 mod card;
 mod words;
@@ -104,12 +103,7 @@ impl WorkspacePane {
 /// A card that opens above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers
 /// nothing in the bar.
 fn card_over(id: &'static str, slot: Div) -> HoverCard {
-    HoverCard::new(id)
-        .appearance(false)
-        .anchor(Anchor::BottomRight)
-        .open_delay(OPENS_AFTER)
-        .close_delay(CLOSES_AFTER)
-        .trigger(slot)
+    look::hover_card(id).appearance(false).anchor(Anchor::BottomRight).trigger(slot)
 }
 
 /// A ring filled clockwise from the top by `used`, from 0 to 1, over a fainter whole ring. It's drawn at once, with
