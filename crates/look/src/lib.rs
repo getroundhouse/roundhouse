@@ -25,7 +25,7 @@ pub use hand::{Hand, Off};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, mark};
-pub use palette::{faint, prompt, tab_underline};
+pub use palette::{faint, field_edge, prompt, tab_underline};
 pub use raised::raised;
 pub use task_ring::{TaskRing, task_ring};
 pub use theme::apply;

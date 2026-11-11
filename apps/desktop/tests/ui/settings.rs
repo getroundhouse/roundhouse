@@ -9,6 +9,8 @@ use gpui_kit::{AppContext as _, ElementId, OwnedMenuItem, TestAppContext};
 
 use crate::support::{Stack, Ui, labelled};
 
+mod search;
+
 /// Whether Settings is showing, by its way back.
 fn settings_showing(ui: &mut Ui<'_>) -> bool {
     ui.has("settings-back")
@@ -252,19 +254,4 @@ fn the_switch_cant_be_flipped_with_a_hub_from_before_it_kept_settings(cx: &mut T
     open_settings(&mut ui);
 
     assert_eq!(keep_awake_switch(&mut ui), (false, false), "an older hub doesn't keep the computer awake at all");
-}
-
-#[gpui_kit::test]
-fn a_setting_is_found_by_what_its_called(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
-    open_settings(&mut ui);
-    assert_eq!(ui.labelled("Always expand thinking").len(), 1);
-
-    ui.press("tab");
-    ui.input("awake");
-    ui.frame();
-
-    assert!(ui.labelled("Always expand thinking").is_empty(), "only what matches is left");
-    assert_eq!(ui.labelled("Keep computer awake while agents are working").len(), 1);
 }

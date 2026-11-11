@@ -8,6 +8,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 - **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
+- **A field on the sidebar, such as Settings' search, has a lighter edge, `#434140`,** since it's something to type in rather than something that separates. *Unconfirmed.*
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold,** for what should stand out from what's around it, such as the title that names what a card or section is about. Bold shouts in a dense layout. Medium is drawn as regular, since the text system gives a request for medium the system font's regular face. *Not built.*
@@ -17,7 +18,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 
 ## Space and shape
 
-- **A 4px grid.** Controls are 32px tall, or 24px for small ones, sidebar rows 36px, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.*
+- **A 4px grid.** Controls are 32px tall, or 24px for small ones, sidebar rows 36px, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.* Settings' sidebar has sizes of its own, so it looks familiar: its search is 28px tall, spaced to the point rather than the grid, with a key 16px tall and 4px corners, and its pages' rows are 32px. *Unconfirmed.*
 - **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side, or over the start of the header while the sidebar is hidden, as `sidebar.md` says. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what the system's setting for a title bar says, except where a button or a sidebar's edge takes the press, and pressing it leaves focus where it was.
 - **The window opens where it was left,** at the size it was, on the display it was on, and in full screen if it was, so a window kept filling the screen still fills it after the app restarts to update. One whose display has gone, or that would open out of reach, opens at its usual size in the middle of the main display. *Unconfirmed.*
 - **Corners are 6px on controls, and 10px on cards and the composer.**

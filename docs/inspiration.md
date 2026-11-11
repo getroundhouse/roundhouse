@@ -38,6 +38,15 @@ From screenshots of a long chat, on a Retina display:
 - At the top right of the chat, just left of its scrollbar, is a short tick for each prompt, about 20px wide and 8px apart, in grey, with the one in view in white. It reads as a map of the chat's prompts, and of where you are among them.
 - Resting the pointer on the ticks opens a raised list over them, which hides them while it's open, so the ticks themselves are never clicked. It's about 255px wide, with one row per prompt, about 26px tall, each cut short with an ellipsis. The prompt in view has a lighter row, and the list scrolls, with its own scrollbar, once there are more than about a dozen.
 
+## Settings' sidebar
+
+From a screenshot of the top of its Settings sidebar, on a Retina display, in points:
+
+- **A search sits at the top, saying "Search settings" and showing `⌘ F` at its right end.** It's 28 tall, with corners of about 6, on a darker fill than the sidebar, the pane's colour, and an edge lighter than the sidebar's own, about `#434140`. Its magnifying glass is muted, about 14 wide, 10 in from the edge, and what it says is fainter than muted text, about 9 after the glass.
+- **The key is a small raised key,** 16 tall and 26 wide, with corners of about 4 and an edge of its own, 8 from the field's right edge. The `⌘` is smaller than the `F`, and the two are about 5 apart, both muted.
+- **Pages are under a heading, Personal, in muted text at about 12,** not bold, 12 below the search, on a line 28 tall, set in as far as a row's icon.
+- **A page's row is 32 tall, with an icon of two sliders, 16 wide and 8 in, then its name at body size, 12 after the icon,** both in the text colour. The row showing is filled a little lighter than the sidebar, with a control's corners. It reaches about 2 further left than the search, and ends level with it on the right.
+
 ## Sources
 
 Conductor's docs run to 68 pages, listed at `conductor.build/llms.txt`. A private reference copy and all 209 changelog entries are on the owner's Mac, in `~/conductor/archived-contexts/conductor-clone/merged-state/conductor-docs/`. They're the best source of ideas for new features. Don't republish them.

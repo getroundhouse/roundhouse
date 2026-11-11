@@ -52,6 +52,7 @@ actions!(
         ShowAll,
         OpenSettings,
         CloseSettings,
+        FindSetting,
         Quit,
         Minimize,
         Zoom,
@@ -91,6 +92,7 @@ pub fn open_main_window(
         // Only while Settings shows. Otherwise Cmd-W closes a chat.
         KeyBinding::new("escape", CloseSettings, Some(settings::KEY_CONTEXT)),
         KeyBinding::new("cmd-w", CloseSettings, Some(settings::KEY_CONTEXT)),
+        KeyBinding::new(settings::FIND_KEY, FindSetting, Some(settings::KEY_CONTEXT)),
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
