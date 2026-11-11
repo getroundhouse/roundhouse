@@ -196,7 +196,7 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 Details are in `crates/protocol/`.
 
 - **Newline-delimited JSON over any byte stream,** which is a Unix socket for clients and stdio for workers. It works over anything, it can be read by hand, and agent output is already JSON.
-- **Versioning:** both sides say hello first and compare a protocol number. "Changing the protocol" says what needs a bump, which is rare.
+- **Versioning:** both sides say hello first and agree on a protocol version. "Changing the protocol" says how, and what needs a bump, which is rare.
 - **`hub_status` and `hub_shutdown` work without a hello,** so a client of any version can see a hub and stop it. That's how `roundhouse hub status`, `roundhouse hub stop` and the app's `Restart the hub` work across a real break, and it's why the app can say how many agents would stop. Anyone who can reach the socket is this user. A connection from elsewhere, once there are any, shouldn't get this.
 - **On Windows a client's byte stream is a named pipe,** since neither tokio nor stable Rust has Unix sockets there. A pipe has no place in a directory, so it's named for the hub's data directory, one for each, and a checkout's hub stays out of an installed app's reach. The name comes from the path as it's spelled, so the data directory has to be an absolute path there. It has the permissions Windows gives a pipe by default, which let this user, administrators and the system send requests, and anyone else only read. Another user on the machine can make a pipe of that name first, and a client takes it for its hub and sends it prompts, so this isn't safe on a machine with other users. A client checking who serves the pipe would close that. *Unconfirmed.*
 - **The database only migrates forward.** Migrations run in order, each in its own transaction, and a database from a newer build is refused rather than damaged.
@@ -215,16 +215,34 @@ Details are in `crates/protocol/`.
 
 ### Changing the protocol
 
-These rules let peers on different versions keep working together.
+These rules let peers on different versions keep working together. They hold for both protocols that cross between processes: the client protocol, between clients and a hub, and the worker protocol, between a hub and its workers. The provider contract follows them too once it's messages. Both protocols meet the same problem, so one set of rules covers them, and nobody has to remember which applies where.
 
 - **Each shape has one form.** It's the serde form in `protocol`, on the wire and in the hub's SQLite columns, so changing a type also changes how old rows read.
 - **A new field is `Option` or `#[serde(default)]`,** so a message from an older peer still decodes. The same goes for old rows.
 - **Every enum read as data has `#[serde(other)] Unknown`:** statuses, kinds, events and blocks. Without it, one new value fails the whole frame, which `client-core` drops, failing the call if it was a reply. Code that receives `Unknown` skips it or shows something neutral. It never panics.
 - **Other envelopes have no `Unknown`.** That covers `HubFrame`, `ClientResponse` and the like, since there's nothing sensible to do with one. A client only gets a new response by making a new request.
-- **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. A client checks `is_unsupported()`, and hides or disables whatever needed it. There's no list of capabilities until something needs one.
-- **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. Client and hub can't work together across one, so it should be rare.
-- **`hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** They're what lets a client see a hub and stop it across one. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it.
-- **The worker protocol follows the same rules once workers can differ in version.** Today a hub and its worker are one binary.
+- **A new request doesn't need a bump, and whoever calls it has to expect a refusal.** A hub or a worker answers a request it doesn't know with `ErrorCode::Unsupported`, and carries on. That includes a known request with a value in it the reader doesn't know, since either comes from a newer peer, and its caller handles both the same way. A client checks `is_unsupported()`, and hides or disables whatever needed it. A hub does without it, or passes the refusal on to whoever asked. There's no list of capabilities until something needs one. *Unconfirmed:* refusing a known request with a value the reader doesn't know. *Not built:* a hub closes the connection on a request with a value it doesn't know, such as a new kind of `ApprovalDecision`, and a worker drops any request it can't read, with no reply, so the hub's call waits until the connection closes.
+- **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. The rules above cover most changes, so it should be rare.
+- **Each protocol has its own version,** so a break in one doesn't break the other. *Not built:* both use `protocol::PROTOCOL_VERSION`.
+- **A hello says which versions its side speaks, and both sides use the newest they share.** It names the newest and the oldest, and the reply names the one chosen. A hello that names only one speaks only that one, as a peer from before ranges does, so that peer still gets an answer. *Not built:* each side speaks one version, and refuses a hello for any other.
+- **The hub speaks the current and the previous version of each protocol, and clients and workers speak only their own.** The hub is the one party that meets skew in both directions, since clients only talk to hubs, and a worker only to the hub that started it, from that hub's build, as "Providers" says. So the code for an old version lives in one place, and only until the next break. *Not built.*
+- **A protocol breaks again only once its last break has been out for 30 days.** With the hub speaking the previous version, that means a client or a worker keeps working with any hub built in the 30 days after it, which is a promise people can plan around. It matters most for clients that can't all be updated at once, such as an iPhone app waiting on App Store review, or the apps of everyone sharing a hub.
+- **The hellos, `hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** The hellos are how two versions find one they share, and the rest let a client see a hub and stop it across a break. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it. *Unconfirmed:* the hellos. *Not built:* it doesn't spell out either hello.
+- **A break is tested against the version before it.** The change that makes it keeps the previous version's wire form of each message it changes, spelled out as `compatibility.rs` does, and tests that the hub still reads and answers it. CI also runs a hub against the worker from the release before it, since that's the pairing every update makes once workers outlive their hub. *Not built.*
+
+Between them, these rules give each pairing this:
+
+| Pairing | An additive change | A break |
+|---|---|---|
+| Older client, newer hub | Works. The client ignores what it doesn't know | The hub speaks the client's version until its next break |
+| Newer client, older hub | Works. The client hides what the hub refuses | The client says the hub is too old. The desktop app replaces a local hub it started, through `hub_status` and `hub_shutdown`, as "Managing a hub" says |
+| Newer hub, older worker | Works. The hub does without what the worker refuses | The hub speaks the worker's version, and replaces the worker with its own build once the worker's workspace is idle, so updating a hub never stops an agent |
+| Older hub, newer worker, after a rollback | Works | The hub stops the worker, and its agents with it |
+
+*Not built:* a worker stops when it loses its hub, as "When a process dies" says, so a hub never meets an older worker.
+
+- **Not everything works with everything.** Clients and workers don't carry old versions, and a rollback past a break stops agents. Doing better would put old code in more places, for cases that are rare or that updating fixes.
+- **The wire format stays as it is.** A schema format such as Protobuf has the same rules for additive changes that serde has with the ones above, and neither helps with a change of meaning, which is what a break is.
 
 ## When a process dies
 
@@ -261,7 +279,7 @@ Who starts, updates and stops a hub is a separate role from the hub itself, and 
 - **A package stamps its published version through `ROUNDHOUSE_BUILD`, and an install its commit,** and any other build says `0.1.0-dev`. The app and `roundhouse hub status` show it, and say so when the app and hub differ, because a bug report has to say which code it came from, and the version is the name of what people download. Version `0.1.N` is the Nth commit on `main`, which `git rev-list --reverse main | sed -n Np` prints. With uncommitted changes, the build also says when it was built, so two different builds never show the same. A build script would rebuild the crates above it on every commit, for builds nobody needs to identify.
 - **An install or a package also stamps an order through `ROUNDHOUSE_BUILD_NUMBER`:** when its commit was made, or when it was built if it has uncommitted changes. Any other build has no number, so it's never replaced. Replacing only an older hub needs an order, and a commit hash has none. Install time would let installing an older commit replace a newer hub, whose database it might not be able to open, and commit counts disagree across branches. Rolling back keeps its older number, so the app leaves the newer hub alone until it's stopped.
 
-What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without stopping its agents, as "When a process dies" describes.
+What someone using the app sees during an update is in `docs/spec/updates.md`. Workers that outlive their hub would let the app replace a hub without stopping its agents, as "When a process dies" describes, and "Changing the protocol" says how a hub works with the older workers that leaves it.
 
 ### Updating the app
 
@@ -291,6 +309,7 @@ The hub needs a small contract from a provider:
 
 - **Workers only need a byte stream.** An adapter can use `incus exec` over stdio, SSH, a WebSocket or anything else. The hub dials out through the adapter, so workers don't need to reach the hub.
 - **External adapters are separate executables, over stdio to start.** The hub runs them and talks to them over stdin and stdout, so they can be written in any language without rebuilding the app. The built-in local provider implements the same contract. A gRPC API may come later, so the contract should be defined as messages, independent of the transport.
+- **A worker always runs its hub's build.** Starting a worker puts the hub's worker binary in the instance first, if it holds a different one, so an instance that slept through an update doesn't wake with an old worker. The only older worker a hub meets is then one that outlived the hub before it. The local provider has no copy to replace, since it starts the hub's own executable. *Unconfirmed.*
 - **Providers declare their capabilities,** such as whether the filesystem survives a stop and whether they support snapshots. Persistent instances don't need snapshots to sleep, while ephemeral sandboxes do.
 - **Availability follows the hub.** A hub on an intermittently available machine, such as a Mac, is only reachable while that machine is awake. Agents on remote workers keep running and catch up later. Persistent mobile access needs a hub on an always-on machine.
 - **Each workspace gets its own worker process and provider instance,** so a crash in one doesn't touch the others. This matches sandboxes, where each workspace has its own machine. A worker uses about 8 MB, so this is cheap on a Mac.

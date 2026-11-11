@@ -78,8 +78,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
 | Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
-| Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello` |
-| Protocol version | The number a client and hub compare in their hello. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
+| Hello | The first request on a connection, which compares protocol versions | `ClientRequest::Hello`, `WorkerRequest::Hello` |
+| Protocol version | The number two peers compare in their hello: a client and a hub, or a hub and a worker. It only changes for a real break | `protocol::PROTOCOL_VERSION` |
 | On-demand hub | One a client started because it needed one, as opposed to one someone chose to run. Only this kind can be restarted from a client | `HubStatus::on_demand`, `roundhoused hub --on-demand` |
 | Build version | Which build a binary is, for people to read. A package stamps its published version, `0.1.N`, an install the commit it came from, and anything else says `-dev`. Whether two binaries can talk is up to the protocol version | `protocol::BUILD_VERSION` |
 | Build number | Puts the builds an install or a package makes in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::BUILD_NUMBER` |
