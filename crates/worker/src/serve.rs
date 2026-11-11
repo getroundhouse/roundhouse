@@ -281,6 +281,13 @@ async fn handle(
                 None => false,
             }))
         }
+        WorkerRequest::AgentCompact { session_id, asked, keeping } => {
+            let agent = state.live_agent(&session_id);
+            Ok(delivery(match agent {
+                Some(agent) => agent.compact(asked, keeping.as_deref()).await.is_ok(),
+                None => false,
+            }))
+        }
         WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
         WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,

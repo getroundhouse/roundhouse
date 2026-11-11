@@ -67,6 +67,15 @@ impl WorkspacePane {
         }
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
+        // As `Compact now` does, so it's recorded and drawn as a compaction whichever way it was asked.
+        if self.attached.is_empty()
+            && let Some(rest) = after_compact(&text)
+        {
+            let keeping = (!rest.is_empty()).then(|| rest.to_string());
+            transcript.update(cx, |t, cx| t.compact(keeping, Some(text.clone()), cx));
+            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            return cx.notify();
+        }
         let files = self.attached.take();
         if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
@@ -286,4 +295,25 @@ impl IntoElement for Slot {
 /// Something with whatever it's given in its middle.
 pub(super) fn middle() -> Div {
     div().flex().items_center().justify_center()
+}
+
+/// What a typed `/compact` says after it, which is what to keep, and empty for a bare one. `None` for anything else.
+fn after_compact(text: &str) -> Option<&str> {
+    let rest = text.trim().strip_prefix("/compact")?;
+    (rest.is_empty() || rest.starts_with(char::is_whitespace)).then(|| rest.trim())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::after_compact;
+
+    #[test]
+    fn only_what_is_compact_asks_and_what_follows_it_is_what_to_keep() {
+        assert_eq!(after_compact("/compact"), Some(""));
+        assert_eq!(after_compact("  /compact  \n"), Some(""), "around it, it's still bare");
+        assert_eq!(after_compact("/compact Keep the API design"), Some("Keep the API design"));
+        assert_eq!(after_compact("/compact\nKeep the API design"), Some("Keep the API design"));
+        assert_eq!(after_compact("/compactly"), None, "another word");
+        assert_eq!(after_compact("Please /compact"), None, "said in passing");
+    }
 }

@@ -334,6 +334,12 @@ impl Client {
         self.expect_ok(ClientRequest::SessionCancel { id: id.clone() })
     }
 
+    /// Asks the agent to compact its conversation, keeping what `keeping` says. Refused while it's on a turn.
+    pub fn session_compact(&self, id: &SessionId, keeping: Option<&str>) -> Result<()> {
+        let keeping = keeping.map(str::to_string);
+        self.expect_ok(ClientRequest::SessionCompact { id: id.clone(), keeping })
+    }
+
     fn expect_ok(&self, request: ClientRequest) -> Result<()> {
         let reply = self.call(request)?;
         let ClientResponse::Ok = reply else {

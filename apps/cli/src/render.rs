@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use protocol::attachment::Attachment;
-use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, SubagentOutcome, TurnOutcome};
+use protocol::event::{
+    AgentTask, CompactionOutcome, ContentBlock, EventBody, SessionEvent, SubagentOutcome, TurnOutcome,
+};
 use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
@@ -92,12 +94,7 @@ impl Printer {
             EventBody::ApprovalResolved { approval_id, outcome, .. } => {
                 self.line(event.seq, &format!("approval {} {outcome:?}", short(approval_id.as_str())));
             }
-            EventBody::AgentExited { reason, code, signal, stderr_tail } => {
-                self.line(event.seq, &format!("agent exited: {reason:?}, code {code:?}, signal {signal:?}"));
-                for line in stderr_tail {
-                    self.line(event.seq, &format!("  {line}"));
-                }
-            }
+            EventBody::AgentExited { .. } => self.exited(event),
             EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
             EventBody::AgentMode { permission_mode } => {
                 self.line(event.seq, &format!("approval mode: {}", crate::session::mode_name(*permission_mode)));
@@ -108,14 +105,26 @@ impl Printer {
             }
             EventBody::SubagentEnded { call, outcome, .. } => self.subagent_ended(event.seq, call, *outcome),
             EventBody::PromptDropped { prompt } => {
-                self.line(event.seq, &format!("the agent stopped before reading the prompt at {prompt}"));
+                self.line(event.seq, &format!("the agent stopped before taking what was asked at {prompt}"));
             }
             EventBody::ToolCallDropped { .. } => self.line(event.seq, "the agent went on without a call's result"),
+            EventBody::CompactionAsked { keeping } => self.line(event.seq, &asked_to_compact(keeping.as_deref())),
+            EventBody::AgentCompacting { written_chars } => self.line(event.seq, &compacting(*written_chars)),
+            EventBody::AgentCompacted { outcome, .. } => self.line(event.seq, &compacted(outcome)),
             EventBody::PromptTaken { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentLimits { .. }
             | EventBody::AgentOther { .. }
             | EventBody::Unknown => {}
+        }
+    }
+
+    /// That the agent exited, how, and the last of what it wrote to stderr.
+    fn exited(&mut self, event: &SessionEvent) {
+        let EventBody::AgentExited { reason, code, signal, stderr_tail } = &event.body else { return };
+        self.line(event.seq, &format!("agent exited: {reason:?}, code {code:?}, signal {signal:?}"));
+        for line in stderr_tail {
+            self.line(event.seq, &format!("  {line}"));
         }
     }
 
@@ -266,6 +275,29 @@ fn summarize_input(input: &Value) -> String {
     }
     let text = input.to_string();
     text.chars().take(120).collect()
+}
+
+/// That someone asked the agent to compact its conversation, and what to keep if they said.
+fn asked_to_compact(keeping: Option<&str>) -> String {
+    keeping.map_or_else(|| "asked to compact".to_string(), |keeping| format!("asked to compact, keeping: {keeping}"))
+}
+
+/// That the agent is compacting, with how much of the summary it has written, since it says so every 30 s.
+fn compacting(written_chars: Option<u64>) -> String {
+    let written = written_chars.map_or_else(String::new, |written| format!(", {written} characters written"));
+    format!("compacting the conversation{written}")
+}
+
+/// What compacting did, or why it couldn't.
+fn compacted(outcome: &CompactionOutcome) -> String {
+    match outcome {
+        CompactionOutcome::Compacted { before_tokens: Some(before), after_tokens: Some(after), .. } => {
+            format!("compacted the conversation from {before} tokens to {after}")
+        }
+        CompactionOutcome::Compacted { .. } | CompactionOutcome::Unknown => "compacted the conversation".to_string(),
+        CompactionOutcome::Failed { error: Some(error) } => format!("couldn't compact the conversation: {error}"),
+        CompactionOutcome::Failed { error: None } => "couldn't compact the conversation".to_string(),
+    }
 }
 
 #[cfg(test)]

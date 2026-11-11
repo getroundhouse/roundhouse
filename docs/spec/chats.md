@@ -4,7 +4,7 @@
 
 - **A turn can end with work still going in the background,** such as a test run the agent said it would come back to. Until that work finishes, an update waits for it and closing its chat asks first, and its mark shows something is running, as `look.md` says. The composer still sends rather than offering to stop, since stopping a turn doesn't reach that work, and when it finishes the agent picks up again by itself. *Unconfirmed.*
 - **The Mac stays awake while there's work,** so it doesn't go to sleep by itself partway through. Work is a turn, what an agent left running in the background, and a workspace being set up. An agent that's only waiting on you isn't, since it could wait all night. The Mac is let go half a minute after the last of the work, so it stays awake between one turn and a queued prompt's. The display still sleeps, and closing the lid or a low battery still puts the Mac to sleep. `Keep computer awake while agents are working`, in Settings, turns it off.
-- **What the agent's CLI writes only for the model isn't shown,** such as how much it shrank an image it read, or the summary a compacted conversation carries on from. *Unconfirmed.*
+- **What the agent's CLI writes only for the model isn't shown,** such as how much it shrank an image it read. The summary a compacted conversation carries on from is the one exception, as "Compacting" says. *Unconfirmed.*
 - **What's running in the background shows where the conversation ends,** a line for each task: a ring, and what the agent said it's for. The ring says it's in the background, so the line's words don't, and pointing at the line does. The fan stays the agent's, one to a chat, so a line under the working line isn't taken for another agent at work. A line goes when its task does. The hub keeps the list, so it shows however long ago the task started. *Unconfirmed.*
 - **A ring's light goes round while its task runs, and a monitor's ring holds still with its hub lit,** since a monitor does nothing until what it's watching for happens. A command and a subagent both run. *Unconfirmed.*
 - **Every task has a line, however many there are,** in the order the agent started them, since what each is for is the reason to look. *Unconfirmed.*
@@ -279,9 +279,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ## The context and the account
 
 - **A ring beside Send shows how full the agent's context is,** filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts. It follows the agent as it works: the agent says when a turn starts, a few times a minute during one, and when it ends. It's in muted text's colour however full it is, since amber and red already mean something, and it doesn't move by itself, since only a working agent moves anything. *Unconfirmed.*
-- **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes as soon as the pointer does. *Unconfirmed.*
+- **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes a third of a second after the pointer leaves, so the pointer can cross to its button. *Unconfirmed.*
 - **The card says how much room is left.** First how much is used, as a share such as `63% used` and as a bar. Under the bar, how much more the context can take, such as `153.5k until it compacts`, and what's used of how much, such as `313.5k/500.0k`. An agent that keeps room back for shrinking the conversation has that room split off the bar's end by a gap, so the gap is where it compacts. For one that keeps none back, the bar is whole and the line says how much is left, such as `186.5k left`. *Unconfirmed.*
 - **Then what's in the context, in the agent's own words, largest first, in tokens.** Room that's free or kept back isn't listed, since the bar shows it. Neither are the tools an agent loads only when it needs them, since they aren't in the context. A part whose kind the agent didn't say is listed, since it may be in it. *Unconfirmed.*
+- **Last, `Compact now` compacts the conversation straight away,** beside `Summarize to make room`, rather than when the room runs out. It asks the hub, as typing `/compact` does, and the chat shows the compaction as one that was asked for. It's off while the agent is on a turn, since the agent would only compact once the turn is done, and while there's no hub. The hub refuses one then, and also while the agent has yet to take a prompt it was sent, or before it has had a turn, when there's nothing to compact, and the chat says why.
 - **A bar for each of the account's limits sits left of the ring,** lying flat, one above the next and as wide as the ring, shortest window first. Each empties from the right as the limit is used, as its bar in the card does. They lie flat because two upright bars beside Send would read as a pause button. They're bars so they can't be taken for the ring, and in its colour for the same reason it is. They have a card of their own because a limit is the account's and the context is the chat's. They follow the account's record, which the hub changes as soon as any agent under the account hears of its limits, in whichever workspace, so they move with nothing asked for, while the app is in the background too. An agent says what's left only as it starts, so while one works it's asked again at most every five minutes, and the bars are never more than about five minutes behind what working agents have used. *Unconfirmed.*
 - **Their card says how much of each limit is left,** such as `96% left` of the `7d limit`, as a bar that empties, and when the limit starts again, with the plan beside its heading. A limit is the account's and not the chat's, so the hub keeps what any agent under the account last heard, and every chat under that account says the same, in whichever workspace, and still says it after the hub restarts. A chat under another account has that account's own, even with the same model provider. Nothing shows for a limit that has started again since it was heard, for an account with no limits, or until an agent under the account has heard of one. *Unconfirmed.*
 - **Under the limits, whose account it is:** the email, then more quietly how it's logged in and the model provider. The hub reads it from the agent's CLI on the workspace's machine each time an agent launches, and the chat names the account its agent's newest launch runs under, so it's there once the agent has gone. A line too long for the card, such as a long email, is cut off with an ellipsis. *Unconfirmed.*
@@ -299,6 +300,38 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **The ring's card on an account no agent has heard a limit for, so it says whose account it is.** *Unconfirmed.*
 
 ![The context's card, with whose account it is under the context](screens/context-account.png)
+
+## Compacting
+
+- **A compaction is a rule across the chat,** where the agent swapped what it held for a summary. In its middle, faint: `Compacted`, or `Compacted automatically` when the agent did it by itself as its context filled, then how many tokens the context went from and to, such as `226.9k → 9.0k tokens`, and how long it took.
+- **The rule opens to the summary the agent carries on from,** under a heading saying so, in a box about fifteen of its lines tall that scrolls inside past that, since a summary can run to thousands of words. The wheel scrolls the box to its end and then the chat. What the CLI writes around the summary for the model is left out.
+- **Typing `/compact` asks the hub to compact, as `Compact now` does, rather than sending a prompt,** with what follows it as what to keep. So a compaction asked for either way is drawn as its rule alone, with no prompt, and so is the end of the turn that was only it, since the rule says how long it took. What it was told to keep is quoted under the rule, as it was typed. Typed while the agent is on a turn, it's refused, and stays typed, with what the hub said.
+- **While the agent compacts, the working line says so after the time,** `Compacting the conversation`, and how much of the summary it has written when the agent says, such as `16.5k characters written`, since that's the only sign a compaction is getting on. It says so from when the compaction is asked for, since an agent that has to start first can take most of a minute to say anything. The hub's tail holds it, so every client says the same, and one that opens the chat partway says it too.
+- **A compaction that failed is a red line saying why,** such as `Couldn't compact the conversation. Not enough messages to compact.`, or only that it couldn't when the agent didn't say.
+
+**A compaction someone asked for, and the turn after it.**
+
+![A compaction someone asked for](screens/compacted.png)
+
+**A compaction asked for with what to keep.**
+
+![A compaction asked for with what to keep](screens/compacted-keeping.png)
+
+**A compaction opened to its summary, which scrolls past fifteen lines or so.**
+
+![A compaction opened to its summary](screens/compacted-summary.png)
+
+**A compaction the agent did by itself, partway through a turn.**
+
+![A compaction the agent did by itself](screens/compacted-by-itself.png)
+
+**The agent compacting, three minutes into a turn.**
+
+![The agent compacting](screens/compacting.png)
+
+**A compaction asked for with too little to compact.**
+
+![A compaction that failed](screens/compaction-failed.png)
 
 ## Tabs
 

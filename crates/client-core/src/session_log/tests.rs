@@ -233,6 +233,7 @@ fn changes_gather_into_one_range_until_a_view_looks() {
             started_at_ms: None,
             models: Vec::new(),
             tokens: None,
+            only_compacted: false,
         },
     ));
 

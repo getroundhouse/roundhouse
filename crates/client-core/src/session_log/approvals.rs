@@ -18,6 +18,7 @@ impl SessionLog {
                     |e| !matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
                 ),
                 EventBody::UserPrompt { .. }
+                | EventBody::CompactionAsked { .. }
                 | EventBody::PromptTaken { .. }
                 | EventBody::PromptDropped { .. }
                 | EventBody::ToolCallDropped { .. }
@@ -35,6 +36,8 @@ impl SessionLog {
                 | EventBody::SubagentStarted { .. }
                 | EventBody::SubagentEnded { .. }
                 | EventBody::AgentOther { .. }
+                | EventBody::AgentCompacting { .. }
+                | EventBody::AgentCompacted { .. }
                 | EventBody::Unknown => {}
             }
         }

@@ -137,7 +137,7 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(None, &finished(&which.as_str().into()));
+        after.on_event(1, None, &finished(&which.as_str().into()));
 
         let others: Vec<_> = before.messages.iter().filter(|m| m.message_id.as_str() != which).cloned().collect();
         prop_assert_eq!(after.messages, others);
@@ -150,7 +150,7 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(Some(ended), &turn_ended());
+        after.on_event(1, Some(ended), &turn_ended());
 
         let later: Vec<_> = before.messages.iter().filter(|m| m.run.is_some_and(|run| run > ended)).cloned().collect();
         prop_assert_eq!(after.messages, later);
@@ -168,5 +168,6 @@ fn turn_ended() -> EventBody {
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
+        only_compacted: false,
     }
 }

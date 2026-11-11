@@ -15,12 +15,18 @@ use crate::model::{
     TaskId, ToolUseId, UsageLimit,
 };
 
+pub use approval::{ApprovalDecision, ApprovalOutcome};
+pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, LinkedImage};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
+pub use task::{AgentTask, TaskKind};
 pub use tokens::TokenUsage;
 
+mod approval;
+mod compaction;
 mod content;
 mod file_change;
+mod task;
 mod tokens;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -60,7 +66,7 @@ pub enum EventBody {
     },
     /// The agent took the prompt recorded at `prompt` into its conversation. One sent mid-turn waits until the agent
     /// can take it, such as when a running tool finishes. Every prompt gets this or `PromptDropped`, and until then the
-    /// agent hasn't got it.
+    /// agent hasn't got it. So does a `CompactionAsked`, which is named the same way.
     PromptTaken {
         prompt: Seq,
     },
@@ -172,6 +178,10 @@ pub enum EventBody {
         /// that doesn't say, and in a turn recorded before it was kept.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tokens: Option<TokenUsage>,
+        /// The turn was only a compaction someone asked for, so the compaction says all there is to say of it. The
+        /// agent's adapter says, since how a compaction is asked, and whether it's a turn of its own, is the agent's.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        only_compacted: bool,
     },
     ApprovalRequested {
         approval_id: ApprovalId,
@@ -216,6 +226,34 @@ pub enum EventBody {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_tool_use_id: Option<ToolUseId>,
     },
+    /// The agent is compacting its conversation: writing a summary to carry on from in place of what it holds, so its
+    /// context has room again. It says so again every so often until it's done.
+    AgentCompacting {
+        /// How much of the summary is written so far, in characters, when the agent says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        written_chars: Option<u64>,
+    },
+    /// Someone asked the agent to compact its conversation now, rather than when its context fills. The hub records it
+    /// only while the agent isn't on a turn, and the agent takes it or drops it as it does a prompt, with
+    /// `PromptTaken` or `PromptDropped` naming it. How the agent is asked is its adapter's to know.
+    CompactionAsked {
+        /// What to keep, in the asker's own words, when they said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keeping: Option<String>,
+    },
+    /// The agent compacted its conversation, or couldn't.
+    AgentCompacted {
+        /// The `CompactionAsked` it answers, as the agent's adapter knows. `None` for one the agent started itself, and
+        /// for one a prompt asked for in the agent's own way, such as a typed `/compact` from a client that doesn't ask
+        /// the hub.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asked: Option<Seq>,
+        /// What that said to keep, so the compaction can say it without its request.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keeping: Option<String>,
+        #[serde(default)]
+        outcome: CompactionOutcome,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -244,6 +282,9 @@ impl EventBody {
             EventBody::Notice { .. } => "notice",
             EventBody::AgentMode { .. } => "agent_mode",
             EventBody::AgentOther { .. } => "agent_other",
+            EventBody::CompactionAsked { .. } => "compaction_asked",
+            EventBody::AgentCompacting { .. } => "agent_compacting",
+            EventBody::AgentCompacted { .. } => "agent_compacted",
             EventBody::Unknown => "unknown",
         }
     }
@@ -256,6 +297,7 @@ impl EventBody {
             | EventBody::AgentUser { parent_tool_use_id, .. }
             | EventBody::AgentOther { parent_tool_use_id, .. } => parent_tool_use_id.as_ref(),
             EventBody::UserPrompt { .. }
+            | EventBody::CompactionAsked { .. }
             | EventBody::PromptTaken { .. }
             | EventBody::PromptDropped { .. }
             | EventBody::AgentStarted { .. }
@@ -272,37 +314,11 @@ impl EventBody {
             | EventBody::AgentExited { .. }
             | EventBody::Notice { .. }
             | EventBody::AgentMode { .. }
+            | EventBody::AgentCompacting { .. }
+            | EventBody::AgentCompacted { .. }
             | EventBody::Unknown => None,
         }
     }
-}
-
-/// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
-/// started it ends.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct AgentTask {
-    pub id: TaskId,
-    /// What the agent said it's for.
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub kind: TaskKind,
-}
-
-/// What a background task is, which says whether it's the agent's own work and whether it's doing anything.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskKind {
-    /// A subagent, which is the agent's own work.
-    Subagent,
-    /// A command that watches for something, and wakes the agent each time it happens. It does nothing meanwhile.
-    Monitor,
-    /// A command the agent left running. It might end by itself, as a test run does, or be held open, as an app is,
-    /// and the agent doesn't say which. It's also what a list from before kinds were kept holds, and what a kind
-    /// this build doesn't know reads as.
-    #[default]
-    #[serde(other)]
-    Command,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -335,39 +351,6 @@ pub enum TurnOutcome {
     Error,
     #[serde(other)]
     Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ApprovalOutcome {
-    Allowed,
-    Denied,
-    /// Nobody answered: the turn was interrupted, or the agent went away.
-    Cancelled,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "decision", rename_all = "snake_case")]
-pub enum ApprovalDecision {
-    Allow {
-        /// Replaces the tool's input. `None` runs it as requested.
-        #[serde(default)]
-        updated_input: Option<Value>,
-        /// Agent-defined rules to remember, taken from `suggestions`.
-        #[serde(default)]
-        updated_permissions: Option<Value>,
-    },
-    Deny {
-        message: String,
-        /// Also stops the turn rather than letting the agent try something else.
-        #[serde(default)]
-        interrupt: bool,
-    },
-    /// The agent asked the user something, and this is what they said, by the question's text. Several
-    /// choices for one question are joined with a comma and a space.
-    Answer { answers: BTreeMap<String, String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

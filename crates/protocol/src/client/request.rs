@@ -333,6 +333,14 @@ pub enum ClientRequest {
     SessionCancel {
         id: SessionId,
     },
+    /// Asks the agent to compact its conversation now, keeping what `keeping` says if it says anything. Refused with
+    /// `Conflict` while the agent is on a turn, or has a prompt it hasn't taken, since it would only compact once
+    /// that's done. Recorded as a `CompactionAsked`, so it's sent once.
+    SessionCompact {
+        id: SessionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keeping: Option<String>,
+    },
     /// Changes the model, approval mode or effort, on the running agent too if there is one. A setting left out is left
     /// as it is. Fails if the agent refuses, saving nothing, though a running agent may already have taken the
     /// settings it was given before the one it refused. It's refused, changing nothing, for a mode a new chat would be

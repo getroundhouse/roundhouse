@@ -42,40 +42,7 @@ async fn ingest_event(
         hub.keep_from_agent(&session.id, attachments).await;
     }
     let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
-    match &body {
-        EventBody::AgentInit { .. } => {
-            if current {
-                session.launched(run);
-            }
-            mark_opened(session).await;
-        }
-        EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
-        EventBody::AgentExited { .. } => {
-            if current {
-                session.state.lock().agent = None;
-            }
-            session.cancel_approvals(Some(run)).await;
-        }
-        EventBody::UserPrompt { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::ApprovalRequested { .. }
-        | EventBody::ApprovalResolved { .. }
-        | EventBody::Notice { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::Unknown => {}
-    }
+    follow(session, run, current, &body).await;
     let stale_approval = if let EventBody::ApprovalRequested { approval_id, .. } = &body
         && !current
     {
@@ -93,6 +60,48 @@ async fn ingest_event(
     }
     if let Some(approval_id) = stale_approval {
         session.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;
+    }
+}
+
+/// What the session does about an event from the agent of `run` before it's recorded, `current` if that's the agent
+/// it has now.
+async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &EventBody) {
+    match body {
+        EventBody::AgentInit { .. } => {
+            if current {
+                session.launched(run);
+            }
+            mark_opened(session).await;
+        }
+        EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
+        EventBody::AgentExited { .. } => {
+            if current {
+                session.state.lock().agent = None;
+            }
+            session.cancel_approvals(Some(run)).await;
+        }
+        EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
+        | EventBody::PromptTaken { .. }
+        | EventBody::PromptDropped { .. }
+        | EventBody::ToolCallDropped { .. }
+        | EventBody::AgentStarted { .. }
+        | EventBody::AgentState { .. }
+        | EventBody::AgentTasks { .. }
+        | EventBody::AgentLimits { .. }
+        | EventBody::Assistant { .. }
+        | EventBody::AgentUser { .. }
+        | EventBody::TurnEnded { .. }
+        | EventBody::ApprovalRequested { .. }
+        | EventBody::ApprovalResolved { .. }
+        | EventBody::Notice { .. }
+        | EventBody::AgentMode { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
+        | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
+        | EventBody::Unknown => {}
     }
 }
 

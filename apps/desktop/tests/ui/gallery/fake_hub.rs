@@ -184,6 +184,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionSendQueued { .. }
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
+        | R::SessionCompact { .. }
         | R::SessionConfigure { .. }
         | R::SessionClose { .. }
         | R::SessionReopen { .. }

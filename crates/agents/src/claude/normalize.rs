@@ -12,6 +12,7 @@ use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
 use calls::OpenCalls;
+use compaction::Compactions;
 pub(super) use limits::{whole_percent, window_named};
 use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
@@ -22,6 +23,7 @@ use turn_end::{TurnModels, turn_ended};
 
 mod advisor;
 mod calls;
+mod compaction;
 mod file_change;
 mod images;
 mod limits;
@@ -71,7 +73,8 @@ pub enum Parsed {
 /// background task is, and that it stopped one, apart from the list of them, so the list can say which are monitors,
 /// by the call that started each, and which left without finishing. It remembers which task each subagent runs as, so
 /// the end of one can say which subagent it was. It never says a call was dropped, so what follows the call has to
-/// show it. And its `result` doesn't say which models the agent's own replies came from, so the replies have to.
+/// show it. And its `result` doesn't say which models the agent's own replies came from, so the replies have to. It
+/// holds what a compaction's boundary says until the summary after it, so the two are one event.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     /// The block of each message that's streaming, and the call whose subagent is writing it, if one is.
@@ -81,6 +84,7 @@ pub struct Normalizer {
     pending_calls: PendingCalls,
     models: TurnModels,
     subagents: Subagents,
+    compactions: Compactions,
 }
 
 impl Normalizer {
@@ -91,6 +95,9 @@ impl Normalizer {
         let noted = self.tasks.note(&value, &self.calls);
         if let Some(body) = self.subagents.read(&value) {
             return Normalized { dropped, parsed: Parsed::Event(body) };
+        }
+        if let Some(parsed) = self.compactions.read(&value) {
+            return Normalized { dropped, parsed };
         }
         let mut parsed = noted.unwrap_or_else(|| parse_value(&value));
         if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {

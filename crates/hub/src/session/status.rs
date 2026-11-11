@@ -28,7 +28,8 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
     let at_rest = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
     match body {
         EventBody::AgentState { state: AgentRunState::Idle } if stale => current,
-        EventBody::UserPrompt { .. } => SessionStatus::Running,
+        // Either starts a turn, whose end says the agent is done.
+        EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. } => SessionStatus::Running,
         EventBody::PromptTaken { .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
             SessionStatus::Running
         }
@@ -72,6 +73,8 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => current,
     }
 }
@@ -116,6 +119,7 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
         EventBody::ApprovalRequested { approval_id, .. } if !pending.contains_key(approval_id) => pending.len() + 1,
         EventBody::ApprovalResolved { approval_id, .. } if pending.contains_key(approval_id) => pending.len() - 1,
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
@@ -135,6 +139,8 @@ fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBod
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => pending.len(),
     }
 }
@@ -146,6 +152,7 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         EventBody::AgentTasks { tasks, .. } => tasks.clone(),
         EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => Vec::new(),
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
@@ -162,6 +169,8 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
+        | EventBody::AgentCompacted { .. }
         | EventBody::Unknown => tasks.to_vec(),
     }
 }

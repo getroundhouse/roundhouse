@@ -13,6 +13,7 @@ mod approved;
 mod baselines;
 mod capture;
 mod chats;
+mod compaction_chats;
 mod diff_screens;
 mod events;
 mod fake_hub;
@@ -127,7 +128,13 @@ fn every_screen_has_a_name_of_its_own() {
 
 /// Every screen the gallery draws.
 fn screens() -> impl Iterator<Item = &'static steps::Screen> {
-    SCREENS.iter().chain(DIFF_SCREENS).chain(TOOL_SCREENS).chain(subagent_chats::SCREENS).chain(UPDATE_SCREENS)
+    SCREENS
+        .iter()
+        .chain(DIFF_SCREENS)
+        .chain(TOOL_SCREENS)
+        .chain(subagent_chats::SCREENS)
+        .chain(compaction_chats::SCREENS)
+        .chain(UPDATE_SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With

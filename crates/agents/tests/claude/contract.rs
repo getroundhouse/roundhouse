@@ -239,7 +239,8 @@ fn a_write_s_result_says_it_made_the_file() {
 fn deltas_rebuild_exactly_what_each_finished_block_says() {
     let mut tail = Tail::default();
     let mut compared = (0, 0, 0);
-    for item in parsed() {
+    // Numbered as the hub would record them.
+    for (seq, item) in (1..).zip(parsed()) {
         match item {
             Parsed::Delta(delta) => tail.apply(&delta),
             Parsed::Event(body) => {
@@ -276,7 +277,7 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
                         other => panic!("unexpected block {other:?}"),
                     }
                 }
-                tail.on_event(None, &body);
+                tail.on_event(seq, None, &body);
             }
             _ => {}
         }

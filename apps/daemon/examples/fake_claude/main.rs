@@ -44,6 +44,9 @@
 //!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
 //!   advise-unanswered   Same, with no reply at all, as the real CLI's call after one of the agent's own tools gets.
 //!
+//! A prompt of `/compact`, with what to keep after it or not, is no script: it compacts, as the real CLI does, in a turn
+//! of its own.
+//!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
 //! with `cancel_queued`.
@@ -75,6 +78,7 @@ use serde_json::{Value, json};
 mod account;
 mod advisor;
 mod background;
+mod compact;
 mod prompt;
 mod read;
 mod result;
@@ -197,6 +201,9 @@ fn main() {
                 Ok(Input::Eof) | Err(_) => return,
             },
         };
+        if !by_itself && compact::if_asked(&config, &out, &prompt) {
+            continue;
+        }
         run_turn(&config, &out, prompt, by_itself, &input_rx, &mut queued, &mut eof);
     }
 }

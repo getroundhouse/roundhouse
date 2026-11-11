@@ -24,9 +24,12 @@ pub(super) fn work(body: &EventBody) -> Work {
     match body {
         EventBody::AgentInit { .. } => Work::Started,
         EventBody::Assistant { parent_tool_use_id, .. } => Work::Wrote { subagent: parent_tool_use_id.is_some() },
+        // A compaction empties most of the context, so it's news as much as something written.
+        EventBody::AgentCompacted { .. } => Work::Wrote { subagent: false },
         EventBody::TurnEnded { .. } => Work::TurnEnded,
         EventBody::AgentLimits { .. } => Work::HeardLimits,
         EventBody::UserPrompt { .. }
+        | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
@@ -42,6 +45,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
         | EventBody::Unknown => Work::Other,
     }
 }

@@ -27,6 +27,7 @@ mod alone;
 mod approval;
 mod around;
 mod asked;
+mod compaction;
 mod line;
 mod mode;
 mod prompt;
@@ -203,6 +204,9 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
                 None => empty(),
             }
         }
+        // The compaction says all there is of what asked for it, and of a turn that was only it.
+        EventBody::CompactionAsked { .. } | EventBody::TurnEnded { only_compacted: true, .. } => empty(),
+        EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
@@ -232,14 +236,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(*reason, stderr_tail, cx),
-        EventBody::Notice { level, message } => {
-            let color = match level {
-                NoticeLevel::Error => cx.theme().danger,
-                NoticeLevel::Warning => cx.theme().warning,
-                NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
-            };
-            colored_line(message.clone(), color)
-        }
+        EventBody::Notice { level, message } => notice(*level, message, cx),
         // These tell the hub things, and there's nothing here for a person.
         EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
@@ -252,9 +249,20 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
+        | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Unknown => empty(),
     }
+}
+
+/// Something the hub says, in the colour of how much it matters.
+fn notice(level: NoticeLevel, message: &str, cx: &App) -> AnyElement {
+    let color = match level {
+        NoticeLevel::Error => cx.theme().danger,
+        NoticeLevel::Warning => cx.theme().warning,
+        NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
+    };
+    colored_line(message.to_string(), color)
 }
 
 /// A call, its result or thinking, which read as lines of one list.

@@ -22,6 +22,7 @@ fn ended(outcome: TurnOutcome) -> EventBody {
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
+        only_compacted: false,
     }
 }
 
@@ -71,6 +72,8 @@ fn a_stop_holds_the_queue_until_the_person_sends_a_prompt() {
     assert!(!ready(&watch));
     record(&mut watch, &idle(), Idle, Idle);
     assert_eq!(watch.held_after(&ended(TurnOutcome::Success), Running, Idle), None, "only a prompt lets it go");
+    let compacting = EventBody::CompactionAsked { keeping: None };
+    assert_eq!(watch.held_after(&compacting, Idle, Running), None, "asking to compact isn't asking to go on");
 
     record(&mut watch, &prompt(), Idle, Running);
     record(&mut watch, &EventBody::PromptTaken { prompt: 3 }, Running, Running);
