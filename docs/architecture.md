@@ -9,14 +9,59 @@ How the system fits together, and why. This is the agreed design, so it includes
 - **A provider gives a hub somewhere to run workers.** Running on the same Mac is one provider, an Incus instance is another, and a cloud sandbox is another. No provider is special, and **any hub can use any provider**.
 
 ```
-Desktop, iPhone, CLI
-   │ client protocol
-   ▼
-Hub: on a Mac, on your own server, or a hosted service
-   │ provider: local, Incus, cloud sandbox, or your own adapter
-   │ worker protocol, over any byte stream
-   ▼
-Worker: on the same Mac, in an Incus instance, or in a sandbox
+ CLIENTS
+ ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐
+ │ Desktop app  │  │ CLI          │  │ iPhone app   (not built) │
+ └──────┬───────┘  └──────┬───────┘  └─────────────┬────────────┘
+        └─────────────────┼────────────────────────┘
+          client-core: each hub's records and open sessions, kept in sync
+                          │
+                          │  client protocol: JSON lines over a Unix socket
+                          │  (a named pipe on Windows; a relay for phones, not built)
+          ┌───────────────┴──────────────────────────────┐
+          ▼                                              ▼
+ HUBS: one client can join several, in one sidebar
+ ┌──────────────────────────────────────┐   ┌────────────────────────────┐
+ │ Hub on your Mac                      │   │ Hub on your own server     │
+ │ owns workspaces, sessions and their  │   │ same code and API, and its │
+ │ event logs, in SQLite                │   │ own adapters (not built)   │
+ └──────┬─────────────────────────┬─────┘   └────────────────────────────┘
+        │                         │
+        │ provider protocol       └─────────────────────────────────────────┐
+        │ JSON lines over stdio      worker protocol: JSON lines over the   │
+        │ create, start, stop,       stdio of the command connect answers   │
+        │ list, connect, events      with. The hub runs it, so no adapter   │
+        ▼                            sits in a worker's stream              │
+ PROVIDER ADAPTERS, children of the hub                                     │
+ ┌────────────────┐ ┌───────────────┐ ┌───────────────┐ ┌──────────┐        │
+ │ provider local │ │ Incus         │ │ EC2           │ │ your own │        │
+ │ (roundhoused)  │ │ (not built)   │ │ (not built)   │ │          │        │
+ └───────┬────────┘ └───────┬───────┘ └───────┬───────┘ └──────────┘        │
+         │                  │                 │   make and end instances    │
+         ▼                  ▼                 ▼                             │
+ INSTANCES, one per workspace                                               │
+ ┌────────────────┐ ┌───────────────┐ ┌───────────────┐                     │
+ │ a directory    │ │ a VM, cloned  │ │ an EC2        │                     │
+ │ and processes  │ │ from a base   │ │ instance from │                     │
+ │ on this Mac    │ │ image on ZFS  │ │ an AMI        │                     │
+ └───────┬────────┘ └───────┬───────┘ └───────┬───────┘                     │
+         └──────────────────┼─────────────────┘                             │
+                            │  each instance runs one worker                │
+ WORKERS                    ▼                                               ▼
+ ┌────────────────────────────────────────────────────────────────────────────┐
+ │ Worker: roundhoused worker --stdio, one per workspace                      │
+ │ git and the worktree, setup and archive scripts, files and diffs           │
+ │ agent adapters, such as agents::claude                                     │
+ └───────────────────────────────────┬────────────────────────────────────────┘
+                                     │  stream-json over stdio,
+                                     │  approvals as control requests
+ AGENTS                              ▼
+ ┌────────────────────────────────────────────┐  ┌──────────────────────────┐
+ │ Claude CLI: your own install, login and    │  │ other agents (not built) │
+ │ settings, on the worker's machine          │  │                          │
+ └─────────────────────┬──────────────────────┘  └──────────────────────────┘
+                       ▼
+ MODEL PROVIDERS: Anthropic's API, or a cloud's
 ```
 
 ## Where a hub can run
@@ -58,23 +103,23 @@ A single Cargo workspace in one repo. Directories marked *not built* don't exist
 
 ```
 crates/
-  protocol/        Client and worker protocol types, event log schema, versioning. No IO
+  protocol/        Client, worker and provider protocol types, event log schema, versioning. No IO
   hub/             Workspaces, sessions, event log, platform API, SQLite storage
   worker/          Git, worktrees, running agents
   agents/          Claude adapter, raw event capture
   process/         Signalling a process group, and recording a PID with its start time
-  providers/       Provider contract, local provider
+  providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
   look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the status mark, the app icon, and the parts of the window tests find
   terminal-view/   GPUI terminal element. Not built
 apps/
-  daemon/          One binary that runs as a hub or a worker
+  daemon/          One binary that runs as a hub, a worker or the local provider's adapter
   cli/             Command-line client
   desktop/         GPUI and gpui-kit app, with its UI tests
   mobile-ios/      iOS app, after the proof of concept. Not built
 providers/
-  incus/           First external adapter. Not built
+  incus/           The Incus provider's adapter, which runs each workspace in a VM. Not built
 services/
   relay/           Lets phones reach hubs that aren't publicly reachable. Not built
   hosted/          Accounts and billing, only if a hosted service is run. Not built
@@ -97,7 +142,8 @@ The binaries are `roundhouse`, `roundhoused` and `roundhouse-desktop`. `crates/p
 apps/desktop ──> transcript, terminal-view ──> client-core ──> protocol
 apps/desktop, transcript ──> look
 apps/cli ─────────────────────────────────────> client-core
-apps/daemon ──> hub ──> providers ──> protocol
+apps/daemon ──> hub ──> protocol
+apps/daemon ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
 agents, providers, worker ──> process
 ```
@@ -106,7 +152,7 @@ agents, providers, worker ──> process
 2. **`protocol` has no IO and no UI.** Everything depends on it, so it needs to stay small and stable.
 3. **The hub and worker must build on Linux without GPUI.** Nothing under `hub`, `worker`, `agents` or `providers` may depend on GPUI or gpui-kit.
 4. **GPUI stays in `transcript`, `terminal-view`, `look` and `apps/`.** `client-core` must stay free of it, and of any async runtime: it's blocking calls and channels, so GPUI's executor stays out, and a native mobile client remains possible if the GPUI path fails. `look` is a crate of its own because both the app and `transcript` draw with it, and `transcript` can't depend on the app. For the same reason it names the parts of the window tests find by where they're drawn, as `look::Region`, since both mark some. *Unconfirmed.*
-5. **The worker boundary is real.** Even on a Mac, the worker runs as a separate process, so remote workers only change the transport.
+5. **The worker and provider boundaries are real.** Even on a Mac, the worker runs as a separate process, so remote workers only change the transport. The hub reaches the local provider the way it reaches any other, through the provider protocol, to an adapter in a process of its own, so the protocol is used by every workspace and a new provider is only a new adapter. *Not built:* the hub depends on `providers`, and runs the local provider inside itself.
 6. **Exact pins for GPUI and gpui-kit.** They are pre-1.0, so upgrades should be deliberate and in one place.
 7. **Nothing that ships is under GPL, AGPL or LGPL.** MPL-2.0 is allowed when it comes unchanged from crates.io, and everything else is permissive, such as Apache-2.0 or MIT. GPL or AGPL code would put the whole app under its terms, which would decide the project's own license and rule out closed or hosted versions, and GPL is widely seen as incompatible with the App Store. AGPL also reaches the hub over the network. LGPL expects users to be able to relink, which static linking makes awkward. MPL-2.0 only covers its own files (§3.3), and shipping it unchanged only means saying where its source is (§3.2), which goes in the notices every license needs anyway. A changed copy would have to be published, hence crates.io only.
 
@@ -220,7 +266,7 @@ Details are in `crates/protocol/`.
 
 ### Changing the protocol
 
-These rules let peers on different versions keep working together. They hold for both protocols that cross between processes: the client protocol, between clients and a hub, and the worker protocol, between a hub and its workers. The provider contract follows them too once it's messages. Both protocols meet the same problem, so one set of rules covers them, and nobody has to remember which applies where.
+These rules let peers on different versions keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its providers' adapters. All three meet the same problem, so one set of rules covers them, and nobody has to remember which applies where. *Not built:* the provider protocol.
 
 - **Each shape has one form.** It's the serde form in `protocol`, on the wire and in the hub's SQLite columns, so changing a type also changes how old rows read.
 - **A new field is `Option` or `#[serde(default)]`,** so a message from an older peer still decodes. The same goes for old rows.
@@ -230,7 +276,7 @@ These rules let peers on different versions keep working together. They hold for
 - **A version bump means a real break,** meaning a change that a peer on the last version can't read under these rules. The rules above cover most changes, so it should be rare.
 - **Each protocol has its own version,** so a break in one doesn't break the other. *Not built:* both use `protocol::PROTOCOL_VERSION`.
 - **A hello says which versions its side speaks, and both sides use the newest they share.** It names the newest and the oldest, and the reply names the one chosen. A hello that names only one speaks only that one, as a peer from before ranges does, so that peer still gets an answer. *Not built:* each side speaks one version, and refuses a hello for any other.
-- **The hub speaks the current and the previous version of each protocol, and clients and workers speak only their own.** The hub is the one party that meets skew in both directions, since clients only talk to hubs, and a worker only to the hub that started it, from that hub's build, as "Providers" says. So the code for an old version lives in one place, and only until the next break. *Not built.*
+- **The hub speaks the current and the previous version of each protocol, and clients, workers and provider adapters speak only their own.** The hub is the one party that meets skew in both directions, since clients only talk to hubs, a worker only to the hub that started it, from that hub's build, as "Providers" says, and a provider adapter only to the hub that runs it. So the code for an old version lives in one place, and only until the next break. *Not built.*
 - **A protocol breaks again only once its last break has been out for 30 days.** With the hub speaking the previous version, that means a client or a worker keeps working with any hub built in the 30 days after it, which is a promise people can plan around. It matters most for clients that can't all be updated at once, such as an iPhone app waiting on App Store review, or the apps of everyone sharing a hub.
 - **The hellos, `hub_status`, `hub_shutdown` and refusals can't change form, even in a real break.** The hellos are how two versions find one they share, and the rest let a client see a hub and stop it across a break. `crates/protocol/tests/compatibility.rs` spells them out, so changing one fails it. *Unconfirmed:* the hellos. *Not built:* it doesn't spell out either hello.
 - **A break is tested against the version before it.** The change that makes it keeps the previous version's wire form of each message it changes, spelled out as `compatibility.rs` does, and tests that the hub still reads and answers it. CI also runs a hub against the worker from the release before it, since that's the pairing every update makes once workers outlive their hub. *Not built.*
@@ -301,21 +347,29 @@ The app is signed and notarized, you download it, and it updates itself as chang
 
 ## Providers
 
-The hub needs a small contract from a provider:
+Every provider has an adapter: a program the hub runs, which makes and ends the provider's instances. The hub talks to it over the provider protocol:
 
 | Operation | Purpose | Required |
 |---|---|---|
-| `create` | Make an instance and place the worker binary in it | Yes |
+| `create` | Make an instance, from a base image and at a size where the provider takes them, and place the worker binary in it | Yes |
 | `start`, `stop` | Wake and sleep. Stopping also ends anything the worker left behind | Yes |
 | `kill` | Like `stop`, without giving a worker that isn't responding time to finish | Yes |
-| `connect` | Return a byte stream to the worker | Yes |
+| `connect` | Return the command that opens a byte stream to the worker | Yes |
 | `destroy` | Remove the instance | Yes |
+| `list` | Say which instances exist, so a hub that starts finds those that outlived it | Yes |
+| Base images | Build one with a repository's script, list them, and delete one | Optional, declared by the provider |
 | `snapshot`, `restore` | Preserve or roll back the filesystem | Optional, declared by the provider |
 
-- **Workers only need a byte stream.** An adapter can use `incus exec` over stdio, SSH, a WebSocket or anything else. The hub dials out through the adapter, so workers don't need to reach the hub.
-- **External adapters are separate executables, over stdio to start.** The hub runs them and talks to them over stdin and stdout, so they can be written in any language without rebuilding the app. The built-in local provider implements the same contract. A gRPC API may come later, so the contract should be defined as messages, independent of the transport.
+An adapter also tells the hub, unasked, when an instance is about to end or has gone, such as when a cloud takes back a spot instance or a host goes down, rather than leaving the hub to find out when the worker's stream breaks.
+
+- **Workers only need a byte stream.** `connect` answers with a command, and the hub runs it, with its stdin and stdout as the worker's stream. That can be `incus exec`, SSH or anything else, including the adapter's own program where it has to carry the stream itself. The hub dials out, so workers don't need to reach the hub, and an adapter that carries no streams can stop without taking its workers with it.
+- **An adapter is a separate program, over stdio.** The hub runs each as one long-lived child, beside itself, and starts it again if it stops. Every request names its instance and is safe to repeat, so a restart loses nothing. Adapters can be written in any language without rebuilding the app, and one written in Rust implements the `Provider` trait and has `providers` serve it. A gRPC API may come later, so the contract is defined as messages, independent of the transport.
+- **The local provider's adapter is the daemon's own `provider local`,** so it ships with every hub, and its instances are directories and its workers processes on this machine.
+- **An adapter keeps its own access to where it runs instances,** such as the Incus client's remotes or the usual AWS credentials, so the hub holds no secrets for it. The hub's settings name each provider, and the command that runs its adapter.
+- **Stopping a worker is split between the hub and the adapter.** The hub closes the worker's stream and gives it time to stop its agents, which works the same over any transport. The adapter then ends the instance and anything the worker left behind: for the local provider, the worker's process group and the agents recorded in its instance directory, and for Incus, the VM.
 - **A worker always runs its hub's build.** Starting a worker puts the hub's worker binary in the instance first, if it holds a different one, so an instance that slept through an update doesn't wake with an old worker. The only older worker a hub meets is then one that outlived the hub before it. The local provider has no copy to replace, since it starts the hub's own executable. *Unconfirmed.*
-- **Providers declare their capabilities,** such as whether the filesystem survives a stop and whether they support snapshots. Persistent instances don't need snapshots to sleep, while ephemeral sandboxes do.
+- **Providers declare their capabilities,** such as which systems and architectures they run, whether the filesystem survives a stop, and whether they build base images or take snapshots. Persistent instances don't need snapshots to sleep, while ephemeral sandboxes do.
+- **A remote workspace runs in a VM of its own, made from its repository's newest base image, and destroyed when it's archived.** A VM is as flexible as a real machine: an agent can run containers in it, and the services and kernel features its project needs, which are hard to get from inside a container. It's also a stronger wall between workspaces whose agents run unattended with credentials, and nothing one workspace leaves behind reaches another. A base image is a VM that a script of the repository's own has set up, with its tools installed and its caches warm, so a workspace made from it starts with a warm build rather than a cold one. *Not built.*
 - **Availability follows the hub.** A hub on an intermittently available machine, such as a Mac, is only reachable while that machine is awake. Agents on remote workers keep running and catch up later. Persistent mobile access needs a hub on an always-on machine.
 - **Each workspace gets its own worker process and provider instance,** so a crash in one doesn't touch the others. This matches sandboxes, where each workspace has its own machine. A worker uses about 8 MB, so this is cheap on a Mac.
-- **The contract is a Rust trait for now.** It becomes messages when the first external adapter needs them. `snapshot` and `restore` come with the first provider that uses them.
+- **The contract is a Rust trait for now,** which the hub calls directly, with the local provider inside the hub, `connect` returning the stream itself, and no `list`. Base images, `snapshot` and `restore` come with the first provider that uses them.
