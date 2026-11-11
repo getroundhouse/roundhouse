@@ -148,17 +148,6 @@ fn the_window_keys_work_on_a_file_after_coming_back_to_it(cx: &mut TestAppContex
     assert_eq!(tab(&ui).0, Showing::Chat, "Ctrl-Tab moved on from the file");
 }
 
-#[gpui_kit::test]
-fn all_files_shows_in_every_workspace_once_it_s_chosen(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
-
-    ui.new_workspace();
-
-    ui.wait("the new workspace's files", |ui| ui.has("all-file-a.txt"));
-    assert!(!ui.has("all-folder-src"), "its own files, not the first workspace's");
-}
-
 /// The agent changes files as it works, so the end of its turn reads again what's shown of them.
 #[gpui_kit::test]
 fn a_turn_s_end_reads_the_files_and_the_one_shown_again(cx: &mut TestAppContext) {
@@ -167,12 +156,8 @@ fn a_turn_s_end_reads_the_files_and_the_one_shown_again(cx: &mut TestAppContext)
     open_lib(&mut ui);
     let chat = ui.active_chat();
     ui.show_chat(&chat);
-    ui.pick("mode-picker", 3);
-    ui.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
 
-    // The fake agent takes `;` to start its next step, so the line it adds has none.
-    ui.input("tool:echo '// more' >> src/lib.rs && echo new > new.txt");
-    ui.press("enter");
+    ui.have_the_agent_run("echo '// more' >> src/lib.rs && echo new > new.txt");
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle) && ui.has("all-file-new.txt"));
 
     ui.wait("the file to show what changed", |ui| shown_text(ui).as_deref() == Some("mod app;\n// more"));

@@ -30,6 +30,7 @@ mod reconnecting;
 mod settings;
 mod setup;
 mod sidebar;
+mod sidebar_tabs;
 mod steering;
 mod streaming;
 #[cfg(test)]

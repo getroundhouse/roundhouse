@@ -30,6 +30,9 @@ pub struct Review {
     pub files: Option<Vec<DiffFile>>,
     /// The hub left some untracked files out.
     pub truncated: bool,
+    /// How many times the diff has been asked for, so only the newest answer is taken, and an older one that comes
+    /// late isn't shown over it, or taken for what the workspace changes now.
+    asks: u64,
     /// What's shown: client-core's copy, less what's being deleted here.
     pub comments: Vec<DiffComment>,
     /// Client-core's copy.
@@ -55,6 +58,7 @@ impl Review {
             workspace_id,
             files: None,
             truncated: false,
+            asks: 0,
             comments: Vec::new(),
             held: Vec::new(),
             deleting: HashSet::new(),
@@ -71,33 +75,34 @@ impl Review {
 
     /// Loads the diff again. Keeps the old one until the new one is ready.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.workspace_id.clone());
+        self.asks += 1;
+        let (ask, client, id) = (self.asks, self.client.clone(), self.workspace_id.clone());
         cx.spawn(async move |this, cx| {
             let loaded = cx.background_spawn(async move { client.workspace_diff(&id) }).await;
-            let diff = match loaded {
-                Ok(loaded) => loaded,
-                Err(e) => {
-                    let _ =
-                        this.update(cx, |_, cx| cx.emit(ReviewEvent::Error(format!("couldn't load the diff: {e}"))));
+            let parsed = match loaded {
+                Ok(diff) => {
+                    let truncated = diff.truncated;
+                    let parsing = cx.background_spawn(async move {
+                        let mut files =
+                            DiffFile::parse(&diff.patch).map_err(|e| format!("couldn't read the diff: {e}"))?;
+                        files.sort_by(|a, b| a.path().cmp(b.path()));
+                        Ok::<_, String>((files, truncated))
+                    });
+                    parsing.await
+                }
+                Err(e) => Err(format!("couldn't load the diff: {e}")),
+            };
+            let _ = this.update(cx, |t, cx| {
+                if ask != t.asks {
                     return;
                 }
-            };
-            let truncated = diff.truncated;
-            let parsed = cx
-                .background_spawn(async move {
-                    let mut files = DiffFile::parse(&diff.patch).map_err(|e| e.to_string())?;
-                    files.sort_by(|a, b| a.path().cmp(b.path()));
-                    Ok::<_, String>(files)
-                })
-                .await;
-            let _ = this.update(cx, |t, cx| {
-                t.truncated = truncated;
                 match parsed {
-                    Ok(files) => {
+                    Ok((files, truncated)) => {
                         t.files = Some(files);
+                        t.truncated = truncated;
                         cx.emit(ReviewEvent::Loaded);
                     }
-                    Err(e) => cx.emit(ReviewEvent::Error(format!("couldn't read the diff: {e}"))),
+                    Err(message) => cx.emit(ReviewEvent::Error(message)),
                 }
                 cx.notify();
             });

@@ -27,6 +27,8 @@ pub enum AllFilesEvent {
     /// Show this file in the file tab.
     Open(SharedString),
     Error(String),
+    /// The hub is too old to list files, which All files says in the list's place.
+    Unsupported,
 }
 
 /// What All files has to show.
@@ -125,7 +127,10 @@ impl AllFiles {
                     }
                     // Lost with the connection, and listed again once the pane catches up on the next one.
                     Err(ClientError::Disconnected) => {}
-                    Err(e) if e.is_unsupported() => t.listing = Listing::Unsupported,
+                    Err(e) if e.is_unsupported() => {
+                        t.listing = Listing::Unsupported;
+                        cx.emit(AllFilesEvent::Unsupported);
+                    }
                     // A list from before is still worth showing.
                     Err(_) if t.worktree.is_some() => {}
                     Err(e) => t.listing = Listing::Failed(e.to_string()),
