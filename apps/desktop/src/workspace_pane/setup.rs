@@ -3,10 +3,10 @@
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, div, px,
+    AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
+    div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, InRegion as _, Region};
 use protocol::model::SetupStatus;
 
 use client_core::records::Record;
@@ -17,7 +17,7 @@ const SETUP_LOG_REFRESH: std::time::Duration = std::time::Duration::from_secs(1)
 
 pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
     div()
-        .id("setup-log-text")
+        .region(Region::SetupLog)
         .flex_none()
         .w_full()
         .max_h(px(220.))

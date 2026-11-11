@@ -6,6 +6,8 @@ use gpui_kit::{
     ParentElement as _, Pixels, Styled as _, TestSupportExt as _, anchored, deferred, div, point, px,
 };
 
+use look::{InRegion as _, Region};
+
 use crate::app::{Agents, BuildLine};
 
 /// Between the details and the top of the card they sit on.
@@ -74,12 +76,15 @@ impl Details {
         }
         let theme = cx.theme();
         let text = v_flex()
-            .id("update-details-text")
             .gap_1()
             .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(format!("{} → {}", self.from, self.to)))
-            .child(div().text_xs().text_color(theme.muted_foreground).child(self.what_happens.clone()))
-            .test_support();
-        let details = look::raised(cx).w(shown.card_width + BORDER * 2.).px_3().py_2p5().child(text);
+            .child(div().text_xs().text_color(theme.muted_foreground).child(self.what_happens.clone()));
+        let details = look::raised(cx)
+            .region(Region::UpdateDetails)
+            .w(shown.card_width + BORDER * 2.)
+            .px_3()
+            .py_2p5()
+            .child(text);
         let above = anchored()
             .position_mode(AnchoredPositionMode::Local)
             .position(point(-BORDER, -(BORDER + GAP)))

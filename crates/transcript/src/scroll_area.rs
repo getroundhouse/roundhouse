@@ -14,9 +14,9 @@
 
 use gpui_kit::base::{InteractiveElementExt as _, Scrollbar};
 use gpui_kit::{
-    AnyElement, App, DispatchPhase, Div, ElementId, HitboxBehavior, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, ScrollEvent, ScrollHandle, Stateful, StatefulInteractiveElement as _,
-    Styled as _, TestSupportExt as _, Window, canvas, div, point, px,
+    AnyElement, App, DispatchPhase, ElementId, HitboxBehavior, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, RenderOnce, ScrollEvent, ScrollHandle, StatefulInteractiveElement as _, Styled, TestSupportExt as _,
+    Window, canvas, div, point, px,
 };
 
 use self::wheel::{Owner, Wheel};
@@ -91,7 +91,7 @@ impl RenderOnce for ScrollArea {
 /// GPUI measures how far an area scrolls by what's directly in it, so `content` goes in a box that wide, and at least
 /// as wide as the area, so a line's colour reaches its edge. The area is a row, so the box can be wider than it, with
 /// the box at the top, since a row would stretch it to the area's height and leave nothing below to scroll to.
-pub(crate) fn holding_wide(area: Stateful<Div>, content: impl IntoElement) -> Stateful<Div> {
+pub(crate) fn holding_wide<E: ParentElement + Styled>(area: E, content: impl IntoElement) -> E {
     area.flex().items_start().child(div().flex_none().min_w_full().child(content))
 }
 

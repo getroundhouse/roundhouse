@@ -5,13 +5,14 @@
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::base::InteractiveElementExt as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement, Render,
     SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
+
+use look::{InRegion as _, Region};
 
 use super::line::{Line, Part, Preview};
 use super::{Answer, Toggle, amount, block, line, numbered};
@@ -119,7 +120,7 @@ impl Render for DiffPreview {
         let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, cx));
         let lines = div().id("edit-preview-lines").children(rows.collect::<Vec<_>>()).test_support();
         let preview = div()
-            .id("edit-preview")
+            .region(Region::EditPreview)
             .w(px(PREVIEW_WIDTH))
             .max_h(px(PREVIEW_HEIGHT))
             .py_1()
@@ -132,9 +133,10 @@ impl Render for DiffPreview {
             .font_family(theme.mono_font_family.clone())
             .text_size(theme.mono_font_size)
             // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until
-            // it turns far enough.
+            // it turns far enough. That's GPUI's own, which the kit's `lock_scroll_axis` calls, since the kit gives that
+            // only to an element that isn't also marked for tests, as a region is.
             .overflow_scroll()
-            .lock_scroll_axis();
-        holding_wide(preview, lines).test_support()
+            .restrict_scroll_to_axis();
+        holding_wide(preview, lines)
     }
 }

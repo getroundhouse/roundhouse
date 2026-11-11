@@ -8,6 +8,7 @@ use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
 };
+use look::{InRegion as _, Region};
 use protocol::event::TokenUsage;
 use protocol::model::{AgentKind, ModelName};
 
@@ -42,7 +43,7 @@ impl TurnCard {
         let times = times.map(|times| table(times.rows, cx));
         let counts = self.tokens.map(|tokens| table(counts(tokens), cx));
         look::raised(cx)
-            .id("turn-card")
+            .region(Region::TurnCard)
             .flex()
             .flex_col()
             .min_w(MIN_WIDTH)
@@ -54,7 +55,6 @@ impl TurnCard {
             .children(day.map(|day| div().whitespace_nowrap().text_color(cx.theme().muted_foreground).child(day)))
             .children(times)
             .children(counts)
-            .test_support()
             .into_any_element()
     }
 }

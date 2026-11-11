@@ -13,7 +13,7 @@ use desktop::sidebar_tabs::SidebarTab;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
     PlatformTextSystem,
@@ -21,8 +21,8 @@ use gpui_kit::{
 use image::RgbaImage;
 
 use super::steps::{Screen, Step, Target};
-use super::{fake_hub, world};
-use crate::support::menu_item;
+use super::{fake_hub, frame, world};
+use crate::support::{first_labelled, menu_item};
 
 mod files;
 
@@ -46,7 +46,8 @@ pub(crate) struct Picture {
     pub(crate) settled: bool,
 }
 
-pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
+/// Its picture, cut to its frame, and what's wrong with the frame, each said as what's wrong with the screen.
+pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Vec<String>) {
     // Under /tmp because of the socket path limit.
     let dir = tempfile::Builder::new().prefix("gallery-").tempdir_in("/tmp").unwrap();
     let hub = hub_source(dir.path());
@@ -77,8 +78,10 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
         app.step(step);
     }
     let picture = app.settle();
+    let cropped = app.cx.update_window(app.handle, |_, window, cx| frame::crop(screen, window, &picture.image, cx));
+    let (image, problems) = cropped.unwrap();
     app.close();
-    picture
+    (Picture { image, ..picture }, problems)
 }
 
 /// Somewhere of its own, with a daemon that doesn't exist, so the app can't start a real hub in its place. The
@@ -270,8 +273,8 @@ impl Driver {
         match target {
             Target::Id(id) => gpui_kit::SharedString::from(id).into(),
             Target::Label(label) => {
-                let found = self.cx.update_window(self.handle, |_, window, _| window.find_all_by_label(label)).unwrap();
-                found.first().unwrap_or_else(|| panic!("nothing is labelled {label}")).path().last().unwrap().clone()
+                let found = self.cx.update_window(self.handle, |_, window, _| first_labelled(window, label)).unwrap();
+                found.unwrap_or_else(|| panic!("nothing is labelled {label}")).path().last().unwrap().clone()
             }
         }
     }

@@ -9,9 +9,7 @@ use std::sync::Arc;
 use client_core::FileToSend;
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
-use gpui_kit::{
-    Axis, Context, Div, ElementId, ExternalPaths, Image, InteractiveElement as _, ParentElement, Stateful, Styled,
-};
+use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
 
@@ -127,11 +125,11 @@ pub(crate) fn anything_to_send(text: &str, files: usize) -> bool {
 }
 
 /// Takes files dropped anywhere on `target`, which shows the focus colour on its edge while they're dragged over it.
-pub(crate) fn takes_drops<T: 'static>(
-    target: Stateful<Div>,
+pub(crate) fn takes_drops<T: 'static, E: InteractiveElement>(
+    target: E,
     cx: &mut Context<T>,
     then: impl Fn(&mut T, Vec<PathBuf>, &mut Context<T>) + 'static,
-) -> Stateful<Div> {
+) -> E {
     let ring = cx.theme().ring;
     target
         .drag_over::<ExternalPaths>(move |style, _, _, _| style.border_color(ring))

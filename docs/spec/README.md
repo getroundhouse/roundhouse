@@ -22,6 +22,8 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 
 Each area's file shows its screens beside the rules they go with, because what a feature does and how it looks are decided together, and read together. A screen is a picture rather than words: the owner decides the look by looking at it, so the record of each decision is the picture itself. The images are kept in `screens/`. The real app draws every screen from made-up data, and a test fails when a screen no longer matches its image, or its area's file doesn't show it, so the look can't change without someone seeing it.
 
+Each image shows only what its screen is about, such as a sidebar, the composer, or what's in the chat, so a change shows in the images of what it changed rather than in every image of the window. A few show the whole window: those about how it's laid out, and those with a dialog, which dims all of it. A change to how wide something is moves what's beside it, so widening a sidebar changes the images of the chat too. *Unconfirmed.*
+
 A screen is confirmed the same way as a rule. One an agent adds, or changes before the owner has approved it, ends with *Unconfirmed*. Changing a confirmed screen's image needs the owner's approval, in the PR that changes it, where GitHub shows the old image beside the new one.
 
 An image is exact about everything, including what nobody chose, such as how text is smoothed. So a GPUI upgrade or a font change can change confirmed images too, and those need approving the same way.
