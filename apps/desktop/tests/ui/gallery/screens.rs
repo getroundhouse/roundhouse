@@ -8,9 +8,9 @@ use protocol::model::SessionStatus;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    all_files, attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen,
-    finishing_update, own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming,
-    thinking_streaming, titled, unread, working_background,
+    attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen, finishing_update,
+    own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled,
+    unread, working_background,
 };
 use super::{chats, file_chats, long_chats, pictures, subagent_chats, tool_chats, worktree};
 
@@ -246,7 +246,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "all-files",
         spec: "files.md",
-        world: Some(all_files),
+        world: Some(diff),
         steps: &[
             Step::Select(FOCUS),
             Step::AllFiles,
@@ -261,7 +261,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "file-opened",
         spec: "files.md",
-        world: Some(all_files),
+        world: Some(diff),
         steps: &[
             Step::Select(FOCUS),
             Step::AllFiles,

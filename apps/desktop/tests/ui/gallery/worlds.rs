@@ -6,7 +6,7 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     AgentAccount, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
     Effort, GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus,
-    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus, WorktreeFiles,
+    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -29,8 +29,9 @@ fn older_hub(on_demand: bool) -> World {
     world
 }
 
-/// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden.
-/// Returns the screen's own workspace, which comes after them.
+/// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden,
+/// and the files in a worktree, which All files lists in a workspace that changes nothing. Returns the screen's own
+/// workspace, which comes after the first repository's others.
 fn sidebar(world: &mut World) -> WorkspaceId {
     let roundhouse = world.repo("roundhouse");
     let signal_box = world.repo("signal-box");
@@ -47,6 +48,7 @@ fn sidebar(world: &mut World) -> WorkspaceId {
     }
     let archived = world.workspace(&signal_box, "hazel");
     world.workspace_mut(&archived).status = WorkspaceStatus::Archived;
+    worktree::put_in(world);
     focus
 }
 
@@ -357,21 +359,6 @@ pub(super) fn diff() -> World {
             rev: Rev::default(),
         }],
     );
-    world
-}
-
-/// The diff's workspace, with every file in its worktree for All files to list, what's in the folders git ignores
-/// whole, and the text of the one opened.
-pub(super) fn all_files() -> World {
-    let mut world = diff();
-    let strings = |names: &[&str]| names.iter().map(ToString::to_string).collect::<Vec<_>>();
-    world.worktree =
-        WorktreeFiles { paths: strings(worktree::FILES), folders: strings(worktree::FOLDERS), truncated: false };
-    for (folder, paths, folders) in worktree::IN_FOLDERS {
-        let files = WorktreeFiles { paths: strings(paths), folders: strings(folders), truncated: false };
-        world.worktree_folders.insert((*folder).to_string(), files);
-    }
-    world.worktree_texts.insert(worktree::OPENED.to_string(), worktree::MODEL.to_string());
     world
 }
 

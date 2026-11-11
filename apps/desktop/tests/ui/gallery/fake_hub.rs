@@ -134,6 +134,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
                 || ApiError::new(ErrorCode::Unsupported, "this screen's hub can't say whose account it is");
             reply(C::SessionAccount(world.account.clone().ok_or_else(unsupported)?))
         }
+        // An older hub's build is from before files were listed, too.
+        R::WorkspaceFiles { .. } if world.hub.is_some() => {
+            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list files"))
+        }
         R::WorkspaceFiles { .. } => reply(C::WorktreeFiles(world.worktree.clone())),
         R::WorkspaceFolderRead { path, .. } => {
             let files = world

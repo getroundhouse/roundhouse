@@ -20,6 +20,7 @@ use crate::file_diff::FileDiff;
 use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
+use crate::sidebar_tabs::TabShown;
 use attaching::Draft;
 use file_tab::FileTab;
 pub use file_tab::Opened;
@@ -63,6 +64,8 @@ pub struct Diff {
     pub changes: Entity<Changes>,
     /// Every file in the worktree, which the sidebar of changes shows in place of the changes when it's chosen.
     pub all_files: Entity<AllFiles>,
+    /// Which of the two the sidebar of changes shows.
+    sidebar_tab: TabShown,
     /// The file tab, while it's open. It's here so there's never a file tab without a view to show in it.
     tab: Option<FileTab>,
     /// A turn ended while the pane wasn't on screen, so the files are listed again once it is.
@@ -259,7 +262,8 @@ impl WorkspacePane {
         for (transcript, _) in self.transcripts.values() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
-        if let Some(diff) = &self.diff {
+        if let Some(diff) = &mut self.diff {
+            diff.sidebar_tab.reconnected();
             diff.review.update(cx, |r, _| r.reconnect(client));
             diff.all_files.update(cx, |a, _| a.reconnect(client));
             diff.viewer.update(cx, |v, _| v.reconnect(client));

@@ -32,6 +32,18 @@ impl Stack {
 }
 
 impl Ui<'_> {
+    /// Has the chat showing run a command once its agent is free, with nothing asked. What the command changes
+    /// shows when its turn ends. The fake agent takes `;` to start its next step, so the command has none.
+    pub(crate) fn have_the_agent_run(&mut self, command: &str) {
+        self.wait("the agent to be free", |ui| ui.session_status() == Some(SessionStatus::Idle));
+        if self.chat_mode().as_deref() != Some("bypassPermissions") {
+            self.pick("mode-picker", 3);
+            self.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
+        }
+        self.input(&format!("tool:{command}"));
+        self.press("enter");
+    }
+
     pub(crate) fn active_chat(&self) -> SessionId {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, _| p.active.clone().unwrap())

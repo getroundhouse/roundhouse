@@ -1,7 +1,22 @@
-//! The worktree the All files screens browse: a made-up repository's files, the same branch the diff screens review,
+//! The worktree every screen's All files lists: a made-up repository's files, the same branch the diff screens review,
 //! what's in the folders git ignores, and the text of the one opened.
 
 #![cfg(test)]
+
+use protocol::model::WorktreeFiles;
+
+use super::world::World;
+
+/// Gives the world's hub the worktree to list, to read a folder of, and to open a file from.
+pub(crate) fn put_in(world: &mut World) {
+    let strings = |names: &[&str]| names.iter().map(ToString::to_string).collect::<Vec<_>>();
+    world.worktree = WorktreeFiles { paths: strings(FILES), folders: strings(FOLDERS), truncated: false };
+    for (folder, paths, folders) in IN_FOLDERS {
+        let files = WorktreeFiles { paths: strings(paths), folders: strings(folders), truncated: false };
+        world.worktree_folders.insert((*folder).to_string(), files);
+    }
+    world.worktree_texts.insert(OPENED.to_string(), MODEL.to_string());
+}
 
 /// In order of path, as the worker lists them, ignored ones too, such as `.env`.
 pub(crate) const FILES: &[&str] = &[

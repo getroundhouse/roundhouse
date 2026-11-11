@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use client_core::Daemon;
 use desktop::app::{AppView, Connection, HubSource};
 use desktop::pull_request::Lookup;
+use desktop::sidebar_tabs::SidebarTab;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
@@ -103,6 +104,15 @@ struct Driver {
     dir: PathBuf,
 }
 
+/// Whether the sidebar of changes shows what it starts on: the changes, or all the files where there are none.
+fn sidebar_loaded(pane: &WorkspacePane, cx: &App) -> bool {
+    pane.diff.as_ref().is_some_and(|diff| match pane.sidebar_tab() {
+        Some(SidebarTab::Changes) => true,
+        Some(SidebarTab::AllFiles) => diff.all_files.read(cx).is_listed(),
+        None => false,
+    })
+}
+
 impl Driver {
     fn step(&mut self, step: &Step) {
         match step {
@@ -114,13 +124,12 @@ impl Driver {
                         v.select(id, cx);
                     });
                 });
-                self.wait("the chat, the diff and the pull request to load", |view, cx| {
+                self.wait("the chat, the sidebar of changes and the pull request to load", |view, cx| {
                     selected_pane(view).is_some_and(|pane| {
                         let pane = pane.read(cx);
                         let wanted = pane.session().map_or(0, |s| s.last_seq);
                         let chat = pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted);
-                        let diff = pane.diff.as_ref().is_some_and(|d| d.review.read(cx).files.is_some());
-                        chat && diff && pane.pull_request != Lookup::Looking
+                        chat && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
                     })
                 });
             }
