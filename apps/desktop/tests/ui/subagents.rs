@@ -1,7 +1,7 @@
 //! A call that started a subagent: opened, it shows what the subagent was asked and its report, and none of its work,
-//! which is in the subagent tab. The button at the end of its line opens the tab, which sits after its chat's tab,
-//! where `Ctrl-Tab` comes to it, and closes with `Cmd-W`, or with its chat. The chat holds its subagents' records until
-//! it closes, and its outline counts only the agent's own events.
+//! which is in the subagent tab. The button at the end of its line opens the tab, which sits at the far left, after
+//! the file tab, where `Ctrl-Tab` comes to it, names its chat in its band, and closes with `Cmd-W`, or with its chat.
+//! The chat holds its subagents' records until it closes, and its outline counts only the agent's own events.
 
 #![cfg(test)]
 
@@ -69,32 +69,78 @@ fn a_subagent_s_call_shows_none_of_its_work_which_opens_in_the_subagent_tab(cx: 
     assert_eq!(items(&ui, "File")[4], "Close Subagent Tab", "⌘W closes the tab, not the chat behind it");
 }
 
+/// The subagent tab sits at the far left, as the file tab does, just after it, so neither moves however many chats are
+/// open, and `Ctrl-Tab` comes to them in that order.
 #[gpui_kit::test]
-fn ctrl_tab_comes_to_the_subagent_tab_after_its_chat_and_cmd_w_closes_it(cx: &mut TestAppContext) {
+fn the_subagent_tab_sits_after_the_file_tab_before_the_chats_and_cmd_w_closes_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let open = a_finished_subagent(&mut ui);
     let first = ui.active_chat();
     ui.click(open);
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
-    // A second chat after it, so the ring of tabs is the first chat, the subagent tab, then the second.
     let second = ui.new_chat();
-    let at = |ui: &Ui<'_>| (showing(ui), ui.active_chat());
+    let workspace = ui.view().selected.clone().unwrap();
+    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\n").unwrap();
+    ui.wait("the file, in All files", |ui| ui.has("all-file-a.txt"));
+    ui.click("all-file-a.txt");
+    ui.wait("the file tab", |ui| showing(ui) == Showing::File);
+    let left = |ui: &mut Ui<'_>, id: String| {
+        ui.frame();
+        ui.cx.update_window(ui.handle, |_, window, _| window.find(SharedString::from(id)).bounds().left()).unwrap()
+    };
 
-    ui.press("ctrl-shift-tab");
-    assert_eq!(showing(&ui), Showing::Subagent, "just before the second chat");
-    ui.press("ctrl-shift-tab");
-    assert_eq!(at(&ui), (Showing::Chat, first.clone()), "just after the first");
+    let lefts = [
+        left(&mut ui, "show-file-tab".into()),
+        left(&mut ui, "show-subagent-tab".into()),
+        left(&mut ui, format!("chat-{first}")),
+        left(&mut ui, format!("chat-{second}")),
+    ];
+    assert!(lefts.is_sorted(), "the file tab, the subagent tab, then the chats, left to right: {lefts:?}");
+    let at = |ui: &Ui<'_>| (showing(ui), ui.active_chat());
     ui.press("ctrl-tab");
-    assert_eq!(showing(&ui), Showing::Subagent);
+    assert_eq!(showing(&ui), Showing::Subagent, "just after the file tab");
+    ui.press("ctrl-tab");
+    assert_eq!(at(&ui), (Showing::Chat, first.clone()), "the first chat after it");
     ui.press("ctrl-tab");
     assert_eq!(at(&ui), (Showing::Chat, second.clone()));
+    ui.press("ctrl-tab");
+    assert_eq!(showing(&ui), Showing::File, "the last chat wraps around to the file tab");
     ui.press("ctrl-shift-tab");
+    assert_eq!(at(&ui), (Showing::Chat, second.clone()), "and goes back");
+    ui.show_chat(&first);
+    ui.press("ctrl-shift-tab");
+    assert_eq!(showing(&ui), Showing::Subagent, "just before the first chat");
     ui.press("cmd-w");
 
     assert_eq!(showing(&ui), Showing::Chat);
     assert!(!ui.has("show-subagent-tab"));
     assert_eq!(ui.open_chats(), [first, second], "the chats stay open");
+}
+
+/// Where it sits doesn't say which chat it's from, so its band does, and that shows the chat when clicked.
+#[gpui_kit::test]
+fn the_subagent_tab_s_band_names_its_chat_which_it_shows(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_finished_subagent(&mut ui);
+    let chat = ui.active_chat();
+    ui.click(open);
+    ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
+    let other = ui.new_chat();
+    // The last chat wraps around to it.
+    ui.press("ctrl-tab");
+    assert_eq!((showing(&ui), ui.active_chat()), (Showing::Subagent, other), "from the other chat");
+    // The chat may be titled while the band shows, so it's the title it has now.
+    ui.wait("the band to name the chat whose subagent it shows", |ui| {
+        let sessions = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.sessions.clone());
+        let title = sessions.iter().find(|s| s.id == chat).unwrap().title.clone();
+        ui.shows_label("subagent-band-chat", title.as_deref().unwrap_or("Untitled"))
+    });
+
+    ui.click("subagent-band-chat");
+
+    assert_eq!((showing(&ui), ui.active_chat()), (Showing::Chat, chat));
 }
 
 #[gpui_kit::test]

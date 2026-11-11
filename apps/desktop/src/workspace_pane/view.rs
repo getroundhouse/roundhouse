@@ -113,17 +113,15 @@ impl WorkspacePane {
         })
     }
 
-    /// The file tab if there is one, then one tab for each open chat, and a way to start another chat. At the far end
-    /// are any closed ones to go back to.
+    /// The file tab and the subagent tab if they're open, at the far left as tabs that are replaced rather than added
+    /// to usually are, then one tab for each open chat, and a way to start another chat. At the far end are any closed
+    /// ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
+        tabs.extend(self.subagent_tab_element(cx));
         for session in self.open_sessions() {
             tabs.push(self.chat_tab(session, cx));
-            // The subagent tab sits just after the tab of the chat whose subagent it shows.
-            if self.subagents.tab_session() == Some(&session.id) {
-                tabs.extend(self.subagent_tab_element(cx));
-            }
         }
         let closed = self.closed_chats(cx);
         div()
