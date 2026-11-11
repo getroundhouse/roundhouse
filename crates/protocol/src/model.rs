@@ -87,6 +87,11 @@ ids!(
     ApprovalId,
     /// Where a workspace's worker runs, in its provider's terms.
     InstanceId,
+    /// A hub's own ID, made once and kept, so a provider adapter serving several hubs on one host works only with
+    /// the instances it made for the one that's asking.
+    HubId,
+    /// The Rust target a worker binary is built for, such as `x86_64-unknown-linux-gnu`.
+    WorkerTarget,
     /// The agent's own ID for a conversation, which is what resumes it.
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
