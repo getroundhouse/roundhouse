@@ -1,8 +1,8 @@
 use super::*;
 
 /// Prompts drawn in these rows.
-fn at_rows(rows: &[usize]) -> Vec<PromptLine> {
-    rows.iter().map(|row| PromptLine::new(*row as u64 + 1, "", 0)).collect()
+fn at_rows(rows: &[usize]) -> Vec<Prompt> {
+    rows.iter().map(|row| Prompt { line: PromptLine::new(*row as u64 + 1, "", 0), row: *row }).collect()
 }
 
 #[test]
@@ -64,9 +64,4 @@ fn a_tick_at_the_chats_own_end_is_not_faded() {
     assert_eq!(look(MOST_TICKS - 1, 0, &first, count), Tick::Faded, "more are after it");
     assert_eq!(look(count - 2, count - 1, &last, count), Tick::Plain, "nothing is after the last");
     assert_eq!(look(0, 3, &(0..5), 5), Tick::Plain, "every one shows");
-}
-
-#[test]
-fn a_prompt_a_hub_numbers_0_goes_in_the_first_row() {
-    assert_eq!(row_of(&PromptLine::new(0, "", 0)), 0);
 }

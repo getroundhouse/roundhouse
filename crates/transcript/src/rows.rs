@@ -22,6 +22,7 @@ use crate::linked_images::LinkedImages;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
+mod alone;
 mod approval;
 mod around;
 mod line;
@@ -32,6 +33,8 @@ mod tools;
 mod turn_end;
 mod turn_times;
 
+pub(crate) use alone::rows_repeating_report;
+pub use alone::subagent_standing;
 pub(crate) use tail::texts_of as tail_texts;
 
 use approval::approval_card;
@@ -63,15 +66,31 @@ fn column(content: impl IntoElement) -> Div {
     div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(content))
 }
 
+/// Which of the list's items is drawn, and which is the tail, the list's last.
+#[derive(Clone, Copy)]
+pub(crate) struct Item {
+    pub(crate) ix: usize,
+    pub(crate) tail: usize,
+}
+
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
-    ix: usize,
+    item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    Some(column(render_row_inner(model, session, this, linked, ix, cx)?).into_any_element())
+    let Item { ix, tail } = item;
+    let drawn = render_row_inner(model, session, this, linked, item, cx)?;
+    let m = model.borrow();
+    if m.alone.is_none() {
+        return Some(column(drawn).into_any_element());
+    }
+    // The subagent tab starts with what it was asked and ends with its report.
+    let head = (ix == 0).then(|| alone::head(&m, cx)).flatten();
+    let foot = (ix == tail).then(|| alone::foot(&m, cx)).flatten();
+    Some(column(v_flex().w_full().children(head).child(drawn).children(foot)).into_any_element())
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
@@ -81,7 +100,8 @@ enum Shown {
     Event(SessionEvent, Around),
     Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
-    /// A subagent's event, which its call draws, so its own row is empty.
+    /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, or in the subagent tab,
+    /// its last words, which its report says.
     InCall,
 }
 
@@ -90,17 +110,20 @@ fn render_row_inner(
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
-    ix: usize,
+    item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
+    let Item { ix, tail } = item;
     let shown = {
         let m = model.borrow();
         session.read(|log| {
-            if ix >= log.row_count() {
+            if ix >= tail || ix >= log.row_count() {
                 return Shown::Tail(log.tail().clone());
             }
             match log.row(ix) {
-                Row::Event(event) if drawn_in_its_call(log, &m, event) => Shown::InCall,
+                Row::Event(event) if drawn_in_its_call(log, &m, event) || alone::repeats_report(log, &m, ix) => {
+                    Shown::InCall
+                }
                 Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
                 Row::Pending(prompt) => Shown::Pending(prompt.clone(), attachments::carried(&m, &prompt.attachments)),
                 Row::Unloaded => Shown::Unloaded,

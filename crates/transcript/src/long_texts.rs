@@ -13,7 +13,7 @@ use std::rc::Rc;
 use client_core::session_log::{Row, SessionLog};
 use gpui_kit::component::text::TextViewState;
 use gpui_kit::{App, AppContext as _, Entity, Subscription, WeakEntity};
-use protocol::model::{Seq, seq_index};
+use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::item_key::ItemKey;
@@ -53,7 +53,7 @@ impl LongTexts {
         self.hold_streaming(log.tail(), this, cx);
         let streaming: Vec<ItemKey> = tail_texts(log.tail()).into_iter().map(|(key, _)| key).collect();
         self.held.retain(|key, held| match held.seq.get() {
-            Some(seq) => matches!(log.row(seq_index(seq).saturating_sub(1)), Row::Event(_)),
+            Some(seq) => log.row_of(seq).is_some_and(|row| matches!(log.row(row), Row::Event(_))),
             None => streaming.contains(key),
         });
     }

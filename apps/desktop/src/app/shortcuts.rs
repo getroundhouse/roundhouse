@@ -36,7 +36,7 @@ impl AppView {
         let pane = self.selected_pane().map(|pane| pane.read(cx));
         let says = menus::Says {
             diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
-            file_tab_showing: pane.is_some_and(|pane| pane.showing() == Showing::File),
+            showing: pane.map_or(Showing::Chat, WorkspacePane::showing),
         };
         if says != self.menus_say {
             self.menus_say = says;

@@ -41,7 +41,7 @@ pub(super) fn separator(cx: &App) -> Div {
 }
 
 /// A faint name for the part of a block below it, such as "Input" or a file's path.
-pub(super) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
+pub(in crate::rows) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
     let theme = cx.theme();
     let text: SharedString = text.into();
     div().px_3().pt_2().font_family(theme.mono_font_family.clone()).text_xs().text_color(look::faint()).child(text)
@@ -98,7 +98,7 @@ pub(super) fn code(id: ElementId, language: &str, prompt: &str, text: &str, cx: 
 
 /// Prose in a block, such as what a subagent was asked or what a model made of a page, as Markdown, scrolling past
 /// a dozen lines or so. It's the item's `part`.
-pub(super) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElement {
+pub(in crate::rows) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElement {
     let (id, text_id) = (key.element(part), key.element(&format!("{part}-text")));
     let shown = div()
         .id(id.clone())

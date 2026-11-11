@@ -139,16 +139,26 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![An edit and a search that failed, opened](screens/tool-failures.png)
 
-- **A call that hands work to a subagent is titled with what the subagent is for,** with its kind of agent in an outlined chip, such as `Explore`, and how many calls it's made so far. *Unconfirmed.*
-- **Opened, a subagent's call shows what the subagent was asked, then its latest call while it works, and its report once it's done,** in full, since the report is what the agent read and acted on. The rest of its work is in the subagent tab, which the call opens. *Not built:* for now, the call opens to everything the subagent did, in order, under a rule down its left: what it wrote, and its calls, each of which opens as any call does, and its last words are its report.
-- **A subagent's work shows in the subagent tab, not in the chat.** The agent goes on working while a subagent does, several subagents can work at once, and one can make hundreds of calls, so their events arrive mixed with the agent's own. Kept out of the chat, they don't bury the conversation they're part of, and the chat costs the same to draw however much its subagents do. *Not built:* for now, a subagent's work is gathered into its call, and work that arrives too long after its call to be gathered, such as more than 2,000 events later, shows where it arrives instead, so it isn't lost.
-- **The subagent tab works as the file tab does.** A workspace has at most one, and opening another subagent shows that one in the same tab, so following subagents doesn't leave a trail of tabs. It covers the chat and its composer until a chat's tab is clicked, and `Cmd-W` closes it while it shows. It sits just after the tab of the chat whose subagent it shows. It shows what the subagent was asked, then everything it did, in order, as the chat shows the agent's, then its report, and a subagent it started opens in the same tab. *Not built.*
+- **A call that hands work to a subagent is titled with what the subagent is for,** with its kind of agent in an outlined chip, such as `Explore`, and how many calls it's made so far. One that failed, or was stopped, says so first, such as `Stopped · 3 calls`. *Unconfirmed.*
+- **Opened, a subagent's call shows the two blocks its tab starts and ends with:** what the subagent was asked, labelled Prompt, and once it's done, its report, labelled Report, in full, since the report is what the agent read and acted on. While it works, its newest call sits between them, under the words `Working on`, and opens as any call does. The rest of its work is in the subagent tab.
+- **A button at the far end of a subagent's line opens the subagent tab on it.** It shows while the call is open, or while the pointer is over its line, whether or not the subagent's record has come, since the tab reads its work by its call. Until the record comes, the tab is named for what the call says the subagent is for, and its band says no more.
+- **A subagent's work shows in the subagent tab, not in the chat.** The agent goes on working while a subagent does, several subagents can work at once, and one can make hundreds of calls, so their events arrive mixed with the agent's own. Kept out of the chat, they don't bury the conversation they're part of, and the chat costs the same to draw however much its subagents do. A hub from before subagents were kept apart can't send the chat only the agent's own events, so there the call opens to everything the subagent did, in order, under a rule down its left, with no button, and work that arrives too long after its call to be gathered, such as more than 2,000 events later, shows where it arrives instead, so it isn't lost.
+- **The subagent tab works as the file tab does.** A workspace has at most one, and opening another subagent shows that one in the same tab, so following subagents doesn't leave a trail of tabs. It covers the chat and its composer until a chat's tab is clicked, and `Cmd-W` closes it while it shows, when the File menu's Close Chat says Close Subagent Tab. It sits just after the tab of the chat whose subagent it shows, `Ctrl-Tab` comes to it there, and it closes when that chat does, since the chat's agent and its subagents stop then. The tab has the call's icon and what the subagent is for, in italics, as the file tab has a file's icon and its name.
+- **The subagent tab is a page about one subagent.** A band at its top, like the diff's file header, says what the subagent is for, its kind, and where it stands, such as `Finished · 3 calls · 12s`, so that's in view however far its work scrolls. Under the band come the Prompt block, everything it did, in order, as the chat shows the agent's, and the Report block once it's done. Its last words aren't drawn above the report when the report says the same. While it works, it ends with the working line, with how long the subagent has been at it, and it follows the subagent's work as a chat follows the agent's. A subagent another started opens in the same tab, from its call's button. *Unconfirmed:* the working line's time. *Not built:* the band saying which subagent started it, as a link back (#451).
 - **A web search shows what it looked for and how many pages it found.** Opened, the pages, each its title and then its site, faint, which open in the browser when clicked, then what was made of them. *Unconfirmed.*
 - **A fetch shows the site in an outlined chip.** Opened, the page's address, what the agent asked of it, then the answer. *Unconfirmed.*
 
-**Subagents: one opened to its work, which came in among the agent's own, and one closed.** *Unconfirmed.*
+**Subagents: one finished, opened to its report, and one at work, opened to its newest call.** *Unconfirmed.*
 
-![A subagent's call, opened to its work](screens/tool-subagent.png)
+![Two subagents' calls, opened: one to its report and one to its newest call](screens/tool-subagent.png)
+
+**The subagent tab on the subagent that finished, with its band at the top.** *Unconfirmed.*
+
+![The subagent tab on a subagent that finished](screens/subagent-tab.png)
+
+**The subagent tab on the subagent at work.** *Unconfirmed.*
+
+![The subagent tab on a subagent at work](screens/subagent-tab-working.png)
 
 **The web: a search and a fetch opened, and a fetch the site refused.** *Unconfirmed.*
 

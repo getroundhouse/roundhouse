@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use client_core::records::Record;
 use client_core::{Client, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
-use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
 use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
@@ -167,12 +167,9 @@ impl AppView {
         }
     }
 
-    pub fn build_line(&self, cx: &App) -> BuildLine {
-        let client = self.client();
-        let hub = client.as_ref().map(Client::hub_version);
-        // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = Agents::of(self.sessions.values().flatten().map(|s| s.status));
-        BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
+    /// Client-core's copy of the hub's records, once it's following a hub.
+    pub fn feed(&self) -> Option<RecordsFeed> {
+        self.feed.clone()
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
@@ -285,7 +282,7 @@ impl AppView {
                 sessions.iter().map(|(id, its)| (id.clone(), accounts_named(records, its))).collect();
             (records.repos(), records.workspaces(), sessions, records.comments(), accounts)
         });
-        self.panes.retain(|id, _| workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived));
+        self.drop_hidden_panes(&workspaces, cx);
         for (id, pane) in &self.panes {
             let Some(workspace) = workspaces.iter().find(|w| &w.id == id).cloned() else { continue };
             let its_sessions = sessions.get(id).cloned().unwrap_or_default();

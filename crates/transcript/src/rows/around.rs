@@ -98,7 +98,7 @@ impl Around {
 }
 
 impl BlockAround {
-    fn read(log: &SessionLog, m: &Model, seq: Seq, block: &ContentBlock, key: ItemKey) -> Self {
+    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, block: &ContentBlock, key: ItemKey) -> Self {
         let open = m.folds.is_open(&key, Fold::of(block));
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }

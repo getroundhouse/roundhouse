@@ -13,7 +13,7 @@ use gpui_kit::{
     IntoElement, ParentElement, Pixels, Role, ScrollEvent, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, canvas, deferred, div, px,
 };
-use protocol::model::{PromptLine, seq_index};
+use protocol::model::PromptLine;
 
 use super::Transcript;
 use crate::list::TranscriptList;
@@ -44,21 +44,30 @@ const LIST_ABOVE: Pixels = px(4.);
 /// Over the rows and the composer, as a menu is.
 const PRIORITY: usize = 1;
 
+/// A prompt, and the row of the chat it's drawn in, which the log says, since the chat's rows go by the agent's own
+/// events, or from a hub that can't read them apart, by every event.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Prompt {
+    line: PromptLine,
+    row: usize,
+}
+
 /// The prompts as the outline last read them, and the list's rows for them. A frame reads them once, so the ticks and
 /// the list agree, and copies them only when the log's have changed.
 #[derive(Default)]
 pub(super) struct Prompts {
     changes: u64,
-    lines: Rc<[PromptLine]>,
+    lines: Rc<[Prompt]>,
     rows: list::Rows,
 }
 
 impl Prompts {
-    fn read(&mut self, session: &OpenSession) -> Rc<[PromptLine]> {
+    fn read(&mut self, session: &OpenSession) -> Rc<[Prompt]> {
         let changed = session.read(|log| {
             let changed = log.prompt_lines_changed() != self.changes;
             if changed {
-                self.lines = log.prompt_lines().cloned().collect();
+                let prompt = |line: &PromptLine| Prompt { row: log.prompt_row(line), line: line.clone() };
+                self.lines = log.prompt_lines().map(prompt).collect();
                 self.changes = log.prompt_lines_changed();
             }
             changed
@@ -155,13 +164,13 @@ fn tells_the_outline_of_the_wheel(hover: &Entity<Hover>) -> AnyElement {
 /// The ticks around the prompt being read. They take the pointer from what's under them, such as a tool call's line
 /// reaching under them in a narrow pane, but let the wheel through to the chat. They're drawn while the list is open
 /// too, under it, so they hear the pointer leave.
-fn ticks(lines: &[PromptLine], at: usize, hover: &Entity<Hover>, window: &mut Window, cx: &App) -> AnyElement {
+fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window, cx: &App) -> AnyElement {
     let shown = shown(lines.len(), at);
     let ticks: Vec<AnyElement> = shown
         .clone()
         .map(|ix| {
             let label = format!("Prompt {} of {}", ix + 1, lines.len());
-            tick(row_of(&lines[ix]), label, look(ix, at, &shown, lines.len()), cx)
+            tick(lines[ix].row, label, look(ix, at, &shown, lines.len()), cx)
         })
         .collect();
     div()
@@ -206,19 +215,13 @@ fn tick(row: usize, label: String, look: Tick, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// The row of the chat a prompt is drawn in. A hub numbers events from 1, so one it numbers 0 goes in the first row
-/// rather than failing.
-fn row_of(line: &PromptLine) -> usize {
-    seq_index(line.seq()).saturating_sub(1)
-}
-
 /// Which prompt is being read, as an index into `lines`: the last one at or above the top row. At the end of the chat,
 /// it's the last prompt, even if it starts lower down, since nothing after it can come to the top.
-fn being_read(lines: &[PromptLine], top: usize, at_end: bool) -> usize {
+fn being_read(lines: &[Prompt], top: usize, at_end: bool) -> usize {
     if at_end {
         return lines.len().saturating_sub(1);
     }
-    lines.partition_point(|line| row_of(line) <= top).saturating_sub(1)
+    lines.partition_point(|prompt| prompt.row <= top).saturating_sub(1)
 }
 
 /// The ticks to show, as a range of `count` prompts: all of them if they fit, and otherwise as many as fit, around the

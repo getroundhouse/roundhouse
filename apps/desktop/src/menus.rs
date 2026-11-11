@@ -3,6 +3,8 @@
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Window};
 
+use crate::workspace_pane::Showing;
+
 use crate::{
     About, AddRepository, CheckForUpdates, CloseChat, Hide, HideOthers, Minimize, NewChat, NewWorkspace, NextWorkspace,
     OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
@@ -14,8 +16,8 @@ use crate::{
 pub(crate) struct Says {
     /// The sidebar of changes is open, so View has Hide Diff rather than Show Diff.
     pub(crate) diff_open: bool,
-    /// The file tab is showing, so ⌘W closes it rather than the chat behind it.
-    pub(crate) file_tab_showing: bool,
+    /// What's showing under the tabs, which ⌘W closes, rather than the chat behind it when it's a tab.
+    pub(crate) showing: Showing,
 }
 
 /// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
@@ -57,9 +59,13 @@ fn app_menu() -> Menu {
 }
 
 /// Making things, and closing a chat, as a File menu makes and closes documents. The window handles these. ⌘W closes
-/// the file tab while it shows, so the item says so then.
+/// the file tab or the subagent tab while it shows, so the item says so then.
 fn file_menu(says: Says) -> Menu {
-    let close = if says.file_tab_showing { "Close File Tab" } else { "Close Chat" };
+    let close = match says.showing {
+        Showing::Chat => "Close Chat",
+        Showing::File => "Close File Tab",
+        Showing::Subagent => "Close Subagent Tab",
+    };
     Menu::new("File").items([
         MenuItem::action("New Workspace", NewWorkspace),
         MenuItem::action("New Chat", NewChat),

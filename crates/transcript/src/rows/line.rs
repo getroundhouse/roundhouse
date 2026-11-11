@@ -33,6 +33,8 @@ pub(super) struct Line {
     preview: Option<Preview>,
     /// Whether what the call opens to shows what came back, so a failure's whole text isn't added under its line.
     shows_output: bool,
+    /// A button at the line's far end, which shows while the call is open or the pointer is over its line.
+    action: Option<AnyElement>,
 }
 
 /// What shows while a closed line is hovered, on a device that has hover, such as a change's diff. It stays while the
@@ -58,7 +60,7 @@ pub(super) enum Part {
 
 impl Line {
     pub(super) fn new(icon: IconName, title: impl Into<SharedString>) -> Self {
-        Self { icon, title: title.into(), parts: Vec::new(), preview: None, shows_output: false }
+        Self { icon, title: title.into(), parts: Vec::new(), preview: None, shows_output: false, action: None }
     }
 
     /// Says whether what the call opens to shows what came back, failures included.
@@ -69,6 +71,11 @@ impl Line {
 
     pub(super) fn preview(mut self, preview: Preview) -> Self {
         self.preview = Some(preview);
+        self
+    }
+
+    pub(super) fn action(mut self, action: AnyElement) -> Self {
+        self.action = Some(action);
         self
     }
 
@@ -106,6 +113,10 @@ impl Line {
             .child(icon(self.icon, open, cx))
             .child(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title))
             .children(parts)
+            .when_some(self.action, |d, action| {
+                let hidden = |d: Div| d.invisible().group_hover(GROUP, Styled::visible);
+                d.child(div().flex_1()).child(div().flex_none().when(!open, hidden).child(action))
+            })
             .test_support()
             .into_any_element()
     }

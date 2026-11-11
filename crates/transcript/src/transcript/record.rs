@@ -1,11 +1,12 @@
 //! Following the session's record: whether the agent is working on a turn and since when, and what it's running in
-//! the background, which the transcript's last row draws.
+//! the background, which the transcript's last row draws. Also its subagents' records, which their calls are drawn
+//! from, and in the subagent tab, the one it shows, which says whether that one is at work.
 
 use std::time::Duration;
 
 use gpui_kit::{Context, Task};
 use protocol::event::AgentTask;
-use protocol::model::{Session, SessionStatus};
+use protocol::model::{Session, SessionStatus, Subagent, SubagentStatus};
 
 use super::Transcript;
 
@@ -32,6 +33,15 @@ impl AtWork {
             background: session.background_tasks.clone(),
         }
     }
+
+    /// A subagent at work, for the subagent tab, which ends with the working line while it is.
+    fn of_subagent(subagent: &Subagent) -> Self {
+        AtWork {
+            working: subagent.status == SubagentStatus::Working,
+            turn_started_at_ms: Some(subagent.started_at_ms),
+            background: Vec::new(),
+        }
+    }
 }
 
 impl Transcript {
@@ -51,6 +61,51 @@ impl Transcript {
         // It's all drawn in the last row, with the streaming tail.
         let rows = self.list.row_count();
         self.list.out_of_date(rows.saturating_sub(1)..rows);
+        cx.notify();
+    }
+
+    /// Follows the records of the session's subagents, and measures again each row that draws one that changed.
+    pub fn set_subagents(&mut self, subagents: &[Subagent], cx: &mut Context<Self>) {
+        let (rows, shown) = {
+            let mut m = self.model.borrow_mut();
+            let changed: Vec<&Subagent> =
+                subagents.iter().filter(|subagent| m.subagents.get(&subagent.call) != Some(*subagent)).collect();
+            if changed.is_empty() {
+                return;
+            }
+            let drawn = m.subagent_rows.borrow();
+            let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.call).copied()).collect();
+            drop(drawn);
+            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.call)).copied();
+            if let Some(subagent) = shown {
+                let at_work = AtWork::of_subagent(subagent);
+                if m.at_work.working != at_work.working {
+                    self.ticking = at_work.working.then(|| tick(cx));
+                }
+                m.at_work = at_work;
+            }
+            for subagent in changed {
+                m.subagents.insert(subagent.call.clone(), subagent.clone());
+            }
+            (rows, shown.is_some())
+        };
+        for seq in rows {
+            self.remeasure(seq, cx);
+        }
+        // The tab draws what its subagent was asked above its first row, and its report in its last. Its last words go
+        // once its report says them, from whichever row they're in.
+        if shown {
+            let count = self.list.row_count();
+            self.list.out_of_date(0..1);
+            self.list.out_of_date(count.saturating_sub(1)..count);
+            let repeated = {
+                let m = self.model.borrow();
+                self.session.read(|log| crate::rows::rows_repeating_report(log, &m))
+            };
+            for row in repeated {
+                self.list.out_of_date(row..row + 1);
+            }
+        }
         cx.notify();
     }
 }
