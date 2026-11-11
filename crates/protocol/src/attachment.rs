@@ -239,8 +239,9 @@ impl serde::de::Visitor<'_> for Base64Visitor {
     }
 }
 
-/// An attachment and its bytes, for the hub to keep: an image a tool sent the agent, as the worker sends it beside the
-/// event that names it. The worker gives it a new ID, as a client does a file it adds.
+/// An attachment and its bytes. It's an image a tool sent the agent, for the hub to keep, which the worker sends beside
+/// the event that names it, under a new ID, as a client gives a file it adds. Or it's an image a prompt carried, for a
+/// call that reads it beside the prompt's words, such as one for a title.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct NewAttachment {
     pub attachment: Attachment,

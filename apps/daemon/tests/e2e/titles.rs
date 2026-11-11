@@ -7,8 +7,9 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError};
+use protocol::attachment::{Attachment, MediaType};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Session, SessionSettingsChange, TitleSource};
+use protocol::model::{AgentKind, AttachmentId, Session, SessionSettingsChange, TitleSource};
 
 use crate::support::{Stack, is_alive, wait_for_turn_end, wait_until, workspace};
 
@@ -29,6 +30,25 @@ fn prompt_for_a_title(stack: &Stack, client: &Client, chat: &Session, title: &st
 
 fn release(state: &Path) {
     std::fs::remove_file(state.join("title-held")).unwrap();
+}
+
+/// Adds a file to the chat for a prompt to carry. An image is enough of a PNG for anything that only looks at how it
+/// starts, which is all the hub and the fake agent do.
+fn add(client: &Client, chat: &Session, name: &str, media_type: MediaType) -> Attachment {
+    let data = if media_type == MediaType::Png {
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        png.resize(300, 7);
+        png
+    } else {
+        b"error at line 42".to_vec()
+    };
+    let id = AttachmentId::from(name.replace('.', "-"));
+    client.attachment_add(&chat.id, &id, name, media_type, data).unwrap()
+}
+
+/// What the fake agent was last given with a prompt to title, as it describes each block.
+fn given_with(state: &Path) -> String {
+    std::fs::read_to_string(state.join("title-images")).unwrap()
 }
 
 #[test]
@@ -144,6 +164,78 @@ fn a_chat_title_typed_while_one_is_generated_stays() {
     });
     let kept = client.session_get(&chat.id).unwrap();
     assert_eq!((kept.title.as_deref(), kept.title_source), (Some("First try"), TitleSource::ByHand));
+}
+
+/// Has the fake agent title prompts, and returns where it keeps what it was given.
+fn ready_to_title(stack: &Stack) -> std::path::PathBuf {
+    let state = stack.agent_state();
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(state.join("title"), "Fix the queue error").unwrap();
+    state
+}
+
+/// A prompt such as "how do we fix this?" can be about a screenshot, so the model is given its images, and only them.
+#[test]
+fn a_prompts_images_go_with_it_for_its_title() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, chat) = stack.workspace(&client);
+    let state = ready_to_title(&stack);
+    let carried =
+        vec![add(&client, &chat, "shot.png", MediaType::Png).id, add(&client, &chat, "build.log", MediaType::Text).id];
+
+    client.session_prompt_with(&chat.id, "say:how do we fix this?", None, carried).unwrap();
+
+    wait_until("the chat's generated title", || {
+        client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
+    });
+    assert_eq!(workspace(&client, &made.id).title.as_deref(), Some("Fix the queue error"));
+    assert_eq!(given_with(&state), "attached: image/png 300 bytes", "the image, and not the log");
+    assert_eq!(std::fs::read_to_string(state.join("title-prompt")).unwrap(), "say:how do we fix this?");
+}
+
+#[test]
+fn a_workspaces_images_go_with_its_prompts_for_a_new_title() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, chat) = stack.workspace(&client);
+    let state = ready_to_title(&stack);
+    let shot = add(&client, &chat, "shot.png", MediaType::Png);
+    client.session_prompt_with(&chat.id, "say:how do we fix this?", None, vec![shot.id]).unwrap();
+    wait_until("the chat's generated title", || {
+        client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
+    });
+    wait_for_turn_end(&client, &chat.id, 1);
+    std::fs::remove_file(state.join("title-images")).unwrap();
+
+    client.workspace_regenerate_title(&made.id).unwrap();
+
+    assert_eq!(given_with(&state), "attached: image/png 300 bytes");
+}
+
+/// With no words there's no first line, so nothing is shown in its place while the title is on its way.
+#[test]
+fn a_prompt_of_only_an_image_is_titled_once_its_generated_title_comes() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, chat) = stack.workspace(&client);
+    let state = ready_to_title(&stack);
+    std::fs::write(state.join("title-held"), "").unwrap();
+    let shot = add(&client, &chat, "shot.png", MediaType::Png);
+
+    client.session_prompt_with(&chat.id, "", None, vec![shot.id]).unwrap();
+    wait_until("the call for a title", || state.join("title-pids").exists());
+    let meanwhile = (workspace(&client, &made.id).title, client.session_get(&chat.id).unwrap().title);
+    release(&state);
+
+    assert_eq!(meanwhile, (None, None));
+    // The chat's title is saved after the workspace's, so once it's there, the workspace's is settled.
+    wait_until("the chat's generated title", || {
+        client.session_get(&chat.id).unwrap().title.as_deref() == Some("Fix the queue error")
+    });
+    let titled = workspace(&client, &made.id);
+    assert_eq!((titled.title.as_deref(), titled.title_source), (Some("Fix the queue error"), TitleSource::Generated));
+    assert_eq!(given_with(&state), "attached: image/png 300 bytes");
 }
 
 /// A call stuck on a title would otherwise keep the worker running, so archiving waited for the hub to give up on

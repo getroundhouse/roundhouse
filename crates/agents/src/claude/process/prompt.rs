@@ -26,12 +26,22 @@ pub(super) fn user_message(text: &str, attachments: &[AttachmentFile]) -> Value 
     if !text.trim().is_empty() || content.is_empty() {
         content.push(json!({"type": "text", "text": text}));
     }
+    user_line(content)
+}
+
+/// A `user` line of `content`'s blocks, as the CLI reads one on stdin.
+pub(in crate::claude) fn user_line(content: Vec<Value>) -> Value {
     json!({
         "type": "user",
         "session_id": "",
         "parent_tool_use_id": null,
-        "message": {"role": "user", "content": content},
+        "message": {"role": "user", "content": Value::Array(content)},
     })
+}
+
+/// An image given whole, as a block of a `user` line.
+pub(in crate::claude) fn image_block(media_type: MediaType, data: &AttachmentBytes) -> Value {
+    json!({"type": "image", "source": {"type": "base64", "media_type": media_type.mime(), "data": data.to_base64()}})
 }
 
 /// A file that can't be read back from the worktree, or a kind this build doesn't know, goes by its path alone, and
@@ -50,12 +60,7 @@ fn blocks(file: &AttachmentFile, images_left: &mut u64) -> Vec<Value> {
     if attachment.media_type.is_image() && size <= *images_left {
         if let Ok(bytes) = std::fs::read(&file.path) {
             *images_left -= size;
-            let data = AttachmentBytes::new(bytes).to_base64();
-            let image = json!({
-                "type": "image",
-                "source": {"type": "base64", "media_type": attachment.media_type.mime(), "data": data},
-            });
-            return vec![image, tag(None)];
+            return vec![image_block(attachment.media_type, &AttachmentBytes::new(bytes)), tag(None)];
         }
     } else if attachment.media_type == MediaType::Text
         && size <= INLINE_TEXT_BYTES

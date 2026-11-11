@@ -1,3 +1,5 @@
+use protocol::attachment::MediaType;
+
 use super::*;
 
 fn lines(texts: &[&str]) -> Vec<PromptLine> {
@@ -36,4 +38,26 @@ fn too_many_prompts_keep_the_first_and_the_newest_that_fit() {
     assert_eq!(listed.len(), 2 + most, "the first, the gap, and as many of the newest as fit");
     let sent: usize = listed.iter().map(|line| line.chars().count()).sum();
     assert!(sent <= MOST_PROMPT_CHARS + 2 * listed.len(), "{sent}");
+}
+
+fn image(id: &str, size_bytes: u64) -> (SessionId, Attachment) {
+    let attachment = Attachment { id: id.into(), name: format!("{id}.png"), media_type: MediaType::Png, size_bytes };
+    (SessionId::from("s"), attachment)
+}
+
+fn ids(chosen: &[(SessionId, Attachment)]) -> Vec<&str> {
+    chosen.iter().map(|(_, attachment)| attachment.id.as_str()).collect()
+}
+
+#[test]
+fn a_title_is_asked_from_the_oldest_images_that_fit() {
+    let log = (SessionId::from("s"), Attachment { media_type: MediaType::Text, ..image("log", 1).1 });
+    let carried = [log, image("first", MOST_IMAGE_BYTES - 10), image("too big", 11), image("fits", 10), image("x", 1)];
+
+    let chosen = chosen_images(carried);
+    let several = chosen_images((1..=MOST_IMAGES + 2).map(|n| image(&n.to_string(), 1)));
+
+    assert_eq!(ids(&chosen), ["first", "fits"], "only images, passing over one too big for the bytes left");
+    let oldest: Vec<String> = (1..=MOST_IMAGES).map(|n| n.to_string()).collect();
+    assert_eq!(ids(&several), oldest, "the oldest, as many as are allowed");
 }

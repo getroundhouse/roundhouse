@@ -3,7 +3,7 @@
 //! their own, which `attachment_files` keeps.
 
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, SessionId};
+use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Store, StoreError, from_text, lock, now_ms, text_of};
@@ -67,6 +67,30 @@ impl Store {
             params![path, session_id.as_str(), id.as_str()],
         )?;
         if changed == 0 { Err(not_found(id)) } else { Ok(()) }
+    }
+
+    /// The images the prompts of the workspace's chats carried, oldest first whichever chat each was in, as
+    /// [`Store::workspace_prompt_lines`] lists the prompts, and in the order each prompt carried them.
+    pub fn workspace_prompt_images(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<(SessionId, Attachment)>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached(
+            "SELECT e.session_id, a.value FROM sessions s \
+             JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
+             JOIN json_each(e.body, '$.attachments') a \
+             WHERE s.workspace_id = ? ORDER BY e.ts_ms, s.created_at_ms, e.seq, a.key",
+        )?;
+        let mut rows = statement.query([workspace_id.as_str()])?;
+        let mut images = Vec::new();
+        while let Some(row) = rows.next()? {
+            let attachment: Attachment = serde_json::from_str(&row.get::<_, String>(1)?)?;
+            if attachment.media_type.is_image() {
+                images.push((SessionId::from(row.get::<_, String>(0)?), attachment));
+            }
+        }
+        Ok(images)
     }
 
     /// What each of `ids` is, in the same order. Fails on the first the session doesn't have.

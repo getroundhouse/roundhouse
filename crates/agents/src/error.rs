@@ -74,11 +74,13 @@ pub enum NoTitle {
     NoRoom(#[source] io::Error),
     #[error(transparent)]
     Call(#[from] CallFailed),
-    /// What it said is the `result` of its JSON if it had one, such as that nobody is logged in, or else its stderr.
+    /// What it said is the `result` of its `result` line if it had one, such as that nobody is logged in, or else its
+    /// stderr.
     #[error("it exited with {status}: {said}")]
     Failed { status: ExitStatus, said: String },
-    #[error("its answer wasn't JSON")]
-    NotJson(#[source] serde_json::Error),
+    /// It printed no `result` line, the one that holds the answer.
+    #[error("it printed no result")]
+    NoResult,
     /// It answered, but as an error, of this kind.
     #[error("it reported {0}")]
     Reported(String),
