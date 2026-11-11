@@ -74,10 +74,16 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: linux-lint-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: linux-lint-
+          key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          # When the key changes, main builds from nothing, so a cache holds what one lockfile builds rather than
+          # what every lockfile before it built too. A PR starts from any cache, since most of it still fits.
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Only the dependencies are worth keeping. A checkout leaves our own crates' sources newer than anything cached,
+      # so they build again on every run.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -106,9 +112,12 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: linux-test-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: linux-test-
+          # As in lint. Our own crates' test binaries each link all of GPUI, so they're over half of what's built.
+          key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-test-deps-' || '' }}
       - run: cargo test --workspace --locked
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
