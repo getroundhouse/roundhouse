@@ -36,8 +36,9 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  # The org's 8-core Windows runner, since the lint took 14 minutes cold on the standard one.
   windows:
-    runs-on: windows-latest
+    runs-on: windows-latest-amd64-8cores
     timeout-minutes: 60
     defaults:
       run:
