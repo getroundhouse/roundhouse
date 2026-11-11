@@ -16,7 +16,7 @@ use super::worlds::{
     approval, attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation,
     planning, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled, working_background,
 };
-use super::{chats, long_chats, pictures};
+use super::{chats, long_chats, pictures, question_chats};
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";
@@ -134,14 +134,14 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "question",
         spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::question())),
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, question_chats::question())),
         frame: QUESTION,
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "questions",
         spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::questions())),
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, question_chats::questions())),
         frame: QUESTION,
         steps: &[
             Step::Select(FOCUS),

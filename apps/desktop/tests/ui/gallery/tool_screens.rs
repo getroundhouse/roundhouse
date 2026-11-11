@@ -1,5 +1,5 @@
-//! The screens of what an agent's tool calls, its thinking and the images it points to show in a chat, apart from
-//! the rest in `screens.rs` only to keep each list a readable length.
+//! The screens of what an agent's tool calls, its questions once they're answered, its thinking and the images it
+//! points to show in a chat, apart from the rest in `screens.rs` only to keep each list a readable length.
 
 #![cfg(test)]
 
@@ -10,9 +10,23 @@ use super::frame::{CHAT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, pointed, read_image, thinking_streaming};
-use super::{chats, file_chats, tool_chats};
+use super::{chats, file_chats, question_chats, tool_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
+    Screen {
+        name: "question-answered",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, question_chats::answered())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "question-answered-opened",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, question_chats::answered())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open(question_chats::TWO_ASKED), Step::LetTheScrollbarFade],
+    },
     Screen {
         name: "tool-commands",
         spec: "chats.md",

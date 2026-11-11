@@ -35,7 +35,7 @@ fn an_approval_can_be_answered_by_a_different_client_after_a_restart() {
     assert!(worktree.join("approved.txt").exists());
     assert!(events.iter().any(|e| matches!(
         &e.body,
-        EventBody::ApprovalResolved { approval_id: id, outcome: ApprovalOutcome::Allowed } if *id == approval_id
+        EventBody::ApprovalResolved { approval_id: id, outcome: ApprovalOutcome::Allowed, .. } if *id == approval_id
     )));
 
     // Answering twice is an error rather than sending the agent a second response.

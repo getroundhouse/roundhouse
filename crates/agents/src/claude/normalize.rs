@@ -164,6 +164,7 @@ fn parse_value(value: &Value) -> Parsed {
             Some(id) => Parsed::Event(EventBody::ApprovalResolved {
                 approval_id: id.into(),
                 outcome: ApprovalOutcome::Cancelled,
+                answers: None,
             }),
             None => other(kind),
         },

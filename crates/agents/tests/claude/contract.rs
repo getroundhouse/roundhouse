@@ -95,7 +95,7 @@ fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
     let cancelled: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled } => Some(approval_id),
+            EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, .. } => Some(approval_id),
             _ => None,
         })
         .collect();

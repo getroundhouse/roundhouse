@@ -15,8 +15,8 @@ impl Transcript {
     }
 
     /// Asks the oldest question that's waiting, in place of whatever was asked before. The transcript draws a question
-    /// only once it's answered, so each row a question leaves changes height. Several waiting at once are asked in
-    /// turn.
+    /// only once it's no longer waiting, so each row a question leaves changes height. Several waiting at once are
+    /// asked in turn.
     pub(super) fn follow_question(&mut self, cx: &mut Context<Self>) {
         let waiting: Vec<(Seq, ApprovalId, Vec<questions::Question>)> = self.session.read(|log| {
             log.open_approvals()

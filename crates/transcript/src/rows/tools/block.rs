@@ -42,7 +42,7 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
 }
 
 /// A line between the parts of a block, such as a command and its output.
-pub(super) fn separator(cx: &App) -> Div {
+pub(in crate::rows) fn separator(cx: &App) -> Div {
     div().h(px(1.)).bg(cx.theme().border)
 }
 
@@ -160,7 +160,7 @@ pub(in crate::rows) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElemen
 /// A part of a block, such as its output, which keeps its own ID, in an area that scrolls it once it's taller than a
 /// dozen lines or so. The area's ID comes from the part's, so each block keeps its own place. At either end of the
 /// part, and over a part that fits, the wheel scrolls the transcript instead.
-pub(super) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
+pub(in crate::rows) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
     ScrollArea::new((id, "scroll"), px(MAX_HEIGHT), part)
 }
 
