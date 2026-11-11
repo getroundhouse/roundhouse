@@ -1,0 +1,6 @@
+# How CI runs the tests: `cargo nextest run --profile ci`. Locally they run under `cargo test`, as docs/rust.md says.
+[profile.ci]
+# Every test runs, so one failure doesn't hide another behind it.
+fail-fast = false
+# No retries, since a test that passes on a second try is flaky, and AGENTS.md says to fix one rather than hide it.
+retries = 0

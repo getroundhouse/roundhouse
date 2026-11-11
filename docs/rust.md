@@ -12,7 +12,7 @@ Two ideas sit behind the rules:
 - `rust-toolchain.toml` pins Rust's version and components, and rustup installs them on first use. There's no `rust-version`: nothing is published, so the pin is the only version to keep.
 - Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses.
 - `Cargo.lock` is committed, and commands that check something use `--locked`.
-- Tests run under `cargo test`. nextest isn't used, since it doesn't run doc tests, and nothing here needs what it adds.
+- Tests run under `cargo test`, and CI runs them with nextest, which runs every test binary's tests in one pool where `cargo test` runs one binary after another. nextest skips doc tests, so CI runs those with `cargo test --doc`. nextest gives each test a process of its own, and `cargo test` runs a binary's tests in one process, so a test has to pass both ways.
 - Code is formatted with `rustfmt`, and `rustfmt.toml` stays at 120 columns.
 
 ## Lints
