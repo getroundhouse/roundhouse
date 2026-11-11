@@ -71,6 +71,8 @@ libc = "0.2"
 markdown = "1"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6"
+# Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSHapticFeedback"] }
 parking_lot = "0.12"
 # Already under GPUI, through `url`. Reads the address of an image the agent's text points to, which can be escaped.
 percent-encoding = "2"

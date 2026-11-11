@@ -17,9 +17,11 @@ use gpui_kit::{
 
 use look::motion::Sliding;
 
+use crate::haptics;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 /// How close to its usual width a dragged sidebar has to come to take it, so the usual width is easy to get back to.
+/// A Mac's trackpad taps as it takes it, so it can be felt as well as seen.
 const SNAP: Pixels = px(8.);
 /// The least room the sidebars leave between them while the window has it, so a chat can still be read beside them.
 const BETWEEN: Pixels = px(360.);
@@ -233,15 +235,39 @@ impl Side {
         (shown > px(0.)).then_some(shown)
     }
 
-    /// Takes the width its edge was dragged to, in a window `across` wide. Says whether that changed it.
-    fn drag_to(self, width: Pixels, across: Pixels, cx: &mut App) -> bool {
+    /// Takes the width its edge was dragged to, in a window `across` wide. Says how that changed it.
+    fn drag_to(self, width: Pixels, across: Pixels, cx: &mut App) -> Change {
         let width = dragged(self, width, across - Sides::of(cx).kept_beside(self));
         let chosen = self.chosen(cx);
-        let changed = width != chosen.width;
-        if changed {
+        let change = Change::of(self, chosen.width, width);
+        if change != Change::Unchanged {
             self.choose(Chosen { width, ..chosen }, cx);
         }
-        changed
+        change
+    }
+}
+
+/// How a drag of a sidebar's edge changed its width.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Change {
+    Unchanged,
+    /// It's as wide as its edge was dragged to.
+    Dragged,
+    /// It took its usual width, from another, which the trackpad taps for. Only arriving there taps, so the pointer
+    /// moving on while it holds that width doesn't tap again.
+    ToUsual,
+}
+
+impl Change {
+    /// What going `from` one width `to` another is, for `side`.
+    fn of(side: Side, from: Pixels, to: Pixels) -> Self {
+        if to == from {
+            Change::Unchanged
+        } else if to == side.usual_width() {
+            Change::ToUsual
+        } else {
+            Change::Dragged
+        }
     }
 }
 
@@ -297,8 +323,13 @@ pub(crate) fn frame(side: Side, shown: Pixels, content: impl IntoElement, cx: &A
             Side::Left => event.event.position.x - event.bounds.left(),
             Side::Right => event.bounds.right() - event.event.position.x,
         };
-        if side.drag_to(width, window.viewport_size().width, cx) {
-            window.refresh();
+        match side.drag_to(width, window.viewport_size().width, cx) {
+            Change::Unchanged => {}
+            Change::Dragged => window.refresh(),
+            Change::ToUsual => {
+                haptics::align();
+                window.refresh();
+            }
         }
     })
 }

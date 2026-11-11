@@ -1,7 +1,7 @@
-use gpui_kit::{Pixels, px};
+use gpui_kit::{Pixels, TestAppContext, px};
 use look::motion::Sliding;
 
-use super::{Beside, Chosen, Placed, Side, Sidebar, Sides, dragged};
+use super::{Beside, Change, Chosen, Placed, Side, Sidebar, Sides, dragged};
 
 /// A window with room for either sidebar at its widest.
 const WIDE: Pixels = px(2000.);
@@ -21,6 +21,19 @@ fn a_sidebar_dragged_close_to_its_usual_width_takes_it() {
 
     assert_eq!(dragged(Side::Left, px(281.), WIDE), px(281.), "further off, it stays where it's dragged");
     assert_eq!(dragged(Side::Left, px(299.), WIDE), px(299.));
+}
+
+/// The trackpad taps as the edge arrives at its usual width, and not again while it holds it, nor as it leaves.
+#[gpui_kit::test]
+fn a_sidebars_edge_taps_once_as_it_takes_its_usual_width(cx: &mut TestAppContext) {
+    use Change::{Dragged, ToUsual, Unchanged};
+    let mut drag = |to: f32| cx.update(|cx| Side::Left.drag_to(px(to), WIDE, cx));
+
+    // It starts at its usual width, so a drag that begins there doesn't tap. Then out, back in through the usual
+    // width, past it, and back again.
+    let changes: Vec<Change> = [292., 350., 298., 293., 286., 282., 270., 286.].map(&mut drag).into();
+
+    assert_eq!(changes, [Unchanged, Dragged, ToUsual, Unchanged, Unchanged, Unchanged, Dragged, ToUsual]);
 }
 
 #[test]
