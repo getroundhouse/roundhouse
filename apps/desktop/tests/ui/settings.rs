@@ -4,10 +4,9 @@
 
 use std::path::PathBuf;
 
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, OwnedMenuItem, TestAppContext};
 
-use crate::support::{Stack, Ui, labelled};
+use crate::support::{self, Stack, Ui, labelled};
 
 mod search;
 
@@ -156,7 +155,7 @@ fn a_setting_changed_just_before_quitting_is_saved(cx: &mut TestAppContext) {
     let id = ui.cx.update_window(ui.handle, |_, window, _| labelled(window, "Always expand thinking")).unwrap();
 
     // Straight after, with nothing let run in between.
-    ui.cx.update_window(ui.handle, |_, window, cx| window.click(id, cx)).unwrap();
+    ui.cx.update_window(ui.handle, |_, window, cx| support::click(window, id, cx)).unwrap();
     ui.cx.update(gpui_kit::App::shutdown);
 
     let saved = std::fs::read_to_string(settings_file(&stack)).unwrap();
