@@ -167,6 +167,17 @@ pub(crate) fn crop(screen: &Screen, window: &mut Window, image: &RgbaImage, cx: 
     (image.to_image(), problems)
 }
 
+/// Whether the part of `image`, a picture of `window`, that the frame shows takes in any of the strip along the
+/// chat's right edge, where its scrollbar is drawn. A frame that can't be worked out shows the whole window.
+pub(crate) fn shows_the_chats_scrollbar(frame: &Frame, window: &Window, image: &RgbaImage) -> bool {
+    let scale = window.scale_factor();
+    let whole = Area { left: 0, top: 0, right: image.width(), bottom: image.height() };
+    let Some(transcript) = drawn(window, Part::Region(Region::Transcript), scale) else { return false };
+    let strip = Area { left: transcript.right.saturating_sub(to_pixels(ROWS_INSET, scale)), ..transcript };
+    let shown = area(frame, window, image, whole).unwrap_or(whole);
+    !shown.within(strip.within(whole)).is_empty()
+}
+
 /// Where in the picture the frame is, or a part it names that the window didn't draw.
 fn area(frame: &Frame, window: &Window, image: &RgbaImage, whole: Area) -> Result<Area, Part> {
     let scale = window.scale_factor();

@@ -67,10 +67,6 @@ pub(crate) enum Step {
     /// Clicks the transcript's line with this label, such as a tool call, to open it, then moves the pointer away,
     /// so the picture shows it open rather than hovered. The first, if there are several.
     Open(&'static str),
-    /// Waits for the transcript's scrollbar to fade, for a screen whose chat scrolled. It shows for two seconds after a
-    /// scroll by the wall clock, which the app's clock in the gallery doesn't move, so otherwise the picture would
-    /// depend on how fast it was taken.
-    LetTheScrollbarFade,
 }
 
 /// An element in the app, by its ID, or by the label it gives assistive apps, for one whose ID is made from data

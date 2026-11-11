@@ -178,7 +178,6 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
             Step::Click(long_chats::FOURTEENTH_PROMPT),
             Step::MoveAway,
-            Step::LetTheScrollbarFade,
         ],
     },
     Screen {
@@ -192,7 +191,6 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Click(long_chats::FOURTEENTH_PROMPT),
             Step::MoveAway,
             Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
-            Step::LetTheScrollbarFade,
         ],
     },
     Screen {

@@ -25,7 +25,7 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, question_chats::answered())),
         frame: CHAT,
-        steps: &[Step::Select(FOCUS), Step::Open(question_chats::TWO_ASKED), Step::LetTheScrollbarFade],
+        steps: &[Step::Select(FOCUS), Step::Open(question_chats::TWO_ASKED)],
     },
     Screen {
         name: "tool-commands",

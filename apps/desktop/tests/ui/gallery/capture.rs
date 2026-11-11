@@ -25,14 +25,15 @@ use super::{fake_hub, frame, world};
 use crate::support::{first_labelled, menu_item};
 
 mod files;
+mod scrollbar;
+
+use scrollbar::ChatScroll;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
 const TIMEOUT: Duration = Duration::from_secs(20);
 /// How many pictures in a row have to match before a screen counts as finished drawing.
 const SAME_IN_A_ROW: usize = 3;
 const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
-/// The kit's scrollbar shows for two seconds after a scroll by the wall clock, and then fades.
-const LONGER_THAN_THE_SCROLLBAR_SHOWS: Duration = Duration::from_secs(3);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
@@ -72,7 +73,7 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     // As people see it, so no checkout.
     let (handle, view) =
         cx.update(|cx| desktop::open_main_window(hub, None, desktop::Opens::InItsUsualPlace, cx)).unwrap();
-    let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf() };
+    let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf(), chat: ChatScroll::default() };
     if screen.frame.in_the_column() {
         app.widen();
     }
@@ -81,6 +82,7 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
         app.step(step);
     }
     let picture = app.settle();
+    let picture = app.without_the_chats_scrollbar(screen, picture);
     let cropped = app.cx.update_window(app.handle, |_, window, cx| frame::crop(screen, window, &picture.image, cx));
     let (image, problems) = cropped.unwrap();
     app.close();
@@ -106,6 +108,7 @@ struct Driver {
     view: Entity<AppView>,
     /// The screen's own directory, for files it pastes.
     dir: PathBuf,
+    chat: ChatScroll,
 }
 
 /// Whether the chat has every row it holds. It holds only the agent's own events, so how many there are isn't the
@@ -177,7 +180,6 @@ impl Driver {
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
             }
             Step::Open(label) => self.open(label),
-            Step::LetTheScrollbarFade => self.let_the_scrollbar_fade(),
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
@@ -290,21 +292,6 @@ impl Driver {
         });
     }
 
-    /// Draws until the picture has stayed the same for longer than the scrollbar shows. It shows, still, for a while
-    /// after a scroll, so a wait shorter than that could end before it fades.
-    fn let_the_scrollbar_fade(&mut self) {
-        let deadline = Instant::now() + TIMEOUT;
-        let (mut last, mut since) = (self.picture(), Instant::now());
-        while since.elapsed() < LONGER_THAN_THE_SCROLLBAR_SHOWS {
-            assert!(Instant::now() < deadline, "the screen kept changing, so the scrollbar's fade can't be told apart");
-            std::thread::sleep(BETWEEN_PICTURES);
-            let next = self.picture();
-            if next != last {
-                (last, since) = (next, Instant::now());
-            }
-        }
-    }
-
     /// Draws until [`SAME_IN_A_ROW`] pictures match, or the time's up.
     fn settle(&mut self) -> Picture {
         let deadline = Instant::now() + TIMEOUT;
@@ -358,6 +345,7 @@ impl Driver {
         self.cx.run_until_parked();
         self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx)).unwrap();
         self.cx.run_until_parked();
+        self.note_where_the_chat_is();
     }
 
     /// Makes the window [`frame::WIDE`] wide, and as tall as it was. A headless window has no edge to drag, so it's
