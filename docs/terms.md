@@ -30,7 +30,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
 | Title | What a workspace or a chat is called on screen. It's generated from the first prompt, generated again from every prompt when someone asks, or typed by hand, and one typed by hand is replaced only by one someone asks for | `Workspace.title`, `Session.title`, `TitleSource` |
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
-| Base image | A VM that a repository's own script has set up, with its tools installed and its caches warm. A remote workspace's VM is made as a copy of its repository's newest one. Not built | None |
+| Base image | An instance that a repository's own script has set up, with its tools installed and its caches warm, then turned into one that others are copied from and that can't start again. A remote workspace's VM is a copy of its repository's current one. Not built | None |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
 | Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded`, `Session.turn_started_at_ms`, `SessionStatus::in_turn` |
