@@ -13,6 +13,7 @@ use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _};
 use gpui_kit::{
     Axis, Context, Div, ElementId, ExternalPaths, Image, InteractiveElement as _, ParentElement, Stateful, Styled,
 };
+use look::Hand as _;
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
 
@@ -133,7 +134,7 @@ pub(crate) fn attach_button<T: 'static>(
     cx: &mut Context<T>,
     then: impl Fn(&mut T, Vec<PathBuf>, &mut Context<T>) + Clone + 'static,
 ) -> Button {
-    Button::new(id).ghost().icon(IconName::Plus).tooltip("Attach images or files").on_click(cx.listener(
+    Button::new(id).hand().ghost().icon(IconName::Plus).tooltip("Attach images or files").on_click(cx.listener(
         move |_, _, _, cx| {
             let then = then.clone();
             reading::pick(cx, move |t, paths, cx| then(t, paths, cx));

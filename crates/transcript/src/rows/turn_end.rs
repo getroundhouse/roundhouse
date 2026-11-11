@@ -5,6 +5,7 @@ use std::time::Duration;
 use gpui_kit::component::clipboard::Clipboard;
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, div};
+use look::Hand as _;
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
 
 use super::{colored_line, empty, muted_line, row, turn_times};
@@ -42,12 +43,14 @@ fn finished(ended: &SessionEvent, took_ms: Option<u64>, result: Option<&str>, cx
     // The button is taller than the text. It's centred on the line without making the line taller, so the line sits
     // where any other muted line would.
     let copy = result.filter(|text| !text.trim().is_empty()).map(|text| {
-        div().flex().items_center().h_0().child(
-            Clipboard::new(ItemKey::Event(ended.seq, 0).element("copy-reply"))
-                .value(text.to_string())
-                .tooltip("Copy final message")
-                .accessibility_label("Copy final message"),
-        )
+        let copy = Clipboard::new(ItemKey::Event(ended.seq, 0).element("copy-reply"))
+            .value(text.to_string())
+            .tooltip("Copy final message")
+            .accessibility_label("Copy final message");
+        // The kit's copy button keeps the arrow and takes no style, so the hand is asked for by something drawn over
+        // it. That takes no press of its own, and the button under it still does.
+        let hand = div().absolute().inset_0().hand();
+        div().flex().items_center().h_0().child(div().relative().child(copy).child(hand))
     });
     row().child(h_flex().gap_1().text_xs().text_color(look::faint()).child(said).children(copy)).into_any_element()
 }

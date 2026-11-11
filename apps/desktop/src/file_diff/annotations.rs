@@ -6,10 +6,11 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
-use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, rems,
 };
+use look::{Hand as _, Off as _};
 use protocol::model::DiffComment;
 
 use super::FileDiff;
@@ -57,14 +58,14 @@ pub(super) fn draft_card(
         .w_full()
         .justify_end()
         .gap_2()
-        .child(Button::new("cancel-comment").ghost().label("Cancel").on_click(move |_, window, cx| {
+        .child(Button::new("cancel-comment").hand().ghost().label("Cancel").on_click(move |_, window, cx| {
             let _ = cancel.update(cx, |t, cx| t.cancel_draft(window, cx));
         }))
         .child(
             Button::new("save-comment")
                 .primary()
                 .label(if editing { "Save ↵" } else { "Comment ↵" })
-                .disabled(empty)
+                .off_while(empty)
                 .on_click(move |_, window, cx| {
                     let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
                 }),
@@ -82,12 +83,12 @@ pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx:
         .w_full()
         .justify_end()
         .gap_2()
-        .child(Button::new(named("edit")).ghost().small().icon(Lucide::Pencil).label("Edit").on_click(
+        .child(Button::new(named("edit")).hand().ghost().small().icon(Lucide::Pencil).label("Edit").on_click(
             move |_, window, cx| {
                 let _ = edit.update(cx, |t, cx| t.edit_comment(&to_edit, window, cx));
             },
         ))
-        .child(Button::new(named("delete")).ghost().small().icon(Lucide::Trash).label("Delete").on_click(
+        .child(Button::new(named("delete")).hand().ghost().small().icon(Lucide::Trash).label("Delete").on_click(
             move |_, _, cx| {
                 let _ = delete.update(cx, |t, cx| t.delete_comment(to_delete.clone(), cx));
             },
@@ -95,6 +96,7 @@ pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx:
         // Outlined, as it opens the chat, with the comment in its composer.
         .child(
             Button::new(named("add-to-chat"))
+                .hand()
                 .outline()
                 .small()
                 .icon(Lucide::MessageSquarePlus)

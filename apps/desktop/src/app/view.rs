@@ -7,6 +7,7 @@ use gpui_kit::{
     AnyElement, Context, Div, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
     ParentElement, Render, Stateful, StatefulInteractiveElement, Styled, Window, div, px,
 };
+use look::Hand as _;
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, hub_source};
@@ -44,6 +45,7 @@ impl Render for AppView {
                     "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a \
                      project from a repository on this Mac.",
                     Button::new("first-add-project")
+                        .hand()
                         .primary()
                         .label("Add project")
                         .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
@@ -53,6 +55,7 @@ impl Render for AppView {
                     "Start a workspace",
                     "Pick a project in the sidebar and press + to give an agent a branch of its own.",
                     Button::new("first-new-workspace")
+                        .hand()
                         .primary()
                         .label("New workspace")
                         .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
@@ -128,7 +131,7 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         .bg(danger.opacity(0.15))
         .text_sm()
         .text_color(danger)
-        .cursor_pointer()
+        .hand()
         // It can sit in the strip that moves the window, and it's a button, so a press here is its own.
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
         .on_click(cx.listener(|t, _, _, cx| {
@@ -196,7 +199,7 @@ pub(super) fn finish_question(status: &HubStatus) -> String {
 }
 
 fn try_again(cx: &mut Context<AppView>) -> Button {
-    Button::new("try-hub-again").label("Try again").on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
+    Button::new("try-hub-again").hand().label("Try again").on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }
 
 fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
@@ -233,6 +236,7 @@ fn across_a_break(
     let action = if may_restart {
         let pid = status.pid;
         Button::new("restart-hub")
+            .hand()
             .primary()
             .label("Restart the hub")
             .on_click(cx.listener(move |t, _, _, cx| t.restart_hub(pid, cx)))

@@ -8,6 +8,7 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, App, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, div};
+use look::Hand as _;
 use protocol::model::Effort;
 
 /// Aliases, so these stay the newest of each without a release here. `default` is the account's own.
@@ -67,6 +68,7 @@ impl RenderOnce for ModelPicker {
         let muted = cx.theme().muted_foreground;
         let (model, chosen, on_pick) = (self.model.clone(), self.effort, self.on_pick);
         Button::new(self.id)
+            .hand()
             .ghost()
             .xsmall()
             .dropdown_caret(true)

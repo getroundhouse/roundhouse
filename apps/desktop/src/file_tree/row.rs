@@ -1,6 +1,7 @@
 //! How a row of a tree is drawn: indented to its depth, with a line down the side for each folder it's in.
 
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, h_flex};
+use look::Hand as _;
 
 use crate::file_icons::{ICON_SIZE, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -66,7 +67,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
         .pr_3()
         .gap(px(GAP))
         .text_sm()
-        .cursor_pointer()
+        .hand()
         .when(showing, |d| d.bg(raised))
         .when(!showing, |d| d.hover(|s| s.bg(hover)))
         .children(guides)

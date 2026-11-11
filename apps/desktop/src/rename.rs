@@ -6,6 +6,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::{App, AppContext as _, ParentElement as _, Window};
+use look::Hand as _;
 use protocol::model::{Title, TitleError};
 
 /// Opens the dialog over the window. `rename` gets what was typed once it's confirmed, for the hub to tidy. A title
@@ -28,8 +29,8 @@ pub(crate) fn open(
             .child(Input::new(&field))
             .footer(
                 DialogFooter::new()
-                    .child(DialogClose::new().trigger(|button| button.label("Cancel")))
-                    .child(DialogAction::new().child(Button::new("rename-confirm").primary().label("Rename"))),
+                    .child(DialogClose::new().trigger(|button| button.label("Cancel").hand()))
+                    .child(DialogAction::new().child(Button::new("rename-confirm").hand().primary().label("Rename"))),
             )
             .on_ok(move |_, _, cx| {
                 let title = typed.read(cx).value().to_string();

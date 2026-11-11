@@ -2,12 +2,13 @@
 //! and the settings on the chosen page beside it. It's the kit's settings view, which also finds a setting by name.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use look::{Hand as _, Off as _};
 use std::rc::Rc;
 
 use client_core::Client;
 use gpui_kit::component::setting::{SettingGroup, SettingItem, SettingPage, Settings};
 use gpui_kit::component::switch::Switch;
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     App, ClickEvent, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     StyleRefinement, Styled as _, Window, div, px,
@@ -58,6 +59,7 @@ pub(crate) fn page(
         .child(
             way_back.child(
                 Button::new("settings-back")
+                    .hand()
                     .ghost()
                     .small()
                     .icon(IconName::ArrowLeft)
@@ -130,7 +132,7 @@ fn switch(
         let flip = Switch::new(name)
             .accessibility_label(name)
             .checked(on.unwrap_or(false))
-            .disabled(on.is_none())
+            .off_while(on.is_none())
             .on_click(move |on: &bool, _, cx: &mut App| set(*on, cx));
         h_flex()
             .w_full()

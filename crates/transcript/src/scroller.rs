@@ -17,13 +17,14 @@ use gpui_kit::base::ScrollBounce;
 use gpui_kit::base::motion::{Transition, transition};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, IconName};
+use gpui_kit::component::{ActiveTheme as _, IconName};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, EntityId, FollowMode, InteractiveElement as _, IntoElement, ListAlignment,
     ListOffset, ListState, ParentElement as _, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
     Window, div, list, px, rems,
 };
+use look::Off as _;
 
 use crate::scroll_area::hears_the_wheel;
 use crate::transcript::Transcript;
@@ -216,7 +217,7 @@ impl Scroller {
                 scroller.scroll_to_end();
                 cx.notify(scroller.view);
             })
-            .when(!wanted, |button| button.disabled(true));
+            .off_while(!wanted);
         Some(
             div()
                 .absolute()

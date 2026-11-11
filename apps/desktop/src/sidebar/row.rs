@@ -6,12 +6,13 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
 };
+use look::{Hand as _, Off as _};
 use protocol::model::Workspace;
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, standing};
@@ -30,6 +31,7 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
     let waiting = app.busy.doing(&workspace.id);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
+        .hand()
         .accessibility_label(label.clone())
         .ghost()
         .w_full()
@@ -85,7 +87,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
         .text_color(cx.theme().muted_foreground)
         .tooltip("Archive")
         // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
-        .disabled(!app.busy.is_free())
+        .off_while(!app.busy.is_free())
         .on_click(cx.listener(move |t, _, _, cx| {
             // The row under it would take the click too, and open the workspace that's going.
             cx.stop_propagation();

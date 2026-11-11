@@ -13,6 +13,7 @@ use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
     SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, px, uniform_list,
 };
+use look::Hand as _;
 
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::review::Review;
@@ -151,9 +152,11 @@ impl Changes {
                     .font_weight(FontWeight::MEDIUM)
                     .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
             )
-            .child(Button::new("send-comments").primary().small().label("Send to agent").on_click(move |_, _, cx| {
-                let _ = review.update(cx, Review::send_comments);
-            }))
+            .child(Button::new("send-comments").hand().primary().small().label("Send to agent").on_click(
+                move |_, _, cx| {
+                    let _ = review.update(cx, Review::send_comments);
+                },
+            ))
     }
 }
 
@@ -214,6 +217,7 @@ pub(crate) fn controls(changes: &Entity<Changes>, cx: &App) -> AnyElement {
         .child(h_flex().flex_none().gap_1p5().text_xs().font_family(mono).children(counts(added, removed, cx)))
         .child(
             Button::new("changes-layout")
+                .hand()
                 .ghost()
                 .xsmall()
                 .icon(Lucide::ListTree)

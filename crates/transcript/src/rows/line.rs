@@ -11,6 +11,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
+use look::Hand as _;
 
 use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
@@ -94,7 +95,7 @@ impl Line {
             .rounded(px(6.))
             .overflow_hidden()
             .whitespace_nowrap()
-            .cursor_pointer()
+            .hand()
             .hover(move |d| d.bg(hover))
             .on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !open, cx));

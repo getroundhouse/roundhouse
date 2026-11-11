@@ -11,6 +11,7 @@ use gpui_kit::{
     ListState, ParentElement, Pixels, Role, SharedString, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, div, list, px,
 };
+use look::Hand as _;
 use protocol::model::PromptLine;
 
 use super::{Jumps, row_of};
@@ -156,7 +157,7 @@ fn row(ix: usize, line: &PromptLine, lit: bool, jumps: &Jumps, cx: &App) -> AnyE
         .pr_3()
         .py_2()
         .rounded(px(8.))
-        .cursor_pointer()
+        .hand()
         .when(lit, |d| d.bg(fill))
         .hover(move |d| d.bg(fill))
         .on_click(jumps.to(row))

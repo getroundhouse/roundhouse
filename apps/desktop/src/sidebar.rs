@@ -3,13 +3,12 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list,
-};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
     px, size,
 };
+use look::{Hand as _, Off as _};
 use look::{Signal, Work};
 use protocol::model::{Repo, Session, SessionStatus, SetupStatus, Workspace, WorkspaceStatus};
 
@@ -200,6 +199,7 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
                 .text_color(muted)
                 .tooltip("New workspace")
                 .loading(creating)
+                .hand_while(!creating)
                 .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(repo_id.clone(), window, cx))),
         )
         .into_any_element()
@@ -221,7 +221,7 @@ fn heading(connected: bool, cx: &mut Context<AppView>) -> AnyElement {
                 .icon(IconName::Plus)
                 .label("Add project")
                 .text_color(faint)
-                .disabled(!connected)
+                .off_while(!connected)
                 .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
         )
         .into_any_element()

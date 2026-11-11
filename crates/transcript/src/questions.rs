@@ -4,9 +4,10 @@
 use std::collections::BTreeMap;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Styled, WeakEntity, div, px};
+use look::{Hand as _, Off as _};
 use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
@@ -108,6 +109,7 @@ fn option_button(
         (card.this.clone(), card.approval_id.clone(), question.clone(), option.label.clone());
     let border = card.border;
     Button::new(ElementId::Name(format!("answer-{seq}-{q}-{o}").into()))
+        .hand()
         .small()
         // Two lines, which is more than a small button's fixed height.
         .h_auto()
@@ -203,19 +205,22 @@ fn card_actions(card: &CardContext<'_>, needs_send: bool, ready: bool) -> impl I
                 .child("Or type your own answer in the box below."),
         )
         .child(
-            Button::new(ElementId::Name(format!("skip-question-{seq}").into())).small().ghost().label("Skip").on_click(
-                move |_, _, cx| {
+            Button::new(ElementId::Name(format!("skip-question-{seq}").into()))
+                .hand()
+                .small()
+                .ghost()
+                .label("Skip")
+                .on_click(move |_, _, cx| {
                     let decision = ApprovalDecision::Deny { message: SKIPPED.to_string(), interrupt: false };
                     let _ = skip.update(cx, |t, cx| t.answer_approval(to_skip.clone(), decision, cx));
-                },
-            ),
+                }),
         )
         .when(needs_send, |d| {
             d.child(
                 Button::new(ElementId::Name(format!("send-answers-{seq}").into()))
                     .small()
                     .primary()
-                    .disabled(!ready)
+                    .off_while(!ready)
                     .label("Send answers")
                     .on_click(move |_, _, cx| {
                         let _ = send.update(cx, |t, cx| t.send_answers(to_send.clone(), cx));

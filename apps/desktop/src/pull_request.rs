@@ -6,13 +6,14 @@ use std::time::Duration;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, Sizable as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window,
     div,
 };
 use look::Work;
+use look::{Hand as _, Off as _};
 use protocol::model::{PullRequest, Standing, Workspace, WorkspaceId};
 
 use crate::busy::Busy;
@@ -153,6 +154,7 @@ pub fn controls(
 fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
     let url = pr.url.clone();
     Button::new("pull-request")
+        .hand()
         .small()
         .outline()
         .border_color(work.edge(cx))
@@ -177,7 +179,7 @@ fn action_button(
     // be pressed twice. The other actions only ask the agent.
     let disabled = action == Action::Archive && !busy.is_free();
     let label = busy.doing(workspace).filter(|_| action == Action::Archive).unwrap_or(action.label());
-    let button = Button::new("pull-request-action").small().label(label).disabled(disabled);
+    let button = Button::new("pull-request-action").small().label(label).off_while(disabled);
     let button = match work.hue() {
         // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
         // press still change. Not while it's disabled, since the kit lays the button's own style over its disabled
