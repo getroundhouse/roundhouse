@@ -15,7 +15,7 @@ use crate::support::{Stack, wait_for_approval, wait_for_status, wait_for_turn_en
 fn an_approval_can_be_answered_by_a_different_client_after_a_restart() {
     let stack = Stack::start();
     let client = stack.client();
-    let (workspace, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (workspace, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo approved > approved.txt", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     wait_for_status(&client, &session.id, SessionStatus::WaitingApproval);
@@ -53,7 +53,7 @@ fn an_approval_can_be_answered_by_a_different_client_after_a_restart() {
 fn a_denied_tool_does_not_run_and_the_agent_hears_why() {
     let stack = Stack::start();
     let client = stack.client();
-    let (workspace, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (workspace, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo nope > nope.txt", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     client
@@ -78,7 +78,7 @@ fn a_denied_tool_does_not_run_and_the_agent_hears_why() {
 fn an_approved_edit_to_a_tools_input_is_what_runs() {
     let stack = Stack::start();
     let client = stack.client();
-    let (workspace, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (workspace, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo original > out.txt", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     let decision = ApprovalDecision::Allow {

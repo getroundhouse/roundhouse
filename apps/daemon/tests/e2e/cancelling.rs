@@ -31,7 +31,7 @@ fn cancelling_stops_the_turn_and_keeps_the_session_usable() {
 fn cancelling_closes_an_open_approval() {
     let stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace_with_mode(&client, Some("manual"));
+    let (_, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo x", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     client.session_cancel(&session.id).unwrap();

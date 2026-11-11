@@ -5,7 +5,7 @@ use client_core::session_log::{PromptState, SessionLog};
 use gpui_kit::Entity;
 use gpui_kit::component::text::TextViewState;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{AgentKind, Seq};
+use protocol::model::{AgentKind, PermissionMode, Seq};
 
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
@@ -38,6 +38,8 @@ pub(super) struct Around {
     pub(super) prompt_text: Option<Entity<TextViewState>>,
     /// For a turn's end: the agent the chat runs, which its card names.
     pub(super) agent: AgentKind,
+    /// For a change of mode: the mode before it, when the log says.
+    pub(super) mode_before: Option<PermissionMode>,
 }
 
 /// What drawing one block of an event needs.
@@ -73,7 +75,11 @@ impl Around {
             prompt: PromptState::Taken,
             prompt_text: None,
             agent: m.agent,
+            mode_before: None,
         };
+        if let EventBody::AgentMode { .. } = body {
+            around.mode_before = nearby::mode_before(log, seq);
+        }
         if let EventBody::UserPrompt { attachments, client_msg_id, .. } = body {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);
@@ -143,6 +149,7 @@ pub(super) fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey 
 mod tests {
     use protocol::attachment::{Attachment, MediaType};
     use protocol::event::{ContentBlock, EventBody};
+    use protocol::model::PermissionMode;
 
     use super::{Around, Reply, block_key};
     use crate::fixtures::{calls, calls_to, event, from_the_agent, log, result, within};
@@ -243,6 +250,16 @@ mod tests {
         assert!(matches!(beside.blocks[0].reply, Reply::Dropped));
         assert!(matches!(beside.blocks[1].reply, Reply::Nothing), "the call made beside it is still waiting");
         assert_eq!(late.blocks[0].reply.result().map(|answer| answer.text.as_str()), Some("from a"), "it stands");
+    }
+
+    #[test]
+    fn a_change_of_mode_knows_the_mode_it_changed_from() {
+        let changed_to = |mode| EventBody::AgentMode { permission_mode: mode };
+        let log = log([event(1, changed_to(PermissionMode::Plan)), event(2, changed_to(PermissionMode::FullAccess))]);
+
+        let around = Around::read(&log, &Model::default(), 2, &changed_to(PermissionMode::FullAccess));
+
+        assert_eq!(around.mode_before, Some(PermissionMode::Plan));
     }
 
     #[test]

@@ -133,10 +133,16 @@ pub(crate) fn rows_of_dots(
         let r = row_radius(spacing, count);
         (0..count).map(move |j| {
             let along = as_f32(j) / as_f32(count - 1);
-            let angle = PI * (along - 1.0);
-            Dot { at: point(center.x + r * angle.cos(), center.y + r * angle.sin()), along, row }
+            Dot { at: on_half_circle(center, r, along), along, row }
         })
     })
+}
+
+/// The point `along` the half circle of `radius` over `center`, from 0 at its left end, over the top, to 1 at its
+/// right end.
+pub(crate) fn on_half_circle(center: Point<Pixels>, radius: Pixels, along: f32) -> Point<Pixels> {
+    let angle = PI * (along - 1.0);
+    point(center.x + radius * angle.cos(), center.y + radius * angle.sin())
 }
 
 pub(crate) fn disc(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
@@ -166,7 +172,7 @@ fn square(center: Point<Pixels>, radius: Pixels) -> Bounds<Pixels> {
     Bounds::new(point(center.x - radius, center.y - radius), size(radius * 2.0, radius * 2.0))
 }
 
-#[expect(clippy::cast_precision_loss, reason = "a count of rows or dots, a few dozen at most")]
+#[expect(clippy::cast_precision_loss, reason = "a count of rows or dots, a few hundred at most")]
 pub(crate) fn as_f32(n: usize) -> f32 {
     n as f32
 }

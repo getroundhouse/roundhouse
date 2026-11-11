@@ -154,7 +154,7 @@ impl World {
             agent: AgentKind::Claude,
             // As the hub gives a chat that names neither.
             model: protocol::model::DEFAULT_MODEL,
-            permission_mode: Some("acceptEdits".to_string()),
+            permission_mode: protocol::model::PermissionMode::FullAccess,
             effort: protocol::model::DEFAULT_EFFORT,
             status,
             last_seq,

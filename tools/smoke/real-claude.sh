@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The whole stack against the real `claude` CLI: step 1.1's "done when", plus the behaviors the fake
-# agent can only imitate. Makes about 25 small Haiku calls, a few more that title chats, and one to Sonnet,
-# on your own login, so run it by hand rather than in CI. Uses a throwaway home, repository and worktrees
-# under /tmp.
+# agent can only imitate. Makes about 25 small Haiku calls, a few more that title chats, and on Sonnet,
+# three plans and a turn in plan mode, since plan mode runs on Sonnet, and one reply, on your own
+# login, so run it by hand rather than in CI. Uses a throwaway home, repository and worktrees under /tmp.
 #
 #   cargo build --workspace && tools/smoke/real-claude.sh
 set -u
@@ -146,56 +146,64 @@ for pair in "hub:$HUB" "worker:$WORKER" "agent:$AGENT"; do
   echo "  rss   ${pair%%:*}: $(( $(ps -o rss= -p "${pair##*:}") / 1024 )) MB"
 done
 
-section "Approvals"
-ASID=$(cli session new timing --model "$MODEL" --permission-mode manual)
+section "Approvals, in a chat that starts in plan mode"
+ASID=$(cli session new timing --model "$MODEL" --permission-mode plan)
 WT2="$ROUNDHOUSE_WORKSPACES/myrepo/timing"
-cli send "$ASID" "Use the Bash tool to run exactly: echo approved > approved.txt   Then reply with the single word DONE." --no-follow >/dev/null
-wait_for "the agent asks for approval" "$ASID" "'approval_requested' in kinds"
-check "the tool hasn't run yet" '[ ! -f "$WT2/approved.txt" ]'
+plan_for() { echo "Make a one line plan to create a file $1 containing hello, then call ExitPlanMode. Do not ask questions."; }
+cli send "$ASID" "$(plan_for approved.txt)" --no-follow >/dev/null
+wait_for "the plan comes back for approval" "$ASID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+check "nothing has been done yet" '[ ! -f "$WT2/approved.txt" ]'
 check "the session reports waiting" '[ "$(session_status timing)" = WaitingApproval ]'
-APPROVAL=$(q "$ASID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
-cli approve "$ASID" "$APPROVAL"
-check "it runs once approved" 'wait_idle timing && [ -f "$WT2/approved.txt" ]'
-cli send "$ASID" "Use the Bash tool to run exactly: echo denied > denied.txt" --no-follow >/dev/null
-wait_for "it asks again" "$ASID" "kinds.count('approval_requested') == 2"
+check "its first turn was in plan mode" '[ "$(q "$ASID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][0]")" = plan ]'
+check "and going into it at launch isn't reported as a change" '[ "$(q "$ASID" "kinds.count(\"agent_mode\")")" = 0 ]'
 APPROVAL=$(q "$ASID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
 cli approve "$ASID" "$APPROVAL" --deny "Not this time"
-check "a denied tool doesn't run" 'wait_idle timing && [ ! -f "$WT2/denied.txt" ]'
+check "a plan sent back isn't carried out" 'wait_idle timing && [ ! -f "$WT2/approved.txt" ]'
 check "the agent is told why" '[ "$(q "$ASID" "any(b.get(\"is_error\") and \"Not this time\" in b.get(\"text\", \"\") for e in events if e[\"body\"][\"type\"] == \"agent_user\" for b in e[\"body\"][\"blocks\"])")" = True ]'
+check "and it's still planning" '[ "$(q "$ASID" "kinds.count(\"agent_mode\")")" = 0 ]'
+cli send "$ASID" "$(plan_for approved.txt)" --no-follow >/dev/null
+wait_for "it asks again" "$ASID" "kinds.count('approval_requested') == 2" 120
+APPROVAL=$(q "$ASID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+cli approve "$ASID" "$APPROVAL"
+wait_for "approving it goes to full access, not to asking first" "$ASID" "[e['body']['permission_mode'] for e in events if e['body']['type'] == 'agent_mode'] == ['bypassPermissions']"
+check "and the plan is carried out without asking" 'wait_idle timing && [ -f "$WT2/approved.txt" ] && [ "$(q "$ASID" "kinds.count(\"approval_requested\")")" = 2 ]'
 
-section "Changing the model, approval mode and effort"
-MSID=$(cli session new timing --model "$MODEL" --permission-mode manual)
+section "Changing the model, plan mode and effort"
+MSID=$(cli session new timing --model "$MODEL")
 mode_of() { cli session list timing | grep "^${MSID:0:8}" | sed 's/.*mode=\([^ ]*\).*/\1/'; }
 OUT=$(cli send "$MSID" "Reply with the single word READY." 2>&1)
 check "a new chat runs beside the other one" 'echo "$OUT" | grep -q READY'
 check "the first prompt names it" 'cli session list timing | grep "^${MSID:0:8}" | grep -q "Reply with the single word READY."'
 MAGENT=$(q "$MSID" "pid()")
-cli session set "$MSID" --permission-mode bypassPermissions >/dev/null
 OUT=$(cli send "$MSID" "Use the Bash tool to run exactly: echo open > full-access.txt   Then reply with the single word DONE." 2>&1)
-check "full access applies to the running agent" '[ -f "$WT2/full-access.txt" ]'
+check "a chat with no mode chosen has full access" '[ -f "$WT2/full-access.txt" ]'
 check "it didn't ask" '[ "$(q "$MSID" "kinds.count(\"approval_requested\")")" = 0 ]'
-check "and it's the same process" '[ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
-cli session set "$MSID" --permission-mode manual >/dev/null
-cli send "$MSID" "Use the Bash tool to run exactly: echo asked > asked.txt   Then reply with the single word DONE." --no-follow >/dev/null
-wait_for "ask first applies too" "$MSID" "'approval_requested' in kinds"
-APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
-cli approve "$MSID" "$APPROVAL"
-check "it runs once approved" 'wait_until_idle_session "$MSID" && [ -f "$WT2/asked.txt" ]'
+check "no other mode is taken" '! cli session set "$MSID" --permission-mode manual >/dev/null 2>&1 && [ "$(mode_of)" = bypassPermissions ]'
 OUT=$(cli session set "$MSID" --model not-a-real-model 2>&1)
 check "a model the CLI doesn't know is refused, with its reason" 'echo "$OUT" | grep -q "not found"'
 check "and nothing changed" 'cli session list timing | grep "^${MSID:0:8}" | grep -q "model=$MODEL"'
 check "the agent survives a refusal" 'alive "$MAGENT"'
-cli session set "$MSID" --permission-mode bypassPermissions >/dev/null
 cli session set "$MSID" --permission-mode plan >/dev/null
 check "plan mode is reported back" '[ "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" = plan ]'
-cli send "$MSID" "Make a one line plan to create a file planned.txt containing hello, then call ExitPlanMode. Do not ask questions." --no-follow >/dev/null
+check "by the same process" '[ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
+# The agent may make a plan rather than call the tool, so either is fine, as long as nothing runs without asking.
+ASKED=$(q "$MSID" "kinds.count('approval_requested')")
+TURNS=$(q "$MSID" "kinds.count('turn_ended')")
+cli send "$MSID" "Use the Bash tool to run exactly: echo asked > asked.txt   Then reply with the single word DONE." --no-follow >/dev/null
+wait_for "in plan mode, it asks before using a tool, or doesn't use one" "$MSID" "kinds.count('approval_requested') > $ASKED or kinds.count('turn_ended') > $TURNS" 120
+if [ "$(q "$MSID" "kinds.count('approval_requested')")" -gt "$ASKED" ]; then
+  APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
+  cli approve "$MSID" "$APPROVAL" --deny "Not while planning"
+fi
+check "and nothing ran" 'wait_until_idle_session "$MSID" && [ ! -f "$WT2/asked.txt" ]'
+cli send "$MSID" "$(plan_for planned.txt)" --no-follow >/dev/null
 wait_for "the plan comes back for approval" "$MSID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
 check "nothing has been done yet" '[ ! -f "$WT2/planned.txt" ]'
 APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
 cli approve "$MSID" "$APPROVAL"
 wait_for "approving it leaves plan mode, by the CLI's own report" "$MSID" "[e['body']['permission_mode'] for e in events if e['body']['type'] == 'agent_mode'][-1] != 'plan'"
 AFTER_PLAN=$(mode_of)
-echo "        (after a plan chosen from full access, the mode is: $AFTER_PLAN)"
+check "a plan chosen from full access goes back to it" '[ "$AFTER_PLAN" = bypassPermissions ]'
 check "the hub's record follows it" '[ "$AFTER_PLAN" = "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" ]'
 wait_until_idle_session "$MSID"
 cli session set "$MSID" --model sonnet >/dev/null
@@ -208,7 +216,7 @@ check "and it's the same process" '[ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
 cli send "$MSID" "$(slow_tool 44 midturn midturn.txt)" --no-follow >/dev/null
 wait_for "a long tool is running" "$MSID" "'44' in str(events[-5:])"
 BEFORE=$SECONDS
-cli session set "$MSID" --permission-mode acceptEdits >/dev/null
+cli session set "$MSID" --permission-mode plan >/dev/null
 check "a change mid-turn is answered right away" '[ $((SECONDS - BEFORE)) -lt 5 ]'
 cli cancel "$MSID" >/dev/null 2>&1
 wait_until_idle_session "$MSID"

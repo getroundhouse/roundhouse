@@ -193,12 +193,6 @@ fn string_of(value: &Value, key: &str) -> Option<String> {
     str_of(value, key).map(str::to_string)
 }
 
-/// The name to launch with. The running CLI calls this mode `default`, and `--permission-mode` only
-/// takes `manual`.
-fn launch_name(mode: &str) -> &str {
-    if mode == "default" { "manual" } else { mode }
-}
-
 fn control_reply(value: &Value) -> Parsed {
     let response = value.get("response").unwrap_or(&Value::Null);
     match str_of(response, "request_id") {
@@ -221,7 +215,7 @@ fn system(value: &Value) -> Parsed {
             agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),
-            permission_mode: string_of(value, "permissionMode"),
+            permission_mode: str_of(value, "permissionMode").map(super::mode::mode),
             agent_version: string_of(value, "claude_code_version"),
         }),
         "session_state_changed" => Parsed::Event(EventBody::AgentState {
@@ -234,7 +228,7 @@ fn system(value: &Value) -> Parsed {
         }),
         "background_tasks_changed" => tasks::listed(value),
         "status" => match str_of(value, "permissionMode") {
-            Some(mode) => Parsed::Event(EventBody::AgentMode { permission_mode: launch_name(mode).to_string() }),
+            Some(mode) => Parsed::Event(EventBody::AgentMode { permission_mode: super::mode::mode(mode) }),
             None => other("system/status"),
         },
         // A running token count for a spinner. Several arrive per second while thinking.

@@ -67,7 +67,7 @@ fn serve(mut stream: UnixStream, lists: &Mutex<VecDeque<ReplyOutcome>>, asked: &
 
 fn session() -> Session {
     let record = format!(
-        r#"{{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,"effort":"xhigh","status":"idle",
+        r#"{{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle",
         "last_seq":{LAST_SEQ},"created_at_ms":0,"updated_at_ms":0}}"#
     );
     serde_json::from_str(&record).unwrap()

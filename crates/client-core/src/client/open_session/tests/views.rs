@@ -141,7 +141,7 @@ fn first<T>(requests: &flume::Receiver<ClientRequest>, pick: impl Fn(&ClientRequ
 
 fn session() -> Session {
     serde_json::from_value(json!({
-        "id": "s", "workspace_id": "w", "agent": "claude", "model": "opus", "permission_mode": null, "effort": "xhigh",
+        "id": "s", "workspace_id": "w", "agent": "claude", "model": "opus", "permission_mode": "bypassPermissions", "effort": "xhigh",
         "status": "idle", "last_seq": LAST_SEQ, "created_at_ms": 0, "updated_at_ms": 0,
     }))
     .unwrap()

@@ -122,3 +122,34 @@ fn writing_whats_running_in_the_background_gives_the_session_a_newer_revision() 
     assert!(after.rev > before, "{} isn't past {before}", after.rev);
     assert_eq!(after.background_tasks, [task]);
 }
+
+/// Every agent has full access unless it's planning, so a mode only the old picker offered goes, and so does leaving it
+/// to the user's own settings, and the chat's next agent has full access.
+#[test]
+fn a_chat_from_before_full_access_keeps_only_plan_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, backups) = (dir.path().join("hub.db"), dir.path().join("backups"));
+    let mut conn = older_database(&path, &backups, BEFORE_FULL_ACCESS);
+    conn.execute_batch(
+        r"
+        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
+            VALUES ('w', 'r', 'alder', 'alder', 'ready', 'local', 'w', 0);
+        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms,
+                              updated_at_ms, permission_mode)
+            VALUES ('asks', 'w', 'claude', 'a', 'idle', 0, 0, 0, 'manual'),
+                   ('edits', 'w', 'claude', 'b', 'idle', 0, 0, 0, 'acceptEdits'),
+                   ('planning', 'w', 'claude', 'c', 'idle', 0, 0, 0, 'plan'),
+                   ('full', 'w', 'claude', 'd', 'idle', 0, 0, 0, 'bypassPermissions'),
+                   ('unset', 'w', 'claude', 'e', 'idle', 0, 0, 0, NULL);
+        ",
+    )
+    .unwrap();
+
+    migrate(&mut conn, &backups).unwrap();
+
+    let mode = |id: &str| -> String {
+        conn.query_row("SELECT permission_mode FROM sessions WHERE id = ?", [id], |row| row.get(0)).unwrap()
+    };
+    let modes: Vec<_> = ["asks", "edits", "planning", "full", "unset"].map(mode).into();
+    assert_eq!(modes, ["bypassPermissions", "bypassPermissions", "plan", "bypassPermissions", "bypassPermissions"]);
+}

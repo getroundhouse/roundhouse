@@ -355,4 +355,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
     subagents::EVENTS_BY_SUBAGENT,
     // Each subagent's record, filled in for those from before it from what the log kept.
     subagents::RECORDS,
+    // Every session names its approval mode from here on, and every agent has full access unless it's planning. One
+    // that left it to the user's own Claude settings, or chose a mode only the old picker offered, such as asking first,
+    // gets full access.
+    r"
+    UPDATE sessions SET permission_mode = 'bypassPermissions'
+        WHERE permission_mode IS NULL OR permission_mode NOT IN ('plan', 'bypassPermissions');
+",
 ];

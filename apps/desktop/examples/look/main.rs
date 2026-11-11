@@ -4,7 +4,7 @@
 //!
 //!     cargo run -p desktop --example look -- some-workspace
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"
-//!     cargo run -p desktop --example look -- some-workspace click:mode-picker
+//!     cargo run -p desktop --example look -- some-workspace click:model-picker
 //!
 //!     cargo run -p desktop --example look -- some-workspace scroll:40
 //!     cargo run -p desktop --example look -- some-workspace drag:3

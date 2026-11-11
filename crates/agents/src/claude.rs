@@ -4,6 +4,7 @@
 mod account;
 mod context;
 mod effort;
+mod mode;
 mod normalize;
 mod one_off;
 mod process;

@@ -221,9 +221,9 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 - **While it has focus, a number chooses that option, `0` goes to the typing row, and the left and right arrows move between questions.** It takes focus from the composer when it comes, and gives it back when it goes. When it's just come, keys do nothing until half a second passes without one, so the end of something being typed in the composer can't answer it. Choosing with the pointer ends that early. Escape leaves the typing row. *Unconfirmed.*
 - **It's drawn on the pane's own surface inside the thin edge colour, with the composer's corners, rather than in a card's amber,** since taking the composer's place already says it's your turn. Its header, numbers and what each option means are small details, at 12px, and the question and its options are at body size. A chosen row is lit in a raised surface's hover colour, the nearest step above the pane, and Send is the composer's. *Unconfirmed.*
 
-**A command waiting to be allowed.** *Unconfirmed.*
+**A command waiting to be allowed, in a chat that's planning,** since only an agent in plan mode asks before using a tool. *Unconfirmed.*
 
-![A command waiting to be allowed](screens/approval.png)
+![A command waiting to be allowed, in a chat that's planning](screens/approval.png)
 
 **A question from the agent, with choices.** *Unconfirmed.*
 
@@ -233,18 +233,22 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![Several questions](screens/questions.png)
 
-## The model and approval mode
+## The model and plan mode
 
-- **A new chat keeps the model, its effort and how edits are handled, but not Plan or Full access.** Plan belongs to the task at hand, and Full access should be chosen on purpose each time. *Unconfirmed.*
+- **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it.
+- **`Shift-Tab` in the composer turns plan mode on and off,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
+- **The composer shows plan mode in copper, with a texture made from the mark:** a muted copper edge, a faint copper wash, and the fan's rows as dotted half circles of fine copper dots around a point just under the composer's bottom edge, each with a dot over the composer's middle, as if the composer lay over a roundhouse far bigger than itself. The texture is strongest at the top and fades toward the buttons, so the colour marks the whole composer and the texture doesn't crowd what's typed or pressed. `look.md` has the colour. *Unconfirmed.*
+- **A chat that's planning when its agent stops is still planning when the agent comes back.** Otherwise an agent that restarted would make changes nobody had approved. *Unconfirmed.*
+- **A new chat keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
 - **Every chat names its model and its effort, and never leaves either to the agent's CLI,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
 - **The model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
 - **The model and its effort are one picker,** since how hard the agent thinks is part of choosing what thinks. It shows the model's name, then the effort in muted text, such as `Opus Extra high`, and its menu lists the models, then the levels: Low, Medium, High, Extra high and Max, which are the CLI's own. *Unconfirmed.*
 - **A chat nobody has chosen for runs Opus at Extra high,** the owner's usual choice. *Unconfirmed.*
 - **A new level reaches an agent that's already working without stopping it,** and shows once the agent has said it's using it, so the picker is never ahead of the agent. *Unconfirmed.*
 
-**The approval mode's menu, open.** *Unconfirmed.*
+**The composer in plan mode, with a prompt typed.** *Unconfirmed.*
 
-![The approval mode's menu](screens/mode-picker.png)
+![The composer in plan mode](screens/plan-mode.png)
 
 **The model picker's menu, open, in a chat at Extra high.** *Unconfirmed.*
 

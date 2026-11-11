@@ -16,7 +16,7 @@ const CHANGES: [&str; 3] = [
     r#"{"method":"agent_configure","session_id":"s1","model":"opus","permission_mode":null,"effort":"max"}"#,
 ];
 
-const LAUNCH: &str = r#"{"method":"agent_start","session_id":"s1","run":7,"agent":"claude","cwd":"/w","agent_session_id":"a1","resume":false,"model":"opus","permission_mode":null,"effort":"max","env":[]}"#;
+const LAUNCH: &str = r#"{"method":"agent_start","session_id":"s1","run":7,"agent":"claude","cwd":"/w","agent_session_id":"a1","resume":false,"model":"opus","permission_mode":"bypassPermissions","effort":"max","env":[]}"#;
 
 /// A client's request starts `session_`, and anything else here is a worker's.
 fn from_a_client(line: &str) -> bool {
@@ -62,7 +62,10 @@ fn on_the_wire_each_setting_is_a_field_of_its_own() {
         assert_eq!(encoded_again(line), line);
     }
     let WorkerRequest::AgentStart(spec) = serde_json::from_str(LAUNCH).unwrap() else { panic!("not a launch") };
-    assert_eq!(spec.settings, SessionSettings { model: OPUS, permission_mode: None, effort: Effort::Max });
+    assert_eq!(
+        spec.settings,
+        SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::Max }
+    );
     assert_eq!(encoded_again(LAUNCH), LAUNCH);
 }
 
@@ -78,24 +81,32 @@ fn a_model_that_would_leave_the_choice_to_the_cli_doesnt_read() {
 }
 
 #[test]
-fn a_launch_always_names_its_model_and_effort() {
-    for left_out in [r#""model":"opus","#, r#","effort":"max""#] {
+fn a_launch_always_names_its_model_mode_and_effort() {
+    for left_out in [r#""model":"opus","#, r#""permission_mode":"bypassPermissions","#, r#","effort":"max""#] {
         assert!(!decodes(&LAUNCH.replace(left_out, "")), "{left_out}");
     }
-    for null in [(r#""model":"opus""#, r#""model":null"#), (r#""effort":"max""#, r#""effort":null"#)] {
+    for null in [
+        (r#""model":"opus""#, r#""model":null"#),
+        (r#""permission_mode":"bypassPermissions""#, r#""permission_mode":null"#),
+        (r#""effort":"max""#, r#""effort":null"#),
+    ] {
         assert!(!decodes(&LAUNCH.replace(null.0, null.1)), "{}", null.1);
     }
 }
 
 #[test]
-fn a_session_always_names_its_model_and_effort() {
-    let session = r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,
+fn a_session_always_names_its_model_mode_and_effort() {
+    let session = r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions",
         "effort":"xhigh","status":"idle","last_seq":0,"created_at_ms":0,"updated_at_ms":0}"#;
     assert_eq!(serde_json::from_str::<Session>(session).unwrap().settings(), SessionSettings::default());
 
-    for (named, left) in
-        [(r#""model":"opus","#, ""), (r#""effort":"xhigh","#, ""), (r#""model":"opus""#, r#""model":null"#)]
-    {
+    for (named, left) in [
+        (r#""model":"opus","#, ""),
+        (r#""permission_mode":"bypassPermissions","#, ""),
+        (r#""effort":"xhigh","#, ""),
+        (r#""model":"opus""#, r#""model":null"#),
+        (r#""permission_mode":"bypassPermissions""#, r#""permission_mode":null"#),
+    ] {
         assert!(serde_json::from_str::<Session>(&session.replace(named, left)).is_err(), "{named} to {left:?}");
     }
 }
@@ -108,25 +119,26 @@ fn a_change_from_before_effort_has_none() {
 
     assert_eq!(
         change,
-        SessionSettingsChange { permission_mode: Some("plan".into()), ..SessionSettingsChange::default() }
+        SessionSettingsChange { permission_mode: Some(PermissionMode::Plan), ..SessionSettingsChange::default() }
     );
 }
 
 #[test]
 fn a_change_takes_what_it_sets_and_keeps_the_rest() {
-    let before = SessionSettings { model: OPUS, permission_mode: Some("acceptEdits".into()), effort: Effort::Max };
-    let change = SessionSettingsChange { model: None, permission_mode: Some("plan".into()), effort: Some(Effort::Low) };
+    let before = SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::Max };
+    let change =
+        SessionSettingsChange { model: None, permission_mode: Some(PermissionMode::Plan), effort: Some(Effort::Low) };
 
     let after = before.changed(change);
 
-    assert_eq!(after, SessionSettings { model: OPUS, permission_mode: Some("plan".into()), effort: Effort::Low });
+    assert_eq!(after, SessionSettings { model: OPUS, permission_mode: PermissionMode::Plan, effort: Effort::Low });
 }
 
 #[test]
-fn a_session_nobody_has_chosen_for_runs_the_defaults_in_the_users_own_mode() {
+fn a_session_nobody_has_chosen_for_runs_the_defaults_with_full_access() {
     assert_eq!(
         SessionSettings::default(),
-        SessionSettings { model: DEFAULT_MODEL, permission_mode: None, effort: DEFAULT_EFFORT }
+        SessionSettings { model: DEFAULT_MODEL, permission_mode: PermissionMode::FullAccess, effort: DEFAULT_EFFORT }
     );
     assert_eq!(SessionSettings::default().changed(SessionSettingsChange::default()), SessionSettings::default());
 }

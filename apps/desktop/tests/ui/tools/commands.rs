@@ -6,7 +6,7 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext, point, px};
 
 use protocol::event::EventBody;
 
-use super::{COMMAND_LINE, bounds, in_full_access, open_a_command};
+use super::{COMMAND_LINE, bounds, in_a_new_workspace, open_a_command};
 use crate::support::{Stack, Ui};
 
 /// Far too long for one line of the transcript.
@@ -16,7 +16,7 @@ const LONG: &str = "echo trains wait at a stop signal until it clears and the de
 #[gpui_kit::test]
 fn a_command_too_long_for_its_line_shows_whole_when_clicked_and_is_cut_off_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, _) = open_a_command(&mut ui, LONG);
     let one_line = bounds(&mut ui, command.clone()).size.height;
     assert_eq!(whole(&mut ui, LONG), Some(false), "a command starts cut off");
@@ -35,7 +35,7 @@ fn a_command_too_long_for_its_line_shows_whole_when_clicked_and_is_cut_off_again
 #[gpui_kit::test]
 fn a_command_of_several_lines_shows_its_first_until_it_is_clicked(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let script = "echo one\necho two";
     let (command, _) = open_a_command(&mut ui, script);
     let first_line = bounds(&mut ui, command.clone()).size.height;
@@ -54,7 +54,7 @@ fn a_command_of_several_lines_shows_its_first_until_it_is_clicked(cx: &mut TestA
 #[gpui_kit::test]
 fn a_command_that_fits_its_line_stays_as_it_is_when_clicked(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (command, _) = open_a_command(&mut ui, "echo short");
 
     ui.click(command);
@@ -66,7 +66,7 @@ fn a_command_that_fits_its_line_stays_as_it_is_when_clicked(cx: &mut TestAppCont
 #[gpui_kit::test]
 fn what_a_command_printed_selects_across_its_lines_and_copies_as_it_was_printed(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     let (_, output) = open_a_command(&mut ui, r"printf 'one\n\nthree\nfour\n'");
     assert!(ui.has(ElementId::from((output.clone(), "lines"))), "drawn a line at a time, rather than as one text");
     let printed = bounds(&mut ui, output);
@@ -83,7 +83,7 @@ fn what_a_command_printed_selects_across_its_lines_and_copies_as_it_was_printed(
 #[gpui_kit::test]
 fn a_command_that_printed_nothing_says_so_once_it_is_done(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.input("tool:true; say:done");
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));

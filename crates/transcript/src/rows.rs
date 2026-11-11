@@ -27,6 +27,7 @@ mod alone;
 mod approval;
 mod around;
 mod line;
+mod mode;
 mod prompt;
 mod tail;
 mod thinking;
@@ -259,9 +260,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         }
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
-        EventBody::AgentMode { permission_mode } => {
-            muted_line(format!("Approval mode is now {}", crate::mode_label(permission_mode)))
-        }
+        EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(*reason, stderr_tail, cx),
         EventBody::Notice { level, message } => {
             let color = match level {

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
-use protocol::model::{ApprovalId, ClientMessageId, Effort, ModelName, Seq};
+use protocol::model::{ApprovalId, ClientMessageId, Effort, ModelName, PermissionMode, Seq};
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = protocol::BUILD_VERSION, about = "Run coding agents in parallel, each in its own worktree")]
@@ -145,10 +145,9 @@ pub(crate) enum SessionCmd {
         /// default.
         #[arg(long, value_parser = model())]
         model: Option<ModelName>,
-        /// Passed to the agent, such as manual, plan, acceptEdits or bypassPermissions. Leave it
-        /// out to use the mode from your own Claude settings.
-        #[arg(long)]
-        permission_mode: Option<String>,
+        /// plan, or bypassPermissions for full access, which is what leaving it out gives.
+        #[arg(long, value_parser = mode())]
+        permission_mode: Option<PermissionMode>,
         /// How hard the agent thinks. Leave it out for the hub's default.
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
@@ -161,8 +160,9 @@ pub(crate) enum SessionCmd {
         session: String,
         #[arg(long, value_parser = model())]
         model: Option<ModelName>,
-        #[arg(long)]
-        permission_mode: Option<String>,
+        /// plan, or bypassPermissions for full access.
+        #[arg(long, value_parser = mode())]
+        permission_mode: Option<PermissionMode>,
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
     },
@@ -183,6 +183,12 @@ pub(crate) enum SessionCmd {
 /// Takes a name that names a model, so `default`, which would leave the choice to the agent's CLI, is refused here.
 fn model() -> impl TypedValueParser<Value = ModelName> {
     clap::builder::StringValueParser::new().try_map(ModelName::try_from)
+}
+
+/// Takes the name of either mode a chat can have, and lists both in the help and in the error for another name.
+fn mode() -> impl TypedValueParser<Value = PermissionMode> {
+    PossibleValuesParser::new(PermissionMode::CHOSEN.into_iter().filter_map(PermissionMode::as_str))
+        .try_map(|name| PermissionMode::parse(&name).ok_or("not a mode a chat can have"))
 }
 
 /// Takes the name of any level, and lists them all in the help and in the error for another name.

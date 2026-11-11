@@ -7,10 +7,7 @@ use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
 };
-use protocol::model::{
-    Account, AccountId, DiffComment, Effort, ModelName, Session, SessionId, SessionSettingsChange, Workspace,
-    WorkspaceId,
-};
+use protocol::model::{Account, AccountId, DiffComment, Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::all_files::AllFiles;
@@ -23,6 +20,7 @@ use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
 use attaching::Draft;
+pub(crate) use composer::KEY_CONTEXT as COMPOSER_CONTEXT;
 pub(crate) use context::accounts_named;
 use file_tab::FileTab;
 pub use file_tab::Opened;
@@ -119,6 +117,8 @@ pub struct WorkspacePane {
     busy: Busy,
     /// The app is waiting on the hub for a new title for this workspace.
     retitling: bool,
+    /// Whether Shift-Tab last asked each chat whose hub hasn't answered yet to plan.
+    plan_asked: HashMap<SessionId, bool>,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -219,6 +219,7 @@ impl WorkspacePane {
             accounts,
             busy: Busy::Free,
             retitling: false,
+            plan_asked: HashMap::new(),
             reading: Reading::default(),
             composer,
             diff: None,
@@ -251,28 +252,6 @@ impl WorkspacePane {
 
     pub fn transcript(&self) -> Option<Entity<Transcript>> {
         self.active.as_ref().and_then(|id| self.transcripts.get(id)).map(|(view, _)| view.clone())
-    }
-
-    /// Changes the showing chat's model, approval mode or effort. The hub only agrees once a running agent
-    /// has, so the pickers change when this comes back, and a refusal leaves them as they were.
-    pub fn configure(
-        &mut self,
-        model: Option<ModelName>,
-        mode: Option<String>,
-        effort: Option<Effort>,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(id) = self.active.clone() else { return };
-        let options = SessionSettingsChange { model, permission_mode: mode, effort };
-        let changing = self.client.start(move |client| client.session_configure(&id, options));
-        cx.spawn(async move |this, cx| {
-            let changed = changing.recv().await;
-            let _ = this.update(cx, |t, cx| match changed {
-                Ok(session) => t.took_reply(session, cx),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't change that: {e}"))),
-            });
-        })
-        .detach();
     }
 
     /// Carries on on a new connection to the hub, keeping everything shown and typed. What the hub reads from

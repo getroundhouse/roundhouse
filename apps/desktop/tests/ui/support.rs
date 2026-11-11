@@ -31,7 +31,7 @@ use gpui_kit::{
     SharedString, TestAppContext,
 };
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::SessionStatus;
+use protocol::model::{PermissionMode, SessionStatus};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -302,7 +302,12 @@ impl<'a> Ui<'a> {
     }
 
     pub(crate) fn press(&mut self, key: &str) {
-        self.cx.update_window(self.handle, |_, window, cx| window.press(key, cx)).unwrap();
+        self.press_at_once(&[key]);
+    }
+
+    /// Presses each of `keys` before anything they started can answer.
+    pub(crate) fn press_at_once(&mut self, keys: &[&str]) {
+        self.cx.update_window(self.handle, |_, window, cx| keys.iter().for_each(|key| window.press(key, cx))).unwrap();
         self.frame();
     }
 
@@ -354,9 +359,9 @@ impl<'a> Ui<'a> {
         self.click(ElementId::Integer(position as u64));
     }
 
-    pub(crate) fn chat_mode(&self) -> Option<String> {
+    pub(crate) fn chat_mode(&self) -> Option<PermissionMode> {
         let pane = self.pane()?;
-        self.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.permission_mode.clone()))
+        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.permission_mode))
     }
 }
 

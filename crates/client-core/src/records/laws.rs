@@ -31,7 +31,7 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         workspace_id: "w".into(),
         agent: AgentKind::Claude,
         model: protocol::model::DEFAULT_MODEL,
-        permission_mode: None,
+        permission_mode: protocol::model::PermissionMode::FullAccess,
         effort: protocol::model::DEFAULT_EFFORT,
         status: SessionStatus::Idle,
         last_seq: 0,

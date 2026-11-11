@@ -336,7 +336,7 @@ fn long_session(stack: &Stack) -> usize {
 /// Starts a session and has the agent say `count` things in it, over as many prompts as that takes. Returns how many
 /// rows that came to.
 fn session_saying(stack: &Stack, count: usize, say: impl Fn(usize) -> String) -> usize {
-    let session = stack.chat_in_full_access();
+    let session = stack.chat_in_a_new_workspace();
     // A few to a prompt, as a person would ask, so no prompt is itself most of the session.
     let script: Vec<String> = (0..count).map(|i| format!("say:{}", say(i))).collect();
     for prompt in script.chunks(25) {

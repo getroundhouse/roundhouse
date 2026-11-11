@@ -7,11 +7,10 @@ use std::path::PathBuf;
 use client_core::ClientError;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AgentKind, RecordKey};
+use protocol::model::{AgentKind, RecordKey, SessionSettingsChange};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, in_mode, is_alive, next_notice, read_all, started_pid, wait_for_turn_end,
-    wait_until,
+    Stack, assistant_text, commit_settings, is_alive, next_notice, read_all, started_pid, wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -19,7 +18,8 @@ fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, first) = stack.workspace(&client);
-    let second = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
+    let second =
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     client.session_prompt(&first.id, "slow:15:from the first", None).unwrap();
     client.session_prompt(&second.id, "slow:15:from the second", None).unwrap();
     let first_events = wait_for_turn_end(&client, &first.id, 1);
@@ -46,7 +46,8 @@ fn closing_a_chat_stops_only_its_agent_and_reopening_continues_it() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, closing) = stack.workspace(&client);
-    let staying = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
+    let staying =
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     client.session_prompt(&closing.id, "say:remember me", None).unwrap();
     client.session_prompt(&staying.id, "say:here", None).unwrap();
     let closing_pid = started_pid(&wait_for_turn_end(&client, &closing.id, 1)).unwrap();
@@ -92,7 +93,8 @@ fn closing_a_chat_nothing_was_sent_in_deletes_it() {
     let (workspace, used) = stack.workspace(&client);
     client.session_prompt(&used.id, "say:keep me", None).unwrap();
     wait_for_turn_end(&client, &used.id, 1);
-    let unused = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
+    let unused =
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     let feed = client.feed_subscribe().unwrap();
 
     let closed = client.session_close(&unused.id).unwrap();

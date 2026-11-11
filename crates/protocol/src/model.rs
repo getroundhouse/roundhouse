@@ -9,6 +9,7 @@ mod files;
 mod hub_settings;
 mod model_name;
 mod one_line;
+mod permission_mode;
 mod prompt_line;
 mod pull_request;
 mod queue;
@@ -23,6 +24,7 @@ pub use effort::Effort;
 pub use files::{FileContents, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
+pub use permission_mode::PermissionMode;
 pub use prompt_line::PromptLine;
 pub use pull_request::{
     Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,

@@ -14,7 +14,7 @@ use tracing::warn;
 
 use super::launch::launch;
 use super::output::{read_stderr, read_stdout};
-use super::{Shared, drain_grace, write_to};
+use super::{Shared, drain_grace, plan, write_to};
 use crate::{AgentOptions, AgentOutput};
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -77,6 +77,7 @@ pub(super) async fn supervise(
         stderr = launched.stderr;
         let mut stdin = shared.stdin.lock().await;
         *stdin = Some(launched.stdin);
+        plan::start_in(spec.settings.permission_mode, &shared, &mut stdin, &output).await;
         let prompts = shared.unconfirmed_prompts.lock().clone();
         for prompt in prompts {
             if let Err(e) = write_to(&mut stdin, &prompt).await {
