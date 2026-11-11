@@ -3,9 +3,12 @@
 use std::ops::Range;
 
 use gpui_kit::{Bounds, Pixels, px};
+use look::motion::Scrolling;
 
 use super::heights::Heights;
 use super::layout::Start;
+
+mod heading;
 
 /// A place in a transcript: a row, and how far into it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -24,8 +27,8 @@ pub(super) struct State {
     /// knowing how tall the rows it passes are, and the next frame finds which row it comes to with the heights it
     /// measures as it lays them out.
     moved: Pixels,
-    /// Keeping to the latest row, which it does until someone scrolls away from it, and again once they're back.
-    following: bool,
+    /// What it keeps to between frames.
+    keeping: Keeping,
     /// Where the rows are drawn, as of the last frame.
     pub(super) viewport: Bounds<Pixels>,
     /// The runs of rows that are loaded, in order, which are the ones there's anything to measure of.
@@ -55,7 +58,7 @@ pub(super) struct State {
 impl State {
     /// A session with nothing in it yet, which keeps to its latest row.
     pub(super) fn new() -> Self {
-        Self { following: true, measuring: 1, altered_at: 1, ..Self::default() }
+        Self { keeping: Keeping::Latest, measuring: 1, altered_at: 1, ..Self::default() }
     }
 
     /// Makes it `rows` rows, of which the runs in `loaded` are loaded, in order. Rows only come and go at the end.
@@ -89,17 +92,22 @@ impl State {
 
     /// Whether someone has scrolled away from the latest row.
     pub(super) fn is_scrolled_up(&self) -> bool {
-        self.furthest() > px(0.) && !self.following
+        self.furthest() > px(0.) && !self.is_following()
+    }
+
+    /// Whether it's keeping to the latest row.
+    fn is_following(&self) -> bool {
+        matches!(self.keeping, Keeping::Latest)
     }
 
     /// Goes to the latest row, and keeps to it as more arrives.
     pub(super) fn go_to_latest(&mut self) {
-        self.following = true;
+        self.keeping = Keeping::Latest;
     }
 
     /// How far down the session the top of what's shown is.
     pub(super) fn scrolled(&self) -> Pixels {
-        if self.following {
+        if self.is_following() {
             return self.furthest();
         }
         self.down(&self.heights).clamp(px(0.), self.furthest())
@@ -110,16 +118,18 @@ impl State {
         heights.above(self.top.row) + self.top.offset + self.moved
     }
 
-    /// The wheel turned by `turned`, which is positive to bring earlier rows down into view.
+    /// The wheel turned by `turned`, which is positive to bring earlier rows down into view. On its way down to the
+    /// latest row, it stops there and goes by the wheel.
     pub(super) fn scroll_by(&mut self, turned: Pixels) {
-        if turned > px(0.) && self.following {
+        match self.keeping {
+            // There's nothing further down.
+            Keeping::Latest if turned <= px(0.) => return,
             // From where keeping to the latest row had it.
-            self.go_to(self.furthest());
-            self.following = false;
+            Keeping::Latest => self.go_to(self.furthest()),
+            Keeping::Place | Keeping::ToLatest(_) => {}
         }
-        if !self.following {
-            self.moved -= turned;
-        }
+        self.keeping = Keeping::Place;
+        self.moved -= turned;
     }
 
     /// Goes to a place `down` the session, by what its rows are known and guessed to come to.
@@ -131,14 +141,14 @@ impl State {
     pub(super) fn go_to_row(&mut self, row: usize) {
         if row < self.heights.rows() {
             (self.top, self.moved) = (Place { row, offset: px(0.) }, px(0.));
-            self.following = false;
+            self.keeping = Keeping::Place;
         }
     }
 
     /// Where to lay the rows out from. A top that's moved more than `walked` is found from what the rows are guessed
     /// to come to instead, since finding it row by row would measure every row between.
     pub(super) fn lay_from(&self, walked: Pixels) -> Start {
-        if self.following {
+        if self.is_following() {
             return Start::Latest;
         }
         if self.moved.abs() <= walked {
@@ -149,10 +159,12 @@ impl State {
     }
 
     /// The rows were laid out with `top` at the top of the window, and with the latest row's end in sight or not.
-    /// Someone who has scrolled back down to that is keeping to it again.
+    /// Someone who has scrolled back down to that is keeping to it again, and so is a list on its way down to it.
     pub(super) fn laid_out(&mut self, top: Place, end_in_sight: bool) {
         (self.top, self.moved) = (top, px(0.));
-        self.following = self.following || end_in_sight;
+        if end_in_sight {
+            self.go_to_latest();
+        }
     }
 
     /// The list is drawn in `viewport`, which puts every row's height out of date if it's another width than last
@@ -252,9 +264,12 @@ impl State {
         (rows, more)
     }
 
-    /// A drag of the scrollbar's thumb begins.
+    /// A drag of the scrollbar's thumb begins, which stops the list on its way down to the latest row.
     pub(super) fn start_drag(&mut self) {
         self.dragging = Some(self.heights.clone());
+        if let Keeping::ToLatest(_) = self.keeping {
+            self.keeping = Keeping::Place;
+        }
     }
 
     pub(super) fn end_drag(&mut self) {
@@ -292,7 +307,7 @@ impl State {
             let furthest = (heights.total() - self.tall()).max(px(0.));
             let (row, offset) = heights.row_at(down.clamp(px(0.), furthest));
             (self.top, self.moved) = (Place { row, offset }, px(0.));
-            self.following = false;
+            self.keeping = Keeping::Place;
             furthest
         } else {
             let turned = self.scrolled() - down;
@@ -302,9 +317,21 @@ impl State {
             self.furthest()
         };
         if furthest > px(0.) && down >= furthest {
-            self.following = true;
+            self.go_to_latest();
         }
     }
+}
+
+/// What the list keeps to between frames.
+#[derive(Debug, Default)]
+enum Keeping {
+    /// The latest row, which it does until someone scrolls away from it, and again once they're back.
+    #[default]
+    Latest,
+    /// The place at the top, wherever someone scrolled the list or sent it.
+    Place,
+    /// The latest row, which it's on its way down to by itself, as the button back to it sends it.
+    ToLatest(Scrolling),
 }
 
 /// The runs in order with each that starts where the one before it ends made one with it, such as the streaming

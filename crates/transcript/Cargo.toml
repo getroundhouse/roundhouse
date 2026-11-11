@@ -7,8 +7,8 @@ publish.workspace = true
 
 [features]
 # What only tests read: where the scrollbar's thumb is, and how long a new question ignores keys, which a test can wait
-# out.
-testing = []
+# out. And look's, for setting off a scroll by a test's clock.
+testing = ["look/testing"]
 
 [dependencies]
 protocol.workspace = true

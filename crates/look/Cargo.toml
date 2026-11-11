@@ -6,7 +6,7 @@ edition.workspace = true
 publish.workspace = true
 
 [features]
-# What only tests use: holding the marks and the time still for pictures.
+# What only tests use: holding the marks and the time still for pictures, and setting off a scroll by a test's clock.
 testing = []
 
 [dependencies]
