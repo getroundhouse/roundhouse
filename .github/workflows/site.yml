@@ -1,0 +1,55 @@
+# Publishes the marketing site, site/, to GitHub Pages whenever it changes on main. docs: site/README.md.
+#
+# The site's address is kept out of the repo, as docs/documentation.md says of domains. It's the custom domain in the
+# repo's Pages settings, and this secret, which is masked in the log:
+#   SITE_URL   The site's address, such as https://example.com, for the link-preview tags that need it. Without it
+#              the page is published without those tags.
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - tools/site/**
+      - .github/workflows/site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, and never cut short, so a deploy that's started always finishes.
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # No `url`, since it would show the address on every run.
+    environment: github-pages
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Put the site together
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          set -euo pipefail
+          tools/site/assemble.py "$RUNNER_TEMP/site" ${SITE_URL:+"$SITE_URL"}
+          # What Pages deploys: an artifact called github-pages, holding artifact.tar. Done by hand, since
+          # actions/upload-pages-artifact runs an action of its own, and the repo only runs pinned ones.
+          tar --dereference --hard-dereference -cf "$RUNNER_TEMP/artifact.tar" -C "$RUNNER_TEMP/site" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

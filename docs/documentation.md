@@ -38,6 +38,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `AGENTS.md` | Instructions | Owner | How to build and test, and the rules for working here |
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
+| `site/README.md` | Instructions | Agents | How to preview the marketing site, and how it follows the app's look |
 
 `AGENTS.md` is read at the start of every session, so it stays lean: it holds what every task needs, and points to the docs for the rest.
 

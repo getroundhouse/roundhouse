@@ -1,0 +1,1157 @@
+/* The app's own palette, from crates/look/src/theme.json and docs/spec/look.md. */
+:root {
+  --pane: #151312;
+  --sidebar: #1a1715;
+  --raised: #24201e;
+  --inset: #1e1b19;
+  --edge: #2a2624;
+  --fg: #ebe7e3;
+  --muted: #a39d97;
+  --faint: #6f6964;
+  --copper: #d08a5c;
+  --red: #ee6f64;
+  --open: #3fb950;
+  --merged: #a371f7;
+  --primary: #f2eee9;
+  --primary-fg: #1d1a18;
+
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, Menlo, SFMono-Regular, Consolas, monospace;
+  --page: 1120px;
+
+  /* Copper as a material: polished where light catches it, darker where it turns away. */
+  --copper-ink: linear-gradient(100deg, #a4653f 0%, #cf8a5c 26%, #f0c4a0 44%, #d4946a 58%, #a96a43 80%, #c98a61 100%);
+  /* The sheen's pattern repeats every two thirds of its length, which is how far it moves in a sweep, so the last
+     third looks as the first does and a sweep ends as the next begins. */
+  --copper-sheen: linear-gradient(
+    100deg,
+    #cf8a5c 0%,
+    #a96a43 16.67%,
+    #cf8a5c 33.33%,
+    #d9996c 42%,
+    #f7dcc6 50%,
+    #d9996c 58%,
+    #cf8a5c 66.67%,
+    #a96a43 83.33%,
+    #cf8a5c 100%
+  );
+  --metal-rim: linear-gradient(168deg, rgb(242 200 166 / 0.5), rgb(208 138 92 / 0.12) 30%, rgb(255 255 255 / 0.04) 62%, rgb(208 138 92 / 0.2));
+  --copper-rule: linear-gradient(90deg, transparent, rgb(208 138 92 / 0.4) 50%, transparent);
+  --gutter: clamp(20px, 5vw, 48px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--pane);
+  color: var(--fg);
+  font: 400 17px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+/* Backgrounds radiate from the page's fans: the hero's, the hub's and the closing mark's. They sit behind everything. */
+.backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+main,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glows reach past the page's edges. They're cut there, so a phone can't scroll sideways to them. */
+main {
+  overflow-x: clip;
+}
+
+::selection {
+  background: #d08a5c55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 500;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+canvas.fan {
+  display: block;
+}
+
+/* Nav */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color 0.3s,
+    border-color 0.3s;
+}
+
+.nav.scrolled {
+  background: rgb(21 19 18 / 0.78);
+  border-bottom-color: var(--edge);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+.nav-inner {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  width: 26px;
+}
+
+.brand.quiet {
+  color: var(--muted);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Buttons: one main action with a light fill, and an outline for one that opens something. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    filter 0.2s,
+    transform 0.2s;
+}
+
+/* The main action is brushed copper: fine lines across it, as brushed metal shows, a bright streak where it faces
+   the light, and a glint that crosses it on hover. */
+.button.primary {
+  position: relative;
+  overflow: hidden;
+  color: #2a170b;
+  background:
+    repeating-linear-gradient(180deg, rgb(255 255 255 / 0.07) 0 1px, transparent 1px 2px),
+    linear-gradient(100deg, #c27f52 0%, #e3aa82 28%, #f1c6a4 42%, #d2905f 60%, #b8723f 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 236 222 / 0.5),
+    inset 0 -1px 0 rgb(80 40 18 / 0.4),
+    0 10px 28px -12px rgb(208 138 92 / 0.5);
+}
+
+.button.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 244 236 / 0.5) 50%, transparent 65%) -150% 0 / 200% 100% no-repeat;
+  transition: background-position 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.button.primary:hover {
+  filter: brightness(1.06);
+}
+
+.button.primary:hover::after {
+  background-position: 250% 0;
+}
+
+/* Pressed, the light leaves its top edge and it sits a pixel lower. */
+.button.primary:active {
+  filter: brightness(0.94);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 2px rgb(80 40 18 / 0.35),
+    0 6px 18px -12px rgb(208 138 92 / 0.5);
+}
+
+.button.outline {
+  border: 1px solid var(--edge);
+  color: var(--fg);
+}
+
+.button.outline:hover {
+  background: #211e1c;
+  border-color: #353130;
+}
+
+.button.small {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.button svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+/* Hero */
+
+.hero {
+  position: relative;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: clamp(4px, 2vh, 24px) var(--gutter) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.hero-fan {
+  position: relative;
+  width: min(340px, 80%);
+  margin-bottom: clamp(24px, 4vh, 36px);
+}
+
+.hero-fan::before {
+  content: "";
+  position: absolute;
+  inset: 10% -30% -40%;
+  background: radial-gradient(50% 50% at 50% 70%, rgb(208 138 92 / 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.hero-fan canvas.fan {
+  position: relative;
+  width: 100%;
+}
+
+.hero-bloom {
+  position: absolute;
+  inset: 0;
+  filter: blur(14px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+h1 {
+  font-size: clamp(40px, 5.6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.042em;
+}
+
+h1 .tone,
+h1 .line {
+  display: block;
+  text-wrap: balance;
+}
+
+h1 .tone {
+  color: var(--faint);
+}
+
+/* The hero's second line is copper, and a highlight crosses it as the fan's light crosses the fan. Held still, the
+   highlight rests in the middle. */
+.hero h1 .tone .rotate > span,
+.hero h1 .tone .still-words {
+  background: var(--copper-sheen) var(--sheen, 50%) 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero h1 .tone .still-words {
+  background: var(--copper-ink);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.headline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Words that change with the fan's light. The slot is as wide as the words in it, and eases between widths, so a
+   centred line glides rather than jumps. */
+.rotate {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  height: 1.02em;
+  text-align: left;
+  transition: width 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.rotate > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(0.3em);
+  filter: blur(8px);
+  transition:
+    opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.rotate > span.on {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+.rotate > span.off {
+  transform: translateY(-0.3em);
+}
+
+/* A slot's still words take no room until it's held still. */
+.rotate > span.still-words {
+  display: none;
+}
+
+/* Held still, a slot shows its still words as ordinary text, wrapping like the rest. */
+.rotate.still {
+  display: inline;
+  width: auto !important;
+  height: auto;
+}
+
+.rotate.still > span {
+  display: none;
+}
+
+.rotate.still > span.still-words {
+  display: inline;
+  position: static;
+  white-space: normal;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate,
+  .rotate > span {
+    transition: none;
+  }
+}
+
+/* A second line in the headline's own colour, so only the word that changes in it is copper. The line is centred
+   for its first word, which gives the slot its width, and the other words start where it does and run on to the
+   right. So the words before the slot never move as the word changes. Centring the line for every word would slide
+   them each time, and sharp text sliding into place reads as lag. */
+h1 .tone.plain {
+  color: var(--fg);
+}
+
+h1 .tone.plain .rotate {
+  width: auto !important;
+  transition: none;
+}
+
+h1 .tone.plain .rotate > span:first-child {
+  position: relative;
+}
+
+/* On a phone the word has a line of its own, with each word on the line's middle, so the headline keeps its
+   height. */
+@media (max-width: 720px) {
+  h1 .tone.plain .rotate {
+    display: block;
+  }
+
+  h1 .tone.plain .rotate > span,
+  h1 .tone.plain .rotate > span:first-child {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+  }
+
+  h1 .tone.plain .rotate.still {
+    display: inline;
+  }
+
+  h1 .tone.plain .rotate.still > span.still-words {
+    position: static;
+    translate: none;
+  }
+}
+
+.lede {
+  max-width: 36em;
+  margin-top: 22px;
+  font-size: clamp(17px, 1.6vw, 19px);
+  line-height: 1.55;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px 22px;
+  margin-top: 30px;
+}
+
+.soon {
+  font-size: 14px;
+  color: var(--faint);
+}
+
+/* The app. Its pictures come from the app's own drawing, without the window's controls, so they're added here, where
+   macOS puts them. */
+
+.shot {
+  max-width: 1240px;
+  margin: clamp(40px, 6vh, 64px) auto 0;
+  padding: 0 var(--gutter);
+}
+
+/* The boxes' edges are metal: they catch warm light along the top and fade round the sides, like a bevel. */
+.window,
+.sidebar,
+.crop,
+.facts li,
+.nodes li,
+.hub-node {
+  border: 1px solid transparent;
+  background:
+    var(--face, linear-gradient(transparent, transparent)) padding-box,
+    linear-gradient(var(--card), var(--card)) padding-box,
+    var(--metal-rim) border-box;
+}
+
+.window {
+  --card: var(--pane);
+  position: relative;
+  margin: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 50px 120px -30px rgb(0 0 0 / 0.9),
+    0 0 160px -40px rgb(208 138 92 / 0.12);
+}
+
+/* A hairline of light along the top edge, as a window catches it. */
+.window::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  pointer-events: none;
+}
+
+.window img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.lights {
+  position: absolute;
+  top: 1.63%;
+  left: 1.06%;
+  width: 3.95%;
+  display: flex;
+  justify-content: space-between;
+}
+
+.lights i {
+  flex: none;
+  width: 23%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.25);
+}
+
+.lights i:nth-child(2) {
+  background: #febc2e;
+}
+
+.lights i:nth-child(3) {
+  background: #28c840;
+}
+
+/* Why this exists: a few sentences, set to be read. */
+
+.letter {
+  max-width: 680px;
+  margin: clamp(120px, 18vh, 200px) auto 0;
+  padding: 0 var(--gutter);
+}
+
+.letter p {
+  font-size: clamp(20px, 2.2vw, 25px);
+  line-height: 1.5;
+  letter-spacing: -0.015em;
+  color: var(--muted);
+}
+
+.letter p + p {
+  margin-top: 1.1em;
+}
+
+.letter p strong {
+  font-weight: 400;
+  color: var(--fg);
+}
+
+.kicker {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--copper);
+}
+
+/* The take: each a statement, and what it means. */
+
+.take {
+  max-width: var(--page);
+  margin: clamp(120px, 18vh, 200px) auto 0;
+  padding: 0 var(--gutter);
+}
+
+.tenet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px clamp(32px, 6vw, 96px);
+  padding: clamp(36px, 5vw, 56px) 0;
+  /* The lines between statements warm to copper in the middle. */
+  background: var(--copper-rule) top / 100% 1px no-repeat;
+}
+
+.tenet:last-child {
+  background:
+    var(--copper-rule) top / 100% 1px no-repeat,
+    var(--copper-rule) bottom / 100% 1px no-repeat;
+}
+
+h2 {
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.032em;
+}
+
+.tenet p {
+  padding-top: 0.45em;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+code {
+  font: 500 0.88em var(--mono);
+  color: var(--fg);
+}
+
+.tenet .sidebar,
+.tenet .crop {
+  margin-top: 32px;
+  max-width: 440px;
+}
+
+/* A piece of the app, cut from its own screens, on a card with the page's metal edge. */
+.crop {
+  --card: var(--pane);
+  margin-bottom: 0;
+  margin-inline: 0;
+  padding: clamp(14px, 2.2vw, 28px);
+  border-radius: 14px;
+  box-shadow: 0 40px 80px -40px rgb(0 0 0 / 0.85);
+}
+
+.crop img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sidebar {
+  --card: var(--sidebar);
+  border-radius: 16px;
+  padding: 14px 10px 18px;
+  box-shadow: 0 40px 80px -40px rgb(0 0 0 / 0.8);
+}
+
+.repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 6px;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.repo + .row {
+  margin-top: 2px;
+}
+
+.row + .repo {
+  margin-top: 14px;
+}
+
+.repo svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 14px 0 12px;
+  border-radius: 9px;
+  font-size: 15.5px;
+}
+
+.row canvas.fan {
+  width: 28px;
+}
+
+.row.selected {
+  background: var(--edge);
+}
+
+.state {
+  font-size: 13px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A name is muted until its chat needs a look, as the app's sidebar has it. Which row is selected shows only in
+   its background. */
+.row .name {
+  color: var(--muted);
+}
+
+.row.look .name {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.state.look {
+  color: var(--fg);
+}
+
+.state.red {
+  color: var(--red);
+}
+
+.state.open {
+  color: var(--open);
+}
+
+.state.merged {
+  color: var(--merged);
+}
+
+/* A section with its heading in the middle. */
+
+.section {
+  max-width: var(--page);
+  margin: clamp(120px, 18vh, 200px) auto 0;
+  padding: 0 var(--gutter);
+}
+
+.section-head {
+  text-align: center;
+}
+
+/* The small things: a grid of them, each a few words and a line. */
+.smalls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 clamp(24px, 4vw, 56px);
+  margin: clamp(40px, 6vw, 64px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.smalls li {
+  padding: 22px 0 26px;
+  background: var(--copper-rule) top / 100% 1px no-repeat;
+}
+
+.smalls strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.smalls span {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+kbd {
+  padding: 2px 7px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--raised);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.35);
+  font: 500 13px var(--mono);
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+/* Native: three plain facts, side by side. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: clamp(40px, 6vw, 64px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.facts li {
+  --card: var(--sidebar);
+  padding: 26px 26px 28px;
+  border-radius: 14px;
+}
+
+.facts strong {
+  display: block;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.facts span {
+  display: block;
+  margin-top: 8px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+/* One hub, and everything around it: where you work on the left, where agents run on the right. */
+
+.hub {
+  max-width: var(--page);
+  margin: clamp(140px, 22vh, 240px) auto 0;
+  padding: 0 var(--gutter);
+  text-align: center;
+}
+
+.hub h2 {
+  font-size: clamp(34px, 4.6vw, 54px);
+  line-height: 1.08;
+  letter-spacing: -0.038em;
+}
+
+.hub h2 .tone {
+  display: block;
+  margin: 10px auto 0;
+  max-width: 22em;
+  font-size: 0.42em;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+.diagram {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(48px, 9vw, 110px) auto clamp(48px, 9vw, 110px) minmax(0, 1fr);
+  grid-template-areas:
+    "you . . . agents"
+    "clients left hub right workers";
+  row-gap: 16px;
+  max-width: 940px;
+  margin: clamp(56px, 8vw, 88px) auto 0;
+  text-align: left;
+}
+
+.label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.label.you {
+  grid-area: you;
+}
+
+.label.agents {
+  grid-area: agents;
+}
+
+.nodes {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clients {
+  grid-area: clients;
+}
+
+.workers {
+  grid-area: workers;
+}
+
+.nodes li,
+.hub-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  --card: var(--sidebar);
+}
+
+.nodes strong,
+.hub-node strong {
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.nodes span,
+.hub-node span {
+  font-size: 13.5px;
+  color: var(--faint);
+}
+
+/* Where a wire meets a box. */
+.nodes li::after,
+.hub-node::before,
+.hub-node::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--pane);
+  box-shadow: 0 0 0 1px #4a4440;
+}
+
+.clients li::after {
+  right: -4px;
+}
+
+.workers li::after {
+  left: -4px;
+}
+
+.hub-node::before {
+  left: -4px;
+}
+
+.hub-node::after {
+  right: -4px;
+}
+
+.wires {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.wires:first-of-type {
+  grid-area: left;
+}
+
+.wires:last-of-type {
+  grid-area: right;
+}
+
+.wires path {
+  fill: none;
+  stroke: #3d3835;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* What isn't built has a plain edge, quieter words and a dashed wire. */
+.nodes li.next {
+  background:
+    linear-gradient(var(--pane), var(--pane)) padding-box,
+    linear-gradient(var(--edge), var(--edge)) border-box;
+}
+
+.nodes li.next strong {
+  color: var(--muted);
+}
+
+.wires path.next {
+  stroke-dasharray: 3 4;
+}
+
+.hub-node {
+  grid-area: hub;
+  align-self: center;
+  align-items: center;
+  padding: 26px 30px 22px;
+  text-align: center;
+  --card: var(--raised);
+  /* Its face is metal turned on a lathe: fine rings round its turntable, and the light caught in two broad streaks,
+     the way a spun disc shows it. */
+  --face:
+    repeating-radial-gradient(circle at 50% 41%, rgb(255 240 228 / 0.028) 0 0.6px, transparent 0.6px 2.4px),
+    conic-gradient(
+      from 0deg at 50% 41%,
+      transparent 0deg,
+      rgb(240 190 150 / 0.11) 32deg,
+      transparent 74deg,
+      transparent 180deg,
+      rgb(240 190 150 / 0.09) 212deg,
+      transparent 254deg
+    );
+  box-shadow: 0 0 80px -10px rgb(208 138 92 / 0.18);
+}
+
+.hub-node canvas.fan {
+  width: 76px;
+  margin-bottom: 14px;
+}
+
+/* Coming from Conductor, and the one thing to do. */
+
+.home {
+  max-width: var(--page);
+  margin: clamp(140px, 22vh, 240px) auto 0;
+  padding: 0 var(--gutter);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.home-mark {
+  width: 96px;
+  margin-bottom: 32px;
+}
+
+.home h2 {
+  font-size: clamp(24px, 2.6vw, 30px);
+  letter-spacing: -0.025em;
+}
+
+.home p {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+/* Footer */
+
+.footer {
+  margin-top: clamp(120px, 18vh, 200px);
+  background: linear-gradient(90deg, transparent, rgb(208 138 92 / 0.32) 50%, transparent) top / 100% 1px no-repeat;
+}
+
+.footer-inner {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 28px var(--gutter) 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+
+.footer-inner a:hover {
+  color: var(--fg);
+}
+
+.footer .brand-mark {
+  width: 22px;
+}
+
+/* Things come into view once, softly, as they're scrolled to. */
+
+.js .reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.9s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--delay, 0s);
+}
+
+.js .reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .js .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Narrow screens */
+
+@media (max-width: 880px) {
+  .tenet {
+    grid-template-columns: 1fr;
+  }
+
+  .tenet p {
+    padding-top: 0;
+  }
+
+  .smalls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  /* The diagram stands up: where you work, then the hub, then where agents run. */
+  .diagram {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "you"
+      "clients"
+      "hub"
+      "agents"
+      "workers";
+    row-gap: 12px;
+  }
+
+  .wires {
+    display: none;
+  }
+
+  .nodes {
+    grid-template-rows: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .nodes li {
+    padding: 12px;
+  }
+
+  .nodes li::after,
+  .hub-node::before,
+  .hub-node::after {
+    display: none;
+  }
+
+  .hub-node {
+    justify-self: center;
+    margin: 20px 0 28px;
+  }
+
+  .label.agents {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .smalls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .soon {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button.primary::after {
+    display: none;
+  }
+}

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roundhouse: running many agents should feel calm</title>
+    <meta
+      name="description"
+      content="A native Mac app for running many coding agents, each in a workspace of its own, from idea to production."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Roundhouse" />
+    <meta property="og:title" content="Running many agents should feel calm." />
+    <meta
+      property="og:description"
+      content="A native Mac app for running many coding agents, each in a workspace of its own, from idea to production."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- The deploy adds the tags that need the site's address here. -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#151312" />
+    <link rel="icon" href="assets/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <link rel="stylesheet" href="style.css" />
+    <script>document.documentElement.classList.add("js")</script>
+    <script src="fan.js" defer></script>
+    <script src="site.js" defer></script>
+    <script src="backdrop.js" defer></script>
+    <script src="copper.js" defer></script>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="brand" href="#top" aria-label="Roundhouse">
+          <canvas class="fan brand-mark" data-work="copper" aria-hidden="true"></canvas>
+          <span>Roundhouse</span>
+        </a>
+        <nav class="nav-links">
+          <a class="button outline small" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-fan" aria-hidden="true">
+          <canvas class="hero-bloom" id="hero-bloom"></canvas>
+          <canvas class="fan" data-hero data-signal="working" data-work="copper" data-sweep-s="3.6" data-bloom="hero-bloom"></canvas>
+        </div>
+        <div class="headline reveal">
+          <h1 aria-label="Running many agents should feel calm.">
+            <span class="line" aria-hidden="true">Running many agents</span>
+            <span class="tone plain" aria-hidden="true">should feel <span class="rotate" data-on="sweep-middle" data-still="calm.">
+              <span>calm.</span>
+              <span>native.</span>
+              <span>under control.</span>
+              <span>like home.</span>
+            </span></span>
+          </h1>
+          <p class="lede">A native Mac app for running many coding agents, each in a workspace of its own, from idea to production.</p>
+        </div>
+        <div class="actions reveal">
+          <a class="button primary" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download for Mac</a>
+          <span class="soon">For Apple silicon. It's early: Claude Code today.</span>
+        </div>
+      </section>
+
+      <section class="shot reveal" aria-label="The app">
+        <figure class="window">
+          <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+          <img
+            src="assets/app.webp"
+            width="2640"
+            height="1720"
+            alt="Roundhouse with six workspaces in the sidebar, a chat with Claude about where a pull request's state should come from, and its pull request ready to merge"
+          />
+        </figure>
+      </section>
+
+      <section class="letter">
+        <span class="kicker reveal">Why this exists</span>
+        <p class="reveal"><strong>Conductor showed how good running agents side by side can feel.</strong> On November 4 it was sold, and it stopped taking new users.</p>
+        <p class="reveal">I tried a dozen alternatives. None thinks about the work the same way. None gets the small things right. None does the cloud and the phone well.</p>
+        <p class="reveal"><strong>So on November 6, I started Roundhouse.</strong> More than 170 pull requests later, written by agents working side by side, it's the app I use every day. It's also the app it's built in.</p>
+      </section>
+
+      <section class="take">
+        <div class="tenet reveal">
+          <h2>One task. One workspace.</h2>
+          <p>A worktree, a branch, ports and chats of its own. Nothing shared.</p>
+        </div>
+
+        <div class="tenet reveal">
+          <h2>Quiet until it needs you.</h2>
+          <div>
+            <p>A light while an agent works. A brighter name when one needs you. Nothing else moves.</p>
+            <div class="sidebar">
+              <div class="repo">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 3.5h4l1.5 1.5h7v7.75H1.75z" /></svg>
+                roundhouse
+              </div>
+              <div class="row">
+                <canvas class="fan" data-signal="working" data-work="none" aria-hidden="true"></canvas>
+                <span class="name">Fix the login redirect</span><span class="state">Working</span>
+              </div>
+              <div class="row">
+                <canvas class="fan" data-signal="setting-up" data-work="none" aria-hidden="true"></canvas>
+                <span class="name">Speed up a large diff</span><span class="state">Setting up</span>
+              </div>
+              <div class="row look">
+                <canvas class="fan" data-signal="idle" data-work="none" aria-hidden="true"></canvas>
+                <span class="name">Ask before deleting</span><span class="state look">Needs you</span>
+              </div>
+              <div class="row selected">
+                <canvas class="fan" data-signal="working" data-work="open" aria-hidden="true"></canvas>
+                <span class="name">PR state in the sidebar</span><span class="state open">#182 &middot; Open</span>
+              </div>
+              <div class="repo">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 3.5h4l1.5 1.5h7v7.75H1.75z" /></svg>
+                signal-box
+              </div>
+              <div class="row">
+                <canvas class="fan" data-signal="failed" data-work="none" aria-hidden="true"></canvas>
+                <span class="name">Retry a failed setup</span><span class="state red">Stopped short</span>
+              </div>
+              <div class="row">
+                <canvas class="fan" data-signal="idle" data-work="merged" aria-hidden="true"></canvas>
+                <span class="name">Read settings from TOML</span><span class="state merged">#176 &middot; Merged</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tenet reveal">
+          <h2>You make the calls.</h2>
+          <div>
+            <p>You choose what it may run. You read the diff. You say when it merges.</p>
+            <figure class="crop"><img src="assets/approval.webp" width="1150" height="330" alt="A command waiting to be allowed, with Allow and Deny" /></figure>
+          </div>
+        </div>
+
+        <div class="tenet reveal">
+          <h2>From idea to production.</h2>
+          <div>
+            <p>Plan it. Build it. Read the diff. Merge it. One place.</p>
+            <figure class="crop"><img src="assets/pr.webp" width="864" height="480" alt="A pull request's bar as its checks run, fail, conflict, pass and merge" /></figure>
+          </div>
+        </div>
+
+        <div class="tenet reveal">
+          <h2>Agents outlive the app.</h2>
+          <p>Close it. Quit it. Update it. They keep running.</p>
+        </div>
+
+        <div class="tenet reveal">
+          <h2>Your agents. Your logins.</h2>
+          <p>Claude Code today. Codex and OpenCode next. No account with us, and nothing sent to us.</p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head reveal">
+          <h2>The small things matter.</h2>
+        </div>
+        <ul class="smalls">
+          <li class="reveal"><strong>Type before it's ready.</strong><span>A prompt sent during setup waits, then sends.</span></li>
+          <li class="reveal"><strong>The queue outlives the app.</strong><span>Queue prompts with <kbd>&#8984;&#8617;</kbd>. They send in order, even with the app closed.</span></li>
+          <li class="reveal"><strong>Stop means stop.</strong><span>The queue holds until you say go.</span></li>
+          <li class="reveal"><strong>Nothing typed is lost.</strong><span>A prompt that can't send comes back to the composer, files and all.</span></li>
+          <li class="reveal"><strong>Titles cost no context.</strong><span>A small model writes them, not your agent.</span></li>
+          <li class="reveal"><strong>See what's left.</strong><span>A ring shows how full the context is. Bars beside it show what's left of your plan's limits.</span></li>
+          <li class="reveal"><strong>Awake only while there's work.</strong><span>Your Mac stays up while agents run, and can sleep once they're waiting on you.</span></li>
+          <li class="reveal"><strong>Archiving is instant, and safe.</strong><span>The branch stays. Uncommitted work is never thrown away.</span></li>
+          <li class="reveal"><strong>A rerun check counts once.</strong><span>A pull request that passed on the second try reads as passed.</span></li>
+          <li class="reveal"><strong>Your GitHub limit stays yours.</strong><span>Pull requests refresh on their own, and leave room for your agents.</span></li>
+          <li class="reveal"><strong>Full access never carries over.</strong><span>A new chat starts without it, every time.</span></li>
+          <li class="reveal"><strong>Updates wait for your agents.</strong><span>An update never stops one.</span></li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <div class="section-head reveal">
+          <h2>Native. Not a web view.</h2>
+        </div>
+        <ul class="facts">
+          <li class="reveal"><strong>Rust, all the way down.</strong><span>The app, the hub and the command line.</span></li>
+          <li class="reveal"><strong>Drawn on the GPU.</strong><span>With GPUI, the toolkit Zed is built on.</span></li>
+          <li class="reveal"><strong>Still when it's idle.</strong><span>A window with nothing happening draws nothing.</span></li>
+        </ul>
+      </section>
+
+      <section class="hub">
+        <h2 class="reveal">One hub. Every device. <span class="tone">Today the hub runs on your Mac. It's designed to run on your own server or in the cloud, with your phone as another way in.</span></h2>
+
+        <div class="diagram reveal">
+          <p class="label you">You</p>
+          <p class="label agents">Your agents</p>
+          <ul class="nodes clients">
+            <li><strong>Desktop</strong><span>The Mac app</span></li>
+            <li><strong>Terminal</strong><span>The CLI</span></li>
+            <li class="next"><strong>Phone</strong><span>The iPhone app, next</span></li>
+          </ul>
+          <svg class="wires" viewBox="0 0 100 300" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 50 C 55 50, 45 150, 100 150" />
+            <path d="M0 150 L 100 150" />
+            <path class="next" d="M0 250 C 55 250, 45 150, 100 150" />
+          </svg>
+          <div class="hub-node">
+            <canvas class="fan" data-signal="working" data-work="copper" aria-hidden="true"></canvas>
+            <strong>Hub</strong>
+            <span>Every workspace and chat</span>
+          </div>
+          <svg class="wires" viewBox="0 0 100 300" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 150 C 55 150, 45 50, 100 50" />
+            <path class="next" d="M0 150 L 100 150" />
+            <path class="next" d="M0 150 C 55 150, 45 250, 100 250" />
+          </svg>
+          <ul class="nodes workers">
+            <li><strong>Your Mac</strong><span>Right here</span></li>
+            <li class="next"><strong>Your server</strong><span>Self-hosted, next</span></li>
+            <li class="next"><strong>The cloud</strong><span>Sandboxes, next</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="home" id="download">
+        <canvas class="fan home-mark reveal" data-work="copper" aria-hidden="true"></canvas>
+        <h2 class="reveal">Coming from Conductor? You'll feel at home.</h2>
+        <p class="reveal">Repositories set up for it work unchanged. It's early: Mac and Claude Code today.</p>
+        <div class="actions reveal">
+          <a class="button primary" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download for Mac</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span class="brand quiet">
+          <canvas class="fan brand-mark" data-work="none" aria-hidden="true"></canvas>
+          Roundhouse
+        </span>
+        <span>For Mac. Built in Rust.</span>
+      </div>
+    </footer>
+  </body>
+</html>
