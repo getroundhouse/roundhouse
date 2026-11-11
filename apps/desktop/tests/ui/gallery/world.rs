@@ -9,9 +9,9 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, Place, PullRequest, Records, Repo, RepoId, Rev,
-    Seq, Session, SessionId, SessionStatus, SetupStatus, Subagent, Title, TitleSource, ToolUseId, Workspace,
-    WorkspaceId, WorkspaceStatus, WorktreeFiles,
+    Account, AgentKind, AttachmentId, DiffComment, FileContents, GitDiff, InstanceId, Place, PullRequest, Records,
+    Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, SetupStatus, Subagent, Title, TitleSource, ToolUseId,
+    Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
 };
 use protocol::tail::Tail;
 
@@ -51,7 +51,9 @@ pub(crate) struct World {
     /// What's in each folder of the screen's worktree that's read when it's opened, by its path.
     pub(crate) worktree_folders: HashMap<String, WorktreeFiles>,
     /// What the files in the screen's worktree that can be opened hold, by path.
-    pub(crate) worktree_texts: HashMap<String, String>,
+    pub(crate) worktree_files: HashMap<String, FileContents>,
+    /// What the files the screen's diff changes held in the commit it was taken from, by path.
+    pub(crate) base_files: HashMap<String, FileContents>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     /// The records of the accounts the screen's chats run under.

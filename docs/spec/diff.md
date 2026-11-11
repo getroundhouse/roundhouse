@@ -34,6 +34,11 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 - **A comment being written on one file is kept while another file shows,** and comes back with its file. *Unconfirmed.*
 - **A saved comment shows where it was written, its text where it was typed,** on the same band, with Edit, Delete and Add to chat on its right. Edit opens it in the box again, and saving keeps it in its place. *Unconfirmed:* how Edit works.
 - **Add to chat puts a comment in the chat's composer, after what's typed there,** so you can say more with it. The comment stays on the diff until it's deleted, as every comment does, and Send to agent sends every comment at once.
+- **A changed file that isn't text shows what it was and what it is, rather than git's line saying they differ.** An image shows as it was in the commit the diff was taken from, as Before, and as it is in the worktree, as After. A file the branch adds shows only After, and one it removes only Before. Any other file says it isn't text, as All files does. It has no lines, so it takes no comments. It's read again with the diff, and an image that hasn't changed stays as it's drawn. *Unconfirmed.*
+- **A changed image is compared side by side, one side at a time in one place, or as what changed, all from one bar above it.** The bar has its path, and Side by side, Before, After and Difference at its right end, and nothing else, so neither is ever squeezed. The choice holds in every workspace until the app quits, as the choice of list or folders does, but a file opened while Before is chosen starts at After. Both sides are drawn at one scale from their top left, never bigger than they are, so a pixel is in the same place in each and an image that grew looks bigger. *Unconfirmed.*
+- **A strip under the bar names each side shown and says what kind of image it is, how many pixels it has and how big a file it is, as an image opened from All files says,** in smaller text than the bar's, as `Before PNG · 720 × 280 · 5 KB`. Side by side, each side's is over its column, so the columns need no captions of their own. A file the branch adds or removes is named Added or Removed. In Difference, both are in one line, without what kind they are when they're the same, as `Before 2200 × 1500 · 395 KB` and `After 2640 × 1720 · 442 KB`, rather than an arrow between what each says. When the bar hasn't room, the path's folders go first, cut from their start to `…/`, then the end of the file's name, and the choices are always whole. What the strip says of each side is cut short at its end. *Unconfirmed.*
+- **Before and After show one side at a time, and flipping between them makes what changed jump out,** as the eye catches anything that moves. Clicking the image or pressing Space flips it, so it can be flipped quickly without aiming at the bar. *Unconfirmed.*
+- **What changed shows After faded to grey, with each pixel that differs from Before tinted yellow, the colour of a modified file,** over what's there, so it can still be read, and a thin outline, with a faint wash of the same yellow, around each place that changed, since a change of a pixel or two is lost once a big screenshot is drawn small. A pixel differs when any of its red, green, blue or transparency does at all, as the gallery decides a screen no longer matches its image. Only what both images cover is compared: what only one covers, when it changed size, is striped and isn't counted, since every pixel of it would count and say nothing about what changed. Changes up to 16 pixels apart, by the boxes around them, are one place, so a word is one outline rather than one for each letter. Places whose outlines would meet or nearly, at the size the image is drawn, are drawn as one, so none is drawn inside, across or against another, while the strip counts them as they are at full size, so the count doesn't change with the window. The strip says how many pixels changed and in how many places at its right end, after a swatch of the yellow, as `3,775 pixels in 7 places`, and how big each side is says whether it changed size. The two are compared only once this is chosen, off the main thread, and again only when either changes. *Unconfirmed.*
 
 **A file's diff in the file tab, with a comment on a changed line.** *Unconfirmed.*
 
@@ -42,3 +47,15 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 **Writing a comment on a changed line, with one already left below it.** *Unconfirmed.*
 
 ![Writing a comment](screens/writing-a-comment.png)
+
+**A changed image, side by side.** *Unconfirmed.*
+
+![A changed image side by side](screens/image-side-by-side.png)
+
+**The same image, After on its own.** *Unconfirmed.*
+
+![A changed image, After on its own](screens/image-flip.png)
+
+**What changed in it, with the badge that moved outlined.** *Unconfirmed.*
+
+![What changed in a changed image](screens/image-difference.png)

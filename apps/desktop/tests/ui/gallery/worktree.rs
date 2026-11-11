@@ -3,8 +3,10 @@
 
 #![cfg(test)]
 
-use protocol::model::WorktreeFiles;
+use protocol::attachment::{AttachmentBytes, MediaType};
+use protocol::model::{FileContents, WorktreeFiles};
 
+use super::pictures;
 use super::world::World;
 
 /// Gives the world's hub the worktree to list, to read a folder of, and to open a file from.
@@ -15,8 +17,20 @@ pub(crate) fn put_in(world: &mut World) {
         let files = WorktreeFiles { paths: strings(paths), folders: strings(folders), truncated: false };
         world.worktree_folders.insert((*folder).to_string(), files);
     }
-    world.worktree_texts.insert(OPENED.to_string(), MODEL.to_string());
+    world.worktree_files.insert(OPENED.to_string(), FileContents::Text { text: MODEL.to_string() });
+    world.worktree_files.insert(PICTURE.to_string(), png(pictures::badge(SHOT_HEIGHT, false)));
 }
+
+/// An image, as the worker reads one.
+pub(crate) fn png(data: Vec<u8>) -> FileContents {
+    FileContents::Image { media_type: MediaType::Png, data: AttachmentBytes::new(data) }
+}
+
+/// The image the screen of an image opens, which the gallery's own folder holds.
+pub(crate) const PICTURE: &str = ".context/gallery/changes.png";
+
+/// How tall the made-up screenshots of the sidebar are, short enough that the file tab draws them big enough to read.
+pub(crate) const SHOT_HEIGHT: u32 = 280;
 
 /// In order of path, as the worker lists them, ignored ones too, such as `.env`.
 pub(crate) const FILES: &[&str] = &[

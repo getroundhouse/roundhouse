@@ -32,8 +32,9 @@ ureq.workspace = true
 flume.workspace = true
 ring.workspace = true
 libc.workspace = true
-# Turns a pasted image an agent can't be given, such as a TIFF, into a PNG. GPUI already builds these.
-image = { workspace = true, features = ["bmp", "png", "tiff"] }
+# Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
+# and compares. GPUI already builds these.
+image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

@@ -14,8 +14,8 @@ const FAINT: Rgba<u8> = Rgba([0x4a, 0x45, 0x41, 0xff]);
 const GREEN: Rgba<u8> = Rgba([0x3f, 0xb9, 0x50, 0xff]);
 
 /// A narrow sidebar where a pull request's badge runs over a workspace's name, as someone might paste to show a bug,
-/// `height` pixels tall. Its rows end above 240.
-pub(crate) fn overlapping_badge(height: u32) -> Vec<u8> {
+/// `height` pixels tall, or, unless `overlapping`, the same sidebar once that's fixed. Its rows end above 240.
+pub(crate) fn badge(height: u32, overlapping: bool) -> Vec<u8> {
     let mut image = RgbaImage::from_pixel(720, height, PANE);
     fill(&mut image, (0, 0), (250, height), SIDEBAR);
     fill(&mut image, (250, 0), (1, height), EDGE);
@@ -24,9 +24,10 @@ pub(crate) fn overlapping_badge(height: u32) -> Vec<u8> {
         fill(&mut image, (22, y), (12, 12), FAINT);
         fill(&mut image, (44, y + 2), (name, 8), TEXT);
     }
-    // The badge, over the end of the second row's name, where it should sit after it.
-    fill(&mut image, (118, 96), (58, 20), GREEN);
-    fill(&mut image, (128, 103), (38, 6), PANE);
+    // The badge, over the end of the second row's name, or after it, where it should sit.
+    let x = if overlapping { 118 } else { 148 };
+    fill(&mut image, (x, 96), (58, 20), GREEN);
+    fill(&mut image, (x + 10, 103), (38, 6), PANE);
     for (line, width) in [380, 410, 300, 360].into_iter().enumerate() {
         fill(&mut image, (290, 60 + 28 * u32::try_from(line).unwrap()), (width, 8), FAINT);
     }

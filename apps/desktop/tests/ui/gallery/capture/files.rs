@@ -27,7 +27,9 @@ impl Driver {
         self.wait("the file tab to show it", |view, cx| {
             let viewer = selected_pane(view).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.viewer.clone()));
             viewer.is_some_and(|viewer| {
-                viewer.read(cx).path.as_deref() == Some(path) && viewer.read(cx).shown_text().is_some()
+                let viewer = viewer.read(cx);
+                viewer.path.as_deref() == Some(path)
+                    && (viewer.shown_text().is_some() || viewer.shown_image().is_some())
             })
         });
     }

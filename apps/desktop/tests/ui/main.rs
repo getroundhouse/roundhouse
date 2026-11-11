@@ -15,6 +15,7 @@ mod core_loop;
 #[cfg(target_os = "macos")]
 mod gallery;
 mod home;
+mod images;
 #[cfg(target_os = "macos")]
 mod marks;
 mod menus;

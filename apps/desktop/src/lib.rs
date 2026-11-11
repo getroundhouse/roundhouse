@@ -14,10 +14,12 @@ pub mod checkout;
 mod composing;
 pub mod file_diff;
 mod file_icons;
+mod file_image;
 mod file_tree;
 pub mod file_view;
 mod haptics;
 mod home;
+pub mod image_diff;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
@@ -62,6 +64,7 @@ actions!(
         ArchiveWorkspace,
         MarkWorkspace,
         ToggleDiff,
+        FlipImage,
         CreatePullRequest,
         StopAgent,
         NextWorkspace,
@@ -97,6 +100,7 @@ pub fn open_main_window(
         KeyBinding::new(settings::FIND_KEY, FindSetting, Some(settings::KEY_CONTEXT)),
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
+        KeyBinding::new("space", FlipImage, Some(image_diff::KEY_CONTEXT)),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
         KeyBinding::new("cmd-shift-a", ArchiveWorkspace, None),
         KeyBinding::new("cmd-shift-u", MarkWorkspace, None),

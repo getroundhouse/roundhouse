@@ -1,44 +1,35 @@
 //! A file as it is in the worktree, as the workspace's file tab shows it when it's opened from All files: its lines,
-//! numbered and highlighted for its language, in a list that scrolls both ways. Which file is the pane's to say, since
-//! the file tab is the pane's.
+//! numbered and highlighted for its language, in a list that scrolls both ways, or its image, fitted to the tab, with
+//! what kind it is and how big. Which file is the pane's to say, since the file tab is the pane's.
 
-use std::hash::{DefaultHasher, Hash as _, Hasher as _};
-
-use client_core::{Client, ClientError};
+use client_core::Client;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement,
+    AnyElement, App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ListHorizontalSizingBehavior, ParentElement as _, Pixels, Render, SharedString, Styled as _, StyledText,
-    UniformListScrollHandle, Window, div, px, uniform_list,
+    Subscription, UniformListScrollHandle, Window, div, px, uniform_list,
 };
-use protocol::attachment::describe_size;
-use protocol::client::ErrorCode;
-use protocol::model::{FileContents, WorkspaceId};
+use protocol::model::WorkspaceId;
 
+use crate::file_image::{FileImage, Placed, fitted};
 use lines::Lines;
+pub(crate) use reading::{Read, Unshown, hash, what_it_gives};
 
 mod lines;
+mod reading;
 
 /// The same height as a line of the diff, so the two read alike.
 const LINE_HEIGHT: Pixels = px(20.);
-const HEADER_HEIGHT: Pixels = px(32.);
-/// Above this, a file is highlighted only after it's shown plain, since highlighting it takes a noticeable moment.
-const QUICK_BYTES: usize = 64 * 1024;
-/// Above this, a file is left plain, since highlighting it would take seconds.
-const HIGHLIGHT_UP_TO: usize = 1024 * 1024;
+/// The bar with the file's path, as tall as the rows of tabs above it, so the buttons an image's comparison has there
+/// have room around them.
+pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 /// What the file view has to show for its file.
 enum Contents {
     Loading,
     Lines(Lines),
-    Empty,
-    Binary,
-    TooBig(u64),
-    /// It was there when the files were listed, and isn't now.
-    Gone,
-    /// The hub is older than the app, and can't read files.
-    Unsupported,
-    Failed(String),
+    Image(FileImage),
+    Instead(Unshown),
 }
 
 pub struct FileView {
@@ -52,8 +43,10 @@ pub struct FileView {
     focus: FocusHandle,
     /// How many times a file has been read, so only the newest answer is shown.
     reads: u64,
-    /// A hash of the text the lines shown were made from, so a file read again that hasn't changed is left as it is.
-    shown_text: Option<u64>,
+    /// A hash of the bytes what's shown was made from, its lines or its image, so a file read again that hasn't changed
+    /// is left as it is.
+    shown: Option<u64>,
+    _releasing: Subscription,
 }
 
 impl Focusable for FileView {
@@ -64,6 +57,11 @@ impl Focusable for FileView {
 
 impl FileView {
     pub fn new(client: Client, workspace_id: WorkspaceId, cx: &mut Context<Self>) -> Self {
+        let releasing = cx.on_release(|t, cx| {
+            if let Contents::Image(image) = &t.contents {
+                image.release(cx);
+            }
+        });
         Self {
             client,
             workspace_id,
@@ -72,7 +70,8 @@ impl FileView {
             scroll: UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
             reads: 0,
-            shown_text: None,
+            shown: None,
+            _releasing: releasing,
         }
     }
 
@@ -86,7 +85,7 @@ impl FileView {
     /// Why the file couldn't be read, if that's what shows.
     #[cfg(feature = "testing")]
     pub fn failure(&self) -> Option<String> {
-        let Contents::Failed(message) = &self.contents else { return None };
+        let Contents::Instead(Unshown::Failed(message)) = &self.contents else { return None };
         Some(message.clone())
     }
 
@@ -95,6 +94,13 @@ impl FileView {
     pub fn shown_text(&self) -> Option<String> {
         let Contents::Lines(lines) = &self.contents else { return None };
         Some(lines.lines.iter().map(|line| line.text.as_ref()).collect::<Vec<_>>().join("\n"))
+    }
+
+    /// What it says of the image it shows, or `None` while it shows something in its place.
+    #[cfg(feature = "testing")]
+    pub fn shown_image(&self) -> Option<String> {
+        let Contents::Image(image) = &self.contents else { return None };
+        Some(image.describe())
     }
 
     /// Shows a file from its first line, in place of the one it showed, or none, as the file tab says.
@@ -115,70 +121,15 @@ impl FileView {
         self.read(cx);
     }
 
-    fn read(&mut self, cx: &mut Context<Self>) {
-        let Some(path) = self.path.clone() else { return };
-        self.reads += 1;
-        let (read, client, id, shown) = (self.reads, self.client.clone(), self.workspace_id.clone(), self.shown_text);
-        cx.spawn(async move |this, cx| {
-            let file = path.to_string();
-            let contents = cx.background_spawn(async move { client.workspace_file_read(&id, &file) }).await;
-            // Lost with the connection, so what's shown stays, and the file is read again once the pane catches up on
-            // the next one.
-            if matches!(contents, Err(ClientError::Disconnected)) {
-                return;
-            }
-            let text = match contents {
-                Ok(FileContents::Text { text }) if text.is_empty() => Err(Contents::Empty),
-                Ok(FileContents::Text { text }) => Ok(text),
-                // An image shows as a file that isn't text, as it did before images were sent.
-                Ok(FileContents::Binary | FileContents::Image { .. } | FileContents::Unknown) => Err(Contents::Binary),
-                Ok(FileContents::TooBig { bytes }) => Err(Contents::TooBig(bytes)),
-                Err(e) if e.is_unsupported() => Err(Contents::Unsupported),
-                Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => Err(Contents::Gone),
-                Err(e) => Err(Contents::Failed(e.to_string())),
-            };
-            let text = match text {
-                Ok(text) => text,
-                Err(contents) => {
-                    let _ = this.update(cx, |t, cx| t.set_contents(read, contents, None, cx));
-                    return;
-                }
-            };
-            let (hash, text) = cx.background_spawn(async move { (hash(&text), text) }).await;
-            // Read again and the same as it was, so what's shown, colours and all, still is.
-            if shown == Some(hash) {
-                return;
-            }
-            let language = (text.len() <= HIGHLIGHT_UP_TO).then(|| look::language(&path).to_string());
-            // A big file is shown plain first, the first time, rather than left loading while it's highlighted. Read
-            // again, what's shown stays, in its colours, until the new lines are.
-            let Some(language) = language else {
-                let lines = cx.background_spawn(async move { Lines::new(&text, None) }).await;
-                let _ = this.update(cx, |t, cx| t.set_contents(read, Contents::Lines(lines), Some(hash), cx));
-                return;
-            };
-            if text.len() > QUICK_BYTES && shown.is_none() {
-                let plain = text.clone();
-                let lines = cx.background_spawn(async move { Lines::new(&plain, None) }).await;
-                let current = this.update(cx, |t, cx| t.set_contents(read, Contents::Lines(lines), None, cx));
-                // Not highlighted for nothing once another file, or another read, has taken its place.
-                if !current.unwrap_or(false) {
-                    return;
-                }
-            }
-            let lines = cx.background_spawn(async move { Lines::new(&text, Some(&language)) }).await;
-            let _ = this.update(cx, |t, cx| t.set_contents(read, Contents::Lines(lines), Some(hash), cx));
-        })
-        .detach();
-    }
-
-    /// Shows `contents`, from the text with the hash `text`, if `read` is the newest read, and says whether it was.
-    fn set_contents(&mut self, read: u64, contents: Contents, text: Option<u64>, cx: &mut Context<Self>) -> bool {
+    /// Shows `contents`, made from bytes with the hash `shown`, if `read` is the newest read, and says whether it was.
+    fn set_contents(&mut self, read: u64, contents: Contents, shown: Option<u64>, cx: &mut Context<Self>) -> bool {
         if read != self.reads {
             return false;
         }
-        self.contents = contents;
-        self.shown_text = text;
+        if let Contents::Image(image) = std::mem::replace(&mut self.contents, contents) {
+            image.release(cx);
+        }
+        self.shown = shown;
         cx.notify();
         true
     }
@@ -208,18 +159,28 @@ impl FileView {
             .collect()
     }
 
+    /// Its path, and for an image, what kind it is and how big, at the other end.
     fn header(&self, cx: &App) -> Option<AnyElement> {
         let path = self.path.clone()?;
         let theme = cx.theme();
+        let about = match &self.contents {
+            Contents::Image(image) => {
+                Some(div().flex_none().text_color(theme.muted_foreground).child(image.describe()))
+            }
+            _ => None,
+        };
         let header = h_flex()
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
             .px_4()
+            .gap_4()
+            .justify_between()
             .border_b_1()
             .border_color(theme.border)
             .text_sm()
-            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(path));
+            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(path))
+            .children(about);
         Some(header.into_any_element())
     }
 }
@@ -234,17 +195,11 @@ fn numbers_width(lines: usize) -> Pixels {
 impl Render for FileView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let (muted, mono, mono_size) = (theme.muted_foreground, theme.mono_font_family.clone(), theme.mono_font_size);
+        let (mono, mono_size) = (theme.mono_font_family.clone(), theme.mono_font_size);
         let body = match &self.contents {
-            Contents::Loading => placeholder("Loading…".into(), muted),
-            Contents::Empty => placeholder("This file is empty".into(), muted),
-            Contents::Binary => placeholder("This file isn't text, so it can't be shown".into(), muted),
-            Contents::TooBig(bytes) => {
-                placeholder(format!("This file is too big to show, at {}", describe_size(*bytes)).into(), muted)
-            }
-            Contents::Gone => placeholder("This file isn't there now".into(), muted),
-            Contents::Unsupported => placeholder("The hub is too old to show files".into(), muted),
-            Contents::Failed(message) => placeholder(format!("Couldn't read the file: {message}").into(), muted),
+            Contents::Loading => placeholder("Loading…".into(), cx),
+            Contents::Image(image) => picture(image),
+            Contents::Instead(why) => placeholder(why.said().into(), cx),
             Contents::Lines(lines) => {
                 uniform_list("file-lines", lines.lines.len(), cx.processor(|t, range, _, cx| t.draw_lines(range, cx)))
                     .track_scroll(&self.scroll)
@@ -262,7 +217,15 @@ impl Render for FileView {
     }
 }
 
-fn placeholder(text: SharedString, color: Hsla) -> AnyElement {
+/// The image, as big as it is, or smaller to fit the tab, in its middle.
+fn picture(image: &FileImage) -> AnyElement {
+    let (image, covers) = (image.clone(), (image.width, image.height));
+    let room = fitted(covers, Placed::Middle, move |scale, cx| image.whole(scale, cx));
+    div().flex_1().w_full().min_h_0().p_6().child(room.size_full()).into_any_element()
+}
+
+/// A line in the middle of the room, muted, saying what's there or why nothing is.
+pub(crate) fn placeholder(text: SharedString, cx: &App) -> AnyElement {
     div()
         .flex_1()
         .w_full()
@@ -271,14 +234,7 @@ fn placeholder(text: SharedString, color: Hsla) -> AnyElement {
         .items_center()
         .justify_center()
         .text_center()
-        .text_color(color)
+        .text_color(cx.theme().muted_foreground)
         .child(text)
         .into_any_element()
-}
-
-/// A hash of a file's text, to tell whether it changed since it was shown without keeping a copy of it.
-fn hash(text: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    hasher.finish()
 }

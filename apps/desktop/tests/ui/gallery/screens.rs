@@ -356,5 +356,5 @@ pub(crate) const SCREENS: &[Screen] = &[
 
 /// A screenshot of a bug, pasted into the new-workspace dialog.
 fn badge_to_paste() -> Vec<u8> {
-    pictures::overlapping_badge(450)
+    pictures::badge(450, true)
 }

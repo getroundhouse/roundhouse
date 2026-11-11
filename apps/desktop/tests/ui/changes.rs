@@ -185,6 +185,23 @@ fn a_comment_is_edited_where_it_was_left(cx: &mut TestAppContext) {
     ui.wait("it to show", |ui| ui.comments(&diff).first().is_some_and(|c| c.text == "Why two? And not three?"));
 }
 
+/// Space is pressed as a key, through the window's bindings, as it is when typed, where a binding for it would take it
+/// from the comment.
+#[gpui_kit::test]
+fn space_is_typed_in_a_comment(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, diff) = reviewing(cx, &stack);
+    ui.open_diff_of(&diff, "a.txt");
+    ui.start_comment(&diff, "a.txt", 2);
+
+    ui.input("Why");
+    ui.press("space");
+    ui.input("two?");
+
+    let typed = ui.cx.read_entity(&diff.file, |f, cx| f.draft.as_ref().map(|d| d.input.read(cx).text().to_string()));
+    assert_eq!(typed.as_deref(), Some("Why two?"));
+}
+
 /// Saving a comment takes its box away, and focus with it, so the window's keys still work.
 #[gpui_kit::test]
 fn the_window_keys_work_after_a_comment_is_saved(cx: &mut TestAppContext) {

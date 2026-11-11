@@ -1,17 +1,20 @@
 //! One changed file's diff, on the kit's `Diff`, as the workspace's file tab shows it, with the comments on it and the
-//! one being written. Which file is the pane's to say, since the file tab is the pane's, and the files and comments
-//! are the workspace's [`Review`]'s.
+//! one being written, or a file that isn't text, as an [`ImageDiff`]. Which file is the pane's to say, since the file
+//! tab is the pane's, and the files and comments are the workspace's [`Review`]'s.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::diff::{
     Diff, DiffAnnotation, DiffFile, DiffLinePosition, DiffMode, DiffSide as KitSide, DiffState,
 };
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
     InteractiveElement as _, IntoElement, ParentElement, Render, SharedString, Styled, Subscription, Window, div,
 };
 use protocol::model::DiffSide;
 
+use crate::FlipImage;
+use crate::image_diff::{self, ImageDiff};
 use crate::review::{Review, ReviewEvent};
 use annotations::{comment_card, draft_card};
 pub use draft::Draft;
@@ -47,6 +50,8 @@ pub struct FileDiff {
     pub state: Option<Entity<DiffState>>,
     /// The comment being written. It's kept while another file shows, and shows again with its own.
     pub draft: Option<Draft>,
+    /// What shows in place of the kit's diff for a file that isn't text, which has no lines to show.
+    pub image: Entity<ImageDiff>,
     /// Where keys go while the file tab shows, when no comment is being written, so the window's keys reach the app.
     focus: FocusHandle,
     _subscriptions: [Subscription; 2],
@@ -70,13 +75,15 @@ impl FileDiff {
             }
         });
         let focus = cx.focus_handle();
-        Self { review, path: None, state: None, draft: None, focus, _subscriptions: [observing, loading] }
+        let image = cx.new(|cx| ImageDiff::new(review.clone(), cx));
+        Self { review, path: None, state: None, draft: None, image, focus, _subscriptions: [observing, loading] }
     }
 
     /// Shows a file, in place of the one it showed, or none, as the file tab says.
     pub fn show(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.path != path {
             self.path = path;
+            self.image.update(cx, |image, cx| image.show(self.path.clone(), cx));
             self.show_file(cx);
         }
         cx.notify();
@@ -160,11 +167,22 @@ impl Render for FileDiff {
         let muted = cx.theme().muted_foreground;
         let state = self.state.clone().filter(|_| self.file(cx).is_some());
         let loaded = self.review.read(cx).files.is_some();
+        let binary = self.file(cx).is_some_and(DiffFile::is_binary);
         let content = match state {
+            Some(_) if binary => self.image.clone().into_any_element(),
             Some(state) => self.diff_view(&state, cx),
             None if loaded => placeholder("This file has no changes now", muted),
             None => placeholder("Loading…", muted),
         };
-        div().track_focus(&self.focus).size_full().child(content)
+        // Space flips a changed image, while it's flipped between its two sides. Only for a file that isn't text,
+        // which has no lines to comment on, since the binding would take Space from what a comment is typed in.
+        div()
+            .track_focus(&self.focus)
+            .when(binary, |root| {
+                root.key_context(image_diff::KEY_CONTEXT)
+                    .on_action(cx.listener(|t, _: &FlipImage, _, cx| t.image.update(cx, ImageDiff::flip)))
+            })
+            .size_full()
+            .child(content)
     }
 }
