@@ -37,6 +37,15 @@ impl<'a> Agent<'a> {
     }
 }
 
+/// Claude's own kind of subagent, which can do anything the agent can, so naming it says nothing.
+const DEFAULT_KIND: &str = "general-purpose";
+
+/// The kind of agent to show beside what a subagent is for: any but the default, since only a kind chosen for the
+/// work, such as `Explore`, which can't change files, or one a project defines, says what the subagent can do.
+pub fn shown_kind(kind: Option<&str>) -> Option<&str> {
+    kind.filter(|kind| *kind != DEFAULT_KIND)
+}
+
 /// Whether a result only says the subagent started in the background. It's addressed to the agent, and the
 /// subagent's report comes later, in its own events.
 pub(crate) fn only_launched(text: &str) -> bool {
@@ -47,7 +56,7 @@ pub(crate) fn only_launched(text: &str) -> bool {
 mod tests {
     use serde_json::json;
 
-    use super::{Agent, hands_off, only_launched};
+    use super::{Agent, hands_off, only_launched, shown_kind};
     use crate::calls::ToolCall;
 
     #[test]
@@ -60,6 +69,14 @@ mod tests {
         assert_eq!(agent.title(), "Find where signals are checked");
         assert_eq!(agent.kind, Some("Explore"));
         assert!(hands_off("Agent") && hands_off("Task"));
+    }
+
+    #[test]
+    fn only_a_kind_other_than_the_default_is_shown() {
+        assert_eq!(shown_kind(Some("Explore")), Some("Explore"));
+        assert_eq!(shown_kind(Some("code-reviewer")), Some("code-reviewer"), "a project's own");
+        assert_eq!(shown_kind(Some("general-purpose")), None);
+        assert_eq!(shown_kind(None), None);
     }
 
     #[test]

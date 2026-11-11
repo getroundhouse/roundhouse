@@ -1,6 +1,7 @@
 //! The workspace's one subagent tab, which shows one subagent's work, as the file tab shows one file. Opening another
-//! subagent shows that one in the same tab, so following subagents doesn't leave a trail of tabs. It sits just after
-//! the tab of the chat whose subagent it shows, and closes with that chat, since its agent stops then.
+//! subagent shows that one in the same tab, so following subagents doesn't leave a trail of tabs. It sits at the far
+//! left, just after the file tab, as tabs that are replaced rather than added to usually do, so its band names the
+//! chat whose subagent it shows. It closes with that chat, since its agent stops then.
 //!
 //! Also each chat's subagents' records, which the chat draws their calls from and the tab its top.
 
@@ -13,12 +14,14 @@ use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, FontWeight, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, StatefulInteractiveElement as _, Styled, Subscription, div, px, relative,
+    ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
+    relative,
 };
+use look::Hand as _;
 use protocol::model::{Rev, SessionId, Subagent, ToolUseId};
-use transcript::{Transcript, TranscriptEvent, subagent_standing};
+use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
-use super::view::{TAB_GROUP, TAB_WIDTH};
+use super::view::{TAB_GROUP, TAB_WIDTH, chat_title};
 use super::{PaneEvent, Showing, WorkspacePane};
 
 /// The subagent tab, while it's open, and the records it and the chats draw from.
@@ -171,8 +174,8 @@ impl WorkspacePane {
         self.subagents.records.retain(|id, _| self.transcripts.contains_key(id));
     }
 
-    /// The subagent tab, just after the tab of the chat whose subagent it shows, built as the file tab is. It has the
-    /// call's icon, and what the subagent is for, in italics, since it's replaced rather than added to.
+    /// The subagent tab, built as the file tab is. It has the call's icon, and what the subagent is for, in italics,
+    /// since it's replaced rather than added to.
     pub(super) fn subagent_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let title = self.subagents.title()?;
         let selected = self.showing() == Showing::Subagent;
@@ -220,8 +223,8 @@ impl WorkspacePane {
         Some(tab.into_any_element())
     }
 
-    /// What shows under the tabs while the subagent tab is in front: a band that says what the subagent is and where
-    /// it stands, as the diff's file header does, then its work, with no composer.
+    /// What shows under the tabs while the subagent tab is in front: a band that says which chat it's from, what the
+    /// subagent is and where it stands, as the diff's file header does, then its work, with no composer.
     pub(super) fn subagent_view(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(tab) = &self.subagents.tab else { return div().into_any_element() };
         v_flex()
@@ -229,16 +232,47 @@ impl WorkspacePane {
             .flex_1()
             .min_h_0()
             .w_full()
-            .children(self.subagents.title().map(|title| band(title, self.subagents.shown(), cx)))
+            .children(self.subagents.title().map(|title| {
+                let chat = self.sessions.iter().find(|s| s.id == tab.session);
+                let from = chat.map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
+                band(from, title, self.subagents.shown(), cx)
+            }))
             .child(div().flex_1().min_h_0().w_full().child(tab.transcript.clone()))
             .into_any_element()
     }
 }
 
-/// What the subagent is for, its kind, and where it stands, once its record has come.
-fn band(title: String, subagent: Option<&Subagent>, cx: &Context<WorkspacePane>) -> AnyElement {
+/// The chat it's from, which shows that chat when clicked, then what the subagent is for, its kind unless it's the
+/// default, and where it stands, once its record has come.
+fn band(
+    from: Option<(SessionId, String)>,
+    title: String,
+    subagent: Option<&Subagent>,
+    cx: &Context<WorkspacePane>,
+) -> AnyElement {
     let theme = cx.theme();
-    let chip = subagent.and_then(|s| s.kind.clone()).map(|kind| {
+    let from = from.map(|(chat, name)| {
+        let link = div()
+            .id("subagent-band-chat")
+            .min_w_0()
+            .max_w(px(240.))
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+            .text_sm()
+            .text_color(look::faint())
+            .hand()
+            .hover(|d| d.text_color(theme.foreground))
+            .role(Role::Link)
+            .aria_label(name.clone())
+            .on_click(cx.listener(move |t, _, _, cx| t.activate(chat.clone(), cx)))
+            .child(name)
+            .test_support();
+        // It gives way well before what the subagent is for does, which is what the page is about.
+        let slash = div().flex_none().text_sm().text_color(look::faint()).child("/");
+        h_flex().flex_shrink(100.).min_w(px(56.)).gap_2().child(link).child(slash)
+    });
+    let chip = subagent.and_then(|s| shown_kind(s.kind.as_deref())).map(|kind| {
         div()
             .flex_none()
             .px_2()
@@ -247,7 +281,7 @@ fn band(title: String, subagent: Option<&Subagent>, cx: &Context<WorkspacePane>)
             .border_color(theme.input)
             .text_sm()
             .text_color(theme.muted_foreground)
-            .child(kind)
+            .child(kind.to_string())
     });
     let standing = subagent.map(subagent_standing);
     h_flex()
@@ -259,6 +293,7 @@ fn band(title: String, subagent: Option<&Subagent>, cx: &Context<WorkspacePane>)
         .border_b_1()
         .border_color(theme.border)
         .child(Icon::new(IconName::Bot).xsmall().text_color(look::faint()))
+        .children(from)
         .child(
             div()
                 .min_w_0()

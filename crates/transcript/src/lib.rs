@@ -21,6 +21,7 @@ mod selectable_lines;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
+pub use calls::agent::shown_kind;
 pub use list::{Place, TranscriptList};
 pub use questions::QuestionPanel;
 pub use rows::{around_column, in_column, subagent_standing};

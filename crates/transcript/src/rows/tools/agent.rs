@@ -1,4 +1,5 @@
-//! A call that handed work to a subagent: what it's for, what kind of agent, and how many calls it's made.
+//! A call that handed work to a subagent: what it's for, what kind of agent unless it's the default, and how many
+//! calls it's made.
 //!
 //! When the hub keeps the subagent's work apart, it's drawn from the subagent's record. Opened, it shows the blocks
 //! the subagent tab starts and ends with: what it was asked, and its report once it's done, with its newest call
@@ -35,7 +36,7 @@ pub(super) fn draw(
     cx: &App,
 ) -> AnyElement {
     let mut line = Line::new(IconName::Bot, call.title())
-        .part(call.kind.map(|kind| Part::Chip(kind.to_string().into())))
+        .part(agent::shown_kind(call.kind).map(|kind| Part::Chip(kind.to_string().into())))
         .part(standing(subagent).map(|standing| Part::Note(standing.into())));
     // The tab reads the subagent's work by its call, which only a hub that keeps it apart can, whether or not its
     // record has come, or ever will, as for one recorded before the agent said when its subagents started.

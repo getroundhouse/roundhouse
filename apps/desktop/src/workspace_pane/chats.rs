@@ -20,6 +20,14 @@ pub(super) fn neighbor(was_open: &[SessionId], gone: &SessionId, open: &[Session
     open.get(still_open_before).or_else(|| open.last()).cloned()
 }
 
+/// A tab `Ctrl-Tab` comes to.
+#[derive(Clone, PartialEq)]
+enum Stop {
+    File,
+    Subagent,
+    Chat(SessionId),
+}
+
 impl WorkspacePane {
     /// For a workspace with no open chat. Another client, or whoever is making this workspace, may be
     /// about to give it one, so this joins that rather than making a second.
@@ -161,31 +169,25 @@ impl WorkspacePane {
         self.transcripts.insert(session.id, (view, events));
     }
 
-    /// Moves to the tab before or after this one, wrapping around. The subagent tab comes just after its chat, where
-    /// it's drawn. The file tab is counted after the chats, which in a ring is the same as before them, where it's
-    /// drawn.
+    /// Moves to the tab before or after this one, in the order they're drawn, wrapping around: the file tab, the
+    /// subagent tab, then the chats.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
-        let mut tabs = Vec::new();
-        for session in self.open_sessions() {
-            tabs.push(Some(session.id.clone()));
-            if self.subagents.tab_session() == Some(&session.id) {
-                tabs.push(None);
-            }
-        }
-        let chats = tabs.len();
-        let current = match self.showing() {
-            Showing::File => chats,
-            Showing::Subagent => tabs.iter().position(Option::is_none).unwrap_or(chats),
-            Showing::Chat => {
-                let Some(current) = tabs.iter().position(|id| id.as_ref() == self.active.as_ref()) else { return };
-                current
-            }
+        let chats = self.open_sessions().map(|session| Stop::Chat(session.id.clone()));
+        let stops: Vec<Stop> = (self.file_tab().map(|_| Stop::File).into_iter())
+            .chain(self.subagents.tab_session().map(|_| Stop::Subagent))
+            .chain(chats)
+            .collect();
+        let here = match (self.showing(), self.active.clone()) {
+            (Showing::File, _) => Stop::File,
+            (Showing::Subagent, _) => Stop::Subagent,
+            (Showing::Chat, Some(id)) => Stop::Chat(id),
+            (Showing::Chat, None) => return,
         };
-        let count = chats + usize::from(self.file_tab().is_some());
-        match tabs.get(crate::app::wrapped_step(current, step, count)) {
-            Some(Some(id)) => self.activate(id.clone(), cx),
-            Some(None) => self.bring_to_front(Showing::Subagent, cx),
-            None => self.show_file_tab(cx),
+        let Some(current) = stops.iter().position(|stop| *stop == here) else { return };
+        match stops[crate::app::wrapped_step(current, step, stops.len())].clone() {
+            Stop::File => self.show_file_tab(cx),
+            Stop::Subagent => self.bring_to_front(Showing::Subagent, cx),
+            Stop::Chat(id) => self.activate(id, cx),
         }
     }
 
