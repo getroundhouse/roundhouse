@@ -9,8 +9,8 @@ use crate::attachment::{AttachmentBytes, AttachmentFile, NewAttachment};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
-    AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, FileContents, GitDiff, GitStatus, PullRequest,
-    RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, UsageLimit, WorktreeFiles,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, CommitId, ContextUsage, FileContents, GitDiff, GitStatus,
+    PullRequest, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, UsageLimit, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
 
@@ -99,6 +99,12 @@ pub enum WorkerRequest {
     /// worktree once every link is followed.
     FileRead {
         path: String,
+        file: String,
+    },
+    /// What the file at `file` held in `commit`, relative to the worktree at `path`, from the worktree's repository.
+    FileReadAt {
+        path: String,
+        commit: CommitId,
         file: String,
     },
     AgentStart(AgentSpec),

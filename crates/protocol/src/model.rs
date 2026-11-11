@@ -98,6 +98,9 @@ ids!(
     ToolUseId,
     /// The agent's own ID for work it runs in the background.
     TaskId,
+    /// A commit, by the full object ID git gives it. It holds any string, as every ID here does, so it's the worker
+    /// reading it that refuses one that isn't a full object ID.
+    CommitId,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.
@@ -320,8 +323,11 @@ pub struct GitFile {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct GitDiff {
-    /// The commit the diff is taken from: the merge base with the workspace's base ref.
-    pub base_commit: Option<String>,
+    /// The commit the diff is taken from, which holds each file as it was before the change: the merge base with the
+    /// workspace's base ref, or HEAD's commit when there's no base ref or git finds no merge base with it. Every diff
+    /// names it, since with no commit at HEAD there's no diff to take. `None` only from a worker older than this,
+    /// which took a diff with no merge base from HEAD without naming its commit.
+    pub base_commit: Option<CommitId>,
     pub patch: String,
     /// True when untracked files were left out to keep the response bounded.
     pub truncated: bool,

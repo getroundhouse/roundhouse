@@ -121,26 +121,30 @@ fn status_and_diff_come_from_the_worker() {
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
 }
 
-/// The worker lists and reads them, and its own tests cover what it leaves out and refuses.
+/// The worker lists and reads them, as they are and as the diff's base has them, and its own tests cover what it
+/// leaves out and refuses.
 #[test]
 fn a_client_browses_the_worktree_s_files_through_the_hub() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let script = "tool:mkdir -p src build/out && echo 'fn main() {}' > src/main.rs && echo built > build/out/app.txt \
-        && echo build/ >> .gitignore";
+        && echo build/ >> .gitignore && echo changed > a.txt";
     client.session_prompt(&session.id, script, None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
+    let base = client.workspace_diff(&workspace.id).unwrap().base_commit.unwrap();
 
     let files = client.workspace_files(&workspace.id).unwrap();
     let folder = client.workspace_folder_read(&workspace.id, "build/out").unwrap();
     let read = client.workspace_file_read(&workspace.id, "src/main.rs").unwrap();
+    let before = client.workspace_file_read_at(&workspace.id, &base, "a.txt").unwrap();
 
     assert!(files.paths.iter().any(|path| path == "a.txt"), "a tracked file: {:?}", files.paths);
     assert!(files.paths.iter().any(|path| path == "src/main.rs"), "a new one: {:?}", files.paths);
     assert_eq!(files.folders, ["build"], "an ignored one, by its folder");
     assert_eq!(folder.paths, ["build/out/app.txt"]);
     assert_eq!(read, FileContents::Text { text: "fn main() {}\n".to_string() });
+    assert_eq!(before, FileContents::Text { text: "one\n".to_string() }, "as the diff's base has it");
 }
 
 #[test]

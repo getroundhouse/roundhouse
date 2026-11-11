@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use protocol::client::ApiError;
-use protocol::model::{FileContents, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles};
+use protocol::model::{
+    CommitId, FileContents, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
+};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 
 use super::{Hub, not_ready, unexpected};
@@ -75,6 +77,21 @@ impl Hub {
     ) -> Result<FileContents, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
         let reply = link.call(WorkerRequest::FileRead { path, file }).await?;
+        let WorkerResponse::FileContents(contents) = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(contents)
+    }
+
+    /// What a file held in a commit of the workspace's repository, as the worker finds it.
+    pub(crate) async fn workspace_file_read_at(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+        commit: CommitId,
+        file: String,
+    ) -> Result<FileContents, ApiError> {
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        let reply = link.call(WorkerRequest::FileReadAt { path, commit, file }).await?;
         let WorkerResponse::FileContents(contents) = reply else {
             return Err(unexpected(&reply));
         };

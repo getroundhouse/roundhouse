@@ -1,7 +1,10 @@
-use protocol::client::ErrorCode;
-use protocol::model::FileContents;
+use std::path::Path;
 
-use super::{MAX_BYTES, bounded, list, read, read_folder};
+use protocol::attachment::{AttachmentBytes, MediaType};
+use protocol::client::ErrorCode;
+use protocol::model::{CommitId, FileContents};
+
+use super::{MAX_IMAGE_BYTES, MAX_TEXT_BYTES, bounded, list, read, read_at, read_folder};
 use crate::git::tests::{new_repo, run};
 
 #[tokio::test]
@@ -169,22 +172,130 @@ fn a_file_reads_as_its_text() {
 #[test]
 fn a_file_that_isn_t_text_or_is_too_big_says_so_rather_than_sending_it() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("shot.png"), b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR").unwrap();
+    std::fs::write(dir.path().join("app.bin"), b"\x7fELF\x02\x01\x01\0\0\0").unwrap();
     let big = std::fs::File::create(dir.path().join("big.log")).unwrap();
-    big.set_len(MAX_BYTES + 1).unwrap();
+    big.set_len(MAX_TEXT_BYTES + 1).unwrap();
 
-    assert_eq!(read(dir.path(), "shot.png").unwrap(), FileContents::Binary);
-    assert_eq!(read(dir.path(), "big.log").unwrap(), FileContents::TooBig { bytes: MAX_BYTES + 1 });
+    assert_eq!(read(dir.path(), "app.bin").unwrap(), FileContents::Binary);
+    assert_eq!(read(dir.path(), "big.log").unwrap(), FileContents::TooBig { bytes: MAX_TEXT_BYTES + 1 });
 }
 
 #[test]
 fn a_file_as_big_as_the_limit_is_sent() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("full.txt"), "a".repeat(usize::try_from(MAX_BYTES).unwrap())).unwrap();
+    std::fs::write(dir.path().join("full.txt"), "a".repeat(usize::try_from(MAX_TEXT_BYTES).unwrap())).unwrap();
 
     let read = read(dir.path(), "full.txt").unwrap();
 
-    assert!(matches!(read, FileContents::Text { text } if text.len() as u64 == MAX_BYTES));
+    assert!(matches!(read, FileContents::Text { text } if text.len() as u64 == MAX_TEXT_BYTES));
+}
+
+/// What it is goes by what it starts with, whatever its name says, and an image is sent whole past text's limit, since
+/// it can't be shown in part.
+#[test]
+fn an_image_is_sent_whole_by_what_it_starts_with() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut shot = PNG.to_vec();
+    shot.resize(usize::try_from(MAX_TEXT_BYTES).unwrap() + 1, 7);
+    std::fs::write(dir.path().join("shot"), &shot).unwrap();
+    std::fs::write(dir.path().join("not.png"), "text\n").unwrap();
+    let huge = std::fs::File::create(dir.path().join("huge.png")).unwrap();
+    std::io::Write::write_all(&mut &huge, PNG).unwrap();
+    huge.set_len(MAX_IMAGE_BYTES + 1).unwrap();
+
+    assert_eq!(read(dir.path(), "shot").unwrap(), image(shot));
+    assert_eq!(read(dir.path(), "not.png").unwrap(), FileContents::Text { text: "text\n".to_string() });
+    assert_eq!(read(dir.path(), "huge.png").unwrap(), FileContents::TooBig { bytes: MAX_IMAGE_BYTES + 1 });
+}
+
+/// The side a diff was taken from, after the worktree has changed it, which is what the diff shows it replaced.
+#[tokio::test]
+async fn a_file_reads_as_a_commit_held_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let before = [PNG, b"before"].concat();
+    std::fs::write(repo.join("shot.png"), &before).unwrap();
+    std::fs::write(repo.join(":notes.txt"), "notes\n").unwrap();
+    std::fs::create_dir_all(repo.join("src/app")).unwrap();
+    std::fs::write(repo.join("src/app/view.rs"), "fn view() {}\n").unwrap();
+    let commit = commit_all(&repo);
+    std::fs::write(repo.join("shot.png"), [PNG, b"after"].concat()).unwrap();
+    std::fs::remove_file(repo.join("a.txt")).unwrap();
+    std::fs::remove_dir_all(repo.join("src")).unwrap();
+
+    assert_eq!(read_at(&repo, &commit, "shot.png").await.unwrap(), image(before));
+    assert_eq!(read_at(&repo, &commit, "a.txt").await.unwrap(), text("one\n"));
+    assert_eq!(read_at(&repo, &commit, "src/app/view.rs").await.unwrap(), text("fn view() {}\n"), "in a folder");
+    let notes = read_at(&repo, &commit, ":notes.txt").await.unwrap();
+    assert_eq!(notes, text("notes\n"), "a name, not what git reads into it");
+}
+
+/// A commit holds a link as the path it leads to, which is what it reads as, so what it leads to is never read, even
+/// outside the worktree.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_link_at_a_commit_reads_as_the_path_it_leads_to() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    std::fs::write(dir.path().join("outside.txt"), "secret").unwrap();
+    std::os::unix::fs::symlink("../outside.txt", repo.join("out")).unwrap();
+    std::os::unix::fs::symlink("a.txt", repo.join("notes.txt")).unwrap();
+    let commit = commit_all(&repo);
+
+    assert_eq!(read_at(&repo, &commit, "out").await.unwrap(), text("../outside.txt"));
+    assert_eq!(read_at(&repo, &commit, "notes.txt").await.unwrap(), text("a.txt"), "and one inside the worktree too");
+}
+
+/// Past text's limit only an image is sent, and its start says whether it is one, as for a file in the worktree.
+#[tokio::test]
+async fn a_file_at_a_commit_past_text_s_limit_is_sent_only_if_it_s_an_image() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let over = usize::try_from(MAX_TEXT_BYTES).unwrap() + 1;
+    let mut shot = PNG.to_vec();
+    shot.resize(over, 7);
+    std::fs::write(repo.join("shot"), &shot).unwrap();
+    std::fs::write(repo.join("big.log"), "a".repeat(over)).unwrap();
+    let commit = commit_all(&repo);
+
+    assert_eq!(read_at(&repo, &commit, "shot").await.unwrap(), image(shot));
+    assert_eq!(read_at(&repo, &commit, "big.log").await.unwrap(), FileContents::TooBig { bytes: MAX_TEXT_BYTES + 1 });
+}
+
+#[tokio::test]
+async fn a_commit_without_the_file_or_not_named_in_full_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::write(repo.join("src/lib.rs"), "\n").unwrap();
+    let commit = commit_all(&repo);
+    let refused = async |commit: &CommitId, path| read_at(&repo, commit, path).await.unwrap_err().code;
+
+    assert_eq!(refused(&commit, "new.txt").await, ErrorCode::NotFound);
+    assert_eq!(refused(&CommitId::from("a1".repeat(20)), "a.txt").await, ErrorCode::NotFound, "not a commit here");
+    assert_eq!(refused(&commit, "src").await, ErrorCode::InvalidRequest, "a folder");
+    assert_eq!(refused(&commit, "src/../a.txt").await, ErrorCode::InvalidRequest);
+    for named in ["HEAD", "main", &commit.as_str()[..7]] {
+        assert_eq!(refused(&CommitId::from(named), "a.txt").await, ErrorCode::InvalidRequest, "{named}");
+    }
+}
+
+/// What a PNG starts with.
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+fn image(data: Vec<u8>) -> FileContents {
+    FileContents::Image { media_type: MediaType::Png, data: AttachmentBytes::new(data) }
+}
+
+fn text(text: &str) -> FileContents {
+    FileContents::Text { text: text.to_string() }
+}
+
+/// Commits everything in the repository at `repo`, and gives the commit.
+fn commit_all(repo: &Path) -> CommitId {
+    run(repo, &["add", "."]);
+    run(repo, &["commit", "-qm", "files"]);
+    CommitId::from(run(repo, &["rev-parse", "HEAD"]))
 }
 
 #[test]

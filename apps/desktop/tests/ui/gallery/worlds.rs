@@ -4,9 +4,9 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    Account, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
-    GitDiff, LimitWindow, MergeState, PermissionMode, PullRequest, Rev, SessionStatus, SetupStatus, Title, UsageLimit,
-    WorkspaceId, WorkspaceStatus,
+    Account, AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment,
+    DiffSide, GitDiff, LimitWindow, MergeState, PermissionMode, PullRequest, Rev, SessionStatus, SetupStatus, Title,
+    UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -321,7 +321,7 @@ pub(super) fn diff() -> World {
     finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
-        GitDiff { base_commit: Some("3f4c19c".to_string()), patch: patch::PATCH.to_string(), truncated: false },
+        GitDiff { base_commit: Some(CommitId::from("3f4c19c")), patch: patch::PATCH.to_string(), truncated: false },
     );
     world.comments.insert(
         focus.clone(),
