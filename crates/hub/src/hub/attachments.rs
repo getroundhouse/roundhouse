@@ -52,7 +52,13 @@ impl Hub {
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
         let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
         self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
-        self.blocking(move |store| store.add_attachment(&session_id, &attachment)).await
+        let session = session_id.clone();
+        let added = self.blocking(move |store| store.add_attachment(&session, &attachment)).await;
+        if added.is_err() {
+            // Such as because its session was deleted meanwhile, which takes the session's files with it.
+            let _ = self.attachment_files.remove(&session_id, &id).await;
+        }
+        added
     }
 
     /// Keeps the images an event from the agent names, before the event is recorded, so a client never asks for one

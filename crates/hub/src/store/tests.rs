@@ -12,7 +12,7 @@ pub(super) fn open_in(dir: &Path) -> Store {
 }
 
 /// A repository with one workspace, `w`, and one idle session in it, `s`.
-pub(super) fn store_with_session(dir: &Path) -> Store {
+pub(crate) fn store_with_session(dir: &Path) -> Store {
     let store = open_in(dir);
     let now = now_ms();
     let repo =

@@ -1,20 +1,51 @@
 //! The session requests, most of which pass straight to the live session.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PromptLine, Rev, Seq, Session, SessionId,
-    SessionSettings, SessionSettingsChange, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PromptLine, RecordKey, Rev, Seq, Session,
+    SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource, WorkspaceId, WorkspaceStatus,
 };
 use tokio::sync::oneshot;
+use tracing::warn;
 
 use super::{Hub, new_id, not_ready};
 use crate::error::internal;
-use crate::session::Command;
+use crate::session::{Command, LiveSession};
 use crate::store::{Made, Reading, Store, StoreError, StoredSession, now_ms};
+
+/// The sessions the hub has in memory, and the ones it has deleted since it started.
+#[derive(Default)]
+pub(super) struct Sessions {
+    pub(super) live: HashMap<SessionId, Arc<LiveSession>>,
+    /// So a session read from the store just before it was deleted isn't brought back once it's gone.
+    deleted: HashSet<SessionId>,
+}
+
+impl Sessions {
+    /// The one in memory, or else the one `start` makes from a copy just read from the store, unless the session has
+    /// been deleted since.
+    pub(super) fn keep(
+        &mut self,
+        id: &SessionId,
+        start: impl FnOnce() -> Arc<LiveSession>,
+    ) -> Result<Arc<LiveSession>, ApiError> {
+        if self.deleted.contains(id) {
+            return Err(StoreError::NotFound { kind: "session", id: id.to_string() }.into());
+        }
+        Ok(self.live.entry(id.clone()).or_insert_with(start).clone())
+    }
+
+    /// Lets go of a session that's been deleted, and gives back what was in memory of it, if anything was.
+    fn forget(&mut self, id: &SessionId) -> Option<Arc<LiveSession>> {
+        self.deleted.insert(id.clone());
+        self.live.remove(id)
+    }
+}
 
 impl Hub {
     pub(crate) async fn session_create(
@@ -223,8 +254,24 @@ impl Hub {
         self.live_session(&id).await?.configure(options).await
     }
 
+    /// A chat nothing has been sent in has nothing to go back to, so closing it deletes it, along with any files added
+    /// to it, which no prompt carried. The reply is then the session as it was, and the feed says it's gone. It's
+    /// deleted before anything else, so nothing of it is brought into memory only to be let go.
     pub(crate) async fn session_close(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
-        self.live_session(&id).await?.close().await
+        let owned = id.clone();
+        let Some((was, rev)) = self.blocking(move |store| store.delete_unused_session(&owned)).await? else {
+            return self.live_session(&id).await?.close().await;
+        };
+        let forgotten = self.sessions.lock().forget(&id);
+        self.notify(HubNotice::Removed { record: RecordKey::Session { id: id.clone() }, rev });
+        if let Some(session) = forgotten {
+            session.end().await;
+        }
+        // Gone whether or not its files are, so failing only leaves them on disk.
+        if let Err(e) = self.attachment_files.remove_session(&id).await {
+            warn!(session = %id, "{e}");
+        }
+        Ok(was)
     }
 
     pub(crate) async fn session_reopen(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
@@ -272,3 +319,6 @@ fn known_effort(options: &SessionSettingsChange) -> Result<(), ApiError> {
         _ => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests;

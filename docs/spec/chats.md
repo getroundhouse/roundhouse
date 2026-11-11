@@ -60,6 +60,8 @@
 - **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.
 - **A chat's title is generated from its first prompt,** by the same rules as a workspace's.
 - **A workspace's first chat gets the same title as the workspace,** from the same call, since they come from the same prompt. *Unconfirmed.*
+- **A chat is called Untitled until it has a title,** since nothing else about a chat says what it's for.
+- **Renaming a chat that's still Untitled starts from an empty field,** so pressing Return can't make Untitled a title typed by hand, which a generated one would never replace.
 
 ## Attachments
 
@@ -258,6 +260,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ## Closing chats, and keys
 
 - **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. *Unconfirmed.*
+- **Closing a chat nothing has been sent in deletes it,** since it has nothing to go back to, so new chats opened and closed unused don't pile up among the closed ones. A prompt queued counts as sent, and a title typed by hand doesn't. A file added for a prompt that never arrived goes with the chat, since nothing shows it.
 - **A closed chat is reopened from the history button at the far end of the tabs,** which shows once a chat is closed and stays put as chats open and close. It's a muted icon with no fill, which brightens while the pointer is over it or its menu is open. The menu lists the closed chats, the most recently closed first, each with its title, how long ago it was closed, such as `9m ago`, and an icon saying a click reopens it. A row has no mark, because a mark says what a chat's agent is doing, and closing a chat stops its agent. *Unconfirmed.*
 - **Chat keys are the ones tabs use elsewhere:** `Cmd-T` for a new chat, `Cmd-W` to close one, and `Ctrl-Tab` and `Ctrl-Shift-Tab` to move between them. *Unconfirmed.*
 

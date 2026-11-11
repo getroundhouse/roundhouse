@@ -166,7 +166,7 @@ pub(crate) enum SessionCmd {
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
     },
-    /// Stop a session's agent and hide it. The history stays.
+    /// Stop a session's agent and hide it. The history stays, and a session nothing was sent in is deleted.
     Close {
         session: String,
     },

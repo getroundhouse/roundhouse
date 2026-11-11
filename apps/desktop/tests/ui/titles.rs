@@ -61,13 +61,25 @@ fn a_chat_is_renamed_from_its_tab(cx: &mut TestAppContext) {
     ui.new_workspace();
     let chat = ui.active_chat();
     let tab = format!("chat-{chat}");
+    assert!(ui.shows_label(&tab, "Untitled"), "until it has a title");
 
+    // It starts from nothing, so Return alone can't make Untitled the chat's title.
     rename(&mut ui, &tab);
+    ui.press("enter");
+    assert!(ui.has_dialog(), "an empty title keeps the dialog open");
     ui.input("First try");
     ui.click(SharedString::from("rename-confirm"));
 
     ui.wait("the chat's new title", |ui| ui.shows_label(&tab, "First try"));
     assert!(!ui.has_dialog());
+    assert_eq!(client.session_get(&chat).unwrap().title.as_deref(), Some("First try"));
+
+    // Once it has a title, renaming starts from that.
+    rename(&mut ui, &tab);
+    ui.press("enter");
+    assert!(!ui.has_dialog(), "Return alone keeps the title it has");
+    let started = ui.view().client().unwrap().commands();
+    started.finished().recv_timeout(Duration::from_secs(10)).unwrap();
     assert_eq!(client.session_get(&chat).unwrap().title.as_deref(), Some("First try"));
 }
 

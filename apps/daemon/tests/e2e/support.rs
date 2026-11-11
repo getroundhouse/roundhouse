@@ -16,8 +16,10 @@ use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
+pub(crate) use feed::next_notice;
 pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
+mod feed;
 mod processes;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);

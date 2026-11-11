@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
+use protocol::client::ErrorCode;
 
 use super::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
 
@@ -207,6 +208,8 @@ impl<S: Source> Follower<S> {
                 self.subscription = Some(subscription);
                 self.shared.set_connected(true);
             }
+            // Deleted, which the records say too, so whoever reads it lets go of it rather than hearing it failed.
+            Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => self.lost(None),
             Err(e) => self.lost(Some(FollowError::Following(e))),
         }
     }

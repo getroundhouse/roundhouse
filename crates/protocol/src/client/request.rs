@@ -290,7 +290,9 @@ pub enum ClientRequest {
         options: SessionSettingsChange,
     },
     /// Stops its agent and hides it from the tabs. The history stays, and it can be reopened. Closing
-    /// it again leaves it closed.
+    /// it again leaves it closed. A session nothing has been sent in, with nothing in its log and nothing queued, is
+    /// deleted instead, with any files added to it, since there's nothing to reopen: the reply is the session as it
+    /// was, the feed says it's removed, and closing it again is refused with `NotFound`.
     SessionClose {
         id: SessionId,
     },

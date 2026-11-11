@@ -385,4 +385,13 @@ pub(super) const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // A chat closed before anything was sent in it is deleted from here on, since there's nothing to reopen, so the
+    // ones closed that way before go too. One with a file added is left: its bytes are outside the database, where
+    // only the hub can let them go. Deleting moves the revision, so a client's next list drops them.
+    r"
+    DELETE FROM sessions
+        WHERE closed_at_ms IS NOT NULL AND queued = '[]'
+            AND NOT EXISTS (SELECT 1 FROM events WHERE events.session_id = sessions.id)
+            AND NOT EXISTS (SELECT 1 FROM attachments WHERE attachments.session_id = sessions.id);
+",
 ];

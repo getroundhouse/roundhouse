@@ -136,6 +136,37 @@ fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppCo
 }
 
 #[gpui_kit::test]
+fn closing_a_chat_nothing_was_sent_in_leaves_nothing_to_reopen(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let workspace = ui.new_workspace();
+    let first = ui.active_chat();
+    let second = ui.new_chat();
+    let third = ui.new_chat();
+    ui.show_chat(&second);
+
+    ui.close_from_tab(&second);
+
+    ui.wait("it to go", |ui| ui.open_chats() == [first.clone(), third.clone()]);
+    ui.wait("the chat after it to show", |ui| ui.active_chat() == third);
+    assert!(!ui.visible("closed-chats"), "there's nothing to reopen");
+    let listed = || client.session_list(&workspace).unwrap().into_iter().map(|s| s.id).collect::<Vec<_>>();
+    assert_eq!(listed(), [first.clone(), third.clone()]);
+
+    // The last one goes too, and leaves a new one, as closing any last chat does.
+    ui.close_from_tab(&first);
+    ui.wait("the first to go", |ui| ui.open_chats() == [third.clone()]);
+    ui.close_from_tab(&third);
+    ui.wait("a new chat", |ui| ui.open_chats().len() == 1 && ui.open_chats()[0] != third);
+    let replacement = ui.open_chats()[0].clone();
+    ui.wait("it to show", |ui| ui.active_chat() == replacement);
+    assert_eq!(listed(), [replacement]);
+}
+
+#[gpui_kit::test]
 fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();

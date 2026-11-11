@@ -1,6 +1,8 @@
 //! Which chats a workspace has, which one is showing, and what each is called.
 
+use client_core::ClientError;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
+use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, Effort, Session, SessionId, SessionSettingsChange};
 use transcript::{Transcript, TranscriptEvent};
 
@@ -15,9 +17,13 @@ pub(super) fn inherited_mode(mode: Option<&str>) -> Option<String> {
     mode.filter(|mode| !matches!(*mode, "plan" | "bypassPermissions")).map(String::from)
 }
 
-/// The chat after this one, or else the one before.
-pub(super) fn neighbor(open: &[SessionId], position: usize) -> Option<SessionId> {
-    open.get(position).or_else(|| open.last()).cloned()
+/// What to show once `gone`, which was open, isn't: the first chat after it that's still open, or else the last open.
+/// It counts from the chats open before, since one closed before anything was sent in it is deleted, and so is in
+/// neither list now.
+pub(super) fn neighbor(was_open: &[SessionId], gone: &SessionId, open: &[SessionId]) -> Option<SessionId> {
+    let at = was_open.iter().position(|id| id == gone).unwrap_or(0);
+    let still_open_before = was_open[..at].iter().filter(|id| open.contains(id)).count();
+    open.get(still_open_before).or_else(|| open.last()).cloned()
 }
 
 impl WorkspacePane {
@@ -193,6 +199,8 @@ impl WorkspacePane {
             let closed = closing.recv().await;
             let _ = this.update(cx, |t, cx| match closed {
                 Ok(session) => t.took_reply(session, cx),
+                // Deleted already, because nothing was sent in it, so closing it again has nothing left to do.
+                Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => {}
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't close the chat: {e}"))),
             });
         })
@@ -211,7 +219,7 @@ impl WorkspacePane {
         .detach();
     }
 
-    /// Asks what to call the chat, and renames it. `current` is what its tab says.
+    /// Asks what to call the chat, and renames it, starting from `current`.
     pub fn start_renaming_chat(&mut self, id: SessionId, current: &str, window: &mut Window, cx: &mut Context<Self>) {
         let this = cx.weak_entity();
         rename::open(Renaming::Chat, current, window, cx, move |title, cx| {
@@ -245,13 +253,14 @@ impl WorkspacePane {
     }
 
     pub(super) fn set_sessions(&mut self, sessions: Vec<Session>, cx: &mut Context<Self>) {
+        let was_open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
         self.sessions = sessions;
         for session in &self.sessions {
             if let Some((transcript, _)) = self.transcripts.get(&session.id) {
                 transcript.update(cx, |t, cx| t.set_session(session, cx));
             }
         }
-        self.keep_active_valid(cx);
+        self.keep_active_valid(&was_open, cx);
         self.keep_edit_valid(cx);
         self.show_next(cx);
         self.read_showing(cx);
@@ -266,26 +275,20 @@ impl WorkspacePane {
         }
     }
 
-    /// Moves off a chat that's been closed, here or anywhere else, and starts one if none are left.
-    fn keep_active_valid(&mut self, cx: &mut Context<Self>) {
-        let closed: Vec<SessionId> =
-            self.sessions.iter().filter(|s| s.closed_at_ms.is_some()).map(|s| s.id.clone()).collect();
-        for id in &closed {
-            self.transcripts.remove(id);
-            self.drafts.remove(id);
-        }
+    /// Moves off a chat that's been closed or deleted, here or anywhere else, to its neighbor among the chats that
+    /// were open, and starts one if none are left.
+    fn keep_active_valid(&mut self, was_open: &[SessionId], cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
+        self.transcripts.retain(|id, _| open.contains(id));
+        self.drafts.retain(|id, _| open.contains(id));
         if self.active.as_ref().is_some_and(|id| open.contains(id)) {
             return;
         }
-        // Where the closed one was, counting only the chats before it that are still open.
-        let position = self
-            .active
-            .as_ref()
-            .and_then(|active| self.sessions.iter().position(|s| &s.id == active))
-            .map_or(0, |at| self.sessions[..at].iter().filter(|s| s.closed_at_ms.is_none()).count());
-        self.active = None;
-        if let Some(id) = neighbor(&open, position) {
+        let next = match self.active.take() {
+            Some(gone) => neighbor(was_open, &gone, &open),
+            None => open.first().cloned(),
+        };
+        if let Some(id) = next {
             self.activate(id, cx);
         } else {
             self.show_draft(cx);

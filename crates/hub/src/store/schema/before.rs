@@ -24,3 +24,6 @@ pub(crate) const BEFORE_CHOSEN_MODELS: usize = 18;
 
 /// How many migrations there were before accounts were records.
 pub(crate) const BEFORE_ACCOUNTS: usize = 19;
+
+/// How many migrations there were before chats closed unused were deleted.
+pub(crate) const BEFORE_UNUSED_DELETED: usize = 20;

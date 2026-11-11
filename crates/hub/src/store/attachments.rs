@@ -13,6 +13,13 @@ impl Store {
     /// recorded, so adding the same ID again returns the first.
     pub fn add_attachment(&self, session_id: &SessionId, attachment: &Attachment) -> Result<Attachment, StoreError> {
         let conn = lock(&self.writer);
+        // Under the writer's lock, so a session deleted meanwhile is found missing rather than failing the insert.
+        let session: Option<i64> = conn
+            .query_row("SELECT 1 FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
+            .optional()?;
+        if session.is_none() {
+            return Err(StoreError::NotFound { kind: "session", id: session_id.to_string() });
+        }
         conn.execute(
             "INSERT INTO attachments (session_id, id, name, media_type, size_bytes, created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, id) DO NOTHING",

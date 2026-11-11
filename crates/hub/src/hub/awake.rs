@@ -120,7 +120,8 @@ impl Stimulant {
 impl Hub {
     /// Whether any agent is doing something that goes on without a person, or a workspace is being set up.
     fn at_work(&self) -> bool {
-        !self.setup_gates.lock().is_empty() || self.sessions.lock().values().any(|session| session.works_unattended())
+        !self.setup_gates.lock().is_empty()
+            || self.sessions.lock().live.values().any(|session| session.works_unattended())
     }
 
     /// Keeps this machine awake while there's work, until what's returned is aborted. Nothing to do where the
