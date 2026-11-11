@@ -23,6 +23,7 @@ gpui_kit::assets::icon_assets!(
         MailOpen,
         MessageSquarePlus,
         Pencil,
+        PencilSparkles,
         Plug,
         RotateCcw,
         RotateCcwClock,

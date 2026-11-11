@@ -10,7 +10,7 @@ use super::world::World;
 use super::worlds::{
     attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, effort_chosen, finishing_update,
     own_hub, pointed, queue_held, queued, read_image, setup_failed, steered, streaming, thinking_streaming, titled,
-    unread, working_background,
+    unread, unread_titled, working_background,
 };
 use super::{chats, file_chats, long_chats, pictures, subagent_chats, tool_chats, worktree};
 
@@ -279,14 +279,14 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "workspace-menu",
         spec: "sidebar.md",
-        world: Some(unread),
+        world: Some(unread_titled),
         // The screen's own workspace, the fourth, whose other chat has a reply nobody has read.
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4")],
     },
     Screen {
         name: "other-workspace-menu",
         spec: "sidebar.md",
-        world: Some(unread),
+        world: Some(unread_titled),
         // The first workspace, which isn't showing, and has a reply nobody has read.
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-1")],
     },
@@ -316,6 +316,12 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(titled),
         // The screen's own workspace is the fourth.
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4"), Step::ClickItem("Rename…")],
+    },
+    Screen {
+        name: "regenerating-title",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[Step::Select(FOCUS), Step::Click("regenerate-title"), Step::MoveAway],
     },
     Screen {
         name: "new-workspace",

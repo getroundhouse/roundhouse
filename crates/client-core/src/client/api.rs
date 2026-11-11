@@ -102,6 +102,12 @@ impl Client {
         self.expect_workspace(ClientRequest::WorkspaceRename { id: id.clone(), title: title.to_string() })
     }
 
+    /// See [`ClientRequest::WorkspaceRegenerateTitle`]. It waits on a model, usually for a second or two. A hub older
+    /// than this refuses it, as `is_unsupported` says.
+    pub fn workspace_regenerate_title(&self, id: &WorkspaceId) -> Result<Workspace> {
+        self.expect_workspace(ClientRequest::WorkspaceRegenerateTitle { id: id.clone() })
+    }
+
     pub fn workspace_status(&self, id: &WorkspaceId) -> Result<GitStatus> {
         let reply = self.call(ClientRequest::WorkspaceStatus { id: id.clone() })?;
         let ClientResponse::GitStatus(status) = reply else {

@@ -24,7 +24,7 @@ pub(super) fn store_with_session(dir: &Path) -> Store {
 }
 
 /// The session `s`, in the workspace `w`, with nothing said in it.
-fn idle_session(now: i64) -> StoredSession {
+pub(super) fn idle_session(now: i64) -> StoredSession {
     StoredSession {
         session: Session {
             id: "s".into(),
@@ -55,7 +55,7 @@ fn idle_session(now: i64) -> StoredSession {
 }
 
 /// The workspace `w`, ready in the repository `r`.
-fn workspace_w(now: i64) -> Workspace {
+pub(super) fn workspace_w(now: i64) -> Workspace {
     Workspace {
         id: "w".into(),
         repo_id: "r".into(),

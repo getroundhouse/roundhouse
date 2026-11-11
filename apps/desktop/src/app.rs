@@ -1,7 +1,7 @@
 //! The window: the sidebar on the left and the selected workspace beside it. Shows the hub's records,
 //! which client-core keeps current, and is the only place that connects and reconnects.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use client_core::records::Record;
 use client_core::{Client, HubAdmin, RecordsFeed};
@@ -76,6 +76,8 @@ pub struct AppView {
     /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
     pub(crate) pointing_at: Option<WorkspaceId>,
     pub busy: Busy,
+    /// The workspaces the hub is finding a new title for, whose rows and headers say so.
+    pub(crate) retitling: HashSet<WorkspaceId>,
     /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
     pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
     /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
@@ -136,6 +138,7 @@ impl AppView {
             sidebar_scroll: VirtualListScrollHandle::new(),
             pointing_at: None,
             busy: Busy::Free,
+            retitling: HashSet::new(),
             new_workspace: None,
             focus_after_dialog: None,
             moving_window: false,
@@ -354,11 +357,15 @@ impl AppView {
             let Some(records) = self.feed.clone() else { return };
             let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
             let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
-            let busy = self.busy.clone();
-            pane.update(cx, |pane, cx| pane.set_busy(busy, cx));
+            let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
+            pane.update(cx, |pane, cx| {
+                pane.set_busy(busy, cx);
+                pane.set_retitling(retitling, cx);
+            });
             cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
+                PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
             })
             .detach();
             self.panes.insert(id.clone(), pane);

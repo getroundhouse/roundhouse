@@ -1,6 +1,7 @@
 //! How a workspace looks: its header, tabs and chat, and the sidebar of changes beside them. The composer is in
 //! `composer.rs`.
 
+use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
@@ -10,12 +11,12 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::Hand as _;
+use look::{Hand as _, Off as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::changes_sidebar::Sidebar;
 use super::setup::setup_log_view;
-use super::{HEADER_HEIGHT, Mark, Opened, Showing, WorkspacePane};
+use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
 use crate::right_click;
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -183,7 +184,8 @@ impl WorkspacePane {
             )
     }
 
-    /// What the workspace is called, and the branch it's on and where that started.
+    /// What the workspace is called, and the branch it's on and where that started. When they don't fit, the words
+    /// give way and end in an ellipsis, so the button beside the title is never pushed out of view.
     fn heading(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (mono, muted) = (theme.mono_font_family.clone(), theme.muted_foreground);
@@ -199,19 +201,52 @@ impl WorkspacePane {
                     .id("workspace-title")
                     .role(gpui_kit::Role::Heading)
                     .aria_label(title.clone())
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
                     .text_sm()
                     .font_weight(FontWeight::MEDIUM)
                     .child(title)
                     .test_support(),
             )
-            .child(div().text_color(look::faint()).child("/"))
-            .child(div().text_xs().font_family(mono).text_color(muted).child(self.workspace.branch.clone()))
+            .child(div().flex_none().child(self.regenerate_title_button(cx)))
+            .child(div().flex_none().text_color(look::faint()).child("/"))
             .child(
                 div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .text_xs()
+                    .font_family(mono)
+                    .text_color(muted)
+                    .child(self.workspace.branch.clone()),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
                     .text_xs()
                     .text_color(look::faint())
                     .child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?"))),
             )
+    }
+
+    /// Titles the workspace again from what's been asked in it, beside the title it replaces. It spins while the hub
+    /// waits on the model, and is greyed out until there's a title, which the first prompt gives. A workspace renamed
+    /// by hand before that has one with nothing to make another from, and the hub says so.
+    fn regenerate_title_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = self.workspace.id.clone();
+        Button::new("regenerate-title")
+            .ghost()
+            .xsmall()
+            .icon(Lucide::PencilSparkles)
+            .text_color(cx.theme().muted_foreground)
+            .tooltip("Regenerate title")
+            .loading(self.retitling)
+            // Under the arrow while it waits, as it is while it's greyed out.
+            .when(!self.retitling, |button| button.off_while(self.workspace.title.is_none()))
+            .on_click(cx.listener(move |_, _, _, cx| cx.emit(PaneEvent::RegenerateTitle(id.clone()))))
     }
 }
 

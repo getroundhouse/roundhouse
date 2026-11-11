@@ -72,6 +72,14 @@ pub enum ClientRequest {
         id: WorkspaceId,
         title: String,
     },
+    /// Titles the workspace again from every prompt its chats have had, by a call of its own to a small model, and
+    /// replies once that has answered. The new title replaces the one that was there when this was asked, one typed
+    /// by hand included, since someone asked, and a title set meanwhile stays. Refused as a conflict unless the
+    /// workspace is ready, and until a chat has had a prompt with something typed in it, since there's nothing to
+    /// title it from. Sent again, it asks again, since it carries no ID.
+    WorkspaceRegenerateTitle {
+        id: WorkspaceId,
+    },
     WorkspaceStatus {
         id: WorkspaceId,
     },

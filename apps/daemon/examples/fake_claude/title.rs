@@ -1,6 +1,8 @@
 //! The one-off call that titles a prompt. It answers with what `$FAKE_CLAUDE_STATE/title` holds, shaped like the
 //! real CLI's single JSON result, and fails if there's no such file, so a test that isn't about titles keeps the
-//! prompt's first line. It keeps the prompt it was given in `title-prompt`.
+//! prompt's first line. It keeps the prompt it was given in `title-prompt`. A prompt can carry its own title instead,
+//! as the rest of the line after `titled:`, for tests that share a state directory, where a file would title every
+//! test's prompts.
 //!
 //! While `title-held` exists it waits, so a test can act before the title arrives. Meanwhile it runs a process of
 //! its own, as a hook would, and writes its PID and that one's to `title-pids`, so a test can tell that stopping the
@@ -26,7 +28,8 @@ pub(crate) fn answer(state: &Path) {
         started.kill().unwrap();
         started.wait().unwrap();
     }
-    let Ok(title) = std::fs::read_to_string(state.join("title")) else {
+    let carried = prompt.split_once("titled:").and_then(|(_, title)| title.lines().next()).map(str::to_string);
+    let Some(title) = carried.or_else(|| std::fs::read_to_string(state.join("title")).ok()) else {
         eprintln!("Error: no title to give");
         std::process::exit(1);
     };

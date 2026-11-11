@@ -175,8 +175,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionMarkRead { .. }
         | R::SessionMarkUnread { .. }
         | R::SessionRename { .. } => Err(read_only("change anything")),
-        // So a screen can show a workspace on its way.
-        R::WorkspaceArchive { .. } => Ok(Outcome::Never),
+        // So a screen can show a workspace on its way, or waiting for its new title.
+        R::WorkspaceArchive { .. } | R::WorkspaceRegenerateTitle { .. } => Ok(Outcome::Never),
         R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
     }
 }

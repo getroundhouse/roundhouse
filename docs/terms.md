@@ -27,7 +27,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Project | What the interface calls a repository added to a hub: the entry that holds a codebase's workspaces and settings, with one git repository behind it | `Repo` |
 | Workspace | The unit of delegation: a name, a branch and a worktree in one repository, with its sessions and diff comments | `Workspace` |
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
-| Title | What a workspace or a chat is called on screen. It comes from the first prompt, or is typed by hand, and one typed by hand is never replaced | `Workspace.title`, `Session.title`, `TitleSource` |
+| Title | What a workspace or a chat is called on screen. It's generated from the first prompt, generated again from every prompt when someone asks, or typed by hand, and one typed by hand is replaced only by one someone asks for | `Workspace.title`, `Session.title`, `TitleSource` |
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
