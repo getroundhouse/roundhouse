@@ -24,7 +24,11 @@ impl SessionLog {
     /// the agent after it.
     pub fn prompt_state(&self, seq: Seq) -> PromptState {
         let mut dropped = false;
-        for later in seq + 1..=self.last_seq {
+        // What comes after it in this log, which holds every event about a prompt, whether it's the whole log or the
+        // agent's own events. One it doesn't hold, such as one past its end, has nothing after it yet.
+        let Some(row) = self.row_of(seq) else { return PromptState::Waiting };
+        let position = row as u64 + 1;
+        for later in position + 1..=self.last {
             // Not loaded, so far behind the tail, where it was settled long ago.
             let Some(event) = self.events.get(&later) else {
                 return if dropped { PromptState::Dropped } else { PromptState::Taken };

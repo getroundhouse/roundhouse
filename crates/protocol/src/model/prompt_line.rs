@@ -2,16 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Seq;
 use super::one_line::one_line;
-use crate::event::EventBody;
+use super::{Place, Seq};
+use crate::event::{EventBody, SessionEvent};
 
 /// A recorded prompt as one line: where it is in the log, and how it starts. Every way to make one tidies its text,
-/// including reading one from a hub, so a line from a hub that tidies differently still reads as one line.
+/// including reading one from a hub, so a line from a hub that tidies differently still reads as one line. A prompt is
+/// one of the agent's own events, so it has a place among them too.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(from = "Sent")]
 pub struct PromptLine {
     seq: Seq,
+    place: Place,
     text: String,
     files: u32,
 }
@@ -20,13 +22,16 @@ pub struct PromptLine {
 #[derive(Deserialize)]
 struct Sent {
     seq: Seq,
+    /// A hub from before places sends none.
+    #[serde(default)]
+    place: Place,
     text: String,
     files: u32,
 }
 
 impl From<Sent> for PromptLine {
     fn from(sent: Sent) -> Self {
-        Self::new(sent.seq, &sent.text, sent.files)
+        Self::new(sent.seq, &sent.text, sent.files).placed(sent.place)
     }
 }
 
@@ -35,20 +40,33 @@ impl PromptLine {
     /// with hundreds of prompts, some of them pasted logs, lists them in a small reply.
     pub const MOST_CHARS: usize = 200;
 
-    /// The line for a prompt recorded at `seq` that says `text` and carries `files` files.
+    /// The line for a prompt recorded at `seq` that says `text` and carries `files` files, with no place until
+    /// [`PromptLine::placed`] gives it one.
     pub fn new(seq: Seq, text: &str, files: u32) -> Self {
-        Self { seq, text: one_line(text, Self::MOST_CHARS), files }
+        Self { seq, place: Place::default(), text: one_line(text, Self::MOST_CHARS), files }
     }
 
-    /// The line for the event recorded at `seq`, if it's a prompt.
-    pub fn of(seq: Seq, body: &EventBody) -> Option<Self> {
-        let EventBody::UserPrompt { text, attachments, .. } = body else { return None };
-        Some(Self::new(seq, text, u32::try_from(attachments.len()).unwrap_or(u32::MAX)))
+    /// The same line, at `place` among the agent's own events.
+    #[must_use]
+    pub fn placed(self, place: Place) -> Self {
+        Self { place, ..self }
+    }
+
+    /// The line for `event`, if it's a prompt, as the hub lists it.
+    pub fn of(event: &SessionEvent) -> Option<Self> {
+        let EventBody::UserPrompt { text, attachments, .. } = &event.body else { return None };
+        let files = u32::try_from(attachments.len()).unwrap_or(u32::MAX);
+        Some(Self::new(event.seq, text, files).placed(event.place))
     }
 
     /// Where the prompt is in the log.
     pub fn seq(&self) -> Seq {
         self.seq
+    }
+
+    /// Where the prompt is among the agent's own events, or 0 from a hub that doesn't record places.
+    pub fn place(&self) -> Place {
+        self.place
     }
 
     /// The start of what was typed, as it reads on one line, tidied as a title is: each run of whitespace is one space,
@@ -98,11 +116,21 @@ mod tests {
     }
 
     #[test]
-    fn a_prompt_has_a_line_and_nothing_else_does() {
+    fn a_prompt_has_a_line_at_its_place_and_nothing_else_does() {
+        let event = |seq, place, body| SessionEvent {
+            session_id: "s".into(),
+            seq,
+            ts_ms: 0,
+            run: None,
+            subagent: None,
+            place: Place::new(place),
+            body,
+            raw: None,
+        };
         let body = EventBody::UserPrompt { text: "Fix\nit".to_string(), client_msg_id: None, attachments: Vec::new() };
 
-        assert_eq!(PromptLine::of(4, &body), Some(PromptLine::new(4, "Fix it", 0)));
-        assert_eq!(PromptLine::of(2, &EventBody::PromptTaken { prompt: 1 }), None);
+        assert_eq!(PromptLine::of(&event(4, 3, body)), Some(PromptLine::new(4, "Fix it", 0).placed(Place::new(3))));
+        assert_eq!(PromptLine::of(&event(2, 2, EventBody::PromptTaken { prompt: 1 })), None);
     }
 
     #[test]
@@ -121,6 +149,16 @@ mod tests {
     fn a_line_goes_to_a_client_with_the_fields_it_reads() {
         let line = PromptLine::new(7, "Fix it", 2);
 
-        assert_eq!(serde_json::to_value(&line).unwrap(), serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 }));
+        assert_eq!(
+            serde_json::to_value(line.placed(Place::new(3))).unwrap(),
+            serde_json::json!({ "seq": 7, "place": 3, "text": "Fix it", "files": 2 })
+        );
+    }
+
+    #[test]
+    fn a_line_from_a_hub_that_doesnt_record_places_has_none() {
+        let sent = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
+
+        assert_eq!(serde_json::from_value::<PromptLine>(sent).unwrap().place(), Place::default());
     }
 }

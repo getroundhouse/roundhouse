@@ -1,13 +1,26 @@
-//! One session's log, kept current so a view only reads it: a window of its history and its live tail.
+//! One session's log, kept current so a view only reads it: a window of its history and its live tail. A view
+//! follows every event, or only the agent's own, or one subagent's.
 
 use parking_lot::Mutex;
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
-use protocol::model::{ClientMessageId, Seq, Session, SessionId};
+use protocol::model::{ClientMessageId, Place, Seq, Session, SessionId, ToolUseId};
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
-use crate::session_log::{Changes, PendingPrompt, SessionLog};
+use crate::session_log::{By, Changes, PendingPrompt, SessionLog};
+
+/// Which of a session's events a view follows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum View {
+    /// Every event, by `seq`.
+    Whole,
+    /// The agent's own events, by place. A hub from before places can't read them apart, so from one this is every
+    /// event, by `seq`, which [`SessionLog::by`] says.
+    Own,
+    /// The events of the subagent the call `call` started, by place.
+    Subagent(ToolUseId),
+}
 
 /// A session someone has open, kept current until every clone of this has gone. It fetches the history a
 /// view is looking at, and carries on from a new connection given to [`OpenSession::reconnect`].
@@ -17,11 +30,25 @@ pub struct OpenSession {
 }
 
 impl OpenSession {
-    /// Starts following, on a thread of its own, so this doesn't wait for the hub. Once it has subscribed, it asks for
-    /// the session's prompts.
+    /// Starts following every event, on a thread of its own, so this doesn't wait for the hub. Once it has subscribed,
+    /// it asks for the session's prompts.
     pub fn start(client: &Client, session: &Session) -> OpenSession {
-        let source = SessionSource { session_id: session.id.clone() };
-        let follow = Follow::start(client, SessionLog::new(session.last_seq), source);
+        OpenSession::start_view(client, session, View::Whole)
+    }
+
+    /// Starts following the events `view` takes, on a thread of its own. Once it has subscribed, it asks for the
+    /// session's prompts, unless it follows a subagent, whose events hold none.
+    pub fn start_view(client: &Client, session: &Session, view: View) -> OpenSession {
+        // One by place doesn't know how far it goes until the hub says.
+        let log = if view == View::Whole { SessionLog::new(session.last_seq) } else { SessionLog::by_place(0) };
+        let source = SessionSource {
+            session_id: session.id.clone(),
+            wanted: view.clone(),
+            view,
+            last_seq: session.last_seq,
+            placed: false,
+        };
+        let follow = Follow::start(client, log, source);
         follow.wake();
         OpenSession { follow }
     }
@@ -70,16 +97,73 @@ impl OpenSession {
 
 struct SessionSource {
     session_id: SessionId,
+    /// The view asked for.
+    wanted: View,
+    /// The view followed, which is every event when the hub can't read the agent's own apart.
+    view: View,
+    /// How far the whole log went when the session was opened, for following it from a hub that can't read by
+    /// place.
+    last_seq: Seq,
+    /// The hub has said how far the events by place go.
+    placed: bool,
+}
+
+impl SessionSource {
+    fn subagent(&self) -> Option<&ToolUseId> {
+        match &self.view {
+            View::Subagent(call) => Some(call),
+            View::Whole | View::Own => None,
+        }
+    }
+
+    /// Asks how far the events by place go, the first time on each connection. A hub that can't read the agent's own
+    /// events apart is followed for every event instead, and one that can, after one that couldn't, by place again.
+    fn place(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<()> {
+        if self.view == View::Whole || self.placed {
+            return Ok(());
+        }
+        match client.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1) {
+            Ok((_, last)) => {
+                let mut log = held.lock();
+                if log.by() == By::Seq {
+                    log.read_by_place();
+                }
+                log.reaches(last.get());
+            }
+            Err(e) if e.is_unsupported() && self.view == View::Own => {
+                self.view = View::Whole;
+                // One already by `seq`, from such a hub before, carries on from where it got to.
+                let mut log = held.lock();
+                if log.by() == By::Place {
+                    log.read_whole(self.last_seq);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+        self.placed = true;
+        Ok(())
+    }
 }
 
 impl Source for SessionSource {
     type Held = SessionLog;
 
+    fn reconnected(&mut self) {
+        self.view = self.wanted.clone();
+        self.placed = false;
+    }
+
     fn resume(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<Subscription> {
+        self.place(client, held)?;
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
         let from = held.lock().received() + 1;
-        let subscription = client.session_subscribe(&self.session_id, from)?;
+        let subscription = match &self.view {
+            View::Whole => client.session_subscribe(&self.session_id, from)?,
+            View::Own | View::Subagent(_) => {
+                client.session_subscribe_places(&self.session_id, self.subagent(), Place::new(from))?
+            }
+        };
         held.lock().retry_failed();
         Ok(subscription)
     }
@@ -110,7 +194,7 @@ impl Source for SessionSource {
         let fetched = !pages.is_empty();
         for range in pages {
             let start = range.start;
-            match read_range(client, &self.session_id, range) {
+            match self.read_range(client, range) {
                 Ok(events) => held.lock().install_page(start, events),
                 Err(e) => {
                     held.lock().fetch_failed();
@@ -126,9 +210,9 @@ impl SessionSource {
     /// Asks for the session's prompts, once. It's only asked for here, with the subscription started, so it misses
     /// nothing: every prompt the subscription won't send was recorded before this. A hub too old to list them leaves
     /// only the prompts the log is given, and one that fails to is asked again on a new connection, while the chat goes
-    /// on either way.
+    /// on either way. A subagent's events hold no prompts, so a view of them asks for none.
     fn list_prompts(&self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
-        if !held.lock().wants_prompt_list() {
+        if matches!(self.view, View::Subagent(_)) || !held.lock().wants_prompt_list() {
             return Ok(false);
         }
         match client.session_prompt_list(&self.session_id) {
@@ -148,18 +232,33 @@ impl SessionSource {
     }
 }
 
-/// A size limit can cut a read short, so this keeps going until the range is complete.
-fn read_range(client: &Client, session_id: &SessionId, range: std::ops::Range<Seq>) -> Result<Vec<SessionEvent>> {
-    let mut events = Vec::new();
-    let mut from = range.start;
-    while from < range.end {
-        let limit = u32::try_from(range.end - from).unwrap_or(u32::MAX);
-        let (page, _) = client.session_read(session_id, from, limit, false)?;
-        let Some(last) = page.last().map(|e| e.seq) else { break };
-        events.extend(page);
-        from = last + 1;
+impl SessionSource {
+    /// The events at these positions. A size limit can cut a read short, so this keeps going until the range is
+    /// complete.
+    fn read_range(&self, client: &Client, range: std::ops::Range<u64>) -> Result<Vec<SessionEvent>> {
+        let mut events = Vec::new();
+        let mut from = range.start;
+        while from < range.end {
+            let limit = u32::try_from(range.end - from).unwrap_or(u32::MAX);
+            let (page, last) = match &self.view {
+                View::Whole => {
+                    let page = client.session_read(&self.session_id, from, limit, false)?.0;
+                    let last = page.last().map(|e| e.seq);
+                    (page, last)
+                }
+                View::Own | View::Subagent(_) => {
+                    let page =
+                        client.session_read_places(&self.session_id, self.subagent(), Place::new(from), limit)?.0;
+                    let last = page.last().map(|e| e.place.get());
+                    (page, last)
+                }
+            };
+            let Some(last) = last else { break };
+            events.extend(page);
+            from = last + 1;
+        }
+        Ok(events)
     }
-    Ok(events)
 }
 
 #[cfg(test)]

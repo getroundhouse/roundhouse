@@ -23,6 +23,10 @@ pub(super) trait Source: Send + 'static {
 
     /// Does what a reader asked for, such as fetching history. Returns whether it changed what's held.
     fn asked(&mut self, client: &Client, held: &Mutex<Self::Held>) -> Result<bool>;
+
+    /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
+    /// [`Source::resume`] does for it.
+    fn reconnected(&mut self) {}
 }
 
 /// What went wrong while following, for a person to hear about. A connection going isn't one of these:
@@ -189,6 +193,7 @@ impl<S: Source> Follower<S> {
         let reconnect = self.shared.reconnect.lock().take();
         if let Some(client) = reconnect {
             self.client = client;
+            self.source.reconnected();
             self.resume();
         }
         // Nothing can be fetched without a connection, so what's asked waits for one.

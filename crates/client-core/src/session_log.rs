@@ -1,10 +1,12 @@
-//! What a client holds of one session: a window of its event log, never all of it.
+//! What a client holds of one session: a window of its event log, or of the events from one agent or subagent in
+//! it, never all of it.
 //!
 //! No IO and no UI. A view asks for rows by index, this says what to fetch, and whoever owns the
-//! connection does the fetching. Rows are indexed by `seq - 1`, followed by prompts still waiting
-//! to be recorded, so an index means the same thing however much is loaded.
+//! connection does the fetching. Rows are indexed by each event's position less one, followed by prompts still
+//! waiting to be recorded, so an index means the same thing however much is loaded. An event's position is its
+//! `seq` in the whole log, and its place in the events from one agent or subagent.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 
 use protocol::attachment::Attachment;
@@ -12,8 +14,10 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Seq, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
+mod approvals;
 mod outline;
 mod prompts;
+mod restart;
 
 pub use prompts::PromptState;
 
@@ -47,13 +51,28 @@ pub struct Changes {
     pub turns_ended: usize,
 }
 
+/// What a log's rows follow, and so what an event's position is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum By {
+    /// Every event in the session, by `seq`.
+    #[default]
+    Seq,
+    /// The events from one agent or subagent, by their place among them.
+    Place,
+}
+
 #[derive(Debug, Default)]
 pub struct SessionLog {
-    last_seq: Seq,
+    by: By,
+    /// The position of the newest event.
+    last: u64,
     /// The newest event the subscription has delivered. It delivers every page after this, so those aren't
     /// fetched.
-    received: Seq,
-    events: BTreeMap<Seq, SessionEvent>,
+    received: u64,
+    /// What's loaded, by position.
+    events: BTreeMap<u64, SessionEvent>,
+    /// The position of each event loaded, by its `seq`, when that isn't its position.
+    positions: HashMap<Seq, u64>,
     pages: BTreeSet<u64>,
     in_flight: BTreeSet<u64>,
     /// Pages whose fetch failed, which aren't asked for again until [`SessionLog::retry_failed`].
@@ -69,103 +88,94 @@ pub struct SessionLog {
     outline: outline::Outline,
 }
 
-fn page_of(seq: Seq) -> u64 {
-    (seq.max(1) - 1) / PAGE_EVENTS
+fn page_of(position: u64) -> u64 {
+    (position.max(1) - 1) / PAGE_EVENTS
 }
 
-/// Where a subscription starts for a log that reaches `last_seq`: the start of the page before the newest,
+/// Where a subscription starts for a log that reaches `last`: the start of the page before the newest,
 /// so every page it delivers arrives whole, and an open approval, which is always near the end, comes too.
-pub(crate) fn first_live_seq(last_seq: Seq) -> Seq {
-    page_range(page_of(last_seq).saturating_sub(1)).start
+pub(crate) fn first_live(last: u64) -> u64 {
+    page_range(page_of(last).saturating_sub(1)).start
 }
 
-fn page_range(page: u64) -> Range<Seq> {
+fn page_range(page: u64) -> Range<u64> {
     page * PAGE_EVENTS + 1..(page + 1) * PAGE_EVENTS + 1
 }
 
 impl SessionLog {
-    /// A log that reaches `last_seq`, which a subscription fills from [`first_live_seq`] on.
+    /// The whole log, which reaches `last_seq`, which a subscription fills from [`first_live`] on.
     pub fn new(last_seq: Seq) -> Self {
         let focus = seq_index(last_seq).saturating_sub(1);
-        Self { last_seq, received: first_live_seq(last_seq) - 1, focus, ..Default::default() }
+        Self { last: last_seq, received: first_live(last_seq) - 1, focus, ..Default::default() }
+    }
+
+    /// The events from one agent or subagent, which reach the place `last`, which a subscription fills from
+    /// [`first_live`] on.
+    pub fn by_place(last: u64) -> Self {
+        let focus = seq_index(last).saturating_sub(1);
+        Self { by: By::Place, last, received: first_live(last) - 1, focus, ..Default::default() }
+    }
+
+    pub fn by(&self) -> By {
+        self.by
     }
 
     pub fn row_count(&self) -> usize {
-        seq_index(self.last_seq) + self.pending.len()
+        seq_index(self.last) + self.pending.len()
     }
 
-    pub fn last_seq(&self) -> Seq {
-        self.last_seq
+    /// The position of the newest event.
+    pub fn last(&self) -> u64 {
+        self.last
     }
 
     pub fn row(&self, index: usize) -> Row<'_> {
-        let seq = index as Seq + 1;
-        if seq <= self.last_seq {
-            return match self.events.get(&seq) {
+        let position = index as u64 + 1;
+        if position <= self.last {
+            return match self.events.get(&position) {
                 Some(event) => Row::Event(event),
                 None => Row::Unloaded,
             };
         }
-        match self.pending.get(index - seq_index(self.last_seq)) {
+        match self.pending.get(index - seq_index(self.last)) {
             Some(prompt) => Row::Pending(prompt),
             None => Row::Unloaded,
         }
+    }
+
+    /// The row of the event at `seq`, if this log has it there: in the whole log, its row by `seq`, and otherwise
+    /// its row if it's loaded.
+    pub fn row_of(&self, seq: Seq) -> Option<usize> {
+        let position = match self.by {
+            By::Seq => (seq >= 1 && seq <= self.last).then_some(seq)?,
+            By::Place => *self.positions.get(&seq)?,
+        };
+        Some(seq_index(position) - 1)
+    }
+
+    /// Where `event` goes in this log.
+    fn position(&self, event: &SessionEvent) -> u64 {
+        match self.by {
+            By::Seq => event.seq,
+            By::Place => event.place.get(),
+        }
+    }
+
+    /// Holds `event`. A position only ever has the one event, so one put in again replaces itself.
+    fn insert(&mut self, event: SessionEvent) {
+        let position = self.position(&event);
+        if self.by == By::Place {
+            self.positions.insert(event.seq, position);
+        }
+        self.events.insert(position, event);
     }
 
     pub fn tail(&self) -> &Tail {
         &self.tail
     }
 
-    /// Open approvals among what's loaded. An approval blocks its agent, so an open one is always
-    /// near the tail, which is always loaded. Only the events that run unbroken back from the newest
-    /// count, since an older request's answer can be in a page that isn't loaded, such as when a page
-    /// is fetched for scrolling back.
-    pub fn open_approvals(&self) -> Vec<&SessionEvent> {
-        let mut open: Vec<&SessionEvent> = Vec::new();
-        for event in self.unbroken_from_newest() {
-            match &event.body {
-                EventBody::ApprovalRequested { .. } => open.push(event),
-                EventBody::ApprovalResolved { approval_id, .. } => open.retain(
-                    |e| !matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id),
-                ),
-                EventBody::UserPrompt { .. }
-                | EventBody::PromptTaken { .. }
-                | EventBody::PromptDropped { .. }
-                | EventBody::ToolCallDropped { .. }
-                | EventBody::AgentStarted { .. }
-                | EventBody::AgentInit { .. }
-                | EventBody::AgentState { .. }
-                | EventBody::AgentTasks { .. }
-                | EventBody::AgentLimits { .. }
-                | EventBody::Assistant { .. }
-                | EventBody::AgentUser { .. }
-                | EventBody::TurnEnded { .. }
-                | EventBody::AgentExited { .. }
-                | EventBody::Notice { .. }
-                | EventBody::AgentMode { .. }
-                | EventBody::SubagentStarted { .. }
-                | EventBody::SubagentEnded { .. }
-                | EventBody::AgentOther { .. }
-                | EventBody::Unknown => {}
-            }
-        }
-        open
-    }
-
-    /// The loaded events with every event after them loaded too, oldest first.
-    fn unbroken_from_newest(&self) -> impl Iterator<Item = &SessionEvent> {
-        let mut wanted = self.last_seq;
-        let unbroken = |seq: &&Seq| {
-            let next = **seq == wanted;
-            wanted = seq.saturating_sub(1);
-            next
-        };
-        let first = self.events.keys().rev().take_while(unbroken).last().copied();
-        first.into_iter().flat_map(|first| self.events.range(first..).map(|(_, event)| event))
-    }
-
     /// The newest event the subscription has delivered, so a new one carries on after it.
-    pub(crate) fn received(&self) -> Seq {
+    pub(crate) fn received(&self) -> u64 {
         self.received
     }
 
@@ -176,13 +186,13 @@ impl SessionLog {
 
     /// Pages to fetch for the row a view wants, nearest first, marking them as in flight. A page the
     /// subscription has yet to deliver isn't one of them.
-    pub(crate) fn pages_to_fetch(&mut self) -> Vec<Range<Seq>> {
-        if self.last_seq == 0 {
+    pub(crate) fn pages_to_fetch(&mut self) -> Vec<Range<u64>> {
+        if self.last == 0 {
             return Vec::new();
         }
-        let focus = self.focus.min(seq_index(self.last_seq) - 1) as Seq + 1;
+        let focus = self.focus.min(seq_index(self.last) - 1) as u64 + 1;
         let center = page_of(focus);
-        let last = page_of(self.last_seq);
+        let last = page_of(self.last);
         let mut wanted = vec![center];
         if center > 0 {
             wanted.push(center - 1);
@@ -201,19 +211,19 @@ impl SessionLog {
     }
 
     /// Puts a fetched range in place.
-    pub(crate) fn install_page(&mut self, start: Seq, events: Vec<SessionEvent>) {
+    pub(crate) fn install_page(&mut self, start: u64, events: Vec<SessionEvent>) {
         let page = page_of(start);
         self.in_flight.remove(&page);
         self.pages.insert(page);
         let range = page_range(page);
         for event in events {
-            self.last_seq = self.last_seq.max(event.seq);
+            self.last = self.last.max(self.position(&event));
             self.outline.saw(&event);
-            self.events.insert(event.seq, event);
+            self.insert(event);
         }
         self.events_added += 1;
         self.evict();
-        self.touched(seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last_seq)));
+        self.touched(seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last)));
     }
 
     /// A fetch failed, so the pages still on their way won't come. They aren't asked for again until
@@ -235,23 +245,24 @@ impl SessionLog {
         }
         self.tail.on_event(event.run, &event.body);
         self.outline.saw(&event);
-        self.received = self.received.max(event.seq);
-        self.last_seq = self.last_seq.max(event.seq);
+        let position = self.position(&event);
+        self.received = self.received.max(position);
+        self.last = self.last.max(position);
         if matches!(event.body, EventBody::TurnEnded { .. }) {
             self.changes.turns_ended += 1;
         }
         // Its own row, and everything after it, which a prompt it recorded may have moved, up to the tail.
-        self.touched(seq_index(event.seq) - 1..self.row_count() + 1);
+        self.touched(seq_index(position) - 1..self.row_count() + 1);
         // A prompt the agent dropped says so under it.
         if let EventBody::PromptDropped { prompt } = &event.body
-            && *prompt > 0
+            && let Some(row) = self.row_of(*prompt)
         {
-            self.touched(seq_index(*prompt) - 1..seq_index(*prompt));
+            self.touched(row..row + 1);
         }
         // Only the tail stays loaded from live events. Anything older is fetched when scrolled to.
-        if page_of(event.seq) + 1 >= page_of(self.last_seq) {
-            self.pages.insert(page_of(event.seq));
-            self.events.insert(event.seq, event);
+        if page_of(position) + 1 >= page_of(self.last) {
+            self.pages.insert(page_of(position));
+            self.insert(event);
             self.events_added += 1;
             self.evict();
         }
@@ -270,7 +281,7 @@ impl SessionLog {
     /// Adds a prompt that's on its way, so it shows straight away. Recording it removes this.
     pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
         self.pending.push(PendingPrompt { client_msg_id, text, attachments });
-        self.touched(seq_index(self.last_seq)..self.row_count() + 1);
+        self.touched(seq_index(self.last)..self.row_count() + 1);
     }
 
     /// What changed since this was last asked.
@@ -289,14 +300,14 @@ impl SessionLog {
     pub(crate) fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
         let at = self.pending.iter().position(|prompt| prompt.client_msg_id == *client_msg_id)?;
         let removed = self.pending.remove(at);
-        self.touched(seq_index(self.last_seq)..self.row_count() + 1);
+        self.touched(seq_index(self.last)..self.row_count() + 1);
         Some(removed)
     }
 
     /// Drops whole pages furthest from where a view is looking, keeping the tail for live updates.
     fn evict(&mut self) {
-        let center = page_of(self.focus as Seq + 1);
-        let tail = page_of(self.last_seq);
+        let center = page_of(self.focus as u64 + 1);
+        let tail = page_of(self.last);
         while self.events.len() > MAX_LOADED_EVENTS {
             let far = self
                 .pages
@@ -307,9 +318,11 @@ impl SessionLog {
             let Some(far) = far else { return };
             self.pages.remove(&far);
             let range = page_range(far);
-            let doomed: Vec<Seq> = self.events.range(range).map(|(seq, _)| *seq).collect();
-            for seq in doomed {
-                self.events.remove(&seq);
+            let doomed: Vec<u64> = self.events.range(range).map(|(position, _)| *position).collect();
+            for position in doomed {
+                if let Some(event) = self.events.remove(&position) {
+                    self.positions.remove(&event.seq);
+                }
             }
         }
     }
@@ -318,8 +331,8 @@ impl SessionLog {
     /// Every other row is [`Row::Unloaded`].
     pub fn loaded_rows(&self) -> Vec<Range<usize>> {
         let mut runs: Vec<Range<usize>> = Vec::new();
-        let recorded = seq_index(self.last_seq);
-        let events = self.events.keys().map(|seq| seq_index(*seq) - 1).filter(|row| *row < recorded);
+        let recorded = seq_index(self.last);
+        let events = self.events.keys().map(|position| seq_index(*position) - 1).filter(|row| *row < recorded);
         for row in events.chain(recorded..recorded + self.pending.len()) {
             match runs.last_mut() {
                 Some(run) if run.end == row => run.end += 1,

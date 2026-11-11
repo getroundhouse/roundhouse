@@ -289,7 +289,7 @@ impl Store {
     pub fn prompt_lines(&self, session_id: &SessionId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
-            "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments') FROM events \
+            "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments'), place FROM events \
              WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq",
         )?;
         lines_of(statement.query([session_id.as_str()])?)
@@ -300,7 +300,7 @@ impl Store {
     pub fn workspace_prompt_lines(&self, workspace_id: &WorkspaceId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
-            "SELECT e.seq, json_extract(e.body, '$.text'), json_array_length(e.body, '$.attachments') \
+            "SELECT e.seq, json_extract(e.body, '$.text'), json_array_length(e.body, '$.attachments'), e.place \
              FROM sessions s JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
              WHERE s.workspace_id = ? ORDER BY e.ts_ms, s.created_at_ms, e.seq",
         )?;
@@ -308,7 +308,7 @@ impl Store {
     }
 }
 
-/// The line for each row of a prompt's `seq`, text and how many files it carries.
+/// The line for each row of a prompt's `seq`, text, how many files it carries, and place.
 fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError> {
     let mut lines = Vec::new();
     while let Some(row) = rows.next()? {
@@ -320,7 +320,8 @@ fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError>
             ValueRef::Null | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Blob(_) => "".into(),
         };
         let files = u32::try_from(row.get::<_, Option<i64>>(2)?.unwrap_or(0)).unwrap_or(u32::MAX);
-        lines.push(PromptLine::new(seq, &text, files));
+        let place = Place::new(row.get::<_, i64>(3)?.cast_unsigned());
+        lines.push(PromptLine::new(seq, &text, files).placed(place));
     }
     Ok(lines)
 }

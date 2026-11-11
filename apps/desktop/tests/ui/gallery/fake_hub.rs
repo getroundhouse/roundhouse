@@ -115,7 +115,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionPromptList { id } => {
             world.session(&id)?;
-            let prompts = world.events_from(&id, 1).filter_map(|event| PromptLine::of(event.seq, &event.body));
+            let prompts = world.events_from(&id, 1).filter_map(PromptLine::of);
             reply(C::Prompts { prompts: prompts.collect() })
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),

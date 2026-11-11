@@ -241,3 +241,74 @@ fn changes_gather_into_one_range_until_a_view_looks() {
     assert_eq!(changes, Changes { rows: Some(0..3), turns_ended: 1 }, "two rows and the tail");
     assert_eq!(log.take_changes(), Changes::default(), "nothing since");
 }
+
+/// An event from one agent or subagent at `place`, which the whole log has at `seq`.
+fn placed(seq: Seq, place: u64, body: EventBody) -> SessionEvent {
+    SessionEvent { place: Place::new(place), ..event(seq, body) }
+}
+
+fn prompt() -> EventBody {
+    EventBody::UserPrompt { text: "go".into(), client_msg_id: None, attachments: Vec::new() }
+}
+
+#[test]
+fn a_log_by_place_has_a_row_for_each_place_whatever_seq_its_event_has() {
+    let mut log = SessionLog::by_place(0);
+    log.reaches(2);
+
+    for event in [
+        placed(3, 1, prompt()),
+        placed(7, 2, notice(7).body),
+        placed(10, 3, EventBody::PromptTaken { prompt: 3 }),
+        placed(12, 4, prompt()),
+    ] {
+        log.apply_event(event);
+    }
+
+    assert_eq!((log.by(), log.row_count()), (By::Place, 4));
+    assert!(matches!(log.row(1), Row::Event(e) if e.seq == 7));
+    assert_eq!((log.row_of(7), log.row_of(5)), (Some(1), None), "seq 5 is another agent's, so it has no row here");
+    assert_eq!(log.prompt_state(3), PromptState::Taken, "the agent took it later in its own events");
+    assert_eq!(log.prompt_state(12), PromptState::Waiting, "nothing after it says the agent has it");
+    assert_eq!(log.prompt_state(20), PromptState::Waiting, "nor after one past its end, which it doesn't hold");
+}
+
+#[test]
+fn a_log_by_place_fetches_nothing_until_a_view_asks_once_it_knows_how_far_it_goes() {
+    let mut log = SessionLog::by_place(0);
+
+    log.reaches(3000);
+
+    assert!(log.pages_to_fetch().is_empty(), "it looks at its last row, whose page comes live");
+}
+
+#[test]
+fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
+    let mut log = SessionLog::by_place(0);
+    log.reaches(3000);
+    log.focus_on(300);
+    assert_eq!(log.pages_to_fetch(), vec![251..501, 1..251, 501..751], "by place, as by seq");
+
+    log.install_page(251, (251..501).map(|place| placed(place * 2, place, notice(place * 2).body)).collect());
+
+    assert!(matches!(log.row(250), Row::Event(e) if e.seq == 502));
+    assert_eq!(log.row_of(502), Some(250));
+    for page in 0..12 {
+        let start = page * PAGE_EVENTS + 1;
+        log.focus_on(seq_index(start) + 1000);
+        log.install_page(start, (start..start + PAGE_EVENTS).map(|p| placed(p * 2, p, notice(p * 2).body)).collect());
+    }
+    assert!(log.loaded_events() <= MAX_LOADED_EVENTS);
+    assert_eq!(log.row_of(502), None, "let go of with its page");
+}
+
+#[test]
+fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way() {
+    let mut log = SessionLog::by_place(0);
+    log.add_pending("m".into(), "go".into(), Vec::new());
+
+    log.read_whole(5);
+
+    assert_eq!((log.by(), log.row_count()), (By::Seq, 6));
+    assert!(matches!(log.row(5), Row::Pending(prompt) if prompt.text == "go"));
+}

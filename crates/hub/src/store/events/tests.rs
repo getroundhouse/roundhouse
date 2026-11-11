@@ -71,12 +71,12 @@ fn every_prompt_is_listed_in_order_as_a_line_and_nothing_else_is() {
     append(&prompt("Fix\n  this", 0));
     append(&EventBody::PromptTaken { prompt: 1 });
     append(&notice("x"));
+    // A subagent's, which isn't among the agent's own, so the next prompt's place isn't its `seq`.
+    append(&Sent::Message(Some(1)).body());
     append(&prompt("", 2));
 
-    assert_eq!(
-        store.prompt_lines(&"s".into()).unwrap(),
-        [PromptLine::new(1, "Fix this", 0), PromptLine::new(4, "", 2)]
-    );
+    let placed = |seq, text, files, place| PromptLine::new(seq, text, files).placed(Place::new(place));
+    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [placed(1, "Fix this", 0, 1), placed(5, "", 2, 4)]);
     assert!(store.prompt_lines(&"other".into()).unwrap().is_empty());
 }
 
@@ -129,7 +129,7 @@ fn a_listed_line_is_the_line_its_event_makes() {
         .enumerate()
         .map(|(files, text)| {
             let event = store.append(&"s".into(), None, &prompt(text, files), None, None, None).unwrap().event;
-            PromptLine::of(event.seq, &event.body).unwrap()
+            PromptLine::of(&event).unwrap()
         })
         .collect();
 

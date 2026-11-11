@@ -36,7 +36,7 @@ pub use api::{new_attachment_id, new_message_id, new_request_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
-pub use open_session::OpenSession;
+pub use open_session::{OpenSession, View};
 pub use start::Daemon;
 
 #[derive(Debug, thiserror::Error)]

@@ -1,5 +1,5 @@
-//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, and
-//! the accounts its agents run under.
+//! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, the
+//! accounts its agents run under, and the subagents of the sessions a view is showing.
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy
 //! has the newer revision, so the result is the same however they interleave. A hub that doesn't keep
@@ -15,6 +15,9 @@ use protocol::model::{
 
 #[cfg(test)]
 mod laws;
+mod subagents;
+
+pub use subagents::Subagents;
 
 /// One record of any kind.
 #[derive(Clone, Debug, PartialEq)]
@@ -64,6 +67,7 @@ pub struct HubRecords {
     removed: HashMap<RecordKey, Rev>,
     /// The newest list taken in. Everything up to it is already reflected.
     listed: Rev,
+    subagents: Subagents,
 }
 
 impl HubRecords {
@@ -114,8 +118,8 @@ impl HubRecords {
             HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
             HubNotice::Account(account) => self.apply_record(Record::Account(account)),
             HubNotice::Removed { record, rev } => self.remove(&record, rev),
-            // A session's subagents aren't among every record, so a view showing the session keeps them.
-            HubNotice::Subagent(_) | HubNotice::Resync | HubNotice::Unknown => false,
+            HubNotice::Subagent(subagent) => self.subagents.apply(subagent),
+            HubNotice::Resync | HubNotice::Unknown => false,
         }
     }
 
@@ -188,6 +192,15 @@ impl HubRecords {
     pub fn account(&self, id: &AccountId) -> Option<Account> {
         let Some(Record::Account(account)) = self.held.get(&RecordKey::Account { id: id.clone() }) else { return None };
         Some(account.clone())
+    }
+
+    /// The subagents of the sessions a view asked for.
+    pub fn subagents(&self) -> &Subagents {
+        &self.subagents
+    }
+
+    pub(crate) fn subagents_mut(&mut self) -> &mut Subagents {
+        &mut self.subagents
     }
 
     fn of_kind<T>(&self, pick: impl Fn(&Record) -> Option<T>) -> Vec<T> {
