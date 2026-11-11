@@ -30,7 +30,8 @@ use crate::images_apart::images_apart;
 use crate::transcript::Transcript;
 
 /// The most the kit's text view reads before it first draws: its `MAX_SYNC_FULL_REPLACE_BYTES`. It goes by the length
-/// of the text it's given.
+/// of the text it's given. The kit doesn't say what it is, so a test checks it hasn't changed. Keeping every text
+/// instead would leave nothing to copy, but a kept text view holds tens of KB however short its text is.
 const AT_ONCE: usize = 4 * 1024;
 
 /// The text views one transcript keeps, by their IDs. Cheap to clone.
@@ -221,7 +222,30 @@ fn kit_view(id: ElementId, text: &str) -> TextView {
 
 #[cfg(test)]
 mod tests {
-    use super::{AT_ONCE, as_drawn};
+    use gpui_kit::component::text::TextViewState;
+    use gpui_kit::{AppContext as _, TestAppContext};
+
+    use super::{AT_ONCE, as_drawn, read_up_to};
+
+    /// The kit reads at once just as much as [`AT_ONCE`] says, so the texts kept are the ones it reads on another
+    /// thread. A kit that read more at once would leave a text between drawn as nothing in its first frame and never
+    /// measured again, since what's read of it wouldn't change after. One that read less would leave texts between
+    /// unkept, read again from nothing each time they're drawn.
+    #[gpui_kit::test]
+    fn the_kit_reads_as_much_at_once_as_this_takes_it_to(cx: &mut TestAppContext) {
+        let read_at_once = |len: usize, cx: &mut TestAppContext| {
+            let text = "x".repeat(len);
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "what the kit does with a text view's state is what's tested"
+            )]
+            let state = cx.new(|cx| TextViewState::markdown(&text, cx));
+            cx.read(|cx| read_up_to(&state, cx))
+        };
+
+        assert_eq!(read_at_once(AT_ONCE, cx), AT_ONCE, "read at once");
+        assert_eq!(read_at_once(AT_ONCE + 1, cx), 0, "read on another thread");
+    }
 
     #[test]
     fn a_text_is_long_by_its_length_with_its_images_apart() {
