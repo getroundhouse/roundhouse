@@ -12,6 +12,7 @@ use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
+use protocol::prompt::PromptProblem;
 
 mod reading;
 
@@ -46,7 +47,7 @@ impl Attachments {
     pub(crate) fn push(&mut self, file: Attached) -> Result<(), String> {
         if self.0.len() >= MAX_PER_PROMPT {
             let name = file.name();
-            return Err(format!("couldn't attach {name}: a prompt can carry at most {MAX_PER_PROMPT} files"));
+            return Err(format!("couldn't attach {name}: {}", PromptProblem::TooManyFiles));
         }
         self.0.push(file);
         Ok(())
@@ -117,11 +118,6 @@ impl Attachments {
         });
         Some(AttachmentGroup::new(group).children(tiles))
     }
-}
-
-/// Whether there's a prompt to send: something typed, or a file.
-pub(crate) fn anything_to_send(text: &str, files: usize) -> bool {
-    !text.trim().is_empty() || files > 0
 }
 
 /// Takes files dropped anywhere on `target`, which shows the focus colour on its edge while they're dragged over it.

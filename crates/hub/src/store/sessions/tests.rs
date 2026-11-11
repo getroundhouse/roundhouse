@@ -207,7 +207,8 @@ fn a_session_anything_has_been_sent_in_is_kept() {
         store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
     });
     kept_once("a queued prompt", |store| {
-        store.queue_prompt(&"s".into(), &QueuedPrompt { client_msg_id: "m".into(), text: "later".into() }).unwrap();
+        let later = QueuedPrompt { client_msg_id: "m".into(), text: "later".into(), attachments: Vec::new() };
+        store.queue_prompt(&"s".into(), &later).unwrap();
     });
 }
 

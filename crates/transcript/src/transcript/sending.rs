@@ -1,7 +1,8 @@
 //! What's sent from a chat: its prompts, with what they carry, and Stop.
 
-use client_core::FileToSend;
+use client_core::{FileToSend, NotTaken, Written};
 use gpui_kit::Context;
+use protocol::prompt::says_or_carries;
 
 use super::{Transcript, TranscriptEvent};
 use crate::attachments::Picture;
@@ -12,11 +13,11 @@ impl Transcript {
         self.send_prompt_with(text, Vec::new(), cx)
     }
 
-    /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt. If any
-    /// of that fails, it takes the prompt back and hands its text and files back with [`TranscriptEvent::NotSent`].
-    /// Returns false if there's nothing to send.
+    /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt, in its
+    /// place in the chat's line. If any of that fails, it takes the prompt back and hands its text and files back with
+    /// [`TranscriptEvent::NotSent`]. Returns false if there's nothing to send.
     pub fn send_prompt_with(&mut self, text: String, files: Vec<FileToSend>, cx: &mut Context<Self>) -> bool {
-        if text.trim().is_empty() && files.is_empty() {
+        if !says_or_carries(&text, files.len()) {
             return false;
         }
         let client_msg_id = client_core::new_message_id();
@@ -33,23 +34,14 @@ impl Transcript {
         self.list.go_to_latest();
         cx.notify();
 
-        // Started on a thread of its own, so it finishes even if the app quits, and hands back what it was given.
-        let (id, msg_id, typed) = (self.session_id.clone(), client_msg_id.clone(), text.clone());
-        let sending = self.client.start(move |client| {
-            let sent = client.send_prompt_carrying(&id, &text, Some(msg_id), &files);
-            Ok((sent, text, files))
-        });
+        let written = Written { client_msg_id: client_msg_id.clone(), text, files };
+        let sending = self.client.start_sending(&self.session_id, written);
         cx.spawn(async move |this, cx| {
-            let (message, text, files) = match sending.recv().await {
-                Ok((Ok(_), ..)) => return,
-                Ok((Err(e), text, files)) => (not_sent(&e), text, files),
-                // Only a call that never ran ends here, and its files went with it.
-                Err(e) => (not_sent(&e), typed, Vec::new()),
-            };
+            let Err(NotTaken { error, text, files }) = sending.recv().await else { return };
             let _ = this.update(cx, |t, cx| {
                 t.session.remove_pending(&client_msg_id);
                 t.catch_up(cx);
-                cx.emit(TranscriptEvent::NotSent { message, text, files });
+                cx.emit(TranscriptEvent::NotSent { message: not_sent(&error), text, files });
                 cx.notify();
             });
         })

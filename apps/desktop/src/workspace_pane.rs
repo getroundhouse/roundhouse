@@ -3,10 +3,8 @@
 use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
-use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
-};
+use gpui_kit::component::input::TextareaState;
+use gpui_kit::{AnyWindowHandle, App, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::model::{Account, AccountId, DiffComment, Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
@@ -108,6 +106,8 @@ pub struct WorkspacePane {
     creating_chat: bool,
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
+    /// Prompts queued from here that the hub hasn't answered for yet, oldest first.
+    queue_pending: Vec<queue::Pending>,
     closed_menu: closed::Menu,
     /// The records of the accounts the workspace's chats name, which say who each is and what's left of its limits,
     /// for what sits beside Send.
@@ -175,23 +175,7 @@ impl WorkspacePane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let composer = cx.new(|cx| {
-            TextareaState::new(window, cx)
-                // Room for a paragraph before it grows, so a longer prompt doesn't start out cramped.
-                .auto_grow(4, 12)
-                .submit_on_enter(true)
-                .placeholder("Ask the agent to do something")
-        });
-        // While the agent works, Enter steers it, and Cmd-Enter queues what's typed for after it finishes.
-        let on_enter = cx.subscribe_in(&composer, window, |this, _, event: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { shift: false, secondary } = event {
-                if *secondary && this.session().is_some_and(|s| s.status.is_active()) {
-                    this.queue_typed(window, cx);
-                } else {
-                    this.submit(window, cx);
-                }
-            }
-        });
+        let (composer, on_enter) = composer::new_input(window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
@@ -213,6 +197,7 @@ impl WorkspacePane {
             waiting: None,
             creating_chat: false,
             queue_edit: None,
+            queue_pending: Vec::new(),
             closed_menu: closed::Menu::Shut,
             accounts,
             busy: Busy::Free,

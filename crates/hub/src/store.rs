@@ -42,7 +42,7 @@ pub use accounts::Launched;
 pub use error::{BackupError, StoreError};
 pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use made::{Made, MadeByRequest};
-pub use queue::Queued;
+pub use queue::{Changed, Queued};
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
 

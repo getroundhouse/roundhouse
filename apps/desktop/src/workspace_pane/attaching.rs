@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use client_core::FileToSend;
 use gpui_kit::{AnyElement, ClipboardItem, Context, IntoElement as _, Styled as _};
 use protocol::model::{AttachmentId, SessionId};
+use protocol::prompt::says_or_carries;
 
 use super::{PaneEvent, WorkspacePane};
 use crate::attached::{self, Attachments, joined};
@@ -19,7 +20,7 @@ pub(crate) struct Draft {
 
 impl Draft {
     pub(crate) fn has_anything(&self) -> bool {
-        attached::anything_to_send(&self.text, self.files.len())
+        says_or_carries(&self.text, self.files.len())
     }
 }
 

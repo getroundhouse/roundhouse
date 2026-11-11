@@ -8,6 +8,7 @@ mod commands;
 mod feed;
 mod files;
 mod follow;
+mod lines;
 mod open_session;
 mod options;
 mod places;
@@ -36,6 +37,7 @@ pub use api::{new_attachment_id, new_message_id, new_request_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
+pub(crate) use lines::Place;
 pub use open_session::{OpenSession, View};
 pub use start::Daemon;
 
@@ -134,6 +136,8 @@ struct Inner {
     /// Set by the hello, before anyone else has this connection.
     hub_version: OnceLock<String>,
     running: Arc<commands::Running>,
+    /// Each chat's prompts, in the order they were written.
+    lines: Arc<lines::Lines>,
 }
 
 impl Inner {
@@ -189,6 +193,7 @@ impl Client {
             disconnected: Mutex::new(false),
             hub_version: OnceLock::new(),
             running: Arc::default(),
+            lines: Arc::default(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()

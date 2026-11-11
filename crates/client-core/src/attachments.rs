@@ -1,13 +1,11 @@
-//! Files a client sends with a prompt: reading one from disk as the kind its bytes say it is, and sending a prompt
-//! with the files it carries, so every client checks them the same way and sends them in the same order.
+//! Files a client sends with a prompt: reading one from disk as the kind its bytes say it is, so every client checks
+//! them the same way. `crate::sending` sends them.
 
 use std::path::Path;
 
-use protocol::attachment::{Attachment, MAX_FILE_BYTES, MAX_PER_PROMPT, MediaType, describe_size, file_name};
-use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{ClientMessageId, Seq, SessionId};
+use protocol::attachment::{Attachment, MAX_FILE_BYTES, MediaType, describe_size, file_name};
 
-use crate::client::{Client, Result, new_attachment_id};
+use crate::client::new_attachment_id;
 
 /// A file to send with a prompt, under the ID it's shown by until it's recorded and after. Sent again under the same
 /// ID, it isn't added twice.
@@ -66,29 +64,6 @@ impl std::fmt::Display for NotAttached {
 }
 
 impl std::error::Error for NotAttached {}
-
-impl Client {
-    /// Adds each file to the session, then sends the prompt that carries them. A hub refuses a prompt naming a file it
-    /// hasn't got, so they go first, in order. With any, `text` can be empty. The files are only borrowed, so a
-    /// caller can offer them again if this fails, and their IDs mean none is added twice.
-    pub fn send_prompt_carrying(
-        &self,
-        id: &SessionId,
-        text: &str,
-        client_msg_id: Option<ClientMessageId>,
-        files: &[FileToSend],
-    ) -> Result<(Seq, bool)> {
-        if files.len() > MAX_PER_PROMPT {
-            let message = format!("a prompt can carry at most {MAX_PER_PROMPT} files");
-            return Err(ApiError::new(ErrorCode::InvalidRequest, message).into());
-        }
-        for FileToSend { attachment, data } in files {
-            self.attachment_add(id, &attachment.id, &attachment.name, attachment.media_type, data.clone())?;
-        }
-        let carried = files.iter().map(|file| file.attachment.id.clone()).collect();
-        self.session_prompt_with(id, text, client_msg_id, carried)
-    }
-}
 
 #[cfg(test)]
 mod tests;

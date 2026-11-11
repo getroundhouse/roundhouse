@@ -287,11 +287,23 @@ pub enum ClientRequest {
         commit: CommitId,
         path: String,
     },
-    /// Puts a prompt at the end of the queue, or changes the text of the one queued under `client_msg_id`, keeping its
-    /// place. So sending it again changes nothing more. Refused with `Conflict` once that prompt has been sent, since
-    /// the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the queue is
-    /// held, as `Session::queue_held` says.
+    /// Puts a prompt at the end of the queue. Sending it again under the same `client_msg_id` changes nothing, so a
+    /// retry is safe, and `SessionChangeQueued` is what changes it. Refused with `Conflict` once that prompt has been
+    /// sent, since the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the
+    /// queue is held, as `Session::queue_held` says. As with `SessionPrompt`, each of `attachments` has to have been
+    /// added to this session first, and a prompt with any can have no text.
     SessionQueue {
+        id: SessionId,
+        client_msg_id: ClientMessageId,
+        text: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<AttachmentId>,
+    },
+    /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and the files it was queued
+    /// with, so with any the text can be empty. Refused with `Conflict` once it's been sent, since the agent has it by
+    /// then, and with `NotFound` once it's been taken out, so a change that comes too late is never queued as a prompt
+    /// of its own. Answers with the session. A hub older than this refuses it as unsupported.
+    SessionChangeQueued {
         id: SessionId,
         client_msg_id: ClientMessageId,
         text: String,

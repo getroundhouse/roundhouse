@@ -193,8 +193,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 - **Enter sends what's typed to the agent while it works, and the agent reads it at its next chance,** such as when a running tool finishes. Until then the prompt is faint, so it's clear the agent hasn't seen it. One sent while the agent writes its last reply starts a turn of its own straight after. *Unconfirmed.*
 - **Stopping the agent drops a prompt it hasn't read yet, and the prompt says so,** since stopping means stopping. So does a prompt the agent never read because it went away. *Unconfirmed.*
-- **Cmd-Enter queues what's typed instead, for after the agent finishes.** Each queued prompt is a turn of its own, sent in order once the agent has nothing left to do, so it can't fold into a turn it wasn't meant for. With the agent idle, Cmd-Enter sends. A queued prompt can't carry files yet, so Cmd-Enter leaves a prompt with files in the composer and says so. *Unconfirmed.*
-- **The queue sits above the composer, one line to a prompt, with buttons to change one, take it out, or send it now.** A change is made in place, where Enter keeps it and Escape leaves it as it was. Once the agent has a prompt, it can't change. *Unconfirmed.*
+- **A chat's prompts reach the hub in the order they were sent, sent or queued,** even while one is still adding a large file and the next carries none, so the agent never reads them out of order. *Unconfirmed.*
+- **Cmd-Enter queues what's typed instead, for after the agent finishes.** Each queued prompt is a turn of its own, sent in order once the agent has nothing left to do, so it can't fold into a turn it wasn't meant for. With the agent idle, Cmd-Enter sends. What's attached goes with it, as it would with Enter, and until the hub has the prompt, it shows faint at the end of the queue, so a prompt whose files take a while to add doesn't seem lost. *Unconfirmed.*
+- **The queue sits above the composer, one line to a prompt, with buttons to change one, take it out, or send it now.** A change is made in place, where Enter keeps it and Escape leaves it as it was. It changes only the text, so the files stay as they were queued, and with any, the text can be cleared. Once the agent has a prompt, or it's been taken out, it can't change, and a change that comes too late says so rather than queueing it again. *Unconfirmed.*
+- **A queued prompt with files says so after its text, muted, with a file's name or how many there are,** and beside it while it's changed. The text gives way first, so a long line doesn't hide that something's attached. *Unconfirmed.*
 - **A queued prompt's buttons show only while the pointer is over it,** which lights its row, so it's clear which prompt they're for.
 - **The arrow on a queued prompt steers the agent with it,** as Enter does, rather than leaving it to wait its turn.
 - **The queue belongs to the hub, not the app,** so it's still sent with the app closed, and every client shows the same queue. *Unconfirmed.*
@@ -204,11 +206,11 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![A prompt waiting for the agent](screens/steered.png)
 
-**Three prompts queued while the agent writes, with the pointer over one.** *Unconfirmed.*
+**Three prompts queued while the agent writes, the first with a file, and the pointer over another.** *Unconfirmed.*
 
 ![The queue](screens/queued.png)
 
-**The queue held after a stop.** *Unconfirmed.*
+**The queue held after a stop, the last prompt with two files.** *Unconfirmed.*
 
 ![A held queue](screens/queue-held.png)
 

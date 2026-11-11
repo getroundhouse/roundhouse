@@ -14,6 +14,7 @@ use gpui_kit::{
     Subscription, Window, px,
 };
 use protocol::model::{AttachmentId, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode, RepoId};
+use protocol::prompt::says_or_carries;
 
 use crate::attached::{self, Attachments, joined};
 use crate::composing;
@@ -42,7 +43,7 @@ pub struct Request {
 impl Request {
     /// Whether there's a prompt to send once the workspace is made.
     pub fn has_prompt(&self) -> bool {
-        attached::anything_to_send(&self.prompt, self.files.len())
+        says_or_carries(&self.prompt, self.files.len())
     }
 }
 
@@ -181,7 +182,7 @@ impl NewWorkspaceDialog {
 
     /// Whether anything is typed or attached, which quitting or restarting would lose.
     pub(crate) fn has_anything(&self, cx: &App) -> bool {
-        attached::anything_to_send(&self.prompt.read(cx).text().to_string(), self.attached.len())
+        says_or_carries(&self.prompt.read(cx).text().to_string(), self.attached.len())
     }
 
     /// Takes a paste that holds images or copied files, and leaves text to the prompt. Returns whether it took it.

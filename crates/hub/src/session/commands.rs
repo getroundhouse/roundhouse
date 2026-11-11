@@ -148,31 +148,44 @@ impl LiveSession {
     }
 
     /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
-    pub(super) async fn record_prompt(
+    async fn record_prompt(
         &self,
         hub: &Arc<Hub>,
         text: &str,
         client_msg_id: Option<ClientMessageId>,
         attachments: &[AttachmentId],
     ) -> Result<(Seq, bool, Vec<Attachment>), ApiError> {
+        let (id, ids) = (self.id.clone(), attachments.to_vec());
+        let attachments = hub.blocking(move |store| store.attachments(&id, &ids)).await?;
+        let (seq, duplicate) = self.record_carrying(hub, text, client_msg_id, &attachments).await?;
+        Ok((seq, duplicate, attachments))
+    }
+
+    /// Records a prompt whose files are known already, such as a queued one's, and returns its place in the log and
+    /// whether it had already been recorded.
+    pub(super) async fn record_carrying(
+        &self,
+        hub: &Arc<Hub>,
+        text: &str,
+        client_msg_id: Option<ClientMessageId>,
+        attachments: &[Attachment],
+    ) -> Result<(Seq, bool), ApiError> {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
         if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
             return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
         }
-        let (id, ids) = (self.id.clone(), attachments.to_vec());
-        let attachments = hub.blocking(move |store| store.attachments(&id, &ids)).await?;
         let body = EventBody::UserPrompt {
             text: text.to_string(),
             client_msg_id: client_msg_id.clone(),
-            attachments: attachments.clone(),
+            attachments: attachments.to_vec(),
         };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         if !duplicate {
-            hub.title_from_prompt(&self.id, &self.workspace_id, text, &attachments).await;
+            hub.title_from_prompt(&self.id, &self.workspace_id, text, attachments).await;
         }
-        Ok((event.seq, duplicate, attachments))
+        Ok((event.seq, duplicate))
     }
 
     async fn handle_prompt(

@@ -179,6 +179,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
         | R::SessionQueue { .. }
+        | R::SessionChangeQueued { .. }
         | R::SessionUnqueue { .. }
         | R::SessionSendQueued { .. }
         | R::SessionApprove { .. }

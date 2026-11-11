@@ -14,8 +14,10 @@ pub mod session_log;
 
 mod attachments;
 mod client;
+mod sending;
 
 pub use attachments::{FileToSend, NotAttached};
+pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{
     Client, ClientError, Commands, Daemon, Ended, FollowError, HubAdmin, IdleStop, OpenSession, RecordsFeed, Reply,

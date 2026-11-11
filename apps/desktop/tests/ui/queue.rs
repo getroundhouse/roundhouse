@@ -3,7 +3,8 @@
 #![cfg(test)]
 
 use gpui_kit::{
-    AppContext as _, ClipboardItem, ElementId, Image, ImageFormat, ScrollDelta, SharedString, TestAppContext, point, px,
+    AppContext as _, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, ScrollDelta,
+    SharedString, TestAppContext, point, px,
 };
 use protocol::event::EventBody;
 use protocol::model::QueuedPrompt;
@@ -181,7 +182,7 @@ fn the_arrow_on_a_queued_prompt_steers_the_agent_with_it(cx: &mut TestAppContext
 }
 
 #[gpui_kit::test]
-fn cmd_enter_leaves_a_prompt_with_files_in_the_composer_to_send(cx: &mut TestAppContext) {
+fn cmd_enter_queues_a_prompt_with_its_files_and_the_agent_gets_them_with_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
@@ -190,14 +191,44 @@ fn cmd_enter_leaves_a_prompt_with_files_in_the_composer_to_send(cx: &mut TestApp
     image::RgbaImage::from_pixel(4, 3, image::Rgba([200, 30, 30, 255]))
         .write_to(&mut png, image::ImageFormat::Png)
         .unwrap();
-    ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, png.into_inner())));
+    let png = png.into_inner();
+    let len = png.len();
+    ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, png)));
     ui.wait("the image to be attached", |ui| ui.attached() == ["Pasted image.png"]);
-    ui.input("say:with a file");
+    ui.input("attached");
 
     ui.press("secondary-enter");
 
-    ui.wait("the reason", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("can't be queued")));
-    assert_eq!(ui.composer_text(), "say:with a file");
-    assert_eq!(ui.attached(), ["Pasted image.png"]);
-    assert!(queued(&ui).is_empty());
+    assert_eq!(ui.composer_text(), "");
+    assert!(ui.attached().is_empty(), "queueing takes what was attached");
+    ui.wait("the queue to show it with its file", |ui| {
+        let queue = queued(ui);
+        queue.first().is_some_and(|prompt| prompt.attachments.len() == 1 && ui.visible(id("queued-files", prompt)))
+    });
+    let said = format!("attached: image/png {len} bytes | Pasted image.png: on disk, {len} bytes");
+    ui.wait_idle_with("the agent to get the image", |text| text.ends_with(&said));
+    ui.wait("the queue to go", |ui| queued(ui).is_empty() && !ui.has("queue"));
+}
+
+#[gpui_kit::test]
+fn a_prompt_shows_in_the_queue_while_its_files_are_added(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    working(&mut ui, 20000);
+    let dir = tempfile::tempdir().unwrap();
+    // Big enough to take a while to add, so the hub doesn't have the prompt yet when the queue's looked at.
+    let big = dir.path().join("big.log");
+    std::fs::write(&big, vec![b'a'; 40 << 20]).unwrap();
+    ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(ExternalPaths(vec![big].into()))));
+    ui.wait("the file to be attached", |ui| ui.attached() == ["big.log"]);
+    ui.input("say:with a big file");
+
+    ui.press("secondary-enter");
+
+    assert!(ui.visible("queue") && queued(&ui).is_empty(), "it shows before the hub has it");
+    ui.wait("the hub to have it", |ui| queued(ui).len() == 1);
+    let prompt = queued(&ui)[0].clone();
+    assert!(ui.visible(id("queued-files", &prompt)));
+    assert_eq!(ui.shown("queued-files-").len(), 1, "it shows once, not again as pending");
 }
