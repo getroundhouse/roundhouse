@@ -68,7 +68,7 @@ impl NewWorkspaceDialog {
     /// The model and effort on the left, and on the right attaching and Create, the dialog's one main action.
     fn footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.weak_entity();
-        let picker = model_picker("new-workspace-model", self.model.as_deref(), self.effort, move |picked, _, cx| {
+        let picker = model_picker("new-workspace-model", &self.model, self.effort, move |picked, _, cx| {
             let _ = this.update(cx, |t, cx| t.pick(picked, cx));
         });
         let attach = attached::attach_button("new-workspace-attach", cx, |_, paths, cx| Self::attach_paths(paths, cx));

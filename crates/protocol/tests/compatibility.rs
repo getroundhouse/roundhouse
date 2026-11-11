@@ -98,7 +98,7 @@ fn a_removed_record_of_a_kind_this_build_does_not_know_still_reads() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -109,7 +109,7 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
 
 #[test]
 fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -119,12 +119,12 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_its_form_stays_readable() {
-    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
     let HubNotice::Session(session) = frame::decode::<HubNotice>(older).unwrap() else { panic!() };
     assert_eq!(session.context, None);
 
     // Spelled out, since a hub's stored rows hold this form too.
-    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":null,"permission_mode":null,"status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"parts":[{"name":"Messages","tokens":5}]}}"#;
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":null,"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"parts":[{"name":"Messages","tokens":5}]}}"#;
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
     let context = session.context.unwrap();
     assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));

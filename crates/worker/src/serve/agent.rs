@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{AgentKind, RunId, SessionId, SessionOptions};
+use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -127,7 +127,7 @@ async fn forward_output(
 pub(crate) async fn configure_agent(
     state: &State,
     session_id: &SessionId,
-    options: &SessionOptions,
+    options: &SessionSettingsChange,
 ) -> Result<WorkerResponse, ApiError> {
     let Some(agent) = state.live_agent(session_id) else {
         return Ok(WorkerResponse::AgentNotRunning);

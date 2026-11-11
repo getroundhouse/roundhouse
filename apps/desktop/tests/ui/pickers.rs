@@ -4,7 +4,7 @@
 
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{Effort, SessionStatus};
+use protocol::model::{DEFAULT_MODEL, Effort, ModelName, SessionStatus};
 
 use crate::support::{Stack, Ui};
 
@@ -32,8 +32,8 @@ fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
     // Full access and another model, on the agent that's already running.
     ui.pick("mode-picker", 3);
     ui.wait("full access", |ui| ui.chat_mode().as_deref() == Some("bypassPermissions"));
-    ui.pick_item("model-picker", "Opus");
-    ui.wait("the model", |_| client.session_get(&chat).unwrap().model.as_deref() == Some("opus"));
+    ui.pick_item("model-picker", "Sonnet");
+    ui.wait("the model", |_| client.session_get(&chat).unwrap().model == ModelName::named("sonnet"));
     ui.input("tool:echo two > two.txt");
     ui.press("enter");
     ui.wait("the second tool, without asking", |ui| {
@@ -46,7 +46,7 @@ fn the_pickers_change_a_running_chat(cx: &mut TestAppContext) {
     ui.new_chat();
     assert_eq!(ui.chat_mode(), None);
     let pane = ui.pane().unwrap();
-    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.model.clone())).as_deref(), Some("opus"));
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone())), Some(ModelName::named("sonnet")));
 }
 
 #[gpui_kit::test]
@@ -60,19 +60,19 @@ fn an_effort_picked_reaches_the_running_agent_and_the_next_chat(cx: &mut TestApp
     let chat = ui.active_chat();
     ui.input("effort");
     ui.press("enter");
-    ui.wait_idle_with("the agent's own effort", |text| text.contains("effort=high"));
+    ui.wait_idle_with("the hub's default effort", |text| text.contains("effort=xhigh"));
 
-    ui.pick_item("model-picker", "Extra high");
-    ui.wait("the effort", |_| client.session_get(&chat).unwrap().effort == Some(Effort::Xhigh));
+    ui.pick_item("model-picker", "Medium");
+    ui.wait("the effort", |_| client.session_get(&chat).unwrap().effort == Effort::Medium);
     ui.input("effort");
     ui.press("enter");
-    ui.wait_idle_with("the running agent's new effort", |text| text.contains("effort=xhigh"));
+    ui.wait_idle_with("the running agent's new effort", |text| text.contains("effort=medium"));
     let started = ui.events().iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
     assert_eq!(started, 1, "the running agent was changed, not replaced");
 
     ui.new_chat();
     let pane = ui.pane().unwrap();
-    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.effort)), Some(Effort::Xhigh));
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.effort)), Some(Effort::Medium));
 }
 
 #[gpui_kit::test]
@@ -86,9 +86,10 @@ fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppConte
     ui.press("enter");
     ui.wait_idle_with("the agent to be up", |text| text.contains("running"));
     let pane = ui.pane().unwrap();
-    ui.cx.update_entity(&pane, |p, cx| p.configure(Some("not-a-model".to_string()), None, None, cx));
+    ui.cx.update_entity(&pane, |p, cx| p.configure(Some(ModelName::named("not-a-model")), None, None, cx));
     ui.wait("the refusal", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("not found")));
-    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().and_then(|s| s.model.clone())), None);
+    let model = ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone()));
+    assert_eq!(model, Some(DEFAULT_MODEL));
 }
 
 #[gpui_kit::test]

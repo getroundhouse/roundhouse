@@ -47,7 +47,9 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Limit | How much of an account's use of its agent is left in a window, such as five hours or seven days, and when the window ends. It's the account's, not a session's, so the hub keeps it by account | `UsageLimit`, `LimitWindow`, `EventBody::AgentLimits`, the `account_limits` table |
 | Account | The login an agent's CLI runs under on its worker's machine: the model provider, the plan, and the email. Agents under one account share its limits, and there can be several accounts with one model provider. Its ID is the adapter's, opaque, and the same for every agent under that login | `AgentAccount`, `AccountId`, `SessionAccount` |
 | Model provider | Who serves an agent's model, such as Anthropic's own API or a cloud's. It's part of an account | `AgentAccount.model_provider` |
-| Effort | How hard an agent thinks before it answers, from Low to Max. `None` leaves it to the user's own Claude settings | `Effort`, `Session.effort`, `model_picker` |
+| Model | Which model an agent runs, by the name its CLI takes: an alias such as `opus`, or a full ID. Every session names one, and never `default`, which would leave the choice to the CLI | `ModelName`, `Session.model`, `DEFAULT_MODEL`, `model_picker` |
+| Effort | How hard an agent thinks before it answers, from Low to Max. Every session names one, as it names a model, so neither is left to the user's own Claude settings | `Effort`, `Session.effort`, `DEFAULT_EFFORT`, `model_picker` |
+| Settings | What a session runs with: its model, approval mode and effort. A change to them names only what it changes | `SessionSettings`, `SessionSettingsChange` |
 | Setup | What happens once a worktree exists: copying local files and running the repository's setup script | `SetupStatus`, `worker::setup` |
 | Diff comment | A comment on one line of a workspace's diff, which can be sent to the agent | `DiffComment` |
 

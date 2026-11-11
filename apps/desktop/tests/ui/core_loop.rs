@@ -7,7 +7,7 @@ use desktop::new_workspace::Request;
 use gpui_kit::component::Theme;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 
 use desktop::busy::Busy;
 use desktop::workspace_pane::Showing;
@@ -212,7 +212,8 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
 
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
 fn nothing_typed(repo: &RepoId) -> Request {
-    Request { repo: repo.clone(), prompt: String::new(), files: Vec::new(), model: None, effort: None }
+    let (model, effort) = (DEFAULT_MODEL, DEFAULT_EFFORT);
+    Request { repo: repo.clone(), prompt: String::new(), files: Vec::new(), model, effort }
 }
 
 #[gpui_kit::test]

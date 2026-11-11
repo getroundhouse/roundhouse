@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, Effort, Seq, Session, SessionId, SessionOptions, SessionStatus};
+use protocol::model::{AgentKind, Effort, Seq, Session, SessionId, SessionSettingsChange, SessionStatus};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -16,7 +16,7 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
     match command {
         SessionCmd::New { workspace, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
-            let options = SessionOptions { model, permission_mode, effort };
+            let options = SessionSettingsChange { model, permission_mode, effort };
             let session = client.session_create(
                 &workspace.id,
                 AgentKind::Claude,
@@ -42,7 +42,8 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
         }
         SessionCmd::Set { session, model, permission_mode, effort } => {
             let session = find_session(client, &session)?;
-            let session = client.session_configure(&session.id, SessionOptions { model, permission_mode, effort })?;
+            let session =
+                client.session_configure(&session.id, SessionSettingsChange { model, permission_mode, effort })?;
             println!("{}", options(&session));
         }
         SessionCmd::Close { session } => {
@@ -76,13 +77,13 @@ pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, r
     Ok(())
 }
 
-/// What the session runs with, `-` for what's left to the user's own Claude settings.
+/// What the session runs with, with `-` for an approval mode left to the user's own Claude settings.
 fn options(session: &Session) -> String {
     format!(
         "model={} mode={} effort={}",
-        session.model.as_deref().unwrap_or("-"),
+        session.model.as_str(),
         session.permission_mode.as_deref().unwrap_or("-"),
-        session.effort.map_or("-", effort_name),
+        effort_name(session.effort),
     )
 }
 

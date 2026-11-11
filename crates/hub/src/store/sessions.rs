@@ -1,7 +1,8 @@
 //! Sessions.
 
 use protocol::model::{
-    AgentKind, ClientRequestId, ContextUsage, QueuedPrompt, Session, SessionOptions, SessionStatus, Title,
+    AgentKind, ClientRequestId, ContextUsage, ModelName, QueuedPrompt, Session, SessionSettingsChange, SessionStatus,
+    Title,
 };
 use protocol::model::{SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
@@ -23,7 +24,7 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             id: row.get::<_, String>(0)?.into(),
             workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,
-            model: row.get(3)?,
+            model: from_text(row.get(3)?)?,
             permission_mode: row.get(4)?,
             status: from_text(row.get(5)?)?,
             last_seq: row.get::<_, i64>(6)?.cast_unsigned(),
@@ -39,7 +40,7 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             queued: queue_from(&row.get::<_, String>(17)?)?,
             queue_held: row.get(18)?,
             turn_started_at_ms: row.get(19)?,
-            effort: row.get::<_, Option<String>>(20)?.map(from_text).transpose()?,
+            effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
             context: row.get::<_, Option<String>>(21)?.and_then(|json| serde_json::from_str(&json).ok()),
             rev: rev_of(row, 22)?,
@@ -70,7 +71,7 @@ impl Store {
                 session.id.as_str(),
                 session.workspace_id.as_str(),
                 text_of(&session.agent),
-                session.model,
+                session.model.as_str(),
                 session.permission_mode,
                 text_of(&session.status),
                 session.last_seq.cast_signed(),
@@ -87,7 +88,7 @@ impl Store {
                 serde_json::to_string(&session.queued)?,
                 session.queue_held,
                 session.turn_started_at_ms,
-                session.effort.as_ref().map(text_of),
+                text_of(&session.effort),
                 session.context.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
@@ -117,14 +118,14 @@ impl Store {
     }
 
     /// A setting that's `None` is left as it is.
-    pub fn set_session_options(&self, id: &SessionId, options: &SessionOptions) -> Result<(), StoreError> {
-        let SessionOptions { model, permission_mode, effort } = options;
+    pub fn set_session_options(&self, id: &SessionId, options: &SessionSettingsChange) -> Result<(), StoreError> {
+        let SessionSettingsChange { model, permission_mode, effort } = options;
         lock(&self.writer).execute(
             "UPDATE sessions
                  SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode),
                      effort = COALESCE(?, effort)
                  WHERE id = ?",
-            params![model, permission_mode, effort.as_ref().map(text_of), id.as_str()],
+            params![model.as_ref().map(ModelName::as_str), permission_mode, effort.as_ref().map(text_of), id.as_str()],
         )?;
         Ok(())
     }

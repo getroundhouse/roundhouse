@@ -13,7 +13,7 @@ use gpui_kit::{
     App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
 };
-use protocol::model::{AttachmentId, Effort, RepoId};
+use protocol::model::{AttachmentId, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, RepoId};
 
 use crate::attached::{self, Attachments, joined};
 use crate::model_picker::Picked;
@@ -32,9 +32,8 @@ pub struct Request {
     /// What was typed. With nothing typed and no files, nothing is sent.
     pub prompt: String,
     pub files: Vec<FileToSend>,
-    /// `None` for the user's own Claude settings.
-    pub model: Option<String>,
-    pub effort: Option<Effort>,
+    pub model: ModelName,
+    pub effort: Effort,
 }
 
 impl Request {
@@ -67,8 +66,9 @@ pub struct NewWorkspaceDialog {
     repo: RepoId,
     offer: Offer,
     prompt: Entity<TextareaState>,
-    model: Option<String>,
-    effort: Option<Effort>,
+    /// What the hub gives a chat that names neither, until another is picked.
+    model: ModelName,
+    effort: Effort,
     attached: Attachments,
     _subscriptions: Vec<Subscription>,
 }
@@ -113,7 +113,7 @@ impl NewWorkspaceDialog {
                 this.create(cx);
             }
         });
-        let (model, effort, attached) = (None, None, Attachments::default());
+        let (model, effort, attached) = (DEFAULT_MODEL, DEFAULT_EFFORT, Attachments::default());
         Self { repo, offer, prompt, model, effort, attached, _subscriptions: vec![on_enter] }
     }
 
@@ -198,8 +198,8 @@ impl NewWorkspaceDialog {
     /// on there.
     fn pick(&mut self, picked: Picked, cx: &mut Context<Self>) {
         match picked {
-            Picked::Model(model) => self.model = Some(model.to_string()),
-            Picked::Effort(effort) => self.effort = Some(effort),
+            Picked::Model(model) => self.model = model,
+            Picked::Effort(effort) => self.effort = effort,
         }
         cx.notify();
     }
@@ -222,13 +222,13 @@ impl NewWorkspaceDialog {
     }
 
     /// The model and effort chosen.
-    pub fn chosen(&self) -> (Option<String>, Option<Effort>) {
+    pub fn chosen(&self) -> (ModelName, Effort) {
         (self.model.clone(), self.effort)
     }
 
     /// Chooses a level, such as one a hub doesn't know, which no menu offers.
     pub fn choose_effort(&mut self, effort: Effort, cx: &mut Context<Self>) {
-        self.effort = Some(effort);
+        self.effort = effort;
         cx.notify();
     }
 }

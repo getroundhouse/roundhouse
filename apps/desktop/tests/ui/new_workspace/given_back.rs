@@ -5,7 +5,7 @@ use client_core::FileToSend;
 use desktop::new_workspace::Request;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
-use protocol::model::{AgentKind, Effort, WorkspaceStatus};
+use protocol::model::{AgentKind, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, WorkspaceStatus};
 
 use super::{open_with_a_repo, prompts};
 use crate::support::Stack;
@@ -59,8 +59,8 @@ fn files_given_back_to_a_full_dialog_go_first_and_it_says_which_didnt_fit(cx: &m
         repo: ui.first_repo_id(),
         prompt: "say:one more".to_string(),
         files: vec![file("earlier.txt")],
-        model: None,
-        effort: None,
+        model: DEFAULT_MODEL,
+        effort: DEFAULT_EFFORT,
     };
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();
@@ -105,8 +105,8 @@ fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_t
     let mut ui = open_with_a_repo(cx, &stack);
     let before = ui.view().workspaces.len();
     let files: Vec<_> = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
-    let request =
-        Request { repo: ui.first_repo_id(), prompt: "say:too many".to_string(), files, model: None, effort: None };
+    let (model, effort) = (DEFAULT_MODEL, DEFAULT_EFFORT);
+    let request = Request { repo: ui.first_repo_id(), prompt: "say:too many".to_string(), files, model, effort };
 
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();

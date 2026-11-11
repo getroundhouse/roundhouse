@@ -8,7 +8,7 @@ use client_core::{ClientError, new_request_id};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, ClientRequestId, DiffSide, FileContents, SessionOptions, SessionStatus, WorkspaceStatus,
+    AgentKind, ClientRequestId, DiffSide, FileContents, SessionSettingsChange, SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{
@@ -191,7 +191,7 @@ fn creating_again_with_the_same_request_id_returns_what_the_first_made() {
         client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", Some(id.clone()))
     };
     let session = |id: &ClientRequestId| {
-        client.session_create(&workspace.id, AgentKind::Claude, SessionOptions::default(), Some(id.clone()))
+        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), Some(id.clone()))
     };
 
     let made = client.workspace_create(repo, None, None, Some(for_workspace.clone())).unwrap();

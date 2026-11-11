@@ -5,7 +5,7 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::{AppContext as _, SharedString};
-use protocol::model::{AgentKind, SessionId, SessionOptions, SessionStatus};
+use protocol::model::{AgentKind, SessionId, SessionSettingsChange, SessionStatus};
 
 use super::{Stack, TIMEOUT, Ui};
 
@@ -15,7 +15,10 @@ impl Stack {
         let client = self.client();
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-        let options = SessionOptions { permission_mode: Some("bypassPermissions".into()), ..SessionOptions::default() };
+        let options = SessionSettingsChange {
+            permission_mode: Some("bypassPermissions".into()),
+            ..SessionSettingsChange::default()
+        };
         client.session_create(&workspace.id, AgentKind::Claude, options, None).unwrap().id
     }
 

@@ -1,7 +1,7 @@
 //! Which chats a workspace has, which one is showing, and what each is called.
 
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
-use protocol::model::{AgentKind, Effort, Session, SessionId, SessionOptions};
+use protocol::model::{AgentKind, Effort, Session, SessionId, SessionSettingsChange};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Draft;
@@ -44,11 +44,11 @@ impl WorkspacePane {
         }
         self.creating_chat = true;
         let id = self.workspace.id.clone();
-        let (model, effort) = (self.session().and_then(|s| s.model.clone()), self.session().and_then(|s| s.effort));
+        let (model, effort) = (self.session().map(|s| s.model.clone()), self.session().map(|s| s.effort));
         let mode = inherited_mode(self.session().and_then(|s| s.permission_mode.as_deref()));
-        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat leaves it to the
-        // user's settings.
-        let options = SessionOptions { model, permission_mode: mode, effort: effort.and_then(Effort::known) };
+        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets the hub's
+        // default.
+        let options = SessionSettingsChange { model, permission_mode: mode, effort: effort.and_then(Effort::known) };
         let creating = self.client.start(move |client| {
             client.session_create(&id, AgentKind::Claude, options, Some(client_core::new_request_id()))
         });

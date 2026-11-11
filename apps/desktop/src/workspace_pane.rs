@@ -9,7 +9,9 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Focusable as _, Pixels, Subscription, Task,
     Window, px,
 };
-use protocol::model::{DiffComment, Effort, Session, SessionId, SessionOptions, Workspace, WorkspaceId};
+use protocol::model::{
+    DiffComment, Effort, ModelName, Session, SessionId, SessionSettingsChange, Workspace, WorkspaceId,
+};
 use transcript::Transcript;
 
 use crate::all_files::AllFiles;
@@ -239,13 +241,13 @@ impl WorkspacePane {
     /// has, so the pickers change when this comes back, and a refusal leaves them as they were.
     pub fn configure(
         &mut self,
-        model: Option<String>,
+        model: Option<ModelName>,
         mode: Option<String>,
         effort: Option<Effort>,
         cx: &mut Context<Self>,
     ) {
         let Some(id) = self.active.clone() else { return };
-        let options = SessionOptions { model, permission_mode: mode, effort };
+        let options = SessionSettingsChange { model, permission_mode: mode, effort };
         let changing = self.client.start(move |client| client.session_configure(&id, options));
         cx.spawn(async move |this, cx| {
             let changed = changing.recv().await;

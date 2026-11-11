@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
-use protocol::model::{ApprovalId, ClientMessageId, Effort, Seq};
+use protocol::model::{ApprovalId, ClientMessageId, Effort, ModelName, Seq};
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = protocol::BUILD_VERSION, about = "Run coding agents in parallel, each in its own worktree")]
@@ -141,13 +141,15 @@ pub(crate) enum SessionCmd {
     /// Start a session. Nothing runs until the first prompt.
     New {
         workspace: String,
-        #[arg(long)]
-        model: Option<String>,
+        /// Such as fable, opus, sonnet or haiku, or a full model ID. Leave it out for the hub's
+        /// default.
+        #[arg(long, value_parser = model())]
+        model: Option<ModelName>,
         /// Passed to the agent, such as manual, plan, acceptEdits or bypassPermissions. Leave it
         /// out to use the mode from your own Claude settings.
         #[arg(long)]
         permission_mode: Option<String>,
-        /// How hard the agent thinks. Leave it out to use the effort from your own Claude settings.
+        /// How hard the agent thinks. Leave it out for the hub's default.
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
     },
@@ -157,8 +159,8 @@ pub(crate) enum SessionCmd {
     /// Change the model, approval mode or effort, on the running agent too if there is one.
     Set {
         session: String,
-        #[arg(long)]
-        model: Option<String>,
+        #[arg(long, value_parser = model())]
+        model: Option<ModelName>,
         #[arg(long)]
         permission_mode: Option<String>,
         #[arg(long, value_parser = effort())]
@@ -176,6 +178,11 @@ pub(crate) enum SessionCmd {
         session: String,
         title: String,
     },
+}
+
+/// Takes a name that names a model, so `default`, which would leave the choice to the agent's CLI, is refused here.
+fn model() -> impl TypedValueParser<Value = ModelName> {
+    clap::builder::StringValueParser::new().try_map(ModelName::try_from)
 }
 
 /// Takes the name of any level, and lists them all in the help and in the error for another name.

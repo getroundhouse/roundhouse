@@ -2,7 +2,7 @@
 //! thread `Client::start` gives it, since each call blocks, and each step needs the one before.
 
 use client_core::{Client, ClientError, FileToSend};
-use protocol::model::{AgentKind, Session, SessionOptions, Workspace};
+use protocol::model::{AgentKind, Session, SessionSettingsChange, Workspace};
 
 use crate::new_workspace::Request;
 
@@ -64,9 +64,12 @@ fn make_into(client: &Client, request: &Request, made: &mut Made) -> Result<(), 
     // The workspace's first chat is found or made by the hub, so two clients opening it at once share one.
     let session = client.session_ensure(&id, AgentKind::Claude).map_err(at(Step::Chat))?;
     let chat = session.id.clone();
+    // The hub gave the chat its defaults, or another client made it, and either may be what was chosen.
+    let as_chosen = session.model == request.model && session.effort == request.effort;
     made.session = Some(session);
-    let options = SessionOptions { model: request.model.clone(), permission_mode: None, effort: request.effort };
-    if !options.is_empty() {
+    if !as_chosen {
+        let (model, effort) = (Some(request.model.clone()), Some(request.effort));
+        let options = SessionSettingsChange { model, permission_mode: None, effort };
         made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
     }
     if request.has_prompt() {

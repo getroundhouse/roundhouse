@@ -59,8 +59,7 @@ impl WorkspacePane {
     /// The model and its effort, and the approval mode, of the chat showing.
     fn pickers(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let session = self.session();
-        let model = session.and_then(|s| s.model.clone());
-        let effort = session.and_then(|s| s.effort);
+        let model_and_effort = session.map(|s| (s.model.clone(), s.effort));
         let mode = session.and_then(|s| s.permission_mode.clone());
         let full_access = mode.as_deref() == Some("bypassPermissions");
         let warning = cx.theme().warning;
@@ -70,7 +69,7 @@ impl WorkspacePane {
             let this = this.clone();
             move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
                 let _ = this.update(cx, |t, cx| match picked {
-                    Picked::Model(id) => t.configure(Some(id.to_string()), None, None, cx),
+                    Picked::Model(model) => t.configure(Some(model), None, None, cx),
                     Picked::Effort(effort) => t.configure(None, None, Some(effort), cx),
                 });
             }
@@ -94,7 +93,10 @@ impl WorkspacePane {
             .flex_1()
             .min_w_0()
             .gap_0p5()
-            .child(model_picker("model-picker", model.as_deref(), effort, models))
+            // Only a chat has a model, so there's none to show while the workspace's first is being made.
+            .when_some(model_and_effort, |row, (model, effort)| {
+                row.child(model_picker("model-picker", &model, effort, models))
+            })
             .child(
                 Button::new("mode-picker")
                     .hand()

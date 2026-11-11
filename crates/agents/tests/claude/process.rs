@@ -8,7 +8,7 @@ use std::time::Duration;
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{AgentKind, RunId, SessionOptions};
+use protocol::model::{AgentKind, RunId, SessionSettings};
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -33,7 +33,7 @@ fn spec(dir: &Path) -> AgentSpec {
         cwd: dir.to_string_lossy().into_owned(),
         agent_session_id: "s".into(),
         resume: false,
-        options: SessionOptions::default(),
+        settings: SessionSettings::default(),
         env: vec![],
     }
 }

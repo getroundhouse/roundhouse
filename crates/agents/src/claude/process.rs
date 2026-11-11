@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use protocol::attachment::AttachmentFile;
 use protocol::event::ApprovalDecision;
-use protocol::model::{ApprovalId, Effort, Seq, SessionOptions};
+use protocol::model::{ApprovalId, Effort, Seq, SessionSettingsChange};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -267,9 +267,9 @@ impl AgentProcess for ClaudeProcess {
         .await
     }
 
-    async fn configure(&self, options: &SessionOptions) -> Result<(), AgentError> {
+    async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError> {
         if let Some(model) = &options.model {
-            control(&self.shared, json!({"subtype": "set_model", "model": model})).await?;
+            control(&self.shared, json!({"subtype": "set_model", "model": model.as_str()})).await?;
         }
         if let Some(mode) = &options.permission_mode {
             control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;

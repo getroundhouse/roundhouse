@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Session, SessionOptions, TitleSource};
+use protocol::model::{AgentKind, Session, SessionSettingsChange, TitleSource};
 
 use crate::support::{Stack, is_alive, wait_for_turn_end, wait_until, workspace};
 
@@ -40,7 +40,7 @@ fn the_first_prompt_titles_the_workspace_and_each_chat() {
 
     client.session_prompt(&first.id, "say:fix the login\nand then the rest", None).unwrap();
     wait_for_turn_end(&client, &first.id, 1);
-    let second = client.session_create(&made.id, AgentKind::Claude, SessionOptions::default(), None).unwrap();
+    let second = client.session_create(&made.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     client.session_prompt(&second.id, "say:write the docs", None).unwrap();
     wait_for_turn_end(&client, &second.id, 1);
 
@@ -176,7 +176,7 @@ fn worked_in(stack: &Stack, client: &Client) -> (protocol::model::Workspace, Ses
         client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
     });
     wait_for_turn_end(client, &chat.id, 1);
-    let second = client.session_create(&made.id, AgentKind::Claude, SessionOptions::default(), None).unwrap();
+    let second = client.session_create(&made.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     client.session_prompt(&second.id, "say:now add a test", None).unwrap();
     wait_for_turn_end(client, &second.id, 1);
     // Its own first prompt asks for a title too, which would otherwise still be on its way when a test holds the next.
