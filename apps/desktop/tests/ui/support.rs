@@ -26,7 +26,10 @@ use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, ScrollDelta, SharedString, TestAppContext};
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, ElementId, Entity, InputEvent as _, MouseMoveEvent, ScrollDelta, ScrollEvent,
+    SharedString, TestAppContext,
+};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::SessionStatus;
 use tempfile::TempDir;
@@ -249,11 +252,36 @@ impl<'a> Ui<'a> {
         self.cx.update_window(self.handle, |_, window, _| window.try_find(id).is_some_and(|e| e.visible())).unwrap()
     }
 
-    /// Turns the mouse wheel over the element, by `delta`. Down the page is a negative `y`.
+    /// Turns the mouse wheel over the element, by `delta`, with the pointer moved to its middle first. Down the page is
+    /// a negative `y`.
+    ///
+    /// Not the kit's `scroll`, which redraws the whole window with `render_frame` before the pointer moves, after it
+    /// moves and after the wheel turns. That would hide a view that forgot to `notify`, as [`Ui::frame`] says, and in a
+    /// test that turns the wheel many times, those redraws took most of its time.
     pub(crate) fn scroll(&mut self, id: impl Into<ElementId>, delta: ScrollDelta) {
         let id = id.into();
         self.frame();
-        self.cx.update_window(self.handle, |_, window, cx| window.scroll(id, delta, cx)).unwrap();
+        let position = self
+            .cx
+            .update_window(self.handle, |_, window, _| {
+                let target = window.find(id.clone());
+                assert!(target.visible(), "{id:?} isn't visible to scroll");
+                target.bounds().center()
+            })
+            .unwrap();
+        self.cx
+            .update_window(self.handle, |_, window, cx| {
+                let event = MouseMoveEvent { position, modifiers: window.modifiers(), ..Default::default() };
+                window.dispatch_event(event.to_platform_input(), cx);
+            })
+            .unwrap();
+        self.frame();
+        self.cx
+            .update_window(self.handle, |_, window, cx| {
+                let event = ScrollEvent { position, delta, modifiers: window.modifiers(), ..Default::default() };
+                window.dispatch_event(event.to_platform_input(), cx);
+            })
+            .unwrap();
         self.frame();
     }
 
