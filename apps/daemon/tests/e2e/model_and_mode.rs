@@ -50,11 +50,13 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
         .unwrap();
     assert_eq!(changed.permission_mode, FullAccess);
     assert_eq!(changed.model, ModelName::named("sonnet"));
-    assert_eq!(mode_changes(&client, &session.id), [FullAccess], "reported by the agent, and only by it");
 
     // The same process, and it no longer asks.
     client.session_prompt(&session.id, "tool:echo second > second.txt", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
+    // The agent reports its new mode after taking it, so the report can come after the reply. It comes before what the
+    // next turn says, though, so it's in the log by the turn's end.
+    assert_eq!(mode_changes(&client, &session.id), [FullAccess], "reported by the agent, and only by it");
     let path = PathBuf::from(workspace.path.clone().unwrap());
     assert!(path.join("second.txt").exists());
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count(), 1);
