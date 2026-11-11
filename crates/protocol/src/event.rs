@@ -204,6 +204,12 @@ pub struct AgentTask {
 pub enum ContentBlock {
     Text {
         text: String,
+        /// The images the text points to in the worktree, as they were when it came, each by the address the text
+        /// gives it. The worker reads each, and the hub keeps it as an attachment of the session, so a client reads
+        /// its bytes with `AttachmentRead`, as it does a prompt's. One that wasn't there, or wasn't an image inside the
+        /// worktree, isn't named, and neither is any in a text recorded before the hub kept them.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<LinkedImage>,
     },
     Thinking {
         text: String,
@@ -236,6 +242,14 @@ pub enum ContentBlock {
     },
     #[serde(other)]
     Unknown,
+}
+
+/// An image a text points to, and the attachment that keeps it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct LinkedImage {
+    /// Where the text says the image is, as its Markdown gives it, before any decoding.
+    pub address: String,
+    pub attachment: Attachment,
 }
 
 /// What a tool changed in a file, as its agent reported it, so a client can show the change with the file's own line

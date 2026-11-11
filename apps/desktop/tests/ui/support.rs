@@ -293,7 +293,7 @@ impl<'a> Ui<'a> {
         for event in self.events() {
             if let EventBody::Assistant { blocks, .. } = &event.body {
                 for block in blocks {
-                    if let protocol::event::ContentBlock::Text { text: t } = block {
+                    if let protocol::event::ContentBlock::Text { text: t, .. } = block {
                         text.push_str(t);
                     }
                 }

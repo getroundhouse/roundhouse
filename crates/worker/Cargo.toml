@@ -9,10 +9,13 @@ process.workspace = true
 parking_lot.workspace = true
 protocol.workspace = true
 agents.workspace = true
+markdown.workspace = true
+percent-encoding.workspace = true
 toml.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

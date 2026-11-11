@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use agents::AgentProcess;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::attachment::AttachmentBytes;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::model::{RunId, SessionId};
@@ -243,12 +242,6 @@ async fn handle(
             .await
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("writing an attachment stopped: {e}")))??;
             Ok(WorkerResponse::AttachmentWritten { path: written.to_string_lossy().into_owned() })
-        }
-        WorkerRequest::ImageRead { path, image } => {
-            let (media_type, data) = tokio::task::spawn_blocking(move || crate::images::read(Path::new(&path), &image))
-                .await
-                .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading an image stopped: {e}")))??;
-            Ok(WorkerResponse::Image { media_type, data: AttachmentBytes::new(data) })
         }
         WorkerRequest::ListFiles { path } => Ok(WorkerResponse::Files(crate::files::list(Path::new(&path)).await?)),
         WorkerRequest::FolderRead { path, folder } => {

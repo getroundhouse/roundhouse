@@ -39,15 +39,6 @@ impl Client {
         Ok(data.into_vec())
     }
 
-    /// See [`ClientRequest::WorkspaceImageRead`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn workspace_image_read(&self, id: &WorkspaceId, path: &str) -> Result<(MediaType, Vec<u8>)> {
-        let reply = self.call(ClientRequest::WorkspaceImageRead { id: id.clone(), path: path.to_string() })?;
-        let ClientResponse::Image { media_type, data } = reply else {
-            return unexpected(&reply);
-        };
-        Ok((media_type, data.into_vec()))
-    }
-
     /// See [`ClientRequest::WorkspaceFiles`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_files(&self, id: &WorkspaceId) -> Result<WorktreeFiles> {
         let reply = self.call(ClientRequest::WorkspaceFiles { id: id.clone() })?;

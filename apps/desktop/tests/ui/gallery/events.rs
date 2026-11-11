@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{ContentBlock, EventBody, FileChange, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, FileChange, LinkedImage, TurnOutcome};
 use protocol::model::{MessageId, Seq, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
@@ -17,7 +17,12 @@ pub(crate) fn taken(prompt: Seq) -> EventBody {
 
 /// Something the agent wrote, as its own message, the way Claude sends each block.
 pub(crate) fn text(message: &str, text: &str) -> EventBody {
-    from_the_agent(message, ContentBlock::Text { text: text.to_string() })
+    text_pointing(message, text, Vec::new())
+}
+
+/// The same, with the images in the worktree it points to, which the hub kept.
+pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>) -> EventBody {
+    from_the_agent(message, ContentBlock::Text { text: text.to_string(), images })
 }
 
 pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {

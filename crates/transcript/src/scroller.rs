@@ -118,6 +118,12 @@ impl Scroller {
         (fraction, furthest + self.list.viewport_bounds().size.height)
     }
 
+    /// How tall the row at `row` was drawn, or `None` if it's above what's on screen.
+    #[cfg(feature = "testing")]
+    pub fn row_height(&self, row: usize) -> Option<gpui_kit::Pixels> {
+        self.list.bounds_for_item(row).map(|bounds| bounds.size.height)
+    }
+
     /// Whether someone has scrolled away from the latest row.
     pub(crate) fn is_scrolled_up(&self) -> bool {
         self.list.max_offset_for_scrollbar().y > px(0.)

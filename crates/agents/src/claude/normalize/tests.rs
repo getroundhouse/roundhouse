@@ -32,7 +32,7 @@ fn surrogate_repair_only_touches_what_is_broken() {
     };
     let wrap =
         |inner: &str| format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{inner}"}}]}}}}"#);
-    let block = |s: &str| vec![ContentBlock::Text { text: s.to_string() }];
+    let block = |s: &str| vec![ContentBlock::Text { text: s.to_string(), images: Vec::new() }];
     // A whole pair is an ordinary character.
     assert_eq!(text(&wrap(r"\ud83d\ude00 ok")), block("\u{1f600} ok"));
     // A low surrogate with no high one, and a high one followed by something else.

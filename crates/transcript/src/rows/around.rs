@@ -151,7 +151,7 @@ mod tests {
             message_id: Some("m".into()),
             parent_tool_use_id: None,
             model: None,
-            blocks: vec![ContentBlock::Text { text: "a".into() }],
+            blocks: vec![ContentBlock::Text { text: "a".into(), images: Vec::new() }],
             first_index,
         };
 

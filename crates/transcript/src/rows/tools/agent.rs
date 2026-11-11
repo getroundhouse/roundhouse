@@ -62,7 +62,8 @@ fn opened(call: &Agent, answer: Option<&Answer>, subagent: Option<&Subagent>, to
         .children(prompt)
         .children(work)
         .when_some(report, |d, report| {
-            d.child(agent_text(toggle.key, report, None).image_source(toggle.linked.resolver(toggle.seq)))
+            // A call's result names no images, so only one written into the report is drawn.
+            d.child(agent_text(toggle.key, report, None).image_source(toggle.linked.resolver(toggle.seq, &[])))
         })
         .into_any_element()
 }

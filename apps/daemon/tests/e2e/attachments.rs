@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use client_core::{Client, ClientError};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
-use protocol::event::{ContentBlock, EventBody};
+use protocol::event::{ContentBlock, EventBody, LinkedImage};
 use protocol::model::{AgentKind, AttachmentId, SessionId, SessionOptions};
 
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
@@ -152,22 +152,52 @@ fn a_prompt_can_only_carry_what_was_added_to_its_own_chat() {
     assert!(read_all(&client, &session.id).is_empty(), "nothing is recorded for a refused prompt");
 }
 
+/// The images the text of each of the agent's replies names, in order, by address.
+fn linked(events: &[protocol::event::SessionEvent]) -> Vec<Vec<LinkedImage>> {
+    let texts = events.iter().filter_map(|e| match &e.body {
+        EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
+            ContentBlock::Text { images, .. } => Some(images.clone()),
+            _ => None,
+        }),
+        _ => None,
+    });
+    texts.collect()
+}
+
 #[test]
-fn a_client_reads_an_image_in_the_worktree_through_the_hub_and_nothing_else() {
+fn an_image_a_reply_points_to_is_kept_as_it_was_when_the_reply_came() {
     let stack = Stack::start();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
+    let (workspace, session) = stack.workspace(&client);
     let worktree = PathBuf::from(workspace.path.clone().unwrap());
     std::fs::write(worktree.join("shot.png"), png(64)).unwrap();
-    std::fs::write(worktree.join("notes.txt"), "not an image").unwrap();
+    client.session_prompt_with(&session.id, "say:![The shot](shot.png)", None, Vec::new()).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    std::fs::write(worktree.join("shot.png"), png(128)).unwrap();
 
-    let read = |path: &str| client.workspace_image_read(&workspace.id, path);
+    client.session_prompt_with(&session.id, "say:![The shot](shot.png)", None, Vec::new()).unwrap();
 
-    assert_eq!(read("shot.png").unwrap(), (MediaType::Png, png(64)));
-    assert_eq!(read(worktree.join("shot.png").to_str().unwrap()).unwrap(), (MediaType::Png, png(64)));
-    assert_eq!(refused_with(read("notes.txt")), ErrorCode::InvalidRequest);
-    assert_eq!(refused_with(read("../../")), ErrorCode::InvalidRequest);
-    assert_eq!(refused_with(read("missing.png")), ErrorCode::NotFound);
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    let [first, second] = linked(&events).try_into().unwrap_or_else(|all| panic!("{all:?}"));
+    let ([first], [second]) = (first.as_slice(), second.as_slice()) else { panic!("{first:?} {second:?}") };
+    assert_eq!((first.address.as_str(), second.address.as_str()), ("shot.png", "shot.png"));
+    assert_eq!(client.attachment_read(&session.id, &first.attachment.id).unwrap(), png(64), "as it was then");
+    assert_eq!(client.attachment_read(&session.id, &second.attachment.id).unwrap(), png(128));
+}
+
+#[test]
+fn a_reply_names_no_image_that_isnt_one_inside_the_worktree() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    std::fs::write(PathBuf::from(workspace.path.unwrap()).join("notes.txt"), "not an image").unwrap();
+
+    client
+        .session_prompt_with(&session.id, "say:![a](notes.txt) ![b](../../x.png) ![c](missing.png)", None, Vec::new())
+        .unwrap();
+
+    let events = wait_for_turn_end(&client, &session.id, 1);
+    assert_eq!(linked(&events), [Vec::<LinkedImage>::new()]);
 }
 
 #[test]
