@@ -9,13 +9,15 @@
 //! transcript draws the agent's own work. [`crate::rows::around`] gathers that work from the log.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
+use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
-    div,
+    AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, SharedString,
+    Styled, TestSupportExt as _, div,
 };
+use look::Hand as _;
 use protocol::event::ContentBlock;
 use protocol::model::{Seq, SubagentStatus, ToolUseId};
 
@@ -24,6 +26,7 @@ use super::{Answer, Subagent, Toggle, block, line};
 use crate::TranscriptEvent;
 use crate::calls::agent::{self, Agent};
 use crate::calls::count;
+use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::rows::around::blocks_of;
 use crate::rows::{agent_text, render_block};
@@ -63,14 +66,17 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" · "))
 }
 
-/// The button that asks for the subagent's work in the subagent tab.
+/// The button that asks for the subagent's work in the subagent tab. It says Open, and it's outlined, as a button that
+/// opens something is, so it reads as the way in, apart from the line, whose click opens the call where it is.
 fn open_tab(call: ToolUseId, title: &str, toggle: &Toggle) -> AnyElement {
     let (this, title) = (toggle.shared.this.clone(), title.to_string());
     Button::new(ElementId::Name(format!("open-subagent/{call}").into()))
-        .ghost()
+        .hand()
+        .outline()
         .xsmall()
+        .label("Open")
         .icon(IconName::ArrowUpRight)
-        .tooltip("Open in tab")
+        .tooltip("Open in the subagent tab")
         .on_click(move |_, _, cx| {
             // The line under it would take the click too, and open or close the call.
             cx.stop_propagation();
@@ -80,29 +86,55 @@ fn open_tab(call: ToolUseId, title: &str, toggle: &Toggle) -> AnyElement {
         .into_any_element()
 }
 
-/// What it was asked, on a block labelled as a call's input is.
-fn prompt_block(call: &Agent, toggle: &Toggle, cx: &App) -> Option<Div> {
-    let prompt = call.prompt?;
-    Some(block::frame(cx).child(block::label("Prompt", cx)).child(block::prose(toggle.key, "prompt", prompt)))
+/// What it was asked, quieter than what it reported, which is the outcome: a quote, with a rule at its left and its
+/// text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a dozen lines or so, as
+/// a block's prose does. The call and the subagent tab both start with it.
+pub(in crate::rows) fn prompt_block(key: &ItemKey, prompt: &str, cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    let (id, text_id) = (key.element("prompt"), key.element("prompt-text"));
+    let text = div()
+        .id(id.clone())
+        .text_sm()
+        .text_color(theme.muted_foreground)
+        .child(TextView::markdown(text_id, SharedString::from(prompt.to_string())).selectable(true))
+        .test_support();
+    v_flex()
+        .mt_1()
+        .gap_1()
+        .pl_3()
+        .border_l_2()
+        .border_color(theme.border)
+        .child(div().text_xs().text_color(look::faint()).child("Asked"))
+        .child(block::scrolling(id, text))
+        .into_any_element()
 }
 
-/// What it reported, once it's done, on a block of its own. A subagent run in the foreground reports in its call's
+/// What it reported, once it's done, as the subagent's answer: the agent's own prose, in full, under a rule and a
+/// heading, so it carries more weight than what it was asked. A subagent run in the foreground reports in its call's
 /// result too, which is all there is until its record comes. A report names no images the hub kept, so only one
 /// written into it is drawn, and it loads in the row of the event at `seq`, when it's drawn in one, as it is in the
 /// chat.
 pub(in crate::rows) fn report_block(
-    key: &crate::item_key::ItemKey,
+    key: &ItemKey,
     report: &str,
     images: Option<(&LinkedImages, Seq)>,
     cx: &App,
 ) -> Div {
+    let theme = cx.theme();
     let text = agent_text(key, report, None);
     let text = match images {
         Some((linked, seq)) => text.image_source(linked.resolver(seq, &[])),
         None => text,
     };
-    let report = div().id(key.element("report")).px_3().py_2().child(text).test_support();
-    block::frame(cx).child(block::label("Report", cx)).child(report)
+    let heading = div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(theme.foreground).child("Report");
+    v_flex()
+        .mt_1()
+        .gap_2()
+        .pt_3()
+        .border_t_1()
+        .border_color(theme.border)
+        .child(heading)
+        .child(div().id(key.element("report")).child(text).test_support())
 }
 
 /// Kept apart: the blocks the subagent tab starts and ends with, and its newest call between them while it works.
@@ -120,7 +152,7 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .mt_1()
         .mb_2()
         .gap_2()
-        .children(prompt_block(call, toggle, cx))
+        .children(call.prompt.map(|prompt| prompt_block(toggle.key, prompt, cx)))
         .children(latest)
         .when_some(report, |d, report| {
             d.child(report_block(toggle.key, report, Some((&toggle.shared.linked, toggle.seq)), cx))
@@ -160,7 +192,7 @@ fn gathered(
         .gap_2()
         .border_l_1()
         .border_color(theme.border)
-        .children(prompt_block(call, toggle, cx))
+        .children(call.prompt.map(|prompt| prompt_block(toggle.key, prompt, cx)))
         .children(work)
         .when_some(report, |d, report| {
             // A call's result names no images, so only one written into the report is drawn.

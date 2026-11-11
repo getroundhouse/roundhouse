@@ -33,7 +33,15 @@ fn records_held(ui: &Ui<'_>, chat: &SessionId) -> usize {
 /// Has the agent start a subagent and finish its turn, and opens the subagent's call. The ID of the button on its line
 /// that opens the subagent tab.
 fn a_finished_subagent(ui: &mut Ui<'_>) -> SharedString {
-    ui.input("agent:Look around; tool:echo after; say:done");
+    let open = a_subagent_for(ui, AGENT_LINE);
+    ui.click_labelled(AGENT_LINE, 0);
+    open
+}
+
+/// Has the agent start a subagent for `what` and finish its turn. The ID of the button on its line that opens the
+/// subagent tab, once it's there.
+fn a_subagent_for(ui: &mut Ui<'_>, what: &str) -> SharedString {
+    ui.input(&format!("agent:{what}; tool:echo after; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     let call = ui
@@ -47,7 +55,6 @@ fn a_finished_subagent(ui: &mut Ui<'_>) -> SharedString {
             _ => None,
         })
         .expect("the agent's call that started the subagent");
-    ui.click_labelled(AGENT_LINE, 0);
     let open = SharedString::from(format!("open-subagent/{call}"));
     // It's there once the subagent's record is, which comes on the feed.
     ui.wait("the button that opens the subagent tab", |ui| ui.has(open.clone()));
@@ -67,6 +74,44 @@ fn a_subagent_s_call_shows_none_of_its_work_which_opens_in_the_subagent_tab(cx: 
     assert_eq!(showing(&ui), Showing::Subagent);
     assert!(ui.has("show-subagent-tab"));
     assert_eq!(items(&ui, "File")[4], "Close Subagent Tab", "⌘W closes the tab, not the chat behind it");
+}
+
+/// The button that opens the subagent tab shows on a closed call's line before the pointer is over it, so the way to
+/// the tab is seen, apart from the line, whose click opens the call where it is.
+#[gpui_kit::test]
+fn the_button_to_the_subagent_tab_shows_on_a_closed_line(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_finished_subagent(&mut ui);
+    ui.click_labelled(AGENT_LINE, 0);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.hover("send", cx)).unwrap();
+    ui.frame();
+
+    let shown = ui.cx.update_window(ui.handle, |_, window, _| window.find(open.clone()).visible()).unwrap();
+    assert!(shown, "the button shows with the call closed and the pointer elsewhere");
+    ui.click(open);
+    ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
+}
+
+/// What the subagent is for gives way before the button does, so a long one ends in an ellipsis and the button stays
+/// on its line.
+#[gpui_kit::test]
+fn the_button_to_the_subagent_tab_stays_on_a_line_with_a_long_title(cx: &mut TestAppContext) {
+    const LONG: &str =
+        "Find every place in the crates that checks whether a signal shows Stop, and say what each one does";
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_subagent_for(&mut ui, LONG);
+
+    let line = ui.labelled(LONG)[0].bounds();
+    let button = ui.cx.update_window(ui.handle, |_, window, _| window.find(open.clone()).bounds()).unwrap();
+
+    assert!(
+        button.right() <= line.right(),
+        "the button, to {:?}, is on its line, to {:?}",
+        button.right(),
+        line.right()
+    );
 }
 
 /// The subagent tab sits at the far left, as the file tab does, just after it, so neither moves however many chats are
