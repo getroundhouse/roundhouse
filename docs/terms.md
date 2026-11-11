@@ -13,6 +13,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Worker | The process that does a workspace's work: its agents, git and scripts. It reports to its hub. There's one per workspace | `worker` |
 | Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. The local provider runs workers on this machine, and it isn't special | `Provider`, `LocalProvider` |
 | Instance | Where a provider runs one workspace's worker | `instance_id` |
+| Provider adapter | The program that makes and ends a provider's instances. The hub runs it and talks to it over the provider protocol, and the local provider's is the daemon's `provider local`. Not built | `Provider` |
 | Client | A program that talks to a hub, such as the desktop app or the CLI. Clients only talk to hubs | `client-core` |
 | Agent | The coding agent a worker runs as a child process. Today that's only the Claude CLI | `AgentKind`, `AgentProcess` |
 | Subagent | An agent that the agent starts inside its own process to do part of the work, such as a search, with a tool call. It isn't one the worker runs, and its lines name the call that started it as their parent, which the hub records with each event. The agent says when one starts, with what it was asked, and when it ends, with its report, and the hub keeps a record of each. The transcript draws them in that call | `parent_tool_use_id`, `SessionEvent::subagent`, `SubagentStarted`, `SubagentEnded`, `Subagent`, `transcript::calls::agent` |
@@ -29,6 +30,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Worktree | A workspace's git worktree, the files on disk | `Workspace.path` |
 | Title | What a workspace or a chat is called on screen. It's generated from the first prompt, generated again from every prompt when someone asks, or typed by hand, and one typed by hand is replaced only by one someone asks for | `Workspace.title`, `Session.title`, `TitleSource` |
 | Base ref | What a workspace's branch was created from. Diffs are taken against it | `base_ref` |
+| Base image | A VM that a repository's own script has set up, with its tools installed and its caches warm. A remote workspace's VM is made as a copy of its repository's newest one. Not built | None |
 | Session | One conversation with one agent, with its log. A workspace can have several | `Session` |
 | Run | One launch of an agent. A session can have many, because an agent can exit and be started again. Its ID never repeats, even across hub restarts | `RunId`, `AgentSpec.run` |
 | Turn | From a prompt until the agent finishes responding. A run can have many. A prompt sent mid-turn folds into the running one if the agent has more to do, and otherwise starts the next. The agent starts one by itself when a background task finishes | `TurnEnded`, `Session.turn_started_at_ms`, `SessionStatus::in_turn` |
@@ -111,10 +113,13 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
 | Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
-| Hub, daemon | `roundhoused` is one binary that runs as a hub or as a worker | "Hub" or "worker". "Daemon" only for the binary |
+| Agent, harness | What other tools call a harness, the program that runs a model with its tools, such as the Claude CLI, is an agent here | "Agent". "Harness" only as another tool's word |
+| Hub, daemon | `roundhoused` is one binary that runs as a hub, as a worker, or as the local provider's adapter | "Hub" or "worker". "Daemon" only for the binary |
 | Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |
 | Approval mode, permission mode | The same setting. `--permission-mode`, `permissionMode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `PermissionMode` and `permission_mode` in code |
 | Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |
+| Adapter | An agent's adapter runs one kind of agent and turns its output into events. A provider's adapter makes and ends its instances | "Adapter" alone means an agent's, except where only a provider's can be meant, as in "Providers" in `docs/architecture.md`. Otherwise "provider adapter" |
+| Base | A workspace's base ref is what its branch was created from. A base image is what a remote workspace's VM is made from | "Base" alone means the base ref. Always "base image" for the other |
 | Provider, model provider | A provider is where a hub runs workers. A model provider is who serves an agent's model | "Provider" alone only for the first. Always "model provider" for the second, in code and in the interface |
 | Account | An agent's account is the login its CLI runs under. A hub's accounts, once a hub serves several people, are who may use it | "Account" alone means the agent's, until hubs have their own. Then say which |
 | Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
