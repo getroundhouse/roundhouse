@@ -8,6 +8,18 @@
 - **A workspace's mark speaks for its open chat with the most going on:** one whose agent is working, then one that stopped short, then one that only left something running. *Unconfirmed.*
 - **A workspace's row shows how many lines it has added and removed,** in green and red at its right, with either left out when it's none. *Not built:* the hub doesn't send them.
 
+## Hiding and widening
+
+- **A button beside the window's buttons hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the button: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.
+- **Both sidebars slide open and shut, in a fifth of a second,** each moving out past its edge of the window as one piece, so it's plain where it went. What's beside a sidebar moves with it, so nothing jumps. A sidebar turned back partway slides from where it had got to. Reduce Motion skips the slide.
+- **Dragging a sidebar's inner edge changes how wide it is,** from 220px to 480px for this one and from 300px to 800px for the sidebar of changes, and no wider than leaves 360px between the two. This one can push the sidebar of changes as far as its narrowest, and the sidebar of changes drags only into the room this one leaves. The pointer shows the edge can be dragged, and the edge shows a short bar while the pointer is on it. The width holds in every workspace, and while the sidebar is hidden, until the app quits.
+- **In a window too narrow for both sidebars at their widths and 360px between them, the sidebar of changes gives way first, and then this one,** each no further than its narrowest, and each is as wide as it was dragged again once the window has the room. A window narrower still squeezes what's between them. A sidebar takes as much of the window as shows of it, so one sliding away gives up its room as it goes and the other widens into it, rather than all at once. The sidebar of changes takes room only where it shows, so on Home and in Settings this one is as wide as it was dragged.
+- **A sidebar dragged to within 8px of its usual width takes it,** which is 290px for this one and 432px for the sidebar of changes, so the usual layout is easy to get back to.
+
+**The sidebar hidden, with the workspace's header starting after the button that shows it again.**
+
+![The sidebar hidden](screens/sidebar-hidden.png)
+
 ## Replies you haven't read
 
 - **A chat that needs a look has its name at full brightness in medium weight,** in its tab and in its workspace's row: one with a reply you haven't read, or one waiting on you for an answer or an approval. Every other name is muted, so which agents have finished or are stuck since you last looked stands out without opening each one. That includes the selected workspace's name and the open chat's title, which look as they do when they aren't selected, as `look.md` says for lists. A chat waiting on you stays that way until it's answered, whether or not it's showing. Its mark doesn't change, since the fan's colour is the pull request's alone, as `look.md` says. A reply is the end of a turn, and one the agent was cut off from shows as stopped short instead. The hub keeps how far each chat is read, so every client agrees. *Unconfirmed.*

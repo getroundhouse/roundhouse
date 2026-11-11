@@ -145,7 +145,7 @@ fn listed(
     listed
 }
 
-pub(crate) fn page(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
     let home = &app.home;
     let search = home.search.read(cx).value().to_string();
     let active = |w: &Workspace| last_active(w, app.sessions.get(&w.id).map_or(&[], Vec::as_slice));
@@ -159,7 +159,7 @@ pub(crate) fn page(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement
     v_flex()
         .id("home-page")
         .size_full()
-        .child(bar::bar(app, cx))
+        .child(bar::bar(app, inset, cx))
         .when(empty, |d| d.child(nothing_listed(cx)))
         .when(!empty, |d| d.child(list.track_scroll(&home.scroll).flex_1().min_h_0()))
         .test_support()

@@ -28,15 +28,14 @@ mod saving;
 mod settings;
 mod sidebar;
 pub mod sidebar_tabs;
+mod sides;
 pub mod updates;
 mod window_place;
 pub mod workspace_pane;
 
 pub use assets::Assets;
 use checkout::Checkout;
-use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point, px,
-};
+use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
 
 /// How long after the window last moved its place is saved, which a test can wait out.
@@ -117,7 +116,7 @@ pub fn open_main_window(
         titlebar: Some(TitlebarOptions {
             title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(12.), px(12.))),
+            traffic_light_position: Some(point(sides::WINDOW_BUTTONS_INSET, sides::WINDOW_BUTTONS_INSET)),
         }),
         // The app moves the window itself, from the strip along the top. GPUI says AppKit's own handling
         // there holds back each click while it waits for a double click, from macOS 27 on.

@@ -22,9 +22,6 @@ pub(crate) mod signal;
 
 pub(crate) use row::doing;
 
-/// Its right edge included. As wide as the sidebar `docs/inspiration.md` measures, so the layout feels familiar.
-/// Settings stands in for the sidebar at the same width.
-pub(crate) const WIDTH: f32 = 290.0;
 const HEADING_HEIGHT: Pixels = px(28.);
 const REPO_HEIGHT: Pixels = px(32.);
 /// A workspace's row, and the note in its place while one is on its way.
@@ -219,6 +216,7 @@ fn creating(cx: &mut Context<AppView>) -> AnyElement {
         .into_any_element()
 }
 
+/// The sidebar, filling the frame `sides` puts it in.
 pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (background, border) = (theme.sidebar, theme.sidebar_border);
@@ -230,14 +228,12 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         range.map(|ix| line(app, lines[ix], cx)).collect::<Vec<_>>()
     });
     v_flex()
-        .flex_none()
-        .w(px(WIDTH))
-        .h_full()
+        .size_full()
         .bg(background)
         .border_r_1()
         .border_color(border)
-        // Where the window's buttons sit, level with the workspace header. It stays put, so the list scrolls
-        // under its bottom edge rather than under the buttons.
+        // Where the window's buttons sit, level with the workspace header, with the button that hides the sidebar
+        // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(nav::nav(app, cx))
         .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5())

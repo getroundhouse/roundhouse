@@ -22,6 +22,8 @@ Bars are decided through `l`, and `xl` is only reported. The sizes come from rea
 - Leave out of a list what isn't shown, rather than putting it in as rows that draw nothing. Rows with no height take no room, so the list draws every one of them whenever it draws the row beside them. A subagent's 1,100 events, left in the list as empty rows under its closed call, raised the p95 frame from about 1.7 ms to 7 ms.
 - Scroll by anchor, with pinning, so jumping to an item doesn't drift.
 - Measure a row when it's drawn, and keep its height. The transcript's list draws only the rows that show in the window, keeps each row's height as a guess once it's out of date, and measures the loaded rows out of sight a few to a frame. So a change of its width costs the rows in the window, where GPUI's list measures every row again in the frame its width changes. A loaded row costs about 40 µs to measure, most of it laying out text, which a release build barely shortens.
+- Keep a sidebar at its whole width while it slides, and clip it, so nothing in it is laid out again as it moves. Its width stays the same all the way, even in a window too narrow for both sidebars, where the other one gives up or takes back room as it slides and is laid out again on each frame. What's beside it is laid out on every frame of the slide, which costs the rows in the window.
+- Nothing in the window is cached, so every frame something moving asks for redraws the whole window. Whatever moves has to end, and then ask for no more frames.
 - Parse terminal output off the main thread, with a short lock per frame.
 - Use the kit's `Diff` and `Textarea` rather than writing those.
 - Highlight with Oniguruma rather than `fancy-regex`, which takes several times the CPU on a large diff.

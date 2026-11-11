@@ -14,9 +14,8 @@
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::Duration;
 
-use gpui_kit::base::motion::{Transition, transition};
+use gpui_kit::base::motion::transition;
 use gpui_kit::base::{ScrollBounce, ScrollbarHandle};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -45,8 +44,6 @@ use state::State;
 
 /// The space above the first row and below the last.
 const EDGE: Pixels = px(8.);
-/// How long the button to the latest row takes to come and go.
-const JUMP_BUTTON: Duration = Duration::from_millis(200);
 
 #[derive(Clone)]
 pub struct TranscriptList {
@@ -192,7 +189,7 @@ impl TranscriptList {
         let shown = transition(
             (id.clone(), "jump-button-visibility"),
             if wanted { 1. } else { 0. },
-            Transition::new(JUMP_BUTTON),
+            look::motion::fade(),
             window,
             cx,
         );

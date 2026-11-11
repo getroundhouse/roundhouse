@@ -16,6 +16,7 @@ use crate::new_workspace::NewWorkspaceDialog;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod build_line;
+mod corner;
 mod home;
 mod hub_source;
 mod pull_requests;
@@ -113,8 +114,13 @@ impl AppView {
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
-        // Coming back from another app is when someone reads the chat showing.
-        cx.observe_window_activation(window, |t, window, cx| t.read_on_screen(window.is_window_active(), cx)).detach();
+        // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion may have
+        // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
+        cx.observe_window_activation(window, |t, window, cx| {
+            gpui_kit::base::apply_system_reduce_motion(cx);
+            t.read_on_screen(window.is_window_active(), cx);
+        })
+        .detach();
         let mut this = Self {
             hub,
             checkout,

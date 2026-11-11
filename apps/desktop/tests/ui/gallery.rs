@@ -1,6 +1,6 @@
 //! Every screen of the app, drawn from made-up data, with no real hub and no window on screen, and checked against
 //! its approved image in the spec. Each screen gets a fake hub that answers from fixed data, in
-//! `gallery/screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. What each
+//! `gallery/screens.rs` and `gallery/tool_screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. What each
 //! screen looks like now goes in `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and
 //! checked the same way, in `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark.
 
@@ -24,6 +24,7 @@ mod screens;
 mod steps;
 mod subagent_chats;
 mod tool_chats;
+mod tool_screens;
 mod worktree;
 mod world;
 mod worlds;
@@ -36,6 +37,7 @@ use gpui_kit::PlatformTextSystem;
 use approved::Verdict;
 use capture::Picture;
 use screens::SCREENS;
+use tool_screens::TOOL_SCREENS;
 
 /// Set to accept how every screen looks now, as its approved image.
 const UPDATE: &str = "ROUNDHOUSE_UPDATE_SCREENS";
@@ -67,10 +69,11 @@ fn every_screen_looks_as_approved() {
     // because the platform it otherwise comes with has to be made on the main thread, and a test isn't on it.
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
-    for screen in SCREENS {
+    let screens = || SCREENS.iter().chain(TOOL_SCREENS);
+    for screen in screens() {
         problems.extend(look_at(screen.name, screen.spec, &capture::take(screen, &text_system)));
     }
-    let names: Vec<&str> = SCREENS.iter().map(|s| s.name).chain([pull_requests::NAME, mark_states::NAME]).collect();
+    let names: Vec<&str> = screens().map(|s| s.name).chain([pull_requests::NAME, mark_states::NAME]).collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
     report(&problems);
 }

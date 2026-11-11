@@ -11,7 +11,7 @@ use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Selectable as _, Siz
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, px, uniform_list,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
 use look::Hand as _;
 
@@ -21,9 +21,6 @@ use rows::{Layout, rows};
 
 mod rows;
 
-/// Its left edge included. As wide as the sidebar of changes `docs/inspiration.md` measures, so the layout feels
-/// familiar, and wide enough for a long path and its counts on one line.
-pub(crate) const WIDTH: Pixels = px(432.);
 /// As tall as the tabs above it.
 const BAR_HEIGHT: Pixels = crate::sidebar_tabs::HEIGHT;
 

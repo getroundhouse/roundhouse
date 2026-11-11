@@ -143,6 +143,9 @@ impl<'a> Ui<'a> {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
+        // A test's clock stands still, so anything that moves would stay where it starts: a sliding sidebar, a mark,
+        // the kit's own animations. `motion.rs` has how a test of something that moves plays it.
+        cx.update(|cx| cx.set_reduce_motion(true));
         let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
         let (handle, view) =
             cx.update(|cx| desktop::open_main_window(hub, checkout, desktop::Opens::WhereItWasLeft, cx)).unwrap();

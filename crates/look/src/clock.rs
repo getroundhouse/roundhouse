@@ -1,6 +1,6 @@
 //! Where the marks are in their motion, and what time it is for text on screen. A moving mark is redrawn on every frame
-//! of the display, for the smoothest motion it can show. Pictures, and the system's Reduce Motion setting, hold every
-//! mark still, and pictures hold the time at one moment too.
+//! of the display, for the smoothest motion it can show. Reduce Motion holds every mark still, as it skips everything
+//! else that moves. Pictures turn it on, and hold the time at one moment too.
 
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -10,7 +10,7 @@ use gpui_kit::{App, Global};
 
 static START: OnceLock<Instant> = OnceLock::new();
 
-/// Set by pictures, to hold every mark still, and the time at one moment.
+/// Set by pictures, to hold the time at one moment.
 struct Still {
     at_ms: i64,
 }
@@ -19,7 +19,7 @@ impl Global for Still {}
 
 /// Whether marks move at all.
 pub(crate) fn moving(cx: &App) -> bool {
-    !cx.has_global::<Still>() && !cx.reduce_motion()
+    !cx.reduce_motion()
 }
 
 /// Seconds since the first mark asked. Each motion takes its own phase from this.
@@ -62,9 +62,11 @@ fn day_and_time_from(at: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> S
     at.format(&format!("{day}%-I:%M %p")).to_string()
 }
 
-/// Holds every mark still from now on, and the time at `at_ms`, so pictures of the app come out the same every time.
+/// Holds everything that moves still from now on, by turning Reduce Motion on, and the time at `at_ms`, so pictures of
+/// the app come out the same every time. Marks stay where they are, and anything else shows as it ends.
 #[cfg(feature = "testing")]
 pub fn hold_still(at_ms: i64, cx: &mut App) {
+    cx.set_reduce_motion(true);
     cx.set_global(Still { at_ms });
 }
 

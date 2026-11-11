@@ -14,10 +14,10 @@ use gpui_kit::{
 use look::{Hand as _, Off as _};
 use protocol::model::{Session, SessionStatus};
 
-use super::changes_sidebar::Sidebar;
 use super::setup::setup_log_view;
 use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
 use crate::right_click;
+use crate::sides::{self, Side, Sidebar};
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
 pub(super) const TAB_WIDTH: Pixels = px(200.);
@@ -151,8 +151,9 @@ impl WorkspacePane {
     }
 
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
-    /// its bar's action instead.
-    fn header(&self, sidebar: Sidebar, cx: &mut Context<Self>) -> impl IntoElement {
+    /// its bar's action instead. `inset` is how far the workspace's name starts from the header's left end, to clear
+    /// the window's buttons while the sidebar on the left is hidden.
+    fn header(&self, sidebar: Sidebar, inset: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let controls = match sidebar {
             Sidebar::Open => None,
@@ -165,7 +166,7 @@ impl WorkspacePane {
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
-            .pl_4()
+            .pl(px(16.) + inset)
             .pr_3()
             .gap_2()
             .border_b_1()
@@ -255,9 +256,11 @@ impl WorkspacePane {
 impl Render for WorkspacePane {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let changes = self.changes_sidebar(cx);
-        // Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
-        let sidebar = if changes.is_some() { Sidebar::Open } else { Sidebar::Hidden };
-        let header = self.header(sidebar, cx).into_any_element();
+        // What the header says goes by what's chosen, from the moment it is, rather than by how far the sidebar has
+        // slid. Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
+        let sidebar = if self.diff.is_some() { Side::Right.chosen(cx).sidebar } else { Sidebar::Hidden };
+        let inset = sides::header_inset(cx);
+        let header = self.header(sidebar, inset, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let tab =
             self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {

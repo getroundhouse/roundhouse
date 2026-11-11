@@ -2,9 +2,7 @@
 //! tabs under the bar choose. Clicking a file in either shows it in the workspace's file tab.
 
 use gpui_kit::component::{ActiveTheme as _, v_flex};
-use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Global, IntoElement as _, ParentElement as _, Styled as _, div,
-};
+use gpui_kit::{AnyElement, App, AppContext as _, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 
 use super::{Diff, Opened, PaneEvent, WorkspacePane};
 use crate::all_files::{AllFiles, AllFilesEvent};
@@ -13,39 +11,17 @@ use crate::file_diff::{FileDiff, FileDiffEvent};
 use crate::file_view::FileView;
 use crate::review::{Review, ReviewEvent};
 use crate::sidebar_tabs::{self, SidebarTab, TabShown};
-
-/// Whether the sidebar of changes shows.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub(super) enum Sidebar {
-    /// It starts open, so a workspace's changes, or its files, and where its pull request stands are in view from the
-    /// start.
-    #[default]
-    Open,
-    Hidden,
-}
-
-/// The sidebar chosen, which every workspace shares until the app quits.
-struct Chosen(Sidebar);
-
-impl Global for Chosen {}
-
-fn sidebar(cx: &App) -> Sidebar {
-    cx.try_global::<Chosen>().map(|chosen| chosen.0).unwrap_or_default()
-}
+use crate::sides::{self, Side, Sidebar};
 
 impl WorkspacePane {
     /// The sidebar of changes shows, in every workspace.
     pub fn changes_open(&self, cx: &App) -> bool {
-        sidebar(cx) == Sidebar::Open
+        Side::Right.chosen(cx).sidebar == Sidebar::Open
     }
 
     /// Shows or hides the sidebar of changes, in every workspace, reading again what it shows as it opens.
     pub fn toggle_changes(&mut self, cx: &mut Context<Self>) {
-        let next = match sidebar(cx) {
-            Sidebar::Open => Sidebar::Hidden,
-            Sidebar::Hidden => Sidebar::Open,
-        };
-        cx.set_global(Chosen(next));
+        Side::Right.toggle(cx);
         self.load_changes(cx);
         cx.notify();
     }
@@ -175,11 +151,17 @@ impl WorkspacePane {
         self.diff = Some(Diff { review, file, viewer, changes, all_files, sidebar_tab, tab, files_behind });
     }
 
-    /// The sidebar of changes, beside the chat and the file tab, while it's open, with the pull request's bar at its
-    /// top, level with the workspace's header, and the tabs that choose what it lists under that, level with the chat
-    /// tabs.
+    /// Whether there's a sidebar of changes to draw beside the chat, shown or hidden.
+    pub(crate) fn lists_changes(&self) -> bool {
+        self.diff.is_some()
+    }
+
+    /// The sidebar of changes, beside the chat and the file tab, with the pull request's bar at its top, level with the
+    /// workspace's header, and the tabs that choose what it lists under that, level with the chat tabs. `None` while
+    /// none of it shows, or there's nothing to show in it yet.
     pub(super) fn changes_sidebar(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let diff = self.diff.as_ref().filter(|_| self.changes_open(cx))?;
+        let diff = self.diff.as_ref()?;
+        let shown = Side::Right.shown(cx)?;
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
         let bar = crate::pull_request::bar(&self.pull_request, &self.busy, &self.workspace.id, act, cx);
         let changed = diff.review.read(cx).files.as_ref().map(Vec::len);
@@ -195,14 +177,8 @@ impl WorkspacePane {
         let on_pick = cx.listener(|t, tab: &SidebarTab, _, cx| t.show_sidebar_tab(*tab, cx));
         let tabs = sidebar_tabs::bar(chosen, changed, controls, on_pick, cx);
         let theme = cx.theme();
-        let column = v_flex().flex_none().w(crate::changes::WIDTH).h_full().border_l_1().border_color(theme.border);
-        Some(
-            column
-                .bg(theme.sidebar)
-                .child(bar)
-                .child(tabs)
-                .child(div().flex_1().min_h_0().children(list))
-                .into_any_element(),
-        )
+        let column = v_flex().size_full().border_l_1().border_color(theme.border).bg(theme.sidebar);
+        let column = column.child(bar).child(tabs).child(div().flex_1().min_h_0().children(list));
+        Some(sides::frame(Side::Right, shown, column, cx).into_any_element())
     }
 }
