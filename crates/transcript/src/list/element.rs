@@ -74,6 +74,9 @@ impl ListElement {
         let (rows, start) = {
             let mut state = self.state.borrow_mut();
             state.drawn_at(bounds);
+            // On its way down to the latest row, it moves on by what's left with the window as tall as it is now, and
+            // before the rows are laid out, so they're laid out where it's got to.
+            state.head_on(|scrolling| scrolling.move_on(window, cx));
             (state.heights.rows(), state.lay_from(tall * WALKED))
         };
         let layout = lay_out(rows, start, tall, &mut Measuring { list: self, width: bounds.size.width, window, cx });

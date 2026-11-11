@@ -1,7 +1,9 @@
-//! How long things take to move, so everything that moves the same way takes the same time, and the two ways a value
+//! How long things take to move, so everything that moves the same way takes the same time, and the ways a value
 //! moves. One that a single view draws follows the kit's `transition`, with a policy from here. One that several
-//! views lay out by is a [`Sliding`], kept where they can all read it. Both skip the motion under Reduce Motion, and
-//! ask for frames only while they move. `docs/gpui.md` has the rules.
+//! views lay out by is a [`Sliding`], kept where they can all read it. A scroll to a place that can move meanwhile
+//! is a [`Scrolling`], which says what share of the way is left rather than where to be, since a slide between two
+//! values set as it starts can't follow a place that moves. Each skips the motion under Reduce Motion, and asks for
+//! frames only while it moves. `docs/gpui.md` has the rules.
 
 use std::time::{Duration, Instant};
 
@@ -14,10 +16,73 @@ use gpui_kit::{App, Window};
 pub const PANEL: Duration = Duration::from_millis(200);
 /// How long something small takes to fade in or out, such as a button that comes and goes.
 pub const FADE: Duration = Duration::from_millis(200);
+/// How long a scroll takes to get where it's sent, such as a chat sent back down to its latest row. Longer than a
+/// slide, since a scroll goes further, and rows passed more quickly can't be followed by eye.
+pub const SCROLL: Duration = Duration::from_millis(300);
 
 /// For something small fading in or out. It slows as it arrives, which is the kit's curve for a transition.
 pub fn fade() -> Transition {
     Transition::new(FADE)
+}
+
+/// A scroll on its way over [`SCROLL`] to a place that can move meanwhile, such as a chat's latest row as more of the
+/// chat comes in. It slows toward the end, as a slide does. It says what share of the way is still to go rather than
+/// where to be, so on each frame whatever scrolls moves by all but that share of what it finds is left, and gets
+/// wherever the place has moved to. What comes in early on is scrolled to with the rest. What comes in near the end is
+/// taken in almost at once, as it is by a chat already at its end.
+#[derive(Debug)]
+pub struct Scrolling {
+    /// When it set off, by the app's clock.
+    since: Instant,
+    /// The share of its way it had still to go when it was last moved on.
+    left: f32,
+}
+
+impl Scrolling {
+    /// One setting off now. Under Reduce Motion, it's there the first time it's moved on.
+    pub fn set_off(cx: &App) -> Self {
+        Self { since: cx.background_executor().now(), left: 1. }
+    }
+
+    /// One that set off at `since`, for a test that keeps a clock of its own.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn since(since: Instant) -> Self {
+        Self { since, left: 1. }
+    }
+
+    /// Moves it on to now, and says what share of what was left the time before is still to go: 1 if no time has
+    /// passed, and 0 once it's there, as it is at once under Reduce Motion, even if that was turned on partway. Asks for
+    /// the next frame while it's on its way.
+    pub fn move_on(&mut self, window: &mut Window, cx: &App) -> f32 {
+        let share = if cx.reduce_motion() { self.arrive() } else { self.move_on_to(cx.background_executor().now()) };
+        if share > 0. {
+            window.request_animation_frame();
+        }
+        share
+    }
+
+    /// Moves it on to `now`, by the app's clock, and says what share of what was left is still to go.
+    fn move_on_to(&mut self, now: Instant) -> f32 {
+        if self.left <= 0. {
+            return 0.;
+        }
+        let left = 1. - eased(now.saturating_duration_since(self.since), SCROLL);
+        let share = left / self.left;
+        self.left = left;
+        share
+    }
+
+    /// Puts it where it's going at once.
+    fn arrive(&mut self) -> f32 {
+        self.left = 0.;
+        0.
+    }
+}
+
+/// How far along something that takes `over` to move is, `elapsed` after it set off, from 0 to 1, slowing as it
+/// arrives.
+fn eased(elapsed: Duration, over: Duration) -> f32 {
+    ease_out_cubic((elapsed.as_secs_f32() / over.as_secs_f32()).min(1.))
 }
 
 /// A value on its way somewhere over [`PANEL`], slowing as it arrives, such as how far open a sidebar is. Whatever
@@ -71,14 +136,15 @@ impl Sliding {
 
     /// Where it is `elapsed` after setting off.
     fn after(&self, elapsed: Duration) -> f32 {
-        let part = (elapsed.as_secs_f32() / PANEL.as_secs_f32()).min(1.);
-        self.from + (self.to - self.from) * ease_out_cubic(part)
+        self.from + (self.to - self.from) * eased(elapsed, PANEL)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PANEL, Sliding};
+    use std::time::Instant;
+
+    use super::{PANEL, SCROLL, Scrolling, Sliding};
 
     fn sliding(from: f32, to: f32) -> Sliding {
         Sliding { from, to, since: None }
@@ -100,5 +166,28 @@ mod tests {
 
         assert!(at.windows(2).all(|pair| pair[0] < pair[1]), "{at:?}");
         assert!(at[1] - at[0] > at[10] - at[9], "the first tenth covers more than the last: {at:?}");
+    }
+
+    #[test]
+    fn a_scroll_has_less_of_what_was_left_to_go_each_time_slowing_as_it_arrives_and_none_once_its_time_is_up() {
+        let from = Instant::now();
+        let mut scrolling = Scrolling::since(from);
+
+        assert!((scrolling.move_on_to(from) - 1.).abs() < f32::EPSILON, "nothing has gone as it sets off");
+        let shares: Vec<f32> =
+            (1..=9_u8).map(|tenth| scrolling.move_on_to(from + SCROLL / 10 * u32::from(tenth))).collect();
+        let left: Vec<f32> = shares
+            .iter()
+            .scan(1., |left, share| {
+                *left *= share;
+                Some(*left)
+            })
+            .collect();
+        assert!(shares.iter().all(|share| *share > 0. && *share < 1.), "{shares:?}");
+        assert!(1. - left[0] > left[7] - left[8], "the first tenth covers more than the ninth: {left:?}");
+        assert!((left[4] - 0.125).abs() < 0.001, "an eighth of the way is left halfway through: {left:?}");
+
+        assert!(scrolling.move_on_to(from + SCROLL).abs() < f32::EPSILON, "it's there once its time is up");
+        assert!(scrolling.move_on_to(from + SCROLL * 3).abs() < f32::EPSILON, "and stays there");
     }
 }

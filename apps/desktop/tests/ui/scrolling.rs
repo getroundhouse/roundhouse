@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta,
-    TestAppContext, point, px,
+    AppContext as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta, TestAppContext,
+    point, px,
 };
 use protocol::event::EventBody;
 use protocol::model::seq_index;
@@ -17,6 +17,7 @@ use transcript::Place;
 use crate::support::{Stack, Ui};
 
 mod cost;
+mod latest;
 
 /// A frame's length, for letting the list measure what it does a few rows to a frame.
 const A_FRAME: Duration = Duration::from_millis(16);
@@ -313,29 +314,6 @@ fn a_place_on_the_scrollbars_track_is_the_same_row_however_long_the_thumb_rests_
 
     assert_ne!(tall(&ui), before, "the rows that loaded aren't as tall as they were taken to be");
     assert!(tops.iter().all(|top| top.abs_diff(row) <= 1), "the page moved under a thumb held still: {tops:?}");
-}
-
-/// Someone who scrolls back down to the latest row is keeping to it again, and the button that would take them
-/// there goes. The list finds the end in sight as it lays the rows out, which is after the button is drawn.
-#[gpui_kit::test]
-fn scrolling_back_down_to_the_latest_row_takes_away_the_button_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
-    let transcript = ui.transcript().unwrap();
-    let session = ui.cx.read_entity(&transcript, |t, _| t.session_id().to_string());
-    let button = ElementId::from((ElementId::Name(session.into()), "jump-to-latest"));
-    let shows = |ui: &mut Ui<'_>| {
-        ui.settle(A_FRAME);
-        ui.cx.update_window(ui.handle, |_, window, _| window.try_find(button.clone()).is_some()).unwrap()
-    };
-    assert!(!shows(&mut ui), "there's no button at the latest row");
-
-    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
-    assert!(shows(&mut ui));
-
-    // Not quite as far as the scrollbar goes, which is near enough that the latest row's end is in sight.
-    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(-299.5))));
-    assert!(!shows(&mut ui), "the button is still there with the latest row's end in sight");
 }
 
 /// Sends the window a pointer event, and lets it draw.

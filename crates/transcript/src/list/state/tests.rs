@@ -6,7 +6,7 @@ fn window(wide: f32, tall: f32) -> Bounds<Pixels> {
     Bounds::new(point(px(0.), px(0.)), size(px(wide), px(tall)))
 }
 
-fn at(row: usize, offset: f32) -> Place {
+pub(super) fn at(row: usize, offset: f32) -> Place {
     Place { row, offset: px(offset) }
 }
 
@@ -22,7 +22,7 @@ fn session(rows: usize, height: f32) -> State {
 }
 
 /// The same, as a frame left it scrolled away from the latest row: at `row`, this far into it.
-fn scrolled_to(rows: usize, height: f32, row: usize, offset: f32) -> State {
+pub(super) fn scrolled_to(rows: usize, height: f32, row: usize, offset: f32) -> State {
     let mut state = session(rows, height);
     state.go_to_row(row);
     state.laid_out(at(row, offset), false);

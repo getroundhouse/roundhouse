@@ -1,5 +1,5 @@
 //! The list a transcript's rows are drawn in: only the rows on screen, keeping to the latest row until someone
-//! scrolls away, with a scrollbar and a button to go back to the latest row.
+//! scrolls away, with a scrollbar and a button that scrolls back down to the latest row.
 //!
 //! It's the transcript's own, rather than GPUI's list, to hold to the four rules `docs/ui.md` gives. It draws only
 //! what's on screen, so a long session costs what a short one does. It keeps its place as a row and how far into
@@ -27,6 +27,7 @@ use gpui_kit::{
     px, rems, size,
 };
 use look::Off as _;
+use look::motion::Scrolling;
 
 use crate::scroll_area::hears_the_wheel;
 use crate::transcript::Transcript;
@@ -91,6 +92,12 @@ impl TranscriptList {
     /// Goes to the latest row, and keeps to it as more arrives.
     pub fn go_to_latest(&self) {
         self.state.borrow_mut().go_to_latest();
+    }
+
+    /// Scrolls down to the latest row over [`look::motion::SCROLL`], and keeps to it as more arrives. Under Reduce
+    /// Motion it's there in the next frame.
+    fn scroll_to_latest(&self, cx: &App) {
+        self.state.borrow_mut().head_to_latest(Scrolling::set_off(cx));
     }
 
     /// How far down the scrollbar its thumb is, from 0 to 1, and how tall the list takes the session to be.
@@ -183,9 +190,10 @@ impl TranscriptList {
             .into_any_element()
     }
 
-    /// The button back to the latest row, which fades in once someone has scrolled away from it.
+    /// The button back to the latest row, which fades in once someone has scrolled away from it, and out as soon as
+    /// it's clicked.
     fn jump_button(&self, id: ElementId, window: &mut Window, cx: &mut App) -> Option<gpui_kit::Div> {
-        let wanted = self.is_scrolled_up();
+        let wanted = self.is_scrolled_up() && !self.state.borrow().is_heading_to_latest();
         let shown = transition(
             (id.clone(), "jump-button-visibility"),
             if wanted { 1. } else { 0. },
@@ -208,7 +216,7 @@ impl TranscriptList {
             .bg(colors.background)
             .text_color(colors.foreground)
             .on_click(move |_, _, cx| {
-                list.go_to_latest();
+                list.scroll_to_latest(cx);
                 cx.notify(list.view);
             })
             .off_while(!wanted);
