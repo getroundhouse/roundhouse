@@ -36,7 +36,7 @@ fn older_hub(on_demand: bool) -> World {
 /// Two repositories, with a workspace in each state a sidebar row can show, and an archived one that stays hidden,
 /// and the files in a worktree, which All files lists in a workspace that changes nothing. Returns the screen's own
 /// workspace, which comes after the first repository's others.
-fn sidebar(world: &mut World) -> WorkspaceId {
+pub(super) fn sidebar(world: &mut World) -> WorkspaceId {
     let roundhouse = world.repo("roundhouse");
     let signal_box = world.repo("signal-box");
     for (name, status) in
@@ -120,7 +120,7 @@ pub(super) fn context_without_limits() -> World {
 
 /// A chat whose one turn is over. It took a little longer as the hub saw it than the agent counted, and the hub's count
 /// is the one shown.
-fn finished_chat(world: &mut World, workspace: &WorkspaceId) {
+pub(super) fn finished_chat(world: &mut World, workspace: &WorkspaceId) {
     let chat = world.chat(workspace, SessionStatus::Idle, chats::finished());
     world.last_turn_took(&chat, 108_000);
 }
@@ -267,7 +267,7 @@ pub(super) fn chat_world(status: SessionStatus, events: Vec<protocol::event::Eve
 pub(super) fn attachments() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let shot = pictures::overlapping_badge(450);
+    let shot = pictures::badge(450, true);
     let attached = [
         ("shot-1", "Screenshot 2026-11-01 at 10.24.png", MediaType::Png, shot),
         ("log-1", "layout.log", MediaType::Text, chats::LAYOUT_LOG.as_bytes().to_vec()),
@@ -302,7 +302,7 @@ pub(super) fn read_image() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     // Short enough that the call it opens from stays in sight above it, under the composer.
-    let shot = pictures::overlapping_badge(300);
+    let shot = pictures::badge(300, true);
     let size_bytes = u64::try_from(shot.len()).unwrap();
     let image = Attachment {
         id: AttachmentId::from("read-1"),
@@ -321,7 +321,11 @@ pub(super) fn diff() -> World {
     finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
-        GitDiff { base_commit: Some(CommitId::from("3f4c19c")), patch: patch::PATCH.to_string(), truncated: false },
+        GitDiff {
+            base_commit: Some(CommitId::from(patch::BASE_COMMIT)),
+            patch: patch::PATCH.to_string(),
+            truncated: false,
+        },
     );
     world.comments.insert(
         focus.clone(),

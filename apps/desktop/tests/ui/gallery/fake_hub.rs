@@ -15,7 +15,7 @@ use protocol::client::{
 };
 use protocol::frame;
 use protocol::model::{
-    FileContents, GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
+    GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
 use super::world::World;
@@ -155,12 +155,15 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::WorktreeFiles(files.clone()))
         }
         R::WorkspaceFileRead { path, .. } => {
-            let text =
-                world.worktree_texts.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
-            reply(C::FileContents(FileContents::Text { text: text.clone() }))
+            let file =
+                world.worktree_files.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
+            reply(C::FileContents(file.clone()))
         }
-        // No screen shows a file as a commit held it.
-        R::WorkspaceFileReadAt { .. } => Err(ApiError::new(ErrorCode::NotFound, "not in the base")),
+        R::WorkspaceFileReadAt { path, .. } => {
+            let file =
+                world.base_files.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "not in the base"))?;
+            reply(C::FileContents(file.clone()))
+        }
         R::HubShutdown
         | R::HubShutdownIfIdle
         | R::HubConfigure { .. }

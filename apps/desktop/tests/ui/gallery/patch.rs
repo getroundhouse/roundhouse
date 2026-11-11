@@ -2,6 +2,20 @@
 
 #![cfg(test)]
 
+/// The commit the diff is taken from.
+pub(crate) const BASE_COMMIT: &str = "3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5";
+
+/// A branch that fixes the badge in the sidebar, and changes the screen that shows it, which git says only differs,
+/// and adds another.
+pub(crate) const IMAGES: &str = "diff --git a/docs/spec/screens/sidebar.png b/docs/spec/screens/sidebar.png
+index 7c1d2e3..8f4a5b6 100644
+Binary files a/docs/spec/screens/sidebar.png and b/docs/spec/screens/sidebar.png differ
+diff --git a/docs/spec/screens/sidebar-narrow.png b/docs/spec/screens/sidebar-narrow.png
+new file mode 100644
+index 0000000..2b3c4d5
+Binary files /dev/null and b/docs/spec/screens/sidebar-narrow.png differ
+";
+
 pub(crate) const PATCH: &str = r##"diff --git a/crates/protocol/src/model.rs b/crates/protocol/src/model.rs
 index 1a2b3c4..5d6e7f8 100644
 --- a/crates/protocol/src/model.rs

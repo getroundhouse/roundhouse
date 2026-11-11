@@ -27,7 +27,7 @@ pub(crate) enum Step {
     StartComment(usize),
     /// Shows All files in the sidebar of changes, and waits for it to list them.
     AllFiles,
-    /// Clicks this file in All files, and waits for the file tab to show its lines.
+    /// Clicks this file in All files, and waits for the file tab to show its lines, or its image.
     ViewFile(&'static str),
     /// Waits for the element with this ID to be drawn, such as what's in a folder that's read when it opens.
     WaitFor(&'static str),

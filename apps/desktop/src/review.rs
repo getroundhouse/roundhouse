@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::component::diff::DiffFile;
 use gpui_kit::{AppContext as _, Context, EventEmitter};
-use protocol::model::{CommentId, DiffComment, WorkspaceId};
+use protocol::model::{CommentId, CommitId, DiffComment, WorkspaceId};
 
 mod comments;
 
@@ -28,6 +28,9 @@ pub struct Review {
     workspace_id: WorkspaceId,
     /// Every changed file, in order of path, or `None` until the diff has loaded.
     pub files: Option<Vec<DiffFile>>,
+    /// The commit the diff was taken from, which holds each file as it was before the change. `None` until the diff
+    /// has loaded, or from a worker too old to say.
+    pub base_commit: Option<CommitId>,
     /// The hub left some untracked files out.
     pub truncated: bool,
     /// How many times the diff has been asked for, so only the newest answer is taken, and an older one that comes
@@ -57,6 +60,7 @@ impl Review {
             records,
             workspace_id,
             files: None,
+            base_commit: None,
             truncated: false,
             asks: 0,
             comments: Vec::new(),
@@ -81,12 +85,12 @@ impl Review {
             let loaded = cx.background_spawn(async move { client.workspace_diff(&id) }).await;
             let parsed = match loaded {
                 Ok(diff) => {
-                    let truncated = diff.truncated;
+                    let (truncated, base) = (diff.truncated, diff.base_commit);
                     let parsing = cx.background_spawn(async move {
                         let mut files =
                             DiffFile::parse(&diff.patch).map_err(|e| format!("couldn't read the diff: {e}"))?;
                         files.sort_by(|a, b| a.path().cmp(b.path()));
-                        Ok::<_, String>((files, truncated))
+                        Ok::<_, String>((files, truncated, base))
                     });
                     parsing.await
                 }
@@ -97,9 +101,10 @@ impl Review {
                     return;
                 }
                 match parsed {
-                    Ok((files, truncated)) => {
+                    Ok((files, truncated, base)) => {
                         t.files = Some(files);
                         t.truncated = truncated;
+                        t.base_commit = base;
                         cx.emit(ReviewEvent::Loaded);
                     }
                     Err(message) => cx.emit(ReviewEvent::Error(message)),
@@ -108,6 +113,11 @@ impl Review {
             });
         })
         .detach();
+    }
+
+    /// The connection the diff is read on, and its workspace, for reading what each file it changes holds.
+    pub(crate) fn source(&self) -> (Client, WorkspaceId) {
+        (self.client.clone(), self.workspace_id.clone())
     }
 
     /// Whether the diff has loaded, with nothing changed.

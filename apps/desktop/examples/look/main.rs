@@ -5,12 +5,14 @@
 //!     cargo run -p desktop --example look -- some-workspace
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"
 //!     cargo run -p desktop --example look -- some-workspace click:model-picker
+//!     cargo run -p desktop --example look -- some-workspace click:file-shot.png click:image-difference
 //!
 //!     cargo run -p desktop --example look -- some-workspace scroll:40
 //!     cargo run -p desktop --example look -- some-workspace drag:3
 //!     cargo run -p desktop --example look -- some-workspace jump:3
 //!
-//! Selects the named workspace, whose sidebar of changes is open, as it is from the start. With `diff`, a further
+//! Selects the named workspace, whose sidebar of changes is open, as it is from the start. Each `click:ID` presses
+//! what has that ID, in turn. With `diff`, a further
 //! argument adds a comment on the first changed line. `scroll:PX` turns the wheel over the transcript every 16 ms, up
 //! to its start and back down, and `drag:PX` drags the scrollbar's thumb up, each printing where the list and its
 //! scrollbar are after every step, then quits. `probes.rs` says why.
@@ -27,6 +29,9 @@ use gpui_kit::SharedString;
 use gpui_kit::test::TestWindowExt as _;
 
 mod probes;
+
+/// How many tenths of a second to wait for something to click to be drawn: long enough for a hub to read a file.
+const CLICK_WAITS: usize = 100;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -64,10 +69,16 @@ fn main() {
                 cx.update(|cx| cx.quit());
                 return;
             }
-            // Opens a menu or presses a button, by its ID, for looking at what that shows.
-            if let Some(target) = args.get(1).and_then(|arg| arg.strip_prefix("click:")) {
-                let target = SharedString::from(target.to_string());
-                let _ = handle.update(cx, |_, window, cx| window.click(target, cx));
+            // Opens a menu or presses a button, by its ID, for looking at what that shows, then each one after it in
+            // turn, once it's drawn, since what a click opens can take a moment to load.
+            let clicks: Vec<SharedString> = args
+                .iter()
+                .skip(1)
+                .filter_map(|arg| arg.strip_prefix("click:"))
+                .map(|target| SharedString::from(target.to_string()))
+                .collect();
+            if !clicks.is_empty() {
+                click_each(handle, clicks, cx).await;
                 return;
             }
             if args.get(1).map(String::as_str) != Some("diff") {
@@ -79,6 +90,20 @@ fn main() {
         })
         .detach();
     });
+}
+
+/// Presses each of `targets` in turn, once it's drawn, or once it's been waited for long enough.
+async fn click_each(handle: gpui_kit::AnyWindowHandle, targets: Vec<SharedString>, cx: &mut gpui_kit::AsyncApp) {
+    for target in targets {
+        for _ in 0..CLICK_WAITS {
+            let drawn = handle.update(cx, |_, window, _| window.try_find(target.clone()).is_some());
+            if drawn.unwrap_or(false) {
+                break;
+            }
+            cx.background_executor().timer(Duration::from_millis(100)).await;
+        }
+        let _ = handle.update(cx, |_, window, cx| window.click(target, cx));
+    }
 }
 
 /// Adds a comment on the first line the workspace's diff adds.

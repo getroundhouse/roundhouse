@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 use super::frame::{CHANGES, FILE, Frame};
+use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worktree;
@@ -69,6 +70,54 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
             Step::Click("all-folder-crates/protocol"),
             Step::Click("all-folder-crates/protocol/src"),
             Step::ViewFile(worktree::OPENED),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "image-opened",
+        spec: "files.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::Click("all-folder-.context"),
+            Step::WaitFor("all-folder-.context/gallery"),
+            Step::Click("all-folder-.context/gallery"),
+            Step::ViewFile(worktree::PICTURE),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "image-side-by-side",
+        spec: "diff.md",
+        world: Some(changed_images),
+        frame: FILE,
+        steps: &[Step::Select(FOCUS), Step::OpenFile(CHANGED), Step::WaitFor("images-side-by-side"), Step::MoveAway],
+    },
+    Screen {
+        name: "image-flip",
+        spec: "diff.md",
+        world: Some(changed_images),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenFile(CHANGED),
+            Step::Click("image-after"),
+            Step::WaitFor("images-flip"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "image-difference",
+        spec: "diff.md",
+        world: Some(changed_images),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenFile(CHANGED),
+            Step::Click("image-difference"),
+            Step::WaitFor("images-difference"),
             Step::MoveAway,
         ],
     },

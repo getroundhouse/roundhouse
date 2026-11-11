@@ -21,6 +21,7 @@ mod frame;
 mod headless;
 mod icon;
 mod image_chats;
+mod image_files;
 mod long_chats;
 mod mark_states;
 mod patch;
