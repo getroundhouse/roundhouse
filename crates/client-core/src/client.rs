@@ -10,6 +10,7 @@ mod files;
 mod follow;
 mod open_session;
 mod options;
+mod places;
 mod queue;
 mod start;
 mod stream;
