@@ -19,7 +19,6 @@ use protocol::tail::Tail;
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
-use crate::scroller::Unloaded;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -48,7 +47,7 @@ const COLUMN: f32 = 848.0;
 const COMPOSER_REACH: f32 = 24.0;
 
 /// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
-/// width. It's inset as the scroller insets each row, and then as the row is.
+/// width. It's inset as the list insets each row, and then as the row is.
 pub fn in_column(content: impl IntoElement) -> Div {
     div().w_full().px_3().child(column(content))
 }
@@ -69,11 +68,10 @@ pub(crate) fn render_row(
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
-    unloaded: &Unloaded,
     ix: usize,
     cx: &mut App,
-) -> AnyElement {
-    column(render_row_inner(model, session, this, linked, unloaded, ix, cx)).into_any_element()
+) -> Option<AnyElement> {
+    Some(column(render_row_inner(model, session, this, linked, ix, cx)?).into_any_element())
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
@@ -92,10 +90,9 @@ fn render_row_inner(
     session: &OpenSession,
     this: &WeakEntity<Transcript>,
     linked: &LinkedImages,
-    unloaded: &Unloaded,
     ix: usize,
     cx: &mut App,
-) -> AnyElement {
+) -> Option<AnyElement> {
     let shown = {
         let m = model.borrow();
         session.read(|log| {
@@ -110,10 +107,7 @@ fn render_row_inner(
             }
         })
     };
-    if !matches!(shown, Shown::Unloaded) {
-        unloaded.loaded(ix);
-    }
-    match shown {
+    Some(match shown {
         Shown::Tail(tail) => {
             let m = model.borrow();
             render_tail(&tail, &m.at_work, &m.long_texts, m.folds.thinking_open(), cx)
@@ -127,8 +121,8 @@ fn render_row_inner(
             prompt_bubble(&key, &prompt.text, None, &carried, Progress::Sending, this, cx)
         }
         Shown::InCall => empty(),
-        Shown::Unloaded => unloaded.placeholder(ix, session),
-    }
+        Shown::Unloaded => return None,
+    })
 }
 
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.

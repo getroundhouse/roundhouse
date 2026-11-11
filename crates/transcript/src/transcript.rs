@@ -15,9 +15,9 @@ use crate::attachments::Picture;
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::list::TranscriptList;
 use crate::long_texts::LongTexts;
 use crate::rows::SubagentCalls;
-use crate::scroller::Scroller;
 
 mod answers;
 mod outline;
@@ -61,7 +61,7 @@ pub struct Transcript {
     model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     linked: LinkedImages,
-    scroller: Scroller,
+    list: TranscriptList,
     _changes: Task<()>,
     /// Draws the time so far again while the agent works.
     ticking: Option<Task<()>>,
@@ -73,9 +73,9 @@ impl EventEmitter<TranscriptEvent> for Transcript {}
 impl Transcript {
     pub fn new(client: Client, session: &Session, cx: &mut Context<Self>) -> Self {
         let open = OpenSession::start(&client, session);
-        // The row after the log is the streaming tail, and it's always there. An empty one has no height.
-        let rows = open.read(SessionLog::row_count) + 1;
-        let scroller = Scroller::new(rows, cx);
+        let (rows, loaded) = open.read(rows_and_loaded);
+        let list = TranscriptList::new(cx);
+        list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let at_work = AtWork::of(session);
         let ticking = at_work.working.then(|| tick(cx));
@@ -94,7 +94,7 @@ impl Transcript {
             session: open,
             model,
             linked,
-            scroller,
+            list,
             _changes: following,
             ticking,
             prompts: outline::Prompts::default(),
@@ -105,8 +105,8 @@ impl Transcript {
         &self.session_id
     }
 
-    pub fn scroller(&self) -> &Scroller {
-        &self.scroller
+    pub fn list(&self) -> &TranscriptList {
+        &self.list
     }
 
     /// Carries on on a new connection to the hub, keeping what's shown and where.
@@ -125,6 +125,13 @@ impl Transcript {
 
     pub fn loaded_events(&self) -> usize {
         self.session.read(SessionLog::loaded_events)
+    }
+
+    /// How many rows are loaded as the session's log has them now. The list is told of them when the log says it has
+    /// changed, which is after the last of the pages asked for together is in, so this can be ahead of the list.
+    #[cfg(feature = "testing")]
+    pub fn loaded_rows(&self) -> usize {
+        self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
     }
 
     /// Whether every long text of the loaded events has been read. One is read on another thread once its row
@@ -165,15 +172,12 @@ impl Transcript {
     fn catch_up(&mut self, cx: &mut Context<Self>) {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
-        let rows = self.session.read(SessionLog::row_count) + 1;
-        let have = self.scroller.item_count();
-        self.scroller.set_rows(rows);
+        let (rows, loaded) = self.session.read(rows_and_loaded);
+        self.list.set_rows(rows, loaded);
         self.read_ahead(changes.rows.clone().unwrap_or_default(), cx);
         if let Some(changed) = changes.rows {
-            self.scroller.remeasure_items(changed);
+            self.list.out_of_date(changed);
         }
-        // The last rows can change height as text streams into them.
-        self.scroller.remeasure_items(have.min(rows).saturating_sub(2)..rows);
         for error in errors {
             cx.emit(TranscriptEvent::Error(error.to_string()));
         }
@@ -199,7 +203,7 @@ impl Transcript {
     /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         let row = seq_index(seq) - 1;
-        self.scroller.remeasure_items(row..row + 1);
+        self.list.out_of_date(row..row + 1);
         cx.notify();
     }
 
@@ -210,7 +214,7 @@ impl Transcript {
             return;
         }
         // Any row can hold thinking, so every row can change height.
-        self.scroller.remeasure();
+        self.list.all_out_of_date();
         cx.notify();
     }
 
@@ -237,7 +241,7 @@ impl Transcript {
         let carried = files.iter().map(|file| file.attachment.clone()).collect();
         self.session.add_pending(client_msg_id.clone(), text.clone(), carried);
         self.catch_up(cx);
-        self.scroller.scroll_to_end();
+        self.list.go_to_latest();
         cx.notify();
 
         // Started on a thread of its own, so it finishes even if the app quits, and hands back what it was given.
@@ -304,15 +308,25 @@ impl Transcript {
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
-        let this = cx.weak_entity();
-        let rows = self.scroller.render(
+        let (this, wanted) = (cx.weak_entity(), self.session.clone());
+        let rows = self.list.render(
             ElementId::Name(self.session_id.to_string().into()),
-            move |ix, bar, _, cx| crate::rows::render_row(&model, &session, &this, &linked, bar, ix, cx),
+            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, &linked, ix, cx),
+            move |row| wanted.want(row),
             window,
             cx,
         );
         self.with_outline(rows.into_any_element(), window, cx)
     }
+}
+
+/// How many rows the list has, and which of them are loaded. The row after the log is the streaming tail, which is
+/// always there, and always loaded. An empty one has no height.
+fn rows_and_loaded(log: &SessionLog) -> (usize, Vec<std::ops::Range<usize>>) {
+    let rows = log.row_count() + 1;
+    let mut loaded = log.loaded_rows();
+    loaded.push(rows - 1..rows);
+    (rows, loaded)
 }
 
 /// What to tell someone whose prompt didn't go. A hub from before attachments is the one failure they can fix.

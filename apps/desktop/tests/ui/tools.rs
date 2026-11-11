@@ -11,11 +11,12 @@ use std::time::Duration;
 
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{
-    AppContext as _, Bounds, ElementId, InputEvent as _, ListOffset, Pixels, ScrollDelta, ScrollEvent, TestAppContext,
-    TouchPhase, point, px,
+    AppContext as _, Bounds, ElementId, InputEvent as _, Pixels, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase,
+    point, px,
 };
 use image::ImageFormat;
 use protocol::event::EventBody;
+use transcript::Place;
 
 use crate::support::{Stack, Ui};
 
@@ -288,7 +289,7 @@ fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
     // under the pointer.
     ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
     ui.cx.update_entity(&ui.transcript().unwrap(), |t, cx| {
-        t.scroller().scroll_to_end();
+        t.list().go_to_latest();
         cx.notify();
     });
     ui.click_labelled(COMMAND_LINE, 0);
@@ -336,8 +337,8 @@ fn top(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Pixels {
 }
 
 /// How far the transcript is scrolled.
-fn scrolled_to(ui: &Ui<'_>) -> ListOffset {
-    ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().logical_scroll_top())
+fn scrolled_to(ui: &Ui<'_>) -> Place {
+    ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().top())
 }
 
 #[gpui_kit::test]

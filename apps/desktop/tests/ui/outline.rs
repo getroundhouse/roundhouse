@@ -372,6 +372,6 @@ fn scrolled_to(ui: &Ui<'_>) -> usize {
 
 /// The row at the top of the chat, and how far into it.
 fn scrolled_to_exactly(ui: &Ui<'_>) -> (usize, Pixels) {
-    let top = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.scroller().logical_scroll_top());
-    (top.item_ix, top.offset_in_item)
+    let top = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().top());
+    (top.row, top.offset)
 }
