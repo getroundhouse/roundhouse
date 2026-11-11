@@ -122,6 +122,8 @@ pub struct WorkspacePane {
     setup_log_refresh: Option<Task<()>>,
     /// Set on a new connection, until [`Self::catch_up`] reads again what it may have changed.
     behind: bool,
+    /// Away while the app connects to a hub again, with this still on screen. `composer.rs` has what that holds up.
+    hub: composer::Hub,
     window: AnyWindowHandle,
     subscriptions: Vec<Subscription>,
 }
@@ -208,6 +210,7 @@ impl WorkspacePane {
             setup_log: None,
             setup_log_refresh: None,
             behind: false,
+            hub: composer::Hub::Here,
             window: window.window_handle(),
             subscriptions: vec![on_enter, on_settings],
         };
@@ -258,6 +261,7 @@ impl WorkspacePane {
     /// the worktree waits for [`Self::catch_up`], so a reconnect doesn't start a worker for every pane at once.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
+        self.hub = composer::Hub::Here;
         self.forget_account();
         for (transcript, _) in self.transcripts.values() {
             transcript.update(cx, |t, _| t.reconnect(client));
@@ -372,22 +376,6 @@ impl WorkspacePane {
             }
             Showing::Chat => self.focus_composer(window, cx),
         }
-    }
-
-    pub fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let text = self.composer.read(cx).text().to_string();
-        let Some(transcript) = self.transcript() else { return };
-        // While the agent is waiting on a question, what's typed is the answer to it, and the files wait for the next
-        // prompt, since an answer can't carry them.
-        if transcript.update(cx, |t, cx| t.answer_with_text(&text, cx)) {
-            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-            return;
-        }
-        let files = self.attached.take();
-        if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
-            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-        }
-        cx.notify();
     }
 
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {

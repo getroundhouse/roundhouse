@@ -28,6 +28,7 @@ mod setup;
 #[cfg(target_os = "macos")]
 mod staying_awake;
 mod steering;
+mod stopping_if_idle;
 #[cfg(test)]
 mod support;
 mod titles;

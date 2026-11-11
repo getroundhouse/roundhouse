@@ -242,7 +242,7 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 
 ## Managing a hub
 
-Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. The app replaces an older local hub once nothing is running on it, when it connects, or while it stays open and its window isn't in front.
+Who starts, updates and stops a hub is a separate role from the hub itself, and what fills it depends on where the hub runs. The app replaces an older local hub once nothing is running on it, when it connects, or while it stays open. The hub has the last word on that: the app asks it to stop only if nothing would notice, and the hub decides as it stops, because a prompt can be sent between the app seeing it idle and stopping it. A hub that's busy after all refuses and carries on. One from before hubs could decide is stopped on what it last said was running.
 
 | | Local hub started on demand | A hub you run yourself, here or on a server | Hosted, if one is ever run |
 |---|---|---|---|

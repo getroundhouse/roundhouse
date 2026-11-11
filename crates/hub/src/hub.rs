@@ -307,6 +307,17 @@ impl Hub {
         self.shutdown.notify_one();
     }
 
+    /// Stops if nothing would notice, as the one asking sees it, and refuses otherwise. What that client sent before
+    /// this either still counts as a request or has left its mark, such as an agent at work, since a prompt's agent
+    /// is at work from when the prompt is recorded.
+    pub(crate) fn shutdown_if_idle(&self) -> Result<(), ApiError> {
+        if !self.status().is_idle() {
+            return Err(ApiError::new(ErrorCode::Conflict, "the hub is busy, so it wasn't stopped"));
+        }
+        self.request_shutdown();
+        Ok(())
+    }
+
     pub(crate) fn status(&self) -> HubStatus {
         let running_sessions = self.sessions.lock().values().filter(|session| session.status().is_active()).count();
         HubStatus {

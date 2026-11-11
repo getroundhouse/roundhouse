@@ -16,8 +16,9 @@ use crate::app::{Agents, AppView, BuildLine, UpdateQuestion};
 
 /// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
 /// and a mark in its corner that says which versions, and what happens next, on hover. Installing an update is the
-/// card's main action. Finishing one stops agents, and happens by itself, so it's a quiet button under what it's
-/// waiting on. When either would lose work, the card asks first, as its title, in place of its buttons.
+/// card's main action, and when that would lose what's typed, the card asks first, as its title, in place of its
+/// button. Finishing one happens by itself, and doing it now stops agents, so that's a quiet button under what it's
+/// waiting on, and a dialog asks first.
 pub(super) fn update_card(
     line: &BuildLine,
     question: Option<&UpdateQuestion>,
@@ -27,9 +28,7 @@ pub(super) fn update_card(
         BuildLine::UpdateReady { next, .. } => {
             ready_card(next, question.filter(|q| matches!(q, UpdateQuestion::Restart { .. })), cx)
         }
-        BuildLine::Finishing { agents, .. } => {
-            finishing_card(*agents, question.filter(|q| matches!(q, UpdateQuestion::Finish(_))), cx)
-        }
+        BuildLine::Finishing { agents, .. } => (finishing_card(*agents, cx), None),
         BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
     };
     let details = Details::of(line)?;
@@ -79,12 +78,25 @@ impl RenderOnce for UpdateCard {
 }
 
 /// What the card says beside the icon: its title, and a detail under it.
-fn card_text(title: &str, detail: String, cx: &App) -> Stateful<Div> {
+fn card_text(title: &str, detail: impl IntoElement, cx: &App) -> Stateful<Div> {
     v_flex()
         .id("update-about")
         .min_w_0()
         .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
         .child(div().text_xs().text_color(cx.theme().muted_foreground).child(detail))
+}
+
+/// Where a version's changes are linked from: beside the version of an update that's waiting to be installed, which
+/// is when someone is deciding to take it. The page it opens doesn't exist yet, so for now it opens nothing, as
+/// `docs/spec/updates.md` says.
+fn whats_new(cx: &App) -> Stateful<Div> {
+    div()
+        .id("whats-new")
+        .text_xs()
+        .text_color(cx.theme().link)
+        .hand()
+        .hover(gpui_kit::Styled::underline)
+        .child("What's new")
 }
 
 /// An update is downloaded, and restarting installs it, unless the card is asking first.
@@ -94,7 +106,8 @@ fn ready_card(
     cx: &mut Context<AppView>,
 ) -> (Stateful<Div>, Option<AnyElement>) {
     let title = question.map_or("Update ready", UpdateQuestion::title);
-    let about = card_text(title, format!("Roundhouse {next}"), cx);
+    let version = h_flex().gap_1().child(format!("Roundhouse {next} ·")).child(whats_new(cx));
+    let about = card_text(title, version, cx);
     let action = if let Some(question) = question {
         asking(question, "Keep working", "Restart", AppView::restart_to_update_anyway, cx)
     } else {
@@ -111,19 +124,11 @@ fn ready_card(
     (about, Some(action))
 }
 
-/// The app has updated, and the older hub is still busy, so it finishes by itself later, or now if asked.
-fn finishing_card(
-    agents: Agents,
-    question: Option<&UpdateQuestion>,
-    cx: &mut Context<AppView>,
-) -> (Stateful<Div>, Option<AnyElement>) {
-    if let Some(question) = question {
-        let about = card_text(question.title(), waiting_on(agents), cx);
-        return (about, Some(asking(question, "Not now", "Finish now", AppView::finish_update_now, cx)));
-    }
+/// The app has updated, and the older hub is still busy, so it finishes by itself once it isn't, or now if asked.
+fn finishing_card(agents: Agents, cx: &mut Context<AppView>) -> Stateful<Div> {
     // Under the text, and in line with it, past the button's own padding.
-    let finish = h_flex().pt_1().ml(px(-3.5)).child(finish_now(cx));
-    (card_text("Finishing update", waiting_on(agents), cx).child(finish), None)
+    let now = h_flex().pt_1().ml(px(-3.5)).child(restart_now(cx));
+    card_text("Finishing update", waiting_on(agents), cx).child(now)
 }
 
 /// What the card asks before going ahead: what that loses, then a quiet button that leaves things as they are, and
@@ -177,10 +182,10 @@ fn waiting_on(agents: Agents) -> String {
     }
 }
 
-/// A quiet button, since finishing an update now stops the agents it's waiting on, which the app says first.
-fn finish_now(cx: &mut Context<AppView>) -> Button {
+/// A quiet button, since finishing an update now stops the agents it's waiting on, which a dialog says first.
+fn restart_now(cx: &mut Context<AppView>) -> Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
-    Button::new("finish-update").hand().ghost().xsmall().label("Finish now").on_click(finish)
+    Button::new("finish-update").hand().ghost().xsmall().label("Restart now").on_click(finish)
 }
 
 #[cfg(test)]

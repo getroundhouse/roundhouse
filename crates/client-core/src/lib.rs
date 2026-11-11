@@ -18,6 +18,7 @@ mod client;
 pub use attachments::{FileToSend, NotAttached};
 
 pub use client::{
-    Client, ClientError, Commands, Daemon, Ended, FollowError, HubAdmin, OpenSession, RecordsFeed, Reply, Result,
-    Subscription, SubscriptionItem, new_attachment_id, new_message_id, new_request_id, stop_hub, stop_hub_if_still,
+    Client, ClientError, Commands, Daemon, Ended, FollowError, HubAdmin, IdleStop, OpenSession, RecordsFeed, Reply,
+    Result, Subscription, SubscriptionItem, new_attachment_id, new_message_id, new_request_id, stop_hub,
+    stop_hub_if_idle, stop_hub_if_still,
 };

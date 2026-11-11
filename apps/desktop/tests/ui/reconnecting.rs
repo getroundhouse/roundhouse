@@ -259,3 +259,31 @@ fn the_heading_stays_over_the_repositories_while_the_hub_is_gone_and_add_project
     assert!(ui.has("add-project"), "so the heading stays over it");
     assert!(ui.disabled("add-project"), "with no hub to add one to");
 }
+
+/// The app restarts an older hub the moment it's idle, which is often just as someone starts typing their next
+/// prompt. The workspace stays on screen meanwhile, so nothing typed is lost. Enter waits too: the hub may be one
+/// that's being stopped, which would take the prompt and then cut its agent off.
+#[gpui_kit::test]
+fn whats_typed_while_the_hub_restarts_is_kept_and_waits_to_be_sent(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input("say:be");
+    let pid = stack.client().hub_status().unwrap().pid;
+
+    // Typed and sent before anything else runs, so the app is surely still connecting.
+    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
+    assert!(matches!(ui.view().connection, Connection::Connecting));
+    ui.input("fore");
+    ui.press("enter");
+
+    assert_eq!(ui.composer_text(), "say:before", "typed, and not sent");
+    ui.wait_for_new_hub(&stack, pid);
+    assert_eq!(ui.composer_text(), "say:before");
+    assert!(ui.events().is_empty(), "nothing reached either hub");
+    // The composer still has the keys, and sends once the hub is back.
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("before"));
+}

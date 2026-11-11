@@ -49,7 +49,7 @@ pub(crate) enum Step {
     PasteImage(fn() -> Vec<u8>),
     /// Pastes a copied file with this name and text, and waits for the composer to take it.
     PasteFile(&'static str, &'static str),
-    /// Presses Finish now in the update's card, and waits for what it asks.
+    /// Presses Restart now in the update's card, and waits for what it asks.
     AskToFinish,
     /// Right-clicks something by its ID, which opens its menu.
     RightClick(&'static str),

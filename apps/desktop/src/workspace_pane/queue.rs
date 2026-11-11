@@ -14,6 +14,7 @@ use look::Hand as _;
 use protocol::client::ErrorCode;
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
 
+use super::composer::Hub;
 use super::{PaneEvent, WorkspacePane};
 
 /// About five prompts of a line each.
@@ -34,7 +35,7 @@ impl WorkspacePane {
     /// queued prompt can't carry files yet, so one with files stays in the composer, to send now.
     pub fn queue_typed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.composer.read(cx).text().to_string();
-        let Some(session_id) = self.active.clone() else { return };
+        let Some(session_id) = self.active.clone().filter(|_| self.hub == Hub::Here) else { return };
         if !self.attached.is_empty() {
             cx.emit(PaneEvent::Error("A prompt with files can't be queued yet. Enter sends it now.".to_string()));
             return;

@@ -112,6 +112,14 @@ pub struct HubStatus {
     pub keeping_awake: bool,
 }
 
+impl HubStatus {
+    /// Whether nothing would notice the hub stopping: nothing is running on it, and whoever asked for this is its one
+    /// client, with their request the one thing it's doing.
+    pub fn is_idle(&self) -> bool {
+        self.running_sessions == 0 && self.running_setups == 0 && self.requests <= 1 && self.clients <= 1
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ApiError {
     pub code: ErrorCode,

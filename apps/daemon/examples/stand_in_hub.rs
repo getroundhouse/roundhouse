@@ -3,7 +3,8 @@
 //! `--speaks-this-protocol` it takes a hello, as an older build would, and serves a hub with nothing in it, so the
 //! app can use it, and refuses anything else. It holds the same lock as a real hub. A test can change how many agents
 //! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory,
-//! and how many clients are connected to it, by writing to [`CLIENTS`].
+//! and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes by what it
+//! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -40,6 +41,20 @@ struct Args {
     /// Which build it says it is.
     #[arg(long)]
     build: Option<u64>,
+    /// What it does when asked to stop only if it's idle.
+    #[arg(long, value_enum, default_value_t = IfIdle::Decides)]
+    asked_to_stop_if_idle: IfIdle,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum IfIdle {
+    /// Goes by what it says is running then, as a hub does.
+    Decides,
+    /// Doesn't know the request, as a hub from before one could decide.
+    Unknown,
+    /// Has an agent start first, as a prompt sent after it last said it was idle would, so it refuses, and says one
+    /// is running from then on.
+    Busy,
 }
 
 /// The files in its data directory that say how many agents are running and how many clients are connected, once a
@@ -140,10 +155,21 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                 let status = ClientResponse::HubStatus(status(args, paths));
                 reply(&writer, request.id, ReplyOutcome::Response(status));
             }
-            ClientRequest::HubShutdown => {
-                reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
-                let _ = std::fs::remove_file(&paths.socket);
-                std::process::exit(0);
+            ClientRequest::HubShutdown => stop(&writer, request.id, paths),
+            ClientRequest::HubShutdownIfIdle if args.speaks_this_protocol => {
+                if args.asked_to_stop_if_idle == IfIdle::Unknown {
+                    let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
+                    reply(&writer, request.id, ReplyOutcome::Error(unknown));
+                    continue;
+                }
+                if args.asked_to_stop_if_idle == IfIdle::Busy {
+                    std::fs::write(paths.data_dir.join(RUNNING), "1").unwrap();
+                }
+                if status(args, paths).is_idle() {
+                    stop(&writer, request.id, paths);
+                }
+                let busy = ApiError::new(ErrorCode::Conflict, "the hub is busy, so it wasn't stopped");
+                reply(&writer, request.id, ReplyOutcome::Error(busy));
             }
             _ => {
                 let refused = ApiError::new(ErrorCode::VersionMismatch, "this hub is from before a real break");
@@ -152,6 +178,13 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
             }
         }
     }
+}
+
+/// Says it's stopping, lets go of the socket, and exits.
+fn stop(writer: &Writer, id: u64, paths: &Paths) -> ! {
+    reply(writer, id, ReplyOutcome::Response(ClientResponse::Ok));
+    let _ = std::fs::remove_file(&paths.socket);
+    std::process::exit(0);
 }
 
 fn main() {
