@@ -95,13 +95,16 @@ impl Around {
     }
 
     /// Every image the event draws now, for its row to ask the hub for: a prompt's, and those of each call or result
-    /// that's open, including what a call gathered from its subagent. A closed call's images wait until it's opened.
+    /// that's open, including what a call gathered from its subagent, or the calls it shows from its subagent's record.
+    /// A closed call's images wait until it's opened.
     pub(super) fn images(&self) -> Vec<&Carried> {
         let mut images: Vec<&Carried> = self.carried.iter().collect();
         for block in self.blocks.iter().filter(|block| block.open) {
             images.extend(block.reply.result().into_iter().flat_map(Answer::images));
             let gathered = block.subagent.iter().flat_map(|subagent| subagent.events.iter().flatten());
             images.extend(gathered.flat_map(|(_, around)| around.images()));
+            let lately = block.subagent.iter().flat_map(|subagent| &subagent.lately).filter(|(_, around)| around.open);
+            images.extend(lately.flat_map(|(_, around)| around.reply.result().into_iter().flat_map(Answer::images)));
         }
         images
     }
@@ -147,9 +150,15 @@ pub(super) fn block_key(seq: Seq, body: &EventBody, position: usize) -> ItemKey 
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
+    use client_core::session_log::SessionLog;
     use protocol::attachment::{Attachment, MediaType};
-    use protocol::event::{ContentBlock, EventBody};
-    use protocol::model::PermissionMode;
+    use protocol::event::{ContentBlock, EventBody, SessionEvent};
+    use protocol::model::{
+        Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Rev, Subagent, SubagentStatus,
+    };
+    use serde_json::json;
 
     use super::{Around, Reply, block_key};
     use crate::fixtures::{calls, calls_to, event, from_the_agent, log, result, within};
@@ -223,6 +232,48 @@ mod tests {
         m.folds.choose(ItemKey::Event(1, 0), Fold::Output, true);
 
         assert_eq!(Around::read(&log, &m, 1, &agent).images().len(), 1, "opened, it gathers its subagent's");
+    }
+
+    /// A chat that reads by place holds only the agent's own events, so what a working subagent has done lately comes
+    /// from its record, images and all.
+    #[test]
+    fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on_is_open() {
+        let agent = calls_to("Agent", &["agent"]);
+        let mut log = SessionLog::by_place(0);
+        log.apply_event(SessionEvent { place: Place::new(1), ..event(1, agent.clone()) });
+        let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
+        let read = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.png" }) };
+        let came_back =
+            CallResult { is_error: false, text: String::new(), cut: false, images: vec![image], encrypted: false };
+        let recent =
+            RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
+        let mut m = Model::default();
+        m.subagents.insert("agent".into(), Rc::new(working("agent", recent)));
+        m.folds.choose(ItemKey::Event(1, 0), Fold::Output, true);
+        assert!(Around::read(&log, &m, 1, &agent).images().is_empty(), "its read is closed");
+
+        m.folds.choose(ItemKey::Call("read".into()), Fold::Output, true);
+
+        assert_eq!(Around::read(&log, &m, 1, &agent).images().len(), 1, "open, under Working on");
+    }
+
+    fn working(call: &str, recent: RecentWork) -> Subagent {
+        Subagent {
+            session_id: "s".into(),
+            call: call.into(),
+            kind: None,
+            description: None,
+            prompt: None,
+            in_background: true,
+            status: SubagentStatus::Working,
+            started_at_ms: 0,
+            ended_at_ms: None,
+            calls: 1,
+            latest_call: None,
+            recent,
+            report: None,
+            rev: Rev::new(1),
+        }
     }
 
     #[test]

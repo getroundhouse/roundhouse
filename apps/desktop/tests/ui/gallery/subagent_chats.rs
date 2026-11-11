@@ -118,6 +118,44 @@ fn finding(agent: &str) -> Vec<EventBody> {
     ]
 }
 
+/// What the second subagent, started by the call `agent`, has done while the screens show it at work: it read both
+/// files, then started the signal tests.
+fn reviewing(agent: &str) -> Vec<EventBody> {
+    vec![
+        within(agent, text("sub-6", "I'll read both files, then run the signal tests.")),
+        within(
+            agent,
+            tool_use(
+                "sub-7",
+                "toolu-s5",
+                "Read",
+                json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" }),
+            ),
+        ),
+        within(agent, tool_result("toolu-s5", "    53\t        if signal.may_pass() {")),
+        within(
+            agent,
+            tool_use(
+                "sub-10",
+                "toolu-s6",
+                "Read",
+                json!({ "file_path": "/workspaces/aspen/crates/signals/src/depot.rs" }),
+            ),
+        ),
+        within(agent, tool_result("toolu-s6", "    19\t    if !aspect.may_pass() { return None; }")),
+        within(agent, text("sub-11", "Both call `may_pass` now. Running the tests.")),
+        within(
+            agent,
+            tool_use(
+                "sub-8",
+                "toolu-s4",
+                "Bash",
+                json!({ "command": "cargo test -p signals", "description": "Run the signal tests" }),
+            ),
+        ),
+    ]
+}
+
 const REVIEW_PROMPT: &str = "Check that train.rs and depot.rs now use `may_pass`, and that the signal tests pass.";
 
 /// A subagent that searched while the agent read, its work interleaved with the agent's own, and a second one that
@@ -143,27 +181,8 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         tool_use("msg-5", "toolu-3", "Agent", review),
         subagent_started("toolu-3", "general-purpose", "Review the change", REVIEW_PROMPT),
         tool_result("toolu-3", LAUNCHED),
-        within("toolu-3", text("sub-6", "I'll read both files, then run the signal tests.")),
-        within(
-            "toolu-3",
-            tool_use(
-                "sub-7",
-                "toolu-s5",
-                "Read",
-                json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" }),
-            ),
-        ),
-        within("toolu-3", tool_result("toolu-s5", "    53\t        if signal.may_pass() {")),
-        within(
-            "toolu-3",
-            tool_use(
-                "sub-8",
-                "toolu-s4",
-                "Bash",
-                json!({ "command": "cargo test -p signals", "description": "Run the signal tests" }),
-            ),
-        ),
     ]);
+    events.extend(reviewing("toolu-3"));
     if working {
         return events;
     }

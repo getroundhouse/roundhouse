@@ -57,8 +57,10 @@ pub(crate) struct Model {
     pub at_work: AtWork,
     /// The long messages' text, read ahead of being drawn.
     pub long_texts: LongTexts,
-    /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't.
-    pub subagents: HashMap<ToolUseId, Subagent>,
+    /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
+    /// shared, since every frame's rows take the records of the calls they draw, and one can hold a call's whole input,
+    /// such as all of a file it wrote.
+    pub subagents: HashMap<ToolUseId, Rc<Subagent>>,
     /// The `seq` of the event each subagent's call was drawn in, so the row is measured again when its record
     /// changes. A call's row is measured only once it's been drawn, so one that isn't here needs nothing.
     pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
