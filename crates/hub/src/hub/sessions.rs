@@ -208,6 +208,16 @@ impl Hub {
         .await
     }
 
+    /// The session's subagents, oldest first, with the revision they're as of.
+    pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<ClientResponse, ApiError> {
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            let (subagents, rev) = store.list_subagents(&id)?;
+            Ok(ClientResponse::Subagents { subagents, rev })
+        })
+        .await
+    }
+
     pub(crate) async fn session_prompt(
         self: &Arc<Self>,
         id: SessionId,

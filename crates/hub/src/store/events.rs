@@ -9,6 +9,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::prompts::note_prompts;
 use super::queue::take_out_recorded;
+use super::subagents::note_subagents;
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
 /// What an event changes about where a session's agent has got to, which commits with the event that brings it.
@@ -129,7 +130,7 @@ impl Store {
         if let Some(client_msg_id) = client_msg_id
             && let Some(event) = recorded_with(&tx, session_id, client_msg_id)?
         {
-            return Ok(Appended { event, duplicate: true, dequeued: false, untaken: None });
+            return Ok(Appended { event, duplicate: true, dequeued: false, untaken: None, subagents: Vec::new() });
         }
         let last_seq: Option<i64> = tx
             .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
@@ -170,7 +171,6 @@ impl Store {
             _ => false,
         };
         let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
-        tx.commit()?;
         let event = SessionEvent {
             session_id: session_id.clone(),
             seq: seq.cast_unsigned(),
@@ -181,7 +181,9 @@ impl Store {
             body: body.clone(),
             raw: None,
         };
-        Ok(Appended { event, duplicate: false, dequeued, untaken })
+        let subagents = note_subagents(&tx, &event)?;
+        tx.commit()?;
+        Ok(Appended { event, duplicate: false, dequeued, untaken, subagents })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.

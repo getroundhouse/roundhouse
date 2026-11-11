@@ -30,3 +30,6 @@ pub(crate) const BEFORE_UNUSED_DELETED: usize = 20;
 
 /// How many migrations there were before events recorded their subagent.
 pub(crate) const BEFORE_SUBAGENTS: usize = 21;
+
+/// How many migrations there were before subagents had records.
+pub(crate) const BEFORE_SUBAGENT_RECORDS: usize = 22;

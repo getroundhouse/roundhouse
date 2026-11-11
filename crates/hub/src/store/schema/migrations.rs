@@ -353,4 +353,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // The subagent each event is from, and its place among those from the same one. In `subagents`, as are the other
     // migrations that record subagents.
     subagents::EVENTS_BY_SUBAGENT,
+    // Each subagent's record, filled in for those from before it from what the log kept.
+    subagents::RECORDS,
 ];

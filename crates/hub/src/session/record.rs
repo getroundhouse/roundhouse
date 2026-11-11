@@ -2,7 +2,7 @@
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{AgentTask, EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Session, SessionStatus};
+use protocol::model::{ClientMessageId, Session, SessionStatus, ToolUseId};
 use protocol::tail::Tail;
 use tracing::error;
 
@@ -79,6 +79,11 @@ impl LiveSession {
         {
             error!(session = %self.id, "could not announce a change of status: {e}");
         }
+        if !appended.subagents.is_empty()
+            && let Err(e) = self.announce_subagents(&hub, appended.subagents.clone()).await
+        {
+            error!(session = %self.id, "could not announce a change to a subagent: {e}");
+        }
         if turn_ended {
             hub.read_pull_request_after_turn(&self.workspace_id);
         }
@@ -92,6 +97,22 @@ impl LiveSession {
         let session = hub.blocking(move |store| store.get_session(&id)).await?.session;
         hub.notify(HubNotice::Session(session.clone()));
         Ok(session)
+    }
+
+    /// Tells everyone following the feed what the records of the subagents that made `calls` are now, read back from
+    /// the store as the session is.
+    async fn announce_subagents(&self, hub: &Hub, calls: Vec<ToolUseId>) -> Result<(), ApiError> {
+        let id = self.id.clone();
+        let subagents = hub
+            .blocking(move |store| {
+                let records = calls.iter().map(|call| store.get_subagent(&id, call));
+                records.filter_map(Result::transpose).collect::<Result<Vec<_>, _>>()
+            })
+            .await?;
+        for subagent in subagents {
+            hub.notify(HubNotice::Subagent(subagent));
+        }
+        Ok(())
     }
 
     /// For where nobody is waiting to hear that recording failed.

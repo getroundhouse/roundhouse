@@ -1,10 +1,13 @@
-//! Reading and following the agent's own events apart from a subagent's.
+//! Reading and following the agent's own events apart from a subagent's, and the hub's record of each subagent.
 
 #![cfg(test)]
 
+use std::time::Instant;
+
 use client_core::{Client, Subscription, SubscriptionItem};
+use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome};
-use protocol::model::{Place, SessionId, ToolUseId};
+use protocol::model::{Place, SessionId, Subagent, SubagentStatus, ToolUseId};
 use protocol::tail::Tail;
 
 use crate::support::{Follower, Stack, TIMEOUT, read_all, wait_for_turn_end, wait_until};
@@ -133,4 +136,39 @@ fn a_subagent_in_the_foreground_cut_off_as_it_writes_leaves_its_follower_nothing
     wait_for_turn_end(&client, &session.id, 1);
     assert!(!reported(&work));
     assert_placed(&work.events, Some(&call));
+}
+
+#[test]
+fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let feed = client.feed_subscribe().unwrap();
+    client.session_prompt(&session.id, "agent:Look around", None).unwrap();
+    let call = subagent_call(&client, &session.id);
+
+    let deadline = Instant::now() + TIMEOUT;
+    let mut notices = Vec::new();
+    while !notices.last().is_some_and(|subagent: &Subagent| subagent.status != SubagentStatus::Working) {
+        match feed.items.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(SubscriptionItem::Notice(HubNotice::Subagent(subagent))) => notices.push(subagent),
+            Ok(_) => {}
+            Err(e) => panic!("timed out waiting for the subagent to end, having heard {notices:?}: {e}"),
+        }
+    }
+    wait_for_turn_end(&client, &session.id, 1);
+    let (subagents, rev) = client.session_subagents(&session.id).unwrap();
+
+    let [subagent] = subagents.as_slice() else { panic!("one subagent: {subagents:?}") };
+    assert_eq!((&subagent.call, subagent.status, subagent.calls), (&call, SubagentStatus::Finished, 1));
+    assert_eq!((subagent.prompt.as_deref(), subagent.in_background), (Some("Look around."), true));
+    assert_eq!(subagent.latest_call.as_ref().map(|call| call.name.as_str()), Some("Bash"));
+    assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
+    assert!(subagent.rev <= rev);
+    let heard: Vec<_> = notices.iter().map(|subagent| (subagent.status, subagent.calls)).collect();
+    let (working, finished) = (SubagentStatus::Working, SubagentStatus::Finished);
+    assert_eq!(heard, [(working, 0), (working, 1), (finished, 1)], "as it started, made its call, and ended");
+    assert!(notices.windows(2).all(|pair| pair[0].rev < pair[1].rev));
+    assert_eq!(notices.last(), Some(subagent), "the last it heard is what's listed");
+    assert!(client.session_subagents(&"missing".into()).is_err());
 }

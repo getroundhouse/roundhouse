@@ -6,8 +6,8 @@ use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, HubSettings, HubSettingsChange, PromptLine, PullRequest, Records, Repo, RepoId, Seq, Session, SessionId,
-    Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, PromptLine, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
+    SessionId, Subagent, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -243,6 +243,19 @@ impl Client {
 
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
         self.subscribe(|subscription_id| ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
+    }
+
+    /// The session's subagents, oldest first, with the revision they're as of, which a [`HubNotice::Subagent`] newer
+    /// than it replaces. A hub from before subagents had records refuses it, which
+    /// [`super::ClientError::is_unsupported`] says.
+    ///
+    /// [`HubNotice::Subagent`]: protocol::client::HubNotice::Subagent
+    pub fn session_subagents(&self, id: &SessionId) -> Result<(Vec<Subagent>, Rev)> {
+        let reply = self.call(ClientRequest::SessionSubagents { id: id.clone() })?;
+        let ClientResponse::Subagents { subagents, rev } = reply else {
+            return unexpected(&reply);
+        };
+        Ok((subagents, rev))
     }
 
     /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
