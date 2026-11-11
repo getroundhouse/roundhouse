@@ -37,30 +37,50 @@ env:
 # filter can't do the skipping: GitHub leaves a required check pending forever when its workflow doesn't run. The repo
 # also only runs actions pinned to a full commit, as these are.
 jobs:
-  # Whether anything but Markdown differs from the branch being merged into. In the queue, that includes the PRs ahead.
+  # Whether the checks run. They don't when nothing but Markdown differs from the branch being merged into, which in the
+  # queue includes the PRs ahead, or when the queue would check a tree that a PR's run has already passed.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # To find that PR's run, by the artifact `checks` keeps.
+      actions: read
     outputs:
-      code: ${{ steps.diff.outputs.code }}
+      run: ${{ steps.diff.outputs.run }}
+      tree: ${{ steps.diff.outputs.tree }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # A push to main has no base, and an error counts as code, so both run the checks.
+      # A push to main has no base, and an error runs the checks, so a push always does.
+      #
+      # A PR that enters the queue with nothing ahead of it, onto the main its own run merged onto, makes the very tree
+      # that run checked, so checking it again only holds up the merge. Only runs from this repo's branches count, since
+      # a fork's run could keep an artifact by any name.
       - id: diff
         env:
           BASE: ${{ github.base_ref || github.event.merge_group.base_ref }}
+          GH_TOKEN: ${{ github.token }}
+          REPO_ID: ${{ github.repository_id }}
         run: |
-          code=true
+          run=true
+          tree=$(git rev-parse 'HEAD^{tree}')
           if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
             git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md'; then
-            code=false
+            run=false
+          # On an error, gh prints the error's body and fails, so `passed` must be a run's ID too.
+          elif [ "$GITHUB_EVENT_NAME" = merge_group ] &&
+            passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ci-passed-$tree" --jq \
+              "[.artifacts[] | select(.workflow_run.head_repository_id == $REPO_ID and (.expired | not))][0].workflow_run.id // empty") &&
+            [[ "$passed" =~ ^[0-9]+$ ]]; then
+            run=false
+            echo "::notice::$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$passed passed this tree on its PR"
           fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
+          { echo "run=$run"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
   # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
   lint:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
@@ -96,7 +116,7 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest-arm64-8cores
     timeout-minutes: 60
     steps:
@@ -132,7 +152,7 @@ jobs:
   # feed-signature.sh fails here instead. Ubuntu's Python and OpenSSL 3 are all they need.
   publish:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -149,3 +169,20 @@ jobs:
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+      # What `changes` looks for in the queue: an artifact named for a tree that every check ran on and passed.
+      - id: passed
+        if: >-
+          github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.test.result == 'success' &&
+          needs.publish.result == 'success'
+        run: echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$RUNNER_TEMP/passed"
+      # Without it the queue only checks the tree again, so failing to keep it doesn't fail the PR.
+      - if: steps.passed.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-passed-${{ needs.changes.outputs.tree }}
+          path: ${{ runner.temp }}/passed
+          if-no-files-found: error
+          retention-days: 7
+          # A re-run keeps it again.
+          overwrite: true
