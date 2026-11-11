@@ -11,11 +11,12 @@
 use gpui_kit::base::HandleEdge;
 use gpui_kit::component::resizable::resize_handle;
 use gpui_kit::{
-    App, AppContext as _, Axis, Context, Div, DragMoveEvent, Empty, Global, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, Stateful, Styled as _, Window, div, px,
+    AnyElement, App, AppContext as _, Axis, Context, DragMoveEvent, Empty, Global, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, Render, Styled as _, Window, div, px,
 };
 
 use look::motion::Sliding;
+use look::{InRegion as _, Region};
 
 use crate::haptics;
 use crate::workspace_pane::HEADER_HEIGHT;
@@ -297,10 +298,10 @@ impl Render for Resizing {
 
 /// A sidebar in its place at the window's edge, `shown` wide, with the rest of it out of sight past the edge it slides
 /// from, and its inner edge to drag. What's beside it has the rest of the room, so it moves as the sidebar slides.
-pub(crate) fn frame(side: Side, shown: Pixels, content: impl IntoElement, cx: &App) -> Stateful<Div> {
-    let (id, handle, edge) = match side {
-        Side::Left => ("left-sidebar", "left-sidebar-edge", HandleEdge::Trailing),
-        Side::Right => ("right-sidebar", "right-sidebar-edge", HandleEdge::Leading),
+pub(crate) fn frame(side: Side, shown: Pixels, content: impl IntoElement, cx: &App) -> AnyElement {
+    let (region, handle, edge) = match side {
+        Side::Left => (Region::LeftSidebar, "left-sidebar-edge", HandleEdge::Trailing),
+        Side::Right => (Region::RightSidebar, "right-sidebar-edge", HandleEdge::Leading),
     };
     // The band along the sidebar's own edge, over its line, so the line it draws is the one already there.
     let handle = resize_handle(handle, Axis::Horizontal)
@@ -313,25 +314,27 @@ pub(crate) fn frame(side: Side, shown: Pixels, content: impl IntoElement, cx: &A
         Side::Left => whole.right_0(),
         Side::Right => whole.left_0(),
     };
-    let frame = div().id(id).relative().flex_none().h_full().w(shown).overflow_hidden().child(whole);
+    let frame = div().region(region).relative().flex_none().h_full().w(shown).overflow_hidden().child(whole);
     // A drag is told to every element that listens for it, wherever the pointer is, so each sidebar takes only its own.
-    frame.on_drag_move(move |event: &DragMoveEvent<Resizing>, window, cx| {
-        if event.drag(cx).0 != side {
-            return;
-        }
-        let width = match side {
-            Side::Left => event.event.position.x - event.bounds.left(),
-            Side::Right => event.bounds.right() - event.event.position.x,
-        };
-        match side.drag_to(width, window.viewport_size().width, cx) {
-            Change::Unchanged => {}
-            Change::Dragged => window.refresh(),
-            Change::ToUsual => {
-                haptics::align();
-                window.refresh();
+    frame
+        .on_drag_move(move |event: &DragMoveEvent<Resizing>, window, cx| {
+            if event.drag(cx).0 != side {
+                return;
             }
-        }
-    })
+            let width = match side {
+                Side::Left => event.event.position.x - event.bounds.left(),
+                Side::Right => event.bounds.right() - event.event.position.x,
+            };
+            match side.drag_to(width, window.viewport_size().width, cx) {
+                Change::Unchanged => {}
+                Change::Dragged => window.refresh(),
+                Change::ToUsual => {
+                    haptics::align();
+                    window.refresh();
+                }
+            }
+        })
+        .into_any_element()
 }
 
 /// Where the button that hides and shows the sidebar on the left starts, from the window's left edge: to the right of

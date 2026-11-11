@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, InRegion as _, Region};
 use protocol::client::ErrorCode;
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
 
@@ -174,7 +174,7 @@ impl WorkspacePane {
         let heading = if held { "Queued, waiting since the agent stopped" } else { "Queued" };
         Some(
             v_flex()
-                .id("queue")
+                .region(Region::Queue)
                 .mx_3()
                 .rounded_t_lg()
                 .border_1()
@@ -186,7 +186,6 @@ impl WorkspacePane {
                 )
                 // Its own height, so a long queue scrolls rather than pushing the composer out of the window.
                 .child(div().id("queue-rows").max_h(px(QUEUE_MOST_HEIGHT)).overflow_y_scroll().p_1().children(rows))
-                .test_support()
                 .into_any_element(),
         )
     }

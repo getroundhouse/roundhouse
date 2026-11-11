@@ -28,9 +28,11 @@
 - **Right-clicking a tab or a workspace's row marks it read, or unread again.** Marking a workspace read reads all its chats, and marking it unread marks the newest reply in its chat last worked in. A chat marked unread stays unread while it's showing, until you go to another chat, workspace or app and come back to it. *Unconfirmed.*
 - **`Cmd-Shift-U` marks the workspace showing read, or unread again,** as its row's menu would, and is the key Mail uses for a message. That row's menu shows it beside the item. Other rows' menus show no key, since it wouldn't act on them, and neither do tabs' menus, since it marks the workspace rather than the chat. *Unconfirmed.*
 
-**Replies you haven't read, in another workspace and in this one's other chat.** *Unconfirmed.*
+**Replies you haven't read, in another workspace and in this one's other chat, which the sidebar shows by each workspace and the tabs by each chat.** *Unconfirmed.*
 
-![Replies you haven't read](screens/unread.png)
+![Replies you haven't read, in the sidebar](screens/unread.png)
+
+![The other chat's tab, with a reply you haven't read](screens/unread-tab.png)
 
 ## Archiving
 

@@ -8,9 +8,9 @@ use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement, Render, Styled, Subscription, TestSupportExt as _, WeakEntity, Window, div, px,
+    KeyDownEvent, ParentElement, Render, Styled, Subscription, WeakEntity, Window, div, px,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, InRegion as _, Off as _, Region};
 use protocol::event::ApprovalDecision;
 use protocol::model::ApprovalId;
 
@@ -297,8 +297,7 @@ impl Render for QuestionPanel {
             .off_while(!ready)
             .on_click(cx.listener(|this, _, _, cx| this.send(cx)));
         v_flex()
-            .id("question")
-            .test_support()
+            .region(Region::Question)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))
             .w_full()

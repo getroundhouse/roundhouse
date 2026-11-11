@@ -10,6 +10,7 @@ use serde_json::json;
 use super::events::{
     replied, subagent_ended, subagent_started, taken, text, tool_result, tool_use, user_prompt, within,
 };
+use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
@@ -20,12 +21,14 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "tool-subagent",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Running, subagents(true))),
+        frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal"), Step::Open("Review the change")],
     },
     Screen {
         name: "subagent-tab",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, subagents(false))),
+        frame: TABS_AND_CHAT,
         steps: &[
             Step::Select(FOCUS),
             Step::Open("Find checks for a stop signal"),
@@ -37,6 +40,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "subagent-tab-working",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Running, subagents(true))),
+        frame: TABS_AND_CHAT,
         steps: &[
             Step::Select(FOCUS),
             Step::Open("Review the change"),

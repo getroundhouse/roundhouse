@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, LineText, Off as _};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Region};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -125,6 +125,7 @@ impl WorkspacePane {
         }
         let closed = self.closed_chats(cx);
         div()
+            .region(Region::TabBar)
             .relative()
             .flex_none()
             .w_full()
@@ -173,6 +174,7 @@ impl WorkspacePane {
             }
         };
         h_flex()
+            .region(Region::Header)
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
@@ -259,7 +261,7 @@ impl Render for WorkspacePane {
                 Some(Opened::Diff) | None => diff.file.clone().into_any_element(),
             });
         let showing = match tab {
-            Some(tab) => div().flex_1().min_h_0().w_full().child(tab).into_any_element(),
+            Some(tab) => div().region(Region::OpenFile).flex_1().min_h_0().w_full().child(tab).into_any_element(),
             None if self.showing() == Showing::Subagent => self.subagent_view(cx),
             None => self.chat(cx),
         };

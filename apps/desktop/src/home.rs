@@ -16,7 +16,7 @@ use gpui_kit::{
     ParentElement, Pixels, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
     size,
 };
-use look::{Hand as _, LineText, Off as _, Placed};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
 use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
@@ -158,12 +158,11 @@ pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> i
         range.map(|ix| row(app, &app.workspaces[rows[ix]], &line_text, cx)).collect::<Vec<_>>()
     });
     v_flex()
-        .id("home-page")
+        .region(Region::Home)
         .size_full()
         .child(bar::bar(app, inset, cx))
         .when(empty, |d| d.child(nothing_listed(cx)))
         .when(!empty, |d| d.child(list.track_scroll(&home.scroll).flex_1().min_h_0()))
-        .test_support()
 }
 
 /// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back, which says so

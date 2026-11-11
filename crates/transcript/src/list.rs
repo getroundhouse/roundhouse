@@ -23,11 +23,10 @@ use gpui_kit::component::{ActiveTheme as _, IconName};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, ElementId, EntityId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Point, Role, Size, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, point,
-    px, rems, size,
+    Pixels, Point, Role, Size, StatefulInteractiveElement as _, Styled as _, Window, div, point, px, rems, size,
 };
-use look::Off as _;
 use look::motion::Scrolling;
+use look::{InRegion as _, Off as _, Region};
 
 use crate::scroll_area::hears_the_wheel;
 use crate::transcript::Transcript;
@@ -177,7 +176,7 @@ impl TranscriptList {
             .child(bounce)
             .vertical_scrollbar(self);
         div()
-            .id("transcript")
+            .region(Region::Transcript)
             .relative()
             .size_full()
             .min_h_0()
@@ -186,7 +185,6 @@ impl TranscriptList {
             .child(hears_the_wheel())
             .child(viewport)
             .children(self.jump_button(id, window, cx))
-            .test_support()
             .into_any_element()
     }
 

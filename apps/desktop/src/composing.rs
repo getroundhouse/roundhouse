@@ -11,8 +11,8 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AbsoluteLength, Anchor, App, Context, Div, FocusHandle, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, Stateful, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
+    AbsoluteLength, Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
 use look::Hand as _;
 
@@ -43,13 +43,13 @@ impl Plan {
 /// `place`, a place where a prompt is written, made into one: `Shift-Tab` and the `+` menu's Plan mode reach `toggle`
 /// through it, and while `planning`, plan mode's texture lies under everything put in it after this, inside its
 /// corners, whose radius is `corner`. The texture is named, so assistive apps can say what it shows.
-pub(crate) fn place<T: 'static>(
-    place: Stateful<Div>,
+pub(crate) fn place<T: 'static, E: InteractiveElement + IntoElement + ParentElement + Styled>(
+    place: E,
     planning: bool,
     corner: AbsoluteLength,
     cx: &mut Context<T>,
     toggle: fn(&mut T, &mut Context<T>),
-) -> Stateful<Div> {
+) -> E {
     let texture = div()
         .id("plan-texture")
         .role(Role::Status)

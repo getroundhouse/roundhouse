@@ -7,10 +7,9 @@ use gpui_kit::component::input::Textarea;
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Focusable as _, InteractiveElement, IntoElement, ParentElement, Pixels, Rems, Styled,
-    Window, div, px, rems,
+    AnyElement, Context, Div, Focusable as _, IntoElement, ParentElement, Pixels, Rems, Styled, Window, div, px, rems,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, InRegion as _, Off as _, Region};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 
 use super::{PaneEvent, WorkspacePane};
@@ -174,7 +173,8 @@ impl WorkspacePane {
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
-        let composer = v_flex().id("composer").w_full().rounded(CORNER).border_1().border_color(border).bg(surface);
+        let composer =
+            v_flex().region(Region::Composer).w_full().rounded(CORNER).border_1().border_color(border).bg(surface);
         let composer = composing::place(composer, planning, CORNER.into(), cx, Self::toggle_plan_mode);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)

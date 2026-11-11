@@ -2,11 +2,13 @@
 //! bars' says how much of the account's limits is left, and whose account it is. Each says only what it's been
 //! told, so a part nobody has said is left out.
 
+use gpui_kit::base::ObservedElement;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
-    Stateful, Styled as _, TestSupportExt as _, div, px, relative,
+    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
+    Stateful, Styled, TestSupportExt as _, div, px, relative,
 };
+use look::{InRegion as _, Region};
 use protocol::model::{Account, AgentKind, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
 use super::{Usage, words};
@@ -16,15 +18,15 @@ const WIDTH: Pixels = px(300.);
 const BAR: Pixels = px(6.);
 
 /// Raised like the app's other cards, with a card's room around what it holds.
-fn surface(id: &'static str, cx: &App) -> Stateful<Div> {
-    look::raised(cx).id(id).flex().flex_col().w(WIDTH).px_3().py_2p5().text_sm()
+fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
+    look::raised(cx).region(region).flex().flex_col().w(WIDTH).px_3().py_2p5().text_sm()
 }
 
 /// The ring's card: the chat's context. `account` is given only when the bars aren't drawn, since this is then the
 /// one card there is to say whose account it is.
 pub(super) fn context_card(context: &ContextUsage, account: Option<&Account>, cx: &App) -> AnyElement {
     let whose = account.and_then(|account| whose(account, Plan::WithWhose, cx));
-    surface("context-card", cx).child(room(context, cx)).children(whose).test_support().into_any_element()
+    surface(Region::ContextCard, cx).child(room(context, cx)).children(whose).into_any_element()
 }
 
 /// The bars' card: the plan beside its heading, how much of each limit shown is left, as a bar that empties, and
@@ -34,7 +36,7 @@ pub(super) fn usage_card(usage: &Usage, agent: AgentKind, cx: &App) -> AnyElemen
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap_2p5().child(heading(words::usage_heading(agent), plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, cx);
-    surface("usage-card", cx).child(limits).children(whose).test_support().into_any_element()
+    surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
 }
 
 /// How full the context is, as a bar with the room the agent keeps back split off its end, then how much it can

@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use super::frame::Frame;
 use super::world::World;
 
 pub(crate) struct Screen {
@@ -11,6 +12,8 @@ pub(crate) struct Screen {
     pub(crate) spec: &'static str,
     /// What the hub holds. `None` is no hub at all.
     pub(crate) world: Option<fn() -> World>,
+    /// What part of the window its picture shows.
+    pub(crate) frame: Frame,
     pub(crate) steps: &'static [Step],
 }
 

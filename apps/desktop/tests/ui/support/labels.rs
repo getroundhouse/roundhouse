@@ -6,6 +6,17 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, Window};
 
 use super::Ui;
 
+/// The ID the kit gives the menu that's open.
+pub(crate) const MENU: &str = "popup-menu";
+
+/// The first element with this label that shows, in the order the window lists them, for a label several have, such
+/// as two tool calls that did the same thing. One scrolled out of sight is skipped, since it can't be pointed at. For
+/// the gallery, which only a Mac draws.
+#[cfg(target_os = "macos")]
+pub(crate) fn first_labelled(window: &Window, label: &str) -> Option<ElementSnapshot> {
+    window.find_all_by_label(label).into_iter().find(ElementSnapshot::visible)
+}
+
 /// The ID of the one element labelled `label`, to act on it.
 pub(crate) fn labelled(window: &Window, label: &str) -> ElementId {
     window.find_by_label(label).path().last().unwrap().clone()
@@ -14,7 +25,7 @@ pub(crate) fn labelled(window: &Window, label: &str) -> ElementId {
 /// The ID of the one item labelled `label` in the menu that's open, even if something outside it has the same label,
 /// such as the button a picker's menu opened from.
 pub(crate) fn menu_item(window: &Window, label: &str) -> ElementId {
-    let menu = ElementId::Name("popup-menu".into());
+    let menu = ElementId::Name(MENU.into());
     let found = window.find_all_by_label(label);
     let mut items = found.iter().filter(|found| found.path().contains(&menu));
     let item = items.next().unwrap_or_else(|| panic!("the open menu has nothing labelled {label}"));

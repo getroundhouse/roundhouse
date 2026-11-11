@@ -66,7 +66,7 @@ crates/
   providers/       Provider contract, local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
-  look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the status mark and the app icon
+  look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the status mark, the app icon, and the parts of the window tests find
   terminal-view/   GPUI terminal element. Not built
 apps/
   daemon/          One binary that runs as a hub or a worker
@@ -105,7 +105,7 @@ agents, providers, worker ──> process
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.
 2. **`protocol` has no IO and no UI.** Everything depends on it, so it needs to stay small and stable.
 3. **The hub and worker must build on Linux without GPUI.** Nothing under `hub`, `worker`, `agents` or `providers` may depend on GPUI or gpui-kit.
-4. **GPUI stays in `transcript`, `terminal-view`, `look` and `apps/`.** `client-core` must stay free of it, and of any async runtime: it's blocking calls and channels, so GPUI's executor stays out, and a native mobile client remains possible if the GPUI path fails. `look` is a crate of its own because both the app and `transcript` draw with it, and `transcript` can't depend on the app. *Unconfirmed.*
+4. **GPUI stays in `transcript`, `terminal-view`, `look` and `apps/`.** `client-core` must stay free of it, and of any async runtime: it's blocking calls and channels, so GPUI's executor stays out, and a native mobile client remains possible if the GPUI path fails. `look` is a crate of its own because both the app and `transcript` draw with it, and `transcript` can't depend on the app. For the same reason it names the parts of the window tests find by where they're drawn, as `look::Region`, since both mark some. *Unconfirmed.*
 5. **The worker boundary is real.** Even on a Mac, the worker runs as a separate process, so remote workers only change the transport.
 6. **Exact pins for GPUI and gpui-kit.** They are pre-1.0, so upgrades should be deliberate and in one place.
 7. **Nothing that ships is under GPL, AGPL or LGPL.** MPL-2.0 is allowed when it comes unchanged from crates.io, and everything else is permissive, such as Apache-2.0 or MIT. GPL or AGPL code would put the whole app under its terms, which would decide the project's own license and rule out closed or hosted versions, and GPL is widely seen as incompatible with the App Store. AGPL also reaches the hub over the network. LGPL expects users to be able to relink, which static linking makes awkward. MPL-2.0 only covers its own files (§3.3), and shipping it unchanged only means saying where its source is (§3.2), which goes in the notices every license needs anyway. A changed copy would have to be published, hence crates.io only.
