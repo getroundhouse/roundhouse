@@ -33,7 +33,7 @@ Anything recorded since the copy is lost.
 
 To work on Roundhouse rather than use it, `cargo run -p desktop --bin roundhouse-desktop` runs your changes with their own hub and data, in `.context/dev`.
 
-Use `Add project` at the top of the sidebar, then the `+` beside the project. Every agent has full access, and `Shift-Tab` in the composer turns plan mode on and off. The model is below the composer. To review the changes, click a file in the sidebar on the right, which `Cmd-Shift-D` hides and shows, and to comment, hover a changed line and click its add button. The top of that sidebar says where the workspace's pull request stands, and offers the next thing to do about it. The `roundhouse` command-line client, in the same directory, talks to the same hub.
+Use `Add project` at the top of the sidebar, then the `+` beside the project. Every agent has full access, and `Shift-Tab` in the composer, or Plan mode in the menu its `+` opens, turns plan mode on and off. The model is below the composer. To review the changes, click a file in the sidebar on the right, which `Cmd-Shift-D` hides and shows, and to comment, hover a changed line and click its add button. The top of that sidebar says where the workspace's pull request stands, and offers the next thing to do about it. The `roundhouse` command-line client, in the same directory, talks to the same hub.
 
 | Key | Action |
 |---|---|
@@ -48,7 +48,7 @@ Use `Add project` at the top of the sidebar, then the `+` beside the project. Ev
 | `Cmd-Shift-A` | Archive the workspace |
 | `Cmd-Shift-U` | Mark the workspace read, or unread again |
 | `Cmd-.` | Stop the agent's turn |
-| `Shift-Tab` | Turn plan mode on or off, in the composer |
+| `Shift-Tab` | Turn plan mode on or off, in the composer and the new-workspace dialog |
 | `Cmd-,` | Open Settings |
 
 ## Where things are

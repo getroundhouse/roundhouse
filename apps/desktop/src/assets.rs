@@ -22,6 +22,7 @@ gpui_kit::assets::icon_assets!(
         Mail,
         MailOpen,
         MessageSquarePlus,
+        Paperclip,
         Pencil,
         PencilSparkles,
         Plug,

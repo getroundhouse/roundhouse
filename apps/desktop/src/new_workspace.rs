@@ -1,7 +1,7 @@
-//! The new-workspace dialog: which repository, what to work on, the model and its effort, and files to go with the
-//! first prompt. It asks the app to make the workspace with an event, and the app tells it where one can be made and
-//! whether one can be made now, so it never reaches into the app. What's left in it when it closes is there the next
-//! time it opens.
+//! The new-workspace dialog: which repository, what to work on, the model and its effort, plan mode, and files to go
+//! with the first prompt. It asks the app to make the workspace with an event, and the app tells it where one can be
+//! made and whether one can be made now, so it never reaches into the app. What's left in it when it closes is there
+//! the next time it opens, but for plan mode.
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -10,12 +10,13 @@ use client_core::FileToSend;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, WindowExt as _};
 use gpui_kit::{
-    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, ParentElement as _, Pixels, Styled as _,
+    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
 };
-use protocol::model::{AttachmentId, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, RepoId};
+use protocol::model::{AttachmentId, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode, RepoId};
 
 use crate::attached::{self, Attachments, joined};
+use crate::composing;
 use crate::model_picker::Picked;
 
 mod view;
@@ -34,6 +35,8 @@ pub struct Request {
     pub files: Vec<FileToSend>,
     pub model: ModelName,
     pub effort: Effort,
+    /// Plan mode, if it was on in the dialog, and full access otherwise.
+    pub permission_mode: PermissionMode,
 }
 
 impl Request {
@@ -69,6 +72,9 @@ pub struct NewWorkspaceDialog {
     /// What the hub gives a chat that names neither, until another is picked.
     model: ModelName,
     effort: Effort,
+    /// The mode the first chat starts in: full access for each new workspace, unless plan mode is turned on, since it
+    /// belongs to the task at hand.
+    mode: PermissionMode,
     attached: Attachments,
     _subscriptions: Vec<Subscription>,
 }
@@ -84,14 +90,15 @@ pub(crate) fn open(
 ) {
     let (shown, closed) = (dialog.clone(), Rc::new(closed));
     window.open_dialog(cx, move |surface, _, cx| {
-        // The composer's surface and corners, since it's where a prompt is written. The dialog's own padding is
-        // left to what's in it, which runs a line under the repository from edge to edge.
-        let (background, closed) = (cx.theme().muted, closed.clone());
+        // The composer's corners, since it's where a prompt is written. The dialog's own padding is left to what's in
+        // it, which runs a line under the repository from edge to edge.
+        let ((background, edge), closed) = (shown.read(cx).colors(cx), closed.clone());
         surface
             .p_0()
             .w(WIDTH)
             .close_button(false)
             .bg(background)
+            .border_color(edge)
             .rounded(RADIUS)
             .child(shown.clone())
             .on_close(move |_, window, cx| closed(window, cx))
@@ -114,7 +121,8 @@ impl NewWorkspaceDialog {
             }
         });
         let (model, effort, attached) = (DEFAULT_MODEL, DEFAULT_EFFORT, Attachments::default());
-        Self { repo, offer, prompt, model, effort, attached, _subscriptions: vec![on_enter] }
+        let mode = PermissionMode::FullAccess;
+        Self { repo, offer, prompt, model, effort, mode, attached, _subscriptions: vec![on_enter] }
     }
 
     pub(crate) fn set_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
@@ -137,24 +145,30 @@ impl NewWorkspaceDialog {
         }
     }
 
-    /// Empties the dialog of what it was asked to make, keeping the repository, model and effort for the next.
+    /// Empties the dialog of what it was asked to make, and turns plan mode off, keeping the repository, model and
+    /// effort for the next.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
         let prompt = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, model, effort) = (self.repo.clone(), self.model.clone(), self.effort);
+        let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
         cx.notify();
-        Request { repo, prompt, files: self.attached.take(), model, effort }
+        Request { repo, prompt, files: self.attached.take(), model, effort, permission_mode }
     }
 
-    /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, so nothing
-    /// is lost.
+    /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
+    /// mode if it was to be planned, so nothing is lost.
     pub(crate) fn give_back(
         &mut self,
         text: String,
         files: Vec<FileToSend>,
+        mode: PermissionMode,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if mode == PermissionMode::Plan {
+            self.mode = mode;
+        }
         for problem in self.attached.put_back(files) {
             cx.emit(DialogEvent::Error(problem));
         }
@@ -177,7 +191,7 @@ impl NewWorkspaceDialog {
         true
     }
 
-    /// Files dropped on the dialog, or chosen with its `+`.
+    /// Files dropped on the dialog, or chosen from its `+` menu.
     fn attach_paths(paths: Vec<PathBuf>, cx: &mut Context<Self>) {
         attached::read_paths_into(
             paths,
@@ -191,6 +205,22 @@ impl NewWorkspaceDialog {
 
     fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
         self.attached.remove(id);
+        cx.notify();
+    }
+
+    fn planning(&self) -> bool {
+        self.mode == PermissionMode::Plan
+    }
+
+    /// Its surface, and its edge, which the line under the repository is too: the composer's surface and a dialog's
+    /// edge, or in plan mode the composer's copper, on which a dialog's own line would hardly show.
+    fn colors(&self, cx: &App) -> (Hsla, Hsla) {
+        composing::colors(self.planning(), cx.theme().border, cx)
+    }
+
+    /// Plan mode on or off for the first chat, as `Shift-Tab` and the `+` menu do.
+    fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
+        self.mode = if self.planning() { PermissionMode::FullAccess } else { PermissionMode::Plan };
         cx.notify();
     }
 
@@ -224,6 +254,11 @@ impl NewWorkspaceDialog {
     /// The model and effort chosen.
     pub fn chosen(&self) -> (ModelName, Effort) {
         (self.model.clone(), self.effort)
+    }
+
+    /// The mode the first chat is to start in.
+    pub fn mode(&self) -> PermissionMode {
+        self.mode
     }
 
     /// Chooses a level, such as one a hub doesn't know, which no menu offers.

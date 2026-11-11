@@ -170,6 +170,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Click("model-picker")],
     },
     Screen {
+        name: "composer-menu",
+        spec: "chats.md",
+        world: Some(conversation),
+        steps: &[Step::Select(FOCUS), Step::Click("add")],
+    },
+    Screen {
+        name: "composer-menu-planning",
+        spec: "chats.md",
+        world: Some(planning),
+        steps: &[Step::Select(FOCUS), Step::Click("add")],
+    },
+    Screen {
         name: "chat-tabs",
         spec: "chats.md",
         world: Some(chat_tabs),
@@ -312,6 +324,19 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::ClickItem("Extra high"),
             Step::PasteImage(badge_to_paste),
             Step::Type(NEW_WORKSPACE_PROMPT),
+        ],
+    },
+    Screen {
+        name: "new-workspace-planning",
+        spec: "workspaces.md",
+        world: Some(titled),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("new-in-repo-1"),
+            Step::Click("new-workspace-add"),
+            Step::ClickItem("Plan mode"),
+            Step::MoveAway,
+            Step::Type("Plan how the sidebar shows a workspace's pull request"),
         ],
     },
     Screen {

@@ -1,12 +1,13 @@
-//! How the composer looks while the agent is in plan mode: in the brand's copper, quieter than keyboard focus, over a
-//! texture of the fan's rows, as dotted half circles of fine copper dots around a point just under the composer's
-//! bottom edge, as if the composer lay over a roundhouse far bigger than itself. The texture fades toward the bottom,
-//! so the colour marks the whole composer and the texture doesn't crowd what's typed or pressed.
+//! How the composer looks in plan mode, and so the new-workspace dialog, where a prompt is written too: in the brand's
+//! copper, quieter than keyboard focus, over a texture of the fan's rows, as dotted half circles of fine copper dots
+//! around a point just under the composer's bottom edge, as if the composer lay over a roundhouse far bigger than
+//! itself. The texture fades toward the bottom, so the colour marks the whole composer and the texture doesn't crowd
+//! what's typed or pressed.
 
 use std::f32::consts::PI;
 
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Point, Rems, Styled, canvas, point, px};
+use gpui_kit::{AbsoluteLength, App, Bounds, Hsla, IntoElement, Pixels, Point, Styled, canvas, point, px};
 
 use crate::fan::{self, as_f32};
 
@@ -34,9 +35,9 @@ pub fn plan_colors(surface: Hsla, cx: &App) -> (Hsla, Hsla) {
     (planning, planning.blend(copper.opacity(EDGE)))
 }
 
-/// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the radius of the parent's corners, which
-/// the dots stay inside.
-pub fn plan_texture(cx: &App, corner: Rems) -> impl IntoElement + use<> {
+/// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the radius of the parent's
+/// corners, which the dots stay inside.
+pub fn plan_texture(cx: &App, corner: AbsoluteLength) -> impl IntoElement + use<> {
     let copper = cx.theme().ring;
     canvas(
         |_, _, _| {},

@@ -2,12 +2,16 @@
 
 #![cfg(test)]
 
-use gpui_kit::{AppContext as _, ElementId, TestAppContext};
+use gpui_kit::test::ElementSnapshot;
+use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::PermissionMode::{FullAccess, Plan};
 use protocol::model::{DEFAULT_MODEL, Effort, ModelName, PermissionMode, SessionStatus};
 
 use crate::support::{Stack, Ui};
+
+/// The composer's `+`.
+const ADD: &str = "add";
 
 /// Whether the composer shows plan mode, as assistive apps hear it.
 fn planning(ui: &mut Ui<'_>) -> bool {
@@ -87,6 +91,44 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off(cx: &mut TestAppContext) {
     };
     ui.wait("both presses answered", |ui| changes(ui).len() == 2);
     assert_eq!(changes(&ui), [Plan, FullAccess]);
+    ui.wait("full access", |ui| ui.chat_mode() == Some(FullAccess));
+    assert!(!planning(&mut ui));
+}
+
+/// The item labelled Plan mode in the `+` menu, which is open.
+fn plan_item(ui: &mut Ui<'_>) -> ElementSnapshot {
+    let menu = ElementId::Name("popup-menu".into());
+    let found = ui.labelled("Plan mode").into_iter().find(|found| found.path().contains(&menu));
+    found.expect("the menu has plan mode")
+}
+
+/// The `+` menu's Plan mode does as Shift-Tab does, is checked while it's on, and leaves focus where the prompt is
+/// typed.
+#[gpui_kit::test]
+fn the_add_menu_turns_plan_mode_on_and_off(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+    ui.input("say:ready");
+    ui.press("enter");
+    ui.wait("the reply", |ui| ui.session_status() == Some(SessionStatus::Idle));
+
+    // With nothing focused, so the menu, rather than whatever had focus before it opened, is what puts it in the
+    // text field.
+    ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
+    ui.click(SharedString::from(ADD));
+    assert_ne!(plan_item(&mut ui).checked(), Some(true), "plan mode is off");
+    ui.click_menu_item("Plan mode");
+    ui.wait("plan mode", |ui| ui.chat_mode() == Some(Plan));
+    assert!(planning(&mut ui), "the composer shows it's planning");
+    ui.input("next");
+    assert_eq!(ui.composer_text(), "next", "focus is where the prompt is typed");
+
+    ui.click(SharedString::from(ADD));
+    assert_eq!(plan_item(&mut ui).checked(), Some(true), "plan mode is on");
+    ui.click_menu_item("Plan mode");
     ui.wait("full access", |ui| ui.chat_mode() == Some(FullAccess));
     assert!(!planning(&mut ui));
 }

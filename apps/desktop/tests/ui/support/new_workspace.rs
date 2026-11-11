@@ -5,7 +5,7 @@
 use desktop::busy::Busy;
 use desktop::new_workspace::NewWorkspaceDialog;
 use gpui_kit::{AppContext as _, Entity, SharedString};
-use protocol::model::WorkspaceId;
+use protocol::model::{PermissionMode, WorkspaceId};
 
 use super::Ui;
 
@@ -51,5 +51,10 @@ impl Ui<'_> {
     /// The names of the files waiting in the dialog, in order.
     pub(crate) fn dialog_attached(&self) -> Vec<String> {
         self.cx.read_entity(&self.dialog(), |d, _| d.attached_names())
+    }
+
+    /// Whether the dialog's first chat is to start in plan mode.
+    pub(crate) fn dialog_planning(&self) -> bool {
+        self.cx.read_entity(&self.dialog(), |d, _| d.mode()) == PermissionMode::Plan
     }
 }

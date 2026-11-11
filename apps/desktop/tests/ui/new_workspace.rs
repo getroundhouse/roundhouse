@@ -2,9 +2,9 @@
 
 #![cfg(test)]
 
-use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
+use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName};
+use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode};
 
 use crate::support::{Stack, Ui, git};
 
@@ -146,4 +146,54 @@ fn a_file_pasted_in_the_dialog_goes_with_the_first_prompt(cx: &mut TestAppContex
     let names: Vec<String> = carried.unwrap_or_default().into_iter().map(|a| a.name).collect();
     assert_eq!(names, ["notes.txt"]);
     assert!(ui.dialog_attached().is_empty(), "creating takes what was attached");
+}
+
+/// Turned on with `Shift-Tab` or the `+` menu, as in the composer, it's the first chat's, whose agent takes the first
+/// prompt in it, and the next workspace starts without it.
+#[gpui_kit::test]
+fn plan_mode_turned_on_in_the_dialog_is_the_first_chats(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    let before = ui.view().workspaces.len();
+
+    ui.open_new_workspace();
+    ui.press("shift-tab");
+    assert!(ui.dialog_planning(), "Shift-Tab turns it on");
+    assert!(ui.shows_label("new-workspace", "Plan mode"), "the dialog shows it");
+    assert_eq!(ui.dialog_text(), "", "Shift-Tab types nothing");
+    ui.click(SharedString::from("new-workspace-add"));
+    ui.click_menu_item("Plan mode");
+    assert!(!ui.dialog_planning(), "the menu turns it off");
+    ui.click(SharedString::from("new-workspace-add"));
+    ui.click_menu_item("Plan mode");
+    assert!(ui.dialog_planning(), "and on again");
+    ui.input("say:a plan");
+    ui.press("enter");
+
+    ui.wait_for_a_new_workspace(before);
+    ui.wait_idle_with("the agent to answer the first prompt", |text| text == "a plan");
+    assert_eq!(ui.chat_mode(), Some(PermissionMode::Plan));
+    let took_it_in = ui.events().into_iter().find_map(|e| match e.body {
+        EventBody::AgentInit { permission_mode, .. } => permission_mode,
+        _ => None,
+    });
+    assert_eq!(took_it_in, Some(PermissionMode::Plan), "the agent took the first prompt in plan mode");
+    ui.open_new_workspace();
+    assert!(!ui.dialog_planning(), "the next workspace starts with full access");
+    assert!(!ui.shows_label("new-workspace", "Plan mode"));
+}
+
+#[gpui_kit::test]
+fn files_chosen_from_the_dialogs_menu_are_attached(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    let notes = stack.dir.path().join("notes.txt");
+    std::fs::write(&notes, "the first line\n").unwrap();
+
+    ui.open_new_workspace();
+    ui.click(SharedString::from("new-workspace-add"));
+    ui.click_menu_item("Attach files…");
+    ui.wait("the file picker", |ui| ui.cx.did_prompt_for_paths());
+    ui.cx.simulate_path_prompt_response(|_| Some(vec![notes.clone()]));
+    ui.wait("the file to be attached", |ui| ui.dialog_attached() == ["notes.txt"]);
 }

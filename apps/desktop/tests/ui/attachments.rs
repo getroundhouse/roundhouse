@@ -5,7 +5,7 @@
 use std::io::Cursor;
 
 use client_core::FileToSend;
-use gpui_kit::{ClipboardEntry, ClipboardItem, ExternalPaths, Image, ImageFormat, TestAppContext};
+use gpui_kit::{ClipboardEntry, ClipboardItem, ExternalPaths, Image, ImageFormat, SharedString, TestAppContext};
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
 use transcript::TranscriptEvent;
@@ -65,6 +65,25 @@ fn a_pasted_tiff_goes_as_a_png(cx: &mut TestAppContext) {
     ui.input("attached");
     ui.press("enter");
     ui.wait_idle_with("the agent to see a PNG", |text| text.starts_with("attached: image/png "));
+}
+
+#[gpui_kit::test]
+fn files_chosen_from_the_add_menu_are_attached(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_a_chat(cx, &stack);
+    let dir = tempfile::tempdir().unwrap();
+    let (notes, shot) = (dir.path().join("notes.txt"), dir.path().join("shot.png"));
+    std::fs::write(&notes, "the plan\n").unwrap();
+    std::fs::write(&shot, png()).unwrap();
+
+    ui.click(SharedString::from("add"));
+    ui.click_menu_item("Attach files…");
+    ui.wait("the file picker", |ui| ui.cx.did_prompt_for_paths());
+    ui.cx.simulate_path_prompt_response(|asked| {
+        assert!(asked.files && asked.multiple && !asked.directories, "it asks for any number of files");
+        Some(vec![notes.clone(), shot.clone()])
+    });
+    ui.wait("the files to be attached", |ui| ui.attached() == ["notes.txt", "shot.png"]);
 }
 
 #[gpui_kit::test]
