@@ -1,4 +1,4 @@
-//! Adding repositories, and making, renaming, archiving and restoring workspaces.
+//! Adding repositories, and making, renaming, retitling, archiving and restoring workspaces.
 
 use client_core::ClientError;
 use client_core::records::Record;
@@ -154,6 +154,39 @@ impl AppView {
             });
         })
         .detach();
+    }
+
+    /// Asks the hub to title the workspace again from what's been asked in it, which waits on a model. Its row and its
+    /// header say so meanwhile, and asking again before the answer does nothing.
+    pub fn regenerate_title(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
+        let Some(client) = self.client() else { return };
+        if !self.retitling.insert(id.clone()) {
+            return;
+        }
+        self.tell_retitling(&id, cx);
+        let target = id.clone();
+        let asking = client.start(move |client| client.workspace_regenerate_title(&target));
+        cx.spawn(async move |this, cx| {
+            let retitled = asking.recv().await;
+            let _ = this.update(cx, |t, cx| {
+                t.retitling.remove(&id);
+                t.tell_retitling(&id, cx);
+                match retitled {
+                    Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
+                    Err(e) => t.show_error(rename::regenerating_failed(&e), cx),
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Tells the workspace's pane, if it has one, whether a new title is on its way.
+    fn tell_retitling(&self, id: &WorkspaceId, cx: &mut Context<Self>) {
+        let retitling = self.retitling.contains(id);
+        if let Some(pane) = self.panes.get(id) {
+            pane.update(cx, |pane, cx| pane.set_retitling(retitling, cx));
+        }
+        cx.notify();
     }
 
     /// Archives, and asks before losing uncommitted work. Does nothing while a workspace is being made, archived or

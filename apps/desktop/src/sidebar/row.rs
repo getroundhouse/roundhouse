@@ -29,7 +29,8 @@ pub(super) fn workspace_row(app: &AppView, workspace: &Workspace, cx: &mut Conte
     let menu = row_menu(app, workspace, cx);
     let label = workspace.label().to_string();
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
-    let waiting = app.busy.doing(&workspace.id);
+    let retitling = app.retitling.contains(&workspace.id).then_some("Renaming…");
+    let waiting = app.busy.doing(&workspace.id).or(retitling);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .hand()
         .accessibility_label(label.clone())
@@ -96,9 +97,10 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
     div().flex_none().child(button)
 }
 
-/// What a right-click on a workspace's row offers: what a tab's does, then archiving it. The keys act on the workspace
-/// showing, so only its row's menu shows them. Marking its chats needs one with a reply. The sidebar lists no archived
-/// workspace, so every row can be archived.
+/// What a right-click on a workspace's row offers: what a tab's does, a new title from what's been asked in it, then
+/// archiving it. The keys act on the workspace showing, so only its row's menu shows them. Marking its chats needs one
+/// with a reply. A new title needs one to replace, which the first prompt gives, none already on its way, and a
+/// workspace that isn't on its way out. The sidebar lists no archived workspace, so every row can be archived.
 fn row_menu(
     app: &AppView,
     workspace: &Workspace,
@@ -121,12 +123,20 @@ fn row_menu(
         let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
     });
     let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
+    let (to_retitle, retitled) = (to_archive.clone(), workspace.id.clone());
+    let going = app.busy.doing(&workspace.id).is_some();
+    let cant_retitle = going || workspace.title.is_none() || app.retitling.contains(&workspace.id);
+    let retitle = Rc::new(move |cx: &mut App| {
+        let _ = to_retitle.update(cx, |t, cx| t.regenerate_title(retitled.clone(), cx));
+    });
     let archive = Rc::new(move |cx: &mut App| {
         let _ = to_archive.update(cx, |t, cx| t.archive(id.clone(), false, cx));
     });
     move |menu, window, cx| {
-        let menu = shared(menu, window, cx);
-        let archive = archive.clone();
+        let (retitle, archive) = (retitle.clone(), archive.clone());
+        let regenerate = PopupMenuItem::new("Regenerate title").icon(Lucide::PencilSparkles);
+        let menu =
+            shared(menu, window, cx).item(regenerate.disabled(cant_retitle).on_click(move |_, _, cx| retitle(cx)));
         let item = PopupMenuItem::new("Archive").icon(Lucide::Archive);
         let item = item.when(showing, |item| item.action(Box::new(ArchiveWorkspace)));
         menu.separator().item(item.disabled(busy).on_click(move |_, _, cx| archive(cx)))

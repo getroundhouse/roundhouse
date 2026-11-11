@@ -1,10 +1,11 @@
-//! What workspaces and chats are called, and renaming them from their menus.
+//! What workspaces and chats are called, renaming them from their menus, and asking for a workspace's title again.
 
 #![cfg(test)]
 
 use std::time::Duration;
 
-use gpui_kit::{SharedString, TestAppContext};
+use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 
 use crate::support::{Stack, Ui};
 
@@ -68,4 +69,59 @@ fn a_chat_is_renamed_from_its_tab(cx: &mut TestAppContext) {
     ui.wait("the chat's new title", |ui| ui.shows_label(&tab, "First try"));
     assert!(!ui.has_dialog());
     assert_eq!(client.session_get(&chat).unwrap().title.as_deref(), Some("First try"));
+}
+
+/// The fake agent titles only a prompt that carries its title, after `titled:`, and fails any other, as the CLI does
+/// when it isn't logged in.
+#[gpui_kit::test]
+fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    let workspace = ui.new_workspace();
+    let row = format!("workspace-{workspace}");
+    assert!(ui.disabled(SharedString::from("regenerate-title")), "nothing has been asked, so there's none to make");
+    ui.input("say:fix the login");
+    ui.press("enter");
+    ui.wait_idle_with("the answer", |text| text.contains("fix the login"));
+    ui.wait("the title", |ui| ui.shows_label(&row, "say:fix the login"));
+
+    // With no title to be had, it says so and keeps the one it has.
+    ui.click(SharedString::from("regenerate-title"));
+    ui.wait("why there's no new title", |ui| {
+        ui.view().error.as_deref().is_some_and(|error| error.starts_with("couldn't regenerate the title: "))
+    });
+    assert!(ui.shows_label(&row, "say:fix the login"));
+    assert!(!ui.disabled(SharedString::from("regenerate-title")), "and can be asked again");
+
+    ui.input("say:and test it titled:Fix and test the login");
+    ui.press("enter");
+    ui.wait_idle_with("the second answer", |text| text.contains("and test it"));
+    ui.right_click(SharedString::from(row.clone()));
+    ui.click_label("Regenerate title");
+    ui.wait("the new title", |ui| ui.shows_label(&row, "Fix and test the login"));
+    assert!(ui.shows_label("workspace-title", "Fix and test the login"), "the header too");
+
+    // Over a title typed by hand too, since it's asked for.
+    rename(&mut ui, &row);
+    ui.input("Login bug");
+    ui.press("enter");
+    ui.wait("the typed title", |ui| ui.shows_label(&row, "Login bug"));
+    ui.click(SharedString::from("regenerate-title"));
+    ui.wait("the title again", |ui| ui.shows_label(&row, "Fix and test the login"));
+    let stored = client.workspace_list(false).unwrap().into_iter().find(|w| w.id == workspace).unwrap();
+    assert_eq!(stored.title.as_deref(), Some("Fix and test the login"));
+
+    // A title as long as one can be gives way to the button, rather than pushing it out of the header.
+    let long = "word ".repeat(24);
+    rename(&mut ui, &row);
+    ui.input(&long);
+    ui.press("enter");
+    ui.wait("the long title", |ui| ui.shows_label("workspace-title", long.trim()));
+    let mut bounds =
+        |id: &'static str| ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap();
+    let (button, header_end) = (bounds("regenerate-title"), bounds("toggle-diff"));
+    assert!(button.right() <= header_end.left(), "{button:?} is past the header's end, {header_end:?}");
 }

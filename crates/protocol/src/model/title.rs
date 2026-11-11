@@ -87,7 +87,8 @@ fn breaks_line(c: char) -> bool {
     matches!(c, '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}')
 }
 
-/// Where a workspace's or a chat's title came from, so one typed by hand is never replaced.
+/// Where a workspace's or a chat's title came from, so one typed by hand is replaced only when someone asks for a
+/// new one.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TitleSource {
@@ -96,7 +97,7 @@ pub enum TitleSource {
     #[default]
     FirstLine,
     Generated,
-    /// Nothing generated replaces it.
+    /// Nothing generated replaces it, unless someone asks for a new title.
     ByHand,
     /// Treated like [`TitleSource::ByHand`], so a title nobody can account for is left alone.
     #[serde(other)]

@@ -41,6 +41,7 @@ mod setup;
 #[cfg(test)]
 mod tests;
 mod view;
+mod waiting;
 
 /// What shows under the tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +77,8 @@ pub struct Diff {
 pub enum PaneEvent {
     Error(String),
     Archive(WorkspaceId, bool),
+    /// Title the workspace again from what's been asked in it.
+    RegenerateTitle(WorkspaceId),
 }
 
 pub struct WorkspacePane {
@@ -106,6 +109,8 @@ pub struct WorkspacePane {
     /// Whose account the workspace's agents run under, for the card the context's ring shows.
     account: context::AccountRead,
     busy: Busy,
+    /// The app is waiting on the hub for a new title for this workspace.
+    retitling: bool,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -138,12 +143,6 @@ impl WorkspacePane {
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others, usize::from(comment))
-    }
-
-    /// Whether the app is making, archiving or restoring a workspace, which the pull request's Archive waits for.
-    pub(crate) fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
-        self.busy = busy;
-        cx.notify();
     }
 
     /// Where the workspace's work stands, as its mark and the pull request's bar show it.
@@ -200,6 +199,7 @@ impl WorkspacePane {
             closed_menu: closed::Menu::Shut,
             account: context::AccountRead::default(),
             busy: Busy::Free,
+            retitling: false,
             reading: Reading::default(),
             composer,
             diff: None,

@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use std::path::Path;
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError};
@@ -165,4 +166,88 @@ fn archiving_stops_a_title_call_under_way_and_what_it_started() {
         wait_until("the call to stop", || !is_alive(pid));
     }
     assert_eq!(workspace(&client, &made.id).title_source, TitleSource::FirstLine, "and its title stays");
+}
+
+/// A workspace with a generated title and two prompts, the second in a chat of its own, and what the fake agent keeps.
+fn worked_in(stack: &Stack, client: &Client) -> (protocol::model::Workspace, Session, std::path::PathBuf) {
+    let (made, chat) = stack.workspace(client);
+    let state = prompt_for_a_title(stack, client, &chat, "Fix the login redirect", false);
+    wait_until("the chat's generated title", || {
+        client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
+    });
+    wait_for_turn_end(client, &chat.id, 1);
+    let second = client.session_create(&made.id, AgentKind::Claude, SessionOptions::default(), None).unwrap();
+    client.session_prompt(&second.id, "say:now add a test", None).unwrap();
+    wait_for_turn_end(client, &second.id, 1);
+    // Its own first prompt asks for a title too, which would otherwise still be on its way when a test holds the next.
+    wait_until("the second chat's generated title", || {
+        client.session_get(&second.id).unwrap().title_source == TitleSource::Generated
+    });
+    (made, chat, state)
+}
+
+#[test]
+fn asking_for_a_new_title_names_the_workspace_from_all_its_prompts_even_over_one_typed_by_hand() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, chat, state) = worked_in(&stack, &client);
+    client.workspace_rename(&made.id, "Login bug").unwrap();
+    std::fs::write(state.join("title"), "Fix and test the login").unwrap();
+
+    let retitled = client.workspace_regenerate_title(&made.id).unwrap();
+
+    let now = (retitled.title.as_deref(), retitled.title_source);
+    assert_eq!(now, (Some("Fix and test the login"), TitleSource::Generated));
+    assert_eq!(workspace(&client, &made.id), retitled, "what it answers is what's kept");
+    assert_eq!((retitled.name, retitled.branch), (made.name, made.branch), "a title leaves the name alone");
+    let asked = std::fs::read_to_string(state.join("title-prompt")).unwrap();
+    let prompts = "\n\n1. say:fix the login it loops\n2. say:now add a test";
+    assert!(asked.ends_with(prompts), "every chat's prompts, oldest first: {asked}");
+    assert_eq!(client.session_get(&chat.id).unwrap().title.as_deref(), Some("Fix the login redirect"), "not its chats");
+}
+
+#[test]
+fn a_title_typed_while_a_new_one_is_asked_for_stays() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, _, state) = worked_in(&stack, &client);
+    std::fs::write(state.join("title"), "Fix and test the login").unwrap();
+    std::fs::write(state.join("title-held"), "").unwrap();
+    let (asking, id) = (stack.client(), made.id.clone());
+    let asked = std::thread::spawn(move || asking.workspace_regenerate_title(&id));
+    wait_until("the call for a title", || state.join("title-pids").exists());
+
+    client.workspace_rename(&made.id, "Login bug").unwrap();
+    release(&state);
+
+    let answered = asked.join().unwrap().unwrap();
+    assert_eq!((answered.title.as_deref(), answered.title_source), (Some("Login bug"), TitleSource::ByHand));
+    assert_eq!(workspace(&client, &made.id).title.as_deref(), Some("Login bug"));
+}
+
+#[test]
+fn asking_for_a_new_title_is_refused_with_nothing_to_go_on_and_says_when_none_comes() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (made, chat) = stack.workspace(&client);
+
+    let unprompted = client.workspace_regenerate_title(&made.id).unwrap_err();
+    let missing = client.workspace_regenerate_title(&"missing".into()).unwrap_err();
+    // The fake agent has no title to give, as when the CLI isn't logged in.
+    client.session_prompt(&chat.id, "say:fix the login", None).unwrap();
+    wait_for_turn_end(&client, &chat.id, 1);
+    let failed = client.workspace_regenerate_title(&made.id).unwrap_err();
+    client.workspace_archive(&made.id, true).unwrap();
+    let hub = stack.hub_pid().to_string();
+    let workers = || String::from_utf8(Command::new("pgrep").args(["-P", &hub]).output().unwrap().stdout).unwrap();
+    let before = workers();
+    let archived = client.workspace_regenerate_title(&made.id).unwrap_err();
+
+    assert!(matches!(archived, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    assert_eq!(workers(), before, "and starts no worker for it");
+    assert!(matches!(unprompted, ClientError::Api(e) if e.code == ErrorCode::Conflict));
+    assert!(matches!(missing, ClientError::Api(e) if e.code == ErrorCode::NotFound));
+    assert!(matches!(failed, ClientError::Api(e) if e.code == ErrorCode::Worker));
+    let kept = workspace(&client, &made.id);
+    assert_eq!((kept.title.as_deref(), kept.title_source), (Some("say:fix the login"), TitleSource::FirstLine));
 }

@@ -1,4 +1,5 @@
-//! Renaming a workspace or a chat, in a dialog with its title in a field, selected, so typing replaces it.
+//! Renaming a workspace or a chat, in a dialog with its title in a field, selected, so typing replaces it, and what
+//! to say when a title asked of the hub doesn't come.
 
 use client_core::ClientError;
 use gpui_kit::component::WindowExt as _;
@@ -46,6 +47,14 @@ pub(crate) fn open(
         input.select_all(window, cx);
         input.focus(window, cx);
     });
+}
+
+/// What to say when the hub couldn't title a workspace again.
+pub(crate) fn regenerating_failed(e: &ClientError) -> String {
+    if e.is_unsupported() {
+        return "couldn't regenerate the title: the hub is older than this app".to_string();
+    }
+    format!("couldn't regenerate the title: {e}")
 }
 
 /// What's being renamed, which the dialog's title says.

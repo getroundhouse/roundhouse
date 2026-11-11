@@ -22,8 +22,8 @@
 ## Archiving
 
 - **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*
-- **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers. Both archive as `Cmd-Shift-A` does, asking first if there's work it would lose, as `workspaces.md` says. *Unconfirmed.*
-- **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it and a box to archive it. *Unconfirmed.*
+- **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers and Regenerate title, which `workspaces.md` describes. Both archive as `Cmd-Shift-A` does, asking first if there's work it would lose, as `workspaces.md` says. *Unconfirmed.*
+- **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it, a pencil with sparks for a new title, and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
 - **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*
 - **While a workspace is being made, archived or restored, none of those can start,** so a button or key pressed twice does it once, and the buttons that archive are greyed out. *Unconfirmed.*

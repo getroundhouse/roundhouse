@@ -200,7 +200,15 @@ pub(super) fn closed_chats() -> World {
 
 /// The conversation, with every workspace titled from its first prompt.
 pub(super) fn titled() -> World {
-    let mut world = conversation();
+    with_titles(conversation())
+}
+
+/// [`unread`], with every workspace titled, so a row's menu offers a new title.
+pub(super) fn unread_titled() -> World {
+    with_titles(unread())
+}
+
+fn with_titles(mut world: World) -> World {
     let titles = [
         ("alder", "Fix the login redirect"),
         ("birch", "Speed up opening a large diff"),

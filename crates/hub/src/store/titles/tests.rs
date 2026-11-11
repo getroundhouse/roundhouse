@@ -62,12 +62,90 @@ fn a_generated_title_replaces_only_a_first_line() {
     assert_eq!((typed.record.title.as_deref(), typed.record.title_source), (Some("Login bug"), TitleSource::ByHand));
 }
 
+fn regenerated(over: Option<&Title>, set: TitleSource) -> Retitle<'_> {
+    Retitle::Regenerated { over, set }
+}
+
+#[test]
+fn a_regenerated_title_replaces_the_one_it_was_asked_over_however_that_was_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let (typed, first) = (title("Login bug"), title("Fix login redirect"));
+    store.retitle_workspace(&"w".into(), &typed, Retitle::ByHand).unwrap();
+
+    let over_typed = regenerated(Some(&typed), TitleSource::ByHand);
+    let new = store.retitle_workspace(&"w".into(), &first, over_typed).unwrap();
+    let over_generated = regenerated(Some(&first), TitleSource::Generated);
+    let again = store.retitle_workspace(&"w".into(), &title("Fix redirect loop"), over_generated).unwrap();
+
+    assert!(new.changed, "over a title typed by hand, since someone asked");
+    assert_eq!(
+        (new.record.title.as_deref(), new.record.title_source),
+        (Some("Fix login redirect"), TitleSource::Generated)
+    );
+    assert!(again.changed, "and over a generated one");
+    assert_eq!(again.record.title.as_deref(), Some("Fix redirect loop"));
+}
+
+#[test]
+fn a_regenerated_title_leaves_one_set_since_it_was_asked_for() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let (first_line, new) = (title("fix the login"), title("Fix login redirect"));
+    store.retitle_workspace(&"w".into(), &first_line, Retitle::FirstLine).unwrap();
+    let typed = store.retitle_workspace(&"w".into(), &title("Login bug"), Retitle::ByHand).unwrap();
+
+    let over_first_line = regenerated(Some(&first_line), TitleSource::FirstLine);
+    let late = store.retitle_workspace(&"w".into(), &new, over_first_line).unwrap();
+    let untitled = store.retitle_workspace(&"w".into(), &new, regenerated(None, TitleSource::FirstLine)).unwrap();
+    let chat = store.retitle_session(&"s".into(), &new, regenerated(None, TitleSource::FirstLine)).unwrap();
+
+    assert!(!late.changed && !untitled.changed);
+    assert_eq!((late.record.title.as_deref(), late.record.title_source), (Some("Login bug"), TitleSource::ByHand));
+    assert_eq!(late.record.rev, typed.record.rev, "a title that doesn't apply changes nothing to announce");
+    assert!(chat.changed, "asked while there was no title, and there's still none");
+}
+
+/// Renaming a workspace to what it's already called is someone keeping a generated title, so it stays too.
+#[test]
+fn a_regenerated_title_leaves_the_same_words_typed_by_hand_since() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let generated = title("Fix login redirect");
+    store.retitle_workspace(&"w".into(), &generated, Retitle::FirstLine).unwrap();
+    store.retitle_workspace(&"w".into(), &generated, Retitle::ByHand).unwrap();
+
+    let over_first_line = regenerated(Some(&generated), TitleSource::FirstLine);
+    let late = store.retitle_workspace(&"w".into(), &title("Something else"), over_first_line).unwrap();
+
+    assert!(!late.changed);
+    let kept = (late.record.title.as_deref(), late.record.title_source);
+    assert_eq!(kept, (Some("Fix login redirect"), TitleSource::ByHand));
+}
+
+/// A record reads its title tidied, so that's the title a new one is asked over, however it's stored.
+#[test]
+fn a_regenerated_title_replaces_one_stored_before_titles_were_tidied() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let untidy = "UPDATE workspaces SET title = 'Login  bug ', title_source = 'by_hand' WHERE id = 'w'";
+    lock(&store.writer).execute(untidy, []).unwrap();
+    let read = store.get_workspace(&"w".into()).unwrap().title.unwrap();
+
+    let over = regenerated(Some(&read), TitleSource::ByHand);
+    let new = store.retitle_workspace(&"w".into(), &title("Fix login redirect"), over).unwrap();
+
+    assert_eq!(read.as_str(), "Login bug");
+    assert!(new.changed);
+}
+
 #[test]
 fn retitling_something_missing_is_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
-    for how in [Retitle::FirstLine, Retitle::Generated, Retitle::ByHand] {
+    let asked = regenerated(None, TitleSource::FirstLine);
+    for how in [Retitle::FirstLine, Retitle::Generated, asked, Retitle::ByHand] {
         let workspace = store.retitle_workspace(&"missing".into(), &title("x"), how);
         let chat = store.retitle_session(&"missing".into(), &title("x"), how);
 
