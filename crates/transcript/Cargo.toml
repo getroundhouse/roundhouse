@@ -17,6 +17,9 @@ gpui-kit.workspace = true
 # Reads an attached image's size before it's drawn, so its row doesn't change height. GPUI already builds these.
 image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
 look.workspace = true
+# Finds the images written one after another in the agent's text or a prompt's, to draw each at its own width, as the
+# text view reads it.
+markdown.workspace = true
 # Holds the images the agent's text points to, for the text view, which takes only what can be shared across threads.
 parking_lot.workspace = true
 serde_json.workspace = true

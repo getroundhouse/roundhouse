@@ -9,6 +9,7 @@ mod calls;
 #[cfg(test)]
 mod fixtures;
 mod folds;
+mod images_apart;
 mod item_key;
 mod linked_images;
 mod list;

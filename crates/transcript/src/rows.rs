@@ -18,6 +18,7 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
+use crate::images_apart::images_apart;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::transcript::{Model, Transcript};
@@ -163,9 +164,11 @@ fn agent_text(key: &ItemKey, text: &str, held: Option<&Entity<TextViewState>>) -
     markdown(key.element("text"), text, held)
 }
 
-/// Markdown under `id`, or showing `held` if the transcript keeps its state.
+/// Markdown under `id`, or showing `held` if the transcript keeps its state, with images one after another apart, as
+/// `crate::images_apart` says.
 fn markdown(id: ElementId, text: &str, held: Option<&Entity<TextViewState>>) -> TextView {
-    let view = held.map_or_else(|| TextView::markdown(id, SharedString::from(text.to_string())), TextView::new);
+    let view =
+        held.map_or_else(|| TextView::markdown(id, SharedString::from(images_apart(text).into_owned())), TextView::new);
     view.selectable(true)
 }
 
