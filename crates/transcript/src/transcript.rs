@@ -12,7 +12,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
-use crate::folds::Folds;
+use crate::folds::{Fold, Folds};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
@@ -264,9 +264,9 @@ impl Transcript {
         self.session.read(|log| m.long_texts.follow(log, rows, &this, cx));
     }
 
-    /// Opens or closes a block drawn in the row of the event at `seq`, which changes that row's height.
-    pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, open: bool, cx: &mut Context<Self>) {
-        self.model.borrow_mut().folds.choose(key, open);
+    /// Opens or closes a fold drawn in the row of the event at `seq`, which changes that row's height.
+    pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
+        self.model.borrow_mut().folds.choose(key, fold, open);
         self.remeasure(seq, cx);
     }
 

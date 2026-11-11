@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use super::around::{Answer, Reply, Subagent};
 use crate::calls::{ToolCall, count};
+use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::transcript::Transcript;
@@ -32,7 +33,10 @@ use super::line::{self, Line, Part};
 pub(super) struct Toggle<'a> {
     pub(super) seq: Seq,
     pub(super) key: &'a ItemKey,
+    pub(super) fold: Fold,
     pub(super) open: bool,
+    /// For a command: whether it's shown whole, as [`crate::folds::Fold::Command`] says.
+    pub(super) whole: bool,
     pub(super) this: &'a WeakEntity<Transcript>,
     /// The images text can point to, for a subagent's work, which is drawn in its call.
     pub(super) linked: &'a LinkedImages,

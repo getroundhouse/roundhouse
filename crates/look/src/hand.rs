@@ -1,7 +1,7 @@
 //! The pointing hand, over what a press does something to. `docs/spec/look.md` has the rule.
 
-use gpui_kit::Styled;
 use gpui_kit::component::Disableable;
+use gpui_kit::{CursorStyle, HitboxBehavior, IntoElement, ParentElement as _, Styled, canvas, div};
 
 /// Something a press does something to: a button, a tab, a switch, or a row that opens something. The kit gives its
 /// buttons the arrow, as a Mac's own have, so each one asks for the hand here.
@@ -21,6 +21,22 @@ pub trait Hand: Styled + Sized {
 }
 
 impl<T: Styled> Hand for T {}
+
+/// The hand over the element this lies in, while `pressable` says a press would do something, for what can only be
+/// pressed when it's laid out a certain way, such as a command that shows more only while it's cut off. That's known
+/// once the window has laid everything out, so it's asked as the window paints, which [`Hand`] is too early for. It
+/// lies over the element, as large as it is, so the element is `relative`.
+pub fn hand_once_laid_out(pressable: impl Fn() -> bool + 'static) -> impl IntoElement {
+    let lies_over = canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            if pressable() {
+                window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
+            }
+        },
+    );
+    div().absolute().inset_0().child(lies_over.size_full())
+}
 
 /// Something that can be greyed out.
 pub trait Off: Disableable + Styled + Sized {

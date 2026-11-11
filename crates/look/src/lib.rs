@@ -23,7 +23,7 @@ mod work;
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
 pub use clock::{date, date_and_time, day_and_time, local_time, now_ms, time_of_day};
-pub use hand::{Hand, Off};
+pub use hand::{Hand, Off, hand_once_laid_out};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
 pub use hover::hover_card;
 pub use icon::{IconSize, IconStyle, icon};

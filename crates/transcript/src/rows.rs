@@ -304,8 +304,8 @@ fn render_block(
     linked: &LinkedImages,
     cx: &App,
 ) -> Option<AnyElement> {
-    let (key, expanded) = (&drawing.key, drawing.open);
-    let toggle = Toggle { seq, key, open: expanded, this, linked };
+    let key = &drawing.key;
+    let toggle = Toggle { seq, key, fold: drawing.fold, open: drawing.open, whole: drawing.whole, this, linked };
     Some(match block {
         ContentBlock::Text { text, images } => {
             agent_text(key, text, drawing.text.as_ref()).image_source(linked.resolver(seq, images)).into_any_element()

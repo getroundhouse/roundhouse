@@ -12,7 +12,7 @@ use gpui_kit::base::{InteractiveElementExt as _, Scrollbar};
 use gpui_kit::{
     AnyElement, App, DispatchPhase, ElementId, HitboxBehavior, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, RenderOnce, ScrollEvent, ScrollHandle, StatefulInteractiveElement as _, Styled as _,
-    Window, canvas, div, point, px,
+    TestSupportExt as _, Window, canvas, div, point, px,
 };
 
 use self::wheel::{Owner, Wheel};
@@ -51,7 +51,8 @@ impl RenderOnce for ScrollArea {
             // GPUI otherwise turns a sideways swipe into a scroll down this area, which has nothing sideways.
             .lock_scroll_axis()
             .track_scroll(&handle)
-            .child(self.content);
+            .child(self.content)
+            .test_support();
         let bar = Scrollbar::vertical(&handle).id((self.id.clone(), "bar")).viewport_from_layout();
         div()
             .relative()

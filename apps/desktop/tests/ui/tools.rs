@@ -19,6 +19,8 @@ use transcript::Place;
 
 use crate::support::{Stack, Ui};
 
+mod commands;
+
 /// The fake agent's commands come with no description, so their line says they run something.
 const COMMAND_LINE: &str = "Run";
 /// Asking the advisor, which the API runs rather than the agent.
@@ -55,8 +57,8 @@ fn a_call_s_output_scrolls_under_the_wheel_and_leaves_the_transcript(cx: &mut Te
     let (_, output) = open_a_command(&mut ui, "seq 1 20");
     let (lines, transcript) = (top(&mut ui, output.clone()), scrolled_to(&ui));
 
-    wheel(&mut ui, &output, -100.);
-    wheel(&mut ui, &output, 40.);
+    wheel(&mut ui, &over(&output), -100.);
+    wheel(&mut ui, &over(&output), 40.);
 
     assert_eq!(scrolled_to(&ui), transcript, "the wheel over the output leaves the transcript under it");
     assert_eq!(top(&mut ui, output), lines - px(60.), "and scrolls the output");
@@ -71,24 +73,24 @@ fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut Test
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     let (start, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
 
-    wheel(&mut ui, &output, 40.);
+    wheel(&mut ui, &over(&output), 40.);
 
     assert_ne!(scrolled_to(&ui), transcript, "at the top of the output, the wheel up scrolls the transcript");
     assert_eq!(scrolled_in(&mut ui), start, "and leaves the output at its top");
 
     let transcript = scrolled_to(&ui);
-    wheel(&mut ui, &output, -1000.);
+    wheel(&mut ui, &over(&output), -1000.);
     let end = scrolled_in(&mut ui);
     assert!(end > start, "the wheel down takes the output to its end first");
     assert_eq!(scrolled_to(&ui), transcript, "without the transcript");
 
-    keep_turning(&mut ui, &output, -40.);
+    keep_turning(&mut ui, &over(&output), -40.);
 
     assert_ne!(scrolled_to(&ui), transcript, "at the end of the output, the wheel down scrolls the transcript");
     assert_eq!(scrolled_in(&mut ui), end, "and leaves the output at its end");
 
     let transcript = scrolled_to(&ui);
-    wheel(&mut ui, &output, 40.);
+    wheel(&mut ui, &over(&output), 40.);
 
     assert_eq!(scrolled_in(&mut ui), end - px(40.), "back up, the wheel scrolls the output again");
     assert_eq!(scrolled_to(&ui), transcript, "and leaves the transcript");
@@ -102,20 +104,20 @@ fn a_fling_of_a_call_s_output_stops_at_its_end(cx: &mut TestAppContext) {
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     let top_of_output = scrolled_in(&mut ui);
     // Down to the end of the output, so a swipe up has the output to scroll and the transcript to carry on into.
-    wheel(&mut ui, &output, -1000.);
-    swipe(&mut ui, &output, TouchPhase::Started, 40.);
-    swipe(&mut ui, &output, TouchPhase::Moved, 1000.);
-    swipe(&mut ui, &output, TouchPhase::Ended, 0.);
+    wheel(&mut ui, &over(&output), -1000.);
+    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 1000.);
+    swipe(&mut ui, &over(&output), TouchPhase::Ended, 0.);
     let transcript = scrolled_to(&ui);
     assert_eq!(scrolled_in(&mut ui), top_of_output, "the swipe takes the output back to its top");
 
-    swipe(&mut ui, &output, TouchPhase::Moved, 60.);
-    swipe(&mut ui, &output, TouchPhase::Moved, 60.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
 
     assert_eq!(scrolled_to(&ui), transcript, "the fling it leaves stops there, without carrying the transcript on");
     assert_eq!(scrolled_in(&mut ui), top_of_output);
 
-    swipe(&mut ui, &output, TouchPhase::Started, 40.);
+    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
 
     assert_ne!(scrolled_to(&ui), transcript, "touching again, the swipe scrolls the transcript");
 }
@@ -127,13 +129,13 @@ fn a_fling_of_the_transcript_passes_over_a_call_s_output(cx: &mut TestAppContext
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     // Partway down the output, so it has room to catch a fling up if it would.
-    wheel(&mut ui, &output, -60.);
+    wheel(&mut ui, &over(&output), -60.);
     let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
     swipe(&mut ui, &line, TouchPhase::Started, 40.);
     swipe(&mut ui, &line, TouchPhase::Ended, 0.);
     let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
 
-    swipe(&mut ui, &output, TouchPhase::Moved, 30.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 30.);
 
     assert_ne!(scrolled_to(&ui), transcript, "the transcript's fling carries on over the output");
     assert_eq!(scrolled_in(&mut ui), inside, "and leaves the output where it was");
@@ -146,12 +148,12 @@ fn a_swipe_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mu
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     // Partway down the output, so it has room to take the swipe up if it would.
-    wheel(&mut ui, &output, -60.);
+    wheel(&mut ui, &over(&output), -60.);
     let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
     swipe(&mut ui, &line, TouchPhase::Started, 40.);
     let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
 
-    swipe(&mut ui, &output, TouchPhase::Moved, 30.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 30.);
 
     assert_ne!(scrolled_to(&ui), transcript, "the fingers go on scrolling the transcript over the output");
     assert_eq!(scrolled_in(&mut ui), inside, "and leave the output where it was");
@@ -163,18 +165,18 @@ fn a_spin_of_the_wheel_that_starts_on_the_transcript_carries_on_over_a_call_s_ou
     let mut ui = in_full_access(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
-    wheel(&mut ui, &output, -60.);
+    wheel(&mut ui, &over(&output), -60.);
     let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
     wheel(&mut ui, &line, 40.);
     let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
 
-    keep_turning(&mut ui, &output, 30.);
+    keep_turning(&mut ui, &over(&output), 30.);
 
     assert_ne!(scrolled_to(&ui), transcript, "the spin goes on scrolling the transcript over the output");
     assert_eq!(scrolled_in(&mut ui), inside, "and leaves the output where it was");
 
     let transcript = scrolled_to(&ui);
-    wheel(&mut ui, &output, 30.);
+    wheel(&mut ui, &over(&output), 30.);
 
     assert_eq!(scrolled_in(&mut ui), inside - px(30.), "after a pause, the wheel scrolls the output");
     assert_eq!(scrolled_to(&ui), transcript);
@@ -187,7 +189,7 @@ fn the_wheel_over_output_that_fits_scrolls_the_transcript(cx: &mut TestAppContex
     let (_, output) = open_a_command(&mut ui, "echo short");
     let transcript = scrolled_to(&ui);
 
-    wheel(&mut ui, &output, 40.);
+    wheel(&mut ui, &over(&output), 40.);
 
     assert_ne!(scrolled_to(&ui), transcript, "a block with nothing to scroll leaves the wheel to the transcript");
 }
@@ -269,6 +271,11 @@ fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
     ui.click_labelled(COMMAND_LINE, 0);
     assert_eq!(command_open(ui), Some(true));
     (ui.shown("command/").remove(0), ui.shown("output/").remove(0))
+}
+
+/// The area that shows the output with this ID, so the pointer is over what can be seen of it however tall it is.
+fn over(output: &ElementId) -> ElementId {
+    ElementId::from((ElementId::from((output.clone(), "scroll")), "area"))
 }
 
 /// Whether the command's line says it's open, as it tells assistive apps.

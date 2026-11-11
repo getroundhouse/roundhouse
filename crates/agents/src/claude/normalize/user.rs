@@ -17,8 +17,11 @@ pub(super) fn line(value: &Value) -> Parsed {
         return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id });
     }
     // Claude says what an edit changed beside the line's one result, rather than in it.
-    if let [ContentBlock::ToolResult { change, .. }] = blocks.as_mut_slice() {
+    if let [ContentBlock::ToolResult { change, text, .. }] = blocks.as_mut_slice() {
         *change = file_change::read(value);
+        if printed_nothing(value, text) {
+            text.clear();
+        }
     }
     let taken = images::take(content, &mut blocks);
     let body = EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks };
@@ -27,4 +30,17 @@ pub(super) fn line(value: &Value) -> Parsed {
     }
     let raw = images::without(value, &taken);
     Parsed::EventWithImages { body, images: taken.into_iter().map(|found| found.kept).collect(), raw }
+}
+
+/// What the CLI sends as a command's result when the command printed nothing.
+const NOTHING_PRINTED: &str = "(Bash completed with no output)";
+
+/// Whether a command's result only says that it printed nothing, which a client says in its own words, as it would
+/// for any command that printed nothing. Only the CLI's own sentence, with nothing on either stream beside it, is
+/// taken for that, so a message that's about something else, such as a command left running in the background, is
+/// kept.
+fn printed_nothing(line: &Value, text: &str) -> bool {
+    let Some(result) = line.get("tool_use_result") else { return false };
+    let empty = |stream| result.get(stream).and_then(Value::as_str) == Some("");
+    text == NOTHING_PRINTED && empty("stdout") && empty("stderr")
 }

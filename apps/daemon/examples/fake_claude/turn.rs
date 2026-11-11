@@ -113,12 +113,14 @@ impl Turn<'_> {
     }
 
     pub(crate) fn tool_result(&self, tool_use_id: &str, content: &str, is_error: bool) {
-        emit(
-            self.out,
-            json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result",
-            "tool_use_id":tool_use_id,"content":content,"is_error":is_error}]},"parent_tool_use_id":self.parent,
-            "session_id":self.config.session_id}),
-        );
+        emit(self.out, self.result_line(tool_use_id, content, is_error));
+    }
+
+    /// The line a tool's result comes in.
+    pub(crate) fn result_line(&self, tool_use_id: &str, content: &str, is_error: bool) -> serde_json::Value {
+        json!({"type":"user","message":{"role":"user","content":[{"type":"tool_result",
+        "tool_use_id":tool_use_id,"content":content,"is_error":is_error}]},"parent_tool_use_id":self.parent,
+        "session_id":self.config.session_id})
     }
 }
 

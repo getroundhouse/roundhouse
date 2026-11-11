@@ -174,7 +174,16 @@ pub(crate) fn edit_file(turn: &mut Turn, lines: u32) -> bool {
 
 pub(crate) fn execute(turn: &mut Turn, tool_use_id: &str, command: &str) -> bool {
     let output = std::process::Command::new("sh").args(["-c", command]).output().unwrap();
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
-    turn.tool_result(tool_use_id, &text, !output.status.success());
+    let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let worked = output.status.success();
+    // As the CLI does, a command that worked and printed nothing says so in a sentence of its own.
+    let text = if worked && stdout.is_empty() && stderr.is_empty() { NOTHING_PRINTED } else { &stdout };
+    // With the record of what it printed that the CLI puts beside it.
+    let mut line = turn.result_line(tool_use_id, text, !worked);
+    line["tool_use_result"] = json!({ "stdout": stdout, "stderr": stderr, "interrupted": false });
+    emit(turn.out, line);
     false
 }
+
+/// What the CLI sends as a command's result when the command printed nothing.
+const NOTHING_PRINTED: &str = "(Bash completed with no output)";

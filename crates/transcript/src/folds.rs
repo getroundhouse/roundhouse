@@ -1,5 +1,6 @@
 //! Which blocks are open. A block the person opened or closed stays as they left it, and the rest start the way
-//! their kind does.
+//! their kind does. Something in a block can open on its own, such as a command shown whole in its opened call, so a
+//! choice is kept for each kind of fold in an item.
 
 use std::collections::HashMap;
 
@@ -8,18 +9,20 @@ use protocol::event::ContentBlock;
 use crate::item_key::ItemKey;
 
 /// A kind of block that opens and closes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Fold {
     Thinking,
     /// What a tool sent back.
     Output,
     /// An image a prompt carried, drawn small until it's opened.
     Picture,
+    /// An opened call's command, shown whole rather than cut off at the end of its line.
+    Command,
 }
 
 impl Fold {
     /// The kind of fold a block is. Only thinking and a tool's output open, and anything else is drawn whole, so it
-    /// never asks.
+    /// never asks. A command shown whole is a fold inside its call's block, rather than a kind of block.
     pub(crate) fn of(block: &ContentBlock) -> Self {
         if matches!(block, ContentBlock::Thinking { .. }) { Fold::Thinking } else { Fold::Output }
     }
@@ -27,8 +30,8 @@ impl Fold {
 
 #[derive(Default)]
 pub(crate) struct Folds {
-    /// What the person chose, for each block they've opened or closed.
-    chosen: HashMap<ItemKey, bool>,
+    /// What the person chose, for each fold they've opened or closed, by its kind, so finding one borrows its key.
+    chosen: HashMap<Fold, HashMap<ItemKey, bool>>,
     /// Whether thinking starts open. Output always starts closed, since it's mostly long and rarely read, and so does
     /// a picture, which would push the reply off screen.
     thinking_open: bool,
@@ -36,14 +39,14 @@ pub(crate) struct Folds {
 
 impl Folds {
     pub(crate) fn is_open(&self, key: &ItemKey, fold: Fold) -> bool {
-        self.chosen.get(key).copied().unwrap_or(match fold {
+        self.chosen.get(&fold).and_then(|chosen| chosen.get(key)).copied().unwrap_or(match fold {
             Fold::Thinking => self.thinking_open,
-            Fold::Output | Fold::Picture => false,
+            Fold::Output | Fold::Picture | Fold::Command => false,
         })
     }
 
-    pub(crate) fn choose(&mut self, key: ItemKey, open: bool) {
-        self.chosen.insert(key, open);
+    pub(crate) fn choose(&mut self, key: ItemKey, fold: Fold, open: bool) {
+        self.chosen.entry(fold).or_default().insert(key, open);
     }
 
     pub(crate) fn thinking_open(&self) -> bool {
@@ -79,14 +82,27 @@ mod tests {
     #[test]
     fn a_block_the_person_chose_stays_as_they_left_it_whatever_the_setting() {
         let mut folds = Folds::default();
-        folds.choose(block(0), true);
+        folds.choose(block(0), Fold::Thinking, true);
         folds.set_thinking_open(true);
-        folds.choose(block(1), false);
+        folds.choose(block(1), Fold::Thinking, false);
 
         folds.set_thinking_open(false);
         assert!(folds.is_open(&block(0), Fold::Thinking));
         folds.set_thinking_open(true);
         assert!(!folds.is_open(&block(1), Fold::Thinking));
         assert!(folds.is_open(&block(2), Fold::Thinking), "one nobody chose follows the setting");
+    }
+
+    #[test]
+    fn a_command_shown_whole_is_its_own_choice_from_its_call_being_open() {
+        let mut folds = Folds::default();
+        folds.choose(block(0), Fold::Output, true);
+        assert!(!folds.is_open(&block(0), Fold::Command), "a command starts cut off");
+
+        folds.choose(block(0), Fold::Command, true);
+        folds.choose(block(0), Fold::Output, false);
+
+        assert!(folds.is_open(&block(0), Fold::Command), "and stays whole while its call is closed");
+        assert!(!folds.is_open(&block(0), Fold::Output));
     }
 }
