@@ -1,56 +1,12 @@
 //! The database's migrations. `before.rs` has how many there were before some of them, for tests.
 
+mod first;
+mod subagents;
+
 /// Applied in order. `PRAGMA user_version` records how many have run.
 pub(super) const MIGRATIONS: &[&str] = &[
-    r"
-    CREATE TABLE repos (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        path TEXT NOT NULL UNIQUE,
-        created_at_ms INTEGER NOT NULL
-    );
-    CREATE TABLE workspaces (
-        id TEXT PRIMARY KEY,
-        repo_id TEXT NOT NULL REFERENCES repos(id),
-        name TEXT NOT NULL,
-        branch TEXT NOT NULL,
-        base_ref TEXT,
-        path TEXT,
-        status TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        instance_id TEXT NOT NULL,
-        created_at_ms INTEGER NOT NULL,
-        archived_at_ms INTEGER,
-        UNIQUE (repo_id, name)
-    );
-    CREATE TABLE sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        agent TEXT NOT NULL,
-        model TEXT,
-        permission_mode TEXT,
-        agent_session_id TEXT NOT NULL,
-        agent_opened INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL,
-        last_seq INTEGER NOT NULL DEFAULT 0,
-        created_at_ms INTEGER NOT NULL,
-        updated_at_ms INTEGER NOT NULL
-    );
-    CREATE INDEX sessions_by_workspace ON sessions (workspace_id, created_at_ms);
-    -- raw is last, and SQLite reads columns lazily, so range reads don't touch it.
-    CREATE TABLE events (
-        session_id TEXT NOT NULL REFERENCES sessions(id),
-        seq INTEGER NOT NULL,
-        ts_ms INTEGER NOT NULL,
-        kind TEXT NOT NULL,
-        client_msg_id TEXT,
-        body TEXT NOT NULL,
-        raw TEXT,
-        PRIMARY KEY (session_id, seq)
-    );
-    CREATE UNIQUE INDEX events_client_msg ON events (session_id, client_msg_id) WHERE client_msg_id IS NOT NULL;
-    CREATE INDEX events_by_kind ON events (session_id, kind);
-",
+    // What the hub began with.
+    first::FIRST,
     r"
     CREATE TABLE diff_comments (
         id TEXT PRIMARY KEY,
@@ -394,4 +350,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
             AND NOT EXISTS (SELECT 1 FROM events WHERE events.session_id = sessions.id)
             AND NOT EXISTS (SELECT 1 FROM attachments WHERE attachments.session_id = sessions.id);
 ",
+    // The subagent each event is from, and its place among those from the same one. In `subagents`, as are the other
+    // migrations that record subagents.
+    subagents::EVENTS_BY_SUBAGENT,
 ];

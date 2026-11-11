@@ -27,3 +27,6 @@ pub(crate) const BEFORE_ACCOUNTS: usize = 19;
 
 /// How many migrations there were before chats closed unused were deleted.
 pub(crate) const BEFORE_UNUSED_DELETED: usize = 20;
+
+/// How many migrations there were before events recorded their subagent.
+pub(crate) const BEFORE_SUBAGENTS: usize = 21;

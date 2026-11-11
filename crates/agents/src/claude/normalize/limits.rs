@@ -11,7 +11,7 @@ use super::{Parsed, str_of};
 pub(super) fn rate_limit_event(value: &Value) -> Parsed {
     let limits = limits(value.get("rate_limit_info").unwrap_or(&Value::Null));
     Parsed::Event(if limits.is_empty() {
-        EventBody::AgentOther { kind: "rate_limit_event".to_string() }
+        EventBody::AgentOther { kind: "rate_limit_event".to_string(), parent_tool_use_id: None }
     } else {
         EventBody::AgentLimits { limits }
     })
@@ -104,7 +104,7 @@ mod tests {
 
         assert_eq!(
             rate_limit_event(&line),
-            Parsed::Event(EventBody::AgentOther { kind: "rate_limit_event".to_string() })
+            Parsed::Event(EventBody::AgentOther { kind: "rate_limit_event".to_string(), parent_tool_use_id: None })
         );
         assert_eq!(limits(&json!({"unifiedWindows": {"thirty_day": {"utilization": 0.5}}})), []);
     }

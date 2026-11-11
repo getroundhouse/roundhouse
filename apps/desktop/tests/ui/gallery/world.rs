@@ -9,8 +9,8 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq,
-    Session, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    Account, AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, Place, PullRequest, Records, Repo, RepoId, Rev,
+    Seq, Session, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
     WorktreeFiles,
 };
 use protocol::tail::Tail;
@@ -139,6 +139,8 @@ impl World {
                 seq,
                 ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
                 run: None,
+                subagent: None,
+                place: Place::default(),
                 body,
                 raw: None,
             })

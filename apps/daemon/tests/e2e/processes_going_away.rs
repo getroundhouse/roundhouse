@@ -268,7 +268,7 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     client.session_prompt(&session.id, "partial:still writing; hang:60000", None).unwrap();
     follower.drain_until(&subscription, "the new agent's text", |f| f.tail_text().contains("still writing"));
     let late = |events: &[SessionEvent]| {
-        events.iter().any(|e| matches!(&e.body, EventBody::AgentOther { kind } if kind == "late_marker"))
+        events.iter().any(|e| matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "late_marker"))
     };
     assert!(!late(&follower.events), "the new agent should be writing before the old one's last output");
     std::fs::write(&go, "").unwrap();
