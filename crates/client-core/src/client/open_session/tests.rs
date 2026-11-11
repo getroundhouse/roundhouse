@@ -18,9 +18,12 @@ use crate::ClientError;
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
 const LAST_SEQ: Seq = 600;
+/// A session the hub has deleted, so it refuses to follow it.
+const GONE: &str = "gone";
 
-/// A hub that answers each ask for the list of prompts with the next of `lists`, a read with no events, and anything
-/// else with Ok, on each connection it's given. It reports every request it's sent.
+/// A hub that answers each ask for the list of prompts with the next of `lists`, a read with no events, following
+/// [`GONE`] with `NotFound`, and anything else with Ok, on each connection it's given. It reports every request it's
+/// sent.
 fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientRequest> {
     let listener = UnixListener::bind(socket).unwrap();
     let lists = Arc::new(Mutex::new(VecDeque::from(lists)));
@@ -45,6 +48,8 @@ fn serve(mut stream: UnixStream, lists: &Mutex<VecDeque<ReplyOutcome>>, asked: &
             Some(lists.lock().pop_front().unwrap_or_else(|| {
                 ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "asked for more lists than the test expects"))
             }))
+        } else if matches!(&request, ClientRequest::SessionSubscribe { id, .. } if id.as_str() == GONE) {
+            Some(refused(ErrorCode::NotFound, "no such session"))
         } else if matches!(request, ClientRequest::SessionRead { .. }) {
             response(ClientResponse::Events { events: Vec::new(), last_seq: LAST_SEQ })
         } else if matches!(request, ClientRequest::SessionUnsubscribe { .. }) {
@@ -159,4 +164,22 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
     drop(open);
     let requests = requests_until_unsubscribed(&heard, 2);
     assert_eq!(lists_asked(&requests), 2, "once on each connection: {requests:?}");
+}
+
+/// Such as one another client deleted while this one was reconnecting.
+#[test]
+fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let heard = start_hub(&socket, Vec::new());
+    let client = Client::connect(&socket, "test").unwrap();
+
+    let open = OpenSession::start(&client, &Session { id: GONE.into(), ..session() });
+
+    open.follow.changed.recv_timeout(Duration::from_secs(10)).expect("never heard back");
+    let mut requests = std::iter::from_fn(|| heard.recv_timeout(Duration::from_secs(10)).ok());
+    assert!(requests.any(|r| matches!(r, ClientRequest::SessionSubscribe { .. })), "it never asked");
+    let errors = open.take_errors();
+    assert!(errors.is_empty(), "{errors:?}");
+    assert!(!open.follow.connected());
 }

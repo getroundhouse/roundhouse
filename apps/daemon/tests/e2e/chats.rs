@@ -5,12 +5,13 @@
 use std::path::PathBuf;
 
 use client_core::ClientError;
-use protocol::client::ErrorCode;
+use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::AgentKind;
+use protocol::model::{AgentKind, RecordKey};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, in_mode, is_alive, read_all, started_pid, wait_for_turn_end, wait_until,
+    Stack, assistant_text, commit_settings, in_mode, is_alive, next_notice, read_all, started_pid, wait_for_turn_end,
+    wait_until,
 };
 
 #[test]
@@ -82,4 +83,31 @@ fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     assert!(client.session_prompt(&session.id, "say:too late", None).is_err());
     assert!(!PathBuf::from(workspace.path.unwrap()).join("never.txt").exists());
     assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
+}
+
+#[test]
+fn closing_a_chat_nothing_was_sent_in_deletes_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, used) = stack.workspace(&client);
+    client.session_prompt(&used.id, "say:keep me", None).unwrap();
+    wait_for_turn_end(&client, &used.id, 1);
+    let unused = client.session_create(&workspace.id, AgentKind::Claude, in_mode("bypassPermissions"), None).unwrap();
+    let feed = client.feed_subscribe().unwrap();
+
+    let closed = client.session_close(&unused.id).unwrap();
+
+    assert_eq!(closed.closed_at_ms, None, "the reply is the chat as it was");
+    let removed = loop {
+        if let HubNotice::Removed { record, rev } = next_notice(&feed, "the chat's removal") {
+            break (record, rev);
+        }
+    };
+    assert_eq!(removed.0, RecordKey::Session { id: unused.id.clone() });
+    assert!(removed.1 > closed.rev);
+    let listed: Vec<_> = client.session_list(&workspace.id).unwrap().into_iter().map(|s| s.id).collect();
+    assert_eq!(listed, std::slice::from_ref(&used.id));
+    let gone = |e: ClientError| matches!(e, ClientError::Api(e) if e.code == ErrorCode::NotFound);
+    assert!(gone(client.session_close(&unused.id).unwrap_err()), "closing it again");
+    assert!(gone(client.session_prompt(&unused.id, "say:hello?", None).unwrap_err()));
 }

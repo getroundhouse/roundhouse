@@ -1,6 +1,7 @@
-use protocol::model::{ContextUsage, Effort, ModelName};
+use protocol::attachment::{Attachment, MediaType};
+use protocol::model::{AttachmentId, ContextUsage, Effort, ModelName};
 
-use super::super::tests::store_with_session;
+use super::super::tests::{notice, store_with_session};
 use super::super::{older, schema};
 use super::*;
 
@@ -141,4 +142,80 @@ fn how_full_the_context_is_is_kept_until_the_agent_says_otherwise_and_moves_the_
     );
     store.set_session_context(&"s".into(), &context(17_000)).unwrap();
     assert_eq!(store.get_session(&"s".into()).unwrap().session.context, Some(context(17_000)));
+}
+
+#[test]
+fn a_session_nothing_has_been_sent_in_is_deleted_with_a_revision_of_its_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let before = store.get_session(&"s".into()).unwrap().session;
+
+    let (was, rev) = store.delete_unused_session(&"s".into()).unwrap().unwrap();
+
+    assert_eq!(was, before, "it's given back as it was");
+    assert!(rev > before.rev, "the feed has to announce it");
+    assert!(matches!(store.get_session(&"s".into()), Err(StoreError::NotFound { .. })));
+    assert!(matches!(store.delete_unused_session(&"s".into()), Err(StoreError::NotFound { .. })));
+}
+
+/// Files are added just before the prompt that carries them, so one no prompt carried is from a prompt that never
+/// arrived, and nothing shows it.
+#[test]
+fn a_file_no_prompt_carried_goes_with_its_session() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let file =
+        Attachment { id: AttachmentId::from("a"), name: "a.log".into(), media_type: MediaType::Text, size_bytes: 1 };
+    store.add_attachment(&"s".into(), &file).unwrap();
+
+    assert!(store.delete_unused_session(&"s".into()).unwrap().is_some());
+
+    assert_eq!(store.attachment(&"s".into(), &file.id).unwrap(), None);
+}
+
+/// Sends something in the session `s`, and checks that it then isn't deleted.
+fn kept_once(what: &str, send: impl Fn(&Store)) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    send(&store);
+    let before = store.get_session(&"s".into()).unwrap().session;
+
+    assert_eq!(store.delete_unused_session(&"s".into()).unwrap(), None, "{what}");
+
+    assert_eq!(store.get_session(&"s".into()).unwrap().session, before, "{what} leaves it as it was");
+}
+
+#[test]
+fn a_session_anything_has_been_sent_in_is_kept() {
+    kept_once("an event", |store| {
+        store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
+    });
+    kept_once("a queued prompt", |store| {
+        store.queue_prompt(&"s".into(), &QueuedPrompt { client_msg_id: "m".into(), text: "later".into() }).unwrap();
+    });
+}
+
+#[test]
+fn chats_closed_unused_before_that_deleted_them_go_once_migrated() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = r#"
+        INSERT INTO sessions (id, workspace_id, agent, model, effort, agent_session_id, status, last_seq,
+                              created_at_ms, updated_at_ms, closed_at_ms, queued)
+            VALUES ('unused', 'w', 'claude', 'opus', 'xhigh', 'a', 'idle', 0, 0, 0, 1, '[]'),
+                   ('used', 'w', 'claude', 'opus', 'xhigh', 'b', 'idle', 1, 0, 0, 1, '[]'),
+                   ('queued', 'w', 'claude', 'opus', 'xhigh', 'c', 'idle', 0, 0, 0, 1,
+                    '[{"client_msg_id":"m","text":"later"}]'),
+                   ('filed', 'w', 'claude', 'opus', 'xhigh', 'd', 'idle', 0, 0, 0, 1, '[]'),
+                   ('open', 'w', 'claude', 'opus', 'xhigh', 'e', 'idle', 0, 0, 0, NULL, '[]');
+        INSERT INTO events (session_id, seq, ts_ms, kind, body) VALUES ('used', 1, 0, 'notice', '{}');
+        INSERT INTO attachments (session_id, id, name, media_type, size_bytes, created_at_ms)
+            VALUES ('filed', 'a', 'a.log', 'text', 1, 0);
+    "#;
+
+    let store = older::store_from_before(dir.path(), schema::BEFORE_UNUSED_DELETED, rows);
+
+    let kept = |id: &str| store.get_session(&id.into()).is_ok();
+    assert!(!kept("unused"));
+    assert!(kept("used") && kept("queued") && kept("open"));
+    assert!(kept("filed"), "only the hub can let go of a file's bytes");
 }

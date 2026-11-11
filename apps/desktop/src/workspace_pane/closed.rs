@@ -45,10 +45,9 @@ impl WorkspacePane {
         let mut closed: Vec<ClosedChat> = self
             .sessions
             .iter()
-            .enumerate()
-            .filter_map(|(index, session)| {
+            .filter_map(|session| {
                 let closed_at_ms = session.closed_at_ms?;
-                Some(ClosedChat { id: session.id.clone(), title: chat_title(session, index + 1).into(), closed_at_ms })
+                Some(ClosedChat { id: session.id.clone(), title: chat_title(session).to_string().into(), closed_at_ms })
             })
             .collect();
         if closed.is_empty() {

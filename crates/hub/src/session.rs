@@ -69,6 +69,8 @@ pub(crate) enum Item {
     WorkerLost(u64),
     /// Resolves once everything queued ahead of it has been recorded.
     Flush(oneshot::Sender<()>),
+    /// The session is gone. What's queued ahead of this is dealt with, and then the task stops.
+    End,
 }
 
 pub(crate) enum Command {
@@ -96,6 +98,8 @@ pub(crate) enum Command {
         client_msg_id: ClientMessageId,
         reply: oneshot::Sender<Result<Session, ApiError>>,
     },
+    /// The session is gone. What's queued ahead of this is carried out, and then the task stops.
+    End,
 }
 
 #[derive(Clone, Debug)]
@@ -266,6 +270,14 @@ impl LiveSession {
 
     pub(crate) async fn command(&self, command: Command) -> Result<(), ApiError> {
         self.commands.send(command).await.map_err(|_| internal("the session has stopped"))
+    }
+
+    /// Lets go of a session that's been deleted. Its two tasks each hold it, and so does everyone following it, so
+    /// both tasks stop, and every follower does once what it waits on is gone.
+    pub(crate) async fn end(&self) {
+        self.state.lock().live = None;
+        let _ = self.command(Command::End).await;
+        self.send_item(Item::End).await;
     }
 
     pub(crate) async fn send_item(&self, item: Item) {

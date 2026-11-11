@@ -32,6 +32,7 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             }
             Command::SendQueued => session.send_queued().await,
             Command::SendQueuedNow { client_msg_id, reply } => session.send_queued_now(client_msg_id, reply).await,
+            Command::End => break,
         }
     }
 }

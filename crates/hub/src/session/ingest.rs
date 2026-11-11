@@ -24,6 +24,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Flush(done) => {
                 let _ = done.send(());
             }
+            Item::End => break,
         }
     }
 }

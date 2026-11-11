@@ -2,26 +2,12 @@
 
 #![cfg(test)]
 
-use std::time::Instant;
-
 use client_core::records::HubRecords;
-use client_core::{RecordsFeed, Subscription, SubscriptionItem};
+use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{AgentKind, DiffSide, PullRequestFound, RecordKey, Rev, Session, SessionStatus, WorkspaceStatus};
 
-use crate::support::{Stack, TIMEOUT, in_mode, wait_for_setup, wait_for_turn_end, wait_until};
-
-fn next_notice(feed: &Subscription, what: &str) -> HubNotice {
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        let wait = deadline.saturating_duration_since(Instant::now());
-        match feed.items.recv_timeout(wait) {
-            Ok(SubscriptionItem::Notice(notice)) => return notice,
-            Ok(_) => {}
-            Err(e) => panic!("timed out waiting for {what}: {e}"),
-        }
-    }
-}
+use crate::support::{Stack, in_mode, next_notice, wait_for_setup, wait_for_turn_end, wait_until};
 
 /// What a sidebar shows of the chat the feed last told of, its status and title, and the copy of its record that
 /// said so.

@@ -31,7 +31,7 @@ mod repos;
 mod schema;
 mod sessions;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 mod titles;
 mod workspaces;
 

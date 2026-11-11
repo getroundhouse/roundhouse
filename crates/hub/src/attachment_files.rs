@@ -26,19 +26,12 @@ impl AttachmentFiles {
         Self { dir, writes: AtomicU64::new(0) }
     }
 
-    /// Only lowercase letters, digits, `-` and `_`, which a UUID is, so no ID can climb out of the directory, and no
-    /// two name one file on a disk that ignores case, as a Mac's does.
     fn path(&self, session_id: &SessionId, id: &AttachmentId) -> Result<PathBuf, ApiError> {
-        let safe = |id: &str| {
-            !id.is_empty()
-                && id.len() <= MAX_ID_CHARS
-                && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
-        };
-        if !safe(session_id.as_str()) || !safe(id.as_str()) {
-            let message = "an attachment's ID can only be lowercase letters, digits, - and _";
-            return Err(ApiError::new(ErrorCode::InvalidRequest, message));
-        }
-        Ok(self.dir.join(session_id.as_str()).join(id.as_str()))
+        Ok(self.session_dir(session_id)?.join(safe(id.as_str())?))
+    }
+
+    fn session_dir(&self, session_id: &SessionId) -> Result<PathBuf, ApiError> {
+        Ok(self.dir.join(safe(session_id.as_str())?))
     }
 
     /// Refuses an ID that couldn't be kept, before anything is written.
@@ -74,6 +67,28 @@ impl AttachmentFiles {
             _ => Ok(()),
         }
     }
+
+    /// Every file a session had, once it's been deleted.
+    pub(crate) async fn remove_session(&self, session_id: &SessionId) -> Result<(), ApiError> {
+        let dir = self.session_dir(session_id)?;
+        match on_disk(move || std::fs::remove_dir_all(dir)).await {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                Err(internal(format!("couldn't remove a deleted session's attachments: {e}")))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Only lowercase letters, digits, `-` and `_`, which a UUID is, so no ID can climb out of the directory, and no two
+/// name one file on a disk that ignores case, as a Mac's does.
+fn safe(id: &str) -> Result<&str, ApiError> {
+    let allowed = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_';
+    if id.is_empty() || id.len() > MAX_ID_CHARS || !id.chars().all(allowed) {
+        let message = "an attachment's ID can only be lowercase letters, digits, - and _";
+        return Err(ApiError::new(ErrorCode::InvalidRequest, message));
+    }
+    Ok(id)
 }
 
 /// Off the async threads, since a file can be large.

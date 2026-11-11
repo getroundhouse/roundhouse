@@ -24,12 +24,16 @@ pub(super) const TAB_WIDTH: Pixels = px(200.);
 /// Each tab's, so a tab's close button shows only while the pointer is over that tab.
 pub(super) const TAB_GROUP: &str = "chat-tab";
 
-pub(super) fn chat_title(session: &Session, number: usize) -> String {
-    session.title.as_deref().map_or_else(|| format!("Chat {number}"), str::to_string)
+/// What a chat is called until it has a title.
+const UNTITLED: &str = "Untitled";
+
+pub(super) fn chat_title(session: &Session) -> &str {
+    session.title.as_deref().unwrap_or(UNTITLED)
 }
 
 impl WorkspacePane {
-    fn chat_tab(&self, session: &Session, title: String, cx: &mut Context<Self>) -> AnyElement {
+    fn chat_tab(&self, session: &Session, cx: &mut Context<Self>) -> AnyElement {
+        let title = chat_title(session).to_string();
         let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
@@ -48,7 +52,7 @@ impl WorkspacePane {
                 cx.stop_propagation();
                 t.close_chat(to_close.clone(), window, cx);
             }));
-        let menu = Self::tab_menu(session, &title, unread, cx);
+        let menu = Self::tab_menu(session, unread, cx);
         let tab = div()
             .id(ElementId::Name(format!("tab-{}", session.id).into()))
             .group(TAB_GROUP)
@@ -88,12 +92,14 @@ impl WorkspacePane {
     /// What a right-click on a chat's tab offers. Marking it needs a reply.
     fn tab_menu(
         session: &Session,
-        title: &str,
         unread: bool,
         cx: &mut Context<Self>,
     ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
         let marking = if unread { Some(Mark::Read) } else { (session.reply_seq > 0).then_some(Mark::Unread) };
-        let (this, session, title) = (cx.weak_entity(), session.clone(), title.to_string());
+        // Renaming a chat with no title starts from nothing, so pressing Return doesn't make "Untitled" a title typed
+        // by hand, which no generated one would ever replace.
+        let title = session.title.as_deref().unwrap_or_default().to_string();
+        let (this, session) = (cx.weak_entity(), session.clone());
         let (to_mark, id) = (this.clone(), session.id.clone());
         let marking = marking.map(|marking| {
             let mark = move |cx: &mut App| {
@@ -111,14 +117,8 @@ impl WorkspacePane {
     /// are any closed ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
-        let numbered: Vec<(usize, Session)> = self.sessions.iter().cloned().enumerate().collect();
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
-        tabs.extend(
-            numbered
-                .iter()
-                .filter(|(_, s)| s.closed_at_ms.is_none())
-                .map(|(index, session)| self.chat_tab(session, chat_title(session, index + 1), cx)),
-        );
+        tabs.extend(self.open_sessions().map(|session| self.chat_tab(session, cx)));
         let closed = self.closed_chats(cx);
         div()
             .relative()

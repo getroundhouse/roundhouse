@@ -17,6 +17,8 @@ mod titles;
 mod workspaces;
 mod worktree;
 
+use sessions::Sessions;
+
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::session::{Item, LiveSession};
@@ -63,7 +65,7 @@ pub(crate) struct Hub {
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     /// Held while finding or making a workspace's first session.
     ensuring_session: AsyncMutex<()>,
-    sessions: Mutex<HashMap<SessionId, Arc<LiveSession>>>,
+    sessions: Mutex<Sessions>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pull_requests: pull_requests::Reading,
@@ -104,7 +106,7 @@ impl Hub {
             workers: Mutex::new(HashMap::new()),
             worker_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),
-            sessions: Mutex::new(HashMap::new()),
+            sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
             awake: Arc::default(),
@@ -269,8 +271,14 @@ impl Hub {
             warn!(%instance_id, "stopping a worker failed: {}", error_chain(&e));
         }
         // Still under the gate, so these are queued before a replacement worker can start.
-        let sessions: Vec<_> =
-            self.sessions.lock().values().filter(|session| &session.workspace_id == workspace_id).cloned().collect();
+        let sessions: Vec<_> = self
+            .sessions
+            .lock()
+            .live
+            .values()
+            .filter(|session| &session.workspace_id == workspace_id)
+            .cloned()
+            .collect();
         for session in sessions {
             session.send_item(Item::WorkerLost(link.id)).await;
         }
@@ -285,7 +293,7 @@ impl Hub {
     }
 
     pub(crate) async fn live_session(self: &Arc<Self>, id: &SessionId) -> Result<Arc<LiveSession>, ApiError> {
-        if let Some(session) = self.sessions.lock().get(id) {
+        if let Some(session) = self.sessions.lock().live.get(id) {
             return Ok(session.clone());
         }
         let owned = id.clone();
@@ -296,9 +304,7 @@ impl Hub {
                 Ok((stored, approvals))
             })
             .await?;
-        let mut sessions = self.sessions.lock();
-        let session = sessions.entry(id.clone()).or_insert_with(|| LiveSession::start(self, stored, approvals));
-        Ok(session.clone())
+        self.sessions.lock().keep(id, || LiveSession::start(self, stored, approvals))
     }
 
     // Platform API --------------------------------------------------------------------------------
@@ -319,7 +325,8 @@ impl Hub {
     }
 
     pub(crate) fn status(&self) -> HubStatus {
-        let running_sessions = self.sessions.lock().values().filter(|session| session.status().is_active()).count();
+        let running_sessions =
+            self.sessions.lock().live.values().filter(|session| session.status().is_active()).count();
         HubStatus {
             pid: std::process::id(),
             hub_version: protocol::BUILD_VERSION.to_string(),
@@ -356,7 +363,7 @@ impl Hub {
                 warn!("a worker didn't stop in time");
             }
         }
-        let sessions: Vec<_> = self.sessions.lock().values().cloned().collect();
+        let sessions: Vec<_> = self.sessions.lock().live.values().cloned().collect();
         for session in sessions {
             let (done, flushed) = oneshot::channel();
             session.send_item(Item::Flush(done)).await;

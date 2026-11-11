@@ -84,6 +84,22 @@ fn the_hub_keeps_an_image_once_its_sent_and_lets_go_of_anything_else() {
     assert_eq!(both.strip_prefix(&first), Some("attached: build.log: error at line 42"));
 }
 
+/// Files are added just before the prompt that carries them, so these are from a prompt that never arrived.
+#[test]
+fn closing_a_chat_whose_files_no_prompt_carried_deletes_them_with_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let log = add(&client, &session.id, "a1", "build.log", MediaType::Text, b"error at line 42");
+    let kept = stack.paths().attachments_dir.join(session.id.as_str());
+    assert!(kept.join(log.id.as_str()).exists());
+
+    client.session_close(&session.id).unwrap();
+
+    assert!(!kept.exists());
+    assert_eq!(refused_with(client.attachment_read(&session.id, &log.id)), ErrorCode::NotFound);
+}
+
 #[test]
 fn a_prompt_can_be_only_files() {
     let stack = Stack::start();

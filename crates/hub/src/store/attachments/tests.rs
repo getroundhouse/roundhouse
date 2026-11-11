@@ -70,3 +70,14 @@ fn where_an_attachment_was_put_is_kept() {
     assert_eq!(placed.as_deref(), Some("/w/.context/attachments/build.log"));
     assert!(matches!(store.set_attachment_placed_at(&session, &"a2".into(), "/x"), Err(StoreError::NotFound { .. })));
 }
+
+#[test]
+fn a_file_for_a_session_thats_been_deleted_is_refused_as_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.delete_unused_session(&"s".into()).unwrap().unwrap();
+
+    let added = store.add_attachment(&"s".into(), &log_file("a1", "build.log"));
+
+    assert!(matches!(added, Err(StoreError::NotFound { .. })), "{added:?}");
+}

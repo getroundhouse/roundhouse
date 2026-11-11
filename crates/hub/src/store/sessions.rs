@@ -1,14 +1,14 @@
 //! Sessions.
 
 use protocol::model::{
-    AgentKind, ClientRequestId, ContextUsage, ModelName, QueuedPrompt, Session, SessionSettingsChange, SessionStatus,
-    Title,
+    AgentKind, ClientRequestId, ContextUsage, ModelName, QueuedPrompt, Rev, Session, SessionSettingsChange,
+    SessionStatus, Title,
 };
 use protocol::model::{SessionId, WorkspaceId};
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 use super::made::{Made, inserted, made_by};
-use super::{Store, StoreError, StoredSession, from_text, lock, rev_of, text_of};
+use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
 pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id";
 
@@ -145,6 +145,35 @@ impl Store {
         lock(&self.writer)
             .execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id.as_str()])?;
         Ok(())
+    }
+
+    /// Deletes a session nothing has been sent in, with nothing in its log and nothing queued, along with what it
+    /// knows of any files added to it, which no prompt carried. Returns it as it was, and the revision deleting it
+    /// made, or `None`, leaving it be, once anything has been sent. One transaction, so a prompt being recorded either
+    /// comes first and keeps the session, or finds it gone.
+    pub fn delete_unused_session(&self, id: &SessionId) -> Result<Option<(Session, Rev)>, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let Some(stored) = tx
+            .query_row(
+                &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE id = ?"),
+                [id.as_str()],
+                session_from_row,
+            )
+            .optional()?
+        else {
+            return Err(StoreError::NotFound { kind: "session", id: id.to_string() });
+        };
+        let logged: bool =
+            tx.query_row("SELECT EXISTS (SELECT 1 FROM events WHERE session_id = ?)", [id.as_str()], |row| row.get(0))?;
+        if logged || !stored.session.queued.is_empty() {
+            return Ok(None);
+        }
+        tx.execute("DELETE FROM attachments WHERE session_id = ?", [id.as_str()])?;
+        tx.execute("DELETE FROM sessions WHERE id = ?", [id.as_str()])?;
+        let rev = current_rev(&tx)?;
+        tx.commit()?;
+        Ok(Some((stored.session, rev)))
     }
 
     pub fn set_agent_opened(&self, id: &SessionId) -> Result<(), StoreError> {
