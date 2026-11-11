@@ -9,7 +9,7 @@ use protocol::client::{
 use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
 use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
-use protocol::tail::StreamDelta;
+use protocol::tail::{StreamDelta, Tail};
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
 /// break. If this fails, a client can no longer see or stop a hub it can't otherwise talk to.
@@ -237,4 +237,13 @@ fn an_event_from_a_hub_that_doesnt_record_subagents_is_the_agents_own_at_place_z
 
     assert_eq!((event.subagent, event.place), (None, Place::default()));
     assert_eq!(event.body.subagent(), None);
+}
+
+#[test]
+fn a_tail_from_a_hub_that_doesnt_say_which_subagents_are_in_the_background_has_none_and_keeps_its_form() {
+    let older = br#"{"messages":[{"message_id":"m","parent_tool_use_id":"toolu_1","blocks":[]}]}"#;
+    let tail: Tail = frame::decode(older).unwrap();
+
+    assert!(tail.in_background.is_empty());
+    assert_eq!(frame::encode(&tail).unwrap(), [older.as_slice(), b"\n"].concat(), "none is left out");
 }

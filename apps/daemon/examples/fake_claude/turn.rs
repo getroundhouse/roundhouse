@@ -12,6 +12,10 @@ use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
 use crate::{advisor, background, read, subagent};
 
+mod prose;
+
+use prose::prose;
+
 /// What a streamed block holds.
 #[derive(Clone, Copy)]
 pub(crate) enum Block {
@@ -327,8 +331,11 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
     }
-    if let Some(description) = command.strip_prefix("agent:") {
-        return subagent::start(turn, description, rx, queued, eof);
+    let subagent = command.strip_prefix("agent:").map(|what| (what, true));
+    if let Some((description, in_background)) =
+        subagent.or(command.strip_prefix("agent-foreground:").map(|what| (what, false)))
+    {
+        return subagent::start(turn, description, in_background, rx, queued, eof);
     }
     if let Some((call, file)) = background::Call::read(command) {
         return background::start(turn, call, file);
@@ -367,30 +374,4 @@ fn outlive_until(file: &str, lines: &[Value]) {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
-}
-
-/// `paragraphs` paragraphs of made-up prose, the same for the same `seed`, of lengths as a reply's vary: some a line,
-/// some several, with now and then a list or a block of code. One chunk to a paragraph.
-fn prose(paragraphs: usize, seed: u64) -> Vec<String> {
-    const WORDS: [&str; 16] = [
-        "signal", "box", "keeps", "the", "ledger", "of", "every", "train", "that", "passes", "and", "lever", "frame",
-        "holds", "route", "clear",
-    ];
-    let mut state = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
-    let mut next = move |n: u64| {
-        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
-        usize::try_from((state >> 33) % n).unwrap()
-    };
-    (0..paragraphs)
-        .map(|_| {
-            let words = [6, 14, 30, 60, 120][next(5)];
-            let sentence: Vec<&str> = (0..words).map(|_| WORDS[next(16)]).collect();
-            let text = sentence.join(" ");
-            match next(8) {
-                0 => format!("- {}\n- {}\n- {}\n\n", WORDS[next(16)], text, WORDS[next(16)]),
-                1 => format!("```rust\nfn {}() {{\n    {}\n}}\n```\n\n", WORDS[next(16)], text),
-                _ => format!("{text}.\n\n"),
-            }
-        })
-        .collect()
 }

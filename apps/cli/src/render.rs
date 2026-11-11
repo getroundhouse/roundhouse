@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use protocol::attachment::Attachment;
-use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, TurnOutcome};
-use protocol::model::{MessageId, Seq, TaskId};
+use protocol::event::{AgentTask, ContentBlock, EventBody, SessionEvent, SubagentOutcome, TurnOutcome};
+use protocol::model::{MessageId, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
@@ -23,6 +23,8 @@ pub(crate) struct Printer {
     /// What the newest list of background tasks printed as, so one that says the same isn't printed again. The agent
     /// lists a monitor's task twice, since it only learns it's a monitor after the first.
     background: Option<String>,
+    /// What each subagent that hasn't ended was started for, so its end can say which it was.
+    subagents: HashMap<ToolUseId, String>,
 }
 
 impl Printer {
@@ -100,6 +102,10 @@ impl Printer {
                 self.line(event.seq, &format!("approval mode: {permission_mode}"));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
+            EventBody::SubagentStarted { description, call, .. } => {
+                self.subagent(event.seq, description.as_deref(), call);
+            }
+            EventBody::SubagentEnded { call, outcome, .. } => self.subagent_ended(event.seq, call, *outcome),
             EventBody::PromptDropped { prompt } => {
                 self.line(event.seq, &format!("the agent stopped before reading the prompt at {prompt}"));
             }
@@ -110,6 +116,30 @@ impl Printer {
             | EventBody::AgentOther { .. }
             | EventBody::Unknown => {}
         }
+    }
+
+    /// That the agent started a subagent, by what it's for, or failing that its call.
+    fn subagent(&mut self, seq: u64, description: Option<&str>, call: &ToolUseId) {
+        let what = description.unwrap_or(call.as_str());
+        self.line(seq, &format!("started a subagent: {what}"));
+        self.subagents.insert(call.clone(), what.to_string());
+    }
+
+    fn subagent_ended(&mut self, seq: u64, call: &ToolUseId, outcome: SubagentOutcome) {
+        let ended = self.ending(call, outcome);
+        self.line(seq, &ended);
+    }
+
+    /// How the subagent `call` started ended, named as its start was, or by the call if this didn't see it start.
+    fn ending(&mut self, call: &ToolUseId, outcome: SubagentOutcome) -> String {
+        let what = self.subagents.remove(call).unwrap_or_else(|| call.as_str().to_string());
+        let how = match outcome {
+            SubagentOutcome::Finished => "finished",
+            SubagentOutcome::Failed => "failed",
+            SubagentOutcome::Stopped => "stopped",
+            SubagentOutcome::Unknown => "ended",
+        };
+        format!("a subagent {how}: {what}")
     }
 
     fn background(&mut self, seq: u64, tasks: &[AgentTask], stopped: &[TaskId]) {
@@ -239,7 +269,7 @@ fn summarize_input(input: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::{AgentTask, TaskKind};
+    use protocol::event::{AgentTask, SubagentOutcome, TaskKind};
 
     use super::Printer;
 
@@ -258,5 +288,20 @@ mod tests {
         assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
         assert_eq!(printer.newly_running(&[]).as_deref(), Some("running in the background: nothing"));
         assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
+    }
+
+    #[test]
+    fn a_subagents_end_says_which_it_was() {
+        let mut printer = Printer::default();
+        printer.subagent(1, Some("Find the tests"), &"toolu_a".into());
+        printer.subagent(2, None, &"toolu_b".into());
+
+        assert_eq!(printer.ending(&"toolu_a".into(), SubagentOutcome::Finished), "a subagent finished: Find the tests");
+        assert_eq!(printer.ending(&"toolu_b".into(), SubagentOutcome::Stopped), "a subagent stopped: toolu_b");
+        assert_eq!(
+            printer.ending(&"toolu_c".into(), SubagentOutcome::Failed),
+            "a subagent failed: toolu_c",
+            "one it didn't see start"
+        );
     }
 }

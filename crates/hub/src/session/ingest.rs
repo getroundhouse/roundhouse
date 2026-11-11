@@ -71,6 +71,8 @@ async fn ingest_event(
         | EventBody::ApprovalResolved { .. }
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => {}
     }

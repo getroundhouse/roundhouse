@@ -132,6 +132,7 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
             parent_tool_use_id: None,
             blocks: vec![TailBlock { index: 0, kind, tool_name: None, text: text.to_string() }],
         }],
+        ..Tail::default()
     }
 }
 
