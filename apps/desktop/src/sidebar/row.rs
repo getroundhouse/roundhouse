@@ -9,8 +9,8 @@ use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Role,
-    StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
+    Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
 };
 use look::{Hand as _, LineText, Off as _, Placed};
 use protocol::model::Workspace;
@@ -103,11 +103,11 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
         .tooltip("Archive")
         // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
         .off_while(!app.busy.is_free())
-        .on_click(cx.listener(move |t, _, _, cx| {
-            // The row under it would take the click too, and open the workspace that's going.
-            cx.stop_propagation();
-            t.archive(id.clone(), false, cx);
-        }));
+        // A left press stops here, so the row under it isn't pressed. A pressed row would open the workspace that's
+        // going once let go. It would also say the pointer had left at the first move, which a quick press makes, and
+        // stop drawing this button before the press was let go. A right press goes on to the row's menu.
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(cx.listener(move |t, _, _, cx| t.archive(id.clone(), false, cx)));
     div().flex_none().child(button)
 }
 

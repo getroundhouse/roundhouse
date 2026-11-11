@@ -3,7 +3,8 @@
 #![cfg(test)]
 
 use desktop::busy::Busy;
-use gpui_kit::{ElementId, ScrollDelta, SharedString, TestAppContext, point, px};
+use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
+use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{Held, Stack, Ui, home_row, pull_request};
@@ -79,6 +80,39 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
     assert!(!ui.has(row(&going)), "it leaves the list");
+}
+
+/// A quick press is made as the pointer comes to rest, so it moves while the button is down. Once pressed, the row says
+/// the pointer has left it at the first move, which would take the button away from under the press.
+#[gpui_kit::test]
+fn a_rows_archive_button_stays_under_a_press_while_the_pointer_moves(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let held = Held::archive(&stack);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let (going, showing) = (ui.new_workspace(), ui.new_workspace());
+    ui.hover(row(&going));
+    let button = archive_button(&going);
+
+    let (drawn, at) = ui
+        .cx
+        .update_window(ui.handle, |_, window, cx| {
+            let at = window.find(button.clone()).bounds().center();
+            window.pointer_move(at, None, cx);
+            window.pointer_down(at, MouseButton::Left, cx);
+            let at = at + point(px(1.), px(0.));
+            window.pointer_move(at, Some(MouseButton::Left), cx);
+            (window.try_find(button.clone()).is_some(), at)
+        })
+        .unwrap();
+
+    assert!(drawn, "the button is still there while it's held");
+
+    ui.cx.update_window(ui.handle, |_, window, cx| window.pointer_up(at, MouseButton::Left, cx)).unwrap();
+
+    ui.wait("it to start archiving", |_| held.runs() == 1);
+    assert_eq!(ui.view().selected.as_ref(), Some(&showing), "letting go doesn't open the workspace instead");
+    held.release();
+    ui.wait("it to be archived", |ui| archived(ui, &going));
 }
 
 #[gpui_kit::test]
