@@ -6,6 +6,9 @@ bucket. It reads the published feed, uses it only once its signature matches the
 packages to it, and signs and uploads exactly that. Whoever can write to the bucket can then only offer apps a feed
 the workflow signed, such as an older one, and can't get a feed of theirs signed.
 
+Each step takes `--channel osx` or `--channel win` first, for which platform's releases it publishes, and osx if it's
+left out. A platform has a feed of its own, `releases.<channel>.json`, and both are in the one bucket.
+
   publish.py prepare --store STORE --key KEY --version VERSION --work DIR
       Reads the published feed and checks its signature. If it lists VERSION, a run already published it: this makes
       sure apps get that feed, and prints `published`. Otherwise it refuses a VERSION that isn't newer than every
@@ -15,8 +18,8 @@ the workflow signed, such as an older one, and can't get a feed of theirs signed
       Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
       DIR/releases, checked against their files, without releases older than the newest COUNT.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
-      Uploads the new packages and the portable zip, then the signed feed, reads the feed back, and then deletes the
-      packages that left it.
+      Uploads the new packages and what people download, then the signed feed, reads the feed back, and then deletes
+      the packages that left it.
   publish.py check --url URL --key KEY --version VERSION --work DIR
       Checks that URL, where apps read the feed, serves the one in DIR/feed, and VERSION's full package. A host with a
       cache can take a while to, so it tries for a minute.
@@ -52,10 +55,23 @@ if sys.version_info < (3, 9):
 
 HERE = Path(__file__).resolve().parent
 PACK_ID = "Roundhouse"
-FEED = "releases.osx.json"
-STAGED_FEED = "staging/" + FEED
-PORTABLE = PACK_ID + "-osx-Portable.zip"
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+# What people download for each channel, which vpk makes anew for each release under the same names.
+CHANNELS = {
+    "osx": {PACK_ID + "-osx-Portable.zip": "application/zip"},
+    "win": {PACK_ID + "-win-Setup.exe": "application/octet-stream", PACK_ID + "-win-Portable.zip": "application/zip"},
+}
+
+
+def use_channel(channel: str) -> None:
+    """Chooses which platform's releases every step below publishes. A run publishes one."""
+    global FEED, STAGED_FEED, DOWNLOADS  # noqa: PLW0603, since a run has one channel, chosen once as it starts
+    FEED = f"releases.{channel}.json"
+    STAGED_FEED = "staging/" + FEED
+    DOWNLOADS = CHANNELS[channel]
+
+
+use_channel("osx")
 
 
 class Refused(Exception):
@@ -310,7 +326,8 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
         if not file_matches(path, asset):
             raise Refused(f"{path} doesn't match the signed feed")
         store.put(asset["FileName"], path, "application/octet-stream")
-    store.put(PORTABLE, work / "releases" / PORTABLE, "application/zip")
+    for name, content_type in DOWNLOADS.items():
+        store.put(name, work / "releases" / name, content_type)
     put_pair(store, STAGED_FEED, work / "feed")
     put_pair(store, FEED, work / "feed")
     if (store.get(FEED), store.get(FEED + ".sig")) != pair:
@@ -346,6 +363,7 @@ def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--channel", choices=sorted(CHANNELS), default="osx")
     steps = parser.add_subparsers(dest="step", required=True)
     for name, options in {
         "prepare": ("--store", "--key", "--version", "--work"),
@@ -357,6 +375,7 @@ def main() -> int:
         for option in options:
             step.add_argument(option, required=True, type={"--keep": int, "--work": Path}.get(option, str))
     args = parser.parse_args()
+    use_channel(args.channel)
     try:
         if args.step == "prepare":
             print(prepare(open_store(args.store), args.key, args.version, args.work))

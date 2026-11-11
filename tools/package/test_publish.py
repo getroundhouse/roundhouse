@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 import publish
-from publish import FEED, PORTABLE, STAGED_FEED, DirStore, Refused
+from publish import DirStore, Refused
 
 HERE = Path(__file__).resolve().parent
 # A throwaway key, and a feed it signed, which the app's tests check too, so the two sides can't disagree on the form.
@@ -41,12 +41,18 @@ def make_key(directory: Path) -> tuple[Path, str]:
     return private, feed_signature("public", str(private))
 
 
+def package_name(version: str, kind: str) -> str:
+    """As vpk names a package, which says its channel unless that's Windows'."""
+    channel = "" if publish.FEED == "releases.win.json" else "-osx"
+    return f"Roundhouse-{version}{channel}-{kind.lower()}.nupkg"
+
+
 def asset(version: str, kind: str, content: bytes) -> dict:
     return {
         "PackageId": "Roundhouse",
         "Version": version,
         "Type": kind,
-        "FileName": f"Roundhouse-{version}-osx-{kind.lower()}.nupkg",
+        "FileName": package_name(version, kind),
         "SHA1": hashlib.sha1(content).hexdigest().upper(),
         "SHA256": hashlib.sha256(content).hexdigest().upper(),
         "Size": len(content),
@@ -75,27 +81,27 @@ class Signature(unittest.TestCase):
     def test_openssl_signs_the_fixture_as_the_app_expects(self) -> None:
         key = (FIXTURE / "throwaway-key.pub").read_text().strip()
         self.assertEqual(feed_signature("public", str(THROWAWAY_KEY)), key)
-        feed_signature("verify", str(FIXTURE / FEED), key)
+        feed_signature("verify", str(FIXTURE / publish.FEED), key)
 
         # Ed25519 signs the same bytes the same way every time, so signing again gives the committed signature.
         with tempfile.TemporaryDirectory() as work:
-            feed = Path(work) / FEED
-            shutil.copyfile(FIXTURE / FEED, feed)
+            feed = Path(work) / publish.FEED
+            shutil.copyfile(FIXTURE / publish.FEED, feed)
             feed_signature("sign", str(feed), str(THROWAWAY_KEY), key)
-            self.assertEqual(Path(str(feed) + ".sig").read_bytes(), (FIXTURE / (FEED + ".sig")).read_bytes())
+            self.assertEqual(Path(str(feed) + ".sig").read_bytes(), (FIXTURE / (publish.FEED + ".sig")).read_bytes())
 
     def test_a_changed_feed_or_another_key_fails_to_verify(self) -> None:
         key = (FIXTURE / "throwaway-key.pub").read_text().strip()
         with tempfile.TemporaryDirectory() as work:
-            feed = Path(work) / FEED
-            feed.write_bytes((FIXTURE / FEED).read_bytes() + b" ")
-            shutil.copyfile(FIXTURE / (FEED + ".sig"), Path(str(feed) + ".sig"))
+            feed = Path(work) / publish.FEED
+            feed.write_bytes((FIXTURE / publish.FEED).read_bytes() + b" ")
+            shutil.copyfile(FIXTURE / (publish.FEED + ".sig"), Path(str(feed) + ".sig"))
             with self.assertRaises(subprocess.CalledProcessError):
                 feed_signature("verify", str(feed), key)
 
             _, other = make_key(Path(work))
             with self.assertRaises(subprocess.CalledProcessError):
-                feed_signature("verify", str(FIXTURE / FEED), other)
+                feed_signature("verify", str(FIXTURE / publish.FEED), other)
 
 
 class Publishing(unittest.TestCase):
@@ -115,18 +121,19 @@ class Publishing(unittest.TestCase):
     def pack(self, work: Path, version: str) -> None:
         """What vpk does: adds a full package and, given an earlier one, a delta, to the feed in releases/."""
         releases = work / "releases"
-        feed = releases / FEED
+        feed = releases / publish.FEED
         assets = json.loads(feed.read_bytes())["Assets"] if feed.exists() else []
         made = [asset(version, "Full", f"full {version} of run {self.runs}".encode())]
         if any(entry["Type"] == "Full" for entry in assets):
             made.append(asset(version, "Delta", f"delta {version} of run {self.runs}".encode()))
         for entry in made:
             (releases / entry["FileName"]).write_bytes(f"{entry['Type'].lower()} {version} of run {self.runs}".encode())
-        (releases / PORTABLE).write_bytes(f"portable {version}".encode())
+        for download in publish.DOWNLOADS:
+            (releases / download).write_bytes(f"{download} {version}".encode())
         feed.write_text(json.dumps({"Assets": assets + made}))
 
     def sign(self, work: Path) -> None:
-        feed = work / "feed" / FEED
+        feed = work / "feed" / publish.FEED
         subprocess.run([str(HERE / "feed-signature.sh"), "sign", str(feed), str(self.private), self.key], check=True,
                        capture_output=True)
 
@@ -136,7 +143,7 @@ class Publishing(unittest.TestCase):
         work = self.work()
         if publish.prepare(store, self.key, version, work) == "new":
             self.pack(work, version)
-            self.assertEqual(publish.merge(version, keep, work), work / "feed" / FEED)
+            self.assertEqual(publish.merge(version, keep, work), work / "feed" / publish.FEED)
             self.sign(work)
             publish.upload(store, self.key, version, work)
         return work
@@ -150,22 +157,23 @@ class Publishing(unittest.TestCase):
         return f"http://127.0.0.1:{server.server_address[1]}"
 
     def published(self) -> list[tuple[str, str]]:
-        feed, signature = self.store.get(FEED), self.store.get(FEED + ".sig")
+        feed, signature = self.store.get(publish.FEED), self.store.get(publish.FEED + ".sig")
         self.assertIsNotNone(feed)
         self.assertTrue(publish.signed(feed, signature, self.key))
         return sorted((entry["Version"], entry["Type"]) for entry in json.loads(feed)["Assets"])
 
     def assert_packages_match(self) -> None:
-        for entry in json.loads(self.store.get(FEED))["Assets"]:
+        for entry in json.loads(self.store.get(publish.FEED))["Assets"]:
             self.assertTrue(publish.file_matches(self.bucket / entry["FileName"], entry), entry["FileName"])
 
     def test_the_first_release_publishes_a_signed_feed_with_its_package(self) -> None:
         work = self.release("0.1.1")
 
         self.assertEqual(self.published(), [("0.1.1", "Full")])
-        self.assertEqual(self.store.get(FEED), (work / "feed" / FEED).read_bytes())
+        self.assertEqual(self.store.get(publish.FEED), (work / "feed" / publish.FEED).read_bytes())
         self.assert_packages_match()
-        self.assertTrue((self.bucket / PORTABLE).exists())
+        self.assertEqual(list(publish.DOWNLOADS), ["Roundhouse-osx-Portable.zip"])
+        self.assertTrue((self.bucket / "Roundhouse-osx-Portable.zip").exists())
 
     def test_the_next_release_starts_from_the_newest_full_package_and_adds_to_the_feed(self) -> None:
         self.release("0.1.1")
@@ -173,9 +181,9 @@ class Publishing(unittest.TestCase):
 
         self.assertEqual(publish.prepare(self.store, self.key, "0.1.2", work), "new")
 
-        newest = work / "releases" / "Roundhouse-0.1.1-osx-full.nupkg"
+        newest = work / "releases" / package_name("0.1.1", "Full")
         self.assertEqual(newest.read_bytes(), (self.bucket / newest.name).read_bytes())
-        self.assertEqual((work / "releases" / FEED).read_bytes(), self.store.get(FEED))
+        self.assertEqual((work / "releases" / publish.FEED).read_bytes(), self.store.get(publish.FEED))
         self.pack(work, "0.1.2")
         publish.merge("0.1.2", 10, work)
         self.sign(work)
@@ -189,21 +197,21 @@ class Publishing(unittest.TestCase):
 
         self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full"), ("0.1.3", "Delta"),
                                             ("0.1.3", "Full")])
-        self.assertFalse((self.bucket / "Roundhouse-0.1.1-osx-full.nupkg").exists())
+        self.assertFalse((self.bucket / package_name("0.1.1", "Full")).exists())
         self.assert_packages_match()
 
     def test_a_feed_changed_in_the_bucket_is_never_signed(self) -> None:
         self.release("0.1.1")
-        planted = json.loads(self.store.get(FEED))
+        planted = json.loads(self.store.get(publish.FEED))
         planted["Assets"].append(asset("9.0.0", "Full", b"not ours"))
-        (self.bucket / FEED).write_text(json.dumps(planted))
+        (self.bucket / publish.FEED).write_text(json.dumps(planted))
 
         # The copy under staging/ still matches its signature, so the release goes ahead from that.
         self.release("0.1.2")
         self.assertEqual(self.published(), [("0.1.1", "Full"), ("0.1.2", "Delta"), ("0.1.2", "Full")])
 
-        (self.bucket / FEED).write_text(json.dumps(planted))
-        (self.bucket / STAGED_FEED).write_text(json.dumps(planted))
+        (self.bucket / publish.FEED).write_text(json.dumps(planted))
+        (self.bucket / publish.STAGED_FEED).write_text(json.dumps(planted))
         with self.assertRaisesRegex(Refused, "no published feed matches its signature"):
             publish.prepare(self.store, self.key, "0.1.3", self.work())
 
@@ -215,18 +223,18 @@ class Publishing(unittest.TestCase):
             publish.prepare(self.store, other, "0.1.2", self.work())
 
     def test_an_unsigned_feed_is_refused_unless_nothing_was_ever_published(self) -> None:
-        (self.bucket / FEED).write_text(json.dumps({"Assets": [asset("0.1.1", "Full", b"x")]}))
+        (self.bucket / publish.FEED).write_text(json.dumps({"Assets": [asset("0.1.1", "Full", b"x")]}))
         with self.assertRaisesRegex(Refused, "no published feed matches its signature"):
             publish.prepare(self.store, self.key, "0.1.2", self.work())
 
-        (self.bucket / FEED).unlink()
-        (self.bucket / (FEED + ".sig")).write_bytes(bytes(64))
+        (self.bucket / publish.FEED).unlink()
+        (self.bucket / (publish.FEED + ".sig")).write_bytes(bytes(64))
         with self.assertRaisesRegex(Refused, "no published feed matches its signature"):
             publish.prepare(self.store, self.key, "0.1.2", self.work())
 
     def test_a_newest_package_that_isnt_the_one_in_the_feed_is_refused(self) -> None:
         self.release("0.1.1")
-        package = self.bucket / "Roundhouse-0.1.1-osx-full.nupkg"
+        package = self.bucket / package_name("0.1.1", "Full")
         package.write_bytes(b"changed")
         with self.assertRaisesRegex(Refused, "doesn't match the feed"):
             publish.prepare(self.store, self.key, "0.1.2", self.work())
@@ -244,12 +252,12 @@ class Publishing(unittest.TestCase):
 
         after = sorted((path.name, path.read_bytes()) for path in self.bucket.rglob("*") if path.is_file())
         self.assertEqual(before, after)
-        self.assertEqual((work / "feed" / FEED).read_bytes(), self.store.get(FEED))
+        self.assertEqual((work / "feed" / publish.FEED).read_bytes(), self.store.get(publish.FEED))
 
     def test_running_again_after_only_the_packages_went_up_publishes_the_new_ones(self) -> None:
         self.release("0.1.1")
         with self.assertRaises(ConnectionError):
-            self.release("0.1.2", store=FailingStore(str(self.bucket), STAGED_FEED))
+            self.release("0.1.2", store=FailingStore(str(self.bucket), publish.STAGED_FEED))
         self.assertEqual(self.published(), [("0.1.1", "Full")])
 
         self.release("0.1.2")
@@ -259,14 +267,14 @@ class Publishing(unittest.TestCase):
 
     def test_running_again_after_the_feed_went_up_without_its_signature_finishes(self) -> None:
         self.release("0.1.1")
-        for failing in (FEED, FEED + ".sig"):
-            version = "0.1.2" if failing == FEED else "0.1.3"
+        for failing in (publish.FEED, publish.FEED + ".sig"):
+            version = "0.1.2" if failing == publish.FEED else "0.1.3"
             with self.assertRaises(ConnectionError):
                 self.release(version, store=FailingStore(str(self.bucket), failing))
 
             self.assertEqual(publish.prepare(self.store, self.key, version, self.work()), "published")
 
-            self.assertEqual(self.store.get(FEED), self.store.get(STAGED_FEED))
+            self.assertEqual(self.store.get(publish.FEED), self.store.get(publish.STAGED_FEED))
             self.assertIn((version, "Full"), self.published())
             self.assert_packages_match()
 
@@ -281,7 +289,7 @@ class Publishing(unittest.TestCase):
         work = self.work()
         publish.prepare(self.store, self.key, "0.1.1", work)
         self.pack(work, "0.1.1")
-        (work / "releases" / "Roundhouse-0.1.1-osx-full.nupkg").write_bytes(b"changed after vpk")
+        (work / "releases" / package_name("0.1.1", "Full")).write_bytes(b"changed after vpk")
 
         with self.assertRaisesRegex(Refused, "doesn't match what vpk's feed says"):
             publish.merge("0.1.1", 10, work)
@@ -292,7 +300,7 @@ class Publishing(unittest.TestCase):
         publish.prepare(self.store, self.key, "0.1.2", work)
         self.pack(work, "0.1.2")
         publish.merge("0.1.2", 10, work)
-        feed = work / "feed" / FEED
+        feed = work / "feed" / publish.FEED
         merged = feed.read_bytes()
 
         feed.write_bytes(merged + b" ")
@@ -317,9 +325,9 @@ class Publishing(unittest.TestCase):
         work = self.release("0.1.2")
 
         self.assertEqual(publish.check(self.serve(), self.key, "0.1.2", work, wait=0), [
-            "0.1.1 Full Roundhouse-0.1.1-osx-full.nupkg 19",
-            "0.1.2 Full Roundhouse-0.1.2-osx-full.nupkg 19",
-            "0.1.2 Delta Roundhouse-0.1.2-osx-delta.nupkg 20",
+            f"0.1.1 Full {package_name('0.1.1', 'Full')} 19",
+            f"0.1.2 Full {package_name('0.1.2', 'Full')} 19",
+            f"0.1.2 Delta {package_name('0.1.2', 'Delta')} 20",
         ])
 
     def test_the_check_refuses_a_feed_or_package_apps_wouldnt_get(self) -> None:
@@ -328,20 +336,55 @@ class Publishing(unittest.TestCase):
         url = self.serve()
 
         # Such as a cache still serving the last feed.
-        for name in (FEED, FEED + ".sig"):
+        for name in (publish.FEED, publish.FEED + ".sig"):
             shutil.copyfile(first / "feed" / name, self.bucket / name)
         with self.assertRaisesRegex(Refused, "doesn't serve the feed this run published"):
             publish.check(url, self.key, "0.1.2", work, attempts=2, wait=0)
 
-        for name in (FEED, FEED + ".sig"):
+        for name in (publish.FEED, publish.FEED + ".sig"):
             shutil.copyfile(work / "feed" / name, self.bucket / name)
-        (self.bucket / "Roundhouse-0.1.2-osx-full.nupkg").unlink()
-        with self.assertRaisesRegex(Refused, "Roundhouse-0.1.2-osx-full.nupkg is missing"):
+        (self.bucket / package_name("0.1.2", "Full")).unlink()
+        with self.assertRaisesRegex(Refused, f"{package_name('0.1.2', 'Full')} is missing"):
             publish.check(url, self.key, "0.1.2", work, wait=0)
 
         _, other = make_key(self.dir)
         with self.assertRaisesRegex(Refused, "doesn't match the app's key"):
             publish.check(url, other, "0.1.2", work, wait=0)
+
+
+class Windows(Publishing):
+    """Windows' releases, which go in the bucket macOS's are in, under a feed of their own. Every test above runs
+    again for them, since `Publishing`'s are inherited, and the ones here are about the two side by side."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        publish.use_channel("win")
+        self.addCleanup(publish.use_channel, "osx")
+
+    def test_the_first_release_publishes_a_signed_feed_with_its_package(self) -> None:
+        self.release("0.1.1")
+
+        self.assertEqual(self.published(), [("0.1.1", "Full")])
+        self.assert_packages_match()
+        for name in ("releases.win.json", "releases.win.json.sig", "Roundhouse-win-Setup.exe",
+                     "Roundhouse-win-Portable.zip", "Roundhouse-0.1.1-full.nupkg"):
+            self.assertTrue((self.bucket / name).exists(), name)
+
+    def test_a_platform_s_releases_leave_the_other_s_alone(self) -> None:
+        publish.use_channel("osx")
+        self.release("0.1.1")
+        self.release("0.1.2")
+        mac = {path.name: path.read_bytes() for path in self.bucket.iterdir() if path.is_file()}
+
+        # The same versions, since each platform publishes every merge, and few enough kept that some are deleted.
+        publish.use_channel("win")
+        self.release("0.1.1", keep=1)
+        self.release("0.1.2", keep=1)
+
+        self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full")])
+        self.assertFalse((self.bucket / "Roundhouse-0.1.1-full.nupkg").exists())
+        for name, content in mac.items():
+            self.assertEqual((self.bucket / name).read_bytes(), content, name)
 
 
 if __name__ == "__main__":
