@@ -1,12 +1,9 @@
 //! Questions the agent asks the user. They arrive as a tool waiting for approval, but what they need
 //! is an answer: allowing one without an answer tells the agent the user didn't reply. While one waits, it's asked in
-//! the composer's place, by [`QuestionPanel`], and once it's answered the transcript keeps a record of it.
+//! the composer's place, by [`QuestionPanel`], and once it's no longer waiting the transcript draws it as a call, as
+//! `rows::asked` says.
 
-use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{AnyElement, App, FontWeight, IntoElement, ParentElement, Styled, div};
 use serde_json::Value;
-
-use crate::rows::{row, waiting_card};
 
 mod choice;
 mod panel;
@@ -58,22 +55,6 @@ pub(crate) fn parse(input: &Value) -> Vec<Question> {
             })
         })
         .collect()
-}
-
-/// A question that's no longer waiting, as the transcript keeps it: what was asked.
-pub(crate) fn record(input: &Value, cx: &App) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
-    let asked = parse(input);
-    let header = asked.iter().find_map(|q| q.header.clone()).unwrap_or_else(|| "Question".to_string());
-    let texts = asked.into_iter().map(|question| div().text_sm().font_weight(FontWeight::MEDIUM).child(question.text));
-    row()
-        .child(
-            waiting_card(false, cx)
-                .gap_3()
-                .child(div().text_xs().font_weight(FontWeight::MEDIUM).text_color(muted).child(header))
-                .children(texts),
-        )
-        .into_any_element()
 }
 
 #[cfg(test)]

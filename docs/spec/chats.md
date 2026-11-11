@@ -214,12 +214,15 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## Questions and approvals
 
-- **A question from the agent takes the composer's place until it's answered,** so it's answered where a reply would be typed, and the transcript keeps a record of what was asked. What's typed and attached in the composer waits for it to go, and so does any other question waiting, since they're asked in turn, oldest first. A plain Allow button would throw the question away. *Unconfirmed.*
+- **A question from the agent takes the composer's place until it's answered,** so it's answered where a reply would be typed, and the transcript keeps what was asked and what was answered. What's typed and attached in the composer waits for it to go, and so does any other question waiting, since they're asked in turn, oldest first. A plain Allow button would throw the question away. *Unconfirmed.*
 - **It asks one question at a time:** its header and text, then each option on a numbered row, with what it means under it, and a last row, `0`, to type another answer into. A chosen row is lit, and where several can be chosen, a check marks each, and the typing row's checkbox takes back what's typed there. *Unconfirmed.*
 - **On the right under the options is the arrow that sends, and with more than one question, on the left, a dot for each, filled once it has an answer and ringed while it shows,** between arrows to the one before and after. Choosing the one answer a question takes goes on to the next without one. *Unconfirmed.*
 - **The arrow sends once any question has an answer, and leaves out a question without one,** so only what matters needs an answer. Enter goes on to the next question without an answer, and sends once there's none. The `×` skips them all, and tells the agent to carry on if it can. *Unconfirmed.*
 - **While it has focus, a number chooses that option, `0` goes to the typing row, and the left and right arrows move between questions.** It takes focus from the composer when it comes, and gives it back when it goes. When it's just come, keys do nothing until half a second passes without one, so the end of something being typed in the composer can't answer it. Choosing with the pointer ends that early. Escape leaves the typing row. *Unconfirmed.*
 - **It's drawn on the pane's own surface inside the thin edge colour, with the composer's corners, rather than in a card's amber,** since taking the composer's place already says it's your turn. Its header, numbers and what each option means are small details, at 12px, and the question and its options are at body size. A chosen row is lit in a raised surface's hover colour, the nearest step above the pane, and Send is the composer's. *Unconfirmed.*
+- **Once it's no longer waiting, a question is a call's line in the transcript, where the agent asked it.** It says `Asked`, or `Asked 2 questions` for several, then each question's header in an outlined chip, then what was answered, faint, cut off where the line ends, with a dot between the answers to several. A typed answer of several lines shows its first there, as a command does. The agent usually says what it's asking just before it asks, so what was answered is what the line has room for. Opened, it's a block with each question under its header, in muted text, and what was answered under it after an arrow, in the foreground colour, so what was decided stands out. The line doesn't say the answers again while it's open.
+- **A question nobody answered says `Not answered` in the block,** whether it was skipped, left out when others were answered, or the turn stopped before anyone could. The line leaves out a question nobody answered, and says `Not answered` only when none of them was. *Unconfirmed.*
+- **What was answered is on the hub's record,** kept as the answers are passed to the agent, so every client shows the same, after a restart too. One answered before the hub kept answers shows only what was asked. *Unconfirmed.*
 
 **A command waiting to be allowed, in a chat that's planning,** since only an agent in plan mode asks before using a tool. *Unconfirmed.*
 
@@ -232,6 +235,14 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **Three questions, with the first answered, two choices and a typed answer on the second, and the third still to answer.** *Unconfirmed.*
 
 ![Several questions](screens/questions.png)
+
+**Questions once answered: one, then two, of which only the first was answered.** *Unconfirmed.*
+
+![Answered questions, closed](screens/question-answered.png)
+
+**The two opened to what was answered to each.** *Unconfirmed.*
+
+![Answered questions, opened](screens/question-answered-opened.png)
 
 ## The model and plan mode
 

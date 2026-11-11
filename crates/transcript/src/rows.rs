@@ -26,6 +26,7 @@ use crate::{calls, questions};
 mod alone;
 mod approval;
 mod around;
+mod asked;
 mod line;
 mod mode;
 mod prompt;
@@ -188,21 +189,8 @@ pub(crate) fn texts_of(event: &SessionEvent) -> Vec<(ItemKey, &str)> {
         .collect()
 }
 
-pub(crate) fn row() -> Div {
+fn row() -> Div {
     v_flex().w_full().pb_4().gap_2()
-}
-
-/// A card that can wait on the person, such as a question or an approval. While it waits, it has an amber edge and a
-/// faint amber wash.
-pub(crate) fn waiting_card(open: bool, cx: &App) -> Div {
-    let theme = cx.theme();
-    v_flex()
-        .w_full()
-        .p_3()
-        .rounded_lg()
-        .border_1()
-        .border_color(if open { theme.warning.opacity(0.45) } else { theme.border })
-        .when(open, |d| d.bg(theme.warning.opacity(0.05)))
 }
 
 fn empty() -> AnyElement {
@@ -228,12 +216,13 @@ fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElem
 
 fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App) -> AnyElement {
     let (seq, body, this) = (event.seq, &event.body, &shared.this);
-    let approval_open = around.approval_open;
     match body {
-        // Asked in the composer's place while it waits, so it's drawn here once it's answered.
-        EventBody::ApprovalRequested { tool_name, .. } if tool_name == questions::TOOL_NAME && approval_open => empty(),
+        // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
         EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-            questions::record(input, cx)
+            match &around.asked {
+                Some(asked) => asked::draw(seq, input, asked, shared, cx),
+                None => empty(),
+            }
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
@@ -258,6 +247,8 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, this, cx)
         }
+        // A question's line says what became of it.
+        EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
@@ -311,8 +302,8 @@ fn render_block(
             .into_any_element(),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
-        // These show as cards when they ask, with everything in them.
-        ContentBlock::ToolUse { name, .. } if calls::asks_in_a_card(name) => return None,
+        // These are drawn from their approvals, which have everything that was asked.
+        ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => return None,
         ContentBlock::ToolUse { name, input, .. } => {
             tools::call(&toggle, name, input, &drawing.reply, drawing.subagent.as_ref(), cx)
         }

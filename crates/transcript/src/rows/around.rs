@@ -11,13 +11,16 @@ use crate::attachments::{self, Carried};
 use crate::calls::agent;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
+use crate::questions;
 use crate::transcript::Model;
 
 mod nearby;
 mod reply;
+mod settled;
 mod subagent;
 
 pub(super) use reply::{Answer, Reply};
+pub(super) use settled::{AnswerTo, Settled};
 pub(crate) use subagent::SubagentCalls;
 pub(super) use subagent::{Subagent, drawn_in_its_call};
 
@@ -30,6 +33,11 @@ pub(super) struct Around {
     pub(super) blocks: Vec<BlockAround>,
     /// For an approval: whether it's still waiting.
     pub(super) approval_open: bool,
+    /// For a question that's no longer waiting, which is drawn as a call's line.
+    pub(super) asked: Option<Asked>,
+    /// For the record that closes an approval: whether it closes a question, whose line already says what became of
+    /// it.
+    pub(super) closes_a_question: bool,
     /// For a prompt: the files it carries.
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
@@ -40,6 +48,14 @@ pub(super) struct Around {
     pub(super) agent: AgentKind,
     /// For a change of mode: the mode before it, when the log says.
     pub(super) mode_before: Option<PermissionMode>,
+}
+
+/// What drawing a question that's no longer waiting needs.
+pub(super) struct Asked {
+    /// What it is, as its event's only item.
+    pub(super) key: ItemKey,
+    pub(super) open: bool,
+    pub(super) settled: Settled,
 }
 
 /// What drawing one block of an event needs.
@@ -71,6 +87,8 @@ impl Around {
         let mut around = Around {
             blocks,
             approval_open: false,
+            asked: None,
+            closes_a_question: false,
             carried: Vec::new(),
             prompt: PromptState::Taken,
             prompt_text: None,
@@ -85,11 +103,22 @@ impl Around {
             around.prompt = log.prompt_state(seq);
             around.prompt_text = m.long_texts.get(&ItemKey::prompt(seq, client_msg_id.as_ref())).cloned();
         }
-        if let EventBody::ApprovalRequested { approval_id, .. } = body {
+        if let EventBody::ApprovalRequested { approval_id, tool_name, .. } = body {
             around.approval_open = log
                 .open_approvals()
                 .iter()
                 .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
+            if tool_name == questions::TOOL_NAME && !around.approval_open {
+                let key = ItemKey::Event(seq, 0);
+                let open = m.folds.is_open(&key, Fold::Output);
+                around.asked = Some(Asked { key, open, settled: Settled::read(log, seq, approval_id) });
+            }
+        }
+        if let EventBody::ApprovalResolved { approval_id, .. } = body {
+            around.closes_a_question = nearby::events_before(log, seq, NEAR).any(|event| {
+                matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, tool_name, .. }
+                    if id == approval_id && tool_name == questions::TOOL_NAME)
+            });
         }
         around
     }
@@ -154,14 +183,14 @@ mod tests {
 
     use client_core::session_log::SessionLog;
     use protocol::attachment::{Attachment, MediaType};
-    use protocol::event::{ContentBlock, EventBody, SessionEvent};
+    use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
     use protocol::model::{
         Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Rev, Subagent, SubagentStatus,
     };
     use serde_json::json;
 
     use super::{Around, Reply, block_key};
-    use crate::fixtures::{calls, calls_to, event, from_the_agent, log, result, within};
+    use crate::fixtures::{asked, calls, calls_to, closed, event, from_the_agent, log, result, within};
     use crate::folds::Fold;
     use crate::item_key::ItemKey;
     use crate::transcript::Model;
@@ -178,6 +207,35 @@ mod tests {
 
         assert_eq!(block_key(7, &finished(Some(2)), 0), ItemKey::Block("m".into(), 2));
         assert_eq!(block_key(7, &finished(None), 0), ItemKey::Event(7, 0), "nothing streamed");
+    }
+
+    #[test]
+    fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
+        let question = asked("q", "AskUserQuestion");
+        let m = Model::default();
+        let waiting = log([event(1, question.clone())]);
+        assert!(Around::read(&waiting, &m, 1, &question).asked.is_none(), "it's in the composer's place");
+
+        let answered = log([event(1, question.clone()), event(2, closed("q", ApprovalOutcome::Denied, None))]);
+
+        assert!(Around::read(&answered, &m, 1, &question).asked.is_some());
+        assert!(Around::read(&answered, &m, 1, &asked("a", "Bash")).asked.is_none(), "only a question is a line");
+    }
+
+    #[test]
+    fn the_record_that_closes_a_question_says_so_and_another_approval_s_does_not() {
+        let (question, command) =
+            (closed("q", ApprovalOutcome::Denied, None), closed("c", ApprovalOutcome::Denied, None));
+        let log = log([
+            event(1, asked("q", "AskUserQuestion")),
+            event(2, question.clone()),
+            event(3, asked("c", "Bash")),
+            event(4, command.clone()),
+        ]);
+        let m = Model::default();
+
+        assert!(Around::read(&log, &m, 2, &question).closes_a_question, "its line says it wasn't answered");
+        assert!(!Around::read(&log, &m, 4, &command).closes_a_question, "so only a command's says it was denied");
     }
 
     #[test]

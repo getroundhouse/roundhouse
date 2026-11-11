@@ -8,6 +8,10 @@ use protocol::model::SessionStatus;
 
 use crate::support::{Stack, Ui};
 
+/// The line a question leaves in the transcript once it's no longer waiting, for one question and for two.
+const ASKED: &str = "Asked";
+const ASKED_TWO: &str = "Asked 2 questions";
+
 /// The result of the agent's question, from what it was told.
 fn told_to_agent(ui: &Ui) -> String {
     let mut told = String::new();
@@ -98,6 +102,41 @@ fn a_question_is_answered_by_choosing_or_typing_or_skipped(cx: &mut TestAppConte
     ui.input("say:a new message");
     ui.press("enter");
     ui.wait_idle_with("the reply", |text| text.contains("a new message"));
+}
+
+#[gpui_kit::test]
+fn an_answered_question_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.new_workspace();
+
+    // While it waits, it's asked in the composer's place, and the transcript leaves it out.
+    open_question(&mut ui, "ask:Red or blue?=Red/Blue|Why?=Because");
+    assert!(ui.labelled(ASKED_TWO).is_empty(), "not in the transcript while it waits");
+
+    // Once it's answered, here only the first of the two, it's a line, and so is one that was skipped. The turn's end
+    // can reach the app before the record that closes the question does, so each waits for its line, which comes
+    // once the question has gone from the composer's place.
+    ui.click(id("question-answer-1"));
+    ui.click(id("question-send"));
+    ui.wait("the answered question's line", |ui| ui.labelled(ASKED_TWO).len() == 1);
+    wait_for_the_turn(&mut ui);
+    open_question(&mut ui, "ask:Now or later?=Now/Later");
+    ui.click(id("question-skip"));
+    ui.wait("the skipped question's line", |ui| ui.labelled(ASKED).len() == 1);
+    wait_for_the_turn(&mut ui);
+    assert_eq!(ui.labelled(ASKED_TWO).len(), 1, "the first is still a line of its own");
+    assert!(ui.shown("asked/").is_empty(), "each starts closed");
+
+    // Opened, each says what was answered to each question, or that nobody answered it.
+    ui.click_labelled(ASKED_TWO, 0);
+    assert_eq!(ui.shown("asked/").len(), 1);
+    assert_eq!(ui.shown("answer-0/").len(), 1, "what was answered to the first");
+    assert_eq!(ui.shown("not-answered-1/").len(), 1, "and that nobody answered the second");
+    ui.click_labelled(ASKED, 0);
+    assert_eq!(ui.shown("not-answered-0/").len(), 1, "the one that was skipped");
 }
 
 #[gpui_kit::test]

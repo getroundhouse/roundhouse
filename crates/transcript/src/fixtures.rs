@@ -1,9 +1,9 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Place, Seq};
-use serde_json::json;
+use serde_json::{Value, json};
 
 pub(crate) fn event(seq: Seq, body: EventBody) -> SessionEvent {
     SessionEvent {
@@ -66,4 +66,22 @@ pub(crate) fn result(id: &str) -> EventBody {
         encrypted: false,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+}
+
+/// The agent asking to use the tool `tool`, under the approval `id`.
+pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
+    EventBody::ApprovalRequested {
+        approval_id: id.into(),
+        tool_name: tool.into(),
+        tool_use_id: None,
+        input: Value::Null,
+        description: None,
+        suggestions: Value::Null,
+    }
+}
+
+/// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.
+pub(crate) fn closed(id: &str, outcome: ApprovalOutcome, answers: Option<&[(&str, &str)]>) -> EventBody {
+    let answers = answers.map(|pairs| pairs.iter().map(|(q, a)| ((*q).to_string(), (*a).to_string())).collect());
+    EventBody::ApprovalResolved { approval_id: id.into(), outcome, answers }
 }

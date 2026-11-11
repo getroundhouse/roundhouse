@@ -89,7 +89,7 @@ impl Printer {
                 self.line(event.seq, &format!("APPROVAL NEEDED: {tool_name}: {summary}"));
                 self.line(event.seq, &format!("  roundhouse approve {} {approval_id}", event.session_id));
             }
-            EventBody::ApprovalResolved { approval_id, outcome } => {
+            EventBody::ApprovalResolved { approval_id, outcome, .. } => {
                 self.line(event.seq, &format!("approval {} {outcome:?}", short(approval_id.as_str())));
             }
             EventBody::AgentExited { reason, code, signal, stderr_tail } => {

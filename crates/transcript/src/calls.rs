@@ -1,7 +1,8 @@
 //! What a tool call is, read from its name and input, and what its result says. Every tool the transcript draws as a
 //! call is named here, so the rest of it draws kinds of call rather than tools. A tool it doesn't know, such as one
-//! from an MCP server, is `Other`, and still gets a readable line. The two that ask the person something are drawn as
-//! cards instead, by `questions` and `rows::approval`, and [`asks_in_a_card`] says which they are.
+//! from an MCP server, is `Other`, and still gets a readable line. The two that ask the person something are drawn from
+//! their approvals instead, a question by `rows::asked` and a plan by `rows::approval`, and [`drawn_from_its_approval`]
+//! says which they are.
 
 use serde_json::Value;
 
@@ -67,9 +68,9 @@ const ADVISOR: &str = "advisor";
 /// Inputs that usually say what a call is about, in the order they're looked for.
 const MAIN_INPUTS: &[&str] = &["command", "file_path", "path", "pattern", "url", "query", "prompt"];
 
-/// Whether a call to `name` asks the person something, and so shows as a card with everything in it rather than as
-/// a call.
-pub(crate) fn asks_in_a_card(name: &str) -> bool {
+/// Whether a call to `name` asks the person something, and so is drawn from its approval, which has everything that
+/// was asked, rather than from the call.
+pub(crate) fn drawn_from_its_approval(name: &str) -> bool {
     name == crate::questions::TOOL_NAME || name == PLAN
 }
 

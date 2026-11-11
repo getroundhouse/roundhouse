@@ -169,6 +169,31 @@ fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
 }
 
+/// An approval closed by a hub from before it kept answers, or closed any other way, has none, and is written as it was.
+#[test]
+fn an_approval_closed_without_answers_has_none_and_keeps_its_form() {
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":1,"place":0,"body":{"type":"approval_resolved","approval_id":"a","outcome":"allowed"}}"#;
+
+    let event: SessionEvent = frame::decode(stored).unwrap();
+
+    let EventBody::ApprovalResolved { answers, .. } = &event.body else { panic!("{event:?}") };
+    assert_eq!(*answers, None);
+    assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
+}
+
+/// Spelled out, since the log holds this form for good.
+#[test]
+fn an_approval_closed_with_answers_keeps_their_form() {
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":0,"body":{"type":"approval_resolved","approval_id":"a","outcome":"allowed","answers":{"Red or blue?":"Blue","Which days?":"Monday, Friday"}}}"#;
+
+    let event: SessionEvent = frame::decode(stored).unwrap();
+
+    let EventBody::ApprovalResolved { answers: Some(answers), .. } = &event.body else { panic!("{event:?}") };
+    let answers: Vec<(&str, &str)> = answers.iter().map(|(q, a)| (q.as_str(), a.as_str())).collect();
+    assert_eq!(answers, [("Red or blue?", "Blue"), ("Which days?", "Monday, Friday")]);
+    assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
+}
+
 /// So a client tells a hub that hasn't looked for a workspace's pull request, which it waits for, from one that looked
 /// and found none, which it can offer to create.
 #[test]

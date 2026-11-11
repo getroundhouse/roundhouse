@@ -108,7 +108,7 @@ pub struct Places<'a> {
 
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
-    EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled }
+    EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, answers: None }
 }
 
 impl Store {

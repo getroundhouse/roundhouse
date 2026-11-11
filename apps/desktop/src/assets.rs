@@ -21,6 +21,7 @@ gpui_kit::assets::icon_assets!(
         ListTree,
         Mail,
         MailOpen,
+        MessageCircleQuestionMark,
         MessageSquarePlus,
         Paperclip,
         Pencil,

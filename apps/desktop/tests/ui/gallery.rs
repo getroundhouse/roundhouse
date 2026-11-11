@@ -26,6 +26,7 @@ mod mark_states;
 mod patch;
 mod pictures;
 mod pull_requests;
+mod question_chats;
 mod screens;
 mod steps;
 mod subagent_chats;

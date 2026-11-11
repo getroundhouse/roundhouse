@@ -263,11 +263,13 @@ impl LiveSession {
                 return Err(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
             }
         }
-        let outcome = match decision {
-            ApprovalDecision::Allow { .. } | ApprovalDecision::Answer { .. } => ApprovalOutcome::Allowed,
-            ApprovalDecision::Deny { .. } => ApprovalOutcome::Denied,
+        // The answers are recorded as well as passed on, since the agent's own words for them are its to choose.
+        let (outcome, answers) = match &decision {
+            ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None),
+            ApprovalDecision::Answer { answers } => (ApprovalOutcome::Allowed, Some(answers.clone())),
+            ApprovalDecision::Deny { .. } => (ApprovalOutcome::Denied, None),
         };
-        let resolved = EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome };
+        let resolved = EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome, answers };
         self.record(Origin::Hub, resolved, None, None).await?;
         let hub = self.hub()?;
         let link = hub

@@ -1,7 +1,7 @@
 //! The card that asks for a tool's approval, or a plan's.
 
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Styled,
@@ -12,7 +12,7 @@ use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Seq};
 use serde_json::Value;
 
-use super::{row, waiting_card};
+use super::row;
 use crate::calls::{self, summarize_input};
 use crate::item_key::ItemKey;
 use crate::transcript::Transcript;
@@ -85,4 +85,16 @@ pub(super) fn approval_card(
                 .when(open, |d| d.child(buttons)),
         )
         .into_any_element()
+}
+
+/// A card that waits on the person. While it waits, it has an amber edge and a faint amber wash.
+fn waiting_card(open: bool, cx: &App) -> Div {
+    let theme = cx.theme();
+    v_flex()
+        .w_full()
+        .p_3()
+        .rounded_lg()
+        .border_1()
+        .border_color(if open { theme.warning.opacity(0.45) } else { theme.border })
+        .when(open, |d| d.bg(theme.warning.opacity(0.05)))
 }

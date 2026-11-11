@@ -186,6 +186,10 @@ pub enum EventBody {
     ApprovalResolved {
         approval_id: ApprovalId,
         outcome: ApprovalOutcome,
+        /// What the person answered the agent's questions, as [`ApprovalDecision::Answer`] gave it, so the transcript
+        /// can say what was decided. `None` for any other decision, and in a record from before the hub kept answers.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        answers: Option<BTreeMap<String, String>>,
     },
     AgentExited {
         reason: ExitReason,
