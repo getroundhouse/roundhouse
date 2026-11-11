@@ -166,9 +166,23 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     assert_eq!(subagent.latest_call.as_ref().map(|call| call.name.as_str()), Some("Bash"));
     assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
     assert!(subagent.rev <= rev);
-    let heard: Vec<_> = notices.iter().map(|subagent| (subagent.status, subagent.calls)).collect();
+    // Each notice's calls, whether its newest call had heard back, and whether it had said anything since.
+    let heard: Vec<_> = notices
+        .iter()
+        .map(|subagent| {
+            let answered = subagent.recent.calls.last().is_some_and(|made| made.result.is_some());
+            (subagent.status, subagent.calls, answered, subagent.recent.since.is_some())
+        })
+        .collect();
     let (working, finished) = (SubagentStatus::Working, SubagentStatus::Finished);
-    assert_eq!(heard, [(working, 0), (working, 1), (finished, 1)], "as it started, made its call, and ended");
+    let told = [
+        (working, 0, false, false),
+        (working, 1, false, false),
+        (working, 1, true, false),
+        (working, 1, true, true),
+        (finished, 1, false, false),
+    ];
+    assert_eq!(heard, told, "as it started, made its call, heard back, said what it found, and ended");
     assert!(notices.windows(2).all(|pair| pair[0].rev < pair[1].rev));
     assert_eq!(notices.last(), Some(subagent), "the last it heard is what's listed");
     assert!(client.session_subagents(&"missing".into()).is_err());

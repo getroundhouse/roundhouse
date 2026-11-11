@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, Rev, Subagent, SubagentStatus, ToolUseId};
+use protocol::model::{Call, RecentWork, Rev, Subagent, SubagentStatus, ToolUseId};
 
 /// The records of the subagents in `log`, by the call that started each.
 pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
@@ -27,6 +27,7 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     ended_at_ms: None,
                     calls: 0,
                     latest_call: None,
+                    recent: RecentWork::default(),
                     report: None,
                     rev,
                 });

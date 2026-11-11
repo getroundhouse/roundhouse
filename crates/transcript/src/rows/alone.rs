@@ -115,7 +115,7 @@ fn last_message(log: &SessionLog) -> Vec<(usize, &SessionEvent)> {
 #[cfg(test)]
 mod tests {
     use protocol::event::{ContentBlock, EventBody, SessionEvent};
-    use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
+    use protocol::model::{RecentWork, Rev, Seq, Subagent, SubagentStatus};
 
     use super::{rows_repeating_report, subagent_standing};
     use crate::fixtures::{calls, event, log, within};
@@ -134,6 +134,7 @@ mod tests {
             ended_at_ms: (status != SubagentStatus::Working).then_some(13_000),
             calls: 3,
             latest_call: None,
+            recent: RecentWork::default(),
             report: report.map(str::to_string),
             rev: Rev::new(1),
         }

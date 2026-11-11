@@ -1,4 +1,4 @@
-use protocol::model::{Rev, Subagent, SubagentStatus};
+use protocol::model::{RecentWork, Rev, Subagent, SubagentStatus};
 
 use super::Subagents;
 
@@ -15,6 +15,7 @@ fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent
         ended_at_ms: None,
         calls: 0,
         latest_call: None,
+        recent: RecentWork::default(),
         report: None,
         rev: Rev::new(rev),
     }

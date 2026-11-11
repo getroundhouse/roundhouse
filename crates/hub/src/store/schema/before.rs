@@ -36,3 +36,6 @@ pub(crate) const BEFORE_SUBAGENT_RECORDS: usize = 22;
 
 /// How many migrations there were before every agent had full access.
 pub(crate) const BEFORE_FULL_ACCESS: usize = 23;
+
+/// How many migrations there were before subagents' records kept what each has done lately.
+pub(crate) const BEFORE_RECENT_WORK: usize = 24;
