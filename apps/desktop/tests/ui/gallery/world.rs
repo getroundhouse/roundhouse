@@ -38,10 +38,9 @@ pub(crate) struct World {
     pub(crate) comments: HashMap<WorkspaceId, Vec<DiffComment>>,
     pub(crate) setup_logs: HashMap<WorkspaceId, String>,
     pub(crate) pull_requests: HashMap<WorkspaceId, PullRequest>,
-    /// The bytes of the files prompts carry, by attachment.
+    /// The bytes of the images the hub keeps, by attachment: the files prompts carry, and the images tools send back
+    /// and the agent's text points to.
     pub(crate) attachments: HashMap<AttachmentId, Vec<u8>>,
-    /// The images in the screen's worktree that the agent's text points to, by the path it gives.
-    pub(crate) worktree_images: HashMap<String, Vec<u8>>,
     /// The files and folders in the screen's worktree, as All files lists them.
     pub(crate) worktree: WorktreeFiles,
     /// What's in each folder of the screen's worktree that's read when it's opened, by its path.

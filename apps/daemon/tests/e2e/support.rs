@@ -282,7 +282,7 @@ pub(crate) fn assistant_text(events: &[SessionEvent]) -> String {
     for event in events {
         if let EventBody::Assistant { blocks, .. } = &event.body {
             for block in blocks {
-                if let ContentBlock::Text { text: t } = block {
+                if let ContentBlock::Text { text: t, .. } = block {
                     text.push_str(t);
                 }
             }

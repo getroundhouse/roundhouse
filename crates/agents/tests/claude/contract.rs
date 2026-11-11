@@ -207,7 +207,7 @@ fn thinking_tools_and_results_all_normalize() {
         .collect();
     // Thinking is only readable because of --thinking-display. Without it the text is empty.
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Thinking { text } if !text.is_empty())));
-    assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text } if text.contains("DONE"))));
+    assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text, .. } if text.contains("DONE"))));
     assert!(blocks.iter().any(|b| matches!(
         b,
         ContentBlock::ToolUse { name, input, id } if name == "Bash" && input["command"].is_string() && id.starts_with("toolu_")
@@ -258,7 +258,7 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
                     // So the finished block keeps the identity it had while it streamed.
                     assert_eq!(*first_index, Some(streamed.index), "the block's place in its message");
                     match &blocks[0] {
-                        ContentBlock::Text { text } => {
+                        ContentBlock::Text { text, .. } => {
                             assert_eq!(streamed.kind, BlockKind::Text);
                             assert_eq!(streamed.text, *text);
                             compared.0 += 1;

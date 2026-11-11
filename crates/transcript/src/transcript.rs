@@ -76,7 +76,7 @@ impl Transcript {
         // The row after the log is the streaming tail, and it's always there. An empty one has no height.
         let rows = open.read(SessionLog::row_count) + 1;
         let scroller = Scroller::new(rows, cx);
-        let linked = LinkedImages::new(client.clone(), session.workspace_id.clone(), cx.weak_entity());
+        let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let at_work = AtWork::of(session);
         let ticking = at_work.working.then(|| tick(cx));
         let model = Rc::new(RefCell::new(Model { at_work, ..Model::default() }));

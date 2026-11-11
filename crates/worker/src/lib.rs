@@ -7,6 +7,7 @@ mod deleting;
 mod files;
 pub mod git;
 mod images;
+mod linked_images;
 mod serve;
 pub mod setup;
 mod worktree_file;

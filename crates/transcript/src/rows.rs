@@ -151,7 +151,9 @@ pub(crate) fn texts_of(event: &SessionEvent) -> Vec<(ItemKey, &str)> {
     let blocks = around::blocks_of(&event.body).iter().enumerate();
     blocks
         .filter_map(|(position, block)| match block {
-            ContentBlock::Text { text } => Some((around::block_key(event.seq, &event.body, position), text.as_str())),
+            ContentBlock::Text { text, .. } => {
+                Some((around::block_key(event.seq, &event.body, position), text.as_str()))
+            }
             ContentBlock::Thinking { .. }
             | ContentBlock::ToolUse { .. }
             | ContentBlock::ToolResult { .. }
@@ -284,8 +286,8 @@ fn render_block(
     let (key, expanded) = (&drawing.key, drawing.open);
     let toggle = Toggle { seq, key, open: expanded, this, linked };
     Some(match block {
-        ContentBlock::Text { text } => {
-            agent_text(key, text, drawing.text.as_ref()).image_source(linked.resolver(seq)).into_any_element()
+        ContentBlock::Text { text, images } => {
+            agent_text(key, text, drawing.text.as_ref()).image_source(linked.resolver(seq, images)).into_any_element()
         }
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),

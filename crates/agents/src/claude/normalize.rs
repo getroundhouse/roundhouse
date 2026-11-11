@@ -231,7 +231,7 @@ fn assistant(value: &Value) -> EventBody {
 
 fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {
     match content {
-        Some(Value::String(text)) => vec![ContentBlock::Text { text: text.clone() }],
+        Some(Value::String(text)) => vec![ContentBlock::Text { text: text.clone(), images: Vec::new() }],
         Some(Value::Array(items)) => items.iter().map(block).collect(),
         _ => Vec::new(),
     }
@@ -239,7 +239,7 @@ fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {
 
 fn block(value: &Value) -> ContentBlock {
     match str_of(value, "type") {
-        Some("text") => ContentBlock::Text { text: string_of(value, "text").unwrap_or_default() },
+        Some("text") => ContentBlock::Text { text: string_of(value, "text").unwrap_or_default(), images: Vec::new() },
         Some("thinking") => ContentBlock::Thinking { text: string_of(value, "thinking").unwrap_or_default() },
         // A tool the API runs itself, such as the advisor, is called the same way.
         Some("tool_use" | "server_tool_use") => ContentBlock::ToolUse {

@@ -1,39 +1,35 @@
-//! Images the agent's text points to, such as `![The new layout](docs/shot.png)`. One in the workspace comes from the
-//! hub, which has the worker read it from the worktree, by a path in full or from the worktree, and one written into
-//! the text as a `data:` URL is its own bytes. Nothing else is drawn, such as an image on the web, since what an agent
-//! writes is untrusted. Each image is decoded off the main thread before it's drawn, and then every row waiting for it
-//! is measured again, since the list keeps each row's height, and the image is only its own height once it's decoded.
+//! Images the agent's text points to, such as `![The new layout](docs/shot.png)`. One in the workspace is the copy the
+//! hub kept when the text came, which the text's block names by the address the text gives it, so a reply keeps what
+//! it showed when the agent changes the file again. One written into the text as a `data:` URL is its own bytes.
+//! Nothing else is drawn, such as an image on the web, since what an agent writes is untrusted. Each image is decoded
+//! off the main thread before it's drawn, and then every row waiting for it is measured again, since the list keeps
+//! each row's height, and the image is only its own height once it's decoded.
 //!
 //! These are kept apart from the pictures a prompt carries, which the transcript keeps by attachment, because the text
 //! view asks for an image from any thread, by its address, so what answers has to be shared across threads.
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use client_core::{Client, ClientError};
+use client_core::Client;
 use gpui_kit::{App, AppContext as _, Image, ImageCacheError, ImageSource, RenderImage, SharedUri, WeakEntity, Window};
 use parking_lot::Mutex;
 use protocol::attachment::{AttachmentBytes, MediaType};
-use protocol::client::ErrorCode;
-use protocol::model::{Seq, WorkspaceId};
+use protocol::event::LinkedImage;
+use protocol::model::{AttachmentId, Seq, SessionId};
 
 use crate::attachments::image_format;
 use crate::transcript::Transcript;
 
-/// How long an image that couldn't be read for a reason that can pass, such as one not written yet, waits before it's
-/// asked for again, the next time it's drawn.
-const RETRY: Duration = Duration::from_secs(5);
-
-/// The images one transcript's text points to, by where the text says each is. Cheap to clone.
+/// The images one transcript's text points to, by where each comes from. Cheap to clone.
 #[derive(Clone)]
 pub(crate) struct LinkedImages(Arc<Shared>);
 
 struct Shared {
-    workspace: WorkspaceId,
+    session: SessionId,
     /// Replaced when the transcript reconnects.
     client: Mutex<Client>,
-    images: Mutex<HashMap<String, Linked>>,
+    images: Mutex<HashMap<Source, Linked>>,
     transcript: WeakEntity<Transcript>,
 }
 
@@ -41,88 +37,85 @@ enum Linked {
     /// With the events whose rows are waiting for it.
     Loading(Vec<Seq>),
     Ready(Arc<RenderImage>),
-    /// Refused, or not an image, so it's not asked for again on this connection.
+    /// The hub couldn't give it, or it isn't an image, so it's not asked for again on this connection.
     Unreadable,
-    /// Not read at the time, such as when it wasn't there yet.
-    Failed(Instant),
 }
 
-/// Where an image the text names is, if it's somewhere that's drawn.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Target {
-    /// In the workspace, as a path in full or from the worktree. The worker decides whether it's in the worktree.
-    Workspace(String),
-    /// Written into the text.
-    Embedded(Vec<u8>),
+/// Where an image a text points to comes from, if it's drawn.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Source {
+    /// The copy the hub kept when the text came.
+    Kept(AttachmentId),
+    /// Written into the text, by its whole address.
+    Embedded(String),
 }
 
 impl LinkedImages {
-    pub(crate) fn new(client: Client, workspace: WorkspaceId, transcript: WeakEntity<Transcript>) -> Self {
+    pub(crate) fn new(client: Client, session: SessionId, transcript: WeakEntity<Transcript>) -> Self {
         let images = Mutex::new(HashMap::new());
-        Self(Arc::new(Shared { workspace, client: Mutex::new(client), images, transcript }))
+        Self(Arc::new(Shared { session, client: Mutex::new(client), images, transcript }))
     }
 
     /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why.
     pub(crate) fn reconnect(&self, client: &Client) {
         *self.0.client.lock() = client.clone();
-        self.0.images.lock().retain(|_, linked| matches!(linked, Linked::Loading(_) | Linked::Ready(_)));
+        self.0.images.lock().retain(|_, linked| !matches!(linked, Linked::Unreadable));
     }
 
-    /// What a text view in the row of the event at `seq` draws for the image at `uri`.
-    pub(crate) fn resolver(&self, seq: Seq) -> impl Fn(&SharedUri) -> ImageSource + Send + Sync + 'static {
-        let images = self.clone();
+    /// What a text that names `kept`, in the row of the event at `seq`, draws for the image at an address.
+    pub(crate) fn resolver(
+        &self,
+        seq: Seq,
+        kept: &[LinkedImage],
+    ) -> impl Fn(&SharedUri) -> ImageSource + Send + Sync + 'static {
+        let (images, kept) = (self.clone(), kept.to_vec());
         move |uri| {
-            let (images, uri) = (images.clone(), uri.to_string());
-            ImageSource::Custom(Arc::new(move |_: &mut Window, cx: &mut App| images.image(&uri, seq, cx)))
+            let (images, source) = (images.clone(), source(uri, &kept));
+            ImageSource::Custom(Arc::new(move |_: &mut Window, cx: &mut App| match &source {
+                Some(source) => images.image(source, seq, cx),
+                None => Some(Err(ImageCacheError::Asset("not an image that's drawn".into()))),
+            }))
         }
     }
 
-    /// The image at `uri` if it's here, an error if it can't be shown, or `None` while it loads, which it starts doing
-    /// the first time it's asked for.
-    fn image(&self, uri: &str, seq: Seq, cx: &mut App) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
-        let unreadable = || Err(ImageCacheError::Asset(format!("{uri} can't be shown").into()));
+    /// The image from `source` if it's here, an error if it can't be shown, or `None` while it loads, which it starts
+    /// doing the first time it's asked for.
+    fn image(&self, source: &Source, seq: Seq, cx: &mut App) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
         let mut images = self.0.images.lock();
-        match images.get_mut(uri) {
+        match images.get_mut(source) {
             Some(Linked::Ready(image)) => return Some(Ok(image.clone())),
-            Some(Linked::Unreadable) => return Some(unreadable()),
-            Some(Linked::Failed(at)) if at.elapsed() < RETRY => return Some(unreadable()),
+            Some(Linked::Unreadable) => return Some(Err(ImageCacheError::Asset("it can't be shown".into()))),
             Some(Linked::Loading(waiting)) => {
                 if !waiting.contains(&seq) {
                     waiting.push(seq);
                 }
                 return None;
             }
-            Some(Linked::Failed(_)) | None => {}
+            None => {}
         }
-        let Some(target) = target(uri) else {
-            images.insert(uri.to_string(), Linked::Unreadable);
-            return Some(unreadable());
-        };
-        images.insert(uri.to_string(), Linked::Loading(vec![seq]));
+        images.insert(source.clone(), Linked::Loading(vec![seq]));
         drop(images);
-        self.load(uri.to_string(), target, cx);
+        self.load(source.clone(), cx);
         None
     }
 
-    fn load(&self, uri: String, target: Target, cx: &mut App) {
-        let (images, client, workspace) = (self.clone(), self.0.client.lock().clone(), self.0.workspace.clone());
-        let renderer = cx.svg_renderer();
+    fn load(&self, source: Source, cx: &mut App) {
+        let (images, client, session) = (self.clone(), self.0.client.lock().clone(), self.0.session.clone());
+        let (renderer, reading) = (cx.svg_renderer(), source.clone());
         let loading = cx.background_spawn(async move {
-            let read = match target {
-                Target::Workspace(path) => client.workspace_image_read(&workspace, &path),
-                Target::Embedded(bytes) => Ok((MediaType::sniff(&bytes), bytes)),
+            let bytes = match reading {
+                Source::Kept(id) => client.attachment_read(&session, &id).ok(),
+                Source::Embedded(uri) => embedded(&uri),
             };
-            match read {
-                Ok((media_type, bytes)) => image_format(media_type)
-                    .and_then(|format| Image::from_bytes(format, bytes).to_image_data(renderer).ok())
-                    .map_or(Linked::Unreadable, Linked::Ready),
-                Err(e) if lasting(&e) => Linked::Unreadable,
-                Err(_) => Linked::Failed(Instant::now()),
-            }
+            bytes
+                .and_then(|bytes| {
+                    Image::from_bytes(image_format(MediaType::sniff(&bytes))?, bytes).to_image_data(renderer).ok()
+                })
+                .map_or(Linked::Unreadable, Linked::Ready)
         });
         cx.spawn(async move |cx| {
             let linked = loading.await;
-            let waiting = match images.0.images.lock().insert(uri, linked) {
+            let waiting = match images.0.images.lock().insert(source, linked) {
                 Some(Linked::Loading(waiting)) => waiting,
                 _ => Vec::new(),
             };
@@ -136,58 +129,49 @@ impl LinkedImages {
     }
 }
 
-/// Whether reading an image failed in a way asking again won't change: the hub refused it, or doesn't know how.
-fn lasting(e: &ClientError) -> bool {
-    matches!(e, ClientError::Api(e) if matches!(e.code, ErrorCode::InvalidRequest | ErrorCode::Unsupported))
+/// Where the image at `uri` comes from, from a Markdown image's address and what its text's block names, or `None` if
+/// it isn't drawn: on the web, elsewhere on the machine, or in the workspace without a copy the hub kept.
+fn source(uri: &str, kept: &[LinkedImage]) -> Option<Source> {
+    if uri.starts_with("data:") {
+        return Some(Source::Embedded(uri.to_string()));
+    }
+    kept.iter().find(|image| image.address == uri).map(|image| Source::Kept(image.attachment.id.clone()))
 }
 
-/// Where `uri` points, from a Markdown image's address, or `None` if it's somewhere that isn't drawn. A path can be a
-/// `file://` URL, and either can be percent-encoded, as an address with a space in it has to be.
-fn target(uri: &str) -> Option<Target> {
-    if let Some(data) = uri.strip_prefix("data:") {
-        let (meta, base64) = data.split_once(',')?;
-        let bytes = meta.ends_with(";base64").then(|| AttachmentBytes::from_base64(base64)).flatten()?;
-        return Some(Target::Embedded(bytes.into_vec()));
-    }
-    let path = uri.strip_prefix("file://").unwrap_or(uri);
-    if path.is_empty() || path.contains("://") {
-        return None;
-    }
-    let decoded = percent_encoding::percent_decode_str(path).decode_utf8();
-    Some(Target::Workspace(decoded.map_or_else(|_| path.to_string(), std::borrow::Cow::into_owned)))
+/// The bytes a `data:` URL holds, if it's written as base64, as an image has to be.
+fn embedded(uri: &str) -> Option<Vec<u8>> {
+    let (meta, base64) = uri.strip_prefix("data:")?.split_once(',')?;
+    meta.ends_with(";base64").then(|| AttachmentBytes::from_base64(base64)).flatten().map(AttachmentBytes::into_vec)
 }
 
 #[cfg(test)]
 mod tests {
-    use client_core::ClientError;
-    use protocol::client::{ApiError, ErrorCode};
+    use protocol::attachment::{Attachment, MediaType};
+    use protocol::event::LinkedImage;
+    use protocol::model::AttachmentId;
 
-    use super::{Target, lasting, target};
+    use super::{Source, embedded, source};
 
     #[test]
-    fn an_image_in_the_workspace_is_named_by_its_path_however_it_was_written() {
-        let workspace = |path: &str| Some(Target::Workspace(path.into()));
-        assert_eq!(target("docs/shot.png"), workspace("docs/shot.png"));
-        assert_eq!(target("/work/repo/shot.png"), workspace("/work/repo/shot.png"));
-        assert_eq!(target("file:///work/repo/a%20shot.png"), workspace("/work/repo/a shot.png"));
-        assert_eq!(target("100%.png"), workspace("100%.png"), "a % that escapes nothing stays");
-        assert_eq!(target("%FF.png"), workspace("%FF.png"), "so does one that isn't text once it's decoded");
+    fn an_image_in_the_workspace_is_the_copy_its_text_names_by_the_address_it_gives() {
+        let attachment = Attachment {
+            id: AttachmentId::from("a1".to_string()),
+            name: "shot.png".into(),
+            media_type: MediaType::Png,
+            size_bytes: 3,
+        };
+        let kept = [LinkedImage { address: "docs/a%20shot.png".into(), attachment }];
+
+        assert_eq!(source("docs/a%20shot.png", &kept), Some(Source::Kept(AttachmentId::from("a1".to_string()))));
+        assert_eq!(source("docs/a shot.png", &kept), None, "only by the address as the text gives it");
+        assert_eq!(source("docs/other.png", &kept), None, "one with no copy isn't drawn");
     }
 
     #[test]
     fn an_image_written_into_the_text_is_its_own_bytes_and_one_on_the_web_isnt_drawn() {
-        assert_eq!(target("data:image/png;base64,R0lGODlh"), Some(Target::Embedded(b"GIF89a".to_vec())));
-        assert_eq!(target("data:image/svg+xml,<svg/>"), None);
-        assert_eq!(target("https://example.com/shot.png"), None);
-        assert_eq!(target(""), None);
-    }
-
-    #[test]
-    fn an_image_the_hub_refused_isnt_asked_for_again_but_one_that_wasnt_there_is() {
-        let api = |code| ClientError::Api(ApiError::new(code, "no"));
-        assert!(lasting(&api(ErrorCode::InvalidRequest)));
-        assert!(lasting(&api(ErrorCode::Unsupported)));
-        assert!(!lasting(&api(ErrorCode::NotFound)));
-        assert!(!lasting(&ClientError::Disconnected));
+        assert_eq!(embedded("data:image/png;base64,R0lGODlh"), Some(b"GIF89a".to_vec()));
+        assert_eq!(embedded("data:image/svg+xml,<svg/>"), None);
+        assert_eq!(source("https://example.com/shot.png", &[]), None);
+        assert_eq!(source("", &[]), None);
     }
 }

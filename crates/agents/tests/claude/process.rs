@@ -82,7 +82,7 @@ printf '{"type":"assistant","message":{"id":"m","content":[{"type":"text","text"
     let seen = until_exit(&mut rx).await;
     let got_it = seen.iter().any(|item| match item {
         AgentOutput::Event { body: EventBody::Assistant { blocks, .. }, .. } => {
-            matches!(blocks.first(), Some(ContentBlock::Text { text }) if text == "after")
+            matches!(blocks.first(), Some(ContentBlock::Text { text, .. }) if text == "after")
         }
         _ => false,
     });

@@ -211,13 +211,6 @@ pub enum ClientRequest {
         session_id: SessionId,
         id: AttachmentId,
     },
-    /// The image at `path` in the workspace's worktree, for drawing one the agent's text points to. `path` is in full
-    /// or relative to the worktree, as the agent wrote it. Refused unless it's an image the transcript draws inside the
-    /// worktree, links followed. A hub older than this refuses it as unsupported.
-    WorkspaceImageRead {
-        id: WorkspaceId,
-        path: String,
-    },
     /// Whose account the session's agent runs under, read from the session's worker when asked, and what the hub
     /// has heard of that account's limits. It records nothing, so asking again only reads again, and like any read
     /// from a worker it starts the workspace's worker if none is running. Refused unless the workspace is ready. A

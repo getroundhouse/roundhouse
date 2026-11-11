@@ -1,6 +1,7 @@
 //! Starting and stopping agents, forwarding what they say to the hub, and the one-off calls that title a prompt and
 //! read the agent's account.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -61,6 +62,8 @@ pub(crate) async fn start_agent(
     }
     let session_id = spec.session_id.clone();
     let run = spec.run;
+    // The agent works in the worktree, which is where what its text points to is read from.
+    let worktree = PathBuf::from(&spec.cwd);
     if let Some(agent) = state.agents.lock().get(&session_id).filter(|a| !a.process.is_gone()) {
         return Ok(WorkerResponse::AgentStarted { pid: agent.process.pid(), run: agent.run, already_running: true });
     }
@@ -76,14 +79,23 @@ pub(crate) async fn start_agent(
     info!(pid, %session_id, %run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
-    forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, rx));
+    forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
 }
 
-async fn forward_output(state: Arc<State>, session_id: SessionId, run: RunId, mut output: mpsc::Receiver<AgentOutput>) {
+/// Sends on what the agent says, in order, with the images its text points to in `worktree`.
+async fn forward_output(
+    state: Arc<State>,
+    session_id: SessionId,
+    run: RunId,
+    worktree: PathBuf,
+    mut output: mpsc::Receiver<AgentOutput>,
+) {
     while let Some(item) = output.recv().await {
         let frame = match item {
-            AgentOutput::Event { body, raw, attachments } => {
+            AgentOutput::Event { body, raw, mut attachments } => {
+                let (body, linked) = crate::linked_images::keep_in(&worktree, body).await;
+                attachments.extend(linked);
                 WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments }
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },

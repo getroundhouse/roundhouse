@@ -1,8 +1,7 @@
-//! Reading what's in a workspace's worktree, which its worker does: its git state, its images, and its files.
+//! Reading what's in a workspace's worktree, which its worker does: its git state and its files.
 
 use std::sync::Arc;
 
-use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::ApiError;
 use protocol::model::{FileContents, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles};
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -42,20 +41,6 @@ impl Hub {
             return Err(unexpected(&reply));
         };
         Ok(diff)
-    }
-
-    /// An image in the workspace's worktree, as the worker finds it, for the transcript to draw.
-    pub(crate) async fn workspace_image_read(
-        self: &Arc<Self>,
-        id: WorkspaceId,
-        image: String,
-    ) -> Result<(MediaType, AttachmentBytes), ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::ImageRead { path, image }).await?;
-        let WorkerResponse::Image { media_type, data } = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok((media_type, data))
     }
 
     /// The files in the workspace's worktree, as the worker lists them.

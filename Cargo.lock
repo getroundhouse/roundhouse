@@ -7861,7 +7861,6 @@ dependencies = [
  "image",
  "look",
  "parking_lot",
- "percent-encoding",
  "protocol",
  "serde_json",
  "similar",
@@ -9370,7 +9369,9 @@ name = "worker"
 version = "0.1.0"
 dependencies = [
  "agents",
+ "markdown",
  "parking_lot",
+ "percent-encoding",
  "process",
  "protocol",
  "serde_json",
@@ -9378,6 +9379,7 @@ dependencies = [
  "tokio",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

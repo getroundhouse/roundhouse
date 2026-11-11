@@ -193,10 +193,6 @@ async fn handle(
         R::WorkspaceRegenerateTitle { id } => C::Workspace(hub.workspace_regenerate_title(id).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
-        R::WorkspaceImageRead { id, path } => {
-            let (media_type, data) = hub.workspace_image_read(id, path).await?;
-            C::Image { media_type, data }
-        }
         R::WorkspaceFiles { id } => C::WorktreeFiles(hub.workspace_files(id).await?),
         R::WorkspaceFolderRead { id, path } => C::WorktreeFiles(hub.workspace_folder_read(id, path).await?),
         R::WorkspaceFileRead { id, path } => C::FileContents(hub.workspace_file_read(id, path).await?),

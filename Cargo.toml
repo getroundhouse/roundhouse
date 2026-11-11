@@ -66,10 +66,13 @@ gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25", default-features = false }
 libc = "0.2"
+# Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
+# text view does.
+markdown = "1"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6"
 parking_lot = "0.12"
-# Already under GPUI, through `url`. Reads the address of an image the agent's text points to.
+# Already under GPUI, through `url`. Reads the address of an image the agent's text points to, which can be escaped.
 percent-encoding = "2"
 proptest = "1"
 # Already under rustls. Checks the update feed's signature.

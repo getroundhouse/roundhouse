@@ -63,7 +63,7 @@ impl Printer {
             EventBody::Assistant { message_id, blocks, first_index, .. } => {
                 for (position, block) in blocks.iter().enumerate() {
                     match (block, self.streamed(message_id.as_ref(), *first_index, position)) {
-                        (ContentBlock::Text { text }, Some(printed)) => self.rest(text, printed),
+                        (ContentBlock::Text { text, .. }, Some(printed)) => self.rest(text, printed),
                         _ => self.block(event.seq, block),
                     }
                 }
@@ -122,7 +122,7 @@ impl Printer {
 
     fn block(&mut self, seq: u64, block: &ContentBlock) {
         match block {
-            ContentBlock::Text { text } => self.line(seq, text),
+            ContentBlock::Text { text, .. } => self.line(seq, text),
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
