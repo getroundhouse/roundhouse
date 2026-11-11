@@ -39,9 +39,9 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-PRs merge through GitHub's merge queue, squashed, once CI's `checks` job passes on the PR merged onto `main` and whatever is ahead of it in the queue, so only each PR's final state reaches `main`. Add a PR to the queue only when the owner asks. Between commits, `cargo check` and the tests for what changed are enough.
+PRs merge through GitHub's merge queue, squashed, once CI's `checks` job passes on the PR merged onto `main` and whatever is ahead of it in the queue, so only each PR's final state reaches `main`. Add a PR to the queue only when the owner asks, but for a fix to a flaky or broken test, below. Between commits, `cargo check` and the tests for what changed are enough.
 
-For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix.
+For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix. Put the fix in a PR of its own from `main`, and when it changes only tests and the code that supports them, add it to the queue yourself once its CI passes, and say you did. Until it merges, the test fails PRs that didn't break it and throws them out of the queue, so it shouldn't wait for the owner to notice it. Making a test wait for the right thing is a fix. Skipping it, deleting it or loosening what it checks isn't, and waits for the owner like any other change.
 
 ## Rules
 
