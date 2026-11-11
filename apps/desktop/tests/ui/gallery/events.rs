@@ -3,8 +3,8 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{ContentBlock, EventBody, FileChange, LinkedImage, TurnOutcome};
-use protocol::model::{MessageId, Seq, ToolUseId};
+use protocol::event::{ContentBlock, EventBody, FileChange, LinkedImage, TokenUsage, TurnOutcome};
+use protocol::model::{MessageId, ModelName, Seq, ToolUseId};
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
     EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() }
@@ -97,8 +97,11 @@ fn answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> C
     ContentBlock::ToolResult { tool_use_id, is_error, text, images, change, encrypted: false }
 }
 
-/// The end of a turn that went well.
+/// The end of a turn that went well. Opus answered, and read most of what it was sent from the cache, as a turn that
+/// reads around a repository does.
 pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
+    let tokens =
+        TokenUsage { input_tokens: 6, output_tokens: 1_840, cache_read_tokens: 412_377, cache_write_tokens: 9_615 };
     EventBody::TurnEnded {
         outcome: TurnOutcome::Success,
         result: None,
@@ -107,6 +110,8 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
         cost_usd: Some(cost_usd),
         num_turns: None,
         started_at_ms: None,
+        models: vec![ModelName::named("claude-opus-5-5")],
+        tokens: Some(tokens),
     }
 }
 

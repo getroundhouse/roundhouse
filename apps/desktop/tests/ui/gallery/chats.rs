@@ -23,6 +23,9 @@ const REPLY: &str = "The sidebar only knows what's in `Workspace`, so the PR sta
      ```rust\npub struct Workspace {\n    // ...\n    /// As the hub last saw it. `None` if there isn't one.\n    \
      pub pull_request: Option<PullRequest>,\n}\n```";
 
+/// The line [`finished`] ends with, its tenth event.
+pub(crate) const FINISHED_TURN_END: &str = "turn-end/event/10/0";
+
 /// A turn that's over: a prompt, two tools and a reply with a list and some code.
 pub(crate) fn finished() -> Vec<EventBody> {
     let mut events = looked_around();
@@ -174,6 +177,8 @@ pub(crate) fn stopped() -> Vec<EventBody> {
         cost_usd: Some(0.09),
         num_turns: Some(2),
         started_at_ms: None,
+        models: Vec::new(),
+        tokens: None,
     });
     events
 }

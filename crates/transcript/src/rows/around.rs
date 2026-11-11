@@ -5,7 +5,7 @@ use client_core::session_log::{PromptState, SessionLog};
 use gpui_kit::Entity;
 use gpui_kit::component::text::TextViewState;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::Seq;
+use protocol::model::{AgentKind, Seq};
 
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
@@ -36,6 +36,8 @@ pub(super) struct Around {
     pub(super) prompt: PromptState,
     /// For a prompt: its text view's state, if the transcript keeps it.
     pub(super) prompt_text: Option<Entity<TextViewState>>,
+    /// For a turn's end: the agent the chat runs, which its card names.
+    pub(super) agent: AgentKind,
 }
 
 /// What drawing one block of an event needs.
@@ -60,8 +62,14 @@ impl Around {
             .enumerate()
             .map(|(position, block)| BlockAround::read(log, m, seq, block, block_key(seq, body, position)))
             .collect();
-        let mut around =
-            Around { blocks, approval_open: false, carried: Vec::new(), prompt: PromptState::Taken, prompt_text: None };
+        let mut around = Around {
+            blocks,
+            approval_open: false,
+            carried: Vec::new(),
+            prompt: PromptState::Taken,
+            prompt_text: None,
+            agent: m.agent,
+        };
         if let EventBody::UserPrompt { attachments, client_msg_id, .. } = body {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);

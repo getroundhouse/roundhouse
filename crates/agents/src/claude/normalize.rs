@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, TurnOutcome};
+use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody};
 use protocol::model::{MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
@@ -17,6 +17,7 @@ use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
 use surrogates::repair_lone_surrogates;
 use tasks::Tasks;
+use turn_end::{TurnModels, turn_ended};
 
 mod advisor;
 mod calls;
@@ -29,6 +30,7 @@ mod surrogates;
 mod tasks;
 #[cfg(test)]
 mod tests;
+mod turn_end;
 mod user;
 
 /// What a line says, and what it shows without saying.
@@ -65,14 +67,16 @@ pub enum Parsed {
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
 /// message, as its deltas did. It keeps which calls are open, from each call to its result. It says what a
 /// background task is, and that it stopped one, apart from the list of them, so the list can say which are monitors,
-/// by the call that started each, and which left without finishing. And it never says a call was dropped, so what
-/// follows the call has to show it.
+/// by the call that started each, and which left without finishing. It never says a call was dropped, so what
+/// follows the call has to show it. And its `result` doesn't say which models the agent's own replies came from, so
+/// the replies have to.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     streaming: HashMap<MessageId, u32>,
     calls: OpenCalls,
     tasks: Tasks,
     pending_calls: PendingCalls,
+    models: TurnModels,
 }
 
 impl Normalizer {
@@ -104,8 +108,12 @@ impl Normalizer {
             let streamed = self.streaming.remove(id);
             *first_index = streamed.filter(|_| blocks.len() == 1);
         }
+        if let Parsed::Event(body) = &parsed {
+            self.models.note(body);
+        }
         // Whatever a turn left streaming, such as when it was cancelled, is over.
-        if let Parsed::Event(EventBody::TurnEnded { .. }) = &parsed {
+        if let Parsed::Event(EventBody::TurnEnded { models, .. }) = &mut parsed {
+            *models = self.models.take();
             self.streaming.clear();
             self.pending_calls.turn_ended();
             self.calls.turn_ended();
@@ -285,32 +293,6 @@ fn tool_result_text(content: Option<&Value>) -> String {
             text
         }
         _ => String::new(),
-    }
-}
-
-fn turn_ended(value: &Value) -> EventBody {
-    let is_error = value.get("is_error").and_then(Value::as_bool).unwrap_or(false);
-    let terminal_reason = str_of(value, "terminal_reason").unwrap_or_default();
-    let outcome = if !is_error {
-        TurnOutcome::Success
-    } else if terminal_reason.starts_with("aborted") {
-        TurnOutcome::Cancelled
-    } else {
-        TurnOutcome::Error
-    };
-    let errors = value
-        .get("errors")
-        .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(|e| e.as_str().map(str::to_string)).collect())
-        .unwrap_or_default();
-    EventBody::TurnEnded {
-        outcome,
-        result: string_of(value, "result"),
-        errors,
-        duration_ms: value.get("duration_ms").and_then(Value::as_u64),
-        cost_usd: value.get("total_cost_usd").and_then(Value::as_f64),
-        num_turns: value.get("num_turns").and_then(Value::as_u64),
-        started_at_ms: None,
     }
 }
 

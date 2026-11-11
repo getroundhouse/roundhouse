@@ -4,17 +4,25 @@ use std::time::Duration;
 
 use gpui_kit::component::clipboard::Clipboard;
 use gpui_kit::component::{ActiveTheme as _, h_flex};
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, div};
+use gpui_kit::{
+    Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
+};
 use look::Hand as _;
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
+use protocol::model::AgentKind;
 
 use super::{colored_line, empty, muted_line, row, turn_times};
 use crate::item_key::ItemKey;
+use card::TurnCard;
 
-/// How the turn `ended`. A finished one says how long it took and when it ended, with a button that copies what the
-/// agent said last, its `result`.
-pub(super) fn line(ended: &SessionEvent, cx: &App) -> AnyElement {
-    let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, .. } = &ended.body else {
+mod card;
+mod words;
+
+/// How the turn `ended`, in a chat with `agent`. A finished one says how long it took and when it ended, with a button
+/// that copies what the agent said last, its `result`, and resting the pointer on what it says shows the turn's card.
+pub(super) fn line(ended: &SessionEvent, agent: AgentKind, cx: &App) -> AnyElement {
+    let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, models, tokens, .. } = &ended.body
+    else {
         return empty();
     };
     match outcome {
@@ -24,22 +32,42 @@ pub(super) fn line(ended: &SessionEvent, cx: &App) -> AnyElement {
             colored_line(detail, cx.theme().danger)
         }
         TurnOutcome::Success | TurnOutcome::Unknown => {
-            finished(ended, took_ms(ended.ts_ms, *started_at_ms, *duration_ms), result.as_deref(), cx)
+            let (started_at_ms, took_ms) = timed(ended.ts_ms, *started_at_ms, *duration_ms);
+            let card = TurnCard {
+                agent,
+                models: models.clone(),
+                started_at_ms,
+                ended_at_ms: ended.ts_ms,
+                took: took_ms.map(|ms| turn_times::took(Duration::from_millis(ms))),
+                tokens: *tokens,
+            };
+            finished(ended, result.as_deref(), card, cx)
         }
     }
 }
 
-/// How long the turn that ended at `ended_at_ms` took. By the hub's clock where it said when the turn started, which is
-/// what the working line counts by, so the time doesn't jump when the turn ends. A turn a hub recorded before it said
-/// that has the agent's own count.
-fn took_ms(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64>) -> Option<u64> {
-    started_at_ms.and_then(|started| u64::try_from(ended_at_ms.checked_sub(started)?).ok()).or(duration_ms)
+/// When the turn that ended at `ended_at_ms` started, and how long it took, for its line and its card alike. A start
+/// after the end is no start. The time is by the hub's clock where it said when the turn started, which is what the
+/// working line counts by, so the time doesn't jump when the turn ends. A turn a hub recorded before it said that has
+/// the agent's own count.
+fn timed(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64>) -> (Option<i64>, Option<u64>) {
+    let started_at_ms = started_at_ms.filter(|started| *started <= ended_at_ms);
+    let took_ms = started_at_ms.and_then(|started| u64::try_from(ended_at_ms.checked_sub(started)?).ok());
+    (started_at_ms, took_ms.or(duration_ms))
 }
 
-fn finished(ended: &SessionEvent, took_ms: Option<u64>, result: Option<&str>, cx: &App) -> AnyElement {
-    let took = took_ms.map(|ms| turn_times::took(Duration::from_millis(ms)));
+/// A finished turn's line, which says how long it took, as the working line counted it, and when it ended.
+fn finished(ended: &SessionEvent, result: Option<&str>, card: TurnCard, cx: &App) -> AnyElement {
     let when = look::day_and_time(ended.ts_ms, cx);
-    let said = took.into_iter().chain(when).collect::<Vec<_>>().join(" · ");
+    let said = card.took.clone().into_iter().chain(when).collect::<Vec<_>>().join(" · ");
+    // It only shows something while the pointer rests on it, so it keeps the arrow. The card opens centred above it,
+    // where it covers neither the line nor the composer, and moves only to stay in the window.
+    let said = div().id(ItemKey::Event(ended.seq, 0).element("turn-end")).child(said).test_support();
+    let said = look::hover_card(ItemKey::Event(ended.seq, 0).element("turn-card"))
+        .appearance(false)
+        .anchor(Anchor::BottomCenter)
+        .trigger(said)
+        .content(move |_, _, cx| card.card(cx));
     // The button is taller than the text. It's centred on the line without making the line taller, so the line sits
     // where any other muted line would.
     let copy = result.filter(|text| !text.trim().is_empty()).map(|text| {
@@ -57,13 +85,18 @@ fn finished(ended: &SessionEvent, took_ms: Option<u64>, result: Option<&str>, cx
 
 #[cfg(test)]
 mod tests {
-    use super::took_ms;
+    use super::timed;
 
     #[test]
     fn a_turn_is_timed_by_the_hubs_clock_where_the_hub_said_when_it_started() {
-        assert_eq!(took_ms(1_600, Some(100), Some(1_400)), Some(1_500));
-        assert_eq!(took_ms(1_600, None, Some(1_400)), Some(1_400), "a hub that didn't say");
-        assert_eq!(took_ms(1_600, None, None), None);
-        assert_eq!(took_ms(1_600, Some(1_700), Some(1_400)), Some(1_400), "a start after the end is no start");
+        assert_eq!(timed(1_600, Some(100), Some(1_400)), (Some(100), Some(1_500)));
+        assert_eq!(timed(1_600, Some(1_600), Some(1_400)), (Some(1_600), Some(0)));
+        assert_eq!(timed(1_600, None, Some(1_400)), (None, Some(1_400)), "a hub that didn't say");
+        assert_eq!(timed(1_600, None, None), (None, None));
+    }
+
+    #[test]
+    fn a_start_after_the_end_is_no_start_for_the_line_or_the_card() {
+        assert_eq!(timed(1_600, Some(1_700), Some(1_400)), (None, Some(1_400)));
     }
 }

@@ -1,5 +1,5 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
-use protocol::event::FileChange;
+use protocol::event::{FileChange, TurnOutcome};
 use serde_json::json;
 
 use super::*;

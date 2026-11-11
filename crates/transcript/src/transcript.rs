@@ -9,7 +9,7 @@ use client_core::{Client, FileToSend, OpenSession};
 use gpui_kit::{AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, IntoElement, Render, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AttachmentId, Seq, Session, SessionId, seq_index};
+use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, seq_index};
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
@@ -41,8 +41,9 @@ pub enum TranscriptEvent {
     Asking { left: Option<FocusHandle> },
 }
 
-#[derive(Default)]
 pub(crate) struct Model {
+    /// The agent the chat runs, as its record names it, which never changes.
+    pub agent: AgentKind,
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
@@ -52,6 +53,32 @@ pub(crate) struct Model {
     pub at_work: AtWork,
     /// The long messages' text, read ahead of being drawn.
     pub long_texts: LongTexts,
+}
+
+impl Model {
+    /// A chat's, before it's drawn anything.
+    fn of(session: &Session) -> Self {
+        Model::with(session.agent, AtWork::of(session))
+    }
+
+    fn with(agent: AgentKind, at_work: AtWork) -> Self {
+        Model {
+            agent,
+            folds: Folds::default(),
+            pictures: HashMap::new(),
+            subagent_calls: RefCell::default(),
+            at_work,
+            long_texts: LongTexts::default(),
+        }
+    }
+}
+
+/// An idle chat with Claude, for tests that draw rows without one.
+#[cfg(test)]
+impl Default for Model {
+    fn default() -> Self {
+        Model::with(AgentKind::Claude, AtWork::default())
+    }
 }
 
 pub struct Transcript {
@@ -82,9 +109,9 @@ impl Transcript {
         let list = TranscriptList::new(cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
-        let at_work = AtWork::of(session);
-        let ticking = at_work.working.then(|| tick(cx));
-        let model = Rc::new(RefCell::new(Model { at_work, ..Model::default() }));
+        let model = Model::of(session);
+        let ticking = model.at_work.working.then(|| tick(cx));
+        let model = Rc::new(RefCell::new(model));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {

@@ -42,11 +42,40 @@ pub fn local_time(at_ms: i64, cx: &App) -> Option<DateTime<FixedOffset>> {
 }
 
 /// When something happened, or will, with only as much of the day as it takes to tell: none today, the day of the week
-/// within a week either way, and the date beyond that, with the year if it's another one. "11:42 PM", "Sun 11:42 PM",
-/// "Oct 26 11:42 PM". It's the one way a day and time are said, whether a turn's end or a limit's reset. `None` for a
-/// time too far off to say.
+/// within a week either way, and the date beyond that, with the year if it's another one, as [`date_and_time`] says
+/// it. "11:42 PM", "Sun 11:42 PM", "Oct 26 11:42 PM", "Dec 30, 2025, 11:42 PM". It's the one way a day and time are
+/// said in a line, whether a turn's end or a limit's reset. A card with room to say the day apart says [`date`] and
+/// [`time_of_day`]. `None` for a time too far off to say.
 pub fn day_and_time(at_ms: i64, cx: &App) -> Option<String> {
     Some(day_and_time_from(local_time(at_ms, cx)?, local_time(now_ms(cx), cx)?))
+}
+
+/// The day something happened, with its year whenever it was: "Nov 6, 2026". `None` for a time too far off to say.
+pub fn date(at_ms: i64, cx: &App) -> Option<String> {
+    Some(date_of(local_time(at_ms, cx)?))
+}
+
+/// The time of day something happened, by the clock it had then: "12:13 PM". `None` for a time too far off to say.
+pub fn time_of_day(at_ms: i64, cx: &App) -> Option<String> {
+    Some(time_of(local_time(at_ms, cx)?))
+}
+
+/// [`date`] and [`time_of_day`] together, the one way a time is said with its year: "Nov 6, 2026, 12:13 PM". `None`
+/// for a time too far off to say.
+pub fn date_and_time(at_ms: i64, cx: &App) -> Option<String> {
+    Some(date_and_time_of(local_time(at_ms, cx)?))
+}
+
+fn date_of(at: DateTime<FixedOffset>) -> String {
+    at.format("%b %-d, %Y").to_string()
+}
+
+fn time_of(at: DateTime<FixedOffset>) -> String {
+    at.format("%-I:%M %p").to_string()
+}
+
+fn date_and_time_of(at: DateTime<FixedOffset>) -> String {
+    format!("{}, {}", date_of(at), time_of(at))
 }
 
 /// [`day_and_time`], for `at` as seen from `now`, each in the local time zone as it was at that moment, so a time
@@ -54,12 +83,12 @@ pub fn day_and_time(at_ms: i64, cx: &App) -> Option<String> {
 fn day_and_time_from(at: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> String {
     let days_apart = (now.date_naive() - at.date_naive()).num_days().abs();
     let day = match days_apart {
-        0 => "",
-        1..7 => "%a ",
-        _ if at.year() == now.year() => "%b %-d ",
-        _ => "%b %-d, %Y ",
+        0 => return time_of(at),
+        1..7 => "%a",
+        _ if at.year() == now.year() => "%b %-d",
+        _ => return date_and_time_of(at),
     };
-    at.format(&format!("{day}%-I:%M %p")).to_string()
+    format!("{} {}", at.format(day), time_of(at))
 }
 
 /// Holds everything that moves still from now on, by turning Reduce Motion on, and the time at `at_ms`, so pictures of
@@ -90,7 +119,16 @@ mod tests {
             "Oct 26 11:42 PM",
             "a Monday a week ago isn't today"
         );
-        assert_eq!(day_and_time_from(at("2025-12-30T23:42:00Z"), now), "Dec 30, 2025 11:42 PM");
+        assert_eq!(day_and_time_from(at("2025-12-30T23:42:00Z"), now), "Dec 30, 2025, 11:42 PM");
+    }
+
+    #[test]
+    fn a_day_has_its_year_and_a_time_of_day_the_clock_it_had_then() {
+        assert_eq!(date_of(at("2026-11-06T12:13:00Z")), "Nov 6, 2026");
+        assert_eq!(time_of(at("2026-11-06T12:13:00Z")), "12:13 PM");
+        assert_eq!(date_and_time_of(at("2026-11-06T12:13:00Z")), "Nov 6, 2026, 12:13 PM");
+        assert_eq!(date_of(at("2025-12-30T23:42:00-08:00")), "Dec 30, 2025", "not the next day, by UTC");
+        assert_eq!(time_of(at("2025-12-30T23:42:00-08:00")), "11:42 PM");
     }
 
     #[test]
@@ -100,7 +138,7 @@ mod tests {
         assert_eq!(day_and_time_from(at("2026-11-10T19:05:00-08:00"), now), "7:05 PM", "later today");
         assert_eq!(day_and_time_from(at("2026-11-16T20:59:00-08:00"), now), "Mon 8:59 PM", "in six days");
         assert_eq!(day_and_time_from(at("2026-11-17T20:59:00-08:00"), now), "Nov 17 8:59 PM", "a week on isn't today");
-        assert_eq!(day_and_time_from(at("2027-01-02T09:00:00-08:00"), now), "Jan 2, 2027 9:00 AM");
+        assert_eq!(day_and_time_from(at("2027-01-02T09:00:00-08:00"), now), "Jan 2, 2027, 9:00 AM");
     }
 
     #[test]

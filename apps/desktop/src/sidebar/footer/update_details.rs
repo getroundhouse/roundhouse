@@ -1,6 +1,5 @@
 //! The info mark in the update card's corner, and what it says on hover: which versions, and what happens next.
 
-use gpui_kit::base::HoverCard;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::{
     Anchor, AnchoredPositionMode, AnyElement, App, Entity, FontWeight, InteractiveElement as _, IntoElement as _,
@@ -8,7 +7,6 @@ use gpui_kit::{
 };
 
 use crate::app::{Agents, BuildLine};
-use crate::hover::{CLOSES_AFTER, OPENS_AFTER};
 
 /// Between the details and the top of the card they sit on.
 const GAP: Pixels = px(6.);
@@ -49,17 +47,14 @@ impl Details {
     pub(super) fn mark(shown: &Entity<Shown>, cx: &App) -> AnyElement {
         let icon = Icon::new(IconName::Info).small().text_color(cx.theme().muted_foreground);
         let shown = shown.clone();
-        // Only for when to show them. The kit keeps what a hover card shows clear of the window's edge by more than
-        // the card is, so it couldn't line them up with the card.
-        let hover =
-            HoverCard::new("details").open_delay(OPENS_AFTER).close_delay(CLOSES_AFTER).trigger(icon).on_open_change(
-                move |open, _, cx| {
-                    shown.update(cx, |shown, cx| {
-                        shown.open = *open;
-                        cx.notify();
-                    });
-                },
-            );
+        // Only for when to show them, so it draws nothing, not even its own box. The kit keeps what a hover card shows
+        // clear of the window's edge by more than the card is, so it couldn't line them up with the card.
+        let hover = look::hover_card("details").appearance(false).trigger(icon).on_open_change(move |open, _, cx| {
+            shown.update(cx, |shown, cx| {
+                shown.open = *open;
+                cx.notify();
+            });
+        });
         div()
             .id("update-details")
             .flex_none()

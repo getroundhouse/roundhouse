@@ -163,18 +163,21 @@ fn a_question_comes_for_approval_with_its_options_and_takes_answers_back() {
     assert!(answered, "the capture answers with `updatedInput.answers`, and the CLI should accept that");
 }
 
+/// Every turn says what its own requests took and which models its replies came from, each turn only its own. In plan
+/// mode, the fourth turn, with Haiku chosen, they came from Sonnet first. Models go by family, so a capture with newer
+/// ones still reads.
 #[test]
-fn turn_results_report_cost_and_duration() {
-    let (duration, cost, turns) = events()
-        .into_iter()
-        .find_map(|e| match e {
-            EventBody::TurnEnded { duration_ms, cost_usd, num_turns, .. } => Some((duration_ms, cost_usd, num_turns)),
-            _ => None,
-        })
-        .unwrap();
-    assert!(duration.is_some());
-    assert!(cost.is_some_and(|c| c >= 0.0));
-    assert!(turns.is_some_and(|t| t >= 1));
+fn turn_results_report_cost_duration_and_what_the_agent_asked_of_which_models() {
+    let mut families: Vec<Vec<String>> = Vec::new();
+    for end in events() {
+        let EventBody::TurnEnded { duration_ms, cost_usd, num_turns, models, tokens, .. } = end else { continue };
+        assert!(duration_ms.is_some() && cost_usd.is_some_and(|c| c >= 0.0) && num_turns.is_some_and(|t| t >= 1));
+        assert!(tokens.is_some_and(|used| used.output_tokens > 0 && used.cache_read_tokens > 0));
+        families.push(models.iter().map(|model| model.as_str().split('-').nth(1).unwrap().to_string()).collect());
+    }
+    let one = |family: &str| vec![family.to_string()];
+    let planned = vec!["sonnet".to_string(), "haiku".to_string()];
+    assert_eq!(families, [one("haiku"), one("haiku"), one("haiku"), planned, one("haiku")]);
 }
 
 #[test]

@@ -44,7 +44,7 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
     let kept_back = context.tokens_of(ContextPartKind::Buffer);
     let left = words::room_left(room_left(context), kept_back > 0);
     let used = format!("{} used", words::whole_percent(context.used_fraction()));
-    let of = format!("{}/{}", words::tokens(context.used_tokens), words::tokens(context.max_tokens));
+    let of = format!("{}/{}", look::tokens(context.used_tokens), look::tokens(context.max_tokens));
     let under = h_flex()
         .justify_between()
         .gap_3()
@@ -52,7 +52,7 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
         .child(div().min_w_0().truncate().text_color(theme.muted_foreground).child(left))
         .child(div().flex_none().text_color(look::faint()).child(of));
     let parts: Vec<Div> =
-        in_it(context).into_iter().map(|part| share(part.name.clone(), words::tokens(part.tokens), cx)).collect();
+        in_it(context).into_iter().map(|part| share(part.name.clone(), look::tokens(part.tokens), cx)).collect();
     v_flex()
         .gap_1()
         .child(heading("Context", Some(used.into()), cx))

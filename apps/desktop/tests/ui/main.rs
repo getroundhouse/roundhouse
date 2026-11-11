@@ -41,6 +41,7 @@ mod support;
 mod title_strip;
 mod titles;
 mod tools;
+mod turn_card;
 mod unread;
 mod updating;
 mod window_place;

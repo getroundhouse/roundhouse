@@ -198,6 +198,20 @@ impl World {
         self.sessions.iter_mut().find(|s| &s.id == id).unwrap().turn_started_at_ms = started;
     }
 
+    /// Has the turn that ends the last chat's log run from 11:57 PM to 12:04 AM the night before the picture, by the
+    /// hub's clock, as the hub says on its end and on the chat's record.
+    pub(crate) fn last_turn_past_midnight(mut self) -> World {
+        let midnight_ms = NOW_MS - 15 * 60 * MINUTE_MS;
+        let started_ms = midnight_ms - 3 * MINUTE_MS;
+        let session = self.sessions.last_mut().unwrap();
+        session.turn_started_at_ms = Some(started_ms);
+        let ended = self.logs.get_mut(&session.id).and_then(|log| log.last_mut()).unwrap();
+        let EventBody::TurnEnded { started_at_ms, .. } = &mut ended.body else { panic!("the log ends mid-turn") };
+        *started_at_ms = Some(started_ms);
+        ended.ts_ms = midnight_ms + 4 * MINUTE_MS;
+        self
+    }
+
     /// Makes the end of a chat's log a reply nobody has read.
     pub(crate) fn unread(&mut self, id: &SessionId) {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
