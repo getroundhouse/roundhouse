@@ -2,7 +2,6 @@
 //! a few lines.
 
 use gpui_kit::base::SelectableText;
-use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
@@ -13,6 +12,7 @@ use super::highlight::spans;
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
+use crate::long_texts::LongTexts;
 use crate::scroll_area::ScrollArea;
 use crate::selectable_lines::SelectableLines;
 
@@ -145,15 +145,9 @@ pub(super) fn code(id: ElementId, language: &str, prompt: &str, text: &str, cx: 
 
 /// Prose in a block, such as what a subagent was asked or what a model made of a page, as Markdown, scrolling past
 /// a dozen lines or so. It's the item's `part`.
-pub(in crate::rows) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElement {
+pub(in crate::rows) fn prose(texts: &LongTexts, key: &ItemKey, part: &str, text: &str) -> AnyElement {
     let (id, text_id) = (key.element(part), key.element(&format!("{part}-text")));
-    let shown = div()
-        .id(id.clone())
-        .px_3()
-        .py_2()
-        .text_sm()
-        .child(TextView::markdown(text_id, SharedString::from(text.to_string())).selectable(true))
-        .test_support();
+    let shown = div().id(id.clone()).px_3().py_2().text_sm().child(texts.markdown(text_id, text)).test_support();
     scrolling(id, shown).into_any_element()
 }
 

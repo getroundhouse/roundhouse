@@ -36,7 +36,7 @@ pub(super) fn fetch(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx:
                 )
             })
             .when_some(answer, |d, answer| {
-                d.child(block::separator(cx)).child(block::prose(toggle.key, "answer", answer))
+                d.child(block::separator(cx)).child(block::prose(&toggle.shared.texts, toggle.key, "answer", answer))
             })
             .into_any_element()
     });
@@ -60,8 +60,12 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
                 d.child(block::scrolling(id.clone(), div().id(id).py_1().children(links.collect::<Vec<_>>())))
             })
             .when_some(summary, |d, summary| {
-                d.when(!results.links.is_empty(), |d| d.child(block::separator(cx)))
-                    .child(block::prose(toggle.key, "summary", summary))
+                d.when(!results.links.is_empty(), |d| d.child(block::separator(cx))).child(block::prose(
+                    &toggle.shared.texts,
+                    toggle.key,
+                    "summary",
+                    summary,
+                ))
             })
             .into_any_element()
     });

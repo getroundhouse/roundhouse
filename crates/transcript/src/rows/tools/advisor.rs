@@ -40,7 +40,7 @@ pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
 /// line under it says what went wrong.
 fn said(reply: &Reply, advice: Option<&str>, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
     if let Some(advice) = advice {
-        return Some(block::prose(toggle.key, "advice", advice));
+        return Some(block::prose(&toggle.shared.texts, toggle.key, "advice", advice));
     }
     let (name, why) = match reply {
         Reply::Nothing => ("no-reply", NO_REPLY),

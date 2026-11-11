@@ -28,6 +28,7 @@ Two ideas sit behind the rules:
 | Nothing `pub` outside a crate's API | `unreachable_pub` |
 | Every `unsafe` block says why it's sound | `undocumented_unsafe_blocks` |
 | No `std::sync::Mutex` | `disallowed-types` in `clippy.toml`. See "Async and locks" |
+| Text views are made as `docs/ui.md` says. *Unconfirmed.* | `disallowed-methods` in `clippy.toml` |
 | No glob imports | `wildcard_imports`, part of pedantic. See "Crates and modules" |
 | Functions of at most 60 lines | `too_many_lines`, with `too-many-lines-threshold` in `clippy.toml` |
 

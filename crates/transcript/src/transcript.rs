@@ -55,8 +55,6 @@ pub(crate) struct Model {
     pub subagent_calls: RefCell<SubagentCalls>,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
-    /// The long messages' text, read ahead of being drawn.
-    pub long_texts: LongTexts,
     /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
     /// shared, since every frame's rows take the records of the calls they draw, and one can hold a call's whole input,
     /// such as all of a file it wrote.
@@ -77,7 +75,6 @@ impl Model {
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),
             at_work,
-            long_texts: LongTexts::default(),
             subagents: HashMap::new(),
             subagent_rows: RefCell::default(),
             alone: None,
@@ -103,6 +100,8 @@ pub struct Transcript {
     model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     linked: LinkedImages,
+    /// Where the rows' text views are made, which keeps each long one and each the agent is still writing.
+    texts: LongTexts,
     list: TranscriptList,
     _changes: Task<()>,
     /// Draws the time so far again while the agent works.
@@ -158,6 +157,7 @@ impl Transcript {
             session: open,
             model,
             linked,
+            texts: LongTexts::default(),
             list,
             _changes: following,
             ticking,
@@ -200,11 +200,19 @@ impl Transcript {
         self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
     }
 
-    /// Whether every long text of the loaded events has been read. One is read on another thread once its row
-    /// loads, and its row is measured again when that's done, so until then the session's height isn't settled.
+    /// Whether every long text the rows have drawn has been read. One is read on another thread from the first time
+    /// its row is drawn, and its row is measured again as it's read, so until then the session's height isn't
+    /// settled.
     #[cfg(feature = "testing")]
     pub fn long_texts_read(&self, cx: &gpui_kit::App) -> bool {
-        self.model.borrow().long_texts.all_read(cx)
+        self.texts.all_read(cx)
+    }
+
+    /// What each long text the rows have drawn, and each text the agent wrote as the transcript watched, shows as
+    /// of what's been read of it.
+    #[cfg(feature = "testing")]
+    pub fn kept_texts(&self, cx: &gpui_kit::App) -> Vec<String> {
+        self.texts.read(cx)
     }
 
     /// The event at a row, if it's loaded.
@@ -243,7 +251,7 @@ impl Transcript {
         let events = self.session.read(SessionLog::row_count);
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
-        self.read_ahead(changes.rows.clone().unwrap_or_default(), cx);
+        self.session.read(|log| self.texts.let_go(log));
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed);
         }
@@ -259,13 +267,6 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Starts reading the long texts of rows whose content has changed, such as a page of history that's loaded,
-    /// and of what the agent is still writing, so each has its height when the list measures it.
-    fn read_ahead(&mut self, rows: std::ops::Range<usize>, cx: &mut Context<Self>) {
-        let (this, mut m) = (cx.weak_entity(), self.model.borrow_mut());
-        self.session.read(|log| m.long_texts.follow(log, rows, &this, cx));
-    }
-
     /// Opens or closes a fold drawn in the row of the event at `seq`, which changes that row's height.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, fold, open);
@@ -278,6 +279,12 @@ impl Transcript {
         if let Some(row) = self.session.read(|log| log.row_of(seq)) {
             self.list.out_of_date(row..row + 1);
         }
+        cx.notify();
+    }
+
+    /// Measures `row` again, since what it draws has changed height, and draws it.
+    pub(crate) fn remeasure_row(&mut self, row: usize, cx: &mut Context<Self>) {
+        self.list.out_of_date(row..row + 1);
         cx.notify();
     }
 
@@ -321,14 +328,23 @@ impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (model, session, wanted) = (self.model.clone(), self.session.clone(), self.session.clone());
         let line_text = look::LineText::new(window, cx);
-        let shared =
-            crate::rows::Shared { this: cx.weak_entity(), linked: self.linked.clone(), line_text: line_text.clone() };
+        let shared = crate::rows::Shared {
+            this: cx.weak_entity(),
+            linked: self.linked.clone(),
+            line_text: line_text.clone(),
+            texts: self.texts.clone(),
+        };
         // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
         // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
         let tail = self.list.row_count().saturating_sub(1);
         let rows = self.list.render(
             ElementId::Name(self.list_id.clone().into()),
-            move |ix, _, cx| crate::rows::render_row(&model, &session, &shared, crate::rows::Item { ix, tail }, cx),
+            move |ix, _, cx| {
+                let item = crate::rows::Item { ix, tail };
+                shared.texts.draw_row(ix, ix == tail, &shared.this, cx, |cx| {
+                    crate::rows::render_row(&model, &session, &shared, item, cx)
+                })
+            },
             move |row| wanted.want(row),
             window,
             cx,

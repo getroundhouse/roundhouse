@@ -6,3 +6,15 @@ disallowed-types = [
     { path = "std::sync::Mutex", reason = "use parking_lot::Mutex; see docs/rust.md" },
     { path = "std::sync::RwLock", reason = "use parking_lot::RwLock; see docs/rust.md" },
 ]
+disallowed-methods = [
+    { path = "gpui_kit::component::text::TextView::markdown", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::component::text::TextView::html", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::component::text::markdown", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::component::text::html", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::base::TextView::markdown", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::base::TextView::html", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::base::markdown", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::base::html", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::component::text::TextViewState::markdown", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+    { path = "gpui_kit::component::text::TextViewState::html", reason = "in the transcript, text views are made by `LongTexts`, which keeps a long text's height, as docs/ui.md says. Elsewhere, #[expect] this with why a height that comes late doesn't matter there" },
+]

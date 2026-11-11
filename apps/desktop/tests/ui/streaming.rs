@@ -2,11 +2,14 @@
 
 #![cfg(test)]
 
+use std::time::Duration;
+
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::model::{SessionStatus, seq_index};
+use transcript::Transcript;
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, Ui, wait_until};
 
 #[gpui_kit::test]
 fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
@@ -23,6 +26,36 @@ fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
     assert_eq!(ui.session_status(), Some(SessionStatus::Running));
     ui.wait_idle_with("the finished message", |text| text.contains("word19"));
     assert!(ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.streaming_text().is_empty())));
+}
+
+/// The reply streams into a text view the transcript keeps, which its row goes on drawing once it's recorded. The
+/// rest of it can arrive with the recorded reply, after the stream is gone from the tail, and the text view the row
+/// drew then went on showing only what had streamed into it.
+#[gpui_kit::test]
+fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    stack.client().session_prompt(&session, "slow:6:word", None).unwrap();
+    // Drawn, rather than only in the session's log, which a thread of its own fills ahead of what the app has drawn.
+    ui.wait("the start of the reply to be drawn", |ui| {
+        ui.cx.read_entity(&transcript, Transcript::kept_texts).iter().any(|kept| kept.contains("word0"))
+    });
+
+    // The app doesn't run while this waits, so it takes in the rest of the reply and its record in one go. The hub
+    // sends the end of the stream as soon as it's written, and the record once it's stored, so the turn is over
+    // only once the app's log, which a thread of its own fills, holds the record too.
+    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
+    let recorded = seq_index(stack.client().session_get(&session).unwrap().last_seq);
+    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.row_count()) >= recorded);
+    ui.wait_idle_with("the recorded reply", |text| text.contains("word5"));
+    ui.settle(Duration::from_millis(16));
+
+    let reply = ui.assistant_text();
+    let shown = ui.cx.read_entity(&transcript, Transcript::kept_texts);
+    assert!(shown.contains(&reply), "{reply:?} shows as {shown:?}");
 }
 
 #[gpui_kit::test]

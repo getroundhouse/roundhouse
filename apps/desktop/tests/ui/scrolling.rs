@@ -17,6 +17,7 @@ use transcript::Place;
 use crate::support::{Stack, Ui};
 
 mod cost;
+mod late_heights;
 mod latest;
 
 /// A frame's length, for letting the list measure what it does a few rows to a frame.

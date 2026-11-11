@@ -16,6 +16,7 @@ use super::tools::agent;
 use super::turn_times;
 use crate::calls::count;
 use crate::item_key::ItemKey;
+use crate::long_texts::LongTexts;
 use crate::transcript::Model;
 
 /// Where a subagent stands, for the top of its tab, such as `Finished · 3 calls · 12s`.
@@ -41,19 +42,19 @@ fn shown(m: &Model) -> Option<&Subagent> {
 }
 
 /// What the subagent was asked, above the tab's first row.
-pub(super) fn head(m: &Model, cx: &App) -> Option<AnyElement> {
+pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
-    Some(row().child(agent::prompt_block(&key, prompt, cx)).into_any_element())
+    Some(row().child(agent::prompt_block(texts, &key, prompt, cx)).into_any_element())
 }
 
 /// Its report, once it's done, in the tab's last row. That's the tail's, which no event is in, so an image it points
 /// to doesn't load, as one in what the agent is still writing doesn't.
-pub(super) fn foot(m: &Model, cx: &App) -> Option<AnyElement> {
+pub(super) fn foot(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
     let report = report(m)?;
     let key = ItemKey::Call(shown(m)?.call.clone());
-    Some(row().child(agent::report_block(&key, report, None, cx)).into_any_element())
+    Some(row().child(agent::report_block(texts, &key, report, None, cx)).into_any_element())
 }
 
 fn report(m: &Model) -> Option<&str> {

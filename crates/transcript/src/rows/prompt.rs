@@ -1,16 +1,14 @@
 //! What a prompt looks like: what was typed, the files it carries, and whether the agent has it yet.
 
 use client_core::session_log::PromptState;
-use gpui_kit::component::text::TextViewState;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, relative};
+use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, div, px, relative};
 use protocol::model::Seq;
 
-use super::row;
+use super::{Shared, row};
 use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
-use crate::transcript::Transcript;
 
 /// The widest a prompt is, as a share of the column. What was asked sits at the right, as wide as it needs, so it
 /// stands apart from the agent's work, which starts at the left.
@@ -31,10 +29,9 @@ pub(crate) enum Progress {
 pub(super) fn prompt_bubble(
     key: &ItemKey,
     text: &str,
-    held: Option<&Entity<TextViewState>>,
     carried: &[Carried],
     progress: Progress,
-    this: &WeakEntity<Transcript>,
+    shared: &Shared,
     cx: &App,
 ) -> AnyElement {
     let typed = !text.trim().is_empty();
@@ -55,8 +52,8 @@ pub(super) fn prompt_bubble(
                 .rounded(px(6.))
                 .bg(look::prompt())
                 .when(faint, |d| d.opacity(0.6))
-                .children(attachments::view(seq, carried, this, cx))
-                .when(typed, |d| d.child(super::markdown(key.element("prompt"), text, held))),
+                .children(attachments::view(seq, carried, &shared.this, cx))
+                .when(typed, |d| d.child(shared.texts.markdown(key.element("prompt"), text))),
         )
         .when(dropped, |d| {
             d.child(

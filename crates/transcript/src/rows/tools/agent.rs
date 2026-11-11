@@ -10,12 +10,11 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, SharedString,
-    Styled, TestSupportExt as _, div,
+    AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
+    TestSupportExt as _, div,
 };
 use look::Hand as _;
 use protocol::event::ContentBlock;
@@ -28,6 +27,7 @@ use crate::calls::agent::{self, Agent};
 use crate::calls::count;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::long_texts::LongTexts;
 use crate::rows::around::blocks_of;
 use crate::rows::{agent_text, render_block};
 
@@ -89,14 +89,14 @@ fn open_tab(call: ToolUseId, title: &str, toggle: &Toggle) -> AnyElement {
 /// What it was asked, quieter than what it reported, which is the outcome: a quote, with a rule at its left and its
 /// text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a dozen lines or so, as
 /// a block's prose does. The call and the subagent tab both start with it.
-pub(in crate::rows) fn prompt_block(key: &ItemKey, prompt: &str, cx: &App) -> AnyElement {
+pub(in crate::rows) fn prompt_block(texts: &LongTexts, key: &ItemKey, prompt: &str, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let (id, text_id) = (key.element("prompt"), key.element("prompt-text"));
     let text = div()
         .id(id.clone())
         .text_sm()
         .text_color(theme.muted_foreground)
-        .child(TextView::markdown(text_id, SharedString::from(prompt.to_string())).selectable(true))
+        .child(texts.markdown(text_id, prompt))
         .test_support();
     v_flex()
         .mt_1()
@@ -115,13 +115,14 @@ pub(in crate::rows) fn prompt_block(key: &ItemKey, prompt: &str, cx: &App) -> An
 /// written into it is drawn, and it loads in the row of the event at `seq`, when it's drawn in one, as it is in the
 /// chat.
 pub(in crate::rows) fn report_block(
+    texts: &LongTexts,
     key: &ItemKey,
     report: &str,
     images: Option<(&LinkedImages, Seq)>,
     cx: &App,
 ) -> Div {
     let theme = cx.theme();
-    let text = agent_text(key, report, None);
+    let text = agent_text(texts, key, report);
     let text = match images {
         Some((linked, seq)) => text.image_source(linked.resolver(seq, &[])),
         None => text,
@@ -154,10 +155,16 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .mt_1()
         .mb_2()
         .gap_2()
-        .children(call.prompt.map(|prompt| prompt_block(toggle.key, prompt, cx)))
+        .children(call.prompt.map(|prompt| prompt_block(&toggle.shared.texts, toggle.key, prompt, cx)))
         .children(lately)
         .when_some(report, |d, report| {
-            d.child(report_block(toggle.key, report, Some((&toggle.shared.linked, toggle.seq)), cx))
+            d.child(report_block(
+                &toggle.shared.texts,
+                toggle.key,
+                report,
+                Some((&toggle.shared.linked, toggle.seq)),
+                cx,
+            ))
         })
         .into_any_element()
 }
@@ -194,11 +201,14 @@ fn gathered(
         .gap_2()
         .border_l_1()
         .border_color(theme.border)
-        .children(call.prompt.map(|prompt| prompt_block(toggle.key, prompt, cx)))
+        .children(call.prompt.map(|prompt| prompt_block(&toggle.shared.texts, toggle.key, prompt, cx)))
         .children(work)
         .when_some(report, |d, report| {
             // A call's result names no images, so only one written into the report is drawn.
-            d.child(agent_text(toggle.key, report, None).image_source(toggle.shared.linked.resolver(toggle.seq, &[])))
+            d.child(
+                agent_text(&toggle.shared.texts, toggle.key, report)
+                    .image_source(toggle.shared.linked.resolver(toggle.seq, &[])),
+            )
         })
         .into_any_element()
 }
