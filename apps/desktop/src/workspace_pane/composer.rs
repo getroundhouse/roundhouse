@@ -3,11 +3,12 @@
 //! and off, as the `+` menu does, and the composer shows it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::Textarea;
+use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Focusable as _, IntoElement, ParentElement, Pixels, Rems, Styled, Window, div, px, rems,
+    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Rems,
+    Styled, Subscription, Window, div, px, rems,
 };
 use look::{Hand as _, InRegion as _, Off as _, Region};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
@@ -26,6 +27,28 @@ pub(super) enum Hub {
     Here,
     /// The app is connecting to one again, with the pane still on screen.
     Away,
+}
+
+/// The box a prompt is typed in, and what Enter does there: while the agent works, Enter steers it, and Cmd-Enter
+/// queues what's typed for after it finishes.
+pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) -> (Entity<TextareaState>, Subscription) {
+    let input = cx.new(|cx| {
+        TextareaState::new(window, cx)
+            // Room for a paragraph before it grows, so a longer prompt doesn't start out cramped.
+            .auto_grow(4, 12)
+            .submit_on_enter(true)
+            .placeholder("Ask the agent to do something")
+    });
+    let on_enter = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
+        if let InputEvent::PressEnter { shift: false, secondary } = event {
+            if *secondary && this.session().is_some_and(|s| s.status.is_active()) {
+                this.queue_typed(window, cx);
+            } else {
+                this.submit(window, cx);
+            }
+        }
+    });
+    (input, on_enter)
 }
 
 impl WorkspacePane {

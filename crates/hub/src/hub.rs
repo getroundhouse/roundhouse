@@ -10,6 +10,7 @@ mod awake;
 mod comments;
 mod hub_settings;
 mod pull_requests;
+mod queues;
 mod repos;
 mod sessions;
 mod setup;

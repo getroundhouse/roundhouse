@@ -1,3 +1,4 @@
+use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{ClientMessageId, QueuedPrompt, Session, SessionId};
 
@@ -7,7 +8,11 @@ use super::*;
 use crate::store::tests::store_with_session;
 
 fn queued(id: &str, text: &str) -> QueuedPrompt {
-    QueuedPrompt { client_msg_id: id.into(), text: text.into() }
+    QueuedPrompt { client_msg_id: id.into(), text: text.into(), attachments: Vec::new() }
+}
+
+fn log(id: &str) -> Attachment {
+    Attachment { id: id.into(), name: format!("{id}.log"), media_type: MediaType::Text, size_bytes: 3 }
 }
 
 fn session(store: &Store) -> Session {
@@ -19,6 +24,15 @@ fn queue(store: &Store, prompt: &QueuedPrompt) -> Reading {
     *reading
 }
 
+fn change(store: &Store, id: &str, text: &str) -> Changed {
+    store.change_queued(&"s".into(), &id.into(), text).unwrap()
+}
+
+fn changed(store: &Store, id: &str, text: &str) -> Reading {
+    let Changed::Done(reading) = change(store, id, text) else { panic!("refused") };
+    *reading
+}
+
 #[test]
 fn prompts_queue_in_order_and_a_change_keeps_its_place() {
     let dir = tempfile::tempdir().unwrap();
@@ -26,12 +40,65 @@ fn prompts_queue_in_order_and_a_change_keeps_its_place() {
 
     queue(&store, &queued("a", "first"));
     queue(&store, &queued("b", "second"));
-    let changed = queue(&store, &queued("a", "first, changed"));
+    let changed = changed(&store, "a", "first, changed");
 
     assert!(changed.changed);
     assert_eq!(session(&store).queued, [queued("a", "first, changed"), queued("b", "second")]);
     assert_eq!(changed.session.session, session(&store), "it comes back as stored");
     assert_eq!(store.first_queued(&"s".into()).unwrap(), Some(queued("a", "first, changed")));
+}
+
+#[test]
+fn queueing_a_prompt_again_is_a_retry_and_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    queue(&store, &queued("a", "first"));
+
+    let again = queue(&store, &queued("a", "not a change"));
+
+    assert!(!again.changed);
+    assert_eq!(session(&store).queued, [queued("a", "first")]);
+}
+
+#[test]
+fn a_change_keeps_the_files_it_was_queued_with_and_can_leave_only_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let carrying = QueuedPrompt { attachments: vec![log("a1"), log("a2")], ..queued("a", "look at these") };
+    queue(&store, &carrying);
+    queue(&store, &queued("b", "no files"));
+
+    changed(&store, "a", "look at these, changed");
+    let files_only = changed(&store, "a", " ");
+    let emptied = change(&store, "b", " ");
+
+    let kept = QueuedPrompt { text: " ".into(), ..carrying };
+    assert_eq!(files_only.session.session.queued, [kept.clone(), queued("b", "no files")]);
+    assert!(matches!(emptied, Changed::WouldBeEmpty));
+    assert_eq!(session(&store).queued, [kept, queued("b", "no files")], "the refused change wasn't kept");
+}
+
+#[test]
+fn a_change_to_a_prompt_taken_out_is_refused_rather_than_queued() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    queue(&store, &queued("a", "first"));
+    store.unqueue_prompt(&"s".into(), &"a".into()).unwrap();
+
+    let late = change(&store, "a", "changed too late");
+
+    assert!(matches!(late, Changed::NotQueued));
+    assert!(session(&store).queued.is_empty());
+}
+
+#[test]
+fn a_queue_kept_before_prompts_carried_files_reads_as_carrying_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let older = r#"[{"client_msg_id":"a","text":"first"}]"#;
+    lock(&store.writer).execute("UPDATE sessions SET queued = ? WHERE id = 's'", [older]).unwrap();
+
+    assert_eq!(session(&store).queued, [queued("a", "first")]);
 }
 
 #[test]
@@ -72,9 +139,11 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
         EventBody::UserPrompt { text: "first".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
     store.append(&"s".into(), None, &prompt, None, Some(&"a".into()), None).unwrap();
 
-    let refused = store.queue_prompt(&"s".into(), &queued("a", "changed too late")).unwrap();
+    let refused = store.queue_prompt(&"s".into(), &queued("a", "queued again too late")).unwrap();
+    let late = change(&store, "a", "changed too late");
 
     assert!(matches!(refused, Queued::AlreadySent));
+    assert!(matches!(late, Changed::AlreadySent));
     assert!(session(&store).queued.is_empty(), "not put back");
 }
 

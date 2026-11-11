@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use super::{Client, ClientError, Result};
+use protocol::model::SessionId;
+
+use super::{Client, ClientError, Place, Result};
 
 /// How many started calls are under way, and who's waiting for there to be none.
 #[derive(Default)]
@@ -79,6 +81,12 @@ impl<T> Reply<T> {
     pub async fn recv(self) -> Result<T> {
         self.0.recv_async().await.unwrap_or(Err(ClientError::Disconnected))
     }
+
+    /// The same, blocking, for a test, which has no executor to wait on.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn wait(self) -> Result<T> {
+        self.0.recv().unwrap_or(Err(ClientError::Disconnected))
+    }
 }
 
 impl Client {
@@ -98,6 +106,12 @@ impl Client {
             let _ = failed.send(Err(ClientError::Io(e)));
         }
         Reply(replied)
+    }
+
+    /// A place in the chat's line of prompts, taken now, on the caller's thread, so it's in the order the prompts were
+    /// written rather than the order their threads start.
+    pub(crate) fn line_up(&self, session_id: &SessionId) -> Place {
+        self.inner.lines.join(session_id)
     }
 
     /// The calls started on this connection, which can be waited for after it's gone.

@@ -11,13 +11,14 @@ use std::sync::Arc;
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, TurnOutcome};
-use protocol::model::{ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
+use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
+use protocol::prompt::PromptProblem;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 use super::{Command, LiveSession};
 use crate::hub::Hub;
-use crate::store::{Queued, Reading};
+use crate::store::{Changed, Queued, Reading};
 
 #[cfg(test)]
 mod tests;
@@ -78,15 +79,23 @@ impl QueueWatch {
 }
 
 impl LiveSession {
-    pub(crate) async fn queue(&self, client_msg_id: ClientMessageId, text: String) -> Result<Session, ApiError> {
-        if text.trim().is_empty() {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "a prompt can't be empty"));
-        }
+    /// Queues a prompt the hub has checked says or carries something. Each of `attachments` has to be one of the
+    /// session's.
+    pub(crate) async fn queue(
+        &self,
+        client_msg_id: ClientMessageId,
+        text: String,
+        attachments: Vec<AttachmentId>,
+    ) -> Result<Session, ApiError> {
         let hub = self.hub()?;
-        let (id, prompt) = (self.id.clone(), QueuedPrompt { client_msg_id, text });
+        let id = self.id.clone();
         let queued = {
             let _not_while_sending = self.queue_lock.lock().await;
-            hub.blocking(move |store| store.queue_prompt(&id, &prompt)).await?
+            hub.blocking(move |store| {
+                let attachments = store.attachments(&id, &attachments)?;
+                store.queue_prompt(&id, &QueuedPrompt { client_msg_id, text, attachments })
+            })
+            .await?
         };
         let Queued::Done(reading) = queued else {
             return Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent"));
@@ -97,6 +106,26 @@ impl LiveSession {
             self.wake_queue();
         }
         Ok(session)
+    }
+
+    /// Changes the text of a queued prompt, unless it's too late to.
+    pub(crate) async fn change_queued(
+        &self,
+        client_msg_id: ClientMessageId,
+        text: String,
+    ) -> Result<Session, ApiError> {
+        let hub = self.hub()?;
+        let id = self.id.clone();
+        let changed = {
+            let _not_while_sending = self.queue_lock.lock().await;
+            hub.blocking(move |store| store.change_queued(&id, &client_msg_id, &text)).await?
+        };
+        match changed {
+            Changed::Done(reading) => Ok(self.changed_queue(*reading)),
+            Changed::AlreadySent => Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent")),
+            Changed::NotQueued => Err(ApiError::new(ErrorCode::NotFound, "that prompt isn't queued")),
+            Changed::WouldBeEmpty => Err(PromptProblem::Empty.into()),
+        }
     }
 
     pub(crate) async fn unqueue(&self, client_msg_id: ClientMessageId) -> Result<Session, ApiError> {
@@ -188,9 +217,9 @@ impl LiveSession {
     /// caller holds `queue_lock`, so a change can't land between reading the prompt and recording it, and be lost.
     /// Returns what to deliver, which is nothing if the prompt was recorded already.
     async fn send_from_queue(&self, hub: &Arc<Hub>, prompt: QueuedPrompt) -> Result<Option<Delivery>, ApiError> {
-        let recorded = self.record_prompt(hub, &prompt.text, Some(prompt.client_msg_id), &[]).await?;
-        let (seq, duplicate, attachments) = recorded;
-        Ok((!duplicate).then_some((seq, prompt.text, attachments)))
+        let QueuedPrompt { client_msg_id, text, attachments } = prompt;
+        let (seq, duplicate) = self.record_carrying(hub, &text, Some(client_msg_id), &attachments).await?;
+        Ok((!duplicate).then_some((seq, text, attachments)))
     }
 
     /// Tells everyone following the feed, if the queue changed.

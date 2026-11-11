@@ -14,7 +14,7 @@ use protocol::model::{AgentKind, AttachmentId, SessionId, SessionSettingsChange}
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
 
 /// Enough of a PNG for anything that only looks at how it starts, which is all the hub and the fake agent do.
-fn png(len: usize) -> Vec<u8> {
+pub(crate) fn png(len: usize) -> Vec<u8> {
     let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
     bytes.resize(len, 7);
     bytes
@@ -24,7 +24,7 @@ fn add(client: &Client, session: &SessionId, id: &str, name: &str, media_type: M
     client.attachment_add(session, &AttachmentId::from(id), name, media_type, data.to_vec()).unwrap()
 }
 
-fn refused_with(result: Result<impl std::fmt::Debug, ClientError>) -> ErrorCode {
+pub(crate) fn refused_with(result: Result<impl std::fmt::Debug, ClientError>) -> ErrorCode {
     match result {
         Err(ClientError::Api(e)) => e.code,
         other => panic!("expected a refusal, got {other:?}"),

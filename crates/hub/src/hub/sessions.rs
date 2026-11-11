@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use protocol::attachment::MAX_PER_PROMPT;
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::model::{
@@ -11,6 +10,7 @@ use protocol::model::{
     RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource,
     ToolUseId, WorkspaceId, WorkspaceStatus,
 };
+use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
 use tracing::warn;
 
@@ -225,59 +225,11 @@ impl Hub {
         client_msg_id: Option<ClientMessageId>,
         attachments: Vec<AttachmentId>,
     ) -> Result<(Seq, bool), ApiError> {
-        if text.trim().is_empty() && attachments.is_empty() {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "a prompt can't be empty"));
-        }
-        if attachments.len() > MAX_PER_PROMPT {
-            let message = format!("a prompt can carry at most {MAX_PER_PROMPT} files");
-            return Err(ApiError::new(ErrorCode::InvalidRequest, message));
-        }
+        check_prompt(&text, attachments.len())?;
         let session = self.live_session(&id).await?;
         let (reply, recorded) = oneshot::channel();
         session.command(Command::Prompt { text, client_msg_id, attachments, reply }).await?;
         recorded.await.map_err(|_| internal("the session has stopped"))?
-    }
-
-    pub(crate) async fn session_queue(
-        self: &Arc<Self>,
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-        text: String,
-    ) -> Result<Session, ApiError> {
-        self.live_session(&id).await?.queue(client_msg_id, text).await
-    }
-
-    pub(crate) async fn session_unqueue(
-        self: &Arc<Self>,
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-    ) -> Result<Session, ApiError> {
-        self.live_session(&id).await?.unqueue(client_msg_id).await
-    }
-
-    pub(crate) async fn session_send_queued(
-        self: &Arc<Self>,
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-    ) -> Result<Session, ApiError> {
-        let session = self.live_session(&id).await?;
-        let (reply, sent) = oneshot::channel();
-        session.command(Command::SendQueuedNow { client_msg_id, reply }).await?;
-        sent.await.map_err(|_| internal("the session has stopped"))?
-    }
-
-    /// At startup, starts each session with a queue, so a queue that was ready to send when the last hub went away is
-    /// sent now, rather than once someone opens its chat.
-    pub(crate) async fn start_queues(self: &Arc<Self>) {
-        let ids = match self.blocking(Store::sessions_with_queues).await {
-            Ok(ids) => ids,
-            Err(e) => return tracing::error!("couldn't read the queues: {e}"),
-        };
-        for id in ids {
-            if let Err(e) = self.live_session(&id).await {
-                tracing::error!(session = %id, "couldn't start a session with a queue: {e}");
-            }
-        }
     }
 
     pub(crate) async fn session_approve(

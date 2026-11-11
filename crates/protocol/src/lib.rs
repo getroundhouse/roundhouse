@@ -16,6 +16,7 @@ pub mod event;
 pub mod frame;
 pub mod model;
 pub mod paths;
+pub mod prompt;
 pub mod tail;
 pub mod worker;
 
