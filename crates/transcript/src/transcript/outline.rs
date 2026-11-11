@@ -13,7 +13,7 @@ use gpui_kit::{
     IntoElement, ParentElement, Pixels, Role, ScrollEvent, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, canvas, deferred, div, px,
 };
-use look::LineText;
+use look::{InRegion as _, LineText, Region};
 use protocol::model::PromptLine;
 
 use super::Transcript;
@@ -181,7 +181,7 @@ fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window
         })
         .collect();
     div()
-        .id("outline")
+        .region(Region::Outline)
         .role(Role::ListBox)
         .aria_label("Prompts")
         .w(TICK_WIDTH)
@@ -191,7 +191,6 @@ fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window
         }))
         .on_mouse_move(window.listener_for(hover, |h: &mut Hover, _, _, cx| h.moved_over_ticks(cx)))
         .children(ticks)
-        .test_support()
         .into_any_element()
 }
 
