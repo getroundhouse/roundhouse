@@ -139,3 +139,12 @@ fn launch_failures_are_told_apart_from_the_clis_messages() {
     );
     assert_eq!(classify_launch_failure(&line("Error: something else")), None);
 }
+
+#[test]
+fn only_a_refusal_of_a_request_the_cli_doesnt_know_says_asking_again_is_pointless() {
+    let unknown = refused("Unsupported control request subtype: get_usage".to_string());
+    let other = refused("Internal error".to_string());
+
+    assert!(matches!(unknown, AgentError::UnknownRequest(_)), "{unknown:?}");
+    assert!(matches!(other, AgentError::Refused(_)), "any other refusal may not come twice: {other:?}");
+}

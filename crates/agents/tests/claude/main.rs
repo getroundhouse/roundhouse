@@ -3,4 +3,5 @@
 #![cfg(test)]
 
 mod contract;
+mod controls;
 mod process;

@@ -13,7 +13,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionSettingsChange, Title};
+use protocol::model::{
+    AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionSettingsChange, Title, UsageLimit,
+};
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -32,6 +34,9 @@ pub enum AgentOutput {
     /// How full the agent's context is now. It answers the adapter's own question rather than being something the
     /// agent said, and only the newest matters, so it isn't an event.
     Context(ContextUsage),
+    /// What's used of each of the account's limits now, shortest window first, when the adapter asked rather than
+    /// the agent saying so by itself. It answers the adapter's own question, so it isn't an event, as `Context` isn't.
+    Limits(Vec<UsageLimit>),
     /// Always the last thing sent.
     Exited {
         code: Option<i32>,

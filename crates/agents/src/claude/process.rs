@@ -24,6 +24,7 @@ use tracing::warn;
 
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
+mod asking;
 mod context;
 mod launch;
 mod output;
@@ -31,6 +32,7 @@ mod prompt;
 mod supervise;
 #[cfg(test)]
 mod tests;
+mod usage;
 
 use context::ContextWatch;
 use launch::launch;
@@ -38,6 +40,7 @@ pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
 use prompt::user_message;
 use supervise::supervise;
+use usage::UsageWatch;
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
@@ -77,6 +80,8 @@ struct Shared {
     pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
     /// Where asking how full the context is has got to.
     context: Mutex<ContextWatch>,
+    /// Where asking what's left of the account's limits has got to.
+    usage: Mutex<UsageWatch>,
     stop_requested: AtomicBool,
     /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
     /// still being drained and delivered.
@@ -117,6 +122,7 @@ pub fn spawn_at(
         pending_inputs: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
         context: Mutex::new(ContextWatch::default()),
+        usage: Mutex::new(UsageWatch::default()),
         stop_requested: AtomicBool::new(false),
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
@@ -158,13 +164,22 @@ async fn control(shared: &Shared, request: Value) -> Result<Value, AgentError> {
     };
     match result {
         Ok(Ok(Ok(answer))) => Ok(answer),
-        Ok(Ok(Err(refusal))) => Err(AgentError::Refused(refusal)),
+        Ok(Ok(Err(refusal))) => Err(refused(refusal)),
         Ok(Err(_)) => Err(AgentError::Exited),
         Err(_) => {
             shared.pending_controls.lock().remove(&request_id);
             Err(AgentError::NoAnswer)
         }
     }
+}
+
+/// How the CLI refuses a request it doesn't know, as `docs/claude-cli.md` records and a contract test checks.
+const UNKNOWN_REQUEST: &str = "Unsupported control request subtype";
+
+/// What the CLI's refusal of a control request was, in its own words: a request it doesn't know, or one it said no
+/// to.
+fn refused(why: String) -> AgentError {
+    if why.contains(UNKNOWN_REQUEST) { AgentError::UnknownRequest(why) } else { AgentError::Refused(why) }
 }
 
 /// Changes the effort, and reads it back. The CLI answers success to a level it doesn't know, and changes nothing, so

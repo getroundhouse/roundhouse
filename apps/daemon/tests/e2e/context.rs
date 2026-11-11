@@ -34,7 +34,7 @@ fn after_prompts(prompts: u64) -> ContextUsage {
     }
 }
 
-/// The week's limit the fake agent hears of in every turn.
+/// The week's limit the fake agent hears of in its process's first turn, and says when asked.
 fn the_week() -> UsageLimit {
     UsageLimit {
         window: LimitWindow::SevenDays,
@@ -323,4 +323,24 @@ fn a_launchs_account_is_asked_again_when_the_worker_couldnt_say_and_what_its_age
 
     // The week's limit was heard in the turn, before anyone knew whose it was.
     wait_for_adas_week(&client, &session.id);
+}
+
+#[test]
+fn an_agent_that_doesnt_say_its_limits_by_itself_is_asked_and_the_answer_stays_out_of_the_log() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    // As the real CLI after its first turn, which says what's left only once a process.
+    std::fs::create_dir_all(stack.agent_state()).unwrap();
+    std::fs::write(stack.agent_state().join("limits-unsaid"), "").unwrap();
+
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    wait_for_adas_week(&client, &session.id);
+    // It answers the adapter's own question, like how full the context is, and the answer says how the account was
+    // used, so none of it is in the log.
+    let (events, _) = client.session_read(&session.id, 1, 500, true).unwrap();
+    assert!(events.iter().all(|e| !matches!(e.body, EventBody::AgentLimits { .. })), "{events:?}");
+    assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("get_usage")));
 }

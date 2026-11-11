@@ -12,6 +12,7 @@ use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
 use calls::OpenCalls;
+pub(super) use limits::{whole_percent, window_named};
 use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
 use surrogates::repair_lone_surrogates;

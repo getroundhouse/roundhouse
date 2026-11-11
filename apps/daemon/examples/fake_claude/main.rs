@@ -47,7 +47,8 @@
 //! `--session-id` fails if there is, as with the real CLI.
 //!
 //! With `--output-format json`, it's the one-off call that titles a prompt instead. See `title.rs`. And as
-//! `auth status --json`, it says who's logged in. See `account.rs`.
+//! `auth status --json`, it says who's logged in. Its first turn says what's left of the account's limits, as the
+//! real CLI's does, and `get_usage` says it whenever it's asked. See `account.rs`.
 
 #![expect(
     clippy::unwrap_used,
@@ -357,6 +358,10 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
                 }
                 Some("get_context_usage") => {
                     answer_control(&out, &value["request_id"], Ok(account::context_usage(conversation)));
+                    continue;
+                }
+                Some("get_usage") => {
+                    answer_control(&out, &value["request_id"], Ok(account::usage(conversation)));
                     continue;
                 }
                 other => panic!("unexpected control request {other:?}"),

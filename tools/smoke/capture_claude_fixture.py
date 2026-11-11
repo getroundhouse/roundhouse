@@ -129,7 +129,7 @@ def capture(cwd):
 
 def capture_controls(cwd):
     """A level it takes, one it doesn't, and a new model, each followed by what it then reports applying. Then how
-    full its context is, and a request it doesn't know."""
+    full its context is, what's left of its account's limits, and a request it doesn't know."""
     cli = Cli(cwd)
     requests = [
         ("settings-1", {"subtype": "get_settings"}),
@@ -140,6 +140,7 @@ def capture_controls(cwd):
         ("model-1", {"subtype": "set_model", "model": "sonnet"}),
         ("settings-4", {"subtype": "get_settings"}),
         ("context-1", {"subtype": "get_context_usage"}),
+        ("usage-1", {"subtype": "get_usage"}),
         ("unknown-1", {"subtype": "not_a_request"}),
     ]
     exchanged = []
@@ -169,6 +170,22 @@ def keep_only_what_the_context_holds(value):
         kept["categories"] = [{key: category[key] for key in ("id", "name", "tokens", "kind") if key in category}
                               for category in answer["categories"]]
         value["response"]["response"] = kept
+    return value
+
+
+def made_up_usage(value):
+    """`get_usage` answers with how much of the account's limits is used, how it was used, by day and week, and what
+    it was spent on, which is all personal. This keeps whether it says there are limits to tell of, and which windows
+    the account has, each with only the keys the adapter reads, with made-up numbers, as `made_up_limits` does. It
+    names many more, with `null` for each the account doesn't have, which are left out."""
+    answer = value.get("response", {}).get("response")
+    if value.get("type") == "control_response" and isinstance(answer, dict) and "rate_limits" in answer:
+        made_up = {"utilization": 25, "resets_at": "2100-01-01T00:00:00+00:00"}
+        windows = answer["rate_limits"] if isinstance(answer["rate_limits"], dict) else {}
+        kept = {name: {key: made_up[key] for key in made_up if key in window}
+                for name, window in windows.items() if isinstance(window, dict)}
+        value["response"]["response"] = {"rate_limits_available": answer.get("rate_limits_available"),
+                                         "rate_limits": kept}
     return value
 
 
@@ -265,7 +282,7 @@ def main():
                 if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
                     continue
                 kept.append(sanitize(value, cwd))
-        controls = [sanitize(keep_only_what_the_context_holds(keep_only_whats_applied(value)), cwd)
+        controls = [sanitize(made_up_usage(keep_only_what_the_context_holds(keep_only_whats_applied(value))), cwd)
                     for value in capture_controls(cwd)]
         # The CLI keeps a conversation file per directory. The random name makes this exact.
         projects = pathlib.Path.home() / ".claude/projects"

@@ -10,7 +10,7 @@ use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
     AgentAccount, AgentKind, AgentSessionId, ApprovalId, ContextUsage, FileContents, GitDiff, GitStatus, PullRequest,
-    RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, WorktreeFiles,
+    RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, UsageLimit, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
 
@@ -239,6 +239,14 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         context: ContextUsage,
+    },
+    /// What's used of each of the account's limits, as the agent answered when the worker asked. It isn't an event,
+    /// as how full the context is isn't: the agent wasn't told it as it worked, and the hub keeps the newest on the
+    /// account's record, as it does what the agent hears by itself.
+    AgentLimits {
+        session_id: SessionId,
+        run: RunId,
+        limits: Vec<UsageLimit>,
     },
 }
 

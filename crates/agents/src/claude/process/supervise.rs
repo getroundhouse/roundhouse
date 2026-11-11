@@ -54,6 +54,7 @@ pub(super) async fn supervise(
         shared.held_output.lock().clear();
         shared.pending_controls.lock().clear();
         shared.context.lock().relaunched();
+        shared.usage.lock().relaunched();
         if matches!(failure, LaunchFailure::NoConversation) {
             let notice = EventBody::Notice {
                 level: NoticeLevel::Warning,
@@ -114,6 +115,7 @@ async fn finish(
     let (code, signal) = status.map_or((None, None), |s| (s.code(), signal_of(s)));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
     shared.context.lock().close();
+    shared.usage.lock().close();
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
 }

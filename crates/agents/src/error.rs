@@ -23,6 +23,10 @@ pub enum AgentError {
     /// The agent understood the request and said no. This is its own wording.
     #[error("{0}")]
     Refused(String),
+    /// The agent doesn't know the request, such as one a newer CLI added, so asking again is pointless. This is its
+    /// own wording.
+    #[error("{0}")]
+    UnknownRequest(String),
     /// A level of effort this agent has no name for, such as one a newer build chose. The way out is to update, or to
     /// choose another level, since running at one nobody chose would be wrong.
     #[error(
