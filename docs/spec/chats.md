@@ -75,7 +75,7 @@
 
 ## Attachments
 
-- **A prompt can carry files.** Paste an image, or drop images and files on the composer, or choose them with its `+`, and each shows as a tile above what's typed, with a way to take it off. A prompt with files needs no text, since a screenshot can be the whole question.
+- **A prompt can carry files.** Paste an image, or drop images and files on the composer, or choose them from the menu its `+` opens, and each shows as a tile above what's typed, with a way to take it off. A prompt with files needs no text, since a screenshot can be the whole question.
 - **Any kind of file can go, up to 100 MB, and at most 10 with a prompt.** The size is what the hub takes in one go.
 - **Each file goes in the workspace's `.context/attachments/`, and the agent is told where, so it can open it then or later.** Git is told to ignore the folder, so the files never show as changes. Images up to 32 MB between them, and a text file up to 32 KB, also go in the prompt itself, so the agent sees them without opening anything. A longer text file is opened from where it is, so the agent can search it rather than read all of it.
 - **A file is known by its bytes rather than its name,** so the agent is never sent an image labelled as something it isn't, and a pasted TIFF, which some apps copy, goes as a PNG.
@@ -236,7 +236,8 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ## The model and plan mode
 
 - **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it.
-- **`Shift-Tab` in the composer turns plan mode on and off,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
+- **`Shift-Tab` in the composer turns plan mode on and off, and so does Plan mode in the menu the composer's `+` opens,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
+- **The `+`'s menu has two items, each with an icon: Attach files…, which opens the file picker, and Plan mode, with `Shift-Tab` beside it, and a check in place of its icon while it's on.** However it closes, focus goes where the prompt is typed. The new-workspace dialog has the same `+` and menu, as `workspaces.md` says. *Unconfirmed.*
 - **The composer shows plan mode in copper, with a texture made from the mark:** a muted copper edge, a faint copper wash, and the fan's rows as dotted half circles of fine copper dots around a point just under the composer's bottom edge, each with a dot over the composer's middle, as if the composer lay over a roundhouse far bigger than itself. The texture is strongest at the top and fades toward the buttons, so the colour marks the whole composer and the texture doesn't crowd what's typed or pressed. `look.md` has the colour. *Unconfirmed.*
 - **A chat that's planning when its agent stops is still planning when the agent comes back.** Otherwise an agent that restarted would make changes nobody had approved. *Unconfirmed.*
 - **A new chat keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
@@ -249,6 +250,14 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **The composer in plan mode, with a prompt typed.** *Unconfirmed.*
 
 ![The composer in plan mode](screens/plan-mode.png)
+
+**The `+`'s menu, open, in a chat with full access.** *Unconfirmed.*
+
+![The menu the composer's + opens](screens/composer-menu.png)
+
+**The same menu in a chat that's planning.** *Unconfirmed.*
+
+![The menu the composer's + opens, with plan mode checked](screens/composer-menu-planning.png)
 
 **The model picker's menu, open, in a chat at Extra high.** *Unconfirmed.*
 

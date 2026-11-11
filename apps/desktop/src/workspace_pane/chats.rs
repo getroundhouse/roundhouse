@@ -98,11 +98,18 @@ impl WorkspacePane {
     }
 
     /// Puts the active chat's draft in the composer, once there's the window to do it with, or for a chat with none, a
-    /// prompt waiting for the first chat to show. Files can come for the chat between its being made active and this,
-    /// such as with a prompt handed back, and they go after the draft's.
+    /// prompt waiting for the first chat to show, and plan mode if it was to be planned. Files can come for the chat
+    /// between its being made active and this, such as with a prompt handed back, and they go after the draft's.
     fn show_draft(&mut self, cx: &mut Context<Self>) {
         self.with_window(cx, |t, window, cx| {
-            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id)).or_else(|| t.waiting.take());
+            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id));
+            let draft = draft.or_else(|| {
+                let waiting = t.waiting.take()?;
+                if let Some(chat) = t.active.clone().filter(|_| waiting.to_plan) {
+                    t.want_plan_mode(chat, true, cx);
+                }
+                Some(waiting.draft)
+            });
             let Draft { text, mut files } = draft.unwrap_or_default();
             for problem in files.append(std::mem::take(&mut t.attached)) {
                 cx.emit(PaneEvent::Error(problem));

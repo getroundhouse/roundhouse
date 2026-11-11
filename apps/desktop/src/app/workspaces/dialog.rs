@@ -4,7 +4,7 @@
 use client_core::FileToSend;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
-use protocol::model::{RepoId, WorkspaceId};
+use protocol::model::{PermissionMode, RepoId, WorkspaceId};
 
 use crate::app::AppView;
 use crate::new_workspace::{self, DialogEvent, NewWorkspaceDialog, Offer};
@@ -49,7 +49,9 @@ impl AppView {
                 window.close_dialog(cx);
                 self.dialog_closed(window, cx);
             }
-            Err(request) => dialog.update(cx, |dialog, cx| dialog.give_back(request.prompt, request.files, window, cx)),
+            Err(request) => dialog.update(cx, |dialog, cx| {
+                dialog.give_back(request.prompt, request.files, request.permission_mode, window, cx);
+            }),
         }
     }
 
@@ -67,13 +69,19 @@ impl AppView {
         }
     }
 
-    /// Puts back a prompt for a workspace that couldn't be made, and opens the dialog to show where it went, unless
-    /// another dialog is open.
-    pub(super) fn give_back_to_dialog(&mut self, text: String, files: Vec<FileToSend>, cx: &mut Context<Self>) {
+    /// Puts back a prompt for a workspace that couldn't be made, with the mode it was to start in, and opens the dialog
+    /// to show where it went, unless another dialog is open.
+    pub(super) fn give_back_to_dialog(
+        &mut self,
+        text: String,
+        files: Vec<FileToSend>,
+        mode: PermissionMode,
+        cx: &mut Context<Self>,
+    ) {
         let Some(dialog) = self.new_workspace.clone() else { return };
         let this = cx.weak_entity();
         let _ = self.window.update(cx, |_, window, cx| {
-            dialog.update(cx, |dialog, cx| dialog.give_back(text, files, window, cx));
+            dialog.update(cx, |dialog, cx| dialog.give_back(text, files, mode, window, cx));
             if !window.has_active_dialog(cx) {
                 new_workspace::open(&dialog, closed(this), window, cx);
             }

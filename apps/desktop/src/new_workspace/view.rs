@@ -1,25 +1,28 @@
 //! How the new-workspace dialog looks: the repository over a line the dialog's width, then what's attached and what's
-//! typed, then the model and effort, attaching and Create.
+//! typed, then the `+` menu, the model and effort, and Create, as the composer's bar has them, over plan mode's
+//! texture while it's on.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    Anchor, Context, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render, Styled as _, Window,
-    div, px, transparent_black,
+    Anchor, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render,
+    Styled as _, Window, div, px, transparent_black,
 };
 use look::{Hand as _, Off as _};
 
 use super::{NewWorkspaceDialog, RADIUS};
 use crate::attached;
+use crate::composing::{self, Plan};
 use crate::model_picker::model_picker;
 
 impl Render for NewWorkspaceDialog {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // An edge of its own inside the dialog's, which shows only while files are dragged over it.
         let target = v_flex().id("new-workspace").w_full().rounded(RADIUS).border_1().border_color(transparent_black());
+        let target = composing::place(target, self.planning(), RADIUS.into(), cx, Self::toggle_plan_mode);
         attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
             .child(self.header(cx))
             .children(
@@ -46,7 +49,7 @@ impl NewWorkspaceDialog {
             }
             menu
         };
-        h_flex().w_full().h(px(48.)).px_2().border_b_1().border_color(cx.theme().border).child(
+        h_flex().w_full().h(px(48.)).px_2().border_b_1().border_color(self.colors(cx).1).child(
             Button::new("new-workspace-repo")
                 .hand()
                 .ghost()
@@ -65,13 +68,17 @@ impl NewWorkspaceDialog {
         div().w_full().px_2().pt_2().child(field)
     }
 
-    /// The model and effort on the left, and on the right attaching and Create, the dialog's one main action.
+    /// The `+` menu and the model and effort on the left, as in the composer's bar, and on the right Create, the
+    /// dialog's one main action.
     fn footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.weak_entity();
         let picker = model_picker("new-workspace-model", &self.model, self.effort, move |picked, _, cx| {
             let _ = this.update(cx, |t, cx| t.pick(picked, cx));
         });
-        let attach = attached::attach_button("new-workspace-attach", cx, |_, paths, cx| Self::attach_paths(paths, cx));
+        let field = self.prompt.focus_handle(cx);
+        let plan = Plan::of(self.planning());
+        let plus =
+            composing::plus_menu("new-workspace-add", plan, field, cx, |_, paths, cx| Self::attach_paths(paths, cx));
         let enter = Keystroke::parse("enter").ok().map(|key| Kbd::new(key).appearance(false));
         let create = Button::new("new-workspace-create")
             .primary()
@@ -85,10 +92,10 @@ impl NewWorkspaceDialog {
             .px_3()
             .pb_3()
             .pt_1()
-            .gap_1()
+            .gap_2()
+            .child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
             .child(h_flex().flex_1().min_w_0().child(picker))
-            .child(attach.small())
             .child(create)
     }
 }

@@ -1,25 +1,23 @@
 //! Files waiting to go with a prompt that hasn't been sent, in a chat's composer or the new-workspace dialog: the list
-//! of them, drawn as tiles above what's typed, and the button and drop target that add to it. Each file is read and
-//! checked as it comes, in `reading`, so nothing that would be refused gets as far as sending. A prompt that can't be
-//! sent comes back with its files.
+//! of them, drawn as tiles above what's typed, and the file picker and drop target that add to it. Each file is read
+//! and checked as it comes, in `reading`, so nothing that would be refused gets as far as sending. A prompt that can't
+//! be sent comes back with its files.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use client_core::FileToSend;
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{
     Axis, Context, Div, ElementId, ExternalPaths, Image, InteractiveElement as _, ParentElement, Stateful, Styled,
 };
-use look::Hand as _;
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
 
 mod reading;
 
-pub(crate) use reading::{pasted, read_into};
+pub(crate) use reading::{pasted, pick, read_into};
 
 /// A file waiting to go, checked and ready to send.
 pub(crate) struct Attached {
@@ -126,20 +124,6 @@ impl Attachments {
 /// Whether there's a prompt to send: something typed, or a file.
 pub(crate) fn anything_to_send(text: &str, files: usize) -> bool {
     !text.trim().is_empty() || files > 0
-}
-
-/// The `+` that asks for files to attach, and hands what was chosen to `then`. The caller sizes it.
-pub(crate) fn attach_button<T: 'static>(
-    id: &'static str,
-    cx: &mut Context<T>,
-    then: impl Fn(&mut T, Vec<PathBuf>, &mut Context<T>) + Clone + 'static,
-) -> Button {
-    Button::new(id).hand().ghost().icon(IconName::Plus).tooltip("Attach images or files").on_click(cx.listener(
-        move |_, _, _, cx| {
-            let then = then.clone();
-            reading::pick(cx, move |t, paths, cx| then(t, paths, cx));
-        },
-    ))
 }
 
 /// Takes files dropped anywhere on `target`, which shows the focus colour on its edge while they're dragged over it.

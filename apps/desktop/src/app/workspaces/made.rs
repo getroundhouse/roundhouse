@@ -2,7 +2,7 @@
 //! thread `Client::start` gives it, since each call blocks, and each step needs the one before.
 
 use client_core::{Client, ClientError, FileToSend};
-use protocol::model::{AgentKind, Session, SessionSettingsChange, Workspace};
+use protocol::model::{AgentKind, PermissionMode, Session, SessionSettingsChange, Workspace};
 
 use crate::new_workspace::Request;
 
@@ -18,6 +18,8 @@ pub(super) struct Made {
 pub(super) struct Unsent {
     pub(super) text: String,
     pub(super) files: Vec<FileToSend>,
+    /// The mode the chat was to start in, which goes back with the prompt.
+    pub(super) permission_mode: PermissionMode,
     pub(super) failed: Step,
     pub(super) error: ClientError,
 }
@@ -27,7 +29,8 @@ pub(super) struct Unsent {
 pub(super) enum Step {
     Workspace,
     Chat,
-    /// Giving the chat the model and effort chosen. The prompt isn't sent without them.
+    /// Giving the chat the model, effort and mode chosen. The prompt isn't sent without them, so a chat that's to plan
+    /// doesn't start on it with full access.
     Model,
     Prompt,
 }
@@ -38,7 +41,7 @@ impl Step {
         match self {
             Step::Workspace => format!("couldn't create the workspace: {e}"),
             Step::Chat => format!("couldn't start the workspace's chat: {e}"),
-            Step::Model => format!("couldn't give the chat its model and effort: {e}"),
+            Step::Model => format!("couldn't give the chat the model, effort and mode chosen: {e}"),
             Step::Prompt => format!("couldn't send that: {e}"),
         }
     }
@@ -47,8 +50,8 @@ impl Step {
 pub(super) fn make(client: &Client, request: Request) -> Made {
     let mut made = Made { workspace: None, session: None, unsent: None };
     if let Err((failed, error)) = make_into(client, &request, &mut made) {
-        let Request { prompt, files, .. } = request;
-        made.unsent = Some(Unsent { text: prompt, files, failed, error });
+        let Request { prompt, files, permission_mode, .. } = request;
+        made.unsent = Some(Unsent { text: prompt, files, permission_mode, failed, error });
     }
     made
 }
@@ -65,11 +68,13 @@ fn make_into(client: &Client, request: &Request, made: &mut Made) -> Result<(), 
     let session = client.session_ensure(&id, AgentKind::Claude).map_err(at(Step::Chat))?;
     let chat = session.id.clone();
     // The hub gave the chat its defaults, or another client made it, and either may be what was chosen.
-    let as_chosen = session.model == request.model && session.effort == request.effort;
+    let as_chosen = session.model == request.model
+        && session.effort == request.effort
+        && session.permission_mode == request.permission_mode;
     made.session = Some(session);
     if !as_chosen {
         let (model, effort) = (Some(request.model.clone()), Some(request.effort));
-        let options = SessionSettingsChange { model, permission_mode: None, effort };
+        let options = SessionSettingsChange { model, permission_mode: Some(request.permission_mode), effort };
         made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
     }
     if request.has_prompt() {

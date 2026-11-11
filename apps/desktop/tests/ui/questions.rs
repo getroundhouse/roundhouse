@@ -55,13 +55,13 @@ fn a_question_is_answered_by_choosing_or_typing_or_skipped(cx: &mut TestAppConte
 
     // It takes the composer's place, and a choice waits for the arrow, so it can be changed first.
     open_question(&mut ui, "ask:Red or blue?=Red/Blue");
-    assert!(!ui.has(id("attach")), "the composer is put away");
+    assert!(!ui.has(id("add")), "the composer is put away");
     ui.click(id("question-answer-0"));
     ui.click(id("question-answer-1"));
     ui.click(id("question-send"));
     ui.wait("the answer", |ui| told_to_agent(ui).contains(r#""Red or blue?"=Blue"#));
     wait_for_the_turn(&mut ui);
-    assert!(ui.has(id("attach")), "the composer is back");
+    assert!(ui.has(id("add")), "the composer is back");
 
     // Typed in the row under the options, it's the answer, and Enter sends it with nothing left to answer. Focus goes
     // back to the composer, and the answer isn't sent as a prompt too.

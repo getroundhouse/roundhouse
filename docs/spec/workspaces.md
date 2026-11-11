@@ -7,12 +7,14 @@
 ![No projects](screens/first-run.png)
 
 - **New Workspace in the File menu, `Cmd-N`, Create in the sidebar and on Home, and the `+` beside a project open a dialog that asks what to work on,** so the task is given as the workspace is made, and the agent starts on it at once. `Cmd-N` and Create open it for the project `sidebar.md` says, and a `+` for its own. *Unconfirmed.*
-- **The dialog holds the project, the first prompt, the model and its effort, and files to go with the prompt.** The project's name at the top opens a menu of the others. Files are pasted, dropped or chosen with its `+`, as in a chat's composer. *Unconfirmed.*
+- **The dialog holds the project, the first prompt, the model and its effort, plan mode, and files to go with the prompt.** The project's name at the top opens a menu of the others. Files are pasted or dropped, as in a chat's composer. *Unconfirmed.*
+- **The dialog's `+` is at its bottom left, as the composer's is, and opens the same menu,** which attaches files and turns plan mode on and off, as `Shift-Tab` does there too, and in plan mode the new workspace's first chat starts planning.
+- **In plan mode the dialog is copper over plan mode's texture, as the composer is.** *Unconfirmed.*
 - **Create is the dialog's main action, and Return presses it.** Shift-Return starts a new line. Create with nothing typed makes the workspace and sends nothing, so making one is still two keys. *Unconfirmed.*
-- **Create closes the dialog at once, and the sidebar shows the workspace being made,** since it fetches first and can take a while. Once it's made it's selected, and the prompt is its first chat's, sent with the model and effort chosen. If it can't be made, what was typed goes back to the dialog, which opens again to show it, and a prompt the new chat couldn't be sent goes to its composer, so nothing typed is lost. *Unconfirmed.*
+- **Create closes the dialog at once, and the sidebar shows the workspace being made,** since it fetches first and can take a while. Once it's made it's selected, and the prompt is its first chat's, sent with the model, effort and plan mode chosen. If it can't be made, what was typed goes back to the dialog with plan mode, and the dialog opens again to show it. A prompt the new chat couldn't be sent goes to its composer, and the chat is asked into plan mode if the prompt was to be planned. So nothing typed is lost, and nothing to be planned is sent with full access. *Unconfirmed.*
 - **The dialog opens while another workspace is being made, and its Create waits until that one is.** A workspace that's made meanwhile is selected behind the dialog, and typing stays in the dialog until it closes. *Unconfirmed.*
 - **The model and effort start as a chat nobody has chosen for would run, Opus at Extra high,** as `chats.md` says. *Unconfirmed.*
-- **Closing the dialog keeps what's in it for the next time it opens,** whether with Escape or a click outside it. The model and effort stay as chosen for the next workspace too. *Unconfirmed.*
+- **Closing the dialog keeps what's in it for the next time it opens,** whether with Escape or a click outside it. The model and effort stay as chosen for the next workspace too, but plan mode doesn't, since it belongs to the task at hand, as in a new chat. *Unconfirmed.*
 - **The dialog's header also starts a workspace from another branch or a pull request, and links an issue to it.** *Not built.*
 
 **The new-workspace dialog, opened over a workspace.** *Unconfirmed.*
@@ -22,6 +24,10 @@
 **A task described in the dialog, with a screenshot to go with it, for Opus at extra high effort.** *Unconfirmed.*
 
 ![A task described in the new-workspace dialog](screens/new-workspace-written.png)
+
+**A task described in the dialog, in plan mode.** *Unconfirmed.*
+
+![The new-workspace dialog in plan mode's copper](screens/new-workspace-planning.png)
 
 - **Setup runs in the background once the worktree exists.** It copies gitignored files matching `.worktreeinclude`, then `file_include_globs`, then `.env*`, and runs `scripts.setup`. A prompt sent meanwhile is recorded at once and delivered when setup finishes. A failure warns, and never blocks. Restoring a workspace runs it again. The matching is git's own, so patterns mean what they do in `.gitignore`. *Unconfirmed.*
 

@@ -5,7 +5,7 @@ use client_core::FileToSend;
 use desktop::new_workspace::Request;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
-use protocol::model::{AgentKind, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, WorkspaceStatus};
+use protocol::model::{AgentKind, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, PermissionMode, WorkspaceStatus};
 
 use super::{open_with_a_repo, prompts};
 use crate::support::Stack;
@@ -32,6 +32,7 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
     std::fs::remove_dir_all(stack.repo()).unwrap();
 
     ui.open_new_workspace();
+    ui.press("shift-tab");
     ui.input("say:never sent");
     ui.press("enter");
 
@@ -40,6 +41,7 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
     assert!(ui.view().workspaces.is_empty());
     assert!(ui.has_dialog(), "the dialog opens again to show where the prompt went");
     assert_eq!(ui.dialog_text(), "say:never sent");
+    assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
 }
 
 /// The dialog can only hold as many files as a prompt carries, so of those given back and those attached since, the
@@ -61,6 +63,7 @@ fn files_given_back_to_a_full_dialog_go_first_and_it_says_which_didnt_fit(cx: &m
         files: vec![file("earlier.txt")],
         model: DEFAULT_MODEL,
         effort: DEFAULT_EFFORT,
+        permission_mode: PermissionMode::FullAccess,
     };
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();
@@ -74,9 +77,10 @@ fn files_given_back_to_a_full_dialog_go_first_and_it_says_which_didnt_fit(cx: &m
     ui.wait("what didn't fit", |ui| ui.view().error.clone().is_some_and(|e| e.contains(&last)));
 }
 
-/// Made from another workspace, as usual, so the new one's pane is made after the prompt comes back.
+/// Made from another workspace, as usual, so the new one's pane is made after the prompt comes back. Plan mode goes
+/// with it, so the prompt isn't then sent with full access.
 #[gpui_kit::test]
-fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_with_its_files(cx: &mut TestAppContext) {
+fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_with_its_files_and_plan_mode(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
     ui.new_workspace();
@@ -88,13 +92,21 @@ fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_with_its_files(cx:
     ui.cx.update_entity(&ui.dialog(), |d, cx| d.choose_effort(Effort::Unknown, cx));
     ui.paste(copied(&stack, 1));
     ui.wait("the file to be attached", |ui| ui.dialog_attached() == ["file-0.txt"]);
+    ui.press("shift-tab");
     ui.input("say:held back");
     ui.press("enter");
 
     ui.wait_for_a_new_workspace(before);
     ui.wait("the prompt in the new chat's composer", |ui| ui.composer_text() == "say:held back");
     assert_eq!(ui.attached(), ["file-0.txt"]);
-    assert!(ui.view().error.clone().unwrap_or_default().contains("couldn't give the chat its model and effort"));
+    ui.wait("plan mode in the new chat", |ui| ui.chat_mode() == Some(PermissionMode::Plan));
+    assert!(
+        ui.view()
+            .error
+            .clone()
+            .unwrap_or_default()
+            .contains("couldn't give the chat the model, effort and mode chosen")
+    );
     assert!(prompts(&ui).is_empty(), "nothing was sent without the effort chosen");
 }
 
@@ -106,7 +118,8 @@ fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_t
     let before = ui.view().workspaces.len();
     let files: Vec<_> = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
     let (model, effort) = (DEFAULT_MODEL, DEFAULT_EFFORT);
-    let request = Request { repo: ui.first_repo_id(), prompt: "say:too many".to_string(), files, model, effort };
+    let (repo, prompt, permission_mode) = (ui.first_repo_id(), "say:too many".to_string(), PermissionMode::FullAccess);
+    let request = Request { repo, prompt, files, model, effort, permission_mode };
 
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();

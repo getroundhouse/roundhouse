@@ -19,8 +19,7 @@ use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
-use attaching::Draft;
-pub(crate) use composer::KEY_CONTEXT as COMPOSER_CONTEXT;
+use attaching::{Draft, Waiting};
 pub(crate) use context::accounts_named;
 use file_tab::FileTab;
 pub use file_tab::Opened;
@@ -104,8 +103,7 @@ pub struct WorkspacePane {
     drafts: HashMap<SessionId, Draft>,
     /// What's attached in the chat showing, to go with what's typed.
     attached: Attachments,
-    /// A prompt handed back before the workspace had a chat to show, for the first that shows.
-    waiting: Option<Draft>,
+    waiting: Option<Waiting>,
     /// A new chat is on its way, so another press doesn't make a second.
     creating_chat: bool,
     /// A queued prompt being changed.
@@ -157,7 +155,7 @@ impl WorkspacePane {
         let drafted = |id: &SessionId| self.drafts.get(id).is_some_and(Draft::has_anything);
         let ids = self.drafts.keys().chain(self.transcripts.keys().filter(|id| !self.drafts.contains_key(*id)));
         let others = ids.filter(|id| self.active.as_ref() != Some(*id) && (drafted(id) || answering(id))).count();
-        let waiting = usize::from(self.waiting.as_ref().is_some_and(Draft::has_anything));
+        let waiting = usize::from(self.waiting.as_ref().is_some_and(|waiting| waiting.draft.has_anything()));
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
         (showing + others + waiting, usize::from(comment))

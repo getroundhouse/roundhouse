@@ -23,6 +23,14 @@ impl Draft {
     }
 }
 
+/// A prompt handed back before the workspace had a chat to show, for the first that shows.
+#[derive(Default)]
+pub(crate) struct Waiting {
+    pub(crate) draft: Draft,
+    /// Whether it was to be planned, so that chat is asked into plan mode.
+    pub(crate) to_plan: bool,
+}
+
 impl WorkspacePane {
     /// Takes a paste that holds images or copied files, and leaves text to the composer. Returns whether it took it.
     pub fn paste(&self, item: &ClipboardItem, cx: &mut Context<Self>) -> bool {
@@ -75,7 +83,7 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) {
         let Some(chat) = chat.or(self.active.as_ref()).cloned() else {
-            let waiting = self.waiting.get_or_insert_default();
+            let waiting = &mut self.waiting.get_or_insert_default().draft;
             let problems = waiting.files.put_back(files);
             if !text.is_empty() {
                 waiting.text = joined(text, &waiting.text);
@@ -101,6 +109,15 @@ impl WorkspacePane {
             }
         }
         cx.notify();
+    }
+
+    /// Asks for plan mode in `chat`, for a prompt handed back that was to be planned, so it isn't then sent with full
+    /// access. With no chat, it's asked for in the one [`Self::give_back`] gave the prompt to.
+    pub(crate) fn plan_given_back(&mut self, chat: Option<&SessionId>, cx: &mut Context<Self>) {
+        match chat.or(self.active.as_ref()).cloned() {
+            Some(chat) => self.want_plan_mode(chat, true, cx),
+            None => self.waiting.get_or_insert_default().to_plan = true,
+        }
     }
 
     /// The files waiting in `chat`'s composer: the composer's own while it's showing, or else its draft's.
