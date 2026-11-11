@@ -2,3 +2,5 @@
 self-hosted-runner:
   labels:
     - ubuntu-latest-arm64-8cores
+    - windows-latest-amd64-8cores
+    - windows-latest-arm64-8cores

@@ -251,9 +251,10 @@ jobs:
           tools/package/publish.py check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
 
-  # The Windows binaries, built where they run. It compiles every dependency, so no key is here.
+  # The Windows binaries, built where they run, on the org's 8-core Windows runner, since a cold build took half an
+  # hour on the standard one. It compiles every dependency, so no key is here.
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-latest-amd64-8cores
     timeout-minutes: 90
     defaults:
       run:
