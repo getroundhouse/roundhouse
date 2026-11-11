@@ -111,7 +111,7 @@ fn it_keeps_to_the_latest_row_once_that_ends_in_sight_before_none_of_the_way_is_
     set_off(&mut state);
 
     // The rows below turned out shorter than they were taken to be.
-    state.laid_out(at(94, 0.), true);
+    state.laid_out(at(94, 0.), None, true);
 
     assert!(!state.is_heading_to_latest());
     assert_eq!(state.lay_from(px(900.)), Start::Latest);

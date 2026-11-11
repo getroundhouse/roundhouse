@@ -58,6 +58,12 @@ fn moved(row: usize, moved: f32) -> Start {
     Start::Top { at: Place { row, offset: px(0.) }, moved: px(moved) }
 }
 
+/// Row `row` kept where its top was `top` below the window's, with the top having moved `moved` down the session
+/// since.
+fn anchored(row: usize, top: f32, moved: f32) -> Start {
+    Start::Anchored { at: Anchor { row, top: px(top) }, moved: px(moved) }
+}
+
 fn at(row: usize, offset: f32) -> Place {
     Place { row, offset: px(offset) }
 }
@@ -131,6 +137,56 @@ fn a_place_further_into_its_row_than_the_row_is_now_tall_is_the_rows_end() {
 
     assert_eq!(layout.top, at(11, 0.), "the rows after it aren't passed by as far as it shrank");
     assert_eq!(and_moved.top, at(10, 20.), "and what the wheel has moved since is from there");
+}
+
+/// Such as a long text at the top of the window that's read once it's there, with the row after it 100 px down the
+/// window.
+#[test]
+fn the_rows_above_the_row_kept_still_grow_up_past_the_windows_top() {
+    let mut heights = [50.; 100];
+    heights[9] = 1000.;
+
+    let (layout, _) = Session::of(&heights).from(anchored(10, 100., 0.));
+
+    assert_eq!(tops(&layout).iter().find(|(row, _)| *row == 10), Some(&(10, px(100.))));
+    assert_eq!(layout.top, at(9, 900.), "as far into the row that grew as it grew");
+    assert_eq!(layout.anchor, Some(Anchor { row: 10, top: px(100.) }), "and the same row is kept still next");
+}
+
+/// Such as a block someone closes while the window is part way down it, as for a place at the top.
+#[test]
+fn a_row_kept_still_too_short_to_reach_the_window_from_where_it_was_ends_at_the_windows_top() {
+    let mut heights = [50.; 100];
+    heights[10] = 30.;
+
+    let (layout, _) = Session::of(&heights).from(anchored(10, -1500., 0.));
+
+    assert_eq!(layout.top, at(11, 0.));
+    assert_eq!(layout.anchor, Some(Anchor { row: 11, top: px(0.) }), "the row it ends at is kept still next");
+}
+
+#[test]
+fn the_row_kept_still_next_is_the_first_to_show_whose_top_is_in_the_window() {
+    let mut heights = [50.; 100];
+    (heights[11], heights[12]) = (0., 0.);
+    let (past_the_top, _) = Session::of(&heights).from(top(10, 20.));
+    let (kept, _) = Session::of(&heights).from(anchored(10, -20., 0.));
+    let (moved, _) = Session::of(&heights).from(anchored(10, -20., -10.));
+    heights[20] = 1000.;
+    let (filled, _) = Session::of(&heights).from(top(20, 200.));
+
+    assert_eq!(
+        past_the_top.anchor,
+        Some(Anchor { row: 13, top: px(30.) }),
+        "past the row reaching up, and those of no height"
+    );
+    assert_eq!(kept.anchor, Some(Anchor { row: 10, top: px(-20.) }), "but the row kept still stays the one");
+    assert_eq!(moved.anchor, Some(Anchor { row: 13, top: px(40.) }), "until the list moves, and it's chosen again");
+    assert_eq!(
+        filled.anchor,
+        Some(Anchor { row: 20, top: px(-200.) }),
+        "or the row at the top, if it fills the window"
+    );
 }
 
 #[test]

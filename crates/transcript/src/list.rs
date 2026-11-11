@@ -3,10 +3,11 @@
 //!
 //! It's the transcript's own, rather than GPUI's list, to hold to the four rules `docs/ui.md` gives. It draws only
 //! what's on screen, so a long session costs what a short one does. It keeps its place as a row and how far into
-//! it, so nothing that changes a height out of sight moves what's in sight. And it keeps each row's height as it was
-//! last measured, as [`Heights`] says, and guesses at the rest, so the scrollbar goes by the whole session without
-//! any of it being measured for that. GPUI's list measures every row or only those on screen, and forgets every
-//! height when its width changes.
+//! it, so nothing that changes a height out of sight moves what's in sight, and keeps a row in sight where it is, as
+//! [`Anchor`] says, so a row in sight that changes height by itself moves nothing else on screen. And it keeps each
+//! row's height as it was last measured, as [`Heights`] says, and guesses at the rest, so the scrollbar goes by the
+//! whole session without any of it being measured for that. GPUI's list measures every row or only those on screen,
+//! and forgets every height when its width changes.
 //!
 //! The kit's scrollbar and its bounce at the ends work on anything that says how far it's scrolled and how tall it
 //! is, which [`TranscriptList`] does for them.
@@ -39,6 +40,8 @@ mod state;
 use element::ListElement;
 #[cfg(doc)]
 use heights::Heights;
+#[cfg(doc)]
+use layout::Anchor;
 pub use state::Place;
 use state::State;
 
@@ -82,6 +85,12 @@ impl TranscriptList {
     /// Every row may have changed height.
     pub(crate) fn all_out_of_date(&self) {
         self.state.borrow_mut().all_out_of_date();
+    }
+
+    /// Someone opened or closed something in `row`, so the list keeps that row where it is, and what they clicked
+    /// stays under the pointer.
+    pub(crate) fn keep_still(&self, row: usize) {
+        self.state.borrow_mut().keep_still(row);
     }
 
     pub fn go_to_row(&self, row: usize) {
