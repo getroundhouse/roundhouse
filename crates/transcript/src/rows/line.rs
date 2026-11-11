@@ -33,7 +33,7 @@ pub(super) struct Line {
     preview: Option<Preview>,
     /// Whether what the call opens to shows what came back, so a failure's whole text isn't added under its line.
     shows_output: bool,
-    /// A button at the line's far end, which shows while the call is open or the pointer is over its line.
+    /// A button at the line's far end, which always shows, so the way it offers is seen before the pointer finds it.
     action: Option<AnyElement>,
 }
 
@@ -114,15 +114,19 @@ impl Line {
             })
             .child(icon(self.icon, open, cx))
             .child(
-                line_text
-                    .body
-                    .set(div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(self.title)),
+                line_text.body.set(
+                    div()
+                        .flex_none()
+                        .max_w(relative(0.7))
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        // A button always shows at the end, so the title gives way to it rather than pushing it off.
+                        .when(self.action.is_some(), |d| d.flex_shrink(1.).min_w_0())
+                        .child(self.title),
+                ),
             )
             .children(parts)
-            .when_some(self.action, |d, action| {
-                let hidden = |d: Div| d.invisible().group_hover(GROUP, Styled::visible);
-                d.child(div().flex_1()).child(div().flex_none().when(!open, hidden).child(action))
-            })
+            .when_some(self.action, |d, action| d.child(div().flex_1()).child(div().flex_none().child(action)))
             .test_support()
             .into_any_element()
     }

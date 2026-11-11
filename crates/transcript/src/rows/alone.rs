@@ -11,7 +11,7 @@ use protocol::model::{Subagent, SubagentStatus};
 
 use super::around::blocks_of;
 use super::row;
-use super::tools::{agent, block};
+use super::tools::agent;
 use super::turn_times;
 use crate::calls::count;
 use crate::item_key::ItemKey;
@@ -44,8 +44,7 @@ pub(super) fn head(m: &Model, cx: &App) -> Option<AnyElement> {
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
-    let prompt = block::frame(cx).child(block::label("Prompt", cx)).child(block::prose(&key, "prompt", prompt));
-    Some(row().child(prompt).into_any_element())
+    Some(row().child(agent::prompt_block(&key, prompt, cx)).into_any_element())
 }
 
 /// Its report, once it's done, in the tab's last row. That's the tail's, which no event is in, so an image it points
