@@ -7,8 +7,8 @@ use look::Region;
 use protocol::model::SessionStatus;
 
 use super::frame::{
-    CHAT, COMPOSER, COMPOSER_MENU, CONTEXT, Frame, Part, QUESTION, QUEUE, SIDEBAR, SIDEBAR_MENU, TABS, TABS_MENU,
-    TURN_CARD,
+    CHAT, COMPOSER, COMPOSER_MENU, CONTEXT, Frame, OUTLINE, Part, QUESTION, QUEUE, SIDEBAR, SIDEBAR_MENU, TABS,
+    TABS_MENU, TURN_CARD,
 };
 use super::steps::{Screen, Step, Target};
 use super::world::World;
@@ -172,10 +172,10 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "outline",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, long_chats::many_turns())),
-        frame: CHAT,
+        frame: OUTLINE,
         steps: &[
             Step::Select(FOCUS),
-            Step::Hover { on: Target::Id("outline"), shows: "outline-list" },
+            Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
             Step::Click(long_chats::FOURTEENTH_PROMPT),
             Step::MoveAway,
             Step::LetTheScrollbarFade,
@@ -185,13 +185,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "outline-list",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, long_chats::many_turns())),
-        frame: CHAT,
+        frame: OUTLINE,
         steps: &[
             Step::Select(FOCUS),
-            Step::Hover { on: Target::Id("outline"), shows: "outline-list" },
+            Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
             Step::Click(long_chats::FOURTEENTH_PROMPT),
             Step::MoveAway,
-            Step::Hover { on: Target::Id("outline"), shows: "outline-list" },
+            Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
             Step::LetTheScrollbarFade,
         ],
     },

@@ -16,7 +16,7 @@ use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
-    PlatformTextSystem,
+    PlatformTextSystem, px, size,
 };
 use image::RgbaImage;
 
@@ -73,6 +73,9 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     let (handle, view) =
         cx.update(|cx| desktop::open_main_window(hub, None, desktop::Opens::InItsUsualPlace, cx)).unwrap();
     let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf() };
+    if screen.frame.in_the_column() {
+        app.widen();
+    }
     app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
     for step in screen.steps {
         app.step(step);
@@ -355,6 +358,17 @@ impl Driver {
         self.cx.run_until_parked();
         self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx)).unwrap();
         self.cx.run_until_parked();
+    }
+
+    /// Makes the window [`frame::WIDE`] wide, and as tall as it was. A headless window has no edge to drag, so it's
+    /// resized, and then told so, as the platform's resize callback would tell it.
+    fn widen(&mut self) {
+        self.cx
+            .update_window(self.handle, |_, window, cx| {
+                window.resize(size(px(frame::WIDE), window.viewport_size().height));
+                window.bounds_changed(cx);
+            })
+            .unwrap();
     }
 
     /// Before the hub goes, so the app doesn't see it go and try to reconnect.

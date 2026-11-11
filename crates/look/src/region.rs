@@ -25,6 +25,8 @@ pub enum Region {
     SetupLog,
     /// The chat's rows.
     Transcript,
+    /// The ticks at the right of a chat with several prompts, one for each, at the pane's edge.
+    Outline,
     /// A question the agent asked, in the composer's place.
     Question,
     /// What an edit changed, shown while the pointer is on its line.
@@ -55,6 +57,7 @@ impl Region {
             Region::Queue => "queue",
             Region::SetupLog => "setup-log-text",
             Region::Transcript => "transcript",
+            Region::Outline => "outline",
             Region::Question => "question",
             Region::EditPreview => "edit-preview",
             Region::TurnCard => "turn-card",

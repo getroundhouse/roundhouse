@@ -21,6 +21,14 @@ const ROOM: f32 = 16.;
 /// How far past its bounds a menu's edge reaches, in points: the kit draws its ring and shadow outside them, the
 /// shadow up to 6 points below it.
 const MENU_EDGE: f32 = 8.;
+/// How far the chat's rows are inset from the pane's right edge, in points. The strip they leave holds the scrollbar
+/// and the outline's ticks, which a [`Frame::Transcript`] takes in only by naming them.
+const ROWS_INSET: f32 = 28.;
+/// How wide the window is, in points, for a screen about what's in the chat's column. That's room for the composer at
+/// its widest, 896 points and 16 of the pane on each side, beside both sidebars at their widest, 480 and 800. So the
+/// column is as wide as it gets whatever the sidebars' widths, and a change to one leaves the pictures of the chat
+/// alone. The other screens are drawn in the window's usual size, which is how wide the app opens.
+pub(crate) const WIDE: f32 = 2208.;
 
 const NOTHING_MORE: &[Part] = &[];
 /// The sidebar down the window's left side.
@@ -47,11 +55,13 @@ pub(crate) const QUEUE: Frame = Frame::Around(Part::Region(Region::Queue), &[Par
 pub(crate) const CONTEXT: Frame = Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::ContextCard)]);
 /// A question the agent asked, which shows in the composer's place.
 pub(crate) const QUESTION: Frame = Frame::Around(Part::Region(Region::Question), NOTHING_MORE);
-/// The card a finished turn's line opens. It reaches past the chat, over the sidebar, and the line has an ID made from
-/// the screen's data, so the card is shown by itself.
+/// The card a finished turn's line opens. It reaches past the chat's column, over the sidebar in a narrow window, and
+/// the line has an ID made from the screen's data, so the card is shown by itself.
 pub(crate) const TURN_CARD: Frame = Frame::Around(Part::Region(Region::TurnCard), NOTHING_MORE);
 /// What's drawn in the chat.
 pub(crate) const CHAT: Frame = Frame::Transcript(NOTHING_MORE);
+/// What's drawn in the chat, and the outline at the pane's edge, with the list of prompts it opens.
+pub(crate) const OUTLINE: Frame = Frame::Transcript(&[Part::Region(Region::Outline)]);
 
 /// Something a frame is drawn around.
 #[derive(Clone, Copy, Debug)]
@@ -83,8 +93,50 @@ pub(crate) enum Frame {
     /// composer. The room is the pane's, so it reaches into a sidebar only beside something that does.
     Around(Part, &'static [Part]),
     /// What's drawn in the chat's rows, with the empty pane around it cut away, and any other parts, such as the
-    /// composer, with [`ROOM`] left around it all.
+    /// composer, with [`ROOM`] left around it all. The scrollbar and the outline, in the strip along the pane's edge,
+    /// are left out unless the outline is named, so the picture is only as wide as the rows are.
     Transcript(&'static [Part]),
+}
+
+impl Frame {
+    /// Whether everything it shows is in the chat's column, or opened from something there, so its screen is drawn
+    /// in a [`WIDE`] window. A frame that names anything as wide as the pane, such as the tab bar, isn't, since a
+    /// wider window would only make its picture wider, and the sidebars' widths move it in a window of any width.
+    pub(crate) fn in_the_column(&self) -> bool {
+        let in_it = |part: &Part| match part {
+            Part::Region(region) => region_in_the_column(*region),
+            Part::Line(_) | Part::Menu => true,
+        };
+        match self {
+            Frame::Layout | Frame::Dialog | Frame::Exactly(..) => false,
+            Frame::Around(first, more) => in_it(first) && more.iter().all(in_it),
+            Frame::Transcript(more) => more.iter().all(in_it),
+        }
+    }
+}
+
+/// Whether the region is drawn in the chat's column, or opened from something there. Every region is named, so a new
+/// one can't be left out.
+fn region_in_the_column(region: Region) -> bool {
+    match region {
+        Region::Composer
+        | Region::Queue
+        | Region::Question
+        | Region::EditPreview
+        | Region::TurnCard
+        | Region::ContextCard
+        | Region::UsageCard => true,
+        Region::LeftSidebar
+        | Region::RightSidebar
+        | Region::Header
+        | Region::TabBar
+        | Region::OpenFile
+        | Region::SetupLog
+        | Region::Transcript
+        | Region::Outline
+        | Region::Home
+        | Region::UpdateDetails => false,
+    }
 }
 
 /// The part of `image`, a picture of `window`, that the screen's frame shows, using where the window last drew the
@@ -128,7 +180,8 @@ fn area(frame: &Frame, window: &Window, image: &RgbaImage, whole: Area) -> Resul
         }
         Frame::Transcript(more) => {
             let transcript = covering(window, Part::Region(Region::Transcript), NOTHING_MORE, scale)?.within(whole);
-            let mut covered = drawn_in(image, transcript);
+            let rows = Area { right: transcript.right.saturating_sub(to_pixels(ROWS_INSET, scale)), ..transcript };
+            let mut covered = drawn_in(image, rows);
             for &part in *more {
                 covered = covered.and(drawn(window, part, scale).ok_or(part)?);
             }
