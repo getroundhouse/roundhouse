@@ -1,4 +1,5 @@
-//! How full the agent's context is: the ring beside Send, and the card it shows while the pointer rests on it.
+//! Beside Send: the ring for how full the agent's context is, the bars for the account's limits, and the card each
+//! shows while the pointer rests on it.
 
 #![cfg(test)]
 
@@ -62,15 +63,51 @@ fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_as_soon_as_it
 }
 
 #[gpui_kit::test]
-fn the_card_fills_in_the_account_and_its_limits_once_the_hub_has_said(cx: &mut TestAppContext) {
+fn the_accounts_limits_have_bars_of_their_own_once_its_agent_has_heard_them(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = after_a_turn(cx, &stack);
+
+    // The agent heard of the week's limit as it worked, which the account's record says, so the bars come without the
+    // pointer going near them.
+    ui.wait("the limits' bars", |ui| ui.has("usage"));
+
+    ui.hover("usage");
+    ui.wait_out_a_tooltip();
+    assert!(ui.visible("usage-card"), "resting on the bars shows their card");
+    assert!(ui.visible("account"), "which says whose account it is");
+}
+
+#[gpui_kit::test]
+fn the_rings_card_is_only_the_context_while_the_limits_have_a_card_of_their_own(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+    ui.wait("the limits' bars", |ui| ui.has("usage"));
 
     ui.hover("context");
     ui.wait_out_a_tooltip();
 
-    // The hub reads the account from the worker once the card shows: who's logged in, and the week's limit the agent
-    // heard of as it worked.
-    ui.wait("the account", |ui| ui.visible("context-account"));
-    ui.wait("the account's limits", |ui| ui.visible("context-limits"));
+    assert!(ui.visible("context-card"));
+    assert!(!ui.has("account"), "the limits' card says whose account it is");
+    assert!(!ui.has("usage-card"));
+}
+
+#[gpui_kit::test]
+fn the_limits_bars_follow_the_accounts_record_even_while_another_app_is_in_front(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    ui.new_workspace();
+    ui.input("say:hello");
+    ui.send_to_back();
+
+    // The agent hears of the week's limit as it works, with nobody looking. Nothing in the app asks for it: the
+    // account's record says so, and the feed brings it.
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("hello"));
+
+    ui.wait("the limits' bars", |ui| ui.has("usage"));
+    assert!(
+        ui.labelled("Claude usage 96% left")
+            .iter()
+            .any(|bars| bars.path().last().is_some_and(|id| *id == "usage".into()))
+    );
 }

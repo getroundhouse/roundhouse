@@ -13,7 +13,7 @@ use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
-use crate::workspace_pane::{PaneEvent, WorkspacePane};
+use crate::workspace_pane::{PaneEvent, WorkspacePane, accounts_named};
 
 mod build_line;
 mod corner;
@@ -279,14 +279,19 @@ impl AppView {
     /// Brings what's shown up to date with client-core's copy of the records, and tells each pane what
     /// it holds for its workspace.
     fn refresh(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
-        let (repos, workspaces, sessions, mut comments) =
-            feed.read(|records| (records.repos(), records.workspaces(), records.sessions(), records.comments()));
+        let (repos, workspaces, sessions, mut comments, mut accounts) = feed.read(|records| {
+            let sessions = records.sessions();
+            let accounts: HashMap<WorkspaceId, _> =
+                sessions.iter().map(|(id, its)| (id.clone(), accounts_named(records, its))).collect();
+            (records.repos(), records.workspaces(), sessions, records.comments(), accounts)
+        });
         self.panes.retain(|id, _| workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived));
         for (id, pane) in &self.panes {
             let Some(workspace) = workspaces.iter().find(|w| &w.id == id).cloned() else { continue };
             let its_sessions = sessions.get(id).cloned().unwrap_or_default();
             let its_comments = comments.remove(id).unwrap_or_default();
-            pane.update(cx, |p, cx| p.set_records(workspace, its_sessions, its_comments, cx));
+            let its_accounts = accounts.remove(id).unwrap_or_default();
+            pane.update(cx, |p, cx| p.set_records(workspace, its_sessions, its_comments, its_accounts, cx));
         }
         self.repos = repos;
         self.workspaces = workspaces;

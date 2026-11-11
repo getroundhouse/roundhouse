@@ -51,9 +51,15 @@ impl ContextUsage {
         fraction(self.used_tokens, self.max_tokens)
     }
 
-    /// How much of the context `part` takes, from 0 to 1.
-    pub fn fraction_of(&self, part: &ContextPart) -> f32 {
-        fraction(part.tokens, self.max_tokens)
+    /// How much of the context `tokens` is, from 0 to 1.
+    pub fn fraction(&self, tokens: u64) -> f32 {
+        fraction(tokens, self.max_tokens)
+    }
+
+    /// How many tokens the parts of one kind come to, such as what the agent keeps back.
+    pub fn tokens_of(&self, kind: ContextPartKind) -> u64 {
+        // Counts from another program, so they stop at the most there is rather than wrap.
+        self.parts.iter().filter(|part| part.kind == kind).fold(0, |all, part| all.saturating_add(part.tokens))
     }
 }
 
@@ -80,10 +86,20 @@ mod tests {
     #[test]
     fn a_share_is_of_the_most_the_context_holds() {
         let context = context(313_500, 500_000);
-        let messages = ContextPart { name: "Messages".to_string(), tokens: 298_500, kind: ContextPartKind::Used };
 
         assert!((context.used_fraction() - 0.627).abs() < 1e-6);
-        assert!((context.fraction_of(&messages) - 0.597).abs() < 1e-6);
+        assert!((context.fraction(298_500) - 0.597).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_parts_of_one_kind_are_counted_together() {
+        let part = |tokens, kind| ContextPart { name: "Part".to_string(), tokens, kind };
+        let mut context = context(10, 100);
+        context.parts =
+            vec![part(4, ContextPartKind::Used), part(20, ContextPartKind::Buffer), part(13, ContextPartKind::Buffer)];
+
+        assert_eq!(context.tokens_of(ContextPartKind::Buffer), 33);
+        assert_eq!(context.tokens_of(ContextPartKind::Free), 0);
     }
 
     #[test]

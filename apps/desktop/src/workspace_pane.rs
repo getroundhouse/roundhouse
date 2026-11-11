@@ -10,7 +10,8 @@ use gpui_kit::{
     Window, px,
 };
 use protocol::model::{
-    DiffComment, Effort, ModelName, Session, SessionId, SessionSettingsChange, Workspace, WorkspaceId,
+    Account, AccountId, DiffComment, Effort, ModelName, Session, SessionId, SessionSettingsChange, Workspace,
+    WorkspaceId,
 };
 use transcript::Transcript;
 
@@ -24,6 +25,7 @@ use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
 use attaching::Draft;
+pub(crate) use context::accounts_named;
 use file_tab::FileTab;
 pub use file_tab::Opened;
 pub use reading::Mark;
@@ -108,8 +110,9 @@ pub struct WorkspacePane {
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
     closed_menu: closed::Menu,
-    /// Whose account the workspace's agents run under, for the card the context's ring shows.
-    account: context::AccountRead,
+    /// The records of the accounts the workspace's chats name, which say who each is and what's left of its limits,
+    /// for what sits beside Send.
+    accounts: HashMap<AccountId, Account>,
     busy: Busy,
     /// The app is waiting on the hub for a new title for this workspace.
     retitling: bool,
@@ -186,6 +189,7 @@ impl WorkspacePane {
             }
         });
         let pull_request = Lookup::recorded(&workspace).unwrap_or(Lookup::Looking);
+        let accounts = records.read(|held| accounts_named(held, &sessions));
         let mut this = Self {
             client,
             records,
@@ -201,7 +205,7 @@ impl WorkspacePane {
             creating_chat: false,
             queue_edit: None,
             closed_menu: closed::Menu::Shut,
-            account: context::AccountRead::default(),
+            accounts,
             busy: Busy::Free,
             retitling: false,
             reading: Reading::default(),
@@ -264,7 +268,6 @@ impl WorkspacePane {
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         self.hub = composer::Hub::Here;
-        self.forget_account();
         for (transcript, _) in self.transcripts.values() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
@@ -298,8 +301,10 @@ impl WorkspacePane {
         workspace: Workspace,
         sessions: Vec<Session>,
         comments: Vec<DiffComment>,
+        accounts: HashMap<AccountId, Account>,
         cx: &mut Context<Self>,
     ) {
+        self.accounts = accounts;
         if workspace != self.workspace {
             if let Some(recorded) = Lookup::recorded(&workspace) {
                 self.pull_request = recorded;

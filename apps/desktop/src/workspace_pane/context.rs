@@ -1,17 +1,20 @@
-//! How full the agent's context is: a ring beside Send, and while the pointer rests on it, a card that says what the
-//! context holds, how much of the account's limits is left, and whose account it is.
+//! What sits beside Send: a ring for how full the chat's context is, and a bar for each of the account's limits.
+//! Each shows a card while the pointer rests on it: what the context holds, or how much of the limits is left and
+//! whose account it is.
 
+use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use client_core::ClientError;
+use client_core::records::HubRecords;
+
 use gpui_kit::base::plot::shape::{Arc, ArcData};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::hover_card::HoverCard;
 use gpui_kit::{
-    Anchor, App, AppContext as _, Bounds, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px,
+    Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px, relative,
 };
-use protocol::model::{SessionAccount, SessionId};
+use protocol::model::{Account, AccountId, Session, UsageLimit};
 
 use super::WorkspacePane;
 use super::composer::{Slot, middle};
@@ -24,97 +27,89 @@ mod words;
 const RING: Pixels = px(16.);
 /// How thick the ring's line is.
 const LINE: f32 = 2.;
+/// How tall a limit's bar is, and how far it is from the next. The same, and on the grid, so one bar or two come to a
+/// whole number of pixels either side of the slot's middle.
+const LIMIT: Pixels = px(4.);
+const BETWEEN_LIMITS: Pixels = px(4.);
 
-/// What the hub last said of the account a chat's agent runs under.
-#[derive(Default)]
-pub(super) struct AccountRead {
-    /// What it said, and of which chat, since chats can run under different accounts. `None` until the hub has said,
-    /// once it has failed to, and from a hub that can't.
-    known: Option<(SessionId, SessionAccount)>,
-    /// A read is under way, so another hover doesn't start a second.
-    reading: bool,
-    /// The hub said it doesn't know the request, so it isn't asked again on this connection.
-    unsupported: bool,
+/// The records of the accounts `sessions` name, from client-core's copy, for a pane to draw them from.
+pub(crate) fn accounts_named(records: &HubRecords, sessions: &[Session]) -> HashMap<AccountId, Account> {
+    let named = sessions.iter().filter_map(|session| session.account.as_ref());
+    named.filter_map(|id| Some((id.clone(), records.account(id)?))).collect()
 }
 
-impl AccountRead {
-    /// What's known of the account `session`'s agent runs under.
-    fn of(&self, session: &SessionId) -> Option<&SessionAccount> {
-        self.known.as_ref().filter(|(of, _)| of == session).map(|(_, account)| account)
-    }
+/// The account the chat showing runs under, as its record says, with each of its limits there's something true to
+/// say of, and what it's called, shortest window first as the hub gives them. Worked out once each time the pane is
+/// drawn, so the bars, their card and the ring's card agree on whether there are any.
+#[derive(Clone)]
+pub(super) struct Usage {
+    account: Account,
+    limits: Vec<(&'static str, UsageLimit)>,
+}
 
-    /// Takes what the hub answered about `session`. A hub that couldn't say leaves nothing known, rather than what an
-    /// earlier read said, which may no longer be so.
-    fn answered(&mut self, session: SessionId, answer: Result<SessionAccount, ClientError>) {
-        self.reading = false;
-        self.unsupported = answer.as_ref().is_err_and(ClientError::is_unsupported);
-        self.known = answer.ok().map(|account| (session, account));
-    }
+/// Of `limits`, those there's something true to say of at `now_ms`, each with what it's called. One whose window has
+/// ended since it was heard has started again, so how much of it was used is no longer so, and one over a window this
+/// build has no name for couldn't be told from another.
+fn shown(limits: &[UsageLimit], now_ms: i64) -> Vec<(&'static str, UsageLimit)> {
+    let current = limits.iter().filter(|limit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms));
+    current.filter_map(|limit| Some((words::window(limit.window)?, *limit))).collect()
 }
 
 impl WorkspacePane {
+    /// The record of the account the chat showing runs under, and which of its limits are shown. `None` until its
+    /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
+    pub(super) fn usage(&self, cx: &App) -> Option<Usage> {
+        let account = self.accounts.get(self.session()?.account.as_ref()?)?.clone();
+        let limits = shown(&account.limits, look::now_ms(cx));
+        Some(Usage { account, limits })
+    }
+
     /// The ring for the chat showing, once its agent has said how full its context is. Until then there's nothing
     /// true to draw. It's in muted text's colour however full it is, since amber and red already mean something.
     ///
-    /// The card opens above the ring's slot, with its right edge on the slot's, so it covers neither the ring nor
-    /// Send. It's made from what the pane holds each time the pane is drawn, so it follows the agent while it shows,
-    /// and fills in the account once the hub has said.
-    pub(super) fn context_ring(&self, cx: &mut Context<Self>) -> Option<Slot> {
+    /// Its card is made from what the pane holds each time the pane is drawn, so it follows the agent while it
+    /// shows. It says whose account it is only when no limits are drawn, since their card says it otherwise.
+    pub(super) fn context_ring(&self, usage: Option<&Usage>, cx: &mut Context<Self>) -> Option<Slot> {
         let session = self.session()?;
-        let (context, agent) = (session.context.clone()?, session.agent);
-        let account = self.account.of(&session.id).cloned();
-        let this = cx.weak_entity();
+        let context = session.context.clone()?;
+        let account = usage.filter(|usage| usage.limits.is_empty()).map(|usage| usage.account.clone());
         let used = context.used_fraction();
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
         let ring = middle().size(Slot::SIZE).child(div().size(RING).child(ring(used, cx)));
-        let hover = HoverCard::new("context-hover")
-            .appearance(false)
-            .anchor(Anchor::BottomRight)
-            .open_delay(OPENS_AFTER)
-            .close_delay(CLOSES_AFTER)
-            .trigger(ring)
-            .content(move |_, _, cx| card::card(&context, agent, account.as_ref(), cx))
-            .on_open_change(move |open, _, cx| {
-                if !*open {
-                    return;
-                }
-                // The account is read each time the card shows, since its limits move as agents work. Deferred, so
-                // it's never inside whatever told the card to open, which the kit doesn't promise is outside the
-                // pane's own update.
-                let pane = this.clone();
-                cx.defer(move |cx| {
-                    let _ = pane.update(cx, Self::read_account);
-                });
-            });
+        let hover = card_over("context-hover", ring)
+            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), cx));
         // Said in words too, since the ring alone says nothing to someone who can't see it.
         let said = format!("Context {} used", words::percent(used));
         Some(Slot::holding(div().id("context").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
 
-    /// Forgets what the hub said of the account, on a new connection, which may be to a hub that says otherwise.
-    pub(super) fn forget_account(&mut self) {
-        self.account = AccountRead::default();
+    /// A bar for each of the limits shown, once an agent under the account has heard what's left of them. There are
+    /// none for an account without limits. They follow the account's record, which the hub changes whenever any agent
+    /// under the account hears of a change to its limits, in whichever workspace. They're bars and not a second ring,
+    /// so the two can't be taken for each other, and in the ring's colour for the same reason.
+    pub(super) fn usage_bars(&self, usage: Option<&Usage>, cx: &mut Context<Self>) -> Option<Slot> {
+        let agent = self.session()?.agent;
+        let usage = usage.filter(|usage| !usage.limits.is_empty())?.clone();
+        let left: Vec<f32> = usage.limits.iter().map(|(_, limit)| f32::from(limit.left_percent()) / 100.).collect();
+        let least = left.iter().copied().reduce(f32::min)?;
+        let bars = middle().size(Slot::SIZE).child(bars(&left, cx));
+        let hover = card_over("usage-hover", bars).content(move |_, _, cx| card::usage_card(&usage, agent, cx));
+        // Said in words too, as the ring is. The least of them is the one that runs out first.
+        let said = format!("{} {} left", words::usage_heading(agent), words::whole_percent(least));
+        Some(Slot::holding(div().id("usage").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
+}
 
-    /// Asks the hub whose account the showing chat's agent runs under. A hub that doesn't know the request is asked
-    /// once, and the card is then only what the context holds.
-    fn read_account(&mut self, cx: &mut Context<Self>) {
-        let Some(session) = self.active.clone() else { return };
-        if self.account.unsupported || std::mem::replace(&mut self.account.reading, true) {
-            return;
-        }
-        let client = self.client.clone();
-        cx.spawn(async move |this, cx| {
-            let asked = session.clone();
-            let answer = cx.background_spawn(async move { client.session_account(&asked) }).await;
-            let _ = this.update(cx, |t, cx| {
-                t.account.answered(session, answer);
-                cx.notify();
-            });
-        })
-        .detach();
-    }
+/// A card that opens above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers
+/// nothing in the bar.
+fn card_over(id: &'static str, slot: Div) -> HoverCard {
+    HoverCard::new(id)
+        .appearance(false)
+        .anchor(Anchor::BottomRight)
+        .open_delay(OPENS_AFTER)
+        .close_delay(CLOSES_AFTER)
+        .trigger(slot)
 }
 
 /// A ring filled clockwise from the top by `used`, from 0 to 1, over a fainter whole ring. It's drawn at once, with
@@ -135,45 +130,35 @@ fn ring(used: f32, cx: &App) -> impl IntoElement {
     .size_full()
 }
 
+/// A bar for each limit, lying flat one above the next and as wide as the ring, filled from the left by how much of
+/// the limit is left, from 0 to 1, over a fainter whole bar. So each is its card's bar made small, and empties as
+/// that does. They lie flat because two upright bars beside Send are a pause button.
+fn bars(left: &[f32], cx: &App) -> impl IntoElement {
+    let color = cx.theme().muted_foreground;
+    let bar = move |left: f32| {
+        let filled = div().h_full().w(relative(left.clamp(0., 1.))).rounded_full().bg(color);
+        div().w(RING).h(LIMIT).rounded_full().bg(color.opacity(0.25)).child(filled)
+    };
+    div().flex().flex_col().gap(BETWEEN_LIMITS).children(left.iter().copied().map(bar))
+}
+
 #[cfg(test)]
 mod tests {
-    use protocol::client::{ApiError, ErrorCode};
-    use protocol::model::AgentAccount;
+    use protocol::model::LimitWindow;
 
     use super::*;
 
-    fn account(email: &str) -> SessionAccount {
-        let account = AgentAccount { email: Some(email.to_string()), ..AgentAccount::default() };
-        SessionAccount { account, limits: Vec::new() }
-    }
-
     #[test]
-    fn an_account_is_known_only_for_the_chat_it_was_read_for() {
-        let mut read = AccountRead::default();
+    fn a_limit_that_has_started_again_since_it_was_heard_or_has_no_name_here_isnt_shown() {
+        let limit = |window, resets_at_ms| UsageLimit { window, used_percent: 40, resets_at_ms, heard_at_ms: None };
+        let (ended, going, open_ended, unnamed) = (
+            limit(LimitWindow::FiveHours, Some(999)),
+            limit(LimitWindow::SevenDays, Some(1_001)),
+            limit(LimitWindow::SevenDays, None),
+            limit(LimitWindow::Unknown, None),
+        );
 
-        read.answered("a".into(), Ok(account("ada@example.com")));
-
-        assert_eq!(read.of(&"a".into()), Some(&account("ada@example.com")));
-        assert_eq!(read.of(&"b".into()), None, "another chat can run under another account");
-    }
-
-    #[test]
-    fn a_hub_that_couldnt_say_leaves_nothing_known_rather_than_what_it_said_before() {
-        let mut read = AccountRead::default();
-        read.answered("a".into(), Ok(account("ada@example.com")));
-
-        read.answered("a".into(), Err(ClientError::Disconnected));
-
-        assert_eq!(read.of(&"a".into()), None);
-        assert!(!read.unsupported, "it can be asked again");
-    }
-
-    #[test]
-    fn a_hub_that_doesnt_know_the_request_isnt_asked_again() {
-        let mut read = AccountRead { reading: true, ..AccountRead::default() };
-
-        read.answered("a".into(), Err(ApiError::new(ErrorCode::Unsupported, "no such request").into()));
-
-        assert!(read.unsupported && !read.reading);
+        assert_eq!(shown(&[ended, going, open_ended, unnamed], 1_000), [("7d limit", going), ("7d limit", open_ended)]);
+        assert_eq!(shown(&[going], 1_001), [], "it starts again the moment its window ends");
     }
 }

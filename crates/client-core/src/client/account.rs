@@ -1,4 +1,5 @@
-//! The call for whose account a session's agent runs under.
+//! The call for whose account a session's agent runs under, as clients made it before accounts were records. Only
+//! tests make it now, to show a hub still answers it.
 
 use protocol::client::{ClientRequest, ClientResponse};
 use protocol::model::{SessionAccount, SessionId};

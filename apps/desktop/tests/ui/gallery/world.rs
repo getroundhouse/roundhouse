@@ -9,8 +9,8 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
-    SessionAccount, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    Account, AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, PullRequest, Records, Repo, RepoId, Rev, Seq,
+    Session, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
     WorktreeFiles,
 };
 use protocol::tail::Tail;
@@ -49,8 +49,8 @@ pub(crate) struct World {
     pub(crate) worktree_texts: HashMap<String, String>,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
-    /// Whose account the agents run under. `None` is a hub that can't say.
-    pub(crate) account: Option<SessionAccount>,
+    /// The records of the accounts the screen's chats run under.
+    pub(crate) accounts: Vec<Account>,
     records: i64,
 }
 
@@ -113,7 +113,7 @@ impl World {
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
             hub_settings: Some(protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
-            accounts: Vec::new(),
+            accounts: self.accounts.clone(),
             rev: Rev::default(),
         }
     }
