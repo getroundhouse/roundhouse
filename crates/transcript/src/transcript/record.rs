@@ -49,8 +49,8 @@ impl Transcript {
             m.at_work = at_work;
         }
         // It's all drawn in the last row, with the streaming tail.
-        let rows = self.scroller.item_count();
-        self.scroller.remeasure_items(rows.saturating_sub(1)..rows);
+        let rows = self.list.row_count();
+        self.list.out_of_date(rows.saturating_sub(1)..rows);
         cx.notify();
     }
 }

@@ -1,4 +1,4 @@
-//! One session's transcript: its history by range and its live output, on GPUI's virtual list and the kit's
+//! One session's transcript: its history by range and its live output, in a list of its own and the kit's
 //! `TextView`. `docs/ui.md` has why it's built on those. Everything GPUI about a transcript is in
 //! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
@@ -11,15 +11,15 @@ mod fixtures;
 mod folds;
 mod item_key;
 mod linked_images;
+mod list;
 mod log_block;
 mod long_texts;
 mod questions;
 mod rows;
 mod scroll_area;
-mod scroller;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
+pub use list::{Place, TranscriptList};
 pub use rows::{around_column, in_column};
-pub use scroller::Scroller;
 pub use transcript::{Transcript, TranscriptEvent, mode_label};

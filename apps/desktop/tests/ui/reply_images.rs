@@ -31,7 +31,7 @@ fn replies(ui: &mut Ui<'_>) -> Vec<Pixels> {
                 _ => false,
             })
         };
-        (0..t.row_count()).filter(points).filter_map(|row| t.scroller().row_height(row)).collect()
+        (0..t.row_count()).filter(points).filter_map(|row| t.list().row_height(row)).collect()
     })
 }
 

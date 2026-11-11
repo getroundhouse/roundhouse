@@ -120,4 +120,34 @@ proptest! {
             prop_assert!(matches!(log.row(focus), Row::Event(_)), "row {} isn't loaded", focus);
         }
     }
+
+    /// The runs of loaded rows name every row there's something to show of, and no other, in order, wherever the
+    /// session has been scrolled and with prompts sent that aren't recorded yet.
+    #[test]
+    fn the_loaded_rows_are_the_ones_that_hold_something(
+        last_seq in 1u64..6_000,
+        focuses in vec(0usize..6_000, 0..12),
+        sent in 0usize..3,
+    ) {
+        let mut log = opened(last_seq);
+        for focus in focuses {
+            scroll_to(&mut log, focus % seq_index(last_seq));
+        }
+        for prompt in 0..sent {
+            log.add_pending(format!("m{prompt}").into(), "hello".into(), Vec::new());
+        }
+
+        let runs = log.loaded_rows();
+
+        prop_assert!(runs.iter().all(|run| !run.is_empty()), "{:?}", runs);
+        prop_assert!(runs.windows(2).all(|pair| pair[0].end < pair[1].start), "not in order, or not joined: {:?}", runs);
+        let mut loaded = vec![false; log.row_count()];
+        for row in runs.iter().flat_map(Clone::clone) {
+            prop_assert!(row < loaded.len(), "row {} is past the end", row);
+            loaded[row] = true;
+        }
+        for (row, loaded) in loaded.into_iter().enumerate() {
+            prop_assert_eq!(loaded, log.row(row) != Row::Unloaded, "row {}", row);
+        }
+    }
 }

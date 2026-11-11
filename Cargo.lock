@@ -7861,6 +7861,7 @@ dependencies = [
  "image",
  "look",
  "parking_lot",
+ "proptest",
  "protocol",
  "serde_json",
  "similar",

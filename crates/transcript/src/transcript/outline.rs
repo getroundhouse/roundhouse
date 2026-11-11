@@ -16,7 +16,7 @@ use gpui_kit::{
 use protocol::model::{PromptLine, seq_index};
 
 use super::Transcript;
-use crate::scroller::Scroller;
+use crate::list::TranscriptList;
 use hover::{Hover, Part, Showing};
 
 mod hover;
@@ -84,17 +84,17 @@ enum Tick {
 #[derive(Clone)]
 struct Jumps {
     hover: Entity<Hover>,
-    scroller: Scroller,
+    chat_list: TranscriptList,
     transcript: EntityId,
 }
 
 impl Jumps {
     /// Shows the prompt in `row` at the top of the chat, and closes the list, so it isn't over where it jumped to.
     fn to(&self, row: usize) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
-        let Jumps { hover, scroller, transcript } = self.clone();
+        let Jumps { hover, chat_list, transcript } = self.clone();
         move |_, _, cx| {
             hover.update(cx, Hover::jumped);
-            scroller.scroll_to_item(row);
+            chat_list.go_to_row(row);
             cx.notify(transcript);
         }
     }
@@ -108,7 +108,7 @@ impl Transcript {
         if lines.len() < 2 {
             return around.child(chat);
         }
-        let at = being_read(&lines, self.scroller.logical_scroll_top().item_ix, !self.scroller.is_scrolled_up());
+        let at = being_read(&lines, self.list.top().row, !self.list.is_scrolled_up());
         let hover = window.use_keyed_state("outline", cx, |_, _| Hover::default());
         let showing = hover.update(cx, |hover, _| hover.frame());
         if showing == Showing::Opened {
@@ -119,7 +119,7 @@ impl Transcript {
             let on_hover = window.listener_for(&hover, |h: &mut Hover, hovered: &bool, _, cx| {
                 h.hovered(Part::List, *hovered, cx);
             });
-            let jumps = Jumps { hover: hover.clone(), scroller: self.scroller.clone(), transcript: cx.entity_id() };
+            let jumps = Jumps { hover: hover.clone(), chat_list: self.list.clone(), transcript: cx.entity_id() };
             let list = list::draw(lines, at, &self.prompts.rows, jumps, on_hover, cx);
             // Over the ticks, which it hides while it's open, with its right edge on theirs.
             let over = div().absolute().top(-LIST_ABOVE).right_0().child(list);

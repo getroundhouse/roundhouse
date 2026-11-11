@@ -170,16 +170,15 @@ fn report(
     pointer: Option<Pixels>,
     cx: &mut AsyncApp,
 ) -> (f32, (usize, Pixels)) {
-    let (top, (fraction, height)) =
-        transcript.read_with(cx, |t, _| (t.scroller().logical_scroll_top(), t.scroller().thumb()));
+    let (top, (fraction, height)) = transcript.read_with(cx, |t, _| (t.list().top(), t.list().thumb()));
     eprintln!(
         "PROBE {} {:.0} {} {:.1} {:.5} {:.0}",
         start.elapsed().as_millis(),
         pointer.map_or(-1., f32::from),
-        top.item_ix,
-        f32::from(top.offset_in_item),
+        top.row,
+        f32::from(top.offset),
         fraction,
         f32::from(height)
     );
-    (fraction, (top.item_ix, top.offset_in_item))
+    (fraction, (top.row, top.offset))
 }

@@ -298,6 +298,21 @@ impl SessionLog {
         }
     }
 
+    /// The rows that are loaded, as runs in order: each event held, and every prompt sent and not yet recorded.
+    /// Every other row is [`Row::Unloaded`].
+    pub fn loaded_rows(&self) -> Vec<Range<usize>> {
+        let mut runs: Vec<Range<usize>> = Vec::new();
+        let recorded = seq_index(self.last_seq);
+        let events = self.events.keys().map(|seq| seq_index(*seq) - 1).filter(|row| *row < recorded);
+        for row in events.chain(recorded..recorded + self.pending.len()) {
+            match runs.last_mut() {
+                Some(run) if run.end == row => run.end += 1,
+                Some(_) | None => runs.push(row..row + 1),
+            }
+        }
+        runs
+    }
+
     pub fn loaded_events(&self) -> usize {
         self.events.len()
     }
