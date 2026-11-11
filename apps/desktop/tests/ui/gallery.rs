@@ -23,6 +23,7 @@ mod pull_requests;
 mod screens;
 mod steps;
 mod subagent_chats;
+mod subagent_records;
 mod tool_chats;
 mod tool_screens;
 mod worktree;
@@ -69,7 +70,7 @@ fn every_screen_looks_as_approved() {
     // because the platform it otherwise comes with has to be made on the main thread, and a test isn't on it.
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
-    let screens = || SCREENS.iter().chain(TOOL_SCREENS);
+    let screens = || SCREENS.iter().chain(TOOL_SCREENS).chain(subagent_chats::SCREENS);
     for screen in screens() {
         problems.extend(look_at(screen.name, screen.spec, &capture::take(screen, &text_system)));
     }

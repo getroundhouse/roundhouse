@@ -123,18 +123,24 @@ impl WorkspacePane {
     }
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
-        let client = self.client.clone();
+        let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id));
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
+            transcript.set_subagents(&subagents, cx);
             transcript
         });
+        // Its subagents' calls are drawn from their records, which client-core keeps once a chat asks for them.
+        self.records.follow_subagents(&session.id);
         let chat = session.id.clone();
         let events = cx.subscribe(&view, move |this, transcript, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             TranscriptEvent::NotSent { message, text, files } => {
                 this.give_back(Some(&chat), text.clone(), files.clone(), cx);
                 cx.emit(PaneEvent::Error(message.clone()));
+            }
+            TranscriptEvent::OpenSubagent { call, title } => {
+                this.open_subagent_tab(chat.clone(), call.clone(), title.clone(), cx);
             }
             TranscriptEvent::TurnEnded => {
                 // The hub reads the pull request again itself, and records it, except a hub too old to.
@@ -154,19 +160,30 @@ impl WorkspacePane {
         self.transcripts.insert(session.id, (view, events));
     }
 
-    /// Moves to the tab before or after this one, wrapping around. The file tab is counted after the chats, which in a
-    /// ring is the same as before them, where it's drawn.
+    /// Moves to the tab before or after this one, wrapping around. The subagent tab comes just after its chat, where
+    /// it's drawn. The file tab is counted after the chats, which in a ring is the same as before them, where it's
+    /// drawn.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
-        let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        let tabs = open.len() + usize::from(self.file_tab().is_some());
-        let current = if self.showing() == Showing::File {
-            open.len()
-        } else {
-            let Some(current) = open.iter().position(|id| Some(id) == self.active.as_ref()) else { return };
-            current
+        let mut tabs = Vec::new();
+        for session in self.open_sessions() {
+            tabs.push(Some(session.id.clone()));
+            if self.subagents.tab_session() == Some(&session.id) {
+                tabs.push(None);
+            }
+        }
+        let chats = tabs.len();
+        let current = match self.showing() {
+            Showing::File => chats,
+            Showing::Subagent => tabs.iter().position(Option::is_none).unwrap_or(chats),
+            Showing::Chat => {
+                let Some(current) = tabs.iter().position(|id| id.as_ref() == self.active.as_ref()) else { return };
+                current
+            }
         };
-        match open.get(crate::app::wrapped_step(current, step, tabs)) {
-            Some(id) => self.activate(id.clone(), cx),
+        let count = chats + usize::from(self.file_tab().is_some());
+        match tabs.get(crate::app::wrapped_step(current, step, count)) {
+            Some(Some(id)) => self.activate(id.clone(), cx),
+            Some(None) => self.bring_to_front(Showing::Subagent, cx),
             None => self.show_file_tab(cx),
         }
     }
@@ -261,6 +278,7 @@ impl WorkspacePane {
             }
         }
         self.keep_active_valid(&was_open, cx);
+        self.keep_subagent_tab_valid(cx);
         self.keep_edit_valid(cx);
         self.show_next(cx);
         self.read_showing(cx);
@@ -275,11 +293,23 @@ impl WorkspacePane {
         }
     }
 
+    /// Lets go of every chat's subagents' records, as the pane goes, such as when its workspace is archived.
+    pub(crate) fn let_go_of_subagents(&self) {
+        for id in self.transcripts.keys() {
+            self.records.unfollow_subagents(id);
+        }
+    }
+
     /// Moves off a chat that's been closed or deleted, here or anywhere else, to its neighbor among the chats that
     /// were open, and starts one if none are left.
     fn keep_active_valid(&mut self, was_open: &[SessionId], cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        self.transcripts.retain(|id, _| open.contains(id));
+        // A chat that's gone takes its subagents' records with its transcript.
+        let gone: Vec<SessionId> = self.transcripts.keys().filter(|id| !open.contains(id)).cloned().collect();
+        for id in &gone {
+            self.transcripts.remove(id);
+            self.records.unfollow_subagents(id);
+        }
         self.drafts.retain(|id, _| open.contains(id));
         if self.active.as_ref().is_some_and(|id| open.contains(id)) {
             return;

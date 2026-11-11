@@ -1,19 +1,19 @@
-//! Finding events near another in the log, for what drawing it needs from other rows, such as a call's result. Rows
-//! are numbered from 0 and events from 1, so the event at `seq` is in row `seq - 1`, and the row after it is `seq`.
+//! Finding events near another in the log, for what drawing it needs from other rows, such as a call's result. An
+//! event's row is the log's to say, since a log of the agent's own events or one subagent's holds only some `seq`s.
 
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Seq, seq_index};
+use protocol::model::Seq;
 
 /// The events after the one at `seq`, in order, as far as `reach` rows on. A row that isn't loaded is skipped.
 pub(super) fn events_after(log: &SessionLog, seq: Seq, reach: usize) -> impl Iterator<Item = &SessionEvent> {
-    let after = seq_index(seq);
+    let after = log.row_of(seq).map_or(log.row_count(), |row| row + 1);
     (after..after.saturating_add(reach).min(log.row_count())).filter_map(|ix| event_in(log, ix))
 }
 
 /// The events before the one at `seq`, nearest first, as far as `reach` rows back.
 pub(super) fn events_before(log: &SessionLog, seq: Seq, reach: usize) -> impl Iterator<Item = &SessionEvent> {
-    let row = seq_index(seq).saturating_sub(1);
+    let row = log.row_of(seq).unwrap_or(0);
     (row.saturating_sub(reach)..row).rev().filter_map(|ix| event_in(log, ix))
 }
 
@@ -31,7 +31,7 @@ pub(super) fn call_before<'a>(log: &'a SessionLog, seq: Seq, id: &str, reach: us
 
 /// Whether the event at `seq` is loaded, so its row is drawn.
 pub(super) fn is_loaded(log: &SessionLog, seq: Seq) -> bool {
-    seq_index(seq).checked_sub(1).is_some_and(|row| event_in(log, row).is_some())
+    log.row_of(seq).is_some_and(|row| event_in(log, row).is_some())
 }
 
 fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {

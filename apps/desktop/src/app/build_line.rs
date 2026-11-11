@@ -1,6 +1,20 @@
 //! What the bottom of the sidebar says about which build is running, and about updating it.
 
+use client_core::Client;
+use gpui_kit::App;
 use protocol::model::SessionStatus;
+
+use super::AppView;
+
+impl AppView {
+    pub fn build_line(&self, cx: &App) -> BuildLine {
+        let client = self.client();
+        let hub = client.as_ref().map(Client::hub_version);
+        // As the hub counts them, from what the sidebar already has, so it's current without asking.
+        let agents = Agents::of(self.sessions.values().flatten().map(|s| s.status));
+        BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
+    }
+}
 
 /// One build is all most people need to know about, so the hub only comes up when it isn't the app's build.
 #[derive(Clone, Debug, PartialEq, Eq)]

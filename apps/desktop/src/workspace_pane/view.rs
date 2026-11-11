@@ -118,7 +118,13 @@ impl WorkspacePane {
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
-        tabs.extend(self.open_sessions().map(|session| self.chat_tab(session, cx)));
+        for session in self.open_sessions() {
+            tabs.push(self.chat_tab(session, cx));
+            // The subagent tab sits just after the tab of the chat whose subagent it shows.
+            if self.subagents.tab_session() == Some(&session.id) {
+                tabs.extend(self.subagent_tab_element(cx));
+            }
+        }
         let closed = self.closed_chats(cx);
         div()
             .relative()
@@ -270,6 +276,7 @@ impl Render for WorkspacePane {
             });
         let showing = match tab {
             Some(tab) => div().flex_1().min_h_0().w_full().child(tab).into_any_element(),
+            None if self.showing() == Showing::Subagent => self.subagent_view(cx),
             None => self.chat(cx),
         };
         h_flex()

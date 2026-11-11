@@ -17,7 +17,7 @@ fn menu(ui: &Ui<'_>, name: &str) -> OwnedMenu {
 }
 
 /// A menu's items as macOS lists them, with `-` for each separator.
-fn items(ui: &Ui<'_>, name: &str) -> Vec<String> {
+pub(crate) fn items(ui: &Ui<'_>, name: &str) -> Vec<String> {
     let items = menu(ui, name).items.into_iter();
     items
         .map(|item| match item {

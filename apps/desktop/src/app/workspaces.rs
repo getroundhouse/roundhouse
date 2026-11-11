@@ -2,9 +2,9 @@
 
 use client_core::ClientError;
 use client_core::records::Record;
-use gpui_kit::{Context, PathPromptOptions, PromptLevel, Window};
+use gpui_kit::{App, Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::busy::Busy;
@@ -271,5 +271,17 @@ impl AppView {
         }
         self.busy = busy;
         cx.notify();
+    }
+
+    /// Lets go of the panes of workspaces that have gone or been archived. A pane's chats close with it, without
+    /// closing one by one, so it lets go of their subagents' records itself.
+    pub(super) fn drop_hidden_panes(&mut self, workspaces: &[Workspace], cx: &App) {
+        self.panes.retain(|id, pane| {
+            let shown = workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived);
+            if !shown {
+                pane.read(cx).let_go_of_subagents();
+            }
+            shown
+        });
     }
 }

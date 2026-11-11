@@ -36,6 +36,7 @@ mod sidebar_tabs;
 mod sidebars;
 mod steering;
 mod streaming;
+mod subagents;
 #[cfg(test)]
 mod support;
 mod title_strip;

@@ -1,8 +1,7 @@
 //! Tool calls in the transcript: each is one line, which opens to what the call did and closes again, in a block that
 //! the wheel scrolls once it's too tall, until it reaches an end and the wheel goes on to the transcript. A scroll
-//! stays with what it started on, and a fling stops at the block's end. A call that started a subagent opens to the
-//! subagent's work, which arrives after it. An edit shows its diff while it's hovered, and a read of an image opens to
-//! the image.
+//! stays with what it started on, and a fling stops at the block's end. An edit shows its diff while it's hovered, and
+//! a read of an image opens to the image. `subagents.rs` has the calls that start subagents.
 
 #![cfg(test)]
 
@@ -11,8 +10,8 @@ use std::time::Duration;
 
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{
-    AppContext as _, Bounds, ElementId, InputEvent as _, Pixels, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase,
-    point, px,
+    AppContext as _, ElementId, InputEvent as _, Pixels, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase, point,
+    px,
 };
 use image::ImageFormat;
 use protocol::event::EventBody;
@@ -22,9 +21,6 @@ use crate::support::{Stack, Ui};
 
 /// The fake agent's commands come with no description, so their line says they run something.
 const COMMAND_LINE: &str = "Run";
-/// What the fake agent says its subagent is for, and the description of the call the subagent makes.
-const AGENT_LINE: &str = "Look around";
-const SUBAGENT_CALL: &str = "List what's here";
 /// Asking the advisor, which the API runs rather than the agent.
 const ADVISOR_LINE: &str = "Ask the advisor";
 /// Longer than a mouse wheel's notches come apart in one spin, so the next notch starts a new gesture.
@@ -197,28 +193,6 @@ fn the_wheel_over_output_that_fits_scrolls_the_transcript(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
-fn a_subagent_s_work_shows_in_its_call_as_it_arrives(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_full_access(cx, &stack);
-    ui.input("agent:Look around; tool:echo after; say:done");
-    ui.press("enter");
-    // The subagent works for a second, so its call is open before its work arrives.
-    ui.wait("the subagent's call", |ui| ui.labelled(AGENT_LINE).len() == 1);
-    ui.click_labelled(AGENT_LINE, 0);
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-
-    let nested = bounds(&mut ui, SUBAGENT_CALL);
-    assert_eq!(nested.len(), 1, "the subagent's call shows once, in its agent's, and not in a row of its own");
-    let (agent, after) = (bounds(&mut ui, AGENT_LINE), bounds(&mut ui, COMMAND_LINE));
-    assert!(nested[0].left() > agent[0].left(), "it sits in from the agent's line: {nested:?} {agent:?}");
-    assert!(nested[0].bottom() <= after[0].top(), "what came after is below it: {nested:?} {after:?}");
-
-    ui.click_labelled(AGENT_LINE, 0);
-
-    assert!(ui.labelled(SUBAGENT_CALL).is_empty(), "closing the call hides its work");
-}
-
-#[gpui_kit::test]
 fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_full_access(cx, &stack);
@@ -268,7 +242,7 @@ fn a_read_of_an_image_opens_to_the_image_the_hub_kept(cx: &mut TestAppContext) {
 }
 
 /// A new workspace in full access, so the fake agent's calls run without waiting to be allowed.
-fn in_full_access<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+pub(crate) fn in_full_access<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
     ui.wait("the repository", |ui| ui.view().repos.len() == 1);
@@ -300,11 +274,6 @@ fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
 /// Whether the command's line says it's open, as it tells assistive apps.
 fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
     ui.labelled(COMMAND_LINE).first().and_then(ElementSnapshot::expanded)
-}
-
-/// Where each element with this label is drawn.
-fn bounds(ui: &mut Ui<'_>, label: &str) -> Vec<Bounds<Pixels>> {
-    ui.labelled(label).iter().map(ElementSnapshot::bounds).collect()
 }
 
 /// Turns the wheel over the element by `y`, down the page when it's negative.

@@ -102,6 +102,16 @@ struct Driver {
     dir: PathBuf,
 }
 
+/// Whether the chat has every row it holds. It holds only the agent's own events, so how many there are isn't the
+/// session's last `seq`.
+fn chat_loaded(pane: &WorkspacePane, cx: &App) -> bool {
+    let empty = pane.session().is_none_or(|s| s.last_seq == 0);
+    pane.transcript().is_some_and(|t| {
+        let t = t.read(cx);
+        t.loaded_events() == t.row_count() && (empty || t.row_count() > 0)
+    })
+}
+
 /// Whether the sidebar of changes shows what it starts on: the changes, or all the files where there are none.
 fn sidebar_loaded(pane: &WorkspacePane, cx: &App) -> bool {
     pane.diff.as_ref().is_some_and(|diff| match pane.sidebar_tab() {
@@ -125,9 +135,7 @@ impl Driver {
                 self.wait("the chat, the sidebar of changes and the pull request to load", |view, cx| {
                     selected_pane(view).is_some_and(|pane| {
                         let pane = pane.read(cx);
-                        let wanted = pane.session().map_or(0, |s| s.last_seq);
-                        let chat = pane.transcript().is_some_and(|t| t.read(cx).loaded_events() as u64 >= wanted);
-                        chat && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
+                        chat_loaded(pane, cx) && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
                     })
                 });
             }

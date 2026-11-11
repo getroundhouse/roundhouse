@@ -8,7 +8,7 @@ use protocol::model::SessionStatus;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, pointed, read_image, thinking_streaming};
-use super::{chats, file_chats, subagent_chats, tool_chats};
+use super::{chats, file_chats, tool_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
     Screen {
@@ -71,12 +71,6 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(thinking_streaming),
         steps: &[Step::Select(FOCUS)],
-    },
-    Screen {
-        name: "tool-subagent",
-        spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::Idle, subagent_chats::subagents())),
-        steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal")],
     },
     Screen {
         name: "tool-web",

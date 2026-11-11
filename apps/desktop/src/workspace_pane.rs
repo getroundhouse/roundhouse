@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use client_core::{Client, RecordsFeed};
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px,
@@ -38,10 +37,12 @@ mod composer;
 mod context;
 mod file_tab;
 mod focus;
+mod front;
 mod pull_request;
 mod queue;
 mod reading;
 mod setup;
+mod subagent_tab;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -55,6 +56,8 @@ pub enum Showing {
     Chat,
     /// The file tab, in place of the active chat.
     File,
+    /// The subagent tab, in place of the active chat.
+    Subagent,
 }
 
 /// The workspace's diff and the views of its worktree, made together the first time the sidebar of changes opens, then
@@ -119,6 +122,7 @@ pub struct WorkspacePane {
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
+    subagents: subagent_tab::Subagents,
     pub pull_request: Lookup,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pull_request_asks: u64,
@@ -191,7 +195,7 @@ impl WorkspacePane {
             }
         });
         let on_settings = crate::settings::observe(cx, |this, cx| {
-            for (transcript, _) in this.transcripts.values() {
+            for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
             }
         });
@@ -218,6 +222,7 @@ impl WorkspacePane {
             reading: Reading::default(),
             composer,
             diff: None,
+            subagents: subagent_tab::Subagents::default(),
             pull_request,
             pull_request_asks: 0,
             setup_log: None,
@@ -275,7 +280,7 @@ impl WorkspacePane {
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         self.hub = composer::Hub::Here;
-        for (transcript, _) in self.transcripts.values() {
+        for transcript in self.every_transcript() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
         if let Some(diff) = &mut self.diff {
@@ -325,6 +330,7 @@ impl WorkspacePane {
         if sessions != self.sessions {
             self.set_sessions(sessions, cx);
         }
+        self.pass_on_subagents(cx);
         if comments != self.comments {
             if let Some(diff) = &self.diff {
                 diff.review.update(cx, |r, cx| r.set_comments(comments.clone(), cx));
@@ -347,30 +353,6 @@ impl WorkspacePane {
                 let _ = this.update(cx, |t, cx| then(t, window, cx));
             });
         });
-    }
-
-    /// What's in front under the tabs.
-    pub fn showing(&self) -> Showing {
-        let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
-        if tab.is_some_and(|tab| tab.in_front) { Showing::File } else { Showing::Chat }
-    }
-
-    /// Puts the active chat or the file tab in front, as long as the file tab is open. It's the only way either comes
-    /// to the front, so what's read and what has focus always follow what's drawn.
-    pub(super) fn bring_to_front(&mut self, front: Showing, cx: &mut Context<Self>) {
-        if let Some(tab) = self.diff.as_mut().and_then(|diff| diff.tab.as_mut()) {
-            tab.in_front = front == Showing::File;
-        }
-        // The chat is read only while it's in front.
-        self.read_showing(cx);
-        // Not behind a dialog, where typing meant for it would come here unseen. The app focuses the pane showing once
-        // the dialog closes.
-        self.with_window(cx, |t, window, cx| {
-            if !window.has_active_dialog(cx) {
-                t.focus_showing(window, cx);
-            }
-        });
-        cx.notify();
     }
 
     pub fn stop_agent(&mut self, cx: &mut Context<Self>) {

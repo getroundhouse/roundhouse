@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use client_core::session_log::{PromptState, Row, SessionLog};
-use client_core::{Client, FileToSend, OpenSession};
+use client_core::{Client, FileToSend, OpenSession, View};
 use gpui_kit::{AppContext, Context, ElementId, Entity, EventEmitter, FocusHandle, IntoElement, Render, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, seq_index};
+use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
 use crate::folds::Folds;
@@ -23,6 +23,7 @@ use crate::rows::SubagentCalls;
 mod answers;
 mod outline;
 mod record;
+mod sending;
 
 pub(crate) use record::AtWork;
 use record::tick;
@@ -39,6 +40,9 @@ pub enum TranscriptEvent {
     /// The question in the composer's place changed: one came, or the one there was answered. `left` is the focus of
     /// the one that went, if one did, so focus that was in it can move to what's drawn now.
     Asking { left: Option<FocusHandle> },
+    /// Someone asked to see the work of the subagent the call `call` started, in the subagent tab. `title` is what the
+    /// call says it's for, for a subagent whose record hasn't come.
+    OpenSubagent { call: ToolUseId, title: String },
 }
 
 pub(crate) struct Model {
@@ -53,14 +57,17 @@ pub(crate) struct Model {
     pub at_work: AtWork,
     /// The long messages' text, read ahead of being drawn.
     pub long_texts: LongTexts,
+    /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't.
+    pub subagents: HashMap<ToolUseId, Subagent>,
+    /// The `seq` of the event each subagent's call was drawn in, so the row is measured again when its record
+    /// changes. A call's row is measured only once it's been drawn, so one that isn't here needs nothing.
+    pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
+    /// In the subagent tab, the call that started the subagent it shows, alone.
+    pub alone: Option<ToolUseId>,
 }
 
 impl Model {
-    /// A chat's, before it's drawn anything.
-    fn of(session: &Session) -> Self {
-        Model::with(session.agent, AtWork::of(session))
-    }
-
+    /// One that's drawn nothing yet, for a chat with `agent`, or for its subagent tab.
     fn with(agent: AgentKind, at_work: AtWork) -> Self {
         Model {
             agent,
@@ -69,6 +76,9 @@ impl Model {
             subagent_calls: RefCell::default(),
             at_work,
             long_texts: LongTexts::default(),
+            subagents: HashMap::new(),
+            subagent_rows: RefCell::default(),
+            alone: None,
         }
     }
 }
@@ -84,6 +94,8 @@ impl Default for Model {
 pub struct Transcript {
     client: Client,
     session_id: SessionId,
+    /// What its list is known by, which differs between a chat and the subagent tab showing its work.
+    list_id: String,
     /// Client-core's copy of the session, which this only reads.
     session: OpenSession,
     model: Rc<RefCell<Model>>,
@@ -103,15 +115,32 @@ pub struct Transcript {
 impl EventEmitter<TranscriptEvent> for Transcript {}
 
 impl Transcript {
+    /// A chat: the agent's own events, with each subagent's call drawn from its record. From a hub that can't read
+    /// them apart, every event, with each subagent's work gathered into its call.
     pub fn new(client: Client, session: &Session, cx: &mut Context<Self>) -> Self {
-        let open = OpenSession::start(&client, session);
+        Self::start(client, session, View::Own, AtWork::of(session), cx)
+    }
+
+    /// The work of the subagent `call` started, alone, for the subagent tab. Whether it's at work is its record's to
+    /// say, once [`Transcript::set_subagents`] passes it on.
+    pub fn subagent(client: Client, session: &Session, call: ToolUseId, cx: &mut Context<Self>) -> Self {
+        let transcript = Self::start(client, session, View::Subagent(call.clone()), AtWork::default(), cx);
+        transcript.model.borrow_mut().alone = Some(call);
+        transcript
+    }
+
+    fn start(client: Client, session: &Session, view: View, at_work: AtWork, cx: &mut Context<Self>) -> Self {
+        let list_id = match &view {
+            View::Subagent(call) => format!("{}-{call}", session.id),
+            View::Whole | View::Own => session.id.to_string(),
+        };
+        let open = OpenSession::start_view(&client, session, view);
         let (rows, loaded) = open.read(rows_and_loaded);
         let list = TranscriptList::new(cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
-        let model = Model::of(session);
-        let ticking = model.at_work.working.then(|| tick(cx));
-        let model = Rc::new(RefCell::new(model));
+        let ticking = at_work.working.then(|| tick(cx));
+        let model = Rc::new(RefCell::new(Model::with(session.agent, at_work)));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -123,6 +152,7 @@ impl Transcript {
         Self {
             client,
             session_id: session.id.clone(),
+            list_id,
             session: open,
             model,
             linked,
@@ -242,8 +272,10 @@ impl Transcript {
 
     /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
-        let row = seq_index(seq) - 1;
-        self.list.out_of_date(row..row + 1);
+        // Not loaded, so not measured either.
+        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+            self.list.out_of_date(row..row + 1);
+        }
         cx.notify();
     }
 
@@ -256,56 +288,6 @@ impl Transcript {
         // Any row can hold thinking, so every row can change height.
         self.list.all_out_of_date();
         cx.notify();
-    }
-
-    /// Shows the prompt at once, and takes it back if it can't be sent. Returns false if it's empty.
-    pub fn send_prompt(&mut self, text: String, cx: &mut Context<Self>) -> bool {
-        self.send_prompt_with(text, Vec::new(), cx)
-    }
-
-    /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt. If any
-    /// of that fails, it takes the prompt back and hands its text and files back with [`TranscriptEvent::NotSent`].
-    /// Returns false if there's nothing to send.
-    pub fn send_prompt_with(&mut self, text: String, files: Vec<FileToSend>, cx: &mut Context<Self>) -> bool {
-        if text.trim().is_empty() && files.is_empty() {
-            return false;
-        }
-        let client_msg_id = client_core::new_message_id();
-        {
-            let mut m = self.model.borrow_mut();
-            for file in files.iter().filter(|file| file.attachment.media_type.is_image()) {
-                let picture = Picture::read(file.attachment.media_type, file.data.clone());
-                m.pictures.insert(file.attachment.id.clone(), picture);
-            }
-        }
-        let carried = files.iter().map(|file| file.attachment.clone()).collect();
-        self.session.add_pending(client_msg_id.clone(), text.clone(), carried);
-        self.catch_up(cx);
-        self.list.go_to_latest();
-        cx.notify();
-
-        // Started on a thread of its own, so it finishes even if the app quits, and hands back what it was given.
-        let (id, msg_id, typed) = (self.session_id.clone(), client_msg_id.clone(), text.clone());
-        let sending = self.client.start(move |client| {
-            let sent = client.send_prompt_carrying(&id, &text, Some(msg_id), &files);
-            Ok((sent, text, files))
-        });
-        cx.spawn(async move |this, cx| {
-            let (message, text, files) = match sending.recv().await {
-                Ok((Ok(_), ..)) => return,
-                Ok((Err(e), text, files)) => (not_sent(&e), text, files),
-                // Only a call that never ran ends here, and its files went with it.
-                Err(e) => (not_sent(&e), typed, Vec::new()),
-            };
-            let _ = this.update(cx, |t, cx| {
-                t.session.remove_pending(&client_msg_id);
-                t.catch_up(cx);
-                cx.emit(TranscriptEvent::NotSent { message, text, files });
-                cx.notify();
-            });
-        })
-        .detach();
-        true
     }
 
     /// Fetches an image a row is drawing, and measures the row again once it's here, since an opened image is as tall
@@ -331,27 +313,21 @@ impl Transcript {
         })
         .detach();
     }
-
-    pub fn cancel(&mut self, cx: &mut Context<Self>) {
-        let id = self.session_id.clone();
-        let stopping = self.client.start(move |client| client.session_cancel(&id));
-        cx.spawn(async move |this, cx| {
-            if let Err(e) = stopping.recv().await {
-                let _ =
-                    this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("couldn't stop the agent: {e}"))));
-            }
-        })
-        .detach();
-    }
 }
 
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (model, session, linked) = (self.model.clone(), self.session.clone(), self.linked.clone());
         let (this, wanted) = (cx.weak_entity(), self.session.clone());
+        // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
+        // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
+        let tail = self.list.row_count().saturating_sub(1);
         let rows = self.list.render(
-            ElementId::Name(self.session_id.to_string().into()),
-            move |ix, _, cx| crate::rows::render_row(&model, &session, &this, &linked, ix, cx),
+            ElementId::Name(self.list_id.clone().into()),
+            move |ix, _, cx| {
+                let item = crate::rows::Item { ix, tail };
+                crate::rows::render_row(&model, &session, &this, &linked, item, cx)
+            },
             move |row| wanted.want(row),
             window,
             cx,
@@ -367,15 +343,6 @@ fn rows_and_loaded(log: &SessionLog) -> (usize, Vec<std::ops::Range<usize>>) {
     let mut loaded = log.loaded_rows();
     loaded.push(rows - 1..rows);
     (rows, loaded)
-}
-
-/// What to tell someone whose prompt didn't go. A hub from before attachments is the one failure they can fix.
-fn not_sent(error: &client_core::ClientError) -> String {
-    if error.is_unsupported() {
-        "couldn't send that: the hub is older than the app, and can't take attachments until it's updated".to_string()
-    } else {
-        format!("couldn't send that: {error}")
-    }
 }
 
 /// What the user calls an approval mode.

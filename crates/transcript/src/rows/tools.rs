@@ -16,7 +16,7 @@ use crate::linked_images::LinkedImages;
 use crate::transcript::Transcript;
 
 mod advisor;
-mod agent;
+pub(super) mod agent;
 pub(super) mod block;
 mod command;
 mod files;

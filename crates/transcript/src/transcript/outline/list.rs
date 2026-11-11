@@ -14,7 +14,7 @@ use gpui_kit::{
 use look::Hand as _;
 use protocol::model::PromptLine;
 
-use super::{Jumps, row_of};
+use super::{Jumps, Prompt};
 
 #[cfg(test)]
 mod tests;
@@ -41,7 +41,7 @@ const LEAD: usize = 2;
 /// They follow the chat's prompts whether or not the list is open.
 pub(super) struct Rows {
     state: ListState,
-    lines: Rc<[PromptLine]>,
+    lines: Rc<[Prompt]>,
 }
 
 impl Default for Rows {
@@ -52,7 +52,7 @@ impl Default for Rows {
 
 impl Rows {
     /// Makes the rows those of `lines`, measuring again only the ones that changed.
-    pub(super) fn follow(&mut self, lines: &Rc<[PromptLine]>) {
+    pub(super) fn follow(&mut self, lines: &Rc<[Prompt]>) {
         let (changed, count) = changed(&self.lines, lines);
         if changed.is_empty() && count == 0 {
             return;
@@ -73,7 +73,7 @@ impl Rows {
 /// What changed from `was` to `now`, as the rows of `was` to replace and how many rows of `now` replace them: those
 /// between the start and the end the two share. A prompt recorded joins the end, one the hub lists can come anywhere,
 /// and one whose text changed stays where it was.
-fn changed(was: &[PromptLine], now: &[PromptLine]) -> (Range<usize>, usize) {
+fn changed(was: &[Prompt], now: &[Prompt]) -> (Range<usize>, usize) {
     let start = was.iter().zip(now).take_while(|(was, now)| was == now).count();
     let end = was[start..].iter().rev().zip(now[start..].iter().rev()).take_while(|(was, now)| was == now).count();
     (start..was.len() - end, now.len() - start - end)
@@ -82,7 +82,7 @@ fn changed(was: &[PromptLine], now: &[PromptLine]) -> (Range<usize>, usize) {
 /// The list, with the prompt at `being_read` lit, as a hovered row is. It's as tall as its rows, up to [`TALLEST`],
 /// and only the rows in view are drawn. The wheel over it scrolls only the list.
 pub(super) fn draw(
-    lines: Rc<[PromptLine]>,
+    lines: Rc<[Prompt]>,
     being_read: usize,
     rows: &Rows,
     jumps: Jumps,
@@ -124,11 +124,11 @@ pub(super) fn draw(
 }
 
 /// The prompt `ix` places from the first: its number, and up to two lines of it, quieter than the one being read.
-fn row(ix: usize, line: &PromptLine, lit: bool, jumps: &Jumps, cx: &App) -> AnyElement {
-    let row = row_of(line);
+fn row(ix: usize, prompt: &Prompt, lit: bool, jumps: &Jumps, cx: &App) -> AnyElement {
+    let row = prompt.row;
     let theme = cx.theme();
     let fill = theme.secondary_hover;
-    let label = label(line);
+    let label = label(&prompt.line);
     let number = div()
         .w(NUMBER_WIDTH)
         .flex_none()

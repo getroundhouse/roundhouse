@@ -10,10 +10,12 @@ use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AgentKind, AttachmentId, DiffComment, GitDiff, InstanceId, Place, PullRequest, Records, Repo, RepoId, Rev,
-    Seq, Session, SessionId, SessionStatus, SetupStatus, Title, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
-    WorktreeFiles,
+    Seq, Session, SessionId, SessionStatus, SetupStatus, Subagent, Title, TitleSource, ToolUseId, Workspace,
+    WorkspaceId, WorkspaceStatus, WorktreeFiles,
 };
 use protocol::tail::Tail;
+
+use super::subagent_records::records_of;
 
 /// When the first record was made: 1 November 2026, at 2 PM in UTC, which pictures show times in. Each one after it is
 /// a minute later, and each event a second.
@@ -30,8 +32,11 @@ pub(crate) struct World {
     pub(crate) repos: Vec<Repo>,
     pub(crate) workspaces: Vec<Workspace>,
     pub(crate) sessions: Vec<Session>,
-    /// Each session's events, with `seq` from 1 and no gaps, as the protocol promises.
+    /// Each session's events, with `seq` from 1 and no gaps, as the protocol promises, and each its place among the
+    /// events from the same agent or subagent.
     logs: HashMap<SessionId, Vec<SessionEvent>>,
+    /// Each session's subagents, made from its events.
+    subagents: HashMap<SessionId, Vec<Subagent>>,
     /// What's still streaming, for a chat caught mid-reply.
     pub(crate) tails: HashMap<SessionId, Tail>,
     pub(crate) diffs: HashMap<WorkspaceId, GitDiff>,
@@ -131,20 +136,8 @@ impl World {
             EventBody::UserPrompt { text, .. } => Title::from_first_line(text),
             _ => None,
         });
-        let log: Vec<SessionEvent> = events
-            .into_iter()
-            .zip(1..)
-            .map(|(body, seq): (EventBody, Seq)| SessionEvent {
-                session_id: id.clone(),
-                seq,
-                ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
-                run: None,
-                subagent: None,
-                place: Place::default(),
-                body,
-                raw: None,
-            })
-            .collect();
+        let log = log_of(&id, created_at_ms, events);
+        self.subagents.insert(id.clone(), records_of(&log));
         let last_seq = log.last().map_or(0, |event| event.seq);
         let background_tasks = log
             .iter()
@@ -235,8 +228,47 @@ impl World {
         self.logs.get(id).into_iter().flatten().filter(move |event| event.seq >= from_seq)
     }
 
+    /// The agent's own events, or one subagent's, from `from`.
+    pub(crate) fn placed_from<'a>(
+        &'a self,
+        id: &SessionId,
+        subagent: Option<&'a ToolUseId>,
+        from: Place,
+    ) -> impl Iterator<Item = &'a SessionEvent> {
+        let theirs = move |event: &&SessionEvent| event.subagent.as_ref() == subagent && event.place >= from;
+        self.logs.get(id).into_iter().flatten().filter(theirs)
+    }
+
+    pub(crate) fn subagents_of(&self, id: &SessionId) -> Vec<Subagent> {
+        self.subagents.get(id).cloned().unwrap_or_default()
+    }
+
     fn next_time(&mut self) -> i64 {
         self.records += 1;
         START_MS + RECORD_GAP_MS * self.records
     }
+}
+
+/// A chat's events, with `seq` from 1 and no gaps, and each its place among the events from the same agent or subagent.
+fn log_of(id: &SessionId, created_at_ms: i64, events: Vec<EventBody>) -> Vec<SessionEvent> {
+    let mut places: HashMap<Option<ToolUseId>, u64> = HashMap::new();
+    events
+        .into_iter()
+        .zip(1..)
+        .map(|(body, seq): (EventBody, Seq)| {
+            let subagent = body.subagent().cloned();
+            let place = places.entry(subagent.clone()).or_default();
+            *place += 1;
+            SessionEvent {
+                session_id: id.clone(),
+                seq,
+                ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
+                run: None,
+                subagent,
+                place: Place::new(*place),
+                body,
+                raw: None,
+            }
+        })
+        .collect()
 }

@@ -1,16 +1,20 @@
-//! What a subagent has done, gathered from the log for the call that started it. Its events arrive in rows of their
-//! own, after the call and among the agent's other work and any other subagent's, so the call gathers them and their
-//! own rows are empty. One too far after its call to be gathered is drawn where it is instead, so nothing the
-//! subagent did goes missing.
+//! What a subagent has done, for the call that started it. A chat that holds only the agent's own events draws it
+//! from the subagent's record, and its work is in the subagent tab.
+//!
+//! From a hub that can't read the agent's own events apart, the chat holds every event, so it's gathered from the log
+//! instead. Its events arrive in rows of their own, after the call and among the agent's other work and any other
+//! subagent's, so the call gathers them and their own rows are empty. One too far after its call to be gathered is
+//! drawn where it is instead, so nothing the subagent did goes missing.
 
 use std::collections::{HashMap, HashSet};
 
-use client_core::session_log::{MAX_LOADED_EVENTS, SessionLog};
+use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Seq, ToolUseId, seq_index};
+use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
 
-use super::{Around, blocks_of, nearby};
+use super::{Around, BlockAround, blocks_of, nearby};
 use crate::calls::agent;
+use crate::item_key::ItemKey;
 use crate::transcript::Model;
 
 /// How far after its call a subagent's events are looked for: as many as the log holds at once. A subagent can work
@@ -19,16 +23,43 @@ const REACH: usize = MAX_LOADED_EVENTS;
 
 /// What a subagent has done so far.
 pub(in crate::rows) struct Subagent {
+    /// The call that started it, which its events name.
+    pub(in crate::rows) call: ToolUseId,
     /// How many calls it's made.
     pub(in crate::rows) calls: usize,
-    /// Its events, with what each needs to be drawn. Only gathered while its call is open.
+    /// Its events, with what each needs to be drawn. Only gathered while its call is open, and never when its work is
+    /// kept apart.
     pub(in crate::rows) events: Option<Vec<(SessionEvent, Around)>>,
+    /// Its work is kept apart from the chat's, in the subagent tab, so it's drawn from its record.
+    pub(in crate::rows) apart: bool,
+    /// Its record, once the hub has sent it.
+    pub(in crate::rows) record: Option<Record>,
+    /// From its record, while it works: its newest call, as a block, with what drawing it needs.
+    pub(in crate::rows) latest: Option<Box<(ContentBlock, BlockAround)>>,
 }
 
 impl Subagent {
     /// What the subagent started by the call `id`, in the event at `seq`, has done.
     pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool) -> Self {
-        let mut subagent = Self { calls: 0, events: open.then(Vec::new) };
+        if log.by() == By::Place {
+            let id = ToolUseId::from(id);
+            let record = m.subagents.get(&id).cloned();
+            let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
+            m.subagent_rows.borrow_mut().insert(id.clone(), seq);
+            let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
+            let latest = working.and_then(|record| record.latest_call.as_ref()).filter(|_| open).map(|call| {
+                let block = ContentBlock::ToolUse {
+                    id: call.id.to_string(),
+                    name: call.name.clone(),
+                    input: call.input.clone(),
+                };
+                let around = BlockAround::read(log, m, seq, &block, ItemKey::Call(call.id.clone()));
+                Box::new((block, around))
+            });
+            return Self { call: id, calls, events: None, apart: true, record, latest };
+        }
+        let mut subagent =
+            Self { call: id.into(), calls: 0, events: open.then(Vec::new), apart: false, record: None, latest: None };
         let its_own = |event: &&SessionEvent| parent_of(&event.body).is_some_and(|parent| parent.as_str() == id);
         for event in nearby::events_after(log, seq, REACH).filter(its_own) {
             let blocks = blocks_of(&event.body);
@@ -45,6 +76,10 @@ impl Subagent {
 /// call is close enough before it to have gathered it. Otherwise, such as when the call is further back than the log
 /// holds, it's drawn where it is, so it shows somewhere.
 pub(in crate::rows) fn drawn_in_its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> bool {
+    // A log by place holds one agent's or subagent's events, so a call and its subagent's work are never both in it.
+    if log.by() == By::Place {
+        return false;
+    }
     let Some(parent) = parent_of(&event.body) else { return false };
     let Some(call) = m.subagent_calls.borrow_mut().find(log, event.seq, parent) else { return false };
     // The same reach as `Subagent::read`, which gathers the events after its call's row.

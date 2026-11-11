@@ -14,7 +14,9 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
 use protocol::frame;
-use protocol::model::{FileContents, GitDiff, GitStatus, PromptLine, SessionId, SessionStatus, WorkspaceStatus};
+use protocol::model::{
+    FileContents, GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
+};
 
 use super::world::World;
 
@@ -119,6 +121,22 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::Prompts { prompts: prompts.collect() })
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),
+        R::SessionReadPlaces { id, subagent, from_place, limit, .. } => {
+            world.session(&id)?;
+            let last_place =
+                world.placed_from(&id, subagent.as_ref(), Place::new(1)).last().map_or(Place::new(0), |e| e.place);
+            let events = world
+                .placed_from(&id, subagent.as_ref(), from_place)
+                .take(usize::try_from(limit).unwrap_or(usize::MAX));
+            reply(C::PlacedEvents { events: events.cloned().collect(), last_place })
+        }
+        R::SessionSubscribePlaces { id, subagent, from_place, subscription_id } => {
+            subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id)
+        }
+        R::SessionSubagents { id } => {
+            world.session(&id)?;
+            reply(C::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() })
+        }
         R::FeedSubscribe { .. } | R::SessionUnsubscribe { .. } => reply(C::Ok),
         R::AttachmentRead { id, .. } => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
@@ -168,13 +186,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionRename { .. } => Err(read_only("change anything")),
         // So a screen can show a workspace on its way, or waiting for its new title.
         R::WorkspaceArchive { .. } | R::WorkspaceRegenerateTitle { .. } => Ok(Outcome::Never),
-        // The app reads whose account it is from the records, so a screen that asks some other way is wrong. Reading by
-        // place and subagents' records are refused as a hub from before them would, since nothing shown reads them yet.
-        R::SessionAccount { .. }
-        | R::SessionReadPlaces { .. }
-        | R::SessionSubscribePlaces { .. }
-        | R::SessionSubagents { .. }
-        | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
+        // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
+        R::SessionAccount { .. } | R::Unknown => {
+            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
+        }
     }
 }
 
@@ -183,6 +198,22 @@ fn subscribe(world: &World, id: &SessionId, from_seq: u64, subscription_id: u64)
     world.session(id)?;
     let events = world.events_from(id, from_seq).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
     let tail = HubFrame::Tail { subscription_id, tail: world.tails.get(id).cloned().unwrap_or_default() };
+    Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
+}
+
+/// The same, for the agent's own events or one subagent's, with only that one's part of what's still streaming.
+fn subscribe_places(
+    world: &World,
+    id: &SessionId,
+    subagent: Option<&ToolUseId>,
+    from: Place,
+    subscription_id: u64,
+) -> Answer {
+    world.session(id)?;
+    let events =
+        world.placed_from(id, subagent, from).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
+    let tail = world.tails.get(id).map(|tail| tail.of(subagent)).unwrap_or_default();
+    let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }
 

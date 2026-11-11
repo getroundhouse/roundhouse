@@ -1,7 +1,13 @@
+use protocol::model::seq_index;
+
 use super::*;
 
-fn lines(seqs: &[u64]) -> Vec<PromptLine> {
-    seqs.iter().map(|seq| PromptLine::new(*seq, "a prompt", 0)).collect()
+fn prompt(line: PromptLine) -> Prompt {
+    Prompt { row: seq_index(line.seq()) - 1, line }
+}
+
+fn lines(seqs: &[u64]) -> Vec<Prompt> {
+    seqs.iter().map(|seq| prompt(PromptLine::new(*seq, "a prompt", 0))).collect()
 }
 
 #[test]
@@ -19,7 +25,8 @@ fn prompts_the_hub_lists_before_those_the_chat_has_go_in_before_them() {
 fn a_prompt_whose_line_changed_is_measured_again_where_it_is() {
     let was = lines(&[1, 5, 9]);
     let mut now = was.clone();
-    now[1] = PromptLine::new(5, "a prompt, and a much longer one, which may take two lines where it took one", 0);
+    now[1] =
+        prompt(PromptLine::new(5, "a prompt, and a much longer one, which may take two lines where it took one", 0));
 
     assert_eq!(changed(&was, &now), (1..2, 1));
 }
@@ -32,7 +39,7 @@ fn the_same_prompts_change_nothing() {
 
 #[test]
 fn rows_alike_at_the_edge_of_what_changed_are_counted_once() {
-    let same = |count| vec![PromptLine::new(1, "a prompt", 0); count];
+    let same = |count| vec![prompt(PromptLine::new(1, "a prompt", 0)); count];
 
     assert_eq!(changed(&same(1), &same(2)), (1..1, 1));
     assert_eq!(changed(&same(2), &same(1)), (1..2, 0));
