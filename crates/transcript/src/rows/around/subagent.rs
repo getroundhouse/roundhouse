@@ -7,15 +7,18 @@
 //! drawn where it is instead, so nothing the subagent did goes missing.
 
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
 
-use super::{Around, BlockAround, blocks_of, nearby};
+use super::{Around, BlockAround, Reply, blocks_of, nearby};
 use crate::calls::agent;
-use crate::item_key::ItemKey;
 use crate::transcript::Model;
+use lately::Lately;
+
+mod lately;
 
 /// How far after its call a subagent's events are looked for: as many as the log holds at once. A subagent can work
 /// for hundreds of events, and the agent goes on with its own work alongside it.
@@ -33,9 +36,10 @@ pub(in crate::rows) struct Subagent {
     /// Its work is kept apart from the chat's, in the subagent tab, so it's drawn from its record.
     pub(in crate::rows) apart: bool,
     /// Its record, once the hub has sent it.
-    pub(in crate::rows) record: Option<Record>,
-    /// From its record, while it works: its newest call, as a block, with what drawing it needs.
-    pub(in crate::rows) latest: Option<Box<(ContentBlock, BlockAround)>>,
+    pub(in crate::rows) record: Option<Rc<Record>>,
+    /// From its record, while it works and its call is open: what it's done lately, as blocks, oldest first, each
+    /// with what drawing it needs.
+    pub(in crate::rows) lately: Vec<(ContentBlock, BlockAround)>,
 }
 
 impl Subagent {
@@ -47,19 +51,28 @@ impl Subagent {
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
             m.subagent_rows.borrow_mut().insert(id.clone(), seq);
             let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
-            let latest = working.and_then(|record| record.latest_call.as_ref()).filter(|_| open).map(|call| {
-                let block = ContentBlock::ToolUse {
-                    id: call.id.to_string(),
-                    name: call.name.clone(),
-                    input: call.input.clone(),
-                };
-                let around = BlockAround::read(log, m, seq, &block, ItemKey::Call(call.id.clone()));
-                Box::new((block, around))
-            });
-            return Self { call: id, calls, events: None, apart: true, record, latest };
+            let lately = working.filter(|_| open).map(|record| lately::lately(record)).unwrap_or_default();
+            let lately = lately
+                .into_iter()
+                .map(|Lately { block, key, result }| {
+                    // What came back is in the subagent's events, which the chat doesn't hold, so it's the record's.
+                    let mut around = BlockAround::read(log, m, seq, &block, key);
+                    if let Some(result) = &result {
+                        around.reply = Reply::of(result, m);
+                    }
+                    (block, around)
+                })
+                .collect();
+            return Self { call: id, calls, events: None, apart: true, record, lately };
         }
-        let mut subagent =
-            Self { call: id.into(), calls: 0, events: open.then(Vec::new), apart: false, record: None, latest: None };
+        let mut subagent = Self {
+            call: id.into(),
+            calls: 0,
+            events: open.then(Vec::new),
+            apart: false,
+            record: None,
+            lately: Vec::new(),
+        };
         let its_own = |event: &&SessionEvent| parent_of(&event.body).is_some_and(|parent| parent.as_str() == id);
         for event in nearby::events_after(log, seq, REACH).filter(its_own) {
             let blocks = blocks_of(&event.body);

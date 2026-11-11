@@ -17,6 +17,11 @@ pub(crate) enum ItemKey {
     Attachment(AttachmentId),
     /// A call drawn from a record rather than an event, such as a subagent's newest, by its ID.
     Call(ToolUseId),
+    /// What a subagent wrote just before a call, drawn from its record, by the call's ID.
+    Before(ToolUseId),
+    /// What a subagent has written since a call, drawn from its record: since its newest, or since the one that
+    /// started it, if it's made none. By that call's ID.
+    After(ToolUseId),
 }
 
 impl ItemKey {
@@ -50,6 +55,8 @@ impl ItemKey {
             ItemKey::Event(seq, position) => format!("{part}/event/{seq}/{position}"),
             ItemKey::Attachment(id) => format!("{part}/attachment/{id}"),
             ItemKey::Call(id) => format!("{part}/call/{id}"),
+            ItemKey::Before(id) => format!("{part}/before/{id}"),
+            ItemKey::After(id) => format!("{part}/after/{id}"),
         };
         ElementId::Name(name.into())
     }
@@ -94,6 +101,9 @@ mod tests {
             ItemKey::prompt(3, None).element("text"),
             ItemKey::Prompt("1".into()).element("text"),
             ItemKey::Attachment("1".into()).element("text"),
+            ItemKey::Call("1".into()).element("text"),
+            ItemKey::Before("1".into()).element("text"),
+            ItemKey::After("1".into()).element("text"),
         ];
 
         for (i, id) in ids.iter().enumerate() {

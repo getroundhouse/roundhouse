@@ -2,6 +2,7 @@
 //! the background, which the transcript's last row draws. Also its subagents' records, which their calls are drawn
 //! from, and in the subagent tab, the one it shows, which says whether that one is at work.
 
+use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::{Context, Task};
@@ -68,8 +69,10 @@ impl Transcript {
     pub fn set_subagents(&mut self, subagents: &[Subagent], cx: &mut Context<Self>) {
         let (rows, shown) = {
             let mut m = self.model.borrow_mut();
-            let changed: Vec<&Subagent> =
-                subagents.iter().filter(|subagent| m.subagents.get(&subagent.call) != Some(*subagent)).collect();
+            let changed: Vec<&Subagent> = subagents
+                .iter()
+                .filter(|subagent| m.subagents.get(&subagent.call).map(Rc::as_ref) != Some(*subagent))
+                .collect();
             if changed.is_empty() {
                 return;
             }
@@ -85,7 +88,7 @@ impl Transcript {
                 m.at_work = at_work;
             }
             for subagent in changed {
-                m.subagents.insert(subagent.call.clone(), subagent.clone());
+                m.subagents.insert(subagent.call.clone(), Rc::new(subagent.clone()));
             }
             (rows, shown.is_some())
         };

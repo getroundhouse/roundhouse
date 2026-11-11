@@ -137,12 +137,14 @@ pub(in crate::rows) fn report_block(
         .child(div().id(key.element("report")).child(text).test_support())
 }
 
-/// Kept apart: the blocks the subagent tab starts and ends with, and its newest call between them while it works.
+/// Kept apart: the blocks the subagent tab starts and ends with, and between them, while it works, what it's done lately:
+/// its newest few calls, each after what it wrote just before it, then what it's written since.
 fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Toggle, cx: &App) -> AnyElement {
-    let latest = subagent.latest.as_deref().and_then(|(block, drawing)| {
-        let drawn = render_block(toggle.seq, block, drawing, toggle.shared, cx)?;
-        Some(v_flex().child(div().text_xs().text_color(look::faint()).child("Working on")).child(drawn))
-    });
+    let drawn: Vec<AnyElement> = (subagent.lately.iter())
+        .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.shared, cx))
+        .collect();
+    let lately = (!drawn.is_empty())
+        .then(|| v_flex().gap_1().child(div().text_xs().text_color(look::faint()).child("Working on")).children(drawn));
     let report = match &subagent.record {
         Some(record) if record.status == SubagentStatus::Working => None,
         Some(record) => record.report.as_deref(),
@@ -153,7 +155,7 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .mb_2()
         .gap_2()
         .children(call.prompt.map(|prompt| prompt_block(toggle.key, prompt, cx)))
-        .children(latest)
+        .children(lately)
         .when_some(report, |d, report| {
             d.child(report_block(toggle.key, report, Some((&toggle.shared.linked, toggle.seq)), cx))
         })
