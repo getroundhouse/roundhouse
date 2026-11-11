@@ -10,7 +10,7 @@ use super::*;
 /// A log as a view of an open session holds it once the subscription has delivered what it starts with.
 fn opened(last_seq: Seq) -> SessionLog {
     let mut log = SessionLog::new(last_seq);
-    for event in page(first_live_seq(last_seq)..last_seq + 1) {
+    for event in page(first_live(last_seq)..last_seq + 1) {
         log.apply_event(event);
     }
     log
@@ -19,7 +19,7 @@ fn opened(last_seq: Seq) -> SessionLog {
 /// Fetches what the log asks for at this focus, and installs it. The fetch at `fails`, if any, fails, and
 /// so does everything after it, as when the connection goes.
 fn fetch(log: &mut SessionLog, focus: usize, fails: Option<usize>) {
-    let last_seq = log.last_seq();
+    let last_seq = log.last();
     log.focus_on(focus);
     for (i, range) in log.pages_to_fetch().into_iter().enumerate() {
         if fails == Some(i) {
@@ -91,7 +91,7 @@ proptest! {
         prop_assert_eq!(log.pages_to_fetch(), Vec::new());
     }
 
-    /// A log whose subscription started at `first_live_seq`, and has had every event since, loads any row a
+    /// A log whose subscription started at `first_live`, and has had every event since, loads any row a
     /// view scrolls to, so a page part-delivered live is never taken for a whole one.
     #[test]
     fn rows_from_live_events_and_from_scrolling_all_load(last_seq in 1u64..3_000, focuses in vec(0usize..3_000, 1..20)) {
