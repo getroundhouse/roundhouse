@@ -148,7 +148,8 @@ impl WorkspacePane {
     /// What sits beside the main action, in the order it's drawn. Something new for the bar's right end goes here,
     /// and being a [`Slot`] is what lines it up and spaces it.
     fn beside_the_main_action(&self, cx: &mut Context<Self>) -> Vec<Slot> {
-        self.context_ring(cx).into_iter().collect()
+        let usage = self.usage(cx);
+        self.usage_bars(usage.as_ref(), cx).into_iter().chain(self.context_ring(usage.as_ref(), cx)).collect()
     }
 
     /// Send, or Stop while the agent is in a turn. Work left in the background isn't one, since stopping a turn

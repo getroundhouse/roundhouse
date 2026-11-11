@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# What only tests use, such as asking for a session's account as clients did before accounts were records.
+testing = []
+
 [dependencies]
 parking_lot.workspace = true
 protocol.workspace = true

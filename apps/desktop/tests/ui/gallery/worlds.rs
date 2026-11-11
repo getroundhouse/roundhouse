@@ -4,9 +4,9 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AgentAccount, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
-    GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionAccount, SessionStatus, SetupStatus,
-    Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    Account, AttachmentId, Checks, CommentId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
+    GitDiff, LimitWindow, MergeState, PullRequest, QueuedPrompt, Rev, SessionStatus, SetupStatus, Title, UsageLimit,
+    WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -59,8 +59,8 @@ pub(super) fn conversation() -> World {
     world
 }
 
-/// The conversation, in a chat whose agent has said how full its context is, on an account with a week's limit that
-/// starts again in six days.
+/// The conversation, in a chat whose agent has said how full its context is, on an account with a five-hour limit
+/// that starts again in three hours and a week's limit that starts again in six days.
 pub(super) fn context() -> World {
     const HOUR_MS: i64 = 3_600_000;
     let mut world = conversation();
@@ -84,17 +84,33 @@ pub(super) fn context() -> World {
         window: LimitWindow::SevenDays,
         used_percent: 4,
         resets_at_ms: Some(NOW_MS + 150 * HOUR_MS),
-        heard_at_ms: Some(NOW_MS - HOUR_MS),
+        // As an account's record has it, which doesn't say when.
+        heard_at_ms: None,
     };
-    let account = AgentAccount {
-        id: Some("claude-0000000000000000".into()),
-        logged_in: true,
+    let hours = UsageLimit {
+        window: LimitWindow::FiveHours,
+        used_percent: 29,
+        resets_at_ms: Some(NOW_MS + 3 * HOUR_MS),
+        heard_at_ms: None,
+    };
+    let account = Account {
+        id: "claude-0000000000000000".into(),
         model_provider: Some("Anthropic API".to_string()),
         plan: Some("Max".to_string()),
         login: Some("Claude account".to_string()),
         email: Some("ada@example.com".to_string()),
+        limits: vec![hours, week],
+        rev: Rev::default(),
     };
-    world.account = Some(SessionAccount { account, limits: vec![week] });
+    world.sessions.last_mut().unwrap().account = Some(account.id.clone());
+    world.accounts.push(account);
+    world
+}
+
+/// The same, before any agent under the account has heard of a limit.
+pub(super) fn context_without_limits() -> World {
+    let mut world = context();
+    world.accounts[0].limits.clear();
     world
 }
 

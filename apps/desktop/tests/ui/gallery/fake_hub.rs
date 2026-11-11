@@ -124,11 +124,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData { data: AttachmentBytes::new(data.clone()) })
         }
-        R::SessionAccount { .. } => {
-            let unsupported =
-                || ApiError::new(ErrorCode::Unsupported, "this screen's hub can't say whose account it is");
-            reply(C::SessionAccount(world.account.clone().ok_or_else(unsupported)?))
-        }
         // An older hub's build is from before files were listed, too.
         R::WorkspaceFiles { .. } if world.hub.is_some() => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list files"))
@@ -173,7 +168,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionRename { .. } => Err(read_only("change anything")),
         // So a screen can show a workspace on its way, or waiting for its new title.
         R::WorkspaceArchive { .. } | R::WorkspaceRegenerateTitle { .. } => Ok(Outcome::Never),
-        R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
+        // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
+        R::SessionAccount { .. } | R::Unknown => {
+            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
+        }
     }
 }
 

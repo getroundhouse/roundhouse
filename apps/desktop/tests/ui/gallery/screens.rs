@@ -8,8 +8,9 @@ use protocol::model::SessionStatus;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    attachments, chat_tabs, chat_world, closed_chats, context, conversation, diff, finishing_update, own_hub,
-    queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled, working_background,
+    attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation, diff,
+    finishing_update, own_hub, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled,
+    working_background,
 };
 use super::{chats, long_chats, pictures, worktree};
 
@@ -38,7 +39,28 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "context",
         spec: "chats.md",
         world: Some(context),
-        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "context-account" }],
+        // The bars come once the hub has said what's left of the limits, which the picture is taken with.
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("context"), shows: "context-card" },
+        ],
+    },
+    Screen {
+        name: "context-account",
+        spec: "chats.md",
+        world: Some(context_without_limits),
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "account" }],
+    },
+    Screen {
+        name: "usage",
+        spec: "chats.md",
+        world: Some(context),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("usage"), shows: "usage-card" },
+        ],
     },
     Screen {
         name: "attachments",
