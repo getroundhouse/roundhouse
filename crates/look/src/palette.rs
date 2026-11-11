@@ -11,6 +11,12 @@ pub fn faint() -> Hsla {
     hex(0x006f_6964)
 }
 
+/// The edge of a field on the sidebar, such as Settings' search: lighter than a line, since it's something to type in
+/// rather than something that separates.
+pub fn field_edge() -> Hsla {
+    hex(0x0043_4140)
+}
+
 /// The top of the app icon's tile, a step above the pane's colour it fades down to.
 pub(crate) fn tile_top() -> Hsla {
     hex(0x0021_1d1b)

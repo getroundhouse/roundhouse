@@ -1,22 +1,29 @@
-//! Settings as it fills the window: a page for each part of the app in a sidebar, with a way back at its top right,
-//! and the settings on the chosen page beside it. It's the kit's settings view, which also finds a setting by name.
+//! Settings as it fills the window: a sidebar with a search at its top and a page for each part of the app under a
+//! heading, with a way back at its top right, and the settings on the chosen page beside it.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use look::{Hand as _, Off as _};
 use std::rc::Rc;
 
-use client_core::Client;
-use gpui_kit::component::setting::{SettingGroup, SettingItem, SettingPage, Settings};
+use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::InputState;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    App, ClickEvent, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    StyleRefinement, Styled as _, Window, div, px,
+    AnyElement, App, ClickEvent, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, RenderOnce, Styled as _, TestSupportExt as _, Window, div, px,
 };
+use look::{Hand as _, Off as _};
 
+use client_core::Client;
 use protocol::model::{HubSettings, HubSettingsChange};
 
+use crate::FindSetting;
 use crate::workspace_pane::HEADER_HEIGHT;
+
+mod sidebar;
+#[cfg(test)]
+mod tests;
 
 /// How big a page's name is: the one thing in Settings larger than body text, since it says where you are.
 const TITLE_SIZE: Pixels = px(24.);
@@ -24,11 +31,17 @@ const TITLE_SIZE: Pixels = px(24.);
 /// The key context Settings' own keys are bound in.
 pub(crate) const KEY_CONTEXT: &str = "Settings";
 
+/// The key that puts the cursor in the search, which the search shows at its right end.
+pub(crate) const FIND_KEY: &str = "cmd-f";
+
 /// A hub's own settings as they are now, and the hub to ask to change them.
 pub(crate) struct OfHub {
     pub(crate) settings: HubSettings,
     pub(crate) client: Client,
 }
+
+/// What goes back from Settings to where the person was.
+type Back = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// Settings, with `back` going back to where the person was. Keys reach it through `focus`. `width` is how wide the
 /// sidebar it stands in for is, whether or not that's showing. `hub` is the settings the hub keeps, or `None` while
@@ -38,115 +51,225 @@ pub(crate) fn page(
     width: Pixels,
     back: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     hub: Option<OfHub>,
-    cx: &App,
-) -> impl IntoElement {
-    // The search starts below the strip along the top, where the main window's sidebar starts. The kit's sidebar
-    // already puts 12px above it.
-    let mut search = StyleRefinement::default();
-    search.padding.top = Some((HEADER_HEIGHT - px(12.)).into());
-    // The same width as the sidebar it stands in for, so nothing moves, and fixed, so the way back stays over it.
-    let pages = Settings::new("settings-pages").sidebar_width(width).sidebar_size_range(width..width);
-    // In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
-    // Settings is for. A press on it is the button's, so it doesn't move the window.
-    let way_back =
-        div().absolute().top_0().left_0().w(width).h(HEADER_HEIGHT).flex().items_center().justify_end().pr_3();
-    div()
-        .id("settings")
-        .key_context(KEY_CONTEXT)
-        .track_focus(focus)
-        .relative()
-        .size_full()
-        .child(pages.header_style(&search).page(general(hub, cx)))
-        .child(
-            way_back.child(
-                Button::new("settings-back")
-                    .hand()
-                    .ghost()
-                    .small()
-                    .icon(IconName::ArrowLeft)
-                    .label("Back")
-                    .text_color(cx.theme().muted_foreground)
-                    .on_click(back),
-            ),
-        )
+) -> SettingsView {
+    SettingsView { focus: focus.clone(), width, back: Rc::new(back), hub }
+}
+
+#[derive(IntoElement)]
+pub(crate) struct SettingsView {
+    focus: FocusHandle,
+    width: Pixels,
+    back: Back,
+    hub: Option<OfHub>,
+}
+
+impl RenderOnce for SettingsView {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // Kept only while Settings shows, so it opens with nothing typed, on its first page.
+        let search = window.use_keyed_state("settings-search", cx, InputState::new);
+        let chosen = window.use_keyed_state("settings-chosen", cx, |_, _| None::<PageId>);
+        let sections = found(sections(self.hub), &search.read(cx).value());
+        let shown = shown(&sections, *chosen.read(cx));
+        let shown_page = match shown {
+            Some(page) => settings_page(page, cx).into_any_element(),
+            None => nothing_found(cx).into_any_element(),
+        };
+        let shown_id = shown.map(|page| page.id);
+        let sidebar = sidebar::sidebar(&search, &sections, shown_id, &chosen, self.width, window, cx);
+        let find = search.clone();
+        div()
+            .id("settings")
+            .key_context(KEY_CONTEXT)
+            .track_focus(&self.focus)
+            // With what's typed selected, as a search field does, so what's typed next takes its place.
+            .on_action(move |_: &FindSetting, window, cx| {
+                find.update(cx, |search, cx| {
+                    search.focus(window, cx);
+                    search.select_all(window, cx);
+                });
+            })
+            .relative()
+            .size_full()
+            .flex()
+            .child(sidebar)
+            .child(div().flex_1().min_w_0().h_full().child(shown_page))
+            .child(way_back(self.width, self.back, cx))
+    }
+}
+
+/// Whether a setting is on, or `None` for one that can't be read or changed just now, such as a hub's while the hub
+/// is out of reach.
+type IsOn = Box<dyn Fn(&App) -> Option<bool>>;
+/// Turns a setting on or off.
+type Set = Rc<dyn Fn(bool, &mut App)>;
+
+/// A setting that's on or off.
+struct Setting {
+    name: &'static str,
+    does: &'static str,
+    is_on: IsOn,
+    set: Set,
+}
+
+impl Setting {
+    /// Whether the search is in what it's called or what it does, in any case.
+    fn matches(&self, search: &str) -> bool {
+        let search = search.trim().to_lowercase();
+        [self.name, self.does].iter().any(|said| said.to_lowercase().contains(&search))
+    }
+}
+
+/// Which page, so a page is known by what it's for rather than by what it says.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PageId {
+    General,
+}
+
+impl PageId {
+    /// What its row in the sidebar is known by.
+    fn row_id(self) -> &'static str {
+        match self {
+            PageId::General => "settings-page-general",
+        }
+    }
+}
+
+struct Page {
+    id: PageId,
+    name: &'static str,
+    icon: Lucide,
+    settings: Vec<Setting>,
+}
+
+/// Pages under a heading.
+struct Section {
+    heading: &'static str,
+    pages: Vec<Page>,
+}
+
+/// Every page, under its heading.
+fn sections(hub: Option<OfHub>) -> Vec<Section> {
+    vec![Section { heading: "Personal", pages: vec![general(hub)] }]
+}
+
+/// What a search leaves: the settings that match it, on their pages, under their headings. A page with nothing left on
+/// it goes, and so does a heading with no page left under it.
+fn found(mut sections: Vec<Section>, search: &str) -> Vec<Section> {
+    for section in &mut sections {
+        for page in &mut section.pages {
+            page.settings.retain(|setting| setting.matches(search));
+        }
+        section.pages.retain(|page| !page.settings.is_empty());
+    }
+    sections.retain(|section| !section.pages.is_empty());
+    sections
+}
+
+/// The page to show: the one chosen, unless the search has left nothing on it, and then the first the search has
+/// left. What was chosen stays chosen, so it shows again once the search no longer hides it.
+fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Page> {
+    let pages = || sections.iter().flat_map(|section| &section.pages);
+    chosen.and_then(|id| pages().find(|page| page.id == id)).or_else(|| pages().next())
 }
 
 /// How the app behaves wherever it is, and what its hub does whether or not the app is open.
-fn general(hub: Option<OfHub>, cx: &App) -> SettingPage {
-    let always_expand_thinking = switch(
-        "Always expand thinking",
-        "Show what the agent thinks in full, rather than as a line to open.",
-        |cx| Some(super::get(cx).always_expand_thinking),
-        |on, cx| super::change(cx, |settings| settings.always_expand_thinking = on),
-    );
+fn general(hub: Option<OfHub>) -> Page {
+    let always_expand_thinking = Setting {
+        name: "Always expand thinking",
+        does: "Show what the agent thinks in full, rather than as a line to open.",
+        is_on: Box::new(|cx| Some(super::get(cx).always_expand_thinking)),
+        set: Rc::new(|on, cx| super::change(cx, |settings| settings.always_expand_thinking = on)),
+    };
     let hub_says = hub.as_ref().map(|hub| hub.settings.keep_awake);
-    let keep_awake = switch(
-        "Keep computer awake while agents are working",
-        "The display still sleeps, and closing the lid still puts the computer to sleep.",
-        move |_| hub_says,
-        move |on, _| {
+    let keep_awake = Setting {
+        name: "Keep computer awake while agents are working",
+        does: "The display still sleeps, and closing the lid still puts the computer to sleep.",
+        is_on: Box::new(move |_| hub_says),
+        set: Rc::new(move |on, _| {
             let Some(hub) = &hub else { return };
             let change = HubSettingsChange { keep_awake: Some(on) };
             // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once
             // it has changed, and a hub that couldn't change it leaves the switch as it was.
             drop(hub.client.start(move |client| client.hub_configure(change)));
-        },
-    );
-    // Inset as far again as the kit insets the page, so the rows and their lines start under the title.
-    let rows = SettingGroup::new().px_4().item(always_expand_thinking).item(keep_awake);
-    SettingPage::new("General").resettable(false).header_style(&title_style(cx)).group(rows)
+        }),
+    };
+    let settings = vec![always_expand_thinking, keep_awake];
+    Page { id: PageId::General, name: "General", icon: Lucide::Settings2, settings }
 }
 
-/// The page's name, large and on the page itself, below the strip along the top, which stays clear for moving the
-/// window. The kit draws it as a bar with a line under it, which this takes away.
-fn title_style(cx: &App) -> StyleRefinement {
-    let mut title = div()
+/// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
+/// Settings is for. A press on it is the button's, so it doesn't move the window.
+fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
+    div().absolute().top_0().left_0().w(width).h(HEADER_HEIGHT).flex().items_center().justify_end().pr_3().child(
+        Button::new("settings-back")
+            .hand()
+            .ghost()
+            .small()
+            .icon(IconName::ArrowLeft)
+            .label("Back")
+            .text_color(cx.theme().muted_foreground)
+            .on_click(move |event, window, cx| back(event, window, cx)),
+    )
+}
+
+/// The page's name, large, below the strip along the top, which stays clear for moving the window, and its settings
+/// under it, which scroll once there are more than fit.
+fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
+    let title = div()
+        .flex_none()
         .px_8()
         .pt(HEADER_HEIGHT + px(20.))
         .pb_2()
-        .border_b_0()
         .text_size(TITLE_SIZE)
         .font_weight(FontWeight::MEDIUM)
-        .text_color(cx.theme().foreground);
-    title.style().clone()
+        .text_color(cx.theme().foreground)
+        .child(page.name);
+    let rows = page.settings.iter().map(|setting| switch(setting, cx));
+    let rows =
+        v_flex().id("settings-rows").flex_1().min_h_0().px_8().py_4().gap_4().children(rows).overflow_y_scrollbar();
+    v_flex().size_full().child(title).child(rows)
+}
+
+/// What shows in place of a page when the search matches no setting.
+fn nothing_found(cx: &App) -> impl IntoElement {
+    div()
+        .id("settings-nothing-found")
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(cx.theme().muted_foreground)
+        .child("No settings match")
+        .test_support()
 }
 
 /// A setting that's on or off: what it's called and what it does on the left, its switch on the right, and a line
-/// under it that sets it apart from the next. The kit's own row has no line, so this draws the whole row. It's found
-/// by what it's called and what it does, as the kit's is. `is_on` says `None` for one that can't be read or changed
-/// just now, such as a hub's while the hub is out of reach, which shows off and can't be flipped.
-fn switch(
-    name: &'static str,
-    does: &'static str,
-    is_on: impl Fn(&App) -> Option<bool> + 'static,
-    set: impl Fn(bool, &mut App) + 'static,
-) -> SettingItem {
-    let set = Rc::new(set);
-    SettingItem::render(move |_, _, cx| {
-        let on = is_on(cx);
-        let said = v_flex()
-            .flex_1()
-            .gap_1()
-            .child(div().font_weight(FontWeight::MEDIUM).child(name))
-            .child(div().text_color(cx.theme().muted_foreground).child(does));
-        let set = set.clone();
-        let flip = Switch::new(name)
-            .accessibility_label(name)
-            .checked(on.unwrap_or(false))
-            .off_while(on.is_none())
-            .on_click(move |on: &bool, _, cx: &mut App| set(*on, cx));
-        h_flex()
-            .w_full()
-            .items_center()
-            .justify_between()
-            .gap_6()
-            .pt_1()
-            .pb_5()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .text_sm()
-            .child(said)
-            .child(flip)
-    })
-    .keywords([name, does])
+/// under it that sets it apart from the next. One that can't be read or changed just now shows off and can't be
+/// flipped.
+fn switch(setting: &Setting, cx: &App) -> AnyElement {
+    let on = (setting.is_on)(cx);
+    let said = v_flex()
+        .flex_1()
+        .gap_1()
+        .child(div().font_weight(FontWeight::MEDIUM).child(setting.name))
+        .child(div().text_color(cx.theme().muted_foreground).child(setting.does));
+    let set = setting.set.clone();
+    let flip = Switch::new(setting.name)
+        .accessibility_label(setting.name)
+        .checked(on.unwrap_or(false))
+        .off_while(on.is_none())
+        .on_click(move |on: &bool, _, cx: &mut App| set(*on, cx));
+    h_flex()
+        .w_full()
+        .items_center()
+        .justify_between()
+        .gap_6()
+        .pt_1()
+        .pb_5()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .text_sm()
+        .child(said)
+        .child(flip)
+        .into_any_element()
 }

@@ -22,7 +22,8 @@ pub(crate) mod signal;
 
 pub(crate) use row::doing;
 
-const HEADING_HEIGHT: Pixels = px(28.);
+/// The heading over the projects, and over Settings' pages.
+pub(crate) const HEADING_HEIGHT: Pixels = px(28.);
 const REPO_HEIGHT: Pixels = px(32.);
 /// A workspace's row, and the note in its place while one is on its way.
 const ROW_HEIGHT: Pixels = px(36.);

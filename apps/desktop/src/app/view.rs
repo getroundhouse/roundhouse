@@ -30,7 +30,7 @@ impl Render for AppView {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
             let (hub, width) = (self.settings_of_hub(), Side::Left.width(cx));
-            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, width, back, hub, cx));
+            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, width, back, hub));
         }
         let inset = sides::corner_inset(cx);
         let danger = cx.theme().danger;
