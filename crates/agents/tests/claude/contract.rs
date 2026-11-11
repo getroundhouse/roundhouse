@@ -17,7 +17,7 @@ fn parsed() -> Vec<Parsed> {
     FIXTURE.lines().map(|line| normalizer.line(line).parsed).collect()
 }
 
-fn events() -> Vec<EventBody> {
+pub(super) fn events() -> Vec<EventBody> {
     parsed()
         .into_iter()
         .filter_map(|p| match p {

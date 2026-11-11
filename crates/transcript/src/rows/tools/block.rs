@@ -14,11 +14,17 @@ use crate::attachments::{self, Carried};
 use crate::item_key::ItemKey;
 use crate::log_block::{LogBlock, LogText};
 use crate::scroll_area::ScrollArea;
+use crate::selectable_lines::SelectableLines;
 
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
 const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 /// How tall a block's output gets before it scrolls: about a dozen lines.
 const MAX_HEIGHT: f32 = 236.0;
+/// The space between the lines of what a command printed, so a line that wraps reads as one: about a fifth of a line.
+const LINE_GAP: f32 = 4.0;
+/// Up to how many lines a command's output is drawn a line at a time, with space between. Each line is a text of its
+/// own, which costs about 3 µs on every frame its row is on screen, so a longer log is drawn as one text, without it.
+const SPACED_UP_TO: usize = 200;
 
 /// The block itself, on the column's left edge with the call's icon, as everything in the transcript is.
 pub(in crate::rows) fn frame(cx: &App) -> Div {
@@ -49,23 +55,64 @@ pub(in crate::rows) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
 
 /// Text a tool sent back, selectable, scrolling past a dozen lines or so.
 pub(in crate::rows) fn output(id: ElementId, text: &str, color: Hsla, cx: &App) -> AnyElement {
-    let theme = cx.theme();
-    let font = theme.mono_font_family.clone();
     let body = if text.len() > LOG_BLOCK_ABOVE {
-        LogBlock { log: LogText::new(text), color, font: font.clone() }.into_any_element()
+        LogBlock { log: LogText::new(text), color, font: cx.theme().mono_font_family.clone() }.into_any_element()
     } else {
         SelectableText::new(id.clone(), text.trim_end().to_string()).into_any_element()
     };
+    printed(id, body, color, cx)
+}
+
+/// What a command printed, in the foreground colour, with a little space between its lines, so one too long for the
+/// block reads as one where it wraps. Each line is laid out with any blank lines after it, so a blank line takes no
+/// more room than it did. Past [`SPACED_UP_TO`] lines, it's drawn as any output is.
+pub(super) fn lines(id: ElementId, text: &str, cx: &App) -> AnyElement {
+    let color = cx.theme().foreground;
+    let Some(runs) = spaced(text) else { return output(id, text, color, cx) };
+    let lines = runs.into_iter().map(|run| SharedString::from(run.to_string())).collect();
+    let body = SelectableLines::new((id.clone(), "lines"), lines, px(LINE_GAP)).into_any_element();
+    printed(id, body, color, cx)
+}
+
+/// Text that came back, in `color` and the code font, in the space a block gives it, scrolling past a dozen lines or so.
+fn printed(id: ElementId, body: AnyElement, color: Hsla, cx: &App) -> AnyElement {
+    let theme = cx.theme();
     let part = div()
         .id(id.clone())
         .px_3()
         .py_2()
-        .font_family(font)
+        .font_family(theme.mono_font_family.clone())
         .text_size(theme.mono_font_size)
         .text_color(color)
         .child(body)
         .test_support();
     scrolling(id, part).into_any_element()
+}
+
+/// The text's lines, as [`runs`] gives them, if there are few enough to draw one at a time. A text too long for that
+/// is turned away before it's read line by line, since this is asked on every frame its call is open.
+fn spaced(text: &str) -> Option<Vec<&str>> {
+    if text.len() > LOG_BLOCK_ABOVE {
+        return None;
+    }
+    let runs = runs(text.trim_end());
+    (runs.len() <= SPACED_UP_TO).then_some(runs)
+}
+
+/// The text's lines, each with the blank lines that follow it, and the first with any before it, so only a text
+/// that's all blank has a run with nothing in it.
+fn runs(text: &str) -> Vec<&str> {
+    let (mut runs, mut start, mut at) = (Vec::new(), 0, 0);
+    for line in text.split_inclusive('\n') {
+        if !line.trim().is_empty() && !text[start..at].trim().is_empty() {
+            // Without the newline that ends it, which would draw an empty line under it.
+            runs.push(&text[start..at - 1]);
+            start = at;
+        }
+        at += line.len();
+    }
+    runs.push(&text[start..]);
+    runs
 }
 
 /// Images a tool sent back, each whole, one under another.
@@ -115,4 +162,43 @@ pub(in crate::rows) fn prose(key: &ItemKey, part: &str, text: &str) -> AnyElemen
 /// part, and over a part that fits, the wheel scrolls the transcript instead.
 pub(super) fn scrolling(id: ElementId, part: impl IntoElement) -> ScrollArea {
     ScrollArea::new((id, "scroll"), px(MAX_HEIGHT), part)
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use proptest::test_runner::{Config, RngSeed};
+
+    use super::{SPACED_UP_TO, runs, spaced};
+
+    proptest! {
+        #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
+
+        /// Output drawn from its runs, a line apart, is the output again, and a run with nothing in it is only ever a
+        /// text that's all blank.
+        #[test]
+        fn output_drawn_from_its_runs_is_the_output_again(text in "[a \t\r\n]{0,40}") {
+            let drawn = runs(&text);
+
+            prop_assert_eq!(drawn.join("\n"), text.clone());
+            prop_assert!(drawn.iter().all(|run| !run.trim().is_empty()) || text.trim().is_empty());
+        }
+    }
+
+    #[test]
+    fn each_line_of_output_keeps_the_blank_lines_after_it() {
+        assert_eq!(runs("one\ntwo"), ["one", "two"]);
+        assert_eq!(runs("one\n\n  \ntwo\nthree"), ["one\n\n  ", "two", "three"]);
+        assert_eq!(runs("\n\none\ntwo"), ["\n\none", "two"], "the first takes any blank lines before it");
+        assert_eq!(runs("   Compiling\n    Finished"), ["   Compiling", "    Finished"]);
+    }
+
+    #[test]
+    fn output_is_drawn_a_line_at_a_time_only_while_it_s_short() {
+        let lines = |count: usize| (1..=count).map(|n| n.to_string()).collect::<Vec<_>>().join("\n");
+
+        assert!(spaced(&lines(SPACED_UP_TO)).is_some());
+        assert!(spaced(&lines(SPACED_UP_TO + 1)).is_none(), "a long log is drawn as one text");
+        assert!(spaced(&"x".repeat(20 * 1024)).is_none(), "and so is a long line");
+    }
 }

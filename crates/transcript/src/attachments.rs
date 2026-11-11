@@ -163,7 +163,7 @@ fn picture(seq: Option<Seq>, file: &Carried, this: &WeakEntity<Transcript>, cx: 
         Some(seq) => {
             let (this, key, opened) = (this.clone(), file.key.clone(), file.opened);
             frame.hand().on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !opened, cx));
+                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), Fold::Picture, !opened, cx));
             })
         }
         None => frame,

@@ -86,7 +86,8 @@ impl Line {
 
     pub(super) fn render(self, toggle: &Toggle, cx: &App) -> AnyElement {
         let theme = cx.theme();
-        let (this, key, seq, open) = (toggle.this.clone(), toggle.key.clone(), toggle.seq, toggle.open);
+        let (this, key, seq, fold, open) =
+            (toggle.this.clone(), toggle.key.clone(), toggle.seq, toggle.fold, toggle.open);
         let hover = theme.muted;
         let parts = self.parts.into_iter().map(|part| part.render(cx));
         h_flex()
@@ -105,7 +106,7 @@ impl Line {
             .hand()
             .hover(move |d| d.bg(hover))
             .on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), !open, cx));
+                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), fold, !open, cx));
             })
             .when_some(self.preview.filter(|_| !open), |d, preview| {
                 d.hoverable_tooltip(move |window, cx| preview(window, cx))

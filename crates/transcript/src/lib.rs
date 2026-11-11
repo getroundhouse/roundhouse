@@ -17,6 +17,7 @@ mod long_texts;
 mod questions;
 mod rows;
 mod scroll_area;
+mod selectable_lines;
 mod transcript;
 
 pub use attachments::{file_card, image_format};

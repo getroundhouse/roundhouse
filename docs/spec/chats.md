@@ -94,14 +94,20 @@
 
 Every call is drawn the same way, as `look.md` says, and each kind fills in what its line says and what it opens to. A tool that has no drawing of its own still gets a readable line, so a new tool, or one from an MCP server, never shows as raw JSON until it's opened.
 
-- **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. Opened, the command comes first, highlighted as shell after a faint `$`, then what it printed. *Unconfirmed.*
-- **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. Opened, the call shows all of what went wrong, since the line only has room for its start, then what it tried, such as an edit's diff. The output itself stays in muted text, so it's still easy to read. *Unconfirmed.*
+- **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. *Unconfirmed.*
+- **Opened, the command comes first, faded, on one line, and what it printed comes under it in the foreground colour,** since the title has already said what the command does, and what it printed is what's read. The command is highlighted as shell, after a faint `$`. A command too long for the line is cut off with an ellipsis, and one of several lines shows its first, as the call's line does. Clicking it shows it whole, wrapping under itself rather than under the `$`, and clicking again cuts it off. The pointer is a hand over it only when a click would change it. A command that printed nothing says `No output` under it, faintly, so one that's done doesn't look as if it never answered, and one still running shows only itself. *Unconfirmed.*
+- **What a command printed has a little space between its lines,** about a fifth of a line, so a line too long for the block reads as one where it wraps. It still selects and copies as one text, its lines one under another, as it was printed. Output of more than 200 lines is drawn without the space, so a long log stays as quick to draw as before. *Unconfirmed.*
+- **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. Opened, the call shows all of what went wrong, since the line only has room for its start, then what it tried, such as an edit's diff. What went wrong stays in muted text rather than red, so it's still easy to read, and what a command printed is in the foreground colour, as it is when the command works. *Unconfirmed.*
 - **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines or images came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
 - **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
 
-**Commands: one opened, one that failed, one the agent didn't describe, and one too long for its line.** *Unconfirmed.*
+**Commands: one that failed, one opened that printed nothing, one the agent didn't describe, and two too long for their line, one of them opened, its output wrapping.** *Unconfirmed.*
 
 ![Commands, one opened with its output](screens/tool-commands.png)
+
+**The opened command, clicked to show it whole.** *Unconfirmed.*
+
+![An opened command shown whole](screens/tool-command-whole.png)
 
 **Tools with no drawing of their own: one from an MCP server opened, one that failed, and a built-in one.** *Unconfirmed.*
 

@@ -44,7 +44,11 @@ pub(super) struct Around {
 pub(super) struct BlockAround {
     /// What the block is, wherever it's drawn.
     pub(super) key: ItemKey,
+    /// The kind of fold it is, and whether that's open.
+    pub(super) fold: Fold,
     pub(super) open: bool,
+    /// For a command: whether it's shown whole in its opened call, rather than cut off at the end of its line.
+    pub(super) whole: bool,
     /// For a call: what's come back for it. For a result drawn on its own: itself.
     pub(super) reply: Reply,
     /// For a call that handed work to a subagent: what the subagent has done.
@@ -99,7 +103,9 @@ impl Around {
 
 impl BlockAround {
     pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, block: &ContentBlock, key: ItemKey) -> Self {
-        let open = m.folds.is_open(&key, Fold::of(block));
+        let fold = Fold::of(block);
+        let open = m.folds.is_open(&key, fold);
+        let whole = matches!(block, ContentBlock::ToolUse { .. }) && m.folds.is_open(&key, Fold::Command);
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id.as_str(), NEAR).is_some());
@@ -115,7 +121,7 @@ impl BlockAround {
             | ContentBlock::Unknown => (Reply::Nothing, None),
         };
         let text = m.long_texts.get(&key).cloned();
-        Self { key, open, reply, subagent, with_call, text }
+        Self { key, fold, open, whole, reply, subagent, with_call, text }
     }
 }
 
@@ -140,6 +146,7 @@ mod tests {
 
     use super::{Around, Reply, block_key};
     use crate::fixtures::{calls, calls_to, event, from_the_agent, log, result, within};
+    use crate::folds::Fold;
     use crate::item_key::ItemKey;
     use crate::transcript::Model;
 
@@ -189,7 +196,7 @@ mod tests {
         let mut m = Model::default();
         assert!(Around::read(&log, &m, 1, &calls(&["a"])).images().is_empty(), "closed");
 
-        m.folds.choose(ItemKey::Event(1, 0), true);
+        m.folds.choose(ItemKey::Event(1, 0), Fold::Output, true);
 
         assert_eq!(Around::read(&log, &m, 1, &calls(&["a"])).images().len(), 1, "open");
     }
@@ -203,10 +210,10 @@ mod tests {
             event(3, within("a", with_an_image("b"))),
         ]);
         let mut m = Model::default();
-        m.folds.choose(ItemKey::Event(2, 0), true);
+        m.folds.choose(ItemKey::Event(2, 0), Fold::Output, true);
         assert!(Around::read(&log, &m, 1, &agent).images().is_empty(), "the agent's call is closed");
 
-        m.folds.choose(ItemKey::Event(1, 0), true);
+        m.folds.choose(ItemKey::Event(1, 0), Fold::Output, true);
 
         assert_eq!(Around::read(&log, &m, 1, &agent).images().len(), 1, "opened, it gathers its subagent's");
     }

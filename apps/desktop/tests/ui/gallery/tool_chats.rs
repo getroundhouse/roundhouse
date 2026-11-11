@@ -31,7 +31,27 @@ Diff in /workspaces/aspen/crates/signals/src/signal_test.rs:4:
 +    assert!(!Aspect::Stop.may_pass());
  }";
 
-/// Commands: one opened with its output, one that failed, one with no description, and one too long for its line.
+/// A command too long for its line: two searches, one after the other, as an agent writes them.
+pub(crate) const SEARCH: &str = "\
+    gh search issues --repo example/signals \"stuck at stop\" --sort created --order desc --limit 5 \
+    --json number,title,createdAt,state --jq '.[] | \"\\(.number) \\(.state) \\(.createdAt) \\(.title)\"' \
+    2>&1; gh search issues --repo example/signals \"may_pass\" --sort created --order desc --limit 5 \
+    --json number,title,createdAt,state --jq '.[] | \"\\(.number) \\(.state) \\(.createdAt) \\(.title)\"' 2>&1";
+
+/// What the agent said the searches are for.
+pub(crate) const SEARCH_LINE: &str = "Search the signal issues for trains stuck at stop";
+
+/// A command that prints nothing when it works.
+pub(crate) const FORMAT_LINE: &str = "Format the workspace";
+
+/// What the searches printed, each line too long for the block.
+const SEARCH_OUTPUT: &str = "\
+271 open 2026-11-11T15:09:45Z Trains stay stuck at a stop signal after the depot's check moved to may_pass, since 14:00 UTC
+268 open 2026-11-11T14:46:52Z signal_test: stop_may_not_pass fails on the depot branch, so the build has been red since 13:48
+204 closed 2025-08-03T13:48:53Z Stop signals ignore caution in the depot";
+
+/// Commands: one that failed, one that printed nothing, one with no description, and two too long for their line,
+/// one opened to its output.
 pub(crate) fn commands() -> Vec<EventBody> {
     let reply = "The tests pass, and the formatting passes once `cargo fmt` has run.";
     vec![
@@ -52,19 +72,23 @@ pub(crate) fn commands() -> Vec<EventBody> {
             json!({ "command": "cargo fmt --all --check", "description": "Check formatting" }),
         ),
         tool_failed("toolu-2", FORMAT_FAILURE),
-        tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "git status --short" })),
-        tool_result("toolu-3", " M crates/signals/src/signal_test.rs"),
+        tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo fmt --all", "description": FORMAT_LINE })),
+        tool_result("toolu-3", ""),
+        tool_use("msg-5", "toolu-4", "Bash", json!({ "command": "git status --short" })),
+        tool_result("toolu-4", " M crates/signals/src/signal_test.rs"),
+        tool_use("msg-6", "toolu-5", "Bash", json!({ "command": SEARCH, "description": SEARCH_LINE })),
+        tool_result("toolu-5", SEARCH_OUTPUT),
         tool_use(
-            "msg-5",
-            "toolu-4",
+            "msg-7",
+            "toolu-6",
             "Bash",
             json!({
                 "command": "cargo fmt --all && cargo clippy --workspace --all-targets --locked -- -D warnings",
                 "description": "Format and lint the workspace",
             }),
         ),
-        tool_result("toolu-4", "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s"),
-        text("msg-6", reply),
+        tool_result("toolu-6", "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s"),
+        text("msg-8", reply),
         replied(reply, 31, 0.12),
     ]
 }

@@ -168,6 +168,23 @@ fn an_edit_s_result_carries_what_it_changed() {
 }
 
 #[test]
+fn a_command_that_printed_nothing_has_an_empty_result() {
+    let result = |content: &str, stdout: &str| {
+        let line = json!({"type":"user","message":{"role":"user","content":[{
+            "type":"tool_result","tool_use_id":"t1","content":content
+        }]},"tool_use_result":{"stdout":stdout,"stderr":"","interrupted":false}})
+        .to_string();
+        let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!() };
+        let [ContentBlock::ToolResult { text, .. }] = blocks.as_slice() else { panic!("{blocks:?}") };
+        text.clone()
+    };
+
+    assert_eq!(result("(Bash completed with no output)", ""), "");
+    assert_eq!(result("Command running in background with ID: b1", ""), "Command running in background with ID: b1");
+    assert_eq!(result("(Bash completed with no output)", "x"), "(Bash completed with no output)", "it printed");
+}
+
+#[test]
 fn a_mode_change_is_reported_by_the_name_a_launch_accepts() {
     let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"plan"}"#;
     assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: "plan".into() }));

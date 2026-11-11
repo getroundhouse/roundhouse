@@ -15,7 +15,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         name: "tool-commands",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),
-        steps: &[Step::Select(FOCUS), Step::Open("Run the signal tests")],
+        steps: &[Step::Select(FOCUS), Step::Open(tool_chats::FORMAT_LINE), Step::Open(tool_chats::SEARCH_LINE)],
+    },
+    Screen {
+        name: "tool-command-whole",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),
+        steps: &[Step::Select(FOCUS), Step::Open(tool_chats::SEARCH_LINE), Step::Open(tool_chats::SEARCH)],
     },
     Screen {
         name: "tool-any",
