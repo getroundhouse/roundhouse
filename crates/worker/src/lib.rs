@@ -3,6 +3,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod attachments;
+mod claim;
 mod deleting;
 mod files;
 pub mod git;
@@ -13,5 +14,6 @@ pub mod setup;
 mod worktree_file;
 
 pub use agents::ENV_CLAUDE_BIN;
+pub use claim::{ClaimError, InstanceClaim, claim_instance};
 pub use deleting::{Deleter, delete_trees};
 pub use serve::{Config, serve};

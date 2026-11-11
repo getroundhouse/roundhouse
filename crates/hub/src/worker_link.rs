@@ -11,7 +11,7 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{InstanceId, WorkspaceId};
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
-use providers::{Provider, WorkerStream};
+use providers::Provider;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, warn};
@@ -19,6 +19,7 @@ use tracing::{debug, warn};
 use crate::error::{internal, provider_failed};
 use crate::hub::Hub;
 use crate::session::Item;
+use crate::worker_process::{self, Spawned, WorkerProcess};
 
 static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -38,6 +39,8 @@ pub(crate) struct WorkerLink {
     closed: watch::Sender<bool>,
     /// Something other than a read nobody asked for has wanted it, so it's kept running.
     kept: AtomicBool,
+    /// The command the hub runs to reach the worker.
+    process: WorkerProcess,
 }
 
 fn lost() -> ApiError {
@@ -52,13 +55,19 @@ impl WorkerLink {
         provider: Arc<dyn Provider>,
         workspace_id: WorkspaceId,
         instance_id: InstanceId,
+        log: &std::path::Path,
     ) -> Result<Arc<WorkerLink>, ApiError> {
-        provider.start(&instance_id).await.map_err(|e| provider_failed(&e))?;
-        let stream = match provider.connect(&instance_id).await {
-            Ok(stream) => stream,
+        // The local provider runs the hub's own executable, so there are no other builds of the worker to give it.
+        provider.start(&instance_id, &[]).await.map_err(|e| provider_failed(&e))?;
+        let connected = match provider.connect(&instance_id).await {
+            Ok(command) => worker_process::spawn(&command, log),
+            Err(e) => Err(provider_failed(&e)),
+        };
+        let Spawned { process, reader, writer } = match connected {
+            Ok(spawned) => spawned,
             Err(e) => {
                 let _ = provider.kill(&instance_id).await;
-                return Err(provider_failed(&e));
+                return Err(e);
             }
         };
         let (calls_tx, calls_rx) = mpsc::channel::<Vec<u8>>(256);
@@ -69,8 +78,8 @@ impl WorkerLink {
             pending: Mutex::new(Some(HashMap::new())),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
+            process,
         });
-        let WorkerStream { reader, writer } = stream;
         tokio::spawn(write_calls(writer, calls_rx));
         tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
 
@@ -81,8 +90,12 @@ impl WorkerLink {
             Ok(Err(e)) => e,
             Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {HELLO_TIMEOUT:?}")),
         };
-        link.close();
-        if let Err(e) = provider.kill(&instance_id).await {
+        link.kill();
+        // A worker refused its instance says so, because another worker is serving it, which ending the instance would
+        // end too.
+        if failure.code != ErrorCode::Conflict
+            && let Err(e) = provider.kill(&instance_id).await
+        {
             warn!(%instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
         }
         Err(failure)
@@ -134,6 +147,19 @@ impl WorkerLink {
     /// Closes the worker's stdin. It stops its agents, flushes, and exits.
     pub(crate) fn close(&self) {
         self.calls.lock().take();
+    }
+
+    /// Closes its stdin, then waits up to `grace` for the worker's command to exit, as it does once its agents have
+    /// stopped, and ends it if it hasn't.
+    pub(crate) async fn stop(&self, grace: Duration) {
+        self.close();
+        self.process.end(grace).await;
+    }
+
+    /// Closes its stdin and ends the worker's command at once.
+    pub(crate) fn kill(&self) {
+        self.close();
+        self.process.kill();
     }
 
     /// Resolves once the worker's output has been fully read.
@@ -221,3 +247,7 @@ async fn read_frames(
     // the value unset, and whoever waits later would wait forever.
     link.closed.send_replace(true);
 }
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests;

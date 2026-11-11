@@ -33,7 +33,13 @@ pub(crate) fn internal(message: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Internal, message)
 }
 
-/// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's.
+/// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's. Each code is
+/// one a client reads as a provider's failure. `NotFound` would read as a file that has gone, and `Unsupported` as a
+/// hub older than the client.
 pub(crate) fn provider_failed(error: &ProviderError) -> ApiError {
-    ApiError::new(ErrorCode::Worker, error_chain(error))
+    let code = match error {
+        ProviderError::NotFound(_) | ProviderError::Io { .. } => ErrorCode::Worker,
+        ProviderError::Unsupported(_) => ErrorCode::Unavailable,
+    };
+    ApiError::new(code, error_chain(error))
 }

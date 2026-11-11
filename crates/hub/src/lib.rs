@@ -15,6 +15,7 @@ mod session;
 pub mod store;
 mod terminate;
 mod worker_link;
+mod worker_process;
 
 pub use crate::error::HubError;
 pub use crate::run::{HubConfig, run};

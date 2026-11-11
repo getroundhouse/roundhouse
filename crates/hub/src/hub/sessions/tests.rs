@@ -22,7 +22,13 @@ fn hub_in(dir: &Path) -> Arc<Hub> {
         shell: Some("/bin/sh".to_string()),
         path: None,
     };
-    Arc::new(Hub::new(store, dir.join("attachments"), Arc::new(LocalProvider::new(config)), false))
+    Arc::new(Hub::new(
+        store,
+        dir.join("attachments"),
+        dir.join("worker-logs"),
+        Arc::new(LocalProvider::new(config)),
+        false,
+    ))
 }
 
 #[tokio::test]

@@ -128,6 +128,10 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     }
     // Each times out on its own 10 s. If one start had to wait for the other, this would be 20 s.
     assert!(started.elapsed() < Duration::from_secs(15), "took {:?}", started.elapsed());
+    // Each is ended as its start gives up, rather than left until the 10 s a stopping worker gets.
+    let given_up = Instant::now();
+    wait_until("the workers that never answered to be gone", || children_of(stack.hub_pid()).len() == 1);
+    assert!(given_up.elapsed() < Duration::from_secs(5), "took {:?}", given_up.elapsed());
 
     restore_real_worker(&exe);
     client.workspace_status(&hung.id).unwrap();

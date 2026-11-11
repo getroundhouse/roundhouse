@@ -104,6 +104,12 @@ fn main() -> anyhow::Result<()> {
         }
         Role::Worker { stdio, workspaces_root, state_dir } => {
             anyhow::ensure!(stdio, "--stdio is the only worker transport so far");
+            // Held until this process exits, since a provider's `connect` can be asked more than once.
+            let (_claim, refused) = match state_dir.as_deref().map(worker::claim_instance).transpose() {
+                Ok(claim) => (claim, None),
+                Err(e @ worker::ClaimError::Taken(_)) => (None, Some(e.to_string())),
+                Err(e) => return Err(e.into()),
+            };
             let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
             runtime()?.block_on(worker::serve(
                 tokio::io::stdin(),
@@ -116,6 +122,7 @@ fn main() -> anyhow::Result<()> {
                     claude_bin,
                     scratch_dir: std::env::temp_dir(),
                     deleter: worker::Deleter::new(exe, ["delete", "--"]),
+                    refused,
                 },
             ));
             Ok(())
