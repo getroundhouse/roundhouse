@@ -170,7 +170,7 @@ impl LiveSession {
         };
         let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
         if !duplicate {
-            hub.title_from_prompt(&self.id, &self.workspace_id, text).await;
+            hub.title_from_prompt(&self.id, &self.workspace_id, text, &attachments).await;
         }
         Ok((event.seq, duplicate, attachments))
     }

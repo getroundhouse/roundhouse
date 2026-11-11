@@ -50,7 +50,7 @@
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
 //!
-//! With `--output-format json`, it's the one-off call that titles a prompt instead. See `title.rs`. And as
+//! With `--no-session-persistence`, it's the one-off call that titles a prompt instead. See `title.rs`. And as
 //! `auth status --json`, it says who's logged in. Its first turn says what's left of the account's limits, as the
 //! real CLI's does, and `get_usage` says it whenever it's asked. See `account.rs`.
 
@@ -144,7 +144,12 @@ fn main() {
     }
     let state = state.expect("FAKE_CLAUDE_STATE");
     std::fs::create_dir_all(&state).unwrap();
-    if flag(&args, "--output-format").as_deref() == Some("json") {
+    if flag(&args, "--output-format").as_deref() == Some("stream-json") && !args.iter().any(|a| a == "--verbose") {
+        eprintln!("Error: When using --print, --output-format=stream-json requires --verbose");
+        std::process::exit(1);
+    }
+    // A session is saved, so it can be resumed, and only a one-off call isn't.
+    if args.iter().any(|a| a == "--no-session-persistence") {
         title::answer(&state);
         return;
     }

@@ -33,13 +33,22 @@ pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
     let mut child = start(&mut command, call.bin, call.cwd)?;
     let running = Running::new(child.id().unwrap_or_default(), call.pid_file);
     let mut stdin = child.stdin.take().ok_or_else(|| AgentError::NoPipes { bin: call.bin.display().to_string() })?;
-    stdin.write_all(call.stdin).await.map_err(CallFailed::Io)?;
-    drop(stdin);
-    let output = tokio::time::timeout(call.timeout, child.wait_with_output())
-        .await
-        .map_err(|_| CallFailed::TimedOut(call.timeout))?
-        .map_err(CallFailed::Io)?;
+    // Written while what it prints is read, so neither waits on the other, however much there is of each.
+    let writing = async move {
+        let written = stdin.write_all(call.stdin).await;
+        drop(stdin);
+        written
+    };
+    let (written, output) =
+        tokio::time::timeout(call.timeout, async { tokio::join!(writing, child.wait_with_output()) })
+            .await
+            .map_err(|_| CallFailed::TimedOut(call.timeout))?;
+    let output = output.map_err(CallFailed::Io)?;
     running.finished();
+    // A CLI that stops reading, such as one refusing its flags, says why itself, which a broken pipe doesn't.
+    if output.status.success() {
+        written.map_err(CallFailed::Io)?;
+    }
     Ok(output)
 }
 
@@ -71,5 +80,41 @@ impl Drop for Running {
         if let Some(path) = &self.record {
             let _ = std::fs::remove_file(path);
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    /// More than a pipe holds, so a write that waits for the other end to read would wait forever.
+    const MORE_THAN_A_PIPE: usize = 1024 * 1024;
+
+    async fn shell(script: &str, stdin: &[u8]) -> Result<Output, AgentError> {
+        let args = vec!["-c".to_string(), script.to_string()];
+        let timeout = Duration::from_secs(20);
+        run(OneOff { bin: Path::new("/bin/sh"), cwd: Path::new("/"), args, stdin, timeout, pid_file: None }).await
+    }
+
+    /// Such as a CLI that prints its first lines before it has read all of a prompt with a big image in it.
+    #[tokio::test]
+    async fn a_call_that_prints_a_lot_before_it_reads_gets_all_it_was_given() {
+        let script = format!("head -c {MORE_THAN_A_PIPE} /dev/zero; wc -c | tr -d ' '");
+
+        let output = shell(&script, &vec![b'x'; MORE_THAN_A_PIPE]).await.unwrap();
+
+        assert!(output.status.success());
+        let (printed, counted) = output.stdout.split_at(MORE_THAN_A_PIPE);
+        assert!(printed.iter().all(|byte| *byte == 0));
+        assert_eq!(String::from_utf8_lossy(counted).trim(), MORE_THAN_A_PIPE.to_string(), "every byte of stdin");
+    }
+
+    /// Such as a CLI refusing its flags before it reads anything, which says why, where a broken pipe wouldn't.
+    #[tokio::test]
+    async fn a_call_that_fails_without_reading_says_why() {
+        let output = shell("echo 'unknown option' >&2; exit 1", &vec![b'x'; MORE_THAN_A_PIPE]).await.unwrap();
+
+        assert!(!output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "unknown option");
     }
 }

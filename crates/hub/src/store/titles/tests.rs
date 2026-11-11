@@ -1,5 +1,7 @@
+use protocol::model::Workspace;
+
 use super::*;
-use crate::store::tests::store_with_session;
+use crate::store::tests::{idle_session, store_with_session, workspace_w};
 use crate::store::{older, schema};
 
 fn title(text: &str) -> Title {
@@ -44,22 +46,25 @@ fn a_title_typed_by_hand_replaces_a_first_line_and_stays() {
 }
 
 #[test]
-fn a_generated_title_replaces_only_a_first_line() {
+fn a_generated_title_replaces_only_a_first_line_or_none() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
-    let untitled = store.retitle_workspace(&"w".into(), &title("Login redirect"), Retitle::Generated).unwrap();
     store.retitle_workspace(&"w".into(), &title("fix the login"), Retitle::FirstLine).unwrap();
     let generated = store.retitle_workspace(&"w".into(), &title("Login redirect"), Retitle::Generated).unwrap();
+    let untitled = store.retitle_session(&"s".into(), &title("Login redirect"), Retitle::Generated).unwrap();
     store.retitle_session(&"s".into(), &title("Login bug"), Retitle::ByHand).unwrap();
     let typed = store.retitle_session(&"s".into(), &title("Login redirect"), Retitle::Generated).unwrap();
+    let again = store.retitle_workspace(&"w".into(), &title("Redirect loop"), Retitle::Generated).unwrap();
 
-    assert!(!untitled.changed, "nothing to replace before the first line");
     assert!(generated.changed);
     let workspace = generated.record;
     assert_eq!((workspace.title.as_deref(), workspace.title_source), (Some("Login redirect"), TitleSource::Generated));
+    assert!(untitled.changed, "a prompt of only images leaves no first line to replace");
+    assert_eq!(untitled.record.title_source, TitleSource::Generated);
     assert!(!typed.changed, "a title typed by hand stays");
     assert_eq!((typed.record.title.as_deref(), typed.record.title_source), (Some("Login bug"), TitleSource::ByHand));
+    assert!(!again.changed, "the first generated title stays too");
 }
 
 fn regenerated(over: Option<&Title>, set: TitleSource) -> Retitle<'_> {
@@ -152,6 +157,44 @@ fn retitling_something_missing_is_not_found() {
         assert!(matches!(workspace, Err(StoreError::NotFound { kind: "workspace", .. })), "{how:?}");
         assert!(matches!(chat, Err(StoreError::NotFound { kind: "session", .. })), "{how:?}");
     }
+}
+
+/// Each rule decides whether one record takes a title, so every other one keeps its own, whether it has none or still
+/// shows a first line.
+#[test]
+fn retitling_one_record_leaves_the_others_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    for (id, name) in [("w2", "birch"), ("w3", "cedar")] {
+        let other = Workspace { id: id.into(), name: name.into(), branch: name.into(), ..workspace_w(1) };
+        store.insert_workspace(&other, None).unwrap();
+    }
+    for id in ["t", "u"] {
+        let mut chat = idle_session(1);
+        (chat.session.id, chat.agent_session_id) = (id.into(), id.into());
+        store.insert_session(&chat, None).unwrap();
+    }
+    store.retitle_workspace(&"w3".into(), &title("Write the docs"), Retitle::FirstLine).unwrap();
+    store.retitle_session(&"u".into(), &title("Write the docs"), Retitle::FirstLine).unwrap();
+    let others = |store: &Store| {
+        let workspaces = ["w2", "w3"].map(|id| {
+            let workspace = store.get_workspace(&id.into()).unwrap();
+            (workspace.title, workspace.title_source, workspace.rev)
+        });
+        let chats = ["t", "u"].map(|id| {
+            let chat = store.get_session(&id.into()).unwrap().session;
+            (chat.title, chat.title_source, chat.rev)
+        });
+        (workspaces, chats)
+    };
+    let before = others(&store);
+
+    for how in [Retitle::FirstLine, Retitle::Generated, regenerated(None, TitleSource::FirstLine), Retitle::ByHand] {
+        store.retitle_workspace(&"w".into(), &title("Fix the login"), how).unwrap();
+        store.retitle_session(&"s".into(), &title("Fix the login"), how).unwrap();
+    }
+
+    assert_eq!(others(&store), before);
 }
 
 /// Where a chat's title came from is part of its record, so a change to that alone gets announced too. Every

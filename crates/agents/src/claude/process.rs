@@ -40,6 +40,7 @@ use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
 use prompt::user_message;
+pub(super) use prompt::{image_block, user_line};
 use supervise::supervise;
 use usage::UsageWatch;
 

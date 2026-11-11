@@ -134,6 +134,11 @@ pub enum WorkerRequest {
     TitleFor {
         agent: AgentKind,
         prompt: String,
+        /// The prompt's images, read with its words, since a prompt such as "how do we fix this?" can be about a
+        /// screenshot. Any that isn't an image, such as a kind from a newer hub, is left out. A worker from before
+        /// images ignores them, and titles from the words alone.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<NewAttachment>,
     },
     /// The account `agent`'s CLI is logged in to on this machine, from a call of its own to the CLI, outside any
     /// session. It changes nothing. Every agent of a kind here runs under one login today. When they can run under

@@ -280,7 +280,7 @@ async fn handle(
         }
         WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor { agent, prompt } => title_for(state, agent, &prompt).await,
+        WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,
         WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
     }
 }

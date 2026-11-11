@@ -1,9 +1,11 @@
 //! What workspaces and chats are called: titled from the first prompt, then by a generated title, or renamed by hand,
-//! and a workspace titled again when someone asks.
+//! and a workspace titled again when someone asks. A title is generated from what was typed and the images that came
+//! with it, since a prompt such as "how do we fix this?" can be about a screenshot.
 
 use std::fmt::Write as _;
 use std::sync::Arc;
 
+use protocol::attachment::{Attachment, AttachmentBytes, NewAttachment};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -15,6 +17,12 @@ use crate::store::Retitle;
 /// Enough of a prompt to say what it's about. Past this it's usually a pasted log, which only costs more to send and
 /// to ask about.
 const MOST_PROMPT_CHARS: usize = 4000;
+
+/// The most images a title is asked from, and the most bytes of them. A few say what the work is about as well as
+/// more would. The CLI shrinks a big one first: a full screenshot, 18 MB, took Haiku about three seconds and
+/// 4,000 tokens, so this keeps a call well inside its timeout.
+const MOST_IMAGES: usize = 3;
+const MOST_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
 
 /// What a model is told before a workspace's prompts, when it's asked to title the work again. Without it, a small
 /// model names the newest prompt, joins two things with "and", or names a chore such as merging, which most
@@ -42,27 +50,31 @@ impl Hub {
         Ok(renamed)
     }
 
-    /// Titles the workspace again from what its chats have been asked, and waits for the title, so whoever asked hears
-    /// why there's none. The newest chat's agent is the one asked. Only for a workspace that's ready, as every read
-    /// from a worker is, so asking never starts a worker for one that's archived or still being made.
+    /// Titles the workspace again from what its chats have been asked and the images they were sent, and waits for the
+    /// title, so whoever asked hears why there's none. The newest chat's agent is the one asked. Only for a workspace
+    /// that's ready, as every read from a worker is, so asking never starts a worker for one that's archived or still
+    /// being made.
     pub(crate) async fn workspace_regenerate_title(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
         let read = id.clone();
-        let (workspace, agent, prompts) = self
+        let (workspace, agent, prompts, carried) = self
             .blocking(move |store| {
                 let workspace = store.get_workspace(&read)?;
                 let agent = store.list_sessions(&read)?.last().map(|chat| chat.agent);
-                Ok((workspace, agent, store.workspace_prompt_lines(&read)?))
+                Ok((workspace, agent, store.workspace_prompt_lines(&read)?, store.workspace_prompt_images(&read)?))
             })
             .await?;
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
         }
-        let (Some(agent), Some(asked)) = (agent, work_so_far(&prompts)) else {
+        let images = self.read_images(chosen_images(carried)).await;
+        // Prompts of only images have no words to list, so the model is told only what to make of the images.
+        let asked = work_so_far(&prompts).or_else(|| (!images.is_empty()).then(|| WORK_SO_FAR.to_string()));
+        let (Some(agent), Some(asked)) = (agent, asked) else {
             let message =
                 format!("nothing has been asked in {} yet, so there's nothing to title it from", workspace.name);
             return Err(ApiError::new(ErrorCode::Conflict, message));
         };
-        let title = self.title_for(&id, agent, asked).await?;
+        let title = self.title_for(&id, agent, asked, images).await?;
         let (over, set) = (workspace.title, workspace.title_source);
         let retitled = self
             .blocking(move |store| {
@@ -76,30 +88,50 @@ impl Hub {
     }
 
     /// Titles a chat from a prompt just recorded in it, if the chat has no title yet, and its workspace too on the
-    /// same terms. Only a workspace none of whose chats has had a prompt is untitled, so it takes its first prompt's
-    /// title. Then asks for a generated title for whichever it titled, without waiting. A failure is only logged,
+    /// same terms, so a workspace takes its first prompt's title. Then asks for a generated title for whichever it
+    /// titled, without waiting. A prompt of only images has no first line, so a chat or workspace with no title stays
+    /// untitled until the generated title comes, or if none does, until a prompt with words. A failure is only logged,
     /// because the prompt matters more than what it's called.
     pub(crate) async fn title_from_prompt(
         self: &Arc<Self>,
         session: &SessionId,
         workspace: &WorkspaceId,
         prompt: &str,
+        attachments: &[Attachment],
     ) {
-        let Some(title) = Title::from_first_line(prompt) else { return };
-        let (session, workspace_id) = (session.clone(), workspace.clone());
-        let titled = self
-            .blocking(move |store| {
-                let chat = store.retitle_session(&session, &title, Retitle::FirstLine)?;
-                Ok((chat, store.retitle_workspace(&workspace_id, &title, Retitle::FirstLine)?))
-            })
-            .await;
-        let (chat, titled_workspace) = match titled {
+        let images = chosen_images(attachments.iter().map(|attachment| (session.clone(), attachment.clone())));
+        let titled = match Title::from_first_line(prompt) {
+            Some(title) => self.title_from_first_line(session, workspace, title).await,
+            None if !images.is_empty() => self.untitled(session, workspace).await,
+            None => return,
+        };
+        let titled = match titled {
             Ok(titled) => titled,
             Err(e) => {
                 warn!("could not title a chat or workspace from its prompt: {e}");
                 return;
             }
         };
+        if titled.session.is_some() || titled.workspace.is_some() {
+            let asked = prompt.chars().take(MOST_PROMPT_CHARS).collect();
+            tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked, images));
+        }
+    }
+
+    /// Gives the chat and its workspace the prompt's first line wherever they have no title, and says so.
+    async fn title_from_first_line(
+        &self,
+        session: &SessionId,
+        workspace: &WorkspaceId,
+        title: Title,
+    ) -> Result<Titled, ApiError> {
+        let (session, workspace_id) = (session.clone(), workspace.clone());
+        let (chat, titled_workspace) = self
+            .blocking(move |store| {
+                let chat = store.retitle_session(&session, &title, Retitle::FirstLine)?;
+                Ok((chat, store.retitle_workspace(&workspace_id, &title, Retitle::FirstLine)?))
+            })
+            .await?;
         let titled = Titled {
             agent: chat.record.agent,
             session: chat.changed.then(|| chat.record.id.clone()),
@@ -111,16 +143,39 @@ impl Hub {
         if chat.changed {
             self.notify(HubNotice::Session(chat.record));
         }
-        if titled.session.is_some() || titled.workspace.is_some() {
-            let asked = prompt.chars().take(MOST_PROMPT_CHARS).collect();
-            tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked));
-        }
+        Ok(titled)
     }
 
-    /// Puts a generated title wherever the prompt's first line still is, so one typed meanwhile stays. A failure is
-    /// only logged, and leaves the first line.
-    async fn generate_title(self: Arc<Self>, workspace: WorkspaceId, titled: Titled, prompt: String) {
-        let title = match self.title_for(&workspace, titled.agent, prompt).await {
+    /// Which of the chat and its workspace have no title, for a prompt with no first line to give them.
+    async fn untitled(&self, session: &SessionId, workspace: &WorkspaceId) -> Result<Titled, ApiError> {
+        let (session, workspace) = (session.clone(), workspace.clone());
+        self.blocking(move |store| {
+            let chat = store.get_session(&session)?.session;
+            let untitled_workspace = store.get_workspace(&workspace)?.title.is_none();
+            Ok(Titled {
+                agent: chat.agent,
+                session: chat.title.is_none().then_some(chat.id),
+                workspace: untitled_workspace.then_some(workspace),
+            })
+        })
+        .await
+    }
+
+    /// Puts a generated title wherever the prompt's first line still is, or where there's still none, so one typed
+    /// meanwhile stays. A failure is only logged, and leaves the first line.
+    async fn generate_title(
+        self: Arc<Self>,
+        workspace: WorkspaceId,
+        titled: Titled,
+        prompt: String,
+        images: Vec<(SessionId, Attachment)>,
+    ) {
+        let images = self.read_images(images).await;
+        if images.is_empty() && Title::from_first_line(&prompt).is_none() {
+            warn!(%workspace, "could not generate a title: the hub no longer has the images of a prompt with no words");
+            return;
+        }
+        let title = match self.title_for(&workspace, titled.agent, prompt, images).await {
             Ok(title) => title,
             Err(e) => {
                 warn!(%workspace, "could not generate a title: {e}");
@@ -160,12 +215,42 @@ impl Hub {
         workspace: &WorkspaceId,
         agent: AgentKind,
         prompt: String,
+        images: Vec<NewAttachment>,
     ) -> Result<Title, ApiError> {
         let link = self.ensure_worker(workspace).await?;
-        let reply = link.call(WorkerRequest::TitleFor { agent, prompt }).await?;
+        let reply = link.call(WorkerRequest::TitleFor { agent, prompt, images }).await?;
         let WorkerResponse::Title { title } = reply else { return Err(unexpected(&reply)) };
         Title::from_first_line(&title).ok_or_else(|| ApiError::new(ErrorCode::Worker, "the worker gave an empty title"))
     }
+
+    /// The bytes of each image, as the hub keeps them. One it no longer has, or can't read, is left out, since a
+    /// title from the words alone is better than none.
+    async fn read_images(&self, chosen: Vec<(SessionId, Attachment)>) -> Vec<NewAttachment> {
+        let mut images = Vec::with_capacity(chosen.len());
+        for (session, attachment) in chosen {
+            match self.attachment_files.read(&session, &attachment.id).await {
+                Ok(Some(bytes)) => images.push(NewAttachment { attachment, data: AttachmentBytes::new(bytes) }),
+                Ok(None) => {}
+                Err(e) => warn!(%session, attachment = %attachment.id, "could not read an image to title from: {e}"),
+            }
+        }
+        images
+    }
+}
+
+/// Which of the images that prompts carried, oldest first, a title is asked from: the first ones, as many as
+/// [`MOST_IMAGES`] and [`MOST_IMAGE_BYTES`] allow, passing over one too big for the bytes left. So the first prompt's,
+/// which set the task, go first.
+fn chosen_images(carried: impl IntoIterator<Item = (SessionId, Attachment)>) -> Vec<(SessionId, Attachment)> {
+    let mut room = MOST_IMAGE_BYTES;
+    let fits = |(_, attachment): &(SessionId, Attachment)| {
+        let fits = attachment.media_type.is_image() && attachment.size_bytes <= room;
+        if fits {
+            room -= attachment.size_bytes;
+        }
+        fits
+    };
+    carried.into_iter().filter(fits).take(MOST_IMAGES).collect()
 }
 
 /// What a model is asked to title a workspace's work from: what its chats were asked, oldest first and numbered, under

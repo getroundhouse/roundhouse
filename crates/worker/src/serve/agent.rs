@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
+use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
@@ -17,9 +18,14 @@ use tracing::info;
 use super::{RunningAgent, State};
 
 /// Gives up once the worker is stopping, which ends the call, so a title nobody will see can't keep it running.
-pub(crate) async fn title_for(state: &State, agent: AgentKind, prompt: &str) -> Result<WorkerResponse, ApiError> {
+pub(crate) async fn title_for(
+    state: &State,
+    agent: AgentKind,
+    prompt: &str,
+    images: &[NewAttachment],
+) -> Result<WorkerResponse, ApiError> {
     let options = one_off(state, "title");
-    let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
+    let title = agents::title_for(agent, prompt, images, &options, &state.config.scratch_dir);
     let title = until_stopping(state, title).await?;
     Ok(WorkerResponse::Title { title: title?.to_string() })
 }

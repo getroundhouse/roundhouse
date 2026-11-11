@@ -1,7 +1,8 @@
 use protocol::attachment::{Attachment, MediaType};
+use protocol::event::EventBody;
 use protocol::model::AttachmentId;
 
-use super::super::tests::store_with_session;
+use super::super::tests::{idle_session, store_with_session};
 use super::*;
 
 fn log_file(id: &str, name: &str) -> Attachment {
@@ -80,4 +81,34 @@ fn a_file_for_a_session_thats_been_deleted_is_refused_as_not_found() {
     let added = store.add_attachment(&"s".into(), &log_file("a1", "build.log"));
 
     assert!(matches!(added, Err(StoreError::NotFound { .. })), "{added:?}");
+}
+
+/// A title is asked from the images a workspace's prompts carried, so they're read across its chats, in the order the
+/// prompts were sent, and only images.
+#[test]
+fn a_workspaces_prompt_images_are_listed_oldest_first_across_its_chats() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let mut second = idle_session(1);
+    (second.session.id, second.agent_session_id) = ("second".into(), "second".into());
+    store.insert_session(&second, None).unwrap();
+    let image = |id: &str| Attachment { media_type: MediaType::Png, ..log_file(id, &format!("{id}.png")) };
+    let sent = |chat: &str, at_ms: i64, attachments: Vec<Attachment>| {
+        let body = EventBody::UserPrompt { text: "look".to_string(), client_msg_id: None, attachments };
+        let seq = store.append(&chat.into(), None, &body, None, None, None).unwrap().event.seq;
+        let when = "UPDATE events SET ts_ms = ?1 WHERE session_id = ?2 AND seq = ?3";
+        lock(&store.writer).execute(when, params![at_ms, chat, seq.cast_signed()]).unwrap();
+    };
+
+    sent("s", 10, vec![image("a1"), log_file("a2", "build.log"), image("a3")]);
+    sent("second", 20, vec![]);
+    sent("s", 40, vec![image("a4")]);
+    sent("second", 30, vec![image("b1")]);
+
+    let listed = store.workspace_prompt_images(&"w".into()).unwrap();
+
+    let found: Vec<(&str, &str)> = listed.iter().map(|(chat, a)| (chat.as_str(), a.id.as_str())).collect();
+    assert_eq!(found, [("s", "a1"), ("s", "a3"), ("second", "b1"), ("s", "a4")]);
+    assert_eq!(listed[0].1, image("a1"), "each as its prompt says it is");
+    assert!(store.workspace_prompt_images(&"missing".into()).unwrap().is_empty());
 }

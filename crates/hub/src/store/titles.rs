@@ -15,7 +15,8 @@ mod tests;
 pub enum Retitle<'a> {
     /// From a prompt's first line, only where there's no title yet.
     FirstLine,
-    /// From a model asked for one, only over a first line, so a title typed meanwhile stays.
+    /// From a model asked for one, only over a first line, or where there's no title yet, as after a prompt of only
+    /// images, so a title typed meanwhile stays.
     Generated,
     /// From a model, because someone asked for a new title: over the one that was there when they asked, `over`,
     /// however it was `set`, and only that one, so a title set meanwhile stays. That includes the same words typed by
@@ -39,7 +40,7 @@ impl Retitle<'_> {
     fn replaces(self) -> &'static str {
         match self {
             Retitle::FirstLine => "title IS NULL",
-            Retitle::Generated => "title IS NOT NULL AND title_source = 'first_line'",
+            Retitle::Generated => "title IS NULL OR title_source = 'first_line'",
             Retitle::Regenerated { .. } | Retitle::ByHand => "TRUE",
         }
     }
@@ -99,7 +100,8 @@ impl Store {
             }
             Retitle::FirstLine | Retitle::Generated | Retitle::ByHand => true,
         };
-        let update = format!("UPDATE {name} SET title = ?1, title_source = ?2 WHERE id = ?3 AND {}", how.replaces());
+        // In brackets, so a rule with an OR in it can't reach past this record.
+        let update = format!("UPDATE {name} SET title = ?1, title_source = ?2 WHERE id = ?3 AND ({})", how.replaces());
         let changed = still_there && conn.execute(&update, params![title.as_str(), text_of(&how.source()), id])? > 0;
         let record = conn
             .query_row(&format!("SELECT {columns}, rev FROM {name} WHERE id = ?"), [id], from_row)
