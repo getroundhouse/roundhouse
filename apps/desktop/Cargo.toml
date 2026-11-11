@@ -37,6 +37,7 @@ image = { workspace = true, features = ["bmp", "png", "tiff"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
+objc2-app-kit.workspace = true
 
 # Reads the file icons' manifest into tables, so the app never parses it.
 [build-dependencies]

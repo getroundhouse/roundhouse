@@ -15,6 +15,7 @@ pub mod file_diff;
 mod file_icons;
 mod file_tree;
 pub mod file_view;
+mod haptics;
 mod home;
 mod hover;
 mod menus;
