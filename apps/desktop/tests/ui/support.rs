@@ -4,6 +4,7 @@
 
 mod attachments;
 mod chats;
+mod click;
 mod daemons;
 mod diff;
 mod held;
@@ -35,6 +36,7 @@ use protocol::model::{PermissionMode, SessionStatus};
 use tempfile::TempDir;
 use transcript::Transcript;
 
+pub(crate) use click::click;
 pub(crate) use daemons::{binaries, point_daemons_at_the_fake_agent};
 pub(crate) use diff::Diff;
 pub(crate) use held::Held;
@@ -219,13 +221,6 @@ impl<'a> Ui<'a> {
     /// Lets the time pass after which the app looks again whether an older hub has gone idle, and lets it look.
     pub(crate) fn wait_out_a_look(&mut self) {
         self.cx.executor().advance_clock(desktop::app::LOOK_AGAIN);
-        self.frame();
-    }
-
-    pub(crate) fn click(&mut self, id: impl Into<ElementId>) {
-        let id = id.into();
-        self.frame();
-        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
         self.frame();
     }
 

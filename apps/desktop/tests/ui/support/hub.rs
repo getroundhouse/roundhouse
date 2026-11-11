@@ -6,10 +6,9 @@ use std::process::Command;
 
 use client_core::{Client, Daemon};
 use desktop::app::Connection;
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId};
 
-use super::{Stack, Ui};
+use super::{Stack, Ui, click};
 
 impl Stack {
     /// Kills the hub the way a crash would, with no chance to tidy up. Returns the pid it had.
@@ -31,7 +30,7 @@ impl Ui<'_> {
     /// several such clicks and stop the hub while what they ask for is still to be sent.
     pub(crate) fn click_and_leave(&mut self, id: impl Into<ElementId>) {
         let id = id.into();
-        self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.cx.update_window(self.handle, |_, window, cx| click(window, id, cx)).unwrap();
     }
 
     /// Waits for the app to be connected again, to a hub other than the one with this pid. It asks with
