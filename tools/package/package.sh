@@ -31,44 +31,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # BINARIES, ROOT, version, stamp, target_dir and build_release.
 # shellcheck source=SCRIPTDIR/../build.sh
 source "$HERE/../build.sh"
-# Velopack's name for the app, which names its packages and its cache directory. The bundle identifier is in
+# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables and check_newer. The bundle identifier is in
 # Info.plist.
-PACK_ID=Roundhouse
+# shellcheck source=SCRIPTDIR/vpk.sh
+source "$HERE/vpk.sh"
 # The app's icon, a drawing for each size. `docs/spec/look.md` says which style it is.
 ICONSET="$ROOT/apps/desktop/icons/working.iconset"
-
-die() { echo "error: $1" >&2; exit 1; }
-
-# Runs .NET from the directory that holds dotnet-tools.json, which is how it finds the vpk that file pins. .NET on macOS
-# skips checking NuGet packages' signatures unless it's asked to, and vpk comes from NuGet.
-dotnet_here() {
-  (cd "$HERE" && DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_NUGET_SIGNATURE_VERIFICATION=true dotnet "$@")
-}
-
-# Checks for an SDK that runs the vpk dotnet-tools.json pins, and installs that vpk.
-dotnet_tools() {
-  local sdk
-  command -v dotnet > /dev/null || die "vpk needs the .NET SDK 8, 9 or 10, such as from \`brew install dotnet\`"
-  sdk="$(dotnet_here --version)"
-  case "${sdk%%.*}" in
-    8 | 9 | 10) ;;
-    *) die "vpk needs the .NET SDK 8, 9 or 10, and dotnet runs $sdk" ;;
-  esac
-  dotnet_here tool restore > /dev/null
-}
-
-# Stops before the build if `releases/` has this version or a newer one, since vpk refuses a version that isn't newer
-# than every one there, but only after the build. This is the check for packaging into an --out that holds earlier
-# releases.
-check_newer() {
-  local releases=$1 newer
-  [ -f "$releases/releases.osx.json" ] || return 0
-  newer="$(jq -r --arg version "$VERSION" '
-    def parts: split("-")[0] | split(".") | map(tonumber);
-    [.Assets[].Version | select(parts >= ($version | parts))] | first // empty' "$releases/releases.osx.json")"
-  [ -z "$newer" ] || die "$releases already has version $newer, and vpk only adds a newer one than every one there.
-Package into another --out"
-}
 
 # Puts the binaries in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of their own. The
 # binaries come from `prebuilt` if it's set, and `check` makes sure they're this build.
@@ -129,16 +97,14 @@ check() {
 }
 
 package() {
-  local allow_dirty=$1 out=$2 prebuilt=$3 sign=$4 keychain=$5 notary=$6 vpk_vars signing=()
-  # vpk also reads each option from a VPK_ variable, which would override this script, such as signing with vpk's
-  # default entitlements, which are .NET's exceptions to the hardened runtime.
-  vpk_vars="$(compgen -e | grep '^VPK_' || true)"
-  [ -z "$vpk_vars" ] || die "unset $(echo "$vpk_vars" | tr '\n' ' ')first, since vpk would take them over this script"
+  local allow_dirty=$1 out=$2 prebuilt=$3 sign=$4 keychain=$5 notary=$6 signing=()
+  # Such as signing with vpk's default entitlements, which are .NET's exceptions to the hardened runtime.
+  refuse_vpk_variables
   dotnet_tools
   VERSION="$(version)"
   stamp "$allow_dirty" package
   mkdir -p "$out/releases"
-  check_newer "$out/releases"
+  check_newer "$out/releases" releases.osx.json
   # Not local, because the trap outlives this function if anything fails.
   staging="$(mktemp -d)"
   trap 'rm -rf "$staging"' EXIT
