@@ -160,6 +160,25 @@ fn open_approvals_are_those_not_yet_answered() {
 }
 
 #[test]
+fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
+    let requested = EventBody::ApprovalRequested {
+        approval_id: "a".into(),
+        tool_name: "AskUserQuestion".into(),
+        tool_use_id: None,
+        input: Value::Null,
+        description: None,
+        suggestions: Value::Null,
+    };
+    let mut log = SessionLog::new(0);
+    log.apply_event(event(1, requested));
+
+    // Its answer could be the event that isn't here.
+    log.apply_event(event(3, EventBody::Notice { level: NoticeLevel::Info, message: "later".into() }));
+
+    assert!(log.open_approvals().is_empty());
+}
+
+#[test]
 fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
     let mut log = SessionLog::new(0);
     log.apply_delta(&StreamDelta {

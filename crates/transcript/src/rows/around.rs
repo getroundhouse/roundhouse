@@ -1,8 +1,6 @@
 //! What drawing one event needs from the rest of the log and the model, read while they're held, so nothing is held
 //! while it's drawn.
 
-use std::collections::BTreeMap;
-
 use client_core::session_log::{PromptState, SessionLog};
 use gpui_kit::Entity;
 use gpui_kit::component::text::TextViewState;
@@ -30,9 +28,8 @@ const NEAR: usize = 64;
 pub(super) struct Around {
     /// What each of the event's blocks needs, by position.
     pub(super) blocks: Vec<BlockAround>,
-    /// For an approval: whether it's still waiting, and what's been chosen on its questions so far.
+    /// For an approval: whether it's still waiting.
     pub(super) approval_open: bool,
-    pub(super) picks: BTreeMap<String, Vec<String>>,
     /// For a prompt: the files it carries.
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
@@ -63,14 +60,8 @@ impl Around {
             .enumerate()
             .map(|(position, block)| BlockAround::read(log, m, seq, block, block_key(seq, body, position)))
             .collect();
-        let mut around = Around {
-            blocks,
-            approval_open: false,
-            picks: BTreeMap::new(),
-            carried: Vec::new(),
-            prompt: PromptState::Taken,
-            prompt_text: None,
-        };
+        let mut around =
+            Around { blocks, approval_open: false, carried: Vec::new(), prompt: PromptState::Taken, prompt_text: None };
         if let EventBody::UserPrompt { attachments, client_msg_id, .. } = body {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);
@@ -81,7 +72,6 @@ impl Around {
                 .open_approvals()
                 .iter()
                 .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
-            around.picks = m.picks.get(approval_id).cloned().unwrap_or_default();
         }
         around
     }

@@ -81,6 +81,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::question())),
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "questions",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, chats::questions())),
+        steps: &[
+            Step::Select(FOCUS),
+            // Answers the first, which brings up the second.
+            Step::Click("question-answer-0"),
+            Step::Click("question-answer-0"),
+            Step::Click("question-answer-1"),
+            Step::Click("question-other"),
+            Step::Type("Only while it's open"),
+        ],
+    },
     Screen { name: "steered", spec: "chats.md", world: Some(steered), steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "queued",

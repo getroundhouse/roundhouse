@@ -67,7 +67,7 @@
 - **Any kind of file can go, up to 100 MB, and at most 10 with a prompt.** The size is what the hub takes in one go.
 - **Each file goes in the workspace's `.context/attachments/`, and the agent is told where, so it can open it then or later.** Git is told to ignore the folder, so the files never show as changes. Images up to 32 MB between them, and a text file up to 32 KB, also go in the prompt itself, so the agent sees them without opening anything. A longer text file is opened from where it is, so the agent can search it rather than read all of it.
 - **A file is known by its bytes rather than its name,** so the agent is never sent an image labelled as something it isn't, and a pasted TIFF, which some apps copy, goes as a PNG.
-- **Files stay with their chat until they're sent,** the way what's typed does, and a prompt that can't be sent comes back to its chat's composer, files and all. While the agent waits on a question, what's typed answers it and the files wait for the next prompt, since an answer can't carry them.
+- **Files stay with their chat until they're sent,** the way what's typed does, and a prompt that can't be sent comes back to its chat's composer, files and all. While the agent waits on a question, the question takes the composer's place, and what's typed and attached waits for it to go.
 - **In the transcript, a prompt's images show small above its text, and a click opens one to its own width, up to the prompt's.** Other files show their name and size. The hub keeps each image, so every client shows it, and it's still there after the workspace is archived. Other files are only in the workspace, so archiving takes them with it.
 
 **A prompt that carried a screenshot and a log, and two more files waiting in the composer.** *Unconfirmed.*
@@ -185,7 +185,12 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## Questions and approvals
 
-- **While the agent waits on a question, what's typed in the composer is the answer,** and the card says so. A plain Allow button would throw the question away. *Unconfirmed.*
+- **A question from the agent takes the composer's place until it's answered,** so it's answered where a reply would be typed, and the transcript keeps a record of what was asked. What's typed and attached in the composer waits for it to go, and so does any other question waiting, since they're asked in turn, oldest first. A plain Allow button would throw the question away. *Unconfirmed.*
+- **It asks one question at a time:** its header and text, then each option on a numbered row, with what it means under it, and a last row, `0`, to type another answer into. A chosen row is lit, and where several can be chosen, a check marks each, and the typing row's checkbox takes back what's typed there. *Unconfirmed.*
+- **On the right under the options is the arrow that sends, and with more than one question, on the left, a dot for each, filled once it has an answer and ringed while it shows,** between arrows to the one before and after. Choosing the one answer a question takes goes on to the next without one. *Unconfirmed.*
+- **The arrow sends once any question has an answer, and leaves out a question without one,** so only what matters needs an answer. Enter goes on to the next question without an answer, and sends once there's none. The `×` skips them all, and tells the agent to carry on if it can. *Unconfirmed.*
+- **While it has focus, a number chooses that option, `0` goes to the typing row, and the left and right arrows move between questions.** It takes focus from the composer when it comes, and gives it back when it goes. When it's just come, keys do nothing until half a second passes without one, so the end of something being typed in the composer can't answer it. Choosing with the pointer ends that early. Escape leaves the typing row. *Unconfirmed.*
+- **It's drawn on the pane's own surface inside the thin edge colour, with the composer's corners, rather than in a card's amber,** since taking the composer's place already says it's your turn. Its header, numbers and what each option means are small details, at 12px, and the question and its options are at body size. A chosen row is lit in a raised surface's hover colour, the nearest step above the pane, and Send is the composer's. *Unconfirmed.*
 
 **A command waiting to be allowed.** *Unconfirmed.*
 
@@ -194,6 +199,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **A question from the agent, with choices.** *Unconfirmed.*
 
 ![A question with choices](screens/question.png)
+
+**Three questions, with the first answered, two choices and a typed answer on the second, and the third still to answer.** *Unconfirmed.*
+
+![Several questions](screens/questions.png)
 
 ## The model and approval mode
 
