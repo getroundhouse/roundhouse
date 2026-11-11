@@ -267,9 +267,13 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Opens or closes a fold drawn in the row of the event at `seq`, which changes that row's height.
+    /// Opens or closes a fold drawn in the row of the event at `seq`, which changes that row's height. The row stays
+    /// where it is in the window, with the fold where it was clicked.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, fold, open);
+        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+            self.list.keep_still(row);
+        }
         self.remeasure(seq, cx);
     }
 

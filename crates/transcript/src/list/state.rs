@@ -6,7 +6,7 @@ use gpui_kit::{Bounds, Pixels, px};
 use look::motion::Scrolling;
 
 use super::heights::Heights;
-use super::layout::Start;
+use super::layout::{Anchor, Start};
 
 mod heading;
 
@@ -27,6 +27,9 @@ pub(super) struct State {
     /// knowing how tall the rows it passes are, and the next frame finds which row it comes to with the heights it
     /// measures as it lays them out.
     moved: Pixels,
+    /// The row the next frame keeps where it is in the window, as [`Anchor`] says. `None` once something has sent
+    /// the list to a place, until a frame lays it out there.
+    anchor: Option<Anchor>,
     /// What it keeps to between frames.
     keeping: Keeping,
     /// Where the rows are drawn, as of the last frame.
@@ -69,6 +72,7 @@ impl State {
     pub(super) fn set_rows(&mut self, rows: usize, loaded: Vec<Range<usize>>) {
         self.heights.set_rows(rows);
         self.measured_at.resize(rows, 0);
+        self.anchor = self.anchor.filter(|anchor| anchor.row < rows);
         let loaded = joined(loaded);
         if !same_pages(&self.loaded, &loaded) {
             self.all_out_of_date();
@@ -135,13 +139,28 @@ impl State {
     /// Goes to a place `down` the session, by what its rows are known and guessed to come to.
     fn go_to(&mut self, down: Pixels) {
         let (row, offset) = self.heights.row_at(down.clamp(px(0.), self.furthest()));
-        (self.top, self.moved) = (Place { row, offset }, px(0.));
+        self.send_to(Place { row, offset });
     }
 
     pub(super) fn go_to_row(&mut self, row: usize) {
         if row < self.heights.rows() {
-            (self.top, self.moved) = (Place { row, offset: px(0.) }, px(0.));
+            self.send_to(Place { row, offset: px(0.) });
             self.keeping = Keeping::Place;
+        }
+    }
+
+    /// Puts `top` at the window's top, from which the next frame lays the rows out and chooses which to keep where
+    /// it is.
+    fn send_to(&mut self, top: Place) {
+        (self.top, self.moved, self.anchor) = (top, px(0.), None);
+    }
+
+    /// Someone opened or closed something in `row`, which keeps it where it is in the window, as [`Anchor`] says,
+    /// if it's in sight.
+    pub(super) fn keep_still(&mut self, row: usize) {
+        let top = self.heights.above(row) - self.heights.above(self.top.row) - self.top.offset;
+        if row >= self.top.row && top < self.tall() {
+            self.anchor = Some(Anchor { row, top });
         }
     }
 
@@ -152,16 +171,20 @@ impl State {
             return Start::Latest;
         }
         if self.moved.abs() <= walked {
-            return Start::Top { at: self.top, moved: self.moved };
+            return match self.anchor {
+                Some(at) => Start::Anchored { at, moved: self.moved },
+                None => Start::Top { at: self.top, moved: self.moved },
+            };
         }
         let (row, offset) = self.heights.row_at(self.down(&self.heights).max(px(0.)));
         Start::Top { at: Place { row, offset }, moved: px(0.) }
     }
 
-    /// The rows were laid out with `top` at the top of the window, and with the latest row's end in sight or not.
-    /// Someone who has scrolled back down to that is keeping to it again, and so is a list on its way down to it.
-    pub(super) fn laid_out(&mut self, top: Place, end_in_sight: bool) {
-        (self.top, self.moved) = (top, px(0.));
+    /// The rows were laid out with `top` at the top of the window, `anchor` to keep where it is in the next frame,
+    /// and with the latest row's end in sight or not. Someone who has scrolled back down to that is keeping to it
+    /// again, and so is a list on its way down to it.
+    pub(super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end_in_sight: bool) {
+        (self.top, self.moved, self.anchor) = (top, px(0.), anchor);
         if end_in_sight {
             self.go_to_latest();
         }
@@ -306,7 +329,7 @@ impl State {
         let furthest = if let Some(heights) = &self.dragging {
             let furthest = (heights.total() - self.tall()).max(px(0.));
             let (row, offset) = heights.row_at(down.clamp(px(0.), furthest));
-            (self.top, self.moved) = (Place { row, offset }, px(0.));
+            self.send_to(Place { row, offset });
             self.keeping = Keeping::Place;
             furthest
         } else {

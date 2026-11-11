@@ -1,7 +1,9 @@
 //! Scrolling through rows whose height comes late, such as a long text the kit reads on another thread, which moves
 //! nothing in the window when it does.
 
+use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
+use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{SessionId, SessionStatus, seq_index};
 use transcript::{Place, Transcript};
 
@@ -56,6 +58,115 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     each_went_as_far_as_the_wheel(&steps);
 }
 
+/// A long thought whose reading lands once it's at the top of the window, as when it takes longer to read than
+/// someone takes to scroll to it, or a fling or a drag of the scrollbar's thumb takes the window to it before its row
+/// has been drawn. It's drawn then as a line with nothing under it, and when it's read it grows by all of its length.
+/// What's on screen stays where it is.
+#[gpui_kit::test]
+fn a_long_text_read_once_it_is_at_the_top_of_the_window_moves_nothing_on_screen(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:a short reply first");
+    stack.run(&session, "ponder:40:1; prose:40:2");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    // Closed, so the thought's text isn't drawn, and nothing has read it.
+    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    let thought = thought_row(&ui, &transcript);
+    ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
+    let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
+
+    // Up through the reply a little at a time, each frame drawn with nothing else let run, so the thought's reading
+    // is still under way when it comes to the top of the window.
+    while top(&ui).row > thought {
+        let up = ScrollDelta::Pixels(point(px(0.), px(10.)));
+        ui.cx.update_window(ui.handle, |_, window, cx| window.scroll("transcript", up, cx)).unwrap();
+    }
+    assert_eq!(top(&ui).row, thought, "the thought is at the top, as a line");
+    assert!(!ui.cx.read_entity(&transcript, Transcript::long_texts_read), "and not read yet");
+    let before = to_the_end(&ui, &transcript);
+    ui.settle(A_FRAME);
+
+    let after = to_the_end(&ui, &transcript);
+    assert!((after - before).abs() < px(0.5), "what's on screen moved {:?} as the thought was read", after - before);
+}
+
+/// A long thought, closed, opened from its line while the line is cut off at the top of the window. The line stays
+/// where it was clicked, and the thought opens under it, as it does once it's read, rather than growing up past the
+/// window's top and taking the line with it.
+#[gpui_kit::test]
+fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:a short reply first");
+    stack.run(&session, "ponder:40:1; prose:40:2");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    let thought = thought_row(&ui, &transcript);
+    while ui.cx.read_entity(&transcript, |t, _| t.list().top().row) > thought {
+        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), STEP)));
+        ui.settle(A_FRAME);
+    }
+    // Then until only the bottom of the line shows.
+    let above = |ui: &mut Ui<'_>| window_top(ui) - line(ui).bounds().top();
+    let turn = above(&mut ui) - CUT;
+    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), turn)));
+    ui.settle(A_FRAME);
+    assert!((above(&mut ui) - CUT).abs() < px(0.5), "the line is cut off at the window's top");
+    let before = line(&mut ui).bounds().top();
+
+    let id = line(&mut ui).path().last().unwrap().clone();
+    let at = point(px(20.), CUT + px(4.));
+    ui.cx.update_window(ui.handle, |_, window, cx| window.click_at(id, at, cx)).unwrap();
+    ui.settle(A_FRAME);
+
+    assert_eq!(line(&mut ui).expanded(), Some(true), "the thought is open");
+    assert!(ui.cx.read_entity(&transcript, Transcript::long_texts_read), "and read");
+    let moved = line(&mut ui).bounds().top() - before;
+    assert!(moved.abs() < px(0.5), "the line moved {moved:?} as the thought opened under it");
+}
+
+/// How much of the thought's line is above the window's top in the test of opening it there.
+const CUT: Pixels = px(8.);
+
+/// The one thought's line.
+fn line(ui: &mut Ui<'_>) -> ElementSnapshot {
+    let mut lines = ui.labelled("Thinking");
+    assert_eq!(lines.len(), 1, "one thought's line");
+    lines.remove(0)
+}
+
+/// Where the top of the window the transcript's rows show in is.
+fn window_top(ui: &mut Ui<'_>) -> Pixels {
+    ui.frame();
+    ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds().top()).unwrap()
+}
+
+/// The row of the session's one thought.
+fn thought_row(ui: &Ui<'_>, transcript: &Entity<Transcript>) -> usize {
+    ui.cx.read_entity(transcript, |t, _| {
+        (0..t.row_count()).find(|row| t.event_at(*row).is_some_and(|event| thinks(&event.body))).unwrap()
+    })
+}
+
+/// Whether an event holds a thought.
+fn thinks(body: &EventBody) -> bool {
+    let EventBody::Assistant { blocks, .. } = body else { return false };
+    blocks.iter().any(|block| matches!(block, ContentBlock::Thinking { .. }))
+}
+
+/// How far it is from the top of the window to the end of the session, by the rows' heights as measured.
+fn to_the_end(ui: &Ui<'_>, transcript: &Entity<Transcript>) -> Pixels {
+    ui.cx.read_entity(transcript, |t, _| {
+        let (list, top) = (t.list(), t.list().top());
+        let below: Pixels = (top.row..list.row_count()).map(|row| list.row_height(row).unwrap_or_default()).sum();
+        below - top.offset
+    })
+}
+
 /// The row of the session's latest event.
 fn last_row(stack: &Stack, session: &SessionId) -> usize {
     seq_index(stack.client().session_get(session).unwrap().last_seq) - 1
@@ -65,19 +176,12 @@ fn last_row(stack: &Stack, session: &SessionId) -> usize {
 /// to rest after each. Returns how far it was from the top of the window to the end of the session after each, by
 /// the rows' heights as measured.
 fn steps_up_to_the_start(ui: &mut Ui<'_>, transcript: &Entity<Transcript>) -> Vec<Pixels> {
-    let to_the_end = |ui: &Ui<'_>| {
-        ui.cx.read_entity(transcript, |t, _| {
-            let (list, top) = (t.list(), t.list().top());
-            let below: Pixels = (top.row..list.row_count()).map(|row| list.row_height(row).unwrap_or_default()).sum();
-            below - top.offset
-        })
-    };
     let top = |ui: &Ui<'_>| ui.cx.read_entity(transcript, |t, _| t.list().top());
-    let mut steps = vec![to_the_end(ui)];
+    let mut steps = vec![to_the_end(ui, transcript)];
     while top(ui) != Place::default() {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), STEP)));
         ui.settle(A_FRAME);
-        steps.push(to_the_end(ui));
+        steps.push(to_the_end(ui, transcript));
         assert!(steps.len() < 2000, "the top is never reached");
     }
     steps
