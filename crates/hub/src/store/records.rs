@@ -3,6 +3,7 @@
 use protocol::model::Records;
 use rusqlite::{Row, Transaction};
 
+use super::accounts::accounts;
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
 use super::hub_settings::hub_settings;
 use super::repos::{REPO_COLUMNS, repo_from_row};
@@ -33,6 +34,7 @@ impl Store {
                 comment_from_row,
             )?,
             hub_settings: Some(hub_settings(&tx)?),
+            accounts: accounts(&tx)?,
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

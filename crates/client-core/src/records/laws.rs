@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{AgentKind, SessionId, SessionStatus, Title, TitleSource};
+use protocol::model::{AgentKind, LimitWindow, SessionId, SessionStatus, Title, TitleSource, UsageLimit};
 
 use super::*;
 
@@ -26,6 +26,7 @@ enum Delivery {
 
 fn session(id: &SessionId, title: u8, rev: u64) -> Session {
     Session {
+        account: None,
         id: id.clone(),
         workspace_id: "w".into(),
         agent: AgentKind::Claude,
@@ -210,4 +211,34 @@ fn a_hub_from_before_it_kept_settings_has_none() {
     held.apply_list(Records { rev: Rev::new(3), ..Records::default() });
 
     assert_eq!(held.hub_settings(), None);
+}
+
+fn account(id: &str, used_percent: u8, rev: u64) -> Account {
+    let limit = UsageLimit { window: LimitWindow::SevenDays, used_percent, resets_at_ms: None, heard_at_ms: None };
+    Account {
+        id: id.into(),
+        model_provider: None,
+        plan: None,
+        login: None,
+        email: Some(format!("{id}@example.com")),
+        limits: vec![limit],
+        rev: Rev::new(rev),
+    }
+}
+
+#[test]
+fn each_account_is_a_record_like_the_rest() {
+    let mut held = HubRecords::default();
+    assert_eq!(held.account(&"ada".into()), None);
+
+    let listed = vec![account("ada", 4, 2), account("grace", 80, 3)];
+    assert!(held.apply_list(Records { accounts: listed, rev: Rev::new(3), ..Records::default() }));
+    assert!(held.apply_notice(HubNotice::Account(account("ada", 9, 5))));
+    assert!(!held.apply_notice(HubNotice::Account(account("ada", 6, 4))), "an older copy that arrives late");
+
+    assert_eq!(held.account(&"ada".into()), Some(account("ada", 9, 5)));
+    assert_eq!(held.account(&"grace".into()), Some(account("grace", 80, 3)), "another account is its own");
+    // A list from before the change, as a reconnect can bring.
+    held.apply_list(Records { accounts: vec![account("ada", 4, 2)], rev: Rev::new(4), ..Records::default() });
+    assert_eq!(held.account(&"ada".into()), Some(account("ada", 9, 5)));
 }

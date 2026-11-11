@@ -51,6 +51,7 @@ mod tests {
 
     fn session(status: SessionStatus) -> Session {
         Session {
+            account: None,
             id: "s".into(),
             workspace_id: "w".into(),
             agent: AgentKind::Claude,

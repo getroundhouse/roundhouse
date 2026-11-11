@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use protocol::client::ApiError;
+use protocol::client::{ApiError, HubNotice};
 use protocol::model::{
     AccountId, AgentAccount, AgentKind, SessionAccount, SessionId, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
@@ -34,11 +34,11 @@ impl Hub {
     }
 
     /// The account the session's agent runs under, and what's been heard of that account's limits, by any agent
-    /// under it.
+    /// under it. For clients from before accounts were records, which ask for it.
     pub(crate) async fn session_account(self: &Arc<Self>, id: SessionId) -> Result<SessionAccount, ApiError> {
         let session = self.session_get(id).await?;
         let account = self.account_of(&session.workspace_id, session.agent).await?;
-        let limits = match account.id.clone() {
+        let limits = match account.logged_in_as().cloned() {
             Some(id) => self.blocking(move |store| store.account_limits(&id)).await?,
             // A login that can't be told from another has no limits kept for it.
             None => Vec::new(),
@@ -46,11 +46,26 @@ impl Hub {
         Ok(SessionAccount { account, limits })
     }
 
-    /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`.
+    /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, and tells every client when it
+    /// changed the account's record, since every session under the account shows it.
     pub(crate) async fn hear_limits(&self, account: AccountId, limits: Vec<UsageLimit>, heard_at_ms: i64) {
         let kept = account.clone();
-        if let Err(e) = self.blocking(move |store| store.hear_limits(&kept, &limits, heard_at_ms)).await {
-            error!(%account, "could not keep what an agent heard of its account's limits: {e}");
+        match self.blocking(move |store| store.hear_limits(&kept, &limits, heard_at_ms)).await {
+            Ok(Some(record)) => self.notify(HubNotice::Account(record)),
+            Ok(None) => {}
+            Err(e) => error!(%account, "could not keep what an agent heard of its account's limits: {e}"),
         }
+    }
+
+    /// Files that `session`'s agent launched under `under`, as its worker read it, and tells every client what that
+    /// changed of the account's record. Whether the session's record changed is returned, for the session to announce
+    /// itself, since only it knows how.
+    pub(crate) async fn launched_under(&self, session: &SessionId, under: AgentAccount) -> Result<bool, ApiError> {
+        let id = session.clone();
+        let launched = self.blocking(move |store| store.launched_under(&id, &under)).await?;
+        if let Some(record) = launched.account {
+            self.notify(HubNotice::Account(record));
+        }
+        Ok(launched.session)
     }
 }

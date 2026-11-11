@@ -157,7 +157,7 @@ struct LiveState {
     background_tasks: Vec<AgentTask>,
     /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
     context: Option<ContextUsage>,
-    /// Which account a launch of the agent runs under, once it has heard of a limit, for filing what it hears.
+    /// Which account a launch of the agent runs under, learnt as it launches, for filing what it hears.
     hearing: Option<(RunId, limits::Hearing)>,
     /// When the newest turn started, as the session's record says, for the turn's end to carry.
     turn_started_at_ms: Option<i64>,
@@ -187,6 +187,8 @@ pub(crate) struct LiveSession {
     commands: mpsc::Sender<Command>,
     ingest: mpsc::Sender<Item>,
     state: Mutex<LiveState>,
+    /// Held while the session's record changes and is announced, by an event being recorded or by filing which account
+    /// a launch runs under, so they happen one at a time and the feed hears each copy in the order they were made.
     recording: tokio::sync::Mutex<()>,
     /// Held while a queued prompt is sent, and while the queue changes, so a change can't land between reading the
     /// prompt and taking it out of the queue, and be lost.

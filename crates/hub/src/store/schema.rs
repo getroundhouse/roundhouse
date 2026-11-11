@@ -8,14 +8,16 @@ use tracing::info;
 use super::StoreError;
 use super::backup::back_up;
 
+#[cfg(test)]
+mod before;
 mod migrations;
 
-use migrations::MIGRATIONS;
 #[cfg(test)]
-pub(crate) use migrations::{
-    BEFORE_CHOSEN_MODELS, BEFORE_CONTEXT, BEFORE_EFFORT, BEFORE_HUB_SETTINGS, BEFORE_PULL_REQUESTS, BEFORE_RUNS,
-    BEFORE_TITLES,
+pub(crate) use before::{
+    BEFORE_ACCOUNTS, BEFORE_CHOSEN_MODELS, BEFORE_CONTEXT, BEFORE_EFFORT, BEFORE_HUB_SETTINGS, BEFORE_PULL_REQUESTS,
+    BEFORE_RUNS, BEFORE_TITLES,
 };
+use migrations::MIGRATIONS;
 
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;

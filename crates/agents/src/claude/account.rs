@@ -46,8 +46,9 @@ fn account_from(stdout: &[u8]) -> Result<AgentAccount, NoAccount> {
 /// the organization's or each member's, and taking two people for one would show one of them the other's. `None` for
 /// a login that names neither, such as one with an API key, which can't be told from another.
 ///
-/// It says it's Claude's, so no other kind of agent's account can be taken for it, and it's opaque, so the log and
-/// the hub's records don't hold an email because of it. FNV-1a, written out here, so it's the same in every build:
+/// It says it's Claude's, so no other kind of agent's account can be taken for it, and it's opaque, so what names the
+/// account, such as a session's record, doesn't hold an email because of it. Only the account's own record says the
+/// email, for a person to read. FNV-1a, written out here, so it's the same in every build:
 /// the hub keeps limits under it across updates.
 fn account_id(organization: Option<&str>, email: Option<&str>) -> Option<AccountId> {
     if organization.is_none() && email.is_none() {

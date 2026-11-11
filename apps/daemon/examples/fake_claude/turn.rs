@@ -130,6 +130,18 @@ fn remember(config: &Config, prompt: &str) {
     std::fs::write(&config.conversation, &seen).unwrap();
 }
 
+/// What the real CLI writes as a turn begins: that it's ready, and what's left of the account's limits.
+fn begin(config: &Config, out: &Out) {
+    emit(
+        out,
+        json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
+        "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
+    );
+    if crate::account::hears_limits(&config.conversation) {
+        emit(out, crate::account::rate_limit_event(&config.session_id));
+    }
+}
+
 pub(crate) fn run_turn(
     config: &Config,
     out: &Out,
@@ -144,12 +156,7 @@ pub(crate) fn run_turn(
         state_event(config, out, "running");
     }
     lifecycle(out, &first, "started");
-    emit(
-        out,
-        json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
-        "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
-    );
-    emit(out, crate::account::rate_limit_event(&config.session_id));
+    begin(config, out);
 
     let mut turn = Turn { config, out, parent: None };
     let mut interrupted = false;

@@ -27,6 +27,7 @@ fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64
 
 fn session(workspace: &str, updated_at_ms: i64) -> Session {
     Session {
+        account: None,
         id: format!("{workspace}-chat").into(),
         workspace_id: workspace.into(),
         agent: AgentKind::Claude,
