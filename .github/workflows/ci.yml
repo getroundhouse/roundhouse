@@ -1,7 +1,7 @@
-# The full checks from AGENTS.md, and the tests of the scripts that publish releases, for every PR and the merge
-# queue. They run on Linux, where everything passes but the gallery: the window tests use GPUI's test platform, which
-# draws nothing, and the gallery, whose images are exact to the Mac that approved them, is compiled only on macOS.
-# mac.yml covers what only a Mac catches. A change to nothing but Markdown skips them.
+# The full checks from AGENTS.md, with the tests run by nextest, and the tests of the scripts that publish releases, for
+# every PR and the merge queue. They run on Linux, where everything passes but the gallery: the window tests use GPUI's
+# test platform, which draws nothing, and the gallery, whose images are exact to the Mac that approved them, is compiled
+# only on macOS. mac.yml covers what only a Mac catches. A change to nothing but Markdown skips them.
 name: CI
 
 on:
@@ -124,6 +124,10 @@ jobs:
       - run: .github/install-linux-packages.sh
       # The tests make commits.
       - run: git config --global user.name ci && git config --global user.email ci@example.com
+      # A pinned version, moved by hand like the toolchain.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@0.9.151
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -135,7 +139,10 @@ jobs:
           # As in lint. Our own crates' test binaries each link all of GPUI, so they're over half of what's built.
           key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-test-deps-' || '' }}
-      - run: cargo test --workspace --locked
+      # nextest runs every test binary's tests in one pool, where `cargo test` runs one binary after another. It skips
+      # doc tests, so they run after it. .config/nextest.toml says how.
+      - run: cargo nextest run --profile ci --workspace --locked
+      - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
