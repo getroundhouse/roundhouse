@@ -43,6 +43,7 @@ jobs:
       # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
           version: 0.17.1
           use-cache: false
       - id: cache
