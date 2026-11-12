@@ -22,7 +22,7 @@ use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::around::Answer;
 
-const ICON: f32 = 15.0;
+const ICON: f32 = look::LINE_ICON;
 /// As tall as a line of body text and a little room, so calls in a row read as a list.
 pub(super) const HEIGHT: f32 = 28.0;
 /// The hover group of one line, which turns its icon into the way to open it.

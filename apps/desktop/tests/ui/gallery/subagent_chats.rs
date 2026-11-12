@@ -8,7 +8,8 @@ use protocol::model::SessionStatus;
 use serde_json::json;
 
 use super::events::{
-    replied, subagent_ended, subagent_started, taken, text, tool_result, tool_use, user_prompt, within,
+    replied, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result, tool_use, user_prompt,
+    within,
 };
 use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
@@ -163,8 +164,8 @@ fn reviewing(agent: &str) -> Vec<EventBody> {
 const REVIEW_PROMPT: &str = "Check that train.rs and depot.rs now use `may_pass`, and that the signal tests pass.";
 
 /// A subagent that searched while the agent read, its work interleaved with the agent's own, and a second one that
-/// checks the change, with the agent's word on when each started and ended, as the hub records it. With `working`, the
-/// second is still at its tests, and the agent waits on it.
+/// checks the change, with the agent's word on when each started and ended, and what was in the background, as the hub
+/// records it. With `working`, the second is still at its tests, and the agent waits on it.
 pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
     let find =
         json!({ "description": "Find checks for a stop signal", "subagent_type": "Explore", "prompt": FIND_PROMPT });
@@ -176,14 +177,17 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         text("msg-1", "I'll have an agent find them while I read the signal."),
         tool_use("msg-2", "toolu-1", "Agent", find),
         subagent_started("toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT),
+        subagents_listed(&[("toolu-1", "Find checks for a stop signal")]),
         tool_result("toolu-1", LAUNCHED),
     ];
     events.extend(finding("toolu-1"));
     events.extend([
         subagent_ended("toolu-1", REPORT),
+        subagents_listed(&[]),
         text("msg-4", "It found two. I'll change both to use `may_pass`, and have them checked."),
         tool_use("msg-5", "toolu-3", "Agent", review),
         subagent_started("toolu-3", "general-purpose", "Review the change", REVIEW_PROMPT),
+        subagents_listed(&[("toolu-3", "Review the change")]),
         tool_result("toolu-3", LAUNCHED),
     ]);
     events.extend(reviewing("toolu-3"));
@@ -196,6 +200,7 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         within("toolu-3", tool_result("toolu-s4", "test result: ok. 5 passed; 0 failed")),
         within("toolu-3", text("sub-9", checked)),
         subagent_ended("toolu-3", checked),
+        subagents_listed(&[]),
         text("msg-6", reply),
         replied(reply, 94, 0.41),
     ]);

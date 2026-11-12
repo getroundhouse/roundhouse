@@ -1,7 +1,8 @@
 //! A call that started a subagent: opened, it shows what the subagent was asked and its report, and none of its work,
-//! which is in the subagent tab. The button at the end of its line opens the tab, which sits at the far left, after
-//! the file tab, where `Ctrl-Tab` comes to it, names its chat in its band, and closes with `Cmd-W`, or with its chat.
-//! The chat holds its subagents' records until it closes, and its outline counts only the agent's own events.
+//! which is in the subagent tab. The button at the end of its line, or of its line in the background while it works
+//! there, opens the tab, which sits at the far left, after the file tab, where `Ctrl-Tab` comes to it, names its chat
+//! in its band, and closes with `Cmd-W`, or with its chat. The chat holds its subagents' records until it closes, and
+//! its outline counts only the agent's own events.
 
 #![cfg(test)]
 
@@ -112,6 +113,42 @@ fn the_button_to_the_subagent_tab_stays_on_a_line_with_a_long_title(cx: &mut Tes
         button.right(),
         line.right()
     );
+}
+
+/// A subagent at work in the background has a line at the chat's end, as all work there does, and the line ends with
+/// the button its call's line has, so the way to its tab is at hand however far up the chat its call is. What it's
+/// for gives way to the button, as on its call's line.
+#[gpui_kit::test]
+fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppContext) {
+    const LONG: &str =
+        "Find every place in the crates that checks whether a signal shows Stop, and say what each one does";
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let chat = ui.active_chat();
+    let done = stack.dir.path().join("done");
+    ui.input(&format!("agent-until:{}:{LONG}; say:done", done.display()));
+    ui.press("enter");
+    let named = || {
+        let tasks = stack.client().session_get(&chat).unwrap().background_tasks;
+        tasks.into_iter().find_map(|task| Some((task.id, task.call?)))
+    };
+    ui.wait("its task to name its call", |_| named().is_some());
+    let (task, call) = named().unwrap();
+    let open = SharedString::from(format!("background-open/{call}"));
+    ui.wait("the button on its line", |ui| ui.has(open.clone()));
+
+    let bounds = |ui: &mut Ui<'_>, id: SharedString| {
+        ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
+    };
+    let (button, words) = (bounds(&mut ui, open.clone()), bounds(&mut ui, format!("background-text/{task}").into()));
+    let its_call = ui.labelled(LONG)[0].bounds();
+    assert!(words.right() <= button.left(), "what it's for, to {:?}, ends before the button", words.right());
+    assert!(button.right() <= its_call.right(), "the button, to {:?}, is in the column", button.right());
+    ui.click(open);
+
+    ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
+    std::fs::write(&done, "").unwrap();
+    ui.wait("the subagent's work, in its tab", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
 }
 
 /// The subagent tab sits at the far left, as the file tab does, just after it, so neither moves however many chats are
