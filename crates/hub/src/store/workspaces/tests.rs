@@ -13,7 +13,7 @@ fn open() -> PullRequest {
         title: "T".to_string(),
         state: PrState::Open,
         is_draft: false,
-        base: Some("main".to_string()),
+        base: Some("main".into()),
         merge_state: protocol::model::MergeState::Clean,
         review: protocol::model::Review::NotRequired,
         checks: protocol::model::Checks { passed: 1, failed: 0, pending: 0 },

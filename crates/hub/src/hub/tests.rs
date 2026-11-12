@@ -32,7 +32,7 @@ pub(super) fn hub_in(dir: &Path) -> Arc<Hub> {
 /// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.
 pub(super) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
     let hub = hub_in(dir);
-    hub.store.workspace_ready(&"w".into(), "/w", "alder", "main", None).unwrap();
+    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     hub
 }
 

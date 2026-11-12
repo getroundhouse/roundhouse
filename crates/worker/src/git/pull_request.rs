@@ -6,7 +6,7 @@ use std::process::{Output, Stdio};
 
 use chrono::DateTime;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Checks, LeftQueue, Local, PrState, PullRequest, QueueState};
+use protocol::model::{BranchName, Checks, LeftQueue, Local, PrState, PullRequest, QueueState};
 use protocol::worker::RateLimit;
 use serde_json::Value;
 use tokio::process::Command;
@@ -145,7 +145,7 @@ fn parse_pull_request(json: &[u8]) -> Option<(PullRequest, Option<String>)> {
         title: value["title"].as_str().unwrap_or_default().to_string(),
         state: serde_json::from_value(value["state"].clone()).unwrap_or(PrState::Unknown),
         is_draft: value["isDraft"].as_bool().unwrap_or(false),
-        base: value["baseRefName"].as_str().map(str::to_string),
+        base: value["baseRefName"].as_str().map(BranchName::from),
         merge_state: serde_json::from_value(value["mergeStateStatus"].clone()).unwrap_or_default(),
         review: serde_json::from_value(value["reviewDecision"].clone()).unwrap_or_default(),
         checks: checks(&value["statusCheckRollup"]),

@@ -46,7 +46,7 @@ fn archiving_protects_uncommitted_work_keeps_the_branch_and_restoring_brings_it_
     wait_until("its files to be deleted", || left().is_ok_and(|left: Vec<_>| left == [".lock"]));
     assert_eq!(client.workspace_list(false).unwrap().len(), 0);
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
-    assert!(!git(&stack.repo(), &["branch", "--list", &workspace.branch]).is_empty());
+    assert!(!git(&stack.repo(), &["branch", "--list", workspace.branch.as_str()]).is_empty());
 
     // Archiving it again can't work, and force wouldn't change that.
     let err = client.workspace_archive(&workspace.id, false).unwrap_err();
@@ -75,7 +75,7 @@ fn archiving_keeps_a_branch_the_agent_renamed_and_restoring_finds_it() {
     wait_for_turn_end(&client, &session.id, 1);
 
     let archived = client.workspace_archive(&workspace.id, false).unwrap();
-    assert_eq!(archived.branch, "fix-the-login-bug");
+    assert_eq!(archived.branch.as_str(), "fix-the-login-bug");
     let restored = client.workspace_restore(&workspace.id).unwrap();
     let worktree = PathBuf::from(restored.path.unwrap());
     assert_eq!(git(&worktree, &["branch", "--show-current"]), "fix-the-login-bug");
@@ -113,7 +113,7 @@ fn status_and_diff_come_from_the_worker() {
     wait_for_turn_end(&client, &session.id, 1);
 
     let status = client.workspace_status(&workspace.id).unwrap();
-    assert_eq!(status.branch.as_deref(), Some(workspace.branch.as_str()));
+    assert_eq!(status.branch, Some(workspace.branch));
     let file = |path: &str| status.files.iter().find(|f| f.path == path).unwrap().status.clone();
     assert_eq!(file("a.txt"), ".M");
     assert_eq!(file("new.txt"), "??");
@@ -282,7 +282,7 @@ fn a_workspace_keeps_its_id_through_each_name_git_refuses_and_its_instance_takes
         match next_notice(&feed, "its next name, or its removal") {
             HubNotice::Workspace(renamed) => {
                 assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
-                assert_eq!(renamed.branch, renamed.name);
+                assert_eq!(renamed.branch.as_str(), renamed.name);
                 names.push(renamed.name);
             }
             HubNotice::Removed { record, .. } => break record,

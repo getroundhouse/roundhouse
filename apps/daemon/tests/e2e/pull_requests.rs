@@ -126,7 +126,7 @@ fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged
     gh.say(MERGED);
     client.workspace_pull_request(&workspace.id).unwrap();
     let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
-    let started_on = Head::Branch { name: BranchName::from(workspace.branch.as_str()) };
+    let started_on = Head::Branch { name: workspace.branch.clone() };
     assert_eq!(head(&client), Some(started_on), "known before it moves");
     gh.say(NONE);
 

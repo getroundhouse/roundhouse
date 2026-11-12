@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use super::BranchName;
+
 #[cfg(test)]
 mod tests;
 
@@ -29,7 +31,7 @@ pub struct PullRequest {
     pub is_draft: bool,
     /// The branch it merges into, such as `main`. `None` from a hub that doesn't say.
     #[serde(default)]
-    pub base: Option<String>,
+    pub base: Option<BranchName>,
     #[serde(default)]
     pub merge_state: MergeState,
     #[serde(default)]

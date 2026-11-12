@@ -63,14 +63,14 @@ pub enum WorkerRequest {
         repo_name: String,
         repo_path: String,
         workspace_name: String,
-        branch: String,
+        branch: BranchName,
         base_ref: Option<String>,
     },
     /// Puts the worktree back from its kept branch.
     RestoreWorkspace {
         repo_path: String,
         path: String,
-        branch: String,
+        branch: BranchName,
     },
     RemoveWorkspace {
         repo_path: String,
@@ -268,7 +268,7 @@ pub enum WorkerResponse {
     Ok,
     WorkspaceReady {
         path: String,
-        branch: String,
+        branch: BranchName,
         base_ref: String,
         #[serde(default)]
         warnings: Vec<String>,

@@ -148,7 +148,7 @@ fn the_next_hub_hears_of_a_branch_checked_out_while_there_was_none() {
     client.session_prompt(&session.id, "say:first", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
-    let started_on = Head::Branch { name: BranchName::from(workspace.branch.as_str()) };
+    let started_on = Head::Branch { name: workspace.branch.clone() };
     wait_until("the branches to be known", || head(&client) == Some(started_on.clone()));
     drop(client);
 

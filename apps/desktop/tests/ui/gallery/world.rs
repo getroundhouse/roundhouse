@@ -93,7 +93,7 @@ impl World {
             id: id.clone(),
             repo_id: repo.clone(),
             name: name.to_string(),
-            branch: name.to_string(),
+            branch: name.into(),
             base_ref: Some("origin/main".to_string()),
             path: Some(format!("/workspaces/{name}")),
             status: WorkspaceStatus::Ready,

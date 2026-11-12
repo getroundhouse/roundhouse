@@ -6,7 +6,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Branches, CommitId, GitDiff, GitFile, GitStatus};
+use protocol::model::{BranchName, Branches, CommitId, GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
 pub(crate) mod blob;
@@ -28,7 +28,7 @@ const MAX_UNTRACKED_BYTES: usize = 8 * 1024 * 1024;
 
 pub struct Prepared {
     pub path: String,
-    pub branch: String,
+    pub branch: BranchName,
     pub base_ref: String,
     pub warnings: Vec<String>,
     /// As the worktree was made, so its workspace is ready with them. `None` when they couldn't be read, which the
@@ -129,10 +129,10 @@ pub async fn prepare_workspace(
     repo_name: &str,
     repo_path: &str,
     workspace_name: &str,
-    branch: &str,
+    branch: &BranchName,
     base_ref: Option<&str>,
 ) -> Result<Prepared, ApiError> {
-    reject_option_like(branch, "a branch name")?;
+    reject_option_like(branch.as_str(), "a branch name")?;
     let repo = PathBuf::from(repo_path);
     let path = root.join(repo_name).join(workspace_name);
     if path.exists() {
@@ -141,7 +141,7 @@ pub async fn prepare_workspace(
     if ref_exists(&repo, &format!("refs/heads/{branch}")).await? {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("branch {branch} already exists")));
     }
-    if !git(&repo, &["check-ref-format", "--branch", branch]).await?.success {
+    if !git(&repo, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
     }
 
@@ -175,12 +175,12 @@ pub async fn prepare_workspace(
     let path_str = path.to_string_lossy().into_owned();
     // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or
     // `git pull` from the workspace would act on main.
-    git_ok(&repo, &["worktree", "add", "--no-track", "-b", branch, &path_str, &base]).await?;
+    git_ok(&repo, &["worktree", "add", "--no-track", "-b", branch.as_str(), &path_str, &base]).await?;
     let branches = branches::read_now(&path).await.ok();
-    Ok(Prepared { path: path_str, branch: branch.to_string(), base_ref: base, warnings, branches })
+    Ok(Prepared { path: path_str, branch: branch.clone(), base_ref: base, warnings, branches })
 }
 
-pub async fn restore_workspace(repo_path: &str, path: &str, branch: &str) -> Result<(), ApiError> {
+pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName) -> Result<(), ApiError> {
     let repo = PathBuf::from(repo_path);
     if Path::new(path).exists() {
         return Err(ApiError::new(ErrorCode::Conflict, format!("{path} already exists")));
@@ -190,7 +190,7 @@ pub async fn restore_workspace(repo_path: &str, path: &str, branch: &str) -> Res
     }
     // A worktree deleted outside this app stays registered, and would block re-adding this path.
     git_ok(&repo, &["worktree", "prune"]).await?;
-    git_ok(&repo, &["worktree", "add", path, branch]).await?;
+    git_ok(&repo, &["worktree", "add", path, branch.as_str()]).await?;
     Ok(())
 }
 
@@ -217,7 +217,9 @@ fn parse_status(output: &str) -> GitStatus {
         if let Some(header) = entry.strip_prefix("# ") {
             let mut parts = header.split(' ');
             match parts.next() {
-                Some("branch.head") => status.branch = parts.next().filter(|b| *b != "(detached)").map(String::from),
+                Some("branch.head") => {
+                    status.branch = parts.next().filter(|b| *b != "(detached)").map(BranchName::from);
+                }
                 Some("branch.oid") => status.head = parts.next().filter(|o| *o != "(initial)").map(String::from),
                 Some("branch.ab") => {
                     let count = |part: Option<&str>| part.and_then(|p| p[1..].parse().ok()).unwrap_or(0);

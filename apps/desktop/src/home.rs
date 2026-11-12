@@ -130,7 +130,9 @@ fn listed(
 ) -> Vec<usize> {
     let search = search.trim().to_lowercase();
     let matches = |w: &Workspace| {
-        search.is_empty() || w.label().to_lowercase().contains(&search) || w.branch.to_lowercase().contains(&search)
+        search.is_empty()
+            || w.label().to_lowercase().contains(&search)
+            || w.branch.as_str().to_lowercase().contains(&search)
     };
     let mut listed: Vec<usize> = (0..workspaces.len())
         .filter(|&i| {

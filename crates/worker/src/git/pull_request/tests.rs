@@ -19,7 +19,7 @@ fn a_pull_request_parses_from_what_gh_prints() {
 
     let (pr, head) = parse_pull_request(json).unwrap();
 
-    assert_eq!((pr.number, pr.state, pr.is_draft, pr.base.as_deref()), (12, PrState::Open, false, Some("main")));
+    assert_eq!((pr.number, pr.state, pr.is_draft, pr.base), (12, PrState::Open, false, Some("main".into())));
     assert_eq!((pr.merge_state, pr.review), (MergeState::Blocked, Review::NotRequired));
     assert_eq!(pr.checks, Checks { passed: 2, failed: 3, pending: 2 });
     assert_eq!(head.as_deref(), Some("abc123"));

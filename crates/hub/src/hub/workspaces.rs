@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId,
-    WorkspaceStatus,
+    BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace,
+    WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -121,7 +121,7 @@ impl Hub {
             id: id.clone(),
             repo_id: repo.id.clone(),
             name: String::new(),
-            branch: String::new(),
+            branch: BranchName::from(""),
             base_ref: None,
             path: None,
             status: WorkspaceStatus::Creating,
@@ -143,7 +143,7 @@ impl Hub {
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {
-            (workspace.name, workspace.branch) = (name.clone(), name.clone());
+            (workspace.name, workspace.branch) = (name.clone(), BranchName::from(name.as_str()));
             let (record, request) = (workspace.clone(), client_request_id.clone());
             match self.blocking(move |store| store.insert_workspace(&record, request.as_ref())).await? {
                 Some(Made::New(made)) => {

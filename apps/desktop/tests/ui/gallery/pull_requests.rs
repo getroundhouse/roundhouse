@@ -38,7 +38,7 @@ pub(crate) fn open() -> PullRequest {
         title: "Queue prompts with Cmd-Enter".to_string(),
         state: PrState::Open,
         is_draft: false,
-        base: Some("main".to_string()),
+        base: Some("main".into()),
         merge_state: MergeState::Clean,
         review: Review::NotRequired,
         checks: Checks { passed: 9, failed: 0, pending: 0 },

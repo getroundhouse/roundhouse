@@ -32,7 +32,7 @@ pub(crate) fn new_repo(dir: &Path) -> PathBuf {
 }
 
 async fn prepare(root: &Path, repo: &Path, name: &str, base: Option<&str>) -> Result<Prepared, ApiError> {
-    prepare_workspace(root, "repo", repo.to_str().unwrap(), name, name, base).await
+    prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &name.into(), base).await
 }
 
 #[tokio::test]
@@ -93,13 +93,14 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     // Same path and branch.
     assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
     // Same branch, different path.
-    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", "alder", None).await.err().unwrap();
+    let err =
+        prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", &"alder".into(), None).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::NameTaken);
     let err = prepare(&root, &repo, "cedar", Some("--upload-pack=evil")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "x", "--bad", None).await.err().unwrap();
+    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "x", &"--bad".into(), None).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
@@ -114,7 +115,7 @@ async fn status_reports_each_kind_of_change_including_renames_and_odd_names() {
     run(path, &["mv", ".gitignore", "renamed"]);
 
     let status = status(&prepared.path).await.unwrap();
-    assert_eq!(status.branch.as_deref(), Some("alder"));
+    assert_eq!(status.branch, Some("alder".into()));
     assert!(status.head.is_some());
     let find = |p: &str| status.files.iter().find(|f| f.path == p).unwrap_or_else(|| panic!("{p}: {:?}", status.files));
     assert_eq!(find("a.txt").status, ".M");

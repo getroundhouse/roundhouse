@@ -8,7 +8,7 @@ fn workspace(name: &str, created_at_ms: i64) -> Workspace {
         id: name.into(),
         repo_id: "r".into(),
         name: name.to_string(),
-        branch: name.to_string(),
+        branch: name.into(),
         base_ref: None,
         path: None,
         status: WorkspaceStatus::Ready,

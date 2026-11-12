@@ -8,7 +8,7 @@ fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64
         id: name.into(),
         repo_id: repo.into(),
         name: name.to_string(),
-        branch: format!("branch-{name}"),
+        branch: format!("branch-{name}").into(),
         base_ref: None,
         path: None,
         status,
