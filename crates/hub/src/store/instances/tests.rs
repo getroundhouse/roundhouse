@@ -46,7 +46,8 @@ fn a_workspaces_instance_is_recorded_with_it_before_its_made_and_until_its_destr
     assert_eq!(stages(&store), [("w".into(), InstanceStage::Ready)]);
 }
 
-/// As for a workspace being made whose instance is made again under another name.
+/// As for a workspace being made whose instance is made again under another name. It's recorded again at the time it's
+/// made again, which can be the millisecond `w` was, so it's found by its ID rather than by where it's listed.
 #[test]
 fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
     let dir = tempfile::tempdir().unwrap();
@@ -61,8 +62,9 @@ fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
 
     assert!(while_recorded.is_err(), "{while_recorded:?}");
     let recorded = store.recorded_instances().unwrap();
-    assert_eq!((recorded[1].id.as_str(), recorded[1].provider.as_str()), ("birch-instance", "incus"));
-    assert_eq!(recorded[1].stage, InstanceStage::Creating);
+    assert_eq!(recorded.len(), 2, "{recorded:?}");
+    let birch = recorded.iter().find(|i| i.id.as_str() == "birch-instance").expect("recorded again");
+    assert_eq!((birch.provider.as_str(), birch.stage), ("incus", InstanceStage::Creating));
 }
 
 #[test]
