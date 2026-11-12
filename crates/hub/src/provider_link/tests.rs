@@ -64,12 +64,12 @@ async fn scripted(stdio: DuplexStream, answers: Vec<Option<ProviderOutcome>>, as
 }
 
 fn hello() -> ProviderOutcome {
-    ProviderOutcome::Response(ProviderResponse::Hello {
+    ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
         protocol_version: PROVIDER_PROTOCOL_VERSION,
         adapter: "scripted".into(),
         build: "test".into(),
         capabilities: Capabilities { targets: vec![], features: vec![Feature::Snapshots] },
-    })
+    }))
 }
 
 fn ok() -> ProviderOutcome {
@@ -168,18 +168,35 @@ async fn a_hello_that_the_adapter_refuses_fails_whatever_needed_it_as_io() {
 /// One that chose a version this hub doesn't speak, which no adapter should, since an adapter chooses one both speak.
 #[tokio::test]
 async fn an_adapter_that_chose_another_version_is_not_used() {
-    let chose_another = ProviderOutcome::Response(ProviderResponse::Hello {
+    let chose_another = ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
         protocol_version: PROVIDER_PROTOCOL_VERSION + 1,
         adapter: "scripted".into(),
         build: "test".into(),
         capabilities: Capabilities::default(),
-    });
+    }));
     let open =
         opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(chose_another.clone())], Arc::default()));
     let provider = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, open);
 
     let said = provider.say_hello().await;
 
+    assert!(matches!(&said, Err(ProviderError::Io { .. })), "{said:?}");
+}
+
+#[tokio::test]
+async fn a_reply_of_another_kind_than_its_request_names_fails_it() {
+    let answers = vec![Some(hello()), Some(ok()), Some(ok())];
+    let open = opening(Arc::default(), move |_, stdio| scripted(stdio, answers.clone(), Arc::default()));
+    let provider = started(open).await;
+    let greeted = opening(Arc::default(), |_, stdio| scripted(stdio, vec![Some(ok())], Arc::default()));
+    let greeted = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, greeted);
+
+    let listed = provider.list().await;
+    let stopped = provider.stop(&"i".into()).await;
+    let said = greeted.say_hello().await;
+
+    assert!(matches!(&listed, Err(ProviderError::Io { .. })), "{listed:?}");
+    assert!(stopped.is_ok(), "{stopped:?}");
     assert!(matches!(&said, Err(ProviderError::Io { .. })), "{said:?}");
 }
 

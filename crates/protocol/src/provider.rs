@@ -5,15 +5,50 @@
 //! Every request is safe to repeat. `Hello` and `List` get the same answer again, and every other request names
 //! its instance and has the same effect however often it's sent. So the hub sends again whatever an adapter that
 //! restarted didn't answer.
+//!
+//! Each request is a type of its own, which says what the adapter answers it with, as [`Request`] does, so a hub reads
+//! each reply as that, and one of any other kind fails in one place. On the wire, a request's fields sit beside its
+//! `method`, and a reply's beside its `result`.
 
 use serde::{Deserialize, Serialize};
 
 use crate::client::Outcome;
-use crate::model::{HubId, InstanceId, WorkerTarget};
+use crate::model::InstanceId;
 
 /// The provider protocol's own version, apart from the client and worker protocols', so a break in one doesn't break
 /// the other.
 pub const PROVIDER_PROTOCOL_VERSION: u32 = 1;
+
+mod hello;
+mod instances;
+
+pub use hello::{Capabilities, Feature, Hello, HelloReply};
+pub use instances::{
+    Connect, Create, Destroy, Instance, InstanceState, Instances, Kill, List, MakeBaseImage, Size, Start, Stop,
+    WorkerBinary, WorkerCommand,
+};
+
+/// A request to a provider's adapter, which names what the adapter answers it with.
+pub trait Request {
+    type Reply: Reply;
+
+    /// It among every other request, as it goes on the wire.
+    fn into_request(self) -> ProviderRequest;
+}
+
+/// What an adapter answers a request with, read from the response it came as.
+pub trait Reply: Sized {
+    /// Gives the response back when it's of another kind, for whoever asked to say so.
+    fn read(response: ProviderResponse) -> Result<Self, ProviderResponse>;
+}
+
+/// What a request that only does something is answered with, once it's done.
+impl Reply for () {
+    fn read(response: ProviderResponse) -> Result<Self, ProviderResponse> {
+        let ProviderResponse::Ok = response else { return Err(response) };
+        Ok(())
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ProviderCall {
@@ -21,64 +56,34 @@ pub struct ProviderCall {
     pub request: ProviderRequest,
 }
 
+/// Every request. Each says on its type what it does and what it's answered with. One with no fields is a variant with
+/// none, rather than one holding its type, since serde would then refuse it with a field a newer hub added, and its
+/// type is only for saying what it's answered with.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum ProviderRequest {
-    /// Always first. Names the versions the hub speaks, newest and oldest, and the hub whose instances the
-    /// adapter works with from then on. The same hub's hello again gets the same answer, and another hub's is
-    /// refused.
-    Hello { protocol_version: u32, oldest_protocol_version: u32, hub_id: HubId, build: String },
-    /// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there.
-    Create {
-        instance_id: InstanceId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        from: Option<InstanceId>,
-        /// Ignored by a provider without [`Feature::Sizes`].
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        size: Option<Size>,
-        /// What the instance is called in the provider's own tools, such as `roundhouse-holly`.
-        display_name: String,
-    },
-    /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of
-    /// `workers` built for the instance's target, if the instance holds a different one, so a worker always runs
-    /// its hub's build.
-    Start { instance_id: InstanceId, workers: Vec<WorkerBinary> },
-    /// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake. Putting it to sleep
-    /// is a request of its own, which is yet to come. Does nothing to one that's stopped or gone. The hub closes its
-    /// own worker's stream and gives it time to stop first.
-    Stop { instance_id: InstanceId },
-    /// Like `Stop`, without giving a worker that isn't responding time to finish.
-    Kill { instance_id: InstanceId },
-    /// Removes it, or does nothing if it's gone. A base image can be destroyed while instances made from it run.
-    Destroy { instance_id: InstanceId },
-    /// Every instance the adapter holds for this hub.
+    Hello(Hello),
+    Create(Create),
+    Start(Start),
+    Stop(Stop),
+    Kill(Kill),
+    Destroy(Destroy),
+    /// See [`List`].
     List,
-    /// The command whose stdin and stdout are the worker's stream. The hub runs it, so the adapter is never in
-    /// the stream's way. It can be asked again.
-    Connect { instance_id: InstanceId },
-    /// Turns a stopped instance into a base image, which other instances are made from and which can't start
-    /// again, or does nothing if it's one already. Refused with `Unsupported` by a provider without
-    /// [`Feature::BaseImages`].
-    MakeBaseImage { instance_id: InstanceId },
+    Connect(Connect),
+    MakeBaseImage(MakeBaseImage),
     /// A request from a newer hub, which the adapter refuses with `Unsupported`.
     #[serde(other)]
     Unknown,
 }
 
+/// Every reply, each read as the type of its own that a request names.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ProviderResponse {
-    /// The version chosen, which is the newest both sides speak.
-    Hello {
-        protocol_version: u32,
-        adapter: String,
-        build: String,
-        capabilities: Capabilities,
-    },
+    Hello(HelloReply),
     Ok,
-    Instances {
-        instances: Vec<Instance>,
-    },
+    Instances(Instances),
     Command(WorkerCommand),
 }
 
@@ -117,78 +122,23 @@ pub enum ProviderEvent {
     Unknown,
 }
 
-/// What a provider can do, declared at hello.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct Capabilities {
-    /// Of the workers its instances run.
-    #[serde(default)]
-    pub targets: Vec<WorkerTarget>,
-    /// Whatever an older adapter leaves out, it can't do.
-    #[serde(default)]
-    pub features: Vec<Feature>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl Capabilities {
-    pub fn has(&self, feature: Feature) -> bool {
-        self.features.contains(&feature)
+    /// The rest are each the variant that holds them, which the compiler checks.
+    #[test]
+    fn a_request_with_no_fields_is_sent_as_its_own_method() {
+        assert_eq!(serde_json::to_string(&List.into_request()).unwrap(), r#"{"method":"list"}"#);
     }
-}
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Feature {
-    /// A stopped instance keeps its files.
-    FilesystemSurvivesStop,
-    /// It takes the `size` a `Create` asks for.
-    Sizes,
-    /// It answers `MakeBaseImage`, and makes instances `from` a base image.
-    BaseImages,
-    Snapshots,
-    #[serde(other)]
-    Unknown,
-}
+    /// The rest each read the variant that holds them, which the compiler checks.
+    #[test]
+    fn a_reply_with_no_fields_reads_as_what_it_says_and_any_other_is_given_back() {
+        let instances = ProviderResponse::Instances(Instances { instances: vec![] });
 
-/// What an instance is given. A provider takes the nearest it offers.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Size {
-    pub cpus: u32,
-    pub memory_mib: u32,
-}
-
-/// A worker binary of the hub's build, on the hub's machine, where the adapter runs too.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct WorkerBinary {
-    pub target: WorkerTarget,
-    pub path: String,
-    /// Of the file, in hex, so the adapter can tell whether an instance already holds it.
-    pub sha256: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Instance {
-    pub instance_id: InstanceId,
-    pub state: InstanceState,
-    #[serde(default)]
-    pub base_image: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum InstanceState {
-    Stopped,
-    Starting,
-    Running,
-    Stopping,
-    #[serde(other)]
-    Unknown,
-}
-
-/// A program and its arguments, so a command can't be empty, and what to add to its environment.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct WorkerCommand {
-    pub program: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: Vec<(String, String)>,
+        assert_eq!(<()>::read(ProviderResponse::Ok), Ok(()));
+        assert_eq!(<()>::read(instances.clone()), Err(instances.clone()));
+        assert_eq!(WorkerCommand::read(instances.clone()), Err(instances));
+    }
 }

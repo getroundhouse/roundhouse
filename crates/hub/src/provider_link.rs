@@ -13,7 +13,8 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
-    ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
+    Connect, Create, Destroy, Hello, HelloReply, Kill, List, MakeBaseImage, ProviderCall, ProviderEvent, ProviderFrame,
+    ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request, Start, Stop,
 };
 use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -106,38 +107,38 @@ impl AdapterProvider {
         let opened =
             (self.open)().map_err(|e| ProviderError::io(format!("starting provider {}'s adapter", self.name), e))?;
         let connection = Connection::start(opened);
-        let hello = ProviderRequest::Hello {
+        let hello = Hello {
             protocol_version: versions::PROVIDERS.newest,
             oldest_protocol_version: versions::PROVIDERS.oldest,
             hub_id: self.hub_id.clone(),
             build: self.build.version().to_string(),
-        };
+        }
+        .into_request();
         let failed = |e: io::Error| ProviderError::io(format!("saying hello to provider {}", self.name), e);
         let answer = tokio::select! {
             answer = tokio::time::timeout(HELLO_TIMEOUT, connection.call(&hello)) => answer.map_err(|_| failed(timed_out()))?,
             _ = shut.wait_for(|shut| *shut) => return Err(shutting_down()),
         };
-        match answer?.ok_or_else(|| failed(exited()))? {
-            ProviderOutcome::Response(ProviderResponse::Hello { protocol_version, adapter, build, capabilities })
-                if versions::PROVIDERS.speaks(protocol_version) =>
-            {
-                info!(provider = self.name, adapter, build, "a provider's adapter said hello");
-                *self.capabilities.lock() = capabilities;
-            }
-            ProviderOutcome::Response(ProviderResponse::Hello { protocol_version, .. }) => {
-                let speaks = versions::PROVIDERS;
-                let chose = format!("the adapter chose protocol {protocol_version}, and this hub speaks {speaks}");
-                return Err(failed(io::Error::other(chose)));
-            }
-            ProviderOutcome::Response(other) => return Err(unexpected(&other)),
+        let outcome = answer?.ok_or_else(|| failed(exited()))?;
+        let HelloReply { protocol_version, adapter, build, capabilities } = match outcome {
+            ProviderOutcome::Response(response) => HelloReply::read(response).map_err(|other| unexpected(&other))?,
             // Not with the adapter's own code, which would read as the answer to whatever needed the hello.
             ProviderOutcome::Error(e) => return Err(failed(io::Error::other(e.message))),
+        };
+        if !versions::PROVIDERS.speaks(protocol_version) {
+            let speaks = versions::PROVIDERS;
+            let chose = format!("the adapter chose protocol {protocol_version}, and this hub speaks {speaks}");
+            return Err(failed(io::Error::other(chose)));
         }
+        info!(provider = self.name, adapter, build, "a provider's adapter said hello");
+        *self.capabilities.lock() = capabilities;
         *current = Some(connection.clone());
         Ok(connection)
     }
 
-    async fn call(&self, request: ProviderRequest) -> Result<ProviderResponse, ProviderError> {
+    /// What the adapter answers `request` with, which fails here if it's of another kind than the request names.
+    async fn call<R: Request>(&self, request: R) -> Result<R::Reply, ProviderError> {
+        let request = request.into_request();
         let failed = |e: io::Error| ProviderError::io(format!("asking provider {}", self.name), e);
         let mut asked_again = false;
         loop {
@@ -146,7 +147,9 @@ impl AdapterProvider {
                 .await
                 .map_err(|_| failed(timed_out()))?;
             match answer? {
-                Some(ProviderOutcome::Response(response)) => return Ok(response),
+                Some(ProviderOutcome::Response(response)) => {
+                    return R::Reply::read(response).map_err(|other| unexpected(&other));
+                }
                 Some(ProviderOutcome::Error(e)) => return Err(ProviderError::Adapter(e)),
                 None if !asked_again => {
                     warn!(provider = self.name, "a provider's adapter exited before answering, so asking a new one");
@@ -154,15 +157,6 @@ impl AdapterProvider {
                 }
                 None => return Err(failed(exited())),
             }
-        }
-    }
-
-    async fn call_ok(&self, request: ProviderRequest) -> Result<(), ProviderError> {
-        match self.call(request).await? {
-            ProviderResponse::Ok => Ok(()),
-            other @ (ProviderResponse::Hello { .. }
-            | ProviderResponse::Instances { .. }
-            | ProviderResponse::Command(_)) => Err(unexpected(&other)),
         }
     }
 }
@@ -309,45 +303,35 @@ impl Provider for AdapterProvider {
         display_name: &str,
     ) -> Result<(), ProviderError> {
         let (instance_id, from, display_name) = (instance_id.clone(), from.cloned(), display_name.to_string());
-        self.call_ok(ProviderRequest::Create { instance_id, from, size, display_name }).await
+        self.call(Create { instance_id, from, size, display_name }).await
     }
 
     async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError> {
-        self.call_ok(ProviderRequest::Start { instance_id: instance_id.clone(), workers: workers.to_vec() }).await
+        self.call(Start { instance_id: instance_id.clone(), workers: workers.to_vec() }).await
     }
 
     async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call_ok(ProviderRequest::Stop { instance_id: instance_id.clone() }).await
+        self.call(Stop { instance_id: instance_id.clone() }).await
     }
 
     async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call_ok(ProviderRequest::Kill { instance_id: instance_id.clone() }).await
+        self.call(Kill { instance_id: instance_id.clone() }).await
     }
 
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call_ok(ProviderRequest::Destroy { instance_id: instance_id.clone() }).await
+        self.call(Destroy { instance_id: instance_id.clone() }).await
     }
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
-        match self.call(ProviderRequest::List).await? {
-            ProviderResponse::Instances { instances } => Ok(instances),
-            other @ (ProviderResponse::Hello { .. } | ProviderResponse::Ok | ProviderResponse::Command(_)) => {
-                Err(unexpected(&other))
-            }
-        }
+        Ok(self.call(List).await?.instances)
     }
 
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
-        match self.call(ProviderRequest::Connect { instance_id: instance_id.clone() }).await? {
-            ProviderResponse::Command(command) => Ok(command),
-            other @ (ProviderResponse::Hello { .. } | ProviderResponse::Ok | ProviderResponse::Instances { .. }) => {
-                Err(unexpected(&other))
-            }
-        }
+        self.call(Connect { instance_id: instance_id.clone() }).await
     }
 
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call_ok(ProviderRequest::MakeBaseImage { instance_id: instance_id.clone() }).await
+        self.call(MakeBaseImage { instance_id: instance_id.clone() }).await
     }
 }
 
