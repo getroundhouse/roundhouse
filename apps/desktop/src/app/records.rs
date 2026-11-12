@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use client_core::RecordsFeed;
 use gpui_kit::Context;
-use protocol::model::{Record, WorkspaceId};
+use protocol::model::{Record, Session, WorkspaceId};
 
 use super::AppView;
 use crate::prompt_cache;
@@ -23,21 +23,21 @@ impl AppView {
     /// Brings what's shown up to date with client-core's copy of the records, and tells each pane what
     /// it holds for its workspace.
     pub(super) fn refresh(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
-        let (repos, workspaces, sessions, mut comments, mut accounts) = feed.read(|records| {
-            let sessions = records.sessions();
-            let accounts: HashMap<WorkspaceId, _> =
-                sessions.iter().map(|(id, its)| (id.clone(), accounts_named(records, its))).collect();
-            (records.repos(), records.workspaces(), sessions, records.comments(), accounts)
-        });
+        let records = feed.snapshot();
+        let workspaces = records.workspaces().to_vec();
         self.drop_hidden_panes(&workspaces, cx);
         for (id, pane) in &self.panes {
-            let Some(workspace) = workspaces.iter().find(|w| &w.id == id).cloned() else { continue };
-            let its_sessions = sessions.get(id).cloned().unwrap_or_default();
-            let its_comments = comments.remove(id).unwrap_or_default();
-            let its_accounts = accounts.remove(id).unwrap_or_default();
+            let Some(workspace) = records.workspace(id).cloned() else { continue };
+            let its_sessions = records.sessions(id);
+            let (its_comments, its_accounts) = (records.comments(id).to_vec(), accounts_named(&records, its_sessions));
+            let its_sessions = its_sessions.to_vec();
             pane.update(cx, |p, cx| p.set_records(workspace, its_sessions, its_comments, its_accounts, cx));
         }
-        self.repos = repos;
+        let mut sessions: HashMap<WorkspaceId, Vec<Session>> = HashMap::new();
+        for session in records.every_session() {
+            sessions.entry(session.workspace_id.clone()).or_default().push(session.clone());
+        }
+        self.repos = records.repos().to_vec();
         self.workspaces = workspaces;
         self.sessions = sessions;
         let still_there =

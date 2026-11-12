@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
-use client_core::records::HubRecords;
+use client_core::records::Snapshot;
 
 use gpui_kit::base::plot::shape::{Arc, ArcData};
 use gpui_kit::component::ActiveTheme as _;
@@ -34,9 +34,9 @@ const LIMIT: Pixels = px(4.);
 const BETWEEN_LIMITS: Pixels = px(4.);
 
 /// The records of the accounts `sessions` name, from client-core's copy, for a pane to draw them from.
-pub(crate) fn accounts_named(records: &HubRecords, sessions: &[Session]) -> HashMap<AccountId, Account> {
+pub(crate) fn accounts_named(records: &Snapshot, sessions: &[Session]) -> HashMap<AccountId, Account> {
     let named = sessions.iter().filter_map(|session| session.account.as_ref());
-    named.filter_map(|id| Some((id.clone(), records.account(id)?))).collect()
+    named.filter_map(|id| Some((id.clone(), records.account(id)?.clone()))).collect()
 }
 
 /// The account the chat showing runs under, as its record says, with each of its limits there's something true to

@@ -5,7 +5,10 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{AgentKind, LimitWindow, SessionId, SessionStatus, Title, TitleSource, UsageLimit};
+use protocol::model::{
+    Account, AgentKind, HubSettings, LimitWindow, Session, SessionId, SessionStatus, Title, TitleSource, UsageLimit,
+    WorkspaceDraft,
+};
 
 use super::*;
 
@@ -97,11 +100,18 @@ impl Hub {
         };
     }
 
-    fn now(&self) -> HashMap<WorkspaceId, Vec<Session>> {
+    fn now(&self) -> Vec<Session> {
         let mut now = HubRecords::default();
         now.apply_list(self.lists.last().unwrap().clone());
-        now.sessions()
+        sessions(&now)
     }
+}
+
+/// Every session held, as a view would read them, by ID.
+fn sessions(records: &HubRecords) -> Vec<Session> {
+    let mut sessions: Vec<Session> = records.snapshot().every_session().cloned().collect();
+    sessions.sort_by(|a, b| a.id.cmp(&b.id));
+    sessions
 }
 
 fn changes() -> impl Strategy<Value = Vec<(u8, u8)>> {
@@ -151,7 +161,7 @@ proptest! {
             hub.deliver(&mut records, delivery);
         }
 
-        prop_assert_eq!(records.sessions(), hub.now());
+        prop_assert_eq!(sessions(&records), hub.now());
     }
 
     /// A client that missed notices catches up with one list.
@@ -164,7 +174,7 @@ proptest! {
         }
         hub.deliver(&mut records, Delivery::List(hub.lists.len() - 1));
 
-        prop_assert_eq!(records.sessions(), hub.now());
+        prop_assert_eq!(sessions(&records), hub.now());
     }
 
     /// A hub without revisions: subscribe, list, then take the notices that queued since, in order,
@@ -184,7 +194,7 @@ proptest! {
             hub.deliver(&mut records, Delivery::Notice(at));
         }
 
-        prop_assert_eq!(records.sessions(), hub.now());
+        prop_assert_eq!(sessions(&records), hub.now());
     }
 }
 
@@ -195,18 +205,18 @@ fn settings(keep_awake: bool, rev: u64) -> HubSettings {
 #[test]
 fn a_hubs_settings_are_a_record_like_the_rest() {
     let mut held = HubRecords::default();
-    assert_eq!(held.hub_settings(), None);
+    assert_eq!(held.snapshot().hub_settings().cloned(), None);
 
     assert!(held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(2), ..Records::default() }));
     assert!(held.apply_notice(HubNotice::HubSettings(settings(false, 5))));
     assert!(!held.apply_notice(HubNotice::HubSettings(settings(true, 4))), "an older copy that arrives late");
 
-    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
     // A list from before the change, and one from after it, as a reconnect brings.
     held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(3), ..Records::default() });
-    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
     held.apply_list(Records { hub_settings: Some(settings(false, 5)), rev: Rev::new(6), ..Records::default() });
-    assert_eq!(held.hub_settings(), Some(settings(false, 5)));
+    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
 }
 
 #[test]
@@ -215,7 +225,7 @@ fn a_hub_from_before_it_kept_settings_has_none() {
 
     held.apply_list(Records { rev: Rev::new(3), ..Records::default() });
 
-    assert_eq!(held.hub_settings(), None);
+    assert_eq!(held.snapshot().hub_settings().cloned(), None);
 }
 
 fn dialog(text: &str, rev: u64) -> WorkspaceDraft {
@@ -225,15 +235,23 @@ fn dialog(text: &str, rev: u64) -> WorkspaceDraft {
 #[test]
 fn whats_in_the_new_workspace_dialog_is_a_record_like_the_rest() {
     let mut held = HubRecords::default();
-    assert_eq!(held.workspace_draft(), None, "from a hub from before it kept one, and until the list has arrived");
+    assert_eq!(
+        held.snapshot().workspace_draft().cloned(),
+        None,
+        "from a hub from before it kept one, and until the list has arrived"
+    );
 
     assert!(held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(2), ..Records::default() }));
     assert!(held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix the login", 5))));
     assert!(!held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix", 4))), "an older copy that arrives late");
 
-    assert_eq!(held.workspace_draft(), Some(dialog("fix the login", 5)));
+    assert_eq!(held.snapshot().workspace_draft().cloned(), Some(dialog("fix the login", 5)));
     held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(3), ..Records::default() });
-    assert_eq!(held.workspace_draft(), Some(dialog("fix the login", 5)), "a list from before the change");
+    assert_eq!(
+        held.snapshot().workspace_draft().cloned(),
+        Some(dialog("fix the login", 5)),
+        "a list from before the change"
+    );
 }
 
 fn account(id: &str, used_percent: u8, rev: u64) -> Account {
@@ -252,16 +270,20 @@ fn account(id: &str, used_percent: u8, rev: u64) -> Account {
 #[test]
 fn each_account_is_a_record_like_the_rest() {
     let mut held = HubRecords::default();
-    assert_eq!(held.account(&"ada".into()), None);
+    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), None);
 
     let listed = vec![account("ada", 4, 2), account("grace", 80, 3)];
     assert!(held.apply_list(Records { accounts: listed, rev: Rev::new(3), ..Records::default() }));
     assert!(held.apply_notice(HubNotice::Account(account("ada", 9, 5))));
     assert!(!held.apply_notice(HubNotice::Account(account("ada", 6, 4))), "an older copy that arrives late");
 
-    assert_eq!(held.account(&"ada".into()), Some(account("ada", 9, 5)));
-    assert_eq!(held.account(&"grace".into()), Some(account("grace", 80, 3)), "another account is its own");
+    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), Some(account("ada", 9, 5)));
+    assert_eq!(
+        held.snapshot().account(&"grace".into()).cloned(),
+        Some(account("grace", 80, 3)),
+        "another account is its own"
+    );
     // A list from before the change, as a reconnect can bring.
     held.apply_list(Records { accounts: vec![account("ada", 4, 2)], rev: Rev::new(4), ..Records::default() });
-    assert_eq!(held.account(&"ada".into()), Some(account("ada", 9, 5)));
+    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), Some(account("ada", 9, 5)));
 }

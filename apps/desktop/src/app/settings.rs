@@ -1,6 +1,5 @@
 //! Showing Settings in place of the sidebar and the workspace, and going back.
 
-use client_core::records::HubRecords;
 use gpui_kit::{Context, FocusHandle, Window};
 
 use crate::settings::OfHub;
@@ -18,7 +17,7 @@ impl AppView {
     /// before it kept any.
     pub(super) fn settings_of_hub(&self) -> Option<OfHub> {
         let client = self.client()?;
-        let settings = self.feed.as_ref()?.read(HubRecords::hub_settings)?;
+        let settings = self.feed.as_ref()?.snapshot().hub_settings()?.clone();
         Some(OfHub { settings, client })
     }
 

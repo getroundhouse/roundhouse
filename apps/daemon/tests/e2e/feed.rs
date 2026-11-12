@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use client_core::records::HubRecords;
+use client_core::records::{HubRecords, Snapshot};
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{
@@ -183,17 +183,19 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     client.comment_delete(&removed.id).unwrap();
 
     // Everything the feed announces. A session's newest event moves without a notice, so it's left out.
-    let shown = |records: &HubRecords| {
-        let mut sessions = records.sessions();
-        for session in sessions.values_mut().flatten() {
+    let shown = |records: &Snapshot| {
+        let workspaces = records.workspaces().to_vec();
+        let mut sessions: Vec<_> = workspaces.iter().map(|w| records.sessions(&w.id).to_vec()).collect();
+        for session in sessions.iter_mut().flatten() {
             (session.last_seq, session.updated_at_ms) = (0, 0);
         }
-        (records.repos(), records.workspaces(), sessions, records.comments())
+        let comments: Vec<_> = workspaces.iter().map(|w| records.comments(&w.id).to_vec()).collect();
+        (records.repos().to_vec(), workspaces, sessions, comments)
     };
     wait_until("the copy to match a list", || {
         let mut listed = HubRecords::default();
         listed.apply_list(client.records_list().unwrap());
-        feed.read(shown) == shown(&listed)
+        shown(&feed.snapshot()) == shown(&listed.snapshot())
     });
-    assert_eq!(feed.read(HubRecords::comments).get(&workspace.id), Some(&vec![kept]));
+    assert_eq!(feed.snapshot().comments(&workspace.id), [kept]);
 }

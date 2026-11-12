@@ -2,7 +2,6 @@
 //! opens again, and in any other client.
 
 use client_core::FileToSend;
-use client_core::records::HubRecords;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
@@ -113,7 +112,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     stack.client().workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the dialog hasn't seen it.
     let records = ui.view().records().unwrap();
-    let in_records = || records.read(HubRecords::workspace_draft).map(|draft| draft.text).unwrap_or_default();
+    let in_records = || records.snapshot().workspace_draft().map(|draft| draft.text.clone()).unwrap_or_default();
     wait_until("client-core to hear of the change", || in_records() == "typed elsewhere");
 
     let frozen = Frozen::stop(pid);
@@ -144,7 +143,7 @@ fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppConte
         .workspace_draft_keep(&WorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
         .unwrap();
     let records = ui.view().records().unwrap();
-    let in_records = || records.read(HubRecords::workspace_draft).filter(|draft| draft.text == "say:with notes");
+    let in_records = || records.snapshot().workspace_draft().filter(|draft| draft.text == "say:with notes").cloned();
     wait_until("client-core to hear of the change", || in_records().is_some());
     let (dialog, kept) = (ui.dialog(), in_records().unwrap());
     ui.cx

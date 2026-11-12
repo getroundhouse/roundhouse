@@ -3,7 +3,6 @@
 
 #![cfg(test)]
 
-use client_core::records::HubRecords;
 use client_core::{Drafts, FileToSend, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
@@ -15,9 +14,7 @@ use crate::support::{Stack, wait_for_setup, wait_until};
 
 /// What client-core's copy says is typed in this session.
 fn draft_in(feed: &RecordsFeed, id: &SessionId) -> Option<String> {
-    feed.read(|records: &HubRecords| {
-        records.sessions().values().flatten().find(|s| &s.id == id).map(|s| s.draft.text.clone())
-    })
+    feed.snapshot().session(id).map(|s| s.draft.text.clone())
 }
 
 #[test]
@@ -84,8 +81,7 @@ fn a_drafts_files_are_kept_across_a_restart_until_its_let_go_of_them() {
 
 /// The comment being written on the workspace's diff, as client-core's copy has it.
 fn comment_in(feed: &RecordsFeed, id: &WorkspaceId) -> Option<String> {
-    let workspace = feed.read(|records: &HubRecords| records.workspaces().into_iter().find(|w| &w.id == id));
-    workspace.and_then(|w| w.comment_draft).map(|draft| draft.text)
+    feed.snapshot().workspace(id).and_then(|w| w.comment_draft.as_ref()).map(|draft| draft.text.clone())
 }
 
 #[test]
@@ -101,10 +97,7 @@ fn a_comment_being_written_and_an_answer_being_typed_are_kept_across_a_restart_a
     // So only the notices of what's kept can bring it, rather than the feed's first list, or the notice that setup
     // has finished.
     let setup = wait_for_setup(&client, &workspace.id);
-    let caught_up = || {
-        let held = feed.read(|records: &HubRecords| records.workspaces().into_iter().find(|w| w.id == workspace.id));
-        held.is_some_and(|w| w.setup == setup)
-    };
+    let caught_up = || feed.snapshot().workspace(&workspace.id).is_some_and(|w| w.setup == setup);
     wait_until("client-core to hear setup has finished", caught_up);
 
     let commented = client.workspace_comment_draft(&workspace.id, Some(&comment)).unwrap();
@@ -114,10 +107,7 @@ fn a_comment_being_written_and_an_answer_being_typed_are_kept_across_a_restart_a
     assert_eq!(answered.answer_draft.as_ref(), Some(&answer));
     assert_eq!(answered.status, SessionStatus::Idle, "keeping an answer doesn't start the agent");
     wait_until("the feed to say what's being written", || comment_in(&feed, &workspace.id).as_deref() == Some("why?"));
-    let answer_in = || {
-        feed.read(|records: &HubRecords| records.sessions().values().flatten().find(|s| s.id == session.id).cloned())
-            .and_then(|s| s.answer_draft)
-    };
+    let answer_in = || feed.snapshot().session(&session.id).and_then(|s| s.answer_draft.clone());
     wait_until("the feed to say what's typed in answer", || answer_in().as_ref() == Some(&answer));
     stack.kill_hub();
     stack.start_hub();
@@ -135,7 +125,7 @@ fn whats_in_the_new_workspace_dialog_is_kept_with_its_files_across_a_restart_and
     let mut stack = Stack::start();
     let client = stack.client();
     let feed = RecordsFeed::start(&client);
-    let dialog_in = || feed.read(|records: &HubRecords| records.workspace_draft()).map(|draft| draft.text);
+    let dialog_in = || feed.snapshot().workspace_draft().map(|draft| draft.text.clone());
     // So only the notice of what's kept can bring it, rather than the feed's first list.
     wait_until("client-core's first list", || dialog_in().is_some());
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"one\n".to_vec()).unwrap();
