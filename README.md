@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip"><b>Download for Mac</b></a>
+  &nbsp;·&nbsp; <a href="#where-it-stands">Windows preview</a>
+  &nbsp;·&nbsp; <a href="https://getroundhouse.dev">Website</a>
   &nbsp;·&nbsp; <a href="#get-started">Get started</a>
   &nbsp;·&nbsp; <a href="docs/spec/README.md">Spec</a>
   &nbsp;·&nbsp; <a href="docs/architecture.md">Architecture</a>
@@ -20,7 +22,7 @@
 
 Give each task a workspace: a git worktree, a branch and chats of its own, with an agent at work in it. Roundhouse shows which agents are working, which have finished and which are waiting on you, and takes each one's work from the first prompt to a merged pull request. The workspace is the unit of delegation, and the branch and pull request are the unit of integration.
 
-**It's early.** It runs on a Mac with Apple silicon, and its agent is Claude, through the Claude CLI you already have. Other agents, a hub on your own server or in the cloud, and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
+**It's early.** It runs on a Mac with Apple silicon, with a first preview for Windows, and its agent is Claude, through the Claude CLI you already have. Other agents, a hub on your own server or in the cloud, and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
 
 Roundhouse is a working name, after the round building where a railway services its locomotives, each in its own stall around one turntable. Rail is the theme for naming, and the mark beside every workspace is a roundhouse seen from above.
 
@@ -117,7 +119,7 @@ roundhouse --help
 | **Agents** | Claude, through the Claude CLI. Others are not built. |
 | **Hub** | Runs on your Mac. One on your own server or in the cloud, with workspaces in VMs or sandboxes, is designed for and not built. |
 | **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
-| **Windows** | An installer is published from every merge, for [x64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
+| **Windows** | A first preview. An installer is published from every merge, for [x64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
 | **Linux** | The hub, the worker and the command line build and pass their tests. The desktop app isn't packaged. |
 
 What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, tasks, questions and risks, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.

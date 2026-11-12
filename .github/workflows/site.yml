@@ -1,7 +1,7 @@
 # Publishes the marketing site, site/, to GitHub Pages whenever it changes on main. docs: site/README.md.
 #
-# The site's address is kept out of the repo, as docs/documentation.md says of domains. It's the custom domain in the
-# repo's Pages settings, and this secret, which is masked in the log:
+# Nothing here names the site's address, so the site can move without a change to this file. It's the custom domain in
+# the repo's Pages settings, and this secret, which is masked in the log:
 #   SITE_URL   The site's address, such as https://example.com, for the link-preview tags that need it. Without it
 #              the page is published without those tags.
 name: Site

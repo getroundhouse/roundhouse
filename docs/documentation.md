@@ -84,7 +84,7 @@ Everything else uses GitHub's own fields rather than a label:
 
 ### Kept private
 
-The product's name and trademarks, its domains and accounts, and other legal or business matters go in the private repo, `getroundhouse/private`, and nowhere in this one: not in a doc, an issue, a PR or a commit message. This repo may go public, and its history, issues and PRs would go with it. Research into other companies' names and marks shouldn't go with them, and neither should plans that would tip someone off before a name is held. The private repo's issues follow the same rules as this repo's. Work here mentions such a matter only as far as the code needs, such as the rename itself.
+The product's name and trademarks, its domains and accounts, and other legal or business matters go in the private repo, `getroundhouse/private`, and nowhere in this one: not in a doc, an issue, a PR or a commit message. This repo is public, and so are its history, issues and PRs. Research into other companies' names and marks shouldn't be, and neither should plans that would tip someone off before a name is held. What's already public is the exception: the marketing site's address, `https://getroundhouse.dev`, is on the repo's About box and linked from the README, so a doc, an issue or a PR can name it. A domain nobody has been shown stays private, and so does how any domain or account is held. The private repo's issues follow the same rules as this repo's. Work here mentions such a matter only as far as the code needs, such as the rename itself.
 
 ## Where they meet
 

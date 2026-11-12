@@ -34,5 +34,5 @@ That server doesn't say how long a file may be kept, so a browser can go on usin
 ## How it's published
 
 - **GitHub Pages serves it from `main`.** `.github/workflows/site.yml` publishes `site/` whenever it changes, put together by `tools/site/assemble.py`, which leaves this file out.
-- **Its address is kept out of the repo,** as `docs/documentation.md` says of domains. It's the custom domain in the repo's Pages settings, and the `SITE_URL` secret, from which the deploy adds the link-preview tags that need it. `tools/site/assemble.py OUT https://example.com` shows the page as it's published.
+- **Its address is `https://getroundhouse.dev`,** the custom domain in the repo's Pages settings. The page and the scripts don't name it: the deploy reads it from the `SITE_URL` secret, to add the link-preview tags that need it, so the site can move without a change here. `tools/site/assemble.py OUT https://example.com` shows the page as it's published.
 - **The link preview's picture, `assets/card.png`, is the hero held still,** without the nav and the button, at 1200 by 630. Take it again when the hero changes.
