@@ -4,9 +4,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::mem::Discriminant;
 use std::time::Instant;
 
-use protocol::model::{AttachmentId, SessionId};
+use protocol::attachment::MediaType;
+use protocol::model::AttachmentId;
 
-use super::{Agreed, Change, Counts, PAUSE, Request, Said, Where, agree};
+use super::{Agreed, Change, Counts, FilesFor, PAUSE, Request, Said, Where, agree};
 use crate::{Client, ClientError, FileToSend};
 
 /// Starts the thread, which ends once every handle has gone.
@@ -36,10 +37,11 @@ struct Keeper {
     client: Client,
     /// The newest change in each place that isn't kept yet, and when to keep it.
     pending: HashMap<Where, Pending>,
-    /// Files to add to their chats before any draft is kept, in the order they came.
-    adding: VecDeque<(SessionId, FileToSend)>,
-    /// Files to let go of, each once its chat has no draft waiting to be kept.
-    removing: Vec<(SessionId, AttachmentId)>,
+    /// Files to give the hub for what's typed where they're attached, a chat's composer or the new-workspace dialog,
+    /// before any draft is kept, in the order they came.
+    adding: VecDeque<(FilesFor, FileToSend)>,
+    /// Files to let go of, each once its place has no draft waiting to be kept.
+    removing: Vec<(FilesFor, AttachmentId)>,
     /// The connection went, or the hub doesn't keep chats' drafts, so nothing more is tried until the next.
     stalled: bool,
     /// The kinds of place this connection's hub doesn't keep, such as answers and comments on a hub that keeps only
@@ -78,8 +80,10 @@ impl Keeper {
             }
             let now = Instant::now();
             self.keep(|pending| pending.due <= now);
-            let held = self.pending.keys().all(|at| self.refuses(at));
-            if self.stalled || (held && self.adding.is_empty() && self.removing.is_empty()) {
+            // Everything left waits for another connection.
+            let mut files = self.adding.iter().map(|(to, _)| to).chain(self.removing.iter().map(|(from, _)| from));
+            let held = self.pending.keys().all(|at| self.refuses(at)) && files.all(|f| self.refuses(&f.at()));
+            if self.stalled || held {
                 for done in self.flushing.drain(..) {
                     let _ = done.send(());
                 }
@@ -104,12 +108,14 @@ impl Keeper {
                     self.reached(&at, None);
                 }
             }
-            Request::Attach { id, file } => self.adding.push_back((id, file)),
-            Request::Detach { id, file } => self.removing.push((id, file)),
+            Request::Attach { to, file } => self.adding.push_back((to, file)),
+            Request::Detach { from, file } => self.detach(from, file),
             Request::Reconnect(client) => {
-                // It may be another hub, which may keep what the last didn't.
+                // It may be another hub, which may keep what the last didn't. The dialog's copy agreed on went as the
+                // client was handed the connection, and goes again now, in case the last hub's answer came since.
                 (self.client, self.stalled, self.answered) = (client, false, false);
                 self.refused.clear();
+                self.counts.lock().agreed.remove(&Where::NewWorkspace);
                 for pending in self.pending.values_mut() {
                     pending.due = now;
                 }
@@ -123,7 +129,22 @@ impl Keeper {
         }
     }
 
-    /// Adds every file waiting, then keeps each change `due` picks, then lets go of the files whose chats have no
+    /// Lets go of `file`, unless it's still waiting to be added, such as while the hub doesn't keep the dialog, when it
+    /// never needs to reach the hub. Each file attached has an ID of its own, so it's the same one.
+    fn detach(&mut self, from: FilesFor, file: AttachmentId) {
+        let waiting = self.adding.iter().position(|(to, waiting)| *to == from && waiting.attachment.id == file);
+        if let Some(i) = waiting {
+            self.adding.remove(i);
+            self.reached(&from.at(), None);
+            // Unless the hub has it anyway, such as a file of a prompt that came back because it couldn't be sent.
+            if !matches!(&from, FilesFor::Chat(id) if self.client.has_given(id, &file)) {
+                return;
+            }
+        }
+        self.removing.push((from, file));
+    }
+
+    /// Adds every file waiting, then keeps each change `due` picks, then lets go of the files whose places have no
     /// draft left waiting, unless the connection goes.
     fn keep(&mut self, due: impl Fn(&Pending) -> bool) {
         self.add_files();
@@ -179,33 +200,60 @@ impl Keeper {
                 .client
                 .workspace_comment_draft(id, draft.as_ref())
                 .map(|workspace| Agreed { rev: workspace.rev, said: Said::Comment(workspace.comment_draft) }),
+            Change::NewWorkspace(draft) => self
+                .client
+                .workspace_draft_keep(draft)
+                .map(|kept| Agreed { rev: kept.rev, said: Said::new_workspace(&kept) }),
         }
     }
 
     fn add_files(&mut self) {
+        // Files for a place this hub doesn't keep, which wait for the next connection, in the order they came.
+        let mut held = VecDeque::new();
         while !self.stalled
-            && let Some((id, file)) = self.adding.pop_front()
+            && let Some((to, file)) = self.adding.pop_front()
         {
-            let attachment = &file.attachment;
-            let at = Where::Composer(id.clone());
-            // Such as a file of a prompt that came back because it couldn't be sent.
-            if self.client.has_given(&id, &attachment.id) {
-                self.reached(&at, None);
+            let at = to.at();
+            if self.refuses(&at) {
+                held.push_back((to, file));
                 continue;
             }
-            let added = self.client.attachment_add(
-                &id,
-                &attachment.id,
-                &attachment.name,
-                attachment.media_type,
-                file.data.clone(),
-            );
-            match added {
+            match self.add(&to, &file) {
+                // A hub that keeps chats' drafts but not the dialog's keeps neither its drafts nor its files.
+                Err(e) if e.is_unsupported() && to == FilesFor::NewWorkspace => {
+                    self.refused.insert(std::mem::discriminant(&at));
+                    held.push_back((to, file));
+                }
                 // Added, or the hub won't take it however often it's asked, and then a draft goes without it.
-                Ok(_) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&at, None),
+                Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&at, None),
                 Err(ClientError::Io(_) | ClientError::Disconnected) => {
-                    self.adding.push_front((id, file));
+                    self.adding.push_front((to, file));
                     self.stalled = true;
+                }
+            }
+        }
+        // Held files came before any left, so they go back in front of them.
+        for waiting in held.into_iter().rev() {
+            self.adding.push_front(waiting);
+        }
+    }
+
+    /// Gives the hub `file` for what's typed in `to` to name.
+    fn add(&self, to: &FilesFor, file: &FileToSend) -> Result<(), ClientError> {
+        let attachment = &file.attachment;
+        let (id, name, kind) = (&attachment.id, &attachment.name, attachment.media_type);
+        match to {
+            // Such as a file of a prompt that came back because it couldn't be sent.
+            FilesFor::Chat(chat) if self.client.has_given(chat, id) => Ok(()),
+            FilesFor::Chat(chat) => self.client.attachment_add(chat, id, name, kind, file.data.clone()).map(drop),
+            FilesFor::NewWorkspace => {
+                let add = |kind| self.client.workspace_draft_file_add(id, name, kind, file.data.clone()).map(drop);
+                // A hub refuses a kind it doesn't know, such as one newer than it, as it refuses a request it doesn't
+                // know, so the file is tried again as one any hub that keeps the dialog takes. Refused again, it's
+                // the request that's refused.
+                match add(kind) {
+                    Err(e) if e.is_unsupported() && kind != MediaType::Other => add(MediaType::Other),
+                    added => added,
                 }
             }
         }
@@ -213,16 +261,26 @@ impl Keeper {
 
     fn remove_files(&mut self) {
         let mut left = Vec::new();
-        for (id, file) in std::mem::take(&mut self.removing) {
-            if self.stalled || self.pending.contains_key(&Where::Composer(id.clone())) {
-                left.push((id, file));
+        for (from, file) in std::mem::take(&mut self.removing) {
+            let at = from.at();
+            if self.stalled || self.refuses(&at) || self.pending.contains_key(&at) {
+                left.push((from, file));
                 continue;
             }
-            match self.client.attachment_remove(&id, &file) {
+            let removed = match &from {
+                FilesFor::Chat(chat) => self.client.attachment_remove(chat, &file),
+                FilesFor::NewWorkspace => self.client.workspace_draft_file_remove(&file),
+            };
+            match removed {
+                // A hub that doesn't keep the dialog, such as an older one reached since, which the file waits for.
+                Err(e) if e.is_unsupported() && from == FilesFor::NewWorkspace => {
+                    self.refused.insert(std::mem::discriminant(&at));
+                    left.push((from, file));
+                }
                 // Let go of, or the hub keeps it, such as for a prompt that carries it.
                 Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => {}
                 Err(ClientError::Io(_) | ClientError::Disconnected) => {
-                    left.push((id, file));
+                    left.push((from, file));
                     self.stalled = true;
                 }
             }

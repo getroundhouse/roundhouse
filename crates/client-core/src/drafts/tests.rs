@@ -1,14 +1,15 @@
 use std::path::Path;
 use std::time::Duration;
 
-use protocol::attachment::Attachment;
+use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
-use protocol::model::{AnswerDraft, CommentDraft, Workspace, WorkspaceId};
+use protocol::model::{AnswerDraft, CommentDraft, Workspace, WorkspaceDraft, WorkspaceId};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
 
 mod answers_and_comments;
+mod new_workspace;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -20,15 +21,19 @@ enum Answer {
     Answered,
     /// As a hub too old to keep drafts does.
     Refused,
-    /// As a hub that keeps chats' drafts but not answers or comments does. It says `refused` before each it refuses.
+    /// As a hub that keeps chats' drafts but not answers, comments or the new-workspace dialog does. It says `refused`
+    /// before each it refuses.
     KeepsOnlyChatsDrafts,
+    /// As `Answered`, but as a hub that knows no kind of file but one that goes as it is, `Other`, refuses the rest, as
+    /// one older than the app refuses a kind newer than it. It says `refused` before each.
+    KnowsNoKindOfFile,
     /// It goes away instead, as a hub that's stopped does.
     HangsUp,
 }
 
 /// What a fake hub was asked to keep, chat by chat, in the order it was asked: each draft's text, followed by the files
 /// it names, and `+` or `-` and a file's ID for one added or let go of. An answer or a comment says which it is, then
-/// what's typed in it, by its chat or its workspace.
+/// what's typed in it, by its chat or its workspace. The new-workspace dialog's are the same as a chat's, by `dialog`.
 type Heard = flume::Receiver<(String, String)>;
 
 /// A hub that answers every draft and file as `answer` says, after saying what it was.
@@ -36,20 +41,24 @@ fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         let added = added(&request);
-        let answer_or_comment =
-            matches!(request, ClientRequest::SessionAnswerDraft(_) | ClientRequest::WorkspaceCommentDraft(_));
+        let not_a_chats = !matches!(
+            request,
+            ClientRequest::SessionDraft(_)
+                | ClientRequest::AttachmentAdd { .. }
+                | ClientRequest::AttachmentRemove { .. }
+        );
         let Some((id, what)) = heard_of(request) else { return Does::Nothing };
         let code = match answer {
-            Answer::KeepsOnlyChatsDrafts if answer_or_comment => {
-                let _ = said.send((id, format!("refused {what}")));
-                let refused = ApiError::new(ErrorCode::Unsupported, "a fake hub");
-                return Does::Answers(Box::new(ReplyOutcome::Error(refused)));
+            Answer::KeepsOnlyChatsDrafts if not_a_chats => ErrorCode::Unsupported,
+            Answer::KnowsNoKindOfFile if added.as_ref().is_some_and(|file| file.media_type != MediaType::Other) => {
+                ErrorCode::Unsupported
             }
-            Answer::Answered | Answer::KeepsOnlyChatsDrafts => ErrorCode::NotFound,
+            Answer::Answered | Answer::KeepsOnlyChatsDrafts | Answer::KnowsNoKindOfFile => ErrorCode::NotFound,
             Answer::Refused => ErrorCode::Unsupported,
             Answer::HangsUp => return Does::HangsUp,
         };
-        let _ = said.send((id, what));
+        let refused = !matches!(answer, Answer::Refused) && code == ErrorCode::Unsupported;
+        let _ = said.send((id, if refused { format!("refused {what}") } else { what }));
         let outcome = match added {
             Some(file) if code == ErrorCode::NotFound => ReplyOutcome::Response(ClientResponse::Attachment(file)),
             _ => ReplyOutcome::Error(ApiError::new(code, "a fake hub")),
@@ -61,7 +70,11 @@ fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
 
 /// The file a request adds, as a hub that takes it answers.
 fn added(request: &ClientRequest) -> Option<Attachment> {
-    let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request else { return None };
+    let (ClientRequest::AttachmentAdd { id, name, media_type, data, .. }
+    | ClientRequest::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, name, media_type, data })) = request
+    else {
+        return None;
+    };
     let size_bytes = data.as_slice().len() as u64;
     Some(Attachment { id: id.clone(), name: name.clone(), media_type: *media_type, size_bytes })
 }
@@ -85,6 +98,17 @@ fn heard_of(request: ClientRequest) -> Option<(String, String)> {
     if let ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) = request {
         let text = draft.map(|draft| draft.text);
         return Some((id.to_string(), format!("comment {}", text.as_deref().unwrap_or("none"))));
+    }
+    let dialog = || "dialog".to_string();
+    if let ClientRequest::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) = request {
+        let named = draft.files.iter().map(|file| format!(" {file}"));
+        return Some((dialog(), named.fold(draft.text, |text, file| text + &file)));
+    }
+    if let ClientRequest::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, .. }) = request {
+        return Some((dialog(), format!("+{id}")));
+    }
+    if let ClientRequest::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id }) = request {
+        return Some((dialog(), format!("-{id}")));
     }
     None
 }
@@ -283,8 +307,8 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
     assert!(!drafts.unkept(&chat("a")), "it counts as having reached the hub");
 }
 
-/// A hub that keeps every draft, answer and comment, and answers with the record it's kept on, carrying it, at the next
-/// of its revisions, from `first`.
+/// A hub that keeps every draft, answer and comment, and the new-workspace dialog's, and answers with the record it's
+/// kept on, carrying it, at the next of its revisions, from `first`.
 fn keeping_hub(socket: &Path, first: u64) -> Client {
     let mut next = first;
     stand_in_hub::connect(socket, move |request| {
@@ -294,6 +318,12 @@ fn keeping_hub(socket: &Path, first: u64) -> Client {
             ClientResponse::Session(Session { answer_draft: draft, ..told(id.as_str(), next, "") })
         } else if let ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) = request {
             ClientResponse::Workspace(writing(id.as_str(), next, draft))
+        } else if let ClientRequest::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) = request {
+            ClientResponse::WorkspaceDraft(WorkspaceDraft {
+                rev: Rev::new(next),
+                text: draft.text,
+                ..Default::default()
+            })
         } else {
             return Does::Nothing;
         };
