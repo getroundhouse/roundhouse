@@ -113,12 +113,8 @@ pub(super) async fn read_frames(
 /// Passes one of the agents' frames on to its session, and notes what's numbered to acknowledge once it's recorded.
 pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame) {
     let (session_id, item, seq) = match frame {
-        // Taken where they're read, but for what an agent is writing, which this hub doesn't take, as a hub from before
-        // the frame doesn't.
-        WorkerFrame::Reply { .. }
-        | WorkerFrame::Ask { .. }
-        | WorkerFrame::Branches { .. }
-        | WorkerFrame::AgentTail { .. } => return,
+        // Taken where they're read.
+        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
@@ -132,6 +128,7 @@ pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame)
         WorkerFrame::AgentLimits { session_id, run, limits, seq } => {
             (session_id, Item::Limits { run, limits, seq }, seq)
         }
+        WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
     };
     hub.route(&session_id, item).await;
     if let Some(seq) = seq {

@@ -1,6 +1,7 @@
-//! Letting go of a chat that's been deleted, and of what was typed in answer to a question that's been answered, and
-//! waiting for an agent to pick up again after its work in the background, against a hub that never starts a worker,
-//! with what an agent would say recorded as if it had.
+//! Letting go of a chat that's been deleted, and of what was typed in answer to a question that's been answered,
+//! waiting for an agent to pick up again after its work in the background, and taking what a worker kept of what an
+//! agent is writing, against a hub that never starts a worker, with what an agent would say recorded or sent as if it
+//! had.
 
 use std::time::{Duration, Instant};
 
@@ -8,13 +9,11 @@ use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome
 use protocol::model::{AnswerSoFar, RunId, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::oneshot;
 
 use super::*;
-use crate::hub::tests::hub_in;
-use crate::session::{CarriedOver, Item, LiveSession, Origin, PICKS_UP_WITHIN};
+use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, writing};
+use crate::session::{Item, LiveItem, LiveSession, Origin, PICKS_UP_WITHIN};
 use crate::store::cancelled_approval;
-use crate::worker_link::WorkerLink;
 
 const FROM_AGENT: Origin = Origin::Run { run: RunId::new(1), current: true, numbered: None };
 
@@ -88,13 +87,6 @@ fn listed(count: usize) -> EventBody {
     let task =
         |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
     EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
-}
-
-/// Once everything the session has been sent is recorded.
-async fn flushed(live: &LiveSession) {
-    let (done, taken) = oneshot::channel();
-    live.send_item(Item::Flush(done)).await;
-    taken.await.unwrap();
 }
 
 /// The last of its work in the background has gone, between turns.
@@ -198,12 +190,9 @@ async fn an_agent_carried_on_with_while_it_was_to_pick_up_again_is_taken_to_be_i
     // As the last hub goes, with its timer.
     last.end().await;
     hub.sessions.lock().live.remove(&id);
-    let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
-    hub.workers.lock().insert("w".into(), link.clone());
-    let stored = hub.store.get_session(&id).unwrap();
-    let carried = CarriedOver { link: link.id, run: RunId::new(1), recorded: None, untaken: Vec::new() };
+    let link = stand_in_worker(&hub);
 
-    let live = hub.sessions.lock().keep(&id, || LiveSession::start(&hub, stored, &[], Some(carried))).unwrap();
+    let live = carried_on(&hub, &link, RunId::new(1));
 
     assert_eq!(live.status(), SessionStatus::Background);
     tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
@@ -235,4 +224,23 @@ async fn an_agent_that_drops_the_prompt_it_was_to_take_is_taken_to_be_idle_after
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Idle);
     assert_eq!(states_from_the_hub(&hub), 1);
+}
+
+/// What its worker kept of what the agent was writing, which this hub missed the deltas of, replaces the hub's tail of
+/// the run, and every subscriber is told to read the tail again. What it says of a run the session no longer has
+/// reaches nobody, as that run's deltas don't.
+#[tokio::test]
+async fn a_session_carried_on_with_takes_what_its_worker_kept_of_what_the_agent_is_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let live = carried_on(&hub, &stand_in_worker(&hub), RunId::new(2));
+    let mut following = live.subscribe();
+
+    live.send_item(Item::Tail { run: RunId::new(1), tail: writing(RunId::new(1), "replaced") }).await;
+    live.send_item(Item::Tail { run: RunId::new(2), tail: writing(RunId::new(2), "Reading the") }).await;
+    flushed(&live).await;
+
+    assert_eq!(live.snapshot().tail, writing(RunId::new(2), "Reading the"));
+    assert!(matches!(following.try_recv().unwrap().item, LiveItem::Rewritten));
+    assert!(following.try_recv().is_err(), "the replaced run's reached nobody");
 }

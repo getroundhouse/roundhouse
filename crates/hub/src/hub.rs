@@ -23,7 +23,7 @@ mod repos;
 mod sessions;
 mod setup;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 mod titles;
 mod tools;
 mod waits;
