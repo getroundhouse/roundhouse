@@ -1,34 +1,9 @@
 use std::time::{Duration, Instant};
 
-use protocol::model::{InstanceId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::fixtures::workspace;
+use protocol::model::WorkspaceId;
 
 use super::{HOLDS_FOR, Hold, keep_held};
-
-fn workspace(name: &str) -> Workspace {
-    Workspace {
-        id: name.into(),
-        repo_id: "r".into(),
-        name: name.to_string(),
-        branch: name.into(),
-        base_ref: None,
-        path: None,
-        status: WorkspaceStatus::Ready,
-        provider: "local".into(),
-        instance_id: InstanceId::from("local"),
-        created_at_ms: 0,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: SetupStatus::NotStarted,
-        port_base: 0,
-        rev: Rev::default(),
-        title: None,
-        title_source: TitleSource::default(),
-        pull_request: None,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
-}
 
 #[test]
 fn a_held_order_keeps_each_where_it_was_and_puts_one_that_came_since_after_them_in_the_order_they_were() {

@@ -1,32 +1,11 @@
-use protocol::model::{InstanceId, Rev, SetupStatus, TitleSource, Workspace};
+use protocol::model::Workspace;
 use protocol::model::{RepoId, WorkspaceStatus};
 
 use super::{ArchiveFilter, Sort, listed};
 
 fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64) -> Workspace {
-    Workspace {
-        id: name.into(),
-        repo_id: repo.into(),
-        name: name.to_string(),
-        branch: format!("branch-{name}").into(),
-        base_ref: None,
-        path: None,
-        status,
-        provider: "local".into(),
-        instance_id: InstanceId::from("local"),
-        created_at_ms,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: SetupStatus::NotStarted,
-        port_base: 0,
-        rev: Rev::default(),
-        title: None,
-        title_source: TitleSource::default(),
-        pull_request: None,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
+    let branch = format!("branch-{name}").into();
+    Workspace { repo_id: repo.into(), branch, status, created_at_ms, ..protocol::fixtures::workspace(name) }
 }
 
 fn names(workspaces: &[Workspace], listed: &[usize]) -> Vec<String> {

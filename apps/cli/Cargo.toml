@@ -17,5 +17,8 @@ anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+protocol = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true

@@ -1,5 +1,4 @@
 use protocol::model::{CacheTtl, ContextUsage, PromptCache, SessionStatus};
-use serde_json::json;
 
 use super::*;
 
@@ -8,21 +7,14 @@ const SENT_MS: i64 = 1_793_541_600_000;
 
 /// A chat whose agent's newest request was sent at [`SENT_MS`], with a 1h cache and `used_tokens` in its context.
 fn chat(id: &str, used_tokens: u64) -> Session {
-    let mut session: Session = serde_json::from_value(json!({
-        "id": id, "workspace_id": "w", "agent": "claude", "model": "opus", "permission_mode": "default",
-        "effort": "high", "status": "idle", "last_seq": 4, "created_at_ms": 0, "updated_at_ms": 0,
-    }))
-    .unwrap();
-    session.context = Some(ContextUsage {
-        used_tokens,
-        max_tokens: 1_000_000,
-        model_tokens: None,
-        max_set_by: None,
-        parts: Vec::new(),
-    });
-    session.prompt_cache =
-        Some(PromptCache { used_at_ms: SENT_MS, ttl: CacheTtl::OneHour, model: None, tokens: 313_500 });
-    session
+    let context =
+        ContextUsage { used_tokens, max_tokens: 1_000_000, model_tokens: None, max_set_by: None, parts: Vec::new() };
+    Session {
+        last_seq: 4,
+        context: Some(context),
+        prompt_cache: Some(PromptCache { used_at_ms: SENT_MS, ttl: CacheTtl::OneHour, model: None, tokens: 313_500 }),
+        ..protocol::fixtures::session(id)
+    }
 }
 
 fn after(minutes: i64) -> i64 {

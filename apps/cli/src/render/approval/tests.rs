@@ -1,6 +1,5 @@
 use client_core::{Answered, Approval};
 use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, QuestionAnswer, QuestionOption, SessionEvent};
-use protocol::model::Place;
 use serde_json::{Value, json};
 
 use super::{requested, resolved};
@@ -15,16 +14,7 @@ fn event(tool: &str, input: Value, asking: Option<Asking>) -> SessionEvent {
         suggestions: Value::Null,
         asking: asking.map(Box::new),
     };
-    SessionEvent {
-        session_id: "s".into(),
-        seq: 7,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
+    protocol::fixtures::event(7, body)
 }
 
 fn lines(event: &SessionEvent) -> Vec<String> {
