@@ -123,6 +123,8 @@ impl World {
             // As a hub starts out.
             hub_settings: Some(protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
             accounts: self.accounts.clone(),
+            // As from a hub that doesn't keep one, since its hub refuses to.
+            workspace_draft: None,
             rev: Rev::default(),
         }
     }

@@ -6,6 +6,7 @@ mod cache;
 mod comments;
 mod drafts;
 mod first;
+mod hub_settings;
 mod providers;
 mod subagents;
 mod tools;
@@ -266,24 +267,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (account_id, window)
     );
 ",
-    // The hub's own settings, one row of them, which is a record like the rest. It keeps its machine awake unless
-    // someone has chosen otherwise. The row goes in after its trigger, so it has a revision from the start.
-    r"
-    CREATE TABLE hub_settings (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        keep_awake INTEGER NOT NULL DEFAULT 1,
-        rev INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE TRIGGER hub_settings_rev_on_insert AFTER INSERT ON hub_settings BEGIN
-        UPDATE counters SET value = value + 1 WHERE name = 'rev';
-        UPDATE hub_settings SET rev = (SELECT value FROM counters WHERE name = 'rev');
-    END;
-    CREATE TRIGGER hub_settings_rev_on_update AFTER UPDATE ON hub_settings WHEN NEW.rev = OLD.rev BEGIN
-        UPDATE counters SET value = value + 1 WHERE name = 'rev';
-        UPDATE hub_settings SET rev = (SELECT value FROM counters WHERE name = 'rev');
-    END;
-    INSERT INTO hub_settings (id) VALUES (1);
-",
+    // The hub's own settings, in `hub_settings`.
+    hub_settings::HUB_SETTINGS,
     // Every session names its model and effort from here on, so the agent's CLI never picks either for itself, and a
     // session that doesn't won't read. One that left either to the CLI gets what the hub gives a new session that names
     // neither. A model names none as `ModelName` says: empty, `default`, which was the picker's name for the CLI's own
@@ -381,4 +366,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // diff, and not sent.
     drafts::ANSWER_DRAFT,
     drafts::COMMENT_DRAFT,
+    // What's in the new-workspace dialog and not made yet, with its files.
+    drafts::WORKSPACE_DRAFT,
 ];

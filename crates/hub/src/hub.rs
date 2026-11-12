@@ -21,6 +21,7 @@ mod tests;
 mod titles;
 mod tools;
 mod workers;
+mod workspace_draft;
 mod workspaces;
 mod worktree;
 

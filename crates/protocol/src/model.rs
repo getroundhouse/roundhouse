@@ -25,7 +25,7 @@ pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
-pub use draft::{AnswerDraft, AnswerSoFar, CommentDraft, Draft, NewDraft};
+pub use draft::{AnswerDraft, AnswerSoFar, CommentDraft, Draft, NewDraft, WorkspaceDraft, WorkspaceDraftToKeep};
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};
@@ -196,6 +196,8 @@ pub enum RecordKey {
     },
     /// A hub has one record of its settings.
     HubSettings,
+    /// And one of what's in the new-workspace dialog, as [`WorkspaceDraft`] says.
+    WorkspaceDraft,
     Account {
         id: AccountId,
     },
@@ -216,6 +218,9 @@ pub struct Records {
     /// Empty from a hub from before it kept them.
     #[serde(default)]
     pub accounts: Vec<Account>,
+    /// `None` from a hub from before it kept one.
+    #[serde(default)]
+    pub workspace_draft: Option<WorkspaceDraft>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,

@@ -122,6 +122,7 @@ fn list_records(client: &Client) -> Result<Records> {
                 comments,
                 hub_settings: None,
                 accounts: Vec::new(),
+                workspace_draft: None,
                 rev: Rev::default(),
             })
         }

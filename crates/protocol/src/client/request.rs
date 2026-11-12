@@ -383,6 +383,10 @@ pub enum ClientRequest {
     SessionDraft(drafts::SessionDraft),
     SessionAnswerDraft(drafts::SessionAnswerDraft),
     WorkspaceCommentDraft(drafts::WorkspaceCommentDraft),
+    WorkspaceDraftKeep(drafts::WorkspaceDraftKeep),
+    WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd),
+    WorkspaceDraftFileRead(drafts::WorkspaceDraftFileRead),
+    WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove),
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {
         id: SessionId,

@@ -115,6 +115,14 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::WorkspaceCommentDraft(_) => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't keep a comment being written"))
         }
+        // The same, for what's in the new-workspace dialog.
+        R::WorkspaceDraftKeep(_)
+        | R::WorkspaceDraftFileAdd(_)
+        | R::WorkspaceDraftFileRead(_)
+        | R::WorkspaceDraftFileRemove(_) => Err(ApiError::new(
+            ErrorCode::Unsupported,
+            "the gallery's hub doesn't keep what's in the new-workspace dialog",
+        )),
         R::SessionEnsure { workspace_id, .. } => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat in the screen"))?))

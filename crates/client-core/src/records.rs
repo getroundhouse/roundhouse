@@ -10,7 +10,8 @@ use std::collections::HashMap;
 
 use protocol::client::HubNotice;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceDraft,
+    WorkspaceId,
 };
 
 #[cfg(test)]
@@ -28,6 +29,7 @@ pub enum Record {
     Comment(DiffComment),
     HubSettings(HubSettings),
     Account(Account),
+    WorkspaceDraft(WorkspaceDraft),
 }
 
 impl Record {
@@ -39,6 +41,7 @@ impl Record {
             Record::Comment(comment) => RecordKey::Comment { id: comment.id.clone() },
             Record::HubSettings(_) => RecordKey::HubSettings,
             Record::Account(account) => RecordKey::Account { id: account.id.clone() },
+            Record::WorkspaceDraft(_) => RecordKey::WorkspaceDraft,
         }
     }
 
@@ -50,6 +53,7 @@ impl Record {
             Record::Comment(comment) => comment.rev,
             Record::HubSettings(settings) => settings.rev,
             Record::Account(account) => account.rev,
+            Record::WorkspaceDraft(draft) => draft.rev,
         }
     }
 }
@@ -80,6 +84,7 @@ impl HubRecords {
         let listed = listed.chain(list.comments.into_iter().map(Record::Comment));
         let listed = listed.chain(list.hub_settings.into_iter().map(Record::HubSettings));
         let listed = listed.chain(list.accounts.into_iter().map(Record::Account));
+        let listed = listed.chain(list.workspace_draft.into_iter().map(Record::WorkspaceDraft));
         let mut next: HashMap<RecordKey, Record> = HashMap::new();
         for record in listed {
             let key = record.key();
@@ -112,6 +117,7 @@ impl HubRecords {
             HubNotice::Comment(comment) => self.apply_record(Record::Comment(comment)),
             HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
             HubNotice::Account(account) => self.apply_record(Record::Account(account)),
+            HubNotice::WorkspaceDraft(draft) => self.apply_record(Record::WorkspaceDraft(draft)),
             HubNotice::Removed { record, rev } => self.remove(&record, rev),
             HubNotice::Subagent(subagent) => self.subagents.apply(subagent),
             HubNotice::Resync | HubNotice::Unknown => false,
@@ -181,6 +187,13 @@ impl HubRecords {
     pub fn hub_settings(&self) -> Option<HubSettings> {
         let Some(Record::HubSettings(settings)) = self.held.get(&RecordKey::HubSettings) else { return None };
         Some(settings.clone())
+    }
+
+    /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived, and for good
+    /// from a hub from before it kept one.
+    pub fn workspace_draft(&self) -> Option<WorkspaceDraft> {
+        let Some(Record::WorkspaceDraft(draft)) = self.held.get(&RecordKey::WorkspaceDraft) else { return None };
+        Some(draft.clone())
     }
 
     /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.

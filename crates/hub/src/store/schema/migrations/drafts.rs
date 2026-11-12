@@ -1,5 +1,5 @@
-//! The migrations that keep what's typed and not sent, in each session's composer and in answer to its question, and
-//! on each workspace's diff, kept apart since they're long. Each has its place in `MIGRATIONS`.
+//! The migrations that keep what's typed and not sent, kept apart since they're long. Each has its place in
+//! `MIGRATIONS`.
 
 /// What's typed and attached in each session's composer and not sent, as JSON, which is NULL when nothing is. A
 /// Session record shows it, so the trigger names it.
@@ -43,4 +43,31 @@ pub(super) const COMMENT_DRAFT: &str = r"
 /// client have the hub let go of. Every file from before was a prompt's or an agent's, so each stays.
 pub(super) const ADDED_BY_CLIENT: &str = r"
     ALTER TABLE attachments ADD COLUMN by_client INTEGER NOT NULL DEFAULT 0;
+";
+
+/// What's in the new-workspace dialog and not made yet, one row of it, as JSON, which is NULL until something's kept.
+/// It's a record of its own, so it has a revision of its own, from the start as the hub's settings do. Its files wait
+/// in a table of their own, since there's no session yet to add them to.
+pub(super) const WORKSPACE_DRAFT: &str = r"
+    CREATE TABLE workspace_draft (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        draft TEXT,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER workspace_draft_rev_on_insert AFTER INSERT ON workspace_draft BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspace_draft SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+    CREATE TRIGGER workspace_draft_rev_on_update AFTER UPDATE ON workspace_draft WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspace_draft SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+    INSERT INTO workspace_draft (id) VALUES (1);
+    CREATE TABLE workspace_draft_files (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL
+    );
 ";

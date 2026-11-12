@@ -17,6 +17,19 @@ use crate::error::internal;
 use crate::store::AddedBy;
 use crate::worker_link::WorkerLink;
 
+/// Refuses a file that isn't what it says, or that's empty or too large. A kind from a newer client is refused as
+/// unsupported, so it can fall back to sending the file as `Other`.
+pub(super) fn checked(media_type: MediaType, data: &AttachmentBytes) -> Result<(), ApiError> {
+    let Err(problem) = media_type.check(data.as_slice()) else { return Ok(()) };
+    let code = match problem {
+        AttachmentProblem::Unsupported => ErrorCode::Unsupported,
+        AttachmentProblem::Empty | AttachmentProblem::TooLarge { .. } | AttachmentProblem::NotWhatItSays { .. } => {
+            ErrorCode::InvalidRequest
+        }
+    };
+    Err(ApiError::new(code, problem.to_string()))
+}
+
 impl Hub {
     /// Sent again with the same ID, it returns what the first one added without looking at the rest, the way a prompt
     /// is recorded once.
@@ -41,16 +54,7 @@ impl Hub {
         if let Some(earlier) = earlier {
             return Ok(earlier);
         }
-        if let Err(problem) = media_type.check(data.as_slice()) {
-            // A kind from a newer client is refused as unsupported, so it can fall back to sending the file as `Other`.
-            let code = match problem {
-                AttachmentProblem::Unsupported => ErrorCode::Unsupported,
-                AttachmentProblem::Empty
-                | AttachmentProblem::TooLarge { .. }
-                | AttachmentProblem::NotWhatItSays { .. } => ErrorCode::InvalidRequest,
-            };
-            return Err(ApiError::new(code, problem.to_string()));
-        }
+        checked(media_type, &data)?;
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
         let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
         self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
