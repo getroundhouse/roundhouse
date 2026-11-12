@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+use super::worktree::{MODEL, OPENED};
+
 /// The commit the diff is taken from.
 pub(crate) const BASE_COMMIT: &str = "3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5";
 
@@ -16,21 +18,39 @@ index 0000000..2b3c4d5
 Binary files /dev/null and b/docs/spec/screens/sidebar-narrow.png differ
 ";
 
-pub(crate) const PATCH: &str = r##"diff --git a/crates/protocol/src/model.rs b/crates/protocol/src/model.rs
-index 1a2b3c4..5d6e7f8 100644
---- a/crates/protocol/src/model.rs
-+++ b/crates/protocol/src/model.rs
-@@ -96,6 +96,9 @@ pub struct Workspace {
-     pub setup: SetupStatus,
-     /// The first of ten ports set aside for this workspace, so workspaces don't collide.
-     pub port_base: u16,
-+    /// The pull request for its branch, as the hub last saw it. `None` if there isn't one.
-+    #[serde(default)]
-+    pub pull_request: Option<PullRequest>,
- }
+/// What the branch adds to the file the screens open, after its workspace's ports.
+const ADDED: [&str; 3] = [
+    "    /// The pull request for its branch, as the hub last saw it. `None` if there isn't one.",
+    "    #[serde(default)]",
+    "    pub pull_request: Option<PullRequest>,",
+];
 
- /// Where a workspace's setup has got to. Copying local files counts, even with no script to run.
-diff --git a/apps/desktop/src/sidebar.rs b/apps/desktop/src/sidebar.rs
+/// The line the branch adds the pull request on, which a comment is left on.
+pub(crate) const PULL_REQUEST_LINE: u32 = 37;
+
+/// The whole branch, with git's three lines either side of each change, as the hub sends it. The file the screens open
+/// is the worktree's before the branch changed it, which the hub has as it was in the diff's commit.
+pub(crate) fn patch() -> String {
+    let before: Vec<&str> = MODEL.lines().collect();
+    let at = before.iter().position(|line| line.contains("pub port_base")).unwrap() + 1;
+    let (from, to) = (at - 3, (at + 3).min(before.len()));
+    let mut patch = format!(
+        "diff --git a/{OPENED} b/{OPENED}\nindex 1a2b3c4..5d6e7f8 100644\n--- a/{OPENED}\n+++ b/{OPENED}\n\
+         @@ -{},{} +{},{} @@ pub struct Workspace {{\n",
+        from + 1,
+        to - from,
+        from + 1,
+        to - from + ADDED.len()
+    );
+    let line = |sign: char, text: &str| format!("{sign}{text}\n");
+    patch.extend(before[from..at].iter().map(|text| line(' ', text)));
+    patch.extend(ADDED.iter().map(|text| line('+', text)));
+    patch.extend(before[at..to].iter().map(|text| line(' ', text)));
+    assert_eq!(u32::try_from(at + ADDED.len()).unwrap(), PULL_REQUEST_LINE);
+    patch + REST
+}
+
+const REST: &str = r##"diff --git a/apps/desktop/src/sidebar.rs b/apps/desktop/src/sidebar.rs
 index 9f8e7d6..c5b4a39 100644
 --- a/apps/desktop/src/sidebar.rs
 +++ b/apps/desktop/src/sidebar.rs

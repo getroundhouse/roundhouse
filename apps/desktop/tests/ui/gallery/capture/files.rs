@@ -1,6 +1,7 @@
 //! The steps that open files: a changed one from Changes, the list of All files, one from it, and a comment on a line.
 
-use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
+use desktop::file_diff::LineAt;
+use protocol::model::DiffSide;
 
 use super::{Driver, selected_pane};
 
@@ -9,7 +10,11 @@ impl Driver {
         self.click(format!("file-{path}"));
         self.wait("the file tab to show it", |view, cx| {
             let file = selected_pane(view).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()));
-            file.is_some_and(|file| file.read(cx).file(cx).is_some_and(|file| file.path() == path))
+            // A changed image has no lines, and its comparison says when it's ready.
+            file.is_some_and(|file| {
+                let (view, file) = (file.read(cx), file.read(cx).file(cx));
+                file.is_some_and(|file| file.path() == path && (file.is_binary() || view.is_ready()))
+            })
         });
     }
 
@@ -34,7 +39,7 @@ impl Driver {
         });
     }
 
-    pub(super) fn start_comment(&mut self, line: usize) {
+    pub(super) fn start_comment(&mut self, line: u32) {
         let view = self.view.clone();
         let file = self.cx.update(|cx| {
             selected_pane(view.read(cx)).and_then(|pane| pane.read(cx).diff.as_ref().map(|d| d.file.clone()))
@@ -43,7 +48,7 @@ impl Driver {
             .update_window(self.handle, |_, window, cx| {
                 file.unwrap().update(cx, |f, cx| {
                     let path = f.path.clone().unwrap();
-                    f.start_comment(DiffLinePosition::new(path, DiffSide::Modified, line), window, cx);
+                    f.start_comment(LineAt { path, side: DiffSide::New, line }, window, cx);
                 });
             })
             .unwrap();

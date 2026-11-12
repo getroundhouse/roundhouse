@@ -18,7 +18,7 @@ use crate::file_image::FileImage;
 /// Above this, a file is highlighted only after it's shown plain, since highlighting it takes a noticeable moment.
 const QUICK_BYTES: usize = 64 * 1024;
 /// Above this, a file is left plain, since highlighting it would take seconds.
-const HIGHLIGHT_UP_TO: usize = 1024 * 1024;
+pub(crate) const HIGHLIGHT_UP_TO: usize = 1024 * 1024;
 
 /// What a read gives.
 pub(crate) enum Read {

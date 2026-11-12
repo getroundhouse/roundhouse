@@ -13,6 +13,7 @@ gpui_kit::assets::icon_assets!(
         ArrowUpDown,
         ArrowUpRight,
         Brain,
+        Columns2,
         CornerDownRight,
         FilePen,
         FilePlus,
@@ -35,6 +36,7 @@ gpui_kit::assets::icon_assets!(
         SquareMinus,
         SquarePlus,
         Terminal,
+        TextAlignStart,
         Trash,
         Wrench,
     ]

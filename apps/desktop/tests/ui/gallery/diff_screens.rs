@@ -34,11 +34,18 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs")],
     },
     Screen {
+        name: "diff-split",
+        spec: "diff.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::Click("diff-split")],
+    },
+    Screen {
         name: "writing-a-comment",
         spec: "diff.md",
         world: Some(diff),
         frame: FILE,
-        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::StartComment(99)],
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::StartComment(35)],
     },
     Screen {
         name: "all-files",

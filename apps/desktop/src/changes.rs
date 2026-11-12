@@ -6,7 +6,6 @@ use std::ops::Range;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::diff::{DiffFile, DiffFileStatus};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -16,6 +15,7 @@ use gpui_kit::{
 use look::{Hand as _, LineText, Placed};
 
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
+use crate::patch::{FilePatch, FileStatus};
 use crate::review::Review;
 use rows::{Layout, rows};
 
@@ -98,7 +98,7 @@ impl Changes {
         let line_text = LineText::new(window, cx);
         let rows: Vec<Row> = self.rows.get(range).map(<[Row]>::to_vec).unwrap_or_default();
         // Only the files in view, rather than every file the branch changes.
-        let files: Vec<Option<DiffFile>> = {
+        let files: Vec<Option<FilePatch>> = {
             let files = self.review.read(cx).files.as_deref().unwrap_or_default();
             let file = |row: &Row| match row {
                 Row::File { index, .. } => files.get(*index).cloned(),
@@ -207,7 +207,7 @@ impl Render for Changes {
 pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> AnyElement {
     let files = changes.read(cx).review.read(cx).files.iter().flatten();
     let (added, removed) =
-        files.fold((0, 0), |(added, removed), file| (added + file.additions(), removed + file.deletions()));
+        files.fold((0, 0), |(added, removed), file| (added + file.added(), removed + file.removed()));
     let tree = layout(cx) == Layout::Tree;
     let changes = changes.downgrade();
     h_flex()
@@ -245,14 +245,13 @@ fn counts(added: usize, removed: usize, cx: &App) -> Vec<AnyElement> {
 }
 
 /// How a file changed. A modified file's is yellow, as review tools show it, and the rest are muted.
-fn status_icon(status: DiffFileStatus, cx: &App) -> Icon {
+fn status_icon(status: FileStatus, cx: &App) -> Icon {
     let theme = cx.theme();
     let (icon, color) = match status {
-        DiffFileStatus::Added => (Lucide::SquarePlus, theme.muted_foreground),
-        DiffFileStatus::Deleted => (Lucide::SquareMinus, theme.muted_foreground),
-        DiffFileStatus::Renamed | DiffFileStatus::Copied => (Lucide::SquareArrowRight, theme.muted_foreground),
-        DiffFileStatus::Modified => (Lucide::SquareDot, theme.yellow),
-        _ => (Lucide::SquareDot, theme.muted_foreground),
+        FileStatus::Added => (Lucide::SquarePlus, theme.muted_foreground),
+        FileStatus::Removed => (Lucide::SquareMinus, theme.muted_foreground),
+        FileStatus::Renamed | FileStatus::Copied => (Lucide::SquareArrowRight, theme.muted_foreground),
+        FileStatus::Modified => (Lucide::SquareDot, theme.yellow),
     };
     Icon::new(icon).xsmall().text_color(color)
 }
@@ -260,7 +259,7 @@ fn status_icon(status: DiffFileStatus, cx: &App) -> Icon {
 /// A changed file's row: where it is, then its name, and at the right end how many lines it adds and removes, on the
 /// name's baseline, and how it changed.
 fn file_row(
-    file: &DiffFile,
+    file: &FilePatch,
     depth: usize,
     layout: Layout,
     showing: bool,
@@ -284,7 +283,7 @@ fn file_row(
         })
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status(), cx);
-    let counts = counts(file.additions(), file.deletions(), cx);
+    let counts = counts(file.added(), file.removed(), cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
         .child(

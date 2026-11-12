@@ -24,7 +24,7 @@ pub(crate) enum Step {
     /// Clicks this file in the sidebar of changes, and waits for the file tab to show it.
     OpenFile(&'static str),
     /// Starts a comment on this line of the open file's new side, as the line's add button would.
-    StartComment(usize),
+    StartComment(u32),
     /// Shows All files in the sidebar of changes, and waits for it to list them.
     AllFiles,
     /// Clicks this file in All files, and waits for the file tab to show its lines, or its image.

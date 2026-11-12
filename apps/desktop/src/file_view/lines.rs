@@ -6,7 +6,7 @@ use std::ops::Range;
 use gpui_kit::{HighlightStyle, SharedString};
 
 /// What a tab is drawn as, as the transcript draws a file's lines.
-const TAB: &str = "    ";
+pub(crate) const TAB: &str = "    ";
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Line {

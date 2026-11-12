@@ -18,18 +18,18 @@ use super::FileDiff;
 /// Wide enough to write a sentence or two on one line, and no wider, so a long one still reads easily.
 const WIDTH: f32 = 720.;
 
-/// The raised band across the diff, and the column in it that holds the comment. The diff puts `p_3` around each
-/// comment, so the band reaches out over it to fill the row, and its own padding is that and `px_3`, `pt_2p5` and
-/// `pb_0p5` more. Less goes below, as the buttons there carry space of their own, and the eye measures from their
-/// labels. Its width is left to fill the row, as a width of its own wouldn't reach over the padding on the right.
+/// The raised band across the diff, and the column in it that holds the comment. Less space goes below than above, as
+/// the buttons there carry space of their own, and the eye measures from their labels. It's in the body's font, where
+/// the lines around it are in the code's.
 fn band(column: Div, cx: &App) -> AnyElement {
+    let theme = cx.theme();
     div()
-        .mx_neg_3()
-        .my_neg_3()
+        .w_full()
         .px_6()
         .pt(rems(0.75 + 0.625))
         .pb(rems(0.75 + 0.125))
-        .bg(cx.theme().secondary)
+        .bg(theme.secondary)
+        .font_family(theme.font_family.clone())
         .text_sm()
         .child(column.w_full().max_w(px(WIDTH)).gap_3())
         .into_any_element()
