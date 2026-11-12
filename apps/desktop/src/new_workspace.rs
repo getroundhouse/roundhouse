@@ -106,6 +106,9 @@ pub(crate) fn open(
             .border_color(edge)
             .rounded(RADIUS)
             .child(shown.clone())
+            // Enter is the prompt's, which creates, and Create closes the dialog once it can act, so Enter pressed
+            // while it waits leaves the dialog open.
+            .on_ok(|_, _, _| false)
             .on_close(move |_, window, cx| closed(window, cx))
     });
     // After opening, which focuses the dialog itself.

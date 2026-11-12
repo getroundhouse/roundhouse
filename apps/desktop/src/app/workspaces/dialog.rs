@@ -1,6 +1,6 @@
-//! The new-workspace dialog's side of the app: opening it, telling it where a workspace can be made and whether one can
-//! be made now, and what the hub keeps of it, taking what it asks to make, and giving back a prompt for a workspace that
-//! couldn't be made.
+//! The new-workspace dialog's side of the app. It opens the dialog, and tells it where a workspace can be made, whether
+//! one can be made now, and what the hub keeps of it. It makes what the dialog asks for, and gives back a prompt for a
+//! workspace that couldn't be made.
 
 use client_core::records::HubRecords;
 use client_core::{Client, FileToSend};
@@ -32,7 +32,10 @@ impl AppView {
         if let Some(dialog) = &self.new_workspace {
             return dialog.clone();
         }
-        let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), self.client()));
+        // The connection there is, even one still catching up, which a dialog made now would otherwise hear of only on
+        // the next, so it couldn't read back its files until then.
+        let client = self.client().or_else(|| self.joining.clone());
+        let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
         if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.read(HubRecords::workspace_draft)) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));

@@ -126,3 +126,52 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
 
     ui.wait("what was typed elsewhere", |ui| ui.dialog_text() == "typed elsewhere");
 }
+
+/// Create waits while the files the hub kept are read back, so they go with the prompt rather than being left behind.
+/// A read is a task, and a test's tasks run only once it lets them, so the dialog takes the record here, and Enter is
+/// pressed before the read can run.
+#[gpui_kit::test]
+fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    ui.open_new_workspace();
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    let elsewhere = stack.client();
+    let notes = FileToSend::checked("notes.txt", MediaType::Text, b"a line\n".to_vec()).unwrap();
+    let file = notes.attachment.id.clone();
+    elsewhere.workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
+    elsewhere
+        .workspace_draft_keep(&WorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
+        .unwrap();
+    let records = ui.view().records().unwrap();
+    let in_records = || records.read(HubRecords::workspace_draft).filter(|draft| draft.text == "say:with notes");
+    wait_until("client-core to hear of the change", || in_records().is_some());
+    let (dialog, kept) = (ui.dialog(), in_records().unwrap());
+    ui.cx
+        .update_window(ui.handle, |_, window, cx| dialog.update(cx, |d, cx| d.take_kept_now(kept, window, cx)))
+        .unwrap();
+
+    ui.press("enter");
+
+    assert_eq!(ui.dialog_text(), "say:with notes", "nothing was taken to make");
+    assert!(ui.has_dialog());
+    ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
+    let before = ui.view().workspaces.len();
+    ui.press("enter");
+    ui.wait_for_a_new_workspace(before);
+}
+
+#[gpui_kit::test]
+fn a_prompt_given_back_to_the_dialog_is_kept_on_the_hub_again(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    std::fs::remove_dir_all(stack.repo()).unwrap();
+    ui.open_new_workspace();
+    ui.input("say:never sent");
+
+    ui.press("enter");
+
+    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
+    assert_eq!(ui.dialog_text(), "say:never sent");
+    ui.wait("the hub to keep it again", |_| kept(&stack).text == "say:never sent");
+}

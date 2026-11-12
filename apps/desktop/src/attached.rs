@@ -15,8 +15,10 @@ use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
 use protocol::prompt::PromptProblem;
 
+mod from_the_hub;
 mod reading;
 
+pub(crate) use from_the_hub::{ReadBack, came_back, read_back};
 pub(crate) use reading::{pasted, pick, read_into};
 
 /// A file waiting to go, checked and ready to send.

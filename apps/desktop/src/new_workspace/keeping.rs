@@ -4,16 +4,14 @@
 
 use std::collections::HashSet;
 
-use client_core::{Client, ClientError, Drafts, FileToSend, Where};
-use gpui_kit::{App, AppContext as _, Context, Window};
+use client_core::{Client, Drafts, Where};
+use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, PermissionMode, WorkspaceDraft, WorkspaceDraftToKeep};
 use protocol::prompt::says_or_carries;
 
 use super::{DialogEvent, NewWorkspaceDialog};
-
-/// A file read back from the hub, or why it couldn't be.
-type ReadBack = (Attachment, Result<Vec<u8>, ClientError>);
+use crate::attached::{ReadBack, came_back, read_back};
 
 /// What keeps the dialog on the hub, and the connection its files are read back on.
 #[derive(Default)]
@@ -48,8 +46,9 @@ impl NewWorkspaceDialog {
         }
     }
 
-    /// Has the hub let go of the files it was given, which a workspace being made takes with it. After the draft that
-    /// no longer names them, since the hub keeps a file that's named.
+    /// Has the hub let go of files it was given that the dialog no longer has, such as one taken out, or those a
+    /// workspace being made takes with it. It does so after the draft that no longer names them, since the hub keeps a
+    /// file that's named.
     pub(super) fn let_go_of(&self, files: &[AttachmentId]) {
         let Some(keeper) = &self.keeping.keeper else { return };
         for file in files {
@@ -93,9 +92,13 @@ impl NewWorkspaceDialog {
     /// Shows what the hub keeps of the dialog in place of what's here, when it was changed elsewhere since, or before
     /// the app last started, as [`Drafts::new_workspace_from_elsewhere`] says. What's on its way to the hub from here
     /// goes on and replaces it, so what's typed here is never undone as it's typed. Whatever comes in its place is the
-    /// hub's already, so none of it is kept again.
+    /// hub's already, so none of it is kept again, and this client says it shows it, as taking a chat's draft does.
     pub(crate) fn take_kept(&mut self, kept: WorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
-        let elsewhere = self.keeping.keeper.as_ref().is_some_and(|keeper| keeper.new_workspace_from_elsewhere(&kept));
+        let keeper = self.keeping.keeper.as_ref();
+        let elsewhere = keeper.is_some_and(|keeper| keeper.new_workspace_from_elsewhere(&kept));
+        if let Some(keeper) = keeper.filter(|_| elsewhere) {
+            keeper.took_new_workspace(&kept);
+        }
         let taken = elsewhere && !self.has_kept(&kept, cx);
         self.keeping.kept = kept;
         if !taken {
@@ -141,40 +144,18 @@ impl NewWorkspaceDialog {
         if files.is_empty() {
             return;
         }
-        cx.spawn(async move |this, cx| {
-            let reading = cx.background_spawn(async move {
-                let read = files.into_iter().map(|file| {
-                    let data = client.workspace_draft_file_read(&file.id);
-                    (file, data)
-                });
-                read.collect::<Vec<ReadBack>>()
-            });
-            let read = reading.await;
-            let _ = this.update(cx, |t, cx| t.brought_back(read, cx));
-        })
-        .detach();
+        let read = move |file: &AttachmentId| client.workspace_draft_file_read(file);
+        read_back(files, read, Self::brought_back, cx);
     }
 
     /// Puts the files read back in the dialog, before any attached since, then has the hub keep what's here if that
     /// isn't what its record says, such as with something typed meanwhile. Keeping it otherwise could undo a change
     /// made elsewhere that hasn't arrived yet. Without a connection, they're read again on the next.
     fn brought_back(&mut self, read: Vec<ReadBack>, cx: &mut Context<Self>) {
-        // Not once they've come back, nor when the dialog is waiting for others, such as a change made elsewhere names.
-        let read_ids = read.iter().map(|(file, _)| &file.id);
-        let waiting = self.keeping.restoring.iter().map(|file| &file.id).eq(read_ids);
-        let gone = |(_, data): &ReadBack| matches!(data, Err(ClientError::Io(_) | ClientError::Disconnected));
-        if !waiting || read.iter().any(gone) {
-            return;
-        }
+        let Some((files, mut problems)) = came_back(&self.keeping.restoring, read) else { return };
         self.keeping.restoring.clear();
-        let mut files = Vec::new();
-        for (attachment, data) in read {
-            match data {
-                Ok(data) => files.push(FileToSend { attachment, data }),
-                Err(e) => cx.emit(DialogEvent::Error(format!("couldn't bring back {}: {e}", attachment.name))),
-            }
-        }
-        for problem in self.attached.bring_back(files, &Where::NewWorkspace) {
+        problems.extend(self.attached.bring_back(files, &Where::NewWorkspace));
+        for problem in problems {
             cx.emit(DialogEvent::Error(problem));
         }
         if !self.has_kept(&self.keeping.kept, cx) {
@@ -201,5 +182,10 @@ impl NewWorkspaceDialog {
     /// The hub's record as the dialog was last told of it, for a test to see that it has heard of a change.
     pub fn kept(&self) -> &WorkspaceDraft {
         &self.keeping.kept
+    }
+
+    /// Takes `kept` as the hub's record, as the app does, for a test to act before what that starts has run.
+    pub fn take_kept_now(&mut self, kept: WorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
+        self.take_kept(kept, window, cx);
     }
 }
