@@ -5,7 +5,7 @@ use std::path::Path;
 
 use protocol::attachment::{Attachment, MAX_FILE_BYTES, MediaType, describe_size, file_name};
 
-use crate::client::new_attachment_id;
+use crate::client::{ClientError, new_attachment_id};
 
 /// A file to send with a prompt, under the ID it's shown by until it's recorded and after. Sent again under the same
 /// ID, it isn't added twice.
@@ -47,6 +47,17 @@ impl FileToSend {
         }
         let data = std::fs::read(path).map_err(|e| refused(e.to_string()))?;
         Self::checked(&name, MediaType::sniff(&data), data)
+    }
+
+    /// Gives the hub this file with `add`, as its kind, whatever it's for. A hub refuses a kind it doesn't know, such as
+    /// one newer than it, as it refuses a request it doesn't know, so the file is tried again as one that goes as it
+    /// is, which every hub that takes files takes. Refused again, it's the request that's refused.
+    pub(crate) fn give<T>(&self, add: impl Fn(MediaType) -> Result<T, ClientError>) -> Result<T, ClientError> {
+        let kind = self.attachment.media_type;
+        match add(kind) {
+            Err(e) if e.is_unsupported() && kind != MediaType::Other => add(MediaType::Other),
+            added => added,
+        }
     }
 }
 

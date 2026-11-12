@@ -143,8 +143,9 @@ impl Client {
 
     /// Adds each file to the session, in order.
     fn add_files<'a>(&self, id: &SessionId, files: impl Iterator<Item = &'a FileToSend>) -> Result<()> {
-        for FileToSend { attachment, data } in files {
-            self.attachment_add(id, &attachment.id, &attachment.name, attachment.media_type, data.clone())?;
+        for file in files {
+            let FileToSend { attachment, data } = file;
+            file.give(|kind| self.attachment_add(id, &attachment.id, &attachment.name, kind, data.clone()))?;
         }
         Ok(())
     }

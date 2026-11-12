@@ -118,6 +118,35 @@ fn a_prompt_on_its_way_is_the_one_written_with_the_hub_s_record_of_each_file() {
     assert_ne!(Written::new(Prompt::new("why?")).client_msg_id, written.client_msg_id, "each its own");
 }
 
+/// As one the app knows and its hub doesn't, which the hub refuses as it would a request it doesn't know.
+#[test]
+fn a_file_of_a_kind_the_hub_doesnt_know_goes_with_the_prompt_as_one_that_goes_as_it_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let (said, heard) = flume::unbounded();
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
+        let outcome = if matches!(request, ClientRequest::SessionPrompt { .. }) {
+            let _ = said.send("prompt".to_string());
+            ReplyOutcome::Response(ClientResponse::PromptRecorded { seq: 1, duplicate: false })
+        } else if let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request {
+            if media_type != MediaType::Other {
+                let _ = said.send(format!("refused {}", media_type.mime()));
+                return Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "no kind"))));
+            }
+            let _ = said.send(format!("add {}", media_type.mime()));
+            let size_bytes = data.into_vec().len() as u64;
+            ReplyOutcome::Response(ClientResponse::Attachment(Attachment { id, name, media_type, size_bytes }))
+        } else {
+            return Does::Nothing;
+        };
+        Does::Answers(Box::new(outcome))
+    });
+
+    client.send_prompt(&"s".into(), &Written::new(Prompt::carrying("why?", vec![log()]))).unwrap();
+
+    let said = ["refused text/plain", "add application/octet-stream", "prompt"];
+    assert_eq!(heard.try_iter().collect::<Vec<_>>(), said);
+}
+
 #[test]
 fn a_file_this_connection_gave_the_hub_isnt_sent_again_with_the_prompt() {
     let dir = tempfile::tempdir().unwrap();
