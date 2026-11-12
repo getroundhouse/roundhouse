@@ -7,7 +7,7 @@ use protocol::model::{Branches, Head};
 use protocol::worker::RateLimit;
 
 use super::*;
-use crate::hub::tests::{hub_with_worktree, open, reading, says};
+use crate::hub::tests::{hub_with_worktree, open, reading, reading_within, says};
 
 #[tokio::test(start_paused = true)]
 async fn an_agent_asking_again_soon_after_a_read_waits_for_a_read_of_its_own() {
@@ -45,15 +45,8 @@ async fn an_agent_hears_that_a_read_failed_where_a_client_is_shown_what_was_know
 async fn an_agent_is_refused_the_part_of_githubs_limit_kept_for_everything_else() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let limit = RateLimit { limit: 5000, remaining: 10, resets_at_ms: now_ms() + 3_600_000 };
-    let link = WorkerLink::answering(move |request| {
-        Some(Ok(if matches!(request, WorkerRequest::GithubRateLimit { .. }) {
-            WorkerResponse::GithubRateLimit(limit)
-        } else {
-            WorkerResponse::PullRequest { pull_request: Some(open()), branch: None }
-        }))
-    });
-    hub.workers.lock().insert("w".into(), link.clone());
+    let low = RateLimit { limit: 5000, remaining: 10, resets_at_ms: now_ms() + 3_600_000 };
+    let link = reading_within(&hub, &says(Some(open())), Some(low));
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     let agent = hub.pull_request_for_agent(&"w".into(), &link).await;

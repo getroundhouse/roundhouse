@@ -64,7 +64,10 @@ fn a_chats_record_says_how_full_its_agents_context_is_and_follows_it() {
 
     // The feed says so, so a client that isn't asking sees it.
     let told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
-        SubscriptionItem::Notice(HubNotice::Session(told)) => told.context,
+        SubscriptionItem::Notice(notice) => match *notice {
+            HubNotice::Session(told) => told.context,
+            _ => None,
+        },
         _ => None,
     });
     assert_eq!(told, Some(after_prompts(1)));
@@ -204,7 +207,10 @@ fn a_chat_names_the_account_its_agent_launched_under_and_the_feed_announces_what
     assert_eq!((account.email, account.plan), (ada().email, ada().plan), "who it is, as the worker read it");
     // The feed says so, so a client that isn't asking sees the limits as soon as they're heard.
     let told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
-        SubscriptionItem::Notice(HubNotice::Account(told)) if !told.limits.is_empty() => Some(told),
+        SubscriptionItem::Notice(notice) => match *notice {
+            HubNotice::Account(told) if !told.limits.is_empty() => Some(told),
+            _ => None,
+        },
         _ => None,
     });
     assert_eq!(told.map(|told| told.id), ada().id);

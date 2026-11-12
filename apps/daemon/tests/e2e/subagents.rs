@@ -183,7 +183,11 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     let mut notices = Vec::new();
     while !notices.last().is_some_and(|subagent: &Subagent| subagent.status != SubagentStatus::Working) {
         match feed.items.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-            Ok(SubscriptionItem::Notice(HubNotice::Subagent(subagent))) => notices.push(subagent),
+            Ok(SubscriptionItem::Notice(notice)) => {
+                if let HubNotice::Subagent(subagent) = *notice {
+                    notices.push(subagent);
+                }
+            }
             Ok(_) => {}
             Err(e) => panic!("timed out waiting for the subagent to end, having heard {notices:?}: {e}"),
         }

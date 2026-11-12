@@ -14,6 +14,8 @@ fn open_pr() -> PullRequest {
         review: Review::Approved,
         checks: Checks { passed: 4, failed: 0, pending: 0 },
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     }
 }

@@ -24,7 +24,7 @@ pub(crate) fn store_with_session(dir: &Path) -> Store {
 }
 
 /// The session `s`, in the workspace `w`, with nothing said in it.
-pub(super) fn idle_session(now: i64) -> StoredSession {
+pub(crate) fn idle_session(now: i64) -> StoredSession {
     StoredSession {
         session: Session {
             account: None,

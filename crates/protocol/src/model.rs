@@ -22,6 +22,7 @@ mod session;
 mod settings;
 mod subagent;
 mod title;
+mod wait;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use branches::{Branch, Branches, Head, Upstream};
@@ -37,13 +38,14 @@ pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
 pub use prompt_line::{PromptLine, SettledAt};
 pub use pull_request::{
-    Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
+    Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
 pub use queue::QueuedPrompt;
 pub use session::{AgentKind, Session, SessionStatus};
 pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
+pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
 /// can't be passed as another. They're plain strings on the wire and in storage.
@@ -113,6 +115,8 @@ ids!(
     ToolUseId,
     /// The agent's own ID for work it runs in the background.
     TaskId,
+    /// A wait on a workspace's pull request, chosen by the hub. The MCP task its agent follows it by has the same ID.
+    WaitId,
     /// A commit, by the full object ID git gives it. It holds any string, as every ID here does, so it's the worker
     /// reading it that refuses one that isn't a full object ID.
     CommitId,

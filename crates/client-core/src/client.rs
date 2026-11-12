@@ -78,15 +78,17 @@ impl ClientError {
 pub type Result<T> = std::result::Result<T, ClientError>;
 
 /// What a subscription delivers. When it ends, its channel closes, and [`Subscription::ended`] says why.
-/// To carry on, subscribe again from one past the last event's `seq`.
+/// To carry on, subscribe again from one past the last event's `seq`. An event and a notice are each boxed, since
+/// every item in a subscription's channel takes the room of the largest, and one of them is the largest by far, which
+/// one depending on the platform.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubscriptionItem {
-    Event(SessionEvent),
+    Event(Box<SessionEvent>),
     /// Replaces any streaming tail held so far.
     Tail(Tail),
     Delta(StreamDelta),
     /// Only on a feed subscription.
-    Notice(HubNotice),
+    Notice(Box<HubNotice>),
 }
 
 /// Why a subscription's channel closed.
@@ -279,14 +281,14 @@ fn read_frames(inner: &Arc<Inner>, stream: Stream) {
                 }
             }
             HubFrame::Event { subscription_id, event } => {
-                deliver(inner, subscription_id, SubscriptionItem::Event(event));
+                deliver(inner, subscription_id, SubscriptionItem::Event(Box::new(event)));
             }
             HubFrame::Tail { subscription_id, tail } => deliver(inner, subscription_id, SubscriptionItem::Tail(tail)),
             HubFrame::Delta { subscription_id, delta } => {
                 deliver(inner, subscription_id, SubscriptionItem::Delta(delta));
             }
             HubFrame::Notice { subscription_id, notice } => {
-                deliver(inner, subscription_id, SubscriptionItem::Notice(notice));
+                deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
             }
         }
     }

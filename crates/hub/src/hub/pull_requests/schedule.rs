@@ -1,7 +1,7 @@
 //! Which workspace's pull request to read next when nobody has asked: soonest what's likely to have changed, and
 //! less and less often what keeps coming back the same.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use protocol::model::{MergeState, PrState, PullRequest, Workspace, WorkspaceId, WorkspaceStatus};
@@ -50,6 +50,11 @@ impl Schedule {
     fn due_at(self) -> Instant {
         self.read_at + self.every
     }
+
+    /// When one an agent waits on is due, which is always at the soonest.
+    fn due_at_soonest(self) -> Instant {
+        self.read_at + SOONEST
+    }
 }
 
 /// How a read went.
@@ -75,20 +80,28 @@ fn moving(pr: &PullRequest) -> bool {
 /// open pull request first among them, since they're the likeliest to have moved. Then whichever has been due
 /// longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends,
 /// unless it was found on another branch than the one checked out, so it isn't the workspace's now, as when the read
-/// that should have followed the worktree checking out another failed.
+/// that should have followed the worktree checking out another failed. One an agent waits on, in `waited`, is due at
+/// the soonest, however long it has come back the same, even when it was last read as done, since a read that came
+/// before the wait started didn't end it.
 pub(super) fn due<'a>(
     workspaces: &'a [Workspace],
     schedules: &HashMap<WorkspaceId, Schedule>,
+    waited: &HashSet<WorkspaceId>,
     now: Instant,
 ) -> Option<&'a Workspace> {
     let state = |w: &Workspace| w.known_pull_request().map(|pr| pr.state);
+    let done = |w: &Workspace| {
+        matches!(state(w), Some(PrState::Merged | PrState::Closed))
+            && !w.pull_request_found_on_another_branch()
+            && !waited.contains(&w.id)
+    };
+    let due_at = |w: &Workspace, schedule: &Schedule| {
+        if waited.contains(&w.id) { schedule.due_at_soonest() } else { schedule.due_at() }
+    };
     workspaces
         .iter()
-        .filter(|w| w.status == WorkspaceStatus::Ready)
-        .filter(|w| {
-            !matches!(state(w), Some(PrState::Merged | PrState::Closed)) || w.pull_request_found_on_another_branch()
-        })
-        .map(|w| (w, schedules.get(&w.id).map(|schedule| schedule.due_at())))
+        .filter(|w| w.status == WorkspaceStatus::Ready && !done(w))
+        .map(|w| (w, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
         .filter(|(_, due_at)| due_at.is_none_or(|due_at| due_at <= now))
         .min_by_key(|(w, due_at)| (due_at.is_some(), state(w) != Some(PrState::Open), *due_at))
         .map(|(w, _)| w)

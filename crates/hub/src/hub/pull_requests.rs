@@ -14,11 +14,11 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use schedule::{Schedule, Went};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tracing::debug;
 
 use super::{Hub, unexpected};
-use crate::store::now_ms;
+use crate::store::{Store, now_ms};
 use crate::worker_link::WorkerLink;
 
 mod budget;
@@ -89,6 +89,9 @@ impl Answer {
     }
 }
 
+/// A workspace's reads, held back while it's kept.
+pub(super) type ReadsHeld = OwnedMutexGuard<()>;
+
 /// What the hub keeps to read pull requests.
 pub(super) struct Reading {
     /// Held while a workspace's pull request is read, so its answers are recorded in the order they were asked for.
@@ -142,14 +145,19 @@ impl Hub {
         self.read_pull_request(id, path, link, Asked::Agent, When::Always).await?.read()
     }
 
-    /// Reads it through the workspace's worker and records what it finds, one read at a time for each workspace, so an
-    /// older answer can't land after a newer one. A read asked for while another waited shares the answer of the one
-    /// that began after it was asked. One someone is waiting on spends its calls here, and one in turn already has.
-    ///
-    /// Says what was known when it can't read: when GitHub's limit can't spare the calls, or the worker can't say,
-    /// such as while GitHub can't be reached. Where it can't be read at all, such as without `gh`, what's known is
-    /// kept, and with nothing known it's recorded as none, so the app offers to create one rather than looking for
-    /// ever.
+    /// Reads it for an agent starting a wait, as [`Hub::pull_request_for_agent`] does, and holds the workspace's next
+    /// read back until what it returns goes, so the wait is recorded before another read can judge the waits.
+    pub(super) async fn pull_request_to_wait_on(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        link: &WorkerLink,
+    ) -> Result<(Option<PullRequest>, ReadsHeld), ApiError> {
+        let (_, path) = self.ready_path(id).await?;
+        let (answer, held) = self.read_holding(id, path, link, Asked::Agent, When::Always).await?;
+        Ok((answer.read()?, held))
+    }
+
+    /// Reads it as [`Hub::read_holding`] does, and lets the next read go.
     async fn read_pull_request(
         self: &Arc<Self>,
         id: &WorkspaceId,
@@ -158,27 +166,48 @@ impl Hub {
         asked: Asked,
         when: When,
     ) -> Result<Answer, ApiError> {
+        Ok(self.read_holding(id, path, link, asked, when).await?.0)
+    }
+
+    /// Reads it through the workspace's worker and records what it finds, one read at a time for each workspace, so an
+    /// older answer can't land after a newer one. A read asked for while another waited shares the answer of the one
+    /// that began after it was asked. One someone is waiting on spends its calls here, and one in turn already has.
+    ///
+    /// Says what was known when it can't read: when GitHub's limit can't spare the calls, or the worker can't say,
+    /// such as while GitHub can't be reached. Where it can't be read at all, such as without `gh`, what's known is
+    /// kept, and with nothing known it's recorded as none, so the app offers to create one rather than looking for
+    /// ever. A read that finds it judges the waits on it. Returns the workspace's reads held back, for whoever has more
+    /// to do before the next.
+    async fn read_holding(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        path: String,
+        link: &WorkerLink,
+        asked: Asked,
+        when: When,
+    ) -> Result<(Answer, ReadsHeld), ApiError> {
         let asked_at = Instant::now();
         if asked == Asked::Agent {
             self.pull_requests.space_out(id).await;
         }
         let gate = self.pull_requests.gates.lock().entry(id.clone()).or_default().clone();
-        let _one_at_a_time = gate.lock().await;
+        let held = gate.lock_owned().await;
         let workspace = self.workspace(id).await?;
         let known = workspace.pull_request.clone();
         let last = self.pull_requests.schedules.lock().get(id).copied();
         if let Some(last) = last.filter(|last| last.read_at > asked_at) {
-            return Ok(match known {
+            let answer = match known {
                 Some(found) if last.found => Answer::Read(found.pull_request),
                 known => Answer::Known(known, couldnt_read()),
-            });
+            };
+            return Ok((answer, held));
         }
         // What's known is the branch's own, found since the worktree checked it out.
         if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() {
-            return Ok(Answer::Read(known.and_then(|found| found.pull_request)));
+            return Ok((Answer::Read(known.and_then(|found| found.pull_request)), held));
         }
         if asked != Asked::InTurn && self.spend(link, &path, calls_to_read(known.as_ref()), asked).await.is_err() {
-            return Ok(Answer::Known(known, limit_used_up()));
+            return Ok((Answer::Known(known, limit_used_up()), held));
         }
         let read_at = Instant::now();
         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
@@ -194,13 +223,17 @@ impl Hub {
         };
         let next = Schedule::after(last, read_at, asked, went);
         self.pull_requests.schedules.lock().insert(id.clone(), next);
+        if let Ok(Found { found, .. }) = &read {
+            self.end_waits(id, found).await;
+        }
         if let Some(workspace) = changed {
             self.notify(HubNotice::Workspace(workspace));
         }
-        Ok(match read {
+        let answer = match read {
             Ok(Found { found, .. }) => Answer::Read(found.pull_request),
             Err(e) => Answer::Known(recorded.or(known), e),
-        })
+        };
+        Ok((answer, held))
     }
 
     /// Records what a read found, with the branch it found it on, and where it can't be read at all, what's known, or
@@ -271,24 +304,35 @@ impl Hub {
         });
     }
 
-    /// Reads the pull requests nobody asks for, one at a time, whichever [`schedule::due`] says is next, as the budget
-    /// can spare their calls. Not while no client is connected, since nobody would see them. Once one connects
-    /// again, whatever has come due meanwhile is read. Runs until the hub stops.
+    /// Reads the pull requests nobody asks for, one at a time, whichever [`Hub::to_read_in_turn`] says is next, as the
+    /// budget can spare their calls. Runs until the hub stops.
     pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
         let mut pause = PACE;
         loop {
             tokio::time::sleep(pause).await;
             pause = PACE;
-            if self.clients.load(Ordering::Relaxed) == 0 {
-                continue;
-            }
-            let Ok(workspaces) = self.workspace_list(false).await else { continue };
-            let next = schedule::due(&workspaces, &self.pull_requests.schedules.lock(), Instant::now()).cloned();
-            let Some(workspace) = next else { continue };
+            let Some(workspace) = self.to_read_in_turn().await else { continue };
             if let Err(until) = self.read_in_turn(&workspace).await {
                 pause = until.saturating_duration_since(Instant::now()).clamp(PACE, LONGEST_PAUSE);
             }
         }
+    }
+
+    /// The workspace whose pull request is due to be read now that nobody has asked, as [`schedule::due`] says. While
+    /// no client is connected, only one an agent waits on, since nobody would see the rest. Once one connects again,
+    /// whatever has come due meanwhile is read.
+    pub(super) async fn to_read_in_turn(&self) -> Option<Workspace> {
+        // A store that fails says why as it does, and those waited on wait their turn with the rest meanwhile.
+        let waited = self.blocking(Store::workspaces_waited_on).await.unwrap_or_default();
+        let seen = self.clients.load(Ordering::Relaxed) > 0;
+        if !seen && waited.is_empty() {
+            return None;
+        }
+        let mut workspaces = self.workspace_list(false).await.ok()?;
+        if !seen {
+            workspaces.retain(|workspace| waited.contains(&workspace.id));
+        }
+        schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, Instant::now()).cloned()
     }
 
     /// Reads one nobody asked for, once the budget can spare its calls, starting its workspace's worker if it has

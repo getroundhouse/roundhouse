@@ -165,10 +165,6 @@ struct Follower<S: Source> {
     subscription: Option<Subscription>,
 }
 
-#[expect(
-    clippy::large_enum_variant,
-    reason = "made for each item and matched straight away, so its size costs nothing"
-)]
 enum Next {
     Item(std::result::Result<SubscriptionItem, flume::RecvError>),
     Woken(std::result::Result<(), flume::RecvError>),

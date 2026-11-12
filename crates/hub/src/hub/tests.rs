@@ -6,7 +6,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, Review};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::Hub;
@@ -49,6 +49,8 @@ pub(super) fn open() -> PullRequest {
         review: Review::NotRequired,
         checks: Checks { passed: 0, failed: 0, pending: 1 },
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     }
 }
@@ -63,10 +65,17 @@ pub(super) fn says(pull_request: Option<PullRequest>) -> Says {
 /// A stand-in for `w`'s worker, as the hub's, that reads its pull request as `says` holds then, and does whatever
 /// else it's asked without a word, so it can't say how much of GitHub's limit is left, or how the worktree stands.
 pub(super) fn reading(hub: &Hub, says: &Says) -> Arc<WorkerLink> {
+    reading_within(hub, says, None)
+}
+
+/// The same, which says GitHub's limit stands at `limit`, if it's given one.
+pub(super) fn reading_within(hub: &Hub, says: &Says, limit: Option<RateLimit>) -> Arc<WorkerLink> {
     let says = says.clone();
     let link = WorkerLink::answering(move |request| {
         Some(if matches!(request, WorkerRequest::PullRequest { .. }) {
             says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request, branch: None })
+        } else if let (WorkerRequest::GithubRateLimit { .. }, Some(limit)) = (&request, limit) {
+            Ok(WorkerResponse::GithubRateLimit(limit))
         } else {
             Ok(WorkerResponse::Ok)
         })

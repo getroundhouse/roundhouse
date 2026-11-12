@@ -15,6 +15,8 @@ fn open() -> PullRequest {
         review: Review::NotRequired,
         checks: Checks { passed: 3, failed: 0, pending: 0 },
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     }
 }

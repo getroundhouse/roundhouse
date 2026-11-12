@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::WorkerRequest;
 use crate::client::Outcome;
 use crate::frame::{self, Call};
-use crate::model::PullRequest;
+use crate::model::{PullRequest, ToolUseId, Wait, WaitId, WaitUntil};
 
 /// Which of a worker's asks an answer is for. They're numbered by the worker, apart from the hub's calls.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -79,6 +79,18 @@ pub type AskOutcome = Outcome<AskReply>;
 pub enum WorkerAsk {
     /// The workspace's pull request, as the hub reads it for an agent.
     PullRequest,
+    /// Starts a wait on the workspace's pull request, for the agent's call `call`, from where it stands now. A branch
+    /// without one is refused.
+    StartWait {
+        #[serde(default)]
+        until: WaitUntil,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call: Option<ToolUseId>,
+    },
+    /// How one of the session's waits stands.
+    Wait { wait: WaitId },
+    /// Ends one of the session's waits, as cancelled, unless it has ended already.
+    CancelWait { wait: WaitId },
     #[serde(other)]
     Unknown,
 }
@@ -88,6 +100,8 @@ pub enum WorkerAsk {
 pub enum AskReply {
     /// What the hub knows of it. `None` when the branch has none.
     PullRequest { pull_request: Option<PullRequest> },
+    /// A wait as it stands, and the pull request as the hub last read it.
+    Wait { wait: Wait, pull_request: Option<PullRequest> },
 }
 
 #[cfg(test)]

@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Output, Stdio};
 
+use chrono::DateTime;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Checks, Local, PrState, PullRequest, QueueState};
+use protocol::model::{Checks, LeftQueue, Local, PrState, PullRequest, QueueState};
 use protocol::worker::RateLimit;
 use serde_json::Value;
 use tokio::process::Command;
@@ -17,15 +18,19 @@ mod tests;
 
 const FIELDS: &str =
     "number,url,title,state,isDraft,baseRefName,headRefOid,mergeStateStatus,reviewDecision,statusCheckRollup";
-/// `gh pr view` can't say where a pull request is in the merge queue, so it's asked for by the pull request's URL.
-const QUEUE_QUERY: &str =
-    "query($url: URI!) { resource(url: $url) { ... on PullRequest { mergeQueueEntry { state } } } }";
+/// What `gh pr view` can't say, asked for by the pull request's URL: where it is in the merge queue, when it last left
+/// it, and when a review last asked for changes. Its state comes too, since it can merge between the two calls, and
+/// would otherwise read as having left the queue without merging. GitHub records a removal from the queue as the queue
+/// merges one too, with the reason `merged`, a moment before it calls the pull request merged.
+const BY_URL: &str = "query($url: URI!) { resource(url: $url) { ... on PullRequest { state mergeQueueEntry { state } \
+    timelineItems(itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT], last: 1) { nodes { ... on RemovedFromMergeQueueEvent { \
+    createdAt reason } } } reviews(states: [CHANGES_REQUESTED], last: 1) { nodes { submittedAt } } } } }";
 
 /// The pull request for the current branch, or `None` when `gh` says it has none. An error means `gh` didn't say, so
 /// whoever asked can keep what it knew rather than take it as none: [`ErrorCode::Unavailable`] when `gh` can't work
 /// here at all, such as when it isn't installed or logged in, and [`ErrorCode::Worker`] when it couldn't this time,
 /// such as while GitHub can't be reached. Where it is in the merge queue counts as part of the answer, since a failure
-/// there would read as having left the queue. What the worktree can't say of itself is left at nothing to report.
+/// there would read as being in none. What the worktree can't say of itself is left at nothing to report.
 pub async fn pull_request(path: &str) -> Result<Option<PullRequest>, ApiError> {
     let viewed = match run_gh(path, &["pr", "view", "--json", FIELDS]).await {
         Ok(viewed) => viewed,
@@ -42,11 +47,11 @@ pub async fn pull_request(path: &str) -> Result<Option<PullRequest>, ApiError> {
     }
     let (mut pr, head) =
         parse_pull_request(&viewed.stdout).ok_or_else(|| couldnt_say("gh printed something other than one"))?;
-    // Only an open pull request can still change, so only its queue and its worktree matter.
+    // Only an open pull request can still change, so only what the second call says and its worktree matter.
     if pr.state == PrState::Open {
-        let queue = async { if pr.is_draft { Ok(None) } else { queue(path, &pr.url).await } };
-        let (queue, local) = tokio::join!(queue, local(path, head.as_deref()));
-        (pr.queue, pr.local) = (queue?, local);
+        let (by_url, local) = tokio::join!(by_url(path, &pr.url), local(path, head.as_deref()));
+        by_url?.fill(&mut pr);
+        pr.local = local;
     }
     Ok(Some(pr))
 }
@@ -145,6 +150,8 @@ fn parse_pull_request(json: &[u8]) -> Option<(PullRequest, Option<String>)> {
         review: serde_json::from_value(value["reviewDecision"].clone()).unwrap_or_default(),
         checks: checks(&value["statusCheckRollup"]),
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     };
     Some((pr, value["headRefOid"].as_str().map(str::to_string)))
@@ -208,16 +215,58 @@ fn outcome(check: &Value) -> Outcome {
     }
 }
 
-async fn queue(path: &str, url: &str) -> Result<Option<QueueState>, ApiError> {
-    let (query, url) = (format!("query={QUEUE_QUERY}"), format!("url={url}"));
-    let answer = gh(path, &["api", "graphql", "-f", &query, "-f", &url]).await;
-    Ok(parse_queue(&answer.ok_or_else(|| couldnt_say("its place in the merge queue couldn't be read"))?))
+/// What the second call says of an open pull request.
+#[derive(Debug, PartialEq, Eq)]
+struct ByUrl {
+    /// Its state as of this call, which is later than `gh pr view`'s. `None` when GitHub didn't say.
+    state: Option<PrState>,
+    /// Where it is in the merge queue, or `None` when it isn't in one.
+    queue: Option<QueueState>,
+    left_queue: Option<LeftQueue>,
+    changes_requested_at_ms: Option<i64>,
 }
 
-/// `None` when it isn't in a queue, which GitHub answers with no entry.
-fn parse_queue(json: &[u8]) -> Option<QueueState> {
+impl ByUrl {
+    fn fill(self, pr: &mut PullRequest) {
+        pr.state = self.state.unwrap_or(pr.state);
+        (pr.queue, pr.left_queue, pr.changes_requested_at_ms) =
+            (self.queue, self.left_queue, self.changes_requested_at_ms);
+    }
+}
+
+async fn by_url(path: &str, url: &str) -> Result<ByUrl, ApiError> {
+    let (query, url) = (format!("query={BY_URL}"), format!("url={url}"));
+    let answer = gh(path, &["api", "graphql", "-f", &query, "-f", &url]).await;
+    let unread = || couldnt_say("its place in the merge queue couldn't be read");
+    parse_by_url(&answer.ok_or_else(unread)?).ok_or_else(unread)
+}
+
+/// `None` when GitHub answered something other than the pull request, which can't be taken as being in no queue.
+fn parse_by_url(json: &[u8]) -> Option<ByUrl> {
     let value: Value = serde_json::from_slice(json).ok()?;
-    serde_json::from_value(value["data"]["resource"]["mergeQueueEntry"]["state"].clone()).ok()
+    let pr = value["data"]["resource"].as_object()?;
+    let entry = pr.get("mergeQueueEntry")?;
+    let queue =
+        (!entry.is_null()).then(|| serde_json::from_value(entry["state"].clone()).unwrap_or(QueueState::Unknown));
+    let mut state = pr.get("state").and_then(|state| serde_json::from_value(state.clone()).ok());
+    let newest = |field: &str| pr.get(field).and_then(|items| items["nodes"].as_array()).and_then(|nodes| nodes.last());
+    let mut left_queue = None;
+    if let Some(removal) = newest("timelineItems") {
+        match removal["reason"].as_str() {
+            Some("merged") => state = Some(PrState::Merged),
+            reason => {
+                let reason = reason.unwrap_or_default().to_string();
+                left_queue = at_ms(&removal["createdAt"]).map(|at_ms| LeftQueue { at_ms, reason });
+            }
+        }
+    }
+    let changes_requested_at_ms = newest("reviews").and_then(|review| at_ms(&review["submittedAt"]));
+    Some(ByUrl { state, queue, left_queue, changes_requested_at_ms })
+}
+
+/// One of GitHub's times, in milliseconds since the epoch.
+fn at_ms(at: &Value) -> Option<i64> {
+    DateTime::parse_from_rfc3339(at.as_str()?).ok().map(|at| at.timestamp_millis())
 }
 
 /// Against the pull request's head where the worktree has that commit, which it does once it's pushed from here or
