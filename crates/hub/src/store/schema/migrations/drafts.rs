@@ -1,5 +1,5 @@
-//! The migrations that keep what's in each session's composer, kept apart since they're long. Each has its place in
-//! `MIGRATIONS`.
+//! The migrations that keep what's typed and not sent, in each session's composer and in answer to its question, and
+//! on each workspace's diff, kept apart since they're long. Each has its place in `MIGRATIONS`.
 
 /// What's typed and attached in each session's composer and not sent, as JSON, which is NULL when nothing is. A
 /// Session record shows it, so the trigger names it.

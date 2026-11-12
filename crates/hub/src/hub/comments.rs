@@ -8,6 +8,9 @@ use protocol::model::{
 use super::{Hub, new_id};
 use crate::store::{Made, now_ms};
 
+/// Why a comment, or one being written, on a side of a diff from a newer client is refused.
+const UNKNOWN_SIDE: &str = "this hub doesn't know that side of a diff";
+
 impl Hub {
     /// Keeps the comment being written on the workspace's diff, and tells the feed if that changed it.
     pub(crate) async fn workspace_comment_draft(
@@ -15,6 +18,10 @@ impl Hub {
         id: WorkspaceId,
         draft: Option<CommentDraft>,
     ) -> Result<Workspace, ApiError> {
+        // Not `Unsupported`, which says the hub doesn't keep comments being written at all.
+        if draft.as_ref().is_some_and(|draft| draft.side == DiffSide::Unknown) {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, UNKNOWN_SIDE));
+        }
         let (workspace, changed) = self.blocking(move |store| store.set_comment_draft(&id, draft.as_ref())).await?;
         if changed {
             self.notify(HubNotice::Workspace(workspace.clone()));
@@ -38,7 +45,7 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "a comment can't be empty"));
         }
         if side == DiffSide::Unknown {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that side of a diff"));
+            return Err(ApiError::new(ErrorCode::InvalidRequest, UNKNOWN_SIDE));
         }
         self.workspace(&workspace_id).await?;
         let comment = DiffComment {
@@ -81,3 +88,6 @@ impl Hub {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

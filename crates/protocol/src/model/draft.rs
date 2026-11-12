@@ -70,6 +70,13 @@ pub struct AnswerDraft {
     pub answers: Vec<AnswerSoFar>,
 }
 
+impl AnswerDraft {
+    /// Whether anything's chosen or typed, since an answer with nothing is the same as none.
+    pub fn says_anything(&self) -> bool {
+        self.answers.iter().any(|so_far| !so_far.picked.is_empty() || !so_far.typed.is_empty())
+    }
+}
+
 /// What's chosen and typed on one question.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AnswerSoFar {

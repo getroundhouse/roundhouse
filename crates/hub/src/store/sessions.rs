@@ -7,7 +7,7 @@ use protocol::model::{
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
-use super::drafts::forget_draft;
+use super::drafts::forget_drafts;
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
@@ -184,9 +184,10 @@ impl Store {
         Ok(())
     }
 
-    /// Closes the session, or opens it again with `None`. Its draft goes as it closes, with its composer, and so does
-    /// each file the draft named that nothing else will send, which this returns, so the caller lets go of their bytes
-    /// too. One transaction, so a draft kept meanwhile either comes first and goes too, or finds the session closed.
+    /// Closes the session, or opens it again with `None`. Its draft goes as it closes, with its composer, and so do any
+    /// answer being typed to its question, and each file the draft named that nothing else will send, which this
+    /// returns, so the caller lets go of their bytes too. One transaction, so a draft kept meanwhile either comes first
+    /// and goes too, or finds the session closed.
     pub fn set_session_closed(
         &self,
         id: &SessionId,
@@ -195,7 +196,7 @@ impl Store {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id.as_str()])?;
-        let let_go_of = if closed_at_ms.is_some() { forget_draft(&tx, id)? } else { Vec::new() };
+        let let_go_of = if closed_at_ms.is_some() { forget_drafts(&tx, id)? } else { Vec::new() };
         tx.commit()?;
         Ok(let_go_of)
     }

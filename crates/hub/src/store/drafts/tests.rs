@@ -6,7 +6,7 @@ use protocol::model::{
 };
 
 use crate::store::tests::{open_in, store_with_session};
-use crate::store::{AddedBy, Queued, StoreError};
+use crate::store::{AddedBy, Queued, StoreError, cancelled_approval};
 
 fn id() -> SessionId {
     "s".into()
@@ -228,6 +228,39 @@ fn closing_a_chat_lets_go_of_the_answer_being_typed_and_it_keeps_none_after() {
     assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None);
     let typed_late = store.set_answer_draft(&id(), Some(&answer("typed as it closed"))).unwrap();
     assert!(!typed_late.changed, "a closed session keeps none");
+}
+
+#[test]
+fn answering_a_question_takes_the_answer_being_typed_to_it_and_none_is_kept_for_it_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    store.append(&id(), None, &cancelled_approval("another".into()), None, None, None).unwrap();
+    let answer_draft = || store.get_session(&id()).unwrap().session.answer_draft;
+    assert_eq!(answer_draft(), Some(answer("half")), "another question's answer isn't this one's");
+
+    store.append(&id(), None, &cancelled_approval("q".into()), None, None, None).unwrap();
+
+    assert_eq!(answer_draft(), None);
+    let typed_late = store.set_answer_draft(&id(), Some(&answer("typed elsewhere as it was answered"))).unwrap();
+    assert!(!typed_late.changed, "nobody can send it now");
+    let next = AnswerDraft { approval_id: "next".into(), ..answer("for the next question") };
+    assert!(store.set_answer_draft(&id(), Some(&next)).unwrap().changed);
+}
+
+#[test]
+fn an_answer_with_nothing_chosen_or_typed_is_kept_as_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    let other = AnswerSoFar { other: true, ..AnswerSoFar::default() };
+    let nothing = AnswerDraft { approval_id: "q".into(), answers: vec![other, AnswerSoFar::default()] };
+
+    let kept = store.set_answer_draft(&id(), Some(&nothing)).unwrap();
+
+    assert!(kept.changed);
+    assert_eq!(kept.session.session.answer_draft, None);
+    assert!(!store.set_answer_draft(&id(), None).unwrap().changed, "it's the same as none");
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
 use protocol::model::{PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::instances::{InstanceStage, record_instance};
 use super::made::{Made, inserted, made_by};
@@ -16,6 +16,17 @@ const FIRST_PORT_BASE: u16 = 55_000;
 const PORTS_PER_WORKSPACE: u16 = 10;
 
 pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft";
+
+/// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
+pub(super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Result<Workspace, StoreError> {
+    conn.query_row(
+        &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE id = ?"),
+        [id.as_str()],
+        workspace_from_row,
+    )
+    .optional()?
+    .ok_or_else(|| StoreError::NotFound { kind: "workspace", id: id.to_string() })
+}
 
 pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -194,14 +205,7 @@ impl Store {
     }
 
     pub fn get_workspace(&self, id: &WorkspaceId) -> Result<Workspace, StoreError> {
-        lock(&self.reader)
-            .query_row(
-                &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE id = ?"),
-                [id.as_str()],
-                workspace_from_row,
-            )
-            .optional()?
-            .ok_or_else(|| StoreError::NotFound { kind: "workspace", id: id.to_string() })
+        workspace_on(&lock(&self.reader), id)
     }
 
     pub fn list_workspaces(&self, include_archived: bool) -> Result<Vec<Workspace>, StoreError> {

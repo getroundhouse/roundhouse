@@ -390,15 +390,17 @@ pub enum ClientRequest {
         draft: NewDraft,
     },
     /// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place
-    /// of what was kept, so it's there after the app restarts, and in every client. `None` clears it, as answering
-    /// does. Keeping what's kept already changes nothing, so sending it again does nothing more. Answers with the
-    /// session. A hub older than this refuses it, as `is_unsupported` says.
+    /// of what was kept, so it's there after the app restarts, and in every client. `None` clears it, as one with
+    /// nothing chosen or typed does, and so does the question being answered or cancelled, whoever answers it, after
+    /// which one for it is left out. Keeping what's kept already changes nothing, so sending it again does nothing
+    /// more. Answers with the session. A hub older than this refuses it, as `is_unsupported` says.
     SessionAnswerDraft {
         id: SessionId,
         draft: Option<AnswerDraft>,
     },
     /// Keeps `draft` as the comment being written on the workspace's diff, in place of what was kept, so it's there
-    /// after the app restarts, and in every client. `None` clears it, as saving or cancelling the comment does. Keeping
+    /// after the app restarts, and in every client. `None` clears it, which a client sends once the comment is saved or
+    /// cancelled, and one on a side of a diff the hub doesn't know is refused, as `CommentAdd` refuses it. Keeping
     /// what's kept already changes nothing, so sending it again does nothing more. Answers with the workspace. A hub
     /// older than this refuses it, as `is_unsupported` says.
     WorkspaceCommentDraft {
