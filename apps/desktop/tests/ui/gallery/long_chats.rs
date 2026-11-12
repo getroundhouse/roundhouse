@@ -10,7 +10,7 @@ use super::events::{replied, taken, text, user_prompt};
 use super::world::World;
 
 /// What each turn was asked, and what the agent said.
-const TURNS: [(&str, &str); 20] = [
+pub(crate) const TURNS: [(&str, &str); 20] = [
     (
         "The sidebar should show each workspace's PR state, so I can see at a glance which ones are waiting on review. \
          Where would that come from?",

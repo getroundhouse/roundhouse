@@ -42,16 +42,25 @@ impl Compacted<'_> {
     /// Who compacted, what it freed and how long it took, with `to` between the token counts and `between` between the
     /// parts.
     fn said(&self, to: &str, between: &str) -> String {
-        let who = match self.by {
-            CompactedBy::Agent => "Compacted automatically",
-            CompactedBy::Asked | CompactedBy::Unknown => "Compacted",
-        };
-        let freed = self.before_tokens.zip(self.after_tokens);
-        let freed =
-            freed.map(|(before, after)| format!("{} {to} {} tokens", look::tokens(before), look::tokens(after)));
+        let freed = freed(self.before_tokens, self.after_tokens, to);
         let took = self.took_ms.map(|ms| turn_times::took(Duration::from_millis(ms)));
-        [Some(who.to_string()), freed, took].into_iter().flatten().collect::<Vec<_>>().join(between)
+        [Some(who(self.by).to_string()), freed, took].into_iter().flatten().collect::<Vec<_>>().join(between)
     }
+}
+
+/// Who compacted, as a compaction's rule says it, and the outline's list.
+pub(crate) fn who(by: CompactedBy) -> &'static str {
+    match by {
+        CompactedBy::Agent => "Compacted automatically",
+        CompactedBy::Asked | CompactedBy::Unknown => "Compacted",
+    }
+}
+
+/// How many tokens the context went from and to, with `to` between them, as a compaction's rule says it, and the
+/// outline's list, if the agent said both.
+pub(crate) fn freed(before_tokens: Option<u64>, after_tokens: Option<u64>, to: &str) -> Option<String> {
+    let (before, after) = before_tokens.zip(after_tokens)?;
+    Some(format!("{} {to} {} tokens", look::tokens(before), look::tokens(after)))
 }
 
 /// The rule, with what it freed and how long it took in the middle. With a summary, the middle opens it.

@@ -1,9 +1,12 @@
-//! The outline's list: every prompt in the chat, numbered, up to two lines each, over the ticks.
+//! The outline's list: every prompt in the chat, numbered, up to two lines each, and every compaction among them, over
+//! the ticks.
 
 use std::ops::Range;
 use std::rc::Rc;
 
+use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::Icon;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -12,9 +15,11 @@ use gpui_kit::{
     Window, div, list, px,
 };
 use look::{Hand as _, LineText};
-use protocol::model::PromptLine;
+use protocol::model::{CompactionLine, PromptLine};
 
-use super::{Jumps, Prompt};
+use crate::rows::compaction;
+
+use super::{Jumps, Kind, Line};
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +39,8 @@ const GAP: Pixels = px(2.);
 const NUMBER_WIDTH: Pixels = px(28.);
 /// How far past the list's window rows are laid out, so one is ready before it scrolls in.
 const OVERDRAW: Pixels = px(200.);
+/// The compaction's icon, as its rule in the chat has it.
+const COMPACTION_ICON: f32 = 13.;
 /// How many prompts show above the one being read when the list opens, so it's seen among those before it.
 const LEAD: usize = 2;
 
@@ -41,7 +48,7 @@ const LEAD: usize = 2;
 /// They follow the chat's prompts whether or not the list is open.
 pub(super) struct Rows {
     state: ListState,
-    lines: Rc<[Prompt]>,
+    lines: Rc<[Line]>,
 }
 
 impl Default for Rows {
@@ -52,7 +59,7 @@ impl Default for Rows {
 
 impl Rows {
     /// Makes the rows those of `lines`, measuring again only the ones that changed.
-    pub(super) fn follow(&mut self, lines: &Rc<[Prompt]>) {
+    pub(super) fn follow(&mut self, lines: &Rc<[Line]>) {
         let (changed, count) = changed(&self.lines, lines);
         if changed.is_empty() && count == 0 {
             return;
@@ -73,7 +80,7 @@ impl Rows {
 /// What changed from `was` to `now`, as the rows of `was` to replace and how many rows of `now` replace them: those
 /// between the start and the end the two share. A prompt recorded joins the end, one the hub lists can come anywhere,
 /// and one whose text changed stays where it was.
-fn changed(was: &[Prompt], now: &[Prompt]) -> (Range<usize>, usize) {
+fn changed(was: &[Line], now: &[Line]) -> (Range<usize>, usize) {
     let start = was.iter().zip(now).take_while(|(was, now)| was == now).count();
     let end = was[start..].iter().rev().zip(now[start..].iter().rev()).take_while(|(was, now)| was == now).count();
     (start..was.len() - end, now.len() - start - end)
@@ -82,7 +89,7 @@ fn changed(was: &[Prompt], now: &[Prompt]) -> (Range<usize>, usize) {
 /// The list, with the prompt at `being_read` lit, as a hovered row is. It's as tall as its rows, up to [`TALLEST`],
 /// and only the rows in view are drawn. The wheel over it scrolls only the list.
 pub(super) fn draw(
-    lines: Rc<[Prompt]>,
+    lines: Rc<[Line]>,
     being_read: usize,
     rows: &Rows,
     jumps: Jumps,
@@ -95,7 +102,12 @@ pub(super) fn draw(
     let rows = list(rows.state.clone(), move |ix, _, cx| {
         div()
             .when(ix + 1 < count, |d| d.pb(GAP))
-            .child(row(ix, &lines[ix], ix == being_read, &jumps, &line_text, cx))
+            .child(match &lines[ix].kind {
+                Kind::Prompt { line, number } => {
+                    row(lines[ix].row, line, *number, ix == being_read, &jumps, &line_text, cx)
+                }
+                Kind::Compaction(compaction) => compaction_row(lines[ix].row, compaction, &jumps, &line_text, cx),
+            })
             .into_any_element()
     })
     .with_sizing_behavior(ListSizingBehavior::Infer)
@@ -107,7 +119,7 @@ pub(super) fn draw(
     v_flex()
         .id("outline-list")
         .role(Role::ListBox)
-        .aria_label("Jump to a prompt")
+        .aria_label("Jump to a prompt or a compaction")
         .w(WIDTH)
         .max_h(TALLEST + (INSET + EDGE) * 2.)
         .p(INSET)
@@ -124,14 +136,21 @@ pub(super) fn draw(
         .into_any_element()
 }
 
-/// The prompt `ix` places from the first: its number, smaller, on the baseline of its first line, and up to two lines
+/// The prompt drawn in the chat's `row`: its number, smaller, on the baseline of its first line, and up to two lines
 /// of it, quieter than the one being read.
-fn row(ix: usize, prompt: &Prompt, lit: bool, jumps: &Jumps, line_text: &LineText, cx: &App) -> AnyElement {
-    let row = prompt.row;
+fn row(
+    row: usize,
+    prompt: &PromptLine,
+    number: usize,
+    lit: bool,
+    jumps: &Jumps,
+    line_text: &LineText,
+    cx: &App,
+) -> AnyElement {
     let theme = cx.theme();
     let fill = theme.secondary_hover;
-    let label = label(&prompt.line);
-    let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(look::faint()).child((ix + 1).to_string());
+    let label = label(prompt);
+    let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(look::faint()).child(number.to_string());
     let number = line_text.small.set(number);
     let text = div()
         .flex_1()
@@ -158,6 +177,49 @@ fn row(ix: usize, prompt: &Prompt, lit: bool, jumps: &Jumps, line_text: &LineTex
         .hover(move |d| d.bg(fill))
         .on_click(jumps.to(row))
         .child(number)
+        .child(text)
+        .test_support()
+        .into_any_element()
+}
+
+/// The compaction drawn in the chat's `row`: its icon where a prompt's number goes, then what its rule in the chat says,
+/// faint and on one line, so it reads as a mark between the prompts rather than one of them. It's never lit, since
+/// it's never the one being read.
+fn compaction_row(
+    row: usize,
+    compaction: &CompactionLine,
+    jumps: &Jumps,
+    line_text: &LineText,
+    cx: &App,
+) -> AnyElement {
+    let fill = cx.theme().secondary_hover;
+    let said = |to, between| -> SharedString {
+        let freed = compaction::freed(compaction.before_tokens, compaction.after_tokens, to);
+        let who = compaction::who(compaction.by);
+        freed.map_or_else(|| who.into(), |freed| format!("{who}{between}{freed}").into())
+    };
+    // In words, since a screen reader would read the arrow out as one.
+    let (label, said) = (said("to", ", "), said("→", " · "));
+    let icon = Icon::new(IconName::FoldVertical).size(px(COMPACTION_ICON)).text_color(look::faint());
+    let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
+    let text = div().flex_1().min_w_0().truncate().text_color(look::faint()).child(said);
+    let text = line_text.small.set(text);
+    div()
+        .id(ElementId::Name(format!("outline-compaction/{row}").into()))
+        .role(Role::ListBoxOption)
+        .aria_label(label)
+        .w(ROW_WIDTH)
+        .flex()
+        .items_center()
+        .gap_3()
+        .pl_1()
+        .pr_3()
+        .py_1p5()
+        .rounded(px(8.))
+        .hand()
+        .hover(move |d| d.bg(fill))
+        .on_click(jumps.to(row))
+        .child(icon)
         .child(text)
         .test_support()
         .into_any_element()
