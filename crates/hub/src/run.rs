@@ -117,15 +117,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     };
     let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
-    tokio::select! {
-        () = hub.shutdown.notified() => info!("shutdown requested"),
-        _ = tokio::signal::ctrl_c() => info!("interrupted"),
-        () = terminate.asked() => info!("terminated"),
-    }
+    let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
     watching_pull_requests.abort();
     listener::unbind(&paths.socket);
-    if hub.restarting() {
+    if hub.restarting() && !signalled {
         hub.leave_workers().await;
     } else {
         hub.stop_all_workers().await;
@@ -137,6 +133,25 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     drop(lock_file);
     info!("hub stopped");
     Ok(())
+}
+
+/// Waits until the hub is asked to go, and says whether a signal asked. Whoever sends one, such as systemd, can't say
+/// whether another hub is coming, so a signal stops the agents, even once the hub was asked to restart.
+async fn asked_to_go(hub: &Hub, terminate: &mut Terminate) -> bool {
+    tokio::select! {
+        () = hub.shutdown.notified() => {
+            info!("shutdown requested");
+            false
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("interrupted");
+            true
+        }
+        () = terminate.asked() => {
+            info!("terminated");
+            true
+        }
+    }
 }
 
 #[cfg(test)]

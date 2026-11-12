@@ -179,6 +179,46 @@ fn a_restart_waits_for_a_setup_script_to_finish() {
     assert_eq!(wait_for_setup(&stack.client(), &workspace.id), SetupStatus::Succeeded);
 }
 
+/// `roundhouse hub stop` says it stops the agents, so it does, rather than leave them running with no hub.
+#[test]
+fn a_stop_while_a_restart_waits_for_a_setup_script_stops_the_agents() {
+    let mut stack = Stack::start();
+    let agent = an_agent_at_work_while_a_restart_waits(&stack);
+
+    client_core::stop_hub(&stack.socket()).unwrap();
+
+    stack.hub.take().unwrap().wait().unwrap();
+    wait_until("the agent to stop with the hub", || !is_alive(agent));
+}
+
+/// Whoever sends a signal, such as systemd, can't say whether another hub is coming.
+#[test]
+fn a_signal_while_a_restart_waits_for_a_setup_script_stops_the_agents() {
+    let mut stack = Stack::start();
+    let agent = an_agent_at_work_while_a_restart_waits(&stack);
+
+    stack.stop_hub();
+
+    wait_until("the agent to stop with the hub", || !is_alive(agent));
+}
+
+/// Asks the hub to restart with an agent at work in one workspace and a setup script running in another, so it
+/// waits, and returns the agent's PID.
+fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:before; hang:60000", None).unwrap();
+    wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
+    let agent = started_pid(&read_all(&client, &session.id)).unwrap();
+    commit_settings(stack, "[scripts]\nsetup = \"sleep 30\"\n");
+    client.workspace_create(&workspace.repo_id, None, None, None).unwrap();
+    wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
+    assert!(matches!(client.call(ClientRequest::HubRestart), Ok(ClientResponse::Ok)));
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(client.hub_status().is_ok(), "the restart waits for the setup script");
+    agent
+}
+
 /// So a worker doesn't keep for good what its hub has recorded, and send it all again to the next hub.
 #[test]
 fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
