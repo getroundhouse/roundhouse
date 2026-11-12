@@ -126,6 +126,7 @@ impl WorkspacePane {
                 // Nothing is sent from it, a subagent's work has no turns, no question is asked in it, since
                 // approvals are the agent's own, and nothing's found in it.
                 TranscriptEvent::NotSent { .. }
+                | TranscriptEvent::Answering { .. }
                 | TranscriptEvent::TurnEnded
                 | TranscriptEvent::Asking { .. }
                 | TranscriptEvent::FindClosed => {}

@@ -1,14 +1,14 @@
-//! What's typed and attached in each chat and not sent. The hub keeps each chat's, so it's there after the app
-//! restarts, and in every client: the pane starts with what the hub has, reads back the files it kept, has it keep
-//! each change, and shows a change made elsewhere, such as in another client. An answer being typed to a question
-//! stays only here, so it's what quitting loses, with anything the hub hasn't had yet.
+//! What's typed and attached in each chat and not sent, what's chosen and typed in answer to each chat's question, and
+//! the comment being written on the diff. The hub keeps each, so it's there after the app restarts, and in every
+//! client: the pane starts with what the hub has, reads back the files it kept, has it keep each change, and shows a
+//! change made elsewhere, such as in another client. Quitting loses only what the hub hasn't had yet.
 
 use std::collections::{HashMap, HashSet};
 
-use client_core::{ClientError, FileToSend};
+use client_core::{ClientError, FileToSend, Where};
 use gpui_kit::{App, AppContext as _, Context};
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, Draft, NewDraft, Session, SessionId};
+use protocol::model::{AnswerSoFar, AttachmentId, Draft, NewDraft, Session, SessionId};
 use protocol::prompt::says_or_carries;
 
 use super::attaching::Composed;
@@ -32,26 +32,38 @@ pub(crate) fn drafted(sessions: &[Session]) -> bool {
     sessions.iter().any(|s| s.closed_at_ms.is_none() && says_or_carries(&s.draft.text, s.draft.files.len()))
 }
 
-/// What a chat has that isn't sent.
-#[derive(Clone, Copy)]
-struct Unsent {
-    /// Something typed or attached in its composer, which the hub keeps once it has it.
-    composed: bool,
-    /// The hub hasn't had all of what's in the composer yet.
+/// Whether something's typed in one place, which the hub keeps once it has it, and whether it hasn't had all of it yet.
+#[derive(Clone, Copy, Default)]
+struct Typed {
+    any: bool,
     unkept: bool,
-    /// What only this app has: an answer being typed to its question, a prompt still on its way to the hub, or one
-    /// with no chat to keep it in yet.
+}
+
+impl Typed {
+    fn lost(self) -> bool {
+        self.any && self.unkept
+    }
+}
+
+/// What a chat has that isn't sent.
+#[derive(Clone, Copy, Default)]
+struct Unsent {
+    /// What's typed or attached in its composer.
+    composed: Typed,
+    /// What's typed in answer to its question.
+    answering: Typed,
+    /// What only this app has: a prompt still on its way to the hub, or one with no chat to keep it in yet.
     only_here: bool,
 }
 
 impl Unsent {
     fn any(self) -> bool {
-        self.composed || self.only_here
+        self.composed.any || self.answering.any || self.only_here
     }
 
     /// What stopping the app now would lose.
     fn lost(self) -> bool {
-        self.only_here || (self.composed && self.unkept)
+        self.only_here || self.composed.lost() || self.answering.lost()
     }
 }
 
@@ -117,6 +129,61 @@ impl WorkspacePane {
         for session in elsewhere {
             self.keeper.took(&session);
             self.take_draft(&session.id, session.draft, cx);
+        }
+        self.take_writing_from_elsewhere(cx);
+        self.take_answers_from_elsewhere(cx);
+    }
+
+    /// Opens the box for the comment being written as the hub has it, when it was written elsewhere, or before the app
+    /// last stopped, with nothing from here on its way.
+    fn take_writing_from_elsewhere(&self, cx: &mut Context<Self>) {
+        let Some(diff) = &self.diff else { return };
+        let kept = self.workspace.comment_draft.clone();
+        if !self.keeper.comment_from_elsewhere(&self.workspace) || diff.file.read(cx).writing(cx) == kept {
+            return;
+        }
+        let file = diff.file.clone();
+        self.with_window(cx, move |_, window, cx| file.update(cx, |f, cx| f.take_writing(kept.as_ref(), window, cx)));
+    }
+
+    /// The same, for what's chosen and typed in answer to each chat's question that's being asked here. One kept for
+    /// a question that has gone means nothing.
+    fn take_answers_from_elsewhere(&self, cx: &mut Context<Self>) {
+        for session in self.open_sessions() {
+            let asking = self.transcripts.get(&session.id).and_then(|(transcript, _)| transcript.read(cx).question());
+            let Some(panel) = asking.cloned() else { continue };
+            let question = panel.read(cx).approval_id().clone();
+            let says = |so_far: &AnswerSoFar| *so_far != AnswerSoFar::default();
+            let kept = session.answer_draft.clone();
+            let kept = kept.filter(|kept| kept.approval_id == question && kept.answers.iter().any(says));
+            if !self.keeper.answer_from_elsewhere(session) || panel.read(cx).so_far(cx) == kept {
+                continue;
+            }
+            self.with_window(cx, move |_, window, cx| {
+                panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx));
+            });
+        }
+    }
+
+    /// Has the hub keep the comment being written on the diff, as the file tab asks.
+    pub(super) fn keep_writing(&self, at_once: bool, cx: &App) {
+        let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
+        let id = &self.workspace.id;
+        if at_once {
+            self.keeper.set_comment(id, writing);
+        } else {
+            self.keeper.typed_comment(id, writing);
+        }
+    }
+
+    /// Has the hub keep what's chosen and typed in answer to the chat's question, as its transcript asks.
+    pub(super) fn keep_answer(&self, chat: &SessionId, at_once: bool, cx: &App) {
+        let asking = self.transcripts.get(chat).and_then(|(transcript, _)| transcript.read(cx).question());
+        let so_far = asking.and_then(|panel| panel.read(cx).so_far(cx));
+        if at_once {
+            self.keeper.set_answer(chat, so_far);
+        } else {
+            self.keeper.typed_answer(chat, so_far);
         }
     }
 
@@ -213,12 +280,14 @@ impl WorkspacePane {
     }
 
     /// What's here and not sent that stopping the app now would lose: how many chats have something only this app
-    /// has, or that the hub hasn't had yet, and how many comments on the diff are being written.
+    /// has, or that the hub hasn't had yet, and whether the comment being written on the diff has something the hub
+    /// hasn't had.
     pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
         let chats = self.unsent_chats(cx).filter(|unsent| unsent.lost()).count();
         let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
         let comment = draft.is_some_and(|draft| says_or_carries(&draft.input.read(cx).text().to_string(), 0));
-        (chats, usize::from(comment))
+        let unkept = self.keeper.unkept_in(&Where::Comment(self.workspace.id.clone()));
+        (chats, usize::from(comment && unkept))
     }
 
     /// Whether a chat has something typed or attached that isn't sent, which the workspace's row shows with a pencil.
@@ -229,33 +298,41 @@ impl WorkspacePane {
     /// For the chat showing, each other chat and a prompt waiting for the first chat to show, what it has that isn't
     /// sent. Each is only worked out as it's asked for, since the sidebar asks on every frame and wants only the first.
     fn unsent_chats<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = Unsent> + 'a {
-        let only_here = move |id: &SessionId| {
+        let answering = move |id: &SessionId| {
             let question = self.transcripts.get(id).and_then(|(transcript, _)| transcript.read(cx).question());
-            question.is_some_and(|question| question.read(cx).has_typed(cx)) || self.client.is_sending(id)
+            let any = question.is_some_and(|question| question.read(cx).has_typed(cx));
+            Typed { any, unkept: self.keeper.unkept_in(&Where::Answer(id.clone())) }
         };
+        let only_here = move |id: &SessionId| self.client.is_sending(id);
         let showing = std::iter::once_with(move || {
             // As `says_or_carries` says, without copying what's typed out of the composer.
             let text = self.composer.read(cx).text().chars().any(|c| !c.is_whitespace());
             let composed = text || !self.attached.is_empty();
             match &self.active {
-                Some(id) => Unsent { composed, unkept: self.keeper.unkept(id), only_here: only_here(id) },
+                Some(id) => Unsent {
+                    composed: Typed { any: composed, unkept: self.keeper.unkept(id) },
+                    answering: answering(id),
+                    only_here: only_here(id),
+                },
                 // While the workspace's first chat is being made.
-                None => Unsent { composed: false, unkept: false, only_here: composed },
+                None => Unsent { only_here: composed, ..Unsent::default() },
             }
         });
         let drafted = move |id: &SessionId| Unsent {
-            // A chat whose files are on their way back has them on the hub.
-            composed: self.drafts.get(id).is_some_and(Composed::has_anything) || self.restoring.contains_key(id),
-            unkept: self.keeper.unkept(id),
+            composed: Typed {
+                // A chat whose files are on their way back has them on the hub.
+                any: self.drafts.get(id).is_some_and(Composed::has_anything) || self.restoring.contains_key(id),
+                unkept: self.keeper.unkept(id),
+            },
+            answering: answering(id),
             only_here: only_here(id),
         };
         let ids = self.drafts.keys().chain(self.transcripts.keys().filter(|id| !self.drafts.contains_key(*id)));
         let others = ids.filter(|id| self.active.as_ref() != Some(*id)).map(drafted);
         // Handed back before there was a chat to keep it in.
         let waiting = std::iter::once_with(|| Unsent {
-            composed: false,
-            unkept: false,
             only_here: self.waiting.as_ref().is_some_and(|waiting| waiting.draft.has_anything()),
+            ..Unsent::default()
         });
         showing.chain(others).chain(waiting)
     }

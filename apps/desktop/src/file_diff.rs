@@ -51,6 +51,9 @@ mod view;
 pub enum FileDiffEvent {
     /// Put this in the chat's composer.
     AddToChat(String),
+    /// The comment being written changed, so the hub can keep it: within a moment while it's typed, or at once as it's
+    /// started, saved or cancelled. [`FileDiff::writing`] says what it is now.
+    Writing { at_once: bool },
 }
 
 pub struct FileDiff {

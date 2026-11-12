@@ -41,6 +41,19 @@ impl Choice {
         self.other = !self.other && has_text;
     }
 
+    /// What's chosen as the hub keeps it: the options, in order, and whether what's typed counts.
+    pub(crate) fn kept(&self) -> (&[usize], bool) {
+        (&self.picked, self.other)
+    }
+
+    /// What was chosen, as the hub kept it, leaving out an option the question doesn't have.
+    pub(crate) fn from_kept(picked: impl IntoIterator<Item = usize>, other: bool, options: usize) -> Self {
+        let mut picked: Vec<usize> = picked.into_iter().filter(|&option| option < options).collect();
+        picked.sort_unstable();
+        picked.dedup();
+        Self { picked, other }
+    }
+
     pub(crate) fn has(&self, option: usize) -> bool {
         self.picked.contains(&option)
     }

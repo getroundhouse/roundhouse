@@ -8,7 +8,7 @@ use desktop::updates::{Kind, Problem};
 use gpui_kit::TestAppContext;
 
 use crate::menus::choose;
-use crate::support::{Stack, Ui};
+use crate::support::{Frozen, Stack, Ui};
 
 #[gpui_kit::test]
 fn a_failed_update_shows_in_the_sidebar(cx: &mut TestAppContext) {
@@ -57,14 +57,18 @@ fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, ty
     ui
 }
 
-/// Starts a comment on the diff, which only the app has until it's saved, so restarting would lose it.
-fn start_a_comment(ui: &mut Ui<'_>) {
+/// Starts a comment on the diff, then stops the hub, so what's typed in it can't reach the hub until this goes, and
+/// restarting would lose it.
+fn start_a_comment(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     let workspace = ui.view().selected.clone().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input("Why this word?");
+    frozen
 }
 
 /// What the card asks before restarting to update, while it asks.
@@ -79,7 +83,7 @@ fn restart_question(ui: &Ui<'_>) -> Option<(&'static str, String)> {
 fn restarting_to_update_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
-    start_a_comment(&mut ui);
+    let _frozen = start_a_comment(&mut ui, &stack);
 
     ui.click("restart-to-update");
 
@@ -129,6 +133,24 @@ fn restarting_to_update_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppCo
     assert_eq!(stack.client().session_get(&chat).unwrap().draft.text, "say:kept!");
 }
 
+/// The hub keeps a comment being written too, so restarting doesn't ask about one it has.
+#[gpui_kit::test]
+fn restarting_to_update_doesnt_ask_about_a_comment_the_hub_has(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "");
+    let workspace = ui.view().selected.clone().unwrap();
+    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
+    let diff = ui.open_changes();
+    ui.open_diff_of(&diff, "a.txt");
+    ui.start_comment(&diff, "a.txt", 2);
+    ui.input("Why this word?");
+
+    ui.click("restart-to-update");
+
+    ui.wait("it to go ahead", |ui| ui.has("update-problem"));
+    assert_eq!(restart_question(&ui), None);
+}
+
 /// What's left in the new-workspace dialog is for a first chat, and restarting would lose it too.
 #[gpui_kit::test]
 fn restarting_to_update_counts_what_was_left_in_the_new_workspace_dialog(cx: &mut TestAppContext) {
@@ -152,7 +174,7 @@ fn restarting_to_update_counts_what_was_left_in_the_new_workspace_dialog(cx: &mu
 fn restarting_anyway_asks_again_when_more_would_be_lost_since_it_asked(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
-    start_a_comment(&mut ui);
+    let _frozen = start_a_comment(&mut ui, &stack);
     ui.click("restart-to-update");
     ui.open_new_workspace();
     ui.input("half a thought");
