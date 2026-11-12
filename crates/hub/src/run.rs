@@ -4,18 +4,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{SessionStatus, Workspace};
+use protocol::model::SessionStatus;
 use protocol::paths::Paths;
 use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::HubError;
 use crate::hub::Hub;
 use crate::listener::{self, Listener};
 use crate::private;
 use crate::provider_set::ProviderSet;
-use crate::store::{SessionChange, StatusChange, Store, StoreError, cancelled_approval};
+use crate::store::{RecordedInstance, SessionChange, StatusChange, Store, StoreError, cancelled_approval};
 use crate::terminate::Terminate;
 
 pub struct HubConfig {
@@ -32,8 +32,9 @@ pub struct HubConfig {
 
 /// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too, so
 /// a prompt one of them hadn't taken never will be. A queue whose agent went away at work is held, as when the agent
-/// exits mid-turn with the hub still there.
-fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
+/// exits mid-turn with the hub still there. Returns the instances it left part way, to be destroyed once the hub is
+/// serving, taken before anything new is made.
+fn recover(store: &Store) -> Result<Vec<RecordedInstance>, StoreError> {
     store.fail_interrupted_setups()?;
     for (id, prompts) in store.untaken_prompts()? {
         for prompt in prompts {
@@ -57,7 +58,10 @@ fn recover(store: &Store) -> Result<Vec<Workspace>, StoreError> {
             }),
         )?;
     }
-    store.take_unfinished_workspaces()
+    for workspace in store.take_unfinished_workspaces()? {
+        warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
+    }
+    store.take_unfinished_instances()
 }
 
 /// One hub at a time per data directory. It holds what's returned for as long as it runs.
@@ -147,3 +151,6 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     info!("hub stopped");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

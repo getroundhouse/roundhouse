@@ -124,7 +124,13 @@ fn a_workspaces_prompts_are_listed_oldest_first_across_its_chats() {
         chat.agent_session_id = id.into();
         store.insert_session(&chat, None).unwrap();
     };
-    let elsewhere = Workspace { id: "w2".into(), name: "birch".into(), branch: "birch".into(), ..workspace_w(1) };
+    let elsewhere = Workspace {
+        id: "w2".into(),
+        name: "birch".into(),
+        branch: "birch".into(),
+        instance_id: "w2".into(),
+        ..workspace_w(1)
+    };
     store.insert_workspace(&elsewhere, None).unwrap();
     chat("second", "w");
     chat("other", "w2");

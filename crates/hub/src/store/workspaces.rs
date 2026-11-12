@@ -4,6 +4,7 @@ use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
 use protocol::model::{PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
 use rusqlite::{OptionalExtension, Row, params};
 
+use super::instances::{InstanceStage, record_instance};
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
 
@@ -46,17 +47,19 @@ fn found_text(found: Option<&PullRequestFound>) -> Result<Option<String>, StoreE
 }
 
 impl Store {
-    /// Returns the workspace as stored, or `None` if its name is taken in its repository.
+    /// Returns the workspace as stored, or `None` if its name is taken in its repository. Its instance is recorded with
+    /// it, as being made if the workspace is, so it's recorded before its provider is asked for it.
     pub fn insert_workspace(
         &self,
         workspace: &Workspace,
         client_request_id: Option<&ClientRequestId>,
     ) -> Result<Option<Made<Workspace>>, StoreError> {
-        let conn = lock(&self.writer);
+        let mut conn = lock(&self.writer);
         if let Some(made) = made_by(&conn, client_request_id)? {
             return Ok(Some(Made::Earlier(made)));
         }
-        let added = conn.execute(
+        let tx = conn.transaction()?;
+        let added = tx.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -86,7 +89,12 @@ impl Store {
         if added == 0 {
             return Ok(None);
         }
-        Ok(Some(inserted(&conn, workspace.id.as_str())?))
+        let stage =
+            if workspace.status == WorkspaceStatus::Creating { InstanceStage::Creating } else { InstanceStage::Ready };
+        record_instance(&tx, &workspace.instance_id, &workspace.provider, stage, workspace.created_at_ms)?;
+        let made = inserted(&tx, workspace.id.as_str())?;
+        tx.commit()?;
+        Ok(Some(made))
     }
 
     /// Returns the revision of the removal, or `None` if there was nothing to remove.

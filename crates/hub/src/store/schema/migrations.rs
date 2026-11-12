@@ -390,6 +390,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // What's typed and attached in each session's composer and not sent, and which files a client added, in `drafts`.
     drafts::DRAFT,
     drafts::ADDED_BY_CLIENT,
-    // Who this hub is, in `providers`.
+    // Who this hub is, and each instance it asks a provider for, in `providers`.
     providers::HUB_IDENTITY,
+    providers::INSTANCES,
 ];

@@ -9,6 +9,7 @@ mod attachments;
 mod awake;
 mod comments;
 mod hub_settings;
+mod instances;
 mod pull_requests;
 mod queues;
 mod repos;
@@ -29,7 +30,7 @@ use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
+use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{ClientRequestId, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
@@ -132,23 +133,6 @@ impl Hub {
         self.providers
             .get(name)
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
-    }
-
-    /// For once the hub is serving, so a slow adapter can't keep clients waiting for it. Says hello to each provider's
-    /// adapter, so a problem with one is logged before anything needs it, then destroys the instances of the workspaces
-    /// `unfinished` names, which the last run left half-made.
-    pub(crate) async fn settle_providers(self: Arc<Self>, unfinished: Vec<Workspace>) {
-        self.providers.say_hello().await;
-        for workspace in unfinished {
-            warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
-            let destroyed = match self.provider(&workspace.provider) {
-                Ok(provider) => provider.destroy(&workspace.instance_id).await.map_err(|e| error_chain(&e)),
-                Err(e) => Err(e.message),
-            };
-            if let Err(e) = destroyed {
-                warn!(workspace = workspace.name, instance_id = %workspace.instance_id, "its instance is left: {e}");
-            }
-        }
     }
 
     /// Ends each provider's adapter, after the workers are stopped.
