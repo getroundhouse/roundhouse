@@ -62,6 +62,11 @@ print($2)" "$ROUNDHOUSE_HOME/hub.db" "$1"
 }
 # How many prompts in a session's log found the cache expired.
 expired_in() { q "$1" "kinds.count('cache_expired')"; }
+# How many plans a session's agent has asked to have approved, as a Python expression over its events, so a wait for
+# the next one isn't met by one before it.
+PLANS_ASKED="sum(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)"
+# The hub's pid. Status says more on the lines after the first, such as that it keeps the Mac awake.
+hub_pid() { cli hub status | awk 'NR == 1 {print $2}'; }
 
 wait_for() { # description, session, python expression that's truthy when done, timeout
   local deadline=$((SECONDS + ${4:-90}))
@@ -130,7 +135,7 @@ SEEN=$(q "$SID" "len(events)")
 AGENT=$(q "$SID" "pid()")
 WORKER=$(ps -o ppid= -p "$AGENT" | tr -d ' ')
 HUB=$(ps -o ppid= -p "$WORKER" | tr -d ' ')
-HUB_REPORTED=$(cli hub status | awk '{print $2}')
+HUB_REPORTED=$(hub_pid)
 check "the agent is a real claude process in the worktree's session" 'ps -o command= -p "$AGENT" | grep -q claude'
 check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -q "roundhoused worker"'
 check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -q "roundhoused hub"'
@@ -170,7 +175,7 @@ ASID=$(cli session new timing --model "$MODEL" --permission-mode plan)
 WT2="$ROUNDHOUSE_WORKSPACES/myrepo/timing"
 plan_for() { echo "Make a one line plan to create a file $1 containing hello, then call ExitPlanMode. Do not ask questions."; }
 cli send "$ASID" "$(plan_for approved.txt)" --no-follow >/dev/null
-wait_for "the plan comes back for approval" "$ASID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+wait_for "the plan comes back for approval" "$ASID" "$PLANS_ASKED > 0" 120
 check "nothing has been done yet" '[ ! -f "$WT2/approved.txt" ]'
 check "the session reports waiting" '[ "$(session_status timing)" = WaitingApproval ]'
 check "its first turn was in plan mode" '[ "$(q "$ASID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][0]")" = plan ]'
@@ -215,8 +220,10 @@ if [ "$(q "$MSID" "kinds.count('approval_requested')")" -gt "$ASKED" ]; then
   cli approve "$MSID" "$APPROVAL" --deny "Not while planning"
 fi
 check "and nothing ran" 'wait_until_idle_session "$MSID" && [ ! -f "$WT2/asked.txt" ]'
+# The agent may have made a plan for the tool above, which was refused, so it's the plan after that one.
+PLANS=$(q "$MSID" "$PLANS_ASKED")
 cli send "$MSID" "$(plan_for planned.txt)" --no-follow >/dev/null
-wait_for "the plan comes back for approval" "$MSID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+wait_for "the plan comes back for approval" "$MSID" "$PLANS_ASKED > $PLANS" 120
 check "nothing has been done yet" '[ ! -f "$WT2/planned.txt" ]'
 APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
 cli approve "$MSID" "$APPROVAL"
@@ -278,7 +285,7 @@ section "The hub crashing mid-turn"
 cli send "$SID" "$(slow_tool 43 crashed crashed.txt)" --no-follow >/dev/null
 wait_for "a long tool is running" "$SID" "any(b['type'] == 'tool_use' and '43' in str(b['input']) for e in events if e['body']['type'] == 'assistant' for b in e['body']['blocks'])"
 sleep 1
-HUB=$(cli hub status | awk '{print $2}')
+HUB=$(hub_pid)
 kill -9 "$HUB"
 check "the worker exits" 'wait_gone "$WORKER"'
 check "the agent exits" 'wait_gone "$AGENT"'
