@@ -92,8 +92,8 @@ impl LiveSession {
     async fn handle_wake_agent(&self) {
         let Ok(hub) = self.hub() else { return };
         let waiting_on_nothing = {
-            let state = self.state.lock();
-            state.status.between_turns() && !state.queue.is_held()
+            let progress = &self.state.lock().progress;
+            progress.status.between_turns() && !progress.queue.is_held()
         };
         if self.agent_running() {
             return;
@@ -317,7 +317,7 @@ impl LiveSession {
     async fn handle_approve(&self, approval_id: ApprovalId, decision: ApprovalDecision) -> Result<(), ApiError> {
         {
             let state = self.state.lock();
-            let Some(asked_by) = state.pending_approvals.get(&approval_id) else {
+            let Some(asked_by) = state.progress.approvals.get(&approval_id) else {
                 return Err(ApiError::new(
                     ErrorCode::Conflict,
                     format!("approval {approval_id} isn't waiting for an answer"),

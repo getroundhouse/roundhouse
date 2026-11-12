@@ -44,7 +44,7 @@ fn carrying_on(dir: &Path) -> (Arc<Hub>, Arc<WorkerLink>, Arc<LiveSession>) {
     let id: SessionId = "s".into();
     let stored = hub.store.get_session(&id).unwrap();
     let carried = CarriedOver { link: link.id, run: RUN, recorded: None, untaken: Vec::new() };
-    let live = hub.sessions.lock().keep(&id, || LiveSession::start(&hub, stored, Vec::new(), Some(carried))).unwrap();
+    let live = hub.sessions.lock().keep(&id, || LiveSession::start(&hub, stored, &[], Some(carried))).unwrap();
     (hub, link, live)
 }
 

@@ -5,12 +5,11 @@
 //! arrive on the same stream as agent output: if one task did both, waiting for a reply could stop
 //! the output being read, and the reply behind it would never arrive.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use parking_lot::Mutex;
 use protocol::client::ApiError;
-use protocol::event::{AgentTask, EventBody};
+use protocol::event::EventBody;
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
     SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
@@ -31,6 +30,7 @@ mod ingest;
 mod limits;
 mod messages;
 mod pickup;
+mod progress;
 mod queue;
 mod record;
 mod status;
@@ -43,7 +43,7 @@ use ingest::run_ingest;
 pub(crate) use messages::{Command, Item};
 #[cfg(test)]
 pub(crate) use pickup::PICKS_UP_WITHIN;
-use queue::QueueWatch;
+pub(crate) use progress::Progress;
 
 const LIVE_CAPACITY: usize = 4096;
 
@@ -123,25 +123,16 @@ pub(crate) struct CarriedOver {
 
 struct LiveState {
     last_seq: Seq,
-    status: SessionStatus,
+    /// Where the agent has got to, as the session's record says, which only recording an event changes.
+    progress: Progress,
     tail: Tail,
     version: u64,
-    /// Open approvals, by the run that asked. `None` means an earlier hub's, which can't be answered.
-    pending_approvals: HashMap<ApprovalId, Option<RunId>>,
-    /// What the current agent is running in the background, from what the session's record lists, since a wait the
-    /// hub keeps outlives the agent, though nothing else does.
-    background_tasks: Vec<AgentTask>,
-    /// Whether the session's only work is a wait the hub keeps, as this hub stops, so its agent's exit cuts nothing
-    /// off.
-    outlives_this_hub: bool,
     /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
     context: Option<ContextUsage>,
     /// What the API's cache holds of the conversation, as the session's record says.
     prompt_cache: Option<PromptCache>,
     /// Which account a launch of the agent runs under, learnt as it launches, for filing what it hears.
     hearing: Option<(RunId, limits::Hearing)>,
-    /// When the newest turn started, as the session's record says, for the turn's end to carry.
-    turn_started_at_ms: Option<i64>,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
     /// been replaced: they go in the log, but don't speak for the session's current state, and its
     /// deltas are dropped.
@@ -152,8 +143,6 @@ struct LiveState {
     /// What the next agent launches with.
     settings: SessionSettings,
     closed_at_ms: Option<i64>,
-    /// Whether the agent can take a queued prompt yet.
-    queue: QueueWatch,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
     live: Option<broadcast::Sender<Live>>,
@@ -198,7 +187,7 @@ impl LiveSession {
     pub(crate) fn start(
         hub: &Arc<Hub>,
         stored: StoredSession,
-        open_approvals: Vec<ApprovalId>,
+        open_approvals: &[ApprovalId],
         carried: Option<CarriedOver>,
     ) -> Arc<Self> {
         let has_queue = !stored.session.queued.is_empty();
@@ -208,10 +197,9 @@ impl LiveSession {
         };
         // The agent still running is the one that asked whatever is open, and runs on what it runs in the background.
         let asked_by = agent.map(|agent| agent.run);
-        // As the record lists them: the agent's, if it carries on with one, or else only a wait, which outlives it.
-        let background_tasks = stored.session.background_tasks.clone();
-        let mut queue = QueueWatch::starting(stored.session.queue_held);
-        queue.set_untaken(untaken);
+        // What's in the background is as the record lists it: the agent's, if it carries on with one, or else only a
+        // wait, which outlives it.
+        let progress = Progress::recorded(&stored.session, open_approvals, asked_by, untaken);
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {
@@ -225,22 +213,17 @@ impl LiveSession {
             ingest: ingest_tx,
             state: Mutex::new(LiveState {
                 last_seq: stored.session.last_seq,
-                status: stored.session.status,
+                progress,
                 tail: Tail::default(),
                 version: 0,
-                pending_approvals: open_approvals.into_iter().map(|id| (id, asked_by)).collect(),
-                background_tasks,
-                outlives_this_hub: false,
                 context: stored.session.context.clone(),
                 prompt_cache: stored.session.prompt_cache.clone(),
                 hearing: None,
-                turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent,
                 recorded,
                 agent_opened: stored.agent_opened,
                 settings: stored.session.settings(),
                 closed_at_ms: stored.session.closed_at_ms,
-                queue,
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
@@ -293,7 +276,7 @@ impl LiveSession {
     }
 
     pub(crate) fn status(&self) -> SessionStatus {
-        self.state.lock().status
+        self.state.lock().progress.status
     }
 
     /// The kind of agent it runs, as its record names it, which never changes.
@@ -369,6 +352,13 @@ impl LiveSession {
     }
 
     fn is_closed(&self) -> bool {
-        self.state.lock().closed_at_ms.is_some()
+        !self.state.lock().is_open()
+    }
+}
+
+impl LiveState {
+    /// Whether the chat is open, as [`Session::is_open`] says.
+    fn is_open(&self) -> bool {
+        self.closed_at_ms.is_none()
     }
 }

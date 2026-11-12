@@ -204,7 +204,7 @@ impl LiveSession {
         let open: Vec<ApprovalId> = {
             let state = self.state.lock();
             let from_this_run = |asked_by: Option<RunId>| run.is_none_or(|run| asked_by.is_none_or(|by| by == run));
-            state.pending_approvals.iter().filter(|(_, by)| from_this_run(**by)).map(|(id, _)| id.clone()).collect()
+            state.progress.approvals.iter().filter(|(_, by)| from_this_run(**by)).map(|(id, _)| id.clone()).collect()
         };
         for approval_id in open {
             self.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;
@@ -229,7 +229,7 @@ impl LiveSession {
         if let Some(lost) = lost {
             self.cancel_approvals(None).await;
             // Its agent went with its worker, so it can't say it dropped what it hadn't taken.
-            let untaken = self.state.lock().queue.untaken().to_vec();
+            let untaken = self.state.lock().progress.queue.untaken().to_vec();
             for prompt in untaken {
                 self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt }).await;
             }

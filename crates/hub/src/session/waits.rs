@@ -43,7 +43,7 @@ impl LiveSession {
 
     /// As [`LiveSession::unlist_waits`] does, holding `configuring`, so no agent starts meanwhile.
     pub(super) async fn unlist_waits_holding(&self, _starts: &MutexGuard<'_, ()>) -> Result<(), ApiError> {
-        let listed = self.state.lock().background_tasks.clone();
+        let listed = self.state.lock().progress.background_tasks.clone();
         let left: Vec<_> = listed.iter().filter(|task| task.kind != TaskKind::Wait).cloned().collect();
         if self.agent_running() || left.len() == listed.len() {
             return Ok(());
