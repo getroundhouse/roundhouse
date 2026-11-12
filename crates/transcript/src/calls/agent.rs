@@ -22,6 +22,9 @@ pub(crate) struct Agent<'a> {
     pub(crate) prompt: Option<&'a str>,
 }
 
+/// What a subagent is called when the agent didn't say what it's for, wherever the subagent tab is opened from.
+pub(crate) const UNTITLED: &str = "Agent";
+
 impl<'a> Agent<'a> {
     pub(super) fn read(input: &'a Value) -> Self {
         Self {
@@ -33,7 +36,7 @@ impl<'a> Agent<'a> {
 
     /// What its line says: what the agent said the subagent is for.
     pub(crate) fn title(&self) -> &'a str {
-        self.description.unwrap_or("Agent")
+        self.description.unwrap_or(UNTITLED)
     }
 
     /// What the agent said the subagent is for, if it said, which is the title then.

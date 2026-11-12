@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use client_core::OpenSession;
-use client_core::session_log::{PendingPrompt, Row};
+use client_core::session_log::{By, PendingPrompt, Row};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -122,7 +122,8 @@ pub(crate) fn render_row(
 /// What a row shows, copied out so the log isn't held while it's drawn.
 #[expect(clippy::large_enum_variant, reason = "made for one row and matched straight away")]
 enum Shown {
-    Tail(Tail),
+    /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab.
+    Tail(Tail, By),
     Event(SessionEvent, Around),
     Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
@@ -145,7 +146,7 @@ fn render_row_inner(
         let m = model.borrow();
         session.read(|log| {
             if ix >= tail || ix >= log.row_count() {
-                return Shown::Tail(log.tail().clone());
+                return Shown::Tail(log.tail().clone(), log.by());
             }
             match log.row(ix) {
                 Row::Event(event) if drawn_in_its_call(log, &m, event) || alone::repeats_report(log, &m, ix) => {
@@ -158,9 +159,9 @@ fn render_row_inner(
         })
     };
     Some(match shown {
-        Shown::Tail(tail) => {
+        Shown::Tail(tail, by) => {
             let m = model.borrow();
-            render_tail(&tail, &m.at_work, &shared.texts, m.folds.thinking_open(), cx)
+            render_tail(&tail, &m.at_work, shared, by, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
