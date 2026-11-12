@@ -132,9 +132,10 @@ pub fn bar(
 }
 
 /// The number, then the title, filling what the action leaves of the bar. As the bar narrows, the title gives way
-/// first, as far as nothing, and then the number goes, rather than run past the bar's end, which on Windows is under
-/// the window's buttons. They're laid out from the right and wrap, so the number is the one to go: it wraps onto a
-/// second line, which the bar's height leaves out of sight, since each fills that height.
+/// first, as far as nothing, and then the number goes, rather than push the action past the bar's end, which on
+/// Windows is under the window's buttons. They're laid out from the right and wrap, so the number is the one to go: it
+/// wraps onto a second line, which the bar's height leaves out of sight, since each fills that height. An action
+/// longer than the whole bar still runs past it.
 fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
     let filling = |child: AnyElement| div().h_full().flex().items_center().child(child);
     let title = filling(title.into_any_element()).flex_1().min_w_0();

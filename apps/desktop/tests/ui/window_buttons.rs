@@ -19,8 +19,10 @@ const BUTTONS: Pixels = px(138.);
 
 const BUTTON_IDS: [&str; 3] = ["window-minimize", "window-maximize", "window-close"];
 
-/// A pull request still a draft, whose bar offers its longest action.
-const DRAFT: &str = r#"{"number":7,"url":"https://example.com/pull/7","title":"T","state":"OPEN","isDraft":true}"#;
+/// A pull request with a failed check, whose bar offers Fix checks.
+const CHECK_FAILED: &str = r#"{"number":7,"url":"https://example.com/pull/7","title":"T","state":"OPEN",
+    "isDraft":false,"statusCheckRollup":[
+        {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE"}]}"#;
 
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_window_button_goes_on_to_windows_and_nothing_in_the_app_hears_it(cx: &mut TestAppContext) {
@@ -53,23 +55,24 @@ fn on_windows_the_window_buttons_are_over_an_open_dialog(cx: &mut TestAppContext
 }
 
 /// At its narrowest, the bar at the top of the sidebar of changes has less room beside the buttons than the number
-/// and the longest action need, so the number goes, rather than the action running under them.
+/// and Fix checks need, so the number goes, rather than the action running under them.
 #[gpui_kit::test]
 fn on_windows_the_pull_requests_bar_at_its_narrowest_ends_before_the_window_buttons(cx: &mut TestAppContext) {
     cx.update(|cx| the_title_bar_is(TitleBar::Windows, cx));
     let stack = Stack::new();
     let gh = stack.start_hub_with_stand_in_gh();
-    gh.report(DRAFT);
+    gh.report(CHECK_FAILED);
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     // Narrow enough that the sidebar of changes is at its narrowest.
     ui.cx.simulate_window_resize(ui.handle, size(px(900.), px(800.)));
-    ui.wait("the bar to offer Ready for review", |ui| ui.shows_label("pull-request-bar", "Ready for review"));
+    ui.wait("the bar to offer Fix checks", |ui| ui.shows_label("pull-request-bar", "Fix checks"));
 
     let across = ui.cx.update_window(ui.handle, |_, window, _| window.viewport_size().width).unwrap();
     let ends = ui.cx.update_window(ui.handle, |_, window, _| window.find("pull-request-action").bounds().right());
 
-    assert!(ends.unwrap() <= across - BUTTONS, "the action ends before the buttons");
+    let ends = ends.unwrap();
+    assert!(ends <= across - BUTTONS, "the action ends at {ends:?}, past where the buttons start");
     assert!(!ui.visible("pull-request"), "the number went to make room");
 }
 

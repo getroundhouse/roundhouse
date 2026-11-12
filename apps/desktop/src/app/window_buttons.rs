@@ -3,9 +3,9 @@
 
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
-    AccessibleAction, App, Div, Font, Global, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    Role, Stateful, StatefulInteractiveElement as _, Styled as _, Window, WindowControlArea, deferred, div, font, px,
-    rgb, white,
+    AccessibleAction, App, Font, Global, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, WindowControlArea, deferred, div, font,
+    px, rgb, white,
 };
 
 use crate::sides::{self, WindowButtons};
@@ -92,27 +92,32 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
     let theme = cx.theme();
     // Dimmed while another window is active, as Windows dims its own.
     let colour = if window.is_window_active() { theme.foreground } else { theme.muted_foreground };
-    let (hover, pressed) = (theme.foreground.opacity(0.06), theme.foreground.opacity(0.04));
+    let faint = Shade { hover: theme.foreground.opacity(0.06), pressed: theme.foreground.opacity(0.04), text: colour };
     let red: Hsla = rgb(CLOSE_RED).into();
-    let drawn = |button: Button| drawn(button, glyphs.as_ref(), colour);
+    let red = Shade { hover: red, pressed: red.opacity(0.9), text: white() };
+    let drawn = |button: Button, shade: Shade| drawn(button, glyphs.as_ref(), colour, shade);
     let maximize = if window.is_maximized() { Button::Restore } else { Button::Maximize };
     // A third of the room `sides` leaves them each.
     let buttons = h_flex()
         .w(sides::WINDOWS_BUTTONS_WIDTH)
         .h(HEADER_HEIGHT)
-        .child(drawn(Button::Minimize).hover(move |style| style.bg(hover)).active(move |style| style.bg(pressed)))
-        .child(drawn(maximize).hover(move |style| style.bg(hover)).active(move |style| style.bg(pressed)))
-        .child(
-            drawn(Button::Close)
-                .hover(move |style| style.bg(red).text_color(white()))
-                .active(move |style| style.bg(red.opacity(0.9)).text_color(white())),
-        );
+        .child(drawn(Button::Minimize, faint))
+        .child(drawn(maximize, faint))
+        .child(drawn(Button::Close, red));
     Some(div().absolute().top_0().right_0().child(deferred(buttons).with_priority(PRIORITY)))
 }
 
-/// `button`, drawn with `glyphs`, Windows' icon font, in `colour`, or with the kit's icon without it. A screen reader
-/// presses it by its accessible action, since it has no click of its own.
-fn drawn(button: Button, glyphs: Option<&Font>, colour: Hsla) -> Stateful<Div> {
+/// What a button's background is under the pointer and while it's pressed, and its glyph's colour then.
+#[derive(Clone, Copy)]
+struct Shade {
+    hover: Hsla,
+    pressed: Hsla,
+    text: Hsla,
+}
+
+/// `button`, drawn with `glyphs`, Windows' icon font, in `colour`, or with the kit's icon without it, and in `shade`
+/// under the pointer. A screen reader presses it by its accessible action, since it has no click of its own.
+fn drawn(button: Button, glyphs: Option<&Font>, colour: Hsla, shade: Shade) -> impl IntoElement {
     let drawn = div()
         .id(button.id())
         .role(Role::Button)
@@ -125,11 +130,14 @@ fn drawn(button: Button, glyphs: Option<&Font>, colour: Hsla) -> Stateful<Div> {
         .justify_center()
         .occlude()
         .window_control_area(button.area())
-        .text_color(colour);
-    match glyphs {
+        .text_color(colour)
+        .hover(move |style| style.bg(shade.hover).text_color(shade.text))
+        .active(move |style| style.bg(shade.pressed).text_color(shade.text));
+    let drawn = match glyphs {
         Some(glyphs) => drawn.font(glyphs.clone()).text_size(GLYPH_SIZE).child(button.glyph()),
         None => drawn.child(Icon::new(button.icon()).small()),
-    }
+    };
+    drawn.test_support()
 }
 
 /// Windows' icon font that's installed, found the first time the buttons are drawn, or `None` with neither. GPUI
