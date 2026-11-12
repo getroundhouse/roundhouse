@@ -74,6 +74,45 @@ fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
     assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
 }
 
+/// As a newer client's known request would be, with a value this hub doesn't know: here, a kind of decision.
+#[test]
+fn a_hub_refuses_a_request_it_cannot_read_and_carries_on() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello { .. })));
+
+    let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow_always"}}"#;
+    let refused = connection.ask(2, approve);
+
+    assert!(matches!(&refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{refused:?}");
+    let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
+    assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
+}
+
+/// One it can't read can't be a hello it answers, so it's refused as any first request but a hello is.
+#[test]
+fn a_first_request_the_hub_cannot_read_is_refused_as_one_that_isnt_a_hello() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+
+    let refused = connection.ask(1, r#"{"method":"hello","client":"newer","protocol_version":"3"}"#);
+
+    assert!(matches!(&refused, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{refused:?}");
+    let mut line = String::new();
+    assert_eq!(connection.replies.read_line(&mut line).unwrap(), 0, "it kept the connection, and said {line}");
+}
+
+#[test]
+fn a_hub_closes_a_connection_that_sends_a_frame_naming_no_call() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+
+    writeln!(connection.socket, r#"{{"request":{{"method":"hub_status"}}}}"#).unwrap();
+
+    let mut line = String::new();
+    assert_eq!(connection.replies.read_line(&mut line).unwrap(), 0, "it answered {line}");
+}
+
 /// A client across a real break sends these as written, so a test can't build them from today's types.
 #[test]
 fn a_hub_shows_its_status_and_stops_without_a_hello() {

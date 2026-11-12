@@ -5,22 +5,16 @@ use std::io;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::frame;
+use protocol::frame::{self, Call};
 use protocol::model::HubId;
 use protocol::provider::{
-    PROVIDER_PROTOCOL_VERSION, ProviderCall, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
+    PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
 };
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::{Provider, ProviderError};
-
-/// Whatever a frame that didn't parse says its call's ID is.
-#[derive(serde::Deserialize)]
-struct IdOnly {
-    id: Option<u64>,
-}
 
 /// Makes the provider once the hub has said which hub it is, since an adapter works only with that hub's instances.
 pub type MakeProvider = Box<dyn FnOnce(&HubId) -> Result<Arc<dyn Provider>, ProviderError> + Send>;
@@ -48,23 +42,16 @@ where
         if line.len() > frame::MAX_FRAME_BYTES {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "the hub sent an oversized frame"));
         }
-        let call: ProviderCall = match frame::decode(&line) {
+        let Call { id, request } = match frame::read_call::<ProviderRequest>(&line) {
             Ok(call) => call,
             Err(e) => {
-                // One that names its call is answered, so the hub isn't left waiting for a reply.
-                if let Some(id) = frame::decode::<IdOnly>(&line).ok().and_then(|call| call.id) {
-                    let refused = ApiError::new(ErrorCode::InvalidRequest, format!("the request didn't parse: {e}"));
-                    let _ = frames.send(ProviderFrame::Reply { id, outcome: ProviderOutcome::Error(refused) }).await;
-                } else {
-                    warn!("ignoring a request that didn't parse: {e}");
-                }
+                warn!("ignoring a request that didn't parse: {e}");
                 continue;
             }
         };
-        let id = call.id;
         let reply = move |outcome| ProviderFrame::Reply { id, outcome };
-        match (call.request, &serving) {
-            (ProviderRequest::Hello { protocol_version, oldest_protocol_version, hub_id, .. }, _) => {
+        match (request, &serving) {
+            (Ok(ProviderRequest::Hello { protocol_version, oldest_protocol_version, hub_id, .. }), _) => {
                 let outcome = match hello(&mut make, &mut serving, protocol_version, oldest_protocol_version, hub_id) {
                     Ok(provider) => ProviderOutcome::Response(ProviderResponse::Hello {
                         protocol_version: PROVIDER_PROTOCOL_VERSION,
@@ -80,7 +67,12 @@ where
                 let refused = ApiError::new(ErrorCode::VersionMismatch, "the first request must be hello");
                 let _ = frames.send(reply(ProviderOutcome::Error(refused))).await;
             }
-            (request, Some((_, provider))) => answer_on_a_task(provider.clone(), request, id, frames.clone()),
+            // A newer hub's, so it's refused as one this adapter doesn't do, rather than leaving the hub waiting.
+            (Err(e), Some(_)) => {
+                let refused = ApiError::unsupported_request("this adapter", Some(&e));
+                let _ = frames.send(reply(ProviderOutcome::Error(refused))).await;
+            }
+            (Ok(request), Some((_, provider))) => answer_on_a_task(provider.clone(), request, id, frames.clone()),
         }
     }
     writing.abort();
