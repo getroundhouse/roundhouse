@@ -14,6 +14,7 @@ pub mod changes;
 pub mod checkout;
 mod composing;
 pub mod file_diff;
+mod file_header;
 mod file_icons;
 mod file_image;
 mod file_tree;
@@ -25,6 +26,7 @@ pub mod lost_release;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
+pub mod patch;
 mod prompt_cache;
 pub mod pull_request;
 mod rename;
@@ -50,6 +52,7 @@ mod app_icon_res;
 
 pub use assets::Assets;
 use checkout::Checkout;
+use gpui_kit::component::input::{Copy, SelectAll};
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
 
@@ -108,6 +111,8 @@ pub fn open_main_window(
     settings::load(&hub.paths.data_dir, cx);
     #[cfg(target_os = "macos")]
     accessibility_focus::install();
+    // As the kit binds them in what's typed in, so the diff's text copies as any other text does.
+    let (copy, select_all) = if cx.platform_info().is_mac() { ("cmd-c", "cmd-a") } else { ("ctrl-c", "ctrl-a") };
     cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
@@ -121,6 +126,8 @@ pub fn open_main_window(
         KeyBinding::new("cmd-n", NewWorkspace, None),
         KeyBinding::new("cmd-shift-d", ToggleDiff, None),
         KeyBinding::new("space", FlipImage, Some(image_diff::KEY_CONTEXT)),
+        KeyBinding::new(copy, Copy, Some(file_diff::KEY_CONTEXT)),
+        KeyBinding::new(select_all, SelectAll, Some(file_diff::KEY_CONTEXT)),
         KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
         KeyBinding::new("cmd-shift-a", ArchiveWorkspace, None),
         KeyBinding::new("cmd-shift-u", MarkWorkspace, None),

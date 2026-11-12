@@ -1,6 +1,7 @@
 //! The real app in a real window, opened on a given view, for looking at it by eye or taking a screenshot.
 //! Everything else in the app works normally. Through `cargo run` it uses this checkout's own hub, or
-//! `ROUNDHOUSE_HOME` if it's set.
+//! `ROUNDHOUSE_HOME` if it's set. No hub is built beside an example, so to start one that isn't running, it takes
+//! `ROUNDHOUSE_DAEMON_BIN=target/debug/roundhoused`, after `cargo build -p daemon`.
 //!
 //!     cargo run -p desktop --example look -- some-workspace
 //!     cargo run -p desktop --example look -- some-workspace diff "Rename this"

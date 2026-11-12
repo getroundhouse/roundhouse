@@ -4,9 +4,10 @@
 use std::collections::HashSet;
 
 use client_core::{Client, RecordsFeed};
-use gpui_kit::component::diff::DiffFile;
 use gpui_kit::{AppContext as _, Context, EventEmitter};
 use protocol::model::{CommentId, CommitId, DiffComment, WorkspaceId};
+
+use crate::patch::{self, FilePatch};
 
 mod comments;
 
@@ -27,7 +28,7 @@ pub struct Review {
     records: RecordsFeed,
     workspace_id: WorkspaceId,
     /// Every changed file, in order of path, or `None` until the diff has loaded.
-    pub files: Option<Vec<DiffFile>>,
+    pub files: Option<Vec<FilePatch>>,
     /// The commit the diff was taken from, which holds each file as it was before the change. `None` until the diff
     /// has loaded, or from a worker too old to say.
     pub base_commit: Option<CommitId>,
@@ -88,7 +89,7 @@ impl Review {
                     let (truncated, base) = (diff.truncated, diff.base_commit);
                     let parsing = cx.background_spawn(async move {
                         let mut files =
-                            DiffFile::parse(&diff.patch).map_err(|e| format!("couldn't read the diff: {e}"))?;
+                            patch::parse(&diff.patch).map_err(|e| format!("couldn't read the diff: {e}"))?;
                         files.sort_by(|a, b| a.path().cmp(b.path()));
                         Ok::<_, String>((files, truncated, base))
                     });
@@ -126,7 +127,7 @@ impl Review {
     }
 
     /// A file as the diff last loaded has it. `None` once it no longer changes anything.
-    pub fn file(&self, path: &str) -> Option<&DiffFile> {
+    pub fn file(&self, path: &str) -> Option<&FilePatch> {
         self.files.as_ref()?.iter().find(|file| file.path().as_ref() == path)
     }
 

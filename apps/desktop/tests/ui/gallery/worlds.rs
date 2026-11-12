@@ -5,8 +5,8 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     Account, AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment,
-    DiffSide, GitDiff, LimitWindow, MergeState, PermissionMode, PullRequest, Rev, SessionStatus, SetupStatus, Title,
-    UsageLimit, WorkspaceId, WorkspaceStatus,
+    DiffSide, FileContents, GitDiff, LimitWindow, MergeState, PermissionMode, PullRequest, Rev, SessionStatus,
+    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -321,12 +321,10 @@ pub(super) fn diff() -> World {
     finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
-        GitDiff {
-            base_commit: Some(CommitId::from(patch::BASE_COMMIT)),
-            patch: patch::PATCH.to_string(),
-            truncated: false,
-        },
+        GitDiff { base_commit: Some(CommitId::from(patch::BASE_COMMIT)), patch: patch::patch(), truncated: false },
     );
+    // So the lines git left out of the file the screens open can be shown.
+    world.base_files.insert(worktree::OPENED.to_string(), FileContents::Text { text: worktree::MODEL.to_string() });
     world.comments.insert(
         focus.clone(),
         vec![DiffComment {
@@ -334,7 +332,7 @@ pub(super) fn diff() -> World {
             workspace_id: focus,
             path: "crates/protocol/src/model.rs".to_string(),
             side: DiffSide::New,
-            line: 101,
+            line: patch::PULL_REQUEST_LINE,
             text: "Should this say when it was last checked, so a stale state can show as stale?".to_string(),
             created_at_ms: 0,
             rev: Rev::default(),

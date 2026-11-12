@@ -12,6 +12,7 @@ mod chats;
 mod checkout;
 mod context;
 mod core_loop;
+mod diff_lines;
 mod drafts;
 mod finding;
 #[cfg(target_os = "macos")]

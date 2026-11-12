@@ -5,11 +5,11 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use desktop::file_diff::FileDiff;
+use desktop::file_diff::{FileDiff, LineAt};
 use desktop::review::{Review, ReviewEvent};
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::component::diff::{DiffLinePosition, DiffSide};
 use gpui_kit::{AppContext as _, Entity, SharedString};
+use protocol::model::DiffSide;
 
 use super::Ui;
 
@@ -62,17 +62,20 @@ impl Ui<'_> {
         diff
     }
 
-    /// Clicks a file in Changes, and waits for the file tab to show its diff.
+    /// Clicks a file in Changes, and waits for the file tab to show its diff, made with the file as it was, or for a
+    /// file that isn't text, to start comparing its sides.
     pub(crate) fn open_diff_of(&mut self, diff: &Diff, path: &str) {
         self.click(SharedString::from(format!("file-{path}")));
         self.wait("the file tab to show it", |ui| {
-            ui.cx.read_entity(&diff.file, |f, cx| f.file(cx).is_some_and(|f| f.path() == path) && f.state.is_some())
+            ui.cx.read_entity(&diff.file, |view, cx| {
+                view.file(cx).is_some_and(|file| file.path() == path && (file.is_binary() || view.is_ready()))
+            })
         });
     }
 
     /// Starts a comment on a line on the diff's new side, as that line's add button would.
-    pub(crate) fn start_comment(&mut self, diff: &Diff, path: &str, line: usize) {
-        let position = DiffLinePosition::new(path, DiffSide::Modified, line);
+    pub(crate) fn start_comment(&mut self, diff: &Diff, path: &str, line: u32) {
+        let position = LineAt { path: path.into(), side: DiffSide::New, line };
         self.cx
             .update_window(self.handle, |_, window, cx| {
                 diff.file.update(cx, |f, cx| f.start_comment(position, window, cx));

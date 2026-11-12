@@ -11,15 +11,16 @@ use gpui_kit::{
 };
 use protocol::model::WorkspaceId;
 
+use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
-use lines::Lines;
-pub(crate) use reading::{Read, Unshown, hash, what_it_gives};
+pub(crate) use lines::{Line, Lines, TAB};
+pub(crate) use reading::{HIGHLIGHT_UP_TO, Read, Unshown, hash, what_it_gives};
 
 mod lines;
 mod reading;
 
-/// The same height as a line of the diff, so the two read alike.
-const LINE_HEIGHT: Pixels = px(20.);
+/// The height of a line of a file, and of a line of a diff, so the two read alike.
+pub(crate) const LINE_HEIGHT: Pixels = px(20.);
 /// The bar with the file's path, as tall as the rows of tabs above it, so the buttons an image's comparison has there
 /// have room around them.
 pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
@@ -161,33 +162,20 @@ impl FileView {
 
     /// Its path, and for an image, what kind it is and how big, at the other end.
     fn header(&self, cx: &App) -> Option<AnyElement> {
-        let path = self.path.clone()?;
-        let theme = cx.theme();
+        let path = self.path.as_ref()?;
         let about = match &self.contents {
-            Contents::Image(image) => {
-                Some(div().flex_none().text_color(theme.muted_foreground).child(image.describe()))
-            }
+            Contents::Image(image) => Some(
+                div().flex_none().text_color(cx.theme().muted_foreground).child(image.describe()).into_any_element(),
+            ),
             _ => None,
         };
-        let header = h_flex()
-            .flex_none()
-            .w_full()
-            .h(HEADER_HEIGHT)
-            .px_4()
-            .gap_4()
-            .justify_between()
-            .border_b_1()
-            .border_color(theme.border)
-            .text_sm()
-            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(path))
-            .children(about);
-        Some(header.into_any_element())
+        Some(file_header(path, None, about, cx))
     }
 }
 
 /// Wide enough for the biggest line number, with room after it.
 #[expect(clippy::cast_precision_loss, reason = "a line number has a handful of digits")]
-fn numbers_width(lines: usize) -> Pixels {
+pub(crate) fn numbers_width(lines: usize) -> Pixels {
     let digits = lines.max(1).to_string().len().max(3);
     px(digits as f32 * 8. + 20.)
 }

@@ -29,6 +29,7 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+similar.workspace = true
 velopack.workspace = true
 ureq.workspace = true
 flume.workspace = true

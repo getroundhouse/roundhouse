@@ -26,7 +26,8 @@ Bars are decided through `l`, and `xl` is only reported. The sizes come from rea
 - Keep a sidebar at its whole width while it slides, and clip it, so nothing in it is laid out again as it moves. Its width stays the same all the way, even in a window too narrow for both sidebars, where the other one gives up or takes back room as it slides and is laid out again on each frame. What's beside it is laid out on every frame of the slide, which costs the rows in the window.
 - Nothing in the window is cached, so every frame something moving asks for redraws the whole window. Whatever moves has to end, and then ask for no more frames.
 - Parse terminal output off the main thread, with a short lock per frame.
-- Use the kit's `Diff` and `Textarea` rather than writing those.
+- Use the kit's `Textarea` rather than writing one.
+- Draw a diff in a list that knows its rows' heights. Every row of the file tab's diff is a line or a fold tall, apart from a comment's, so its list adds them up without drawing them, draws only the rows in the window, and keeps a comment's height by which comment it is. A change of its width costs only the comments in the window.
 - Highlight with Oniguruma rather than `fancy-regex`, which takes several times the CPU on a large diff.
 - Stop the caret blinking after 10 s idle, so an idle window draws nothing.
 - Redraw a moving status mark on every frame of the display, and only while it's on screen and its agent works or its workspace is set up. Smoothness comes first until a measurement shows it costs too much. Nothing in the window is cached, so each of those frames redraws the whole window, and an idle window still draws nothing.
