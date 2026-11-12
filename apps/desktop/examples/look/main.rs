@@ -40,6 +40,7 @@ fn main() {
         gpui_kit::init(cx);
         cx.activate(true);
         // In its usual place, so one picture is the same size as the next.
+        desktop::why_quit::say(checkout.as_ref(), cx);
         let hub = HubSource::default_local().expect("find the hub");
         let (handle, view) =
             desktop::open_main_window(hub, checkout, desktop::Opens::InItsUsualPlace, cx).expect("open a window");
@@ -66,7 +67,7 @@ fn main() {
             }
             if let Some(probe) = args.get(1).and_then(|arg| probes::Probe::parse(arg)) {
                 probe.run(&handle, &view, cx).await;
-                cx.update(|cx| cx.quit());
+                cx.update(|cx| desktop::why_quit::done("its probe finished", cx));
                 return;
             }
             // Opens a menu or presses a button, by its ID, for looking at what that shows, then each one after it in
