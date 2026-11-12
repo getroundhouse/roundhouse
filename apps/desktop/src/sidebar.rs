@@ -177,11 +177,18 @@ fn connected(app: &AppView) -> bool {
 }
 
 /// The line, drawn `offset` from its place, which the list lays it out in, as it slides there.
-fn line(app: &AppView, line: Line, offset: Pixels, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
+fn line(
+    app: &AppView,
+    line: Line,
+    offset: Pixels,
+    line_text: &LineText,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
     let drawn = match line {
         Line::Heading => heading::heading(app, connected(app), cx),
         Line::Repo(r) => repo_header(app, &app.records().repos()[r], cx),
-        Line::Workspace(w) => row::workspace_row(app, &app.records().workspaces()[w], line_text, cx),
+        Line::Workspace(w) => row::workspace_row(app, &app.records().workspaces()[w], line_text, window, cx),
         Line::Creating(w) => creating(&app.records().workspaces()[w], cx),
     };
     crate::reorder::offset_by(drawn, offset)
@@ -281,7 +288,7 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
     let Arranged { lines, offsets, sizes } = arranged;
     let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, window, cx| {
         let line_text = LineText::new(window, cx);
-        range.map(|ix| line(app, lines[ix], offsets[ix], &line_text, cx)).collect::<Vec<_>>()
+        range.map(|ix| line(app, lines[ix], offsets[ix], &line_text, window, cx)).collect::<Vec<_>>()
     });
     v_flex()
         .size_full()
