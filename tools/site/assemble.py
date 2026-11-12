@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Puts the marketing site together as it's published: what's in site/, without its README, and with the
-link-preview tags that need the site's address, which is kept out of the repo.
+link-preview tags that need the site's address, which the deploy passes in.
 
     tools/site/assemble.py OUT [ADDRESS]
 
