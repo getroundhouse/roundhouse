@@ -6,20 +6,23 @@ use std::path::{Path, PathBuf};
 use velopack::locator::VelopackLocatorConfig;
 
 use super::problem::{Kind, Problem};
+use crate::appimage::AppImage;
 
 /// Where Velopack finds the app and keeps what it downloads, or `None` to let it choose, which it does on a Mac and on
 /// Windows in a folder of this user's. On Linux its choice is `/var/tmp/velopack/Roundhouse/packages`, one folder for
 /// every user on the machine, so another user could replace a package between its download and its install, or keep
-/// this user from downloading at all. So there it keeps them in `updates/`, in this user's data directory.
+/// this user from downloading at all. So there it keeps them in `updates/`, in this user's data directory. Velopack
+/// would find the `AppImage` through `APPIMAGE`, which the app leaves out of what it starts, so it's given `appimage`.
 #[cfg(target_os = "linux")]
-pub(super) fn paths(data_dir: &Path) -> Option<VelopackLocatorConfig> {
+pub(super) fn paths(data_dir: &Path, appimage: Option<&AppImage>) -> Option<VelopackLocatorConfig> {
     use velopack::locator::{LocationContext, auto_locate_app_manifest};
-    let app = auto_locate_app_manifest(LocationContext::FromCurrentExe).ok()?;
+    let context = LocationContext::FromSpecifiedRootDir(appimage?.path().to_path_buf(), Some(data_dir.join("updates")));
+    let app = auto_locate_app_manifest(context).ok()?;
     let binaries = app.get_current_bin_dir();
     Some(VelopackLocatorConfig {
         RootAppDir: app.get_appimage_path(),
         UpdateExePath: app.get_update_path(),
-        PackagesDir: data_dir.join("updates"),
+        PackagesDir: app.get_packages_dir(),
         // Where Velopack's own search reads it, beside the binaries.
         ManifestPath: binaries.join("sq.version"),
         CurrentBinaryDir: binaries,
@@ -28,7 +31,7 @@ pub(super) fn paths(data_dir: &Path) -> Option<VelopackLocatorConfig> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(super) fn paths(_data_dir: &Path) -> Option<VelopackLocatorConfig> {
+pub(super) fn paths(_data_dir: &Path, _appimage: Option<&AppImage>) -> Option<VelopackLocatorConfig> {
     None
 }
 
