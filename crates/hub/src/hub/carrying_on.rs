@@ -137,7 +137,8 @@ impl Hub {
         for id in gone {
             self.route(&id, Item::AgentLost { link: link.id, reason: ExitReason::HubRestart }).await;
         }
-        info!(%workspace_id, agents = running.len(), build = link.build(), "connected again to the worker an earlier hub left");
+        let (agents, build) = (running.len(), link.build());
+        info!(%workspace_id, agents, build, "connected again to the worker an earlier hub left");
         if self.sessions.lock().live.values().any(|session| session.workspace_id == workspace_id) {
             link.keep();
             // Its watch of the branches goes on from the earlier hub, but sends only what changes, and what it sent

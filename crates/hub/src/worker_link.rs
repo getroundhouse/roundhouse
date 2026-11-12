@@ -56,9 +56,9 @@ pub(crate) struct WorkerLink {
     left: AtomicBool,
     /// Which build the worker said it is, once it has said hello: `None` for a worker from before workers said.
     build: OnceLock<Option<String>>,
-    /// Set while the hub decides whether to replace it with a worker of its own build, and while it does, so it's
-    /// handed to nothing meanwhile.
-    replacing: AtomicBool,
+    /// How many times it's been handed out or called, which only grows, so two looks that find the same number know
+    /// nothing has used it in between.
+    uses: AtomicU64,
 }
 
 fn lost() -> ApiError {
@@ -88,7 +88,7 @@ impl WorkerLink {
             acks: Acks::default(),
             left: AtomicBool::new(false),
             build: OnceLock::new(),
-            replacing: AtomicBool::new(false),
+            uses: AtomicU64::new(0),
         });
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
@@ -141,6 +141,7 @@ impl WorkerLink {
         &self,
         request: WorkerRequest,
     ) -> Result<impl Future<Output = Result<WorkerResponse, ApiError>> + use<>, ApiError> {
+        self.uses.fetch_add(1, Ordering::SeqCst);
         let replied = self.calls.send(|id| WorkerCall { id, request }).await.map_err(|e| match e {
             NotSent::Closed => lost(),
             NotSent::Encoding(e) => internal(e.to_string()),
@@ -173,7 +174,7 @@ impl WorkerLink {
             acks: Acks::default(),
             left: AtomicBool::new(false),
             build: OnceLock::new(),
-            replacing: AtomicBool::new(false),
+            uses: AtomicU64::new(0),
         })
     }
 
@@ -200,13 +201,14 @@ impl WorkerLink {
         self.build.get().and_then(Option::as_deref).unwrap_or("one from before workers said")
     }
 
-    /// Hands it to nothing, or to anything again, as [`Hub::open_worker`] reads it. Only while that's locked.
-    pub(crate) fn set_replacing(&self, replacing: bool) {
-        self.replacing.store(replacing, Ordering::SeqCst);
+    /// Counts its being handed out for something, as [`WorkerLink::uses`] says.
+    pub(crate) fn handed_out(&self) {
+        self.uses.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub(crate) fn replacing(&self) -> bool {
-        self.replacing.load(Ordering::SeqCst)
+    /// How many times it's been handed out or called.
+    pub(crate) fn uses(&self) -> u64 {
+        self.uses.load(Ordering::SeqCst)
     }
 
     /// How many calls to the worker wait for its reply.

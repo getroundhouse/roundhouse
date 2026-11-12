@@ -26,14 +26,15 @@ impl Hub {
     }
 
     /// The running worker, if there is one. One wanted for anything is marked kept while the map is locked, which is
-    /// what makes [`Hub::stop_worker_only_read`] safe. One being replaced is handed to nothing, so whatever wants it
-    /// waits for the workspace's gate, and the worker that replaces it.
+    /// what makes [`Hub::stop_worker_only_read`] safe, and every one handed out is counted then, which is what makes
+    /// [`Hub::replace_once_idle`] safe.
     fn open_worker(&self, workspace_id: &WorkspaceId, wanted: Wanted) -> Option<Arc<WorkerLink>> {
         let workers = self.workers.lock();
-        let link = workers.get(workspace_id).filter(|link| link.is_open() && !link.replacing())?;
+        let link = workers.get(workspace_id).filter(|link| link.is_open())?;
         if wanted == Wanted::ForAnything {
             link.keep();
         }
+        link.handed_out();
         Some(link.clone())
     }
 

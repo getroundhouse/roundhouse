@@ -34,11 +34,15 @@ fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_w
     drop(client);
 
     update(&mut stack);
-    // Its agent has work in the background, so the next hub carries on with the worker the agent is on. Long enough for
-    // the hub to look again after a call to the worker it found under way, and stop it, if it were going to.
-    std::thread::sleep(Duration::from_secs(3));
+    // Its agent has work in the background, so the next hub carries on with the worker the agent is on. Longer than
+    // the hub waits with nothing at work before it stops a worker of another build, if it were going to.
+    std::thread::sleep(Duration::from_secs(12));
     assert!(is_alive(older), "the worker from the older build was stopped while its agent was at work");
-    std::fs::write(&done, "").unwrap();
+    // The agent picks up again by itself a while after its work is done, with nothing at work in between. Moved into
+    // place whole, so the agent can't find it before it says how long.
+    let pause = stack.path("pause");
+    std::fs::write(&pause, "2000").unwrap();
+    std::fs::rename(&pause, &done).unwrap();
     let client = stack.client();
     wait_for_turn_end(&client, &session.id, 2);
     wait_until("the worker from the older build to stop", || !is_alive(older));
