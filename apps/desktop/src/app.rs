@@ -34,6 +34,9 @@ pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
 pub use restarts::UpdateQuestion;
+pub use title_bar::TitleBar;
+#[cfg(feature = "testing")]
+pub use title_bar::the_title_bar_is;
 
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
 #[cfg(feature = "testing")]

@@ -119,7 +119,8 @@ impl AppView {
         let (background, foreground) = (theme.background, theme.foreground);
         // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
         // sizes and its spacing come out as the web's do.
-        title_bar::moves_window(root.id("app"), cx)
+        let root = root
+            .id("app")
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
@@ -127,7 +128,8 @@ impl AppView {
             .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
-            .child(self.unreleased.hears())
+            .child(self.unreleased.hears());
+        title_bar::stands_in(root, cx)
     }
 }
 
