@@ -65,7 +65,8 @@ pub struct FileDiff {
     pub draft: Option<Draft>,
     /// What shows in place of the lines for a file that isn't text, which has none.
     pub image: Entity<ImageDiff>,
-    /// What's been opened of each file that's shown, by path, which stays open while other files show.
+    /// What's been opened of each file that's shown, by path, which stays open while other files show, until the file
+    /// tab closes.
     opened: HashMap<SharedString, Opened>,
     list: DiffList,
     /// The rows as they were last laid out, and whether what they're made from has changed since.
@@ -132,6 +133,12 @@ impl FileDiff {
             self.show_file(cx);
         }
         cx.notify();
+    }
+
+    /// Folds every file's lines again, as the file tab closes, so a file shown afresh shows only its changes.
+    pub(crate) fn fold_all(&mut self, cx: &mut Context<Self>) {
+        self.opened.clear();
+        self.lay_out_again(cx);
     }
 
     /// The file it shows, as the diff last loaded has it. `None` once it no longer changes anything.
