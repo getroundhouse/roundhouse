@@ -7,8 +7,8 @@
 //! and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes by what it
 //! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy. With
 //! `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once no setup script is running, as a
-//! hub does, as many as it says are until a test writes another number to [`SETUPS`], and leaves [`RESTARTED`] to
-//! say it restarted rather than stopped.
+//! hub does, as many as it says are until a test writes another number to [`SETUPS`], unless they're told to end as it's
+//! asked, and leaves [`RESTARTED`] to say it restarted rather than stopped.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -55,6 +55,9 @@ struct Args {
     /// How many setup scripts it says are running, until a test writes another number to [`SETUPS`].
     #[arg(long, default_value_t = 0)]
     setups: u32,
+    /// Have its setup scripts end just as it's asked to restart, after a client saw them running, so it goes at once.
+    #[arg(long)]
+    setups_end_as_it_restarts: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -210,7 +213,7 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
 
 /// Goes once no setup script is running, as a hub asked to restart does, leaving [`RESTARTED`] behind.
 fn restart(args: &Args, paths: &Paths) {
-    while written(paths, SETUPS, args.setups) > 0 {
+    while !args.setups_end_as_it_restarts && written(paths, SETUPS, args.setups) > 0 {
         std::thread::sleep(Duration::from_millis(10));
     }
     std::fs::write(paths.data_dir.join(RESTARTED), "").unwrap();
