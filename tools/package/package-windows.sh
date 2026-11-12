@@ -5,7 +5,7 @@
 # the .NET SDK 8, 9 or 10, which runs `vpk`.
 #
 #   tools/package/package-windows.sh --prebuilt DIR              Package the binaries in DIR, built from this commit
-#   tools/package/package-windows.sh --prebuilt DIR --arch arm64 The same, for binaries built for ARM64, not x64
+#   tools/package/package-windows.sh --prebuilt DIR --arch arm64 The same, for binaries built for ARM64, not amd64
 #   tools/package/package-windows.sh --prebuilt DIR --out DIR    Write to DIR rather than target/package-windows-ARCH
 #   tools/package/package-windows.sh --print-version             Print the version this commit packages as, and stop
 #
@@ -14,8 +14,8 @@
 # gets a delta to this one.
 #
 # The version is `0.1.<commits>`, as for the Mac, and each platform publishes to a feed of its own. An app looks for
-# updates in the channel it was packaged for, which is `win` for x64 and `win-arm64` for ARM64, so each gets its own
-# processor's. The installer puts the app in `%LOCALAPPDATA%\Roundhouse`, for one user, without asking for an
+# updates in the channel it was packaged for, which is `win-amd64` for amd64 and `win-arm64` for ARM64, so each gets its
+# own processor's. The installer puts the app in `%LOCALAPPDATA%\Roundhouse`, for one user, without asking for an
 # administrator.
 set -euo pipefail
 
@@ -38,7 +38,7 @@ with open(sys.argv[1], "rb") as program:
     start = program.read(4096)
 header = struct.unpack_from("<I", start, 0x3C)[0] if start[:2] == b"MZ" else 0
 machine = struct.unpack_from("<H", start, header + 4)[0] if start[header:header + 4] == b"PE\0\0" else 0
-print({0x8664: "x64", 0xAA64: "arm64"}.get(machine, "something else"))
+print({0x8664: "amd64", 0xAA64: "arm64"}.get(machine, "something else"))
 PYTHON
 }
 
@@ -85,17 +85,17 @@ package() {
   stage "$staging" "$prebuilt"
   # `[win]` has vpk package for Windows wherever it runs.
   dotnet_here vpk '[win]' --skip-updates pack --packId "$PACK_ID" --packVersion "$VERSION" --packTitle Roundhouse \
-    --runtime "win-$ARCH" --channel "$CHANNEL" --packDir "$staging/bins" --mainExe roundhouse-desktop.exe \
+    --runtime "$RUNTIME" --channel "$CHANNEL" --packDir "$staging/bins" --mainExe roundhouse-desktop.exe \
     --icon "$staging/AppIcon.ico" --outputDir "$out/releases"
   check "$out/releases"
   echo "Packaged $VERSION for Windows on $ARCH, build $BUILD:"
   echo "  $out/releases/$PACK_ID-$CHANNEL-Setup.exe"
 }
 
-out="" prebuilt="" ARCH=x64
+out="" prebuilt="" ARCH=amd64
 while [ $# -gt 0 ]; do
   case "$1" in
-    --arch) ARCH="${2:?--arch needs x64 or arm64}"; shift ;;
+    --arch) ARCH="${2:?--arch needs amd64 or arm64}"; shift ;;
     --out) out="${2:?--out needs a directory}"; shift ;;
     --prebuilt) prebuilt="$(cd "${2:?--prebuilt needs a directory}" && pwd)"; shift ;;
     --print-version) version; exit ;;
@@ -103,11 +103,12 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-# The channel names the feed and what people download, as `publish.py` knows them.
+# The channel names the feed and what people download, as `publish.py` knows them. Each names its processor, as Linux's
+# do. RUNTIME is the processor as vpk names it.
 case "$ARCH" in
-  x64) CHANNEL=win ;;
-  arm64) CHANNEL=win-arm64 ;;
-  *) die "--arch is x64 or arm64, not $ARCH" ;;
+  amd64) CHANNEL=win-amd64 RUNTIME=win-x64 ;;
+  arm64) CHANNEL=win-arm64 RUNTIME=win-arm64 ;;
+  *) die "--arch is amd64 or arm64, not $ARCH" ;;
 esac
 FEED="releases.$CHANNEL.json"
 [ -n "$prebuilt" ] || die "--prebuilt DIR is needed, with the binaries \`tools/build.sh --package DIR\` built on Windows"

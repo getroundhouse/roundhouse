@@ -6,7 +6,7 @@ bucket. It reads the published feed, uses it only once its signature matches the
 packages to it, and signs and uploads exactly that. Whoever can write to the bucket can then only offer apps a feed
 the workflow signed, such as an older one, and can't get a feed of theirs signed.
 
-Each step takes `--channel` first, for which platform's releases it publishes: `osx`, `win` for Windows on x64,
+Each step takes `--channel` first, for which platform's releases it publishes: `osx`, `win-amd64` for Windows on amd64,
 `win-arm64`, `linux-amd64` for Linux on amd64, or `linux-arm64`. It's osx if it's left out. A platform has a feed of its own,
 `releases.<channel>.json`, and all are in the one bucket.
 
@@ -73,7 +73,7 @@ def linux(channel: str) -> dict[str, str]:
 # What people download for each channel, which vpk makes anew for each release under the same names.
 CHANNELS = {
     "osx": {PACK_ID + "-osx-Portable.zip": "application/zip"},
-    "win": windows("win"),
+    "win-amd64": windows("win-amd64"),
     "win-arm64": windows("win-arm64"),
     "linux-amd64": linux("linux-amd64"),
     "linux-arm64": linux("linux-arm64"),

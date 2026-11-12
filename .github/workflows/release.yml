@@ -7,7 +7,7 @@
 #
 # The Windows app goes the same way in jobs of its own, so neither platform's release waits on the other's or fails
 # with it: built on Windows, with no secrets, then packaged by vpk on Linux, which packages for Windows, and published
-# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. x64 and
+# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. amd64 and
 # ARM64 each go through those jobs, and one failing leaves the other's release alone.
 #
 # The Linux app goes the same way, as an AppImage: built in Ubuntu 22.04, so it needs no glibc newer than 22.04's, then
@@ -264,7 +264,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x64
+          - arch: amd64
             target: x86_64-pc-windows-msvc
             runner: windows-latest-amd64-8cores
           - arch: arm64
@@ -339,7 +339,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        arch: [amd64, arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -368,8 +368,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x64
-            channel: win
+          - arch: amd64
+            channel: win-amd64
           - arch: arm64
             channel: win-arm64
     environment: release

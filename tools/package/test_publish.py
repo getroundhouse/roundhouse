@@ -42,10 +42,9 @@ def make_key(directory: Path) -> tuple[Path, str]:
 
 
 def package_name(version: str, kind: str) -> str:
-    """As vpk names a package, which says its channel unless that's `win`, the one Windows starts with."""
+    """As vpk names a package, which says its channel."""
     channel = publish.FEED.removeprefix("releases.").removesuffix(".json")
-    channel = "" if channel == "win" else f"-{channel}"
-    return f"Roundhouse-{version}{channel}-{kind.lower()}.nupkg"
+    return f"Roundhouse-{version}-{channel}-{kind.lower()}.nupkg"
 
 
 def asset(version: str, kind: str, content: bytes) -> dict:
@@ -398,19 +397,19 @@ class BesideAnother:
 
 
 class Windows(BesideAnother, Publishing):
-    """x64 Windows' releases, beside macOS's."""
+    """amd64 Windows' releases, beside macOS's."""
 
-    CHANNEL = "win"
+    CHANNEL = "win-amd64"
     BESIDE = "osx"
-    PACKAGE = "Roundhouse-0.1.1-full.nupkg"
-    DOWNLOADS = ("Roundhouse-win-Setup.exe", "Roundhouse-win-Portable.zip")
+    PACKAGE = "Roundhouse-0.1.1-win-amd64-full.nupkg"
+    DOWNLOADS = ("Roundhouse-win-amd64-Setup.exe", "Roundhouse-win-amd64-Portable.zip")
 
 
 class WindowsOnArm(BesideAnother, Publishing):
-    """ARM64 Windows' releases, beside x64 Windows'."""
+    """ARM64 Windows' releases, beside amd64 Windows'."""
 
     CHANNEL = "win-arm64"
-    BESIDE = "win"
+    BESIDE = "win-amd64"
     PACKAGE = "Roundhouse-0.1.1-win-arm64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-arm64-Setup.exe", "Roundhouse-win-arm64-Portable.zip")
 
@@ -419,7 +418,7 @@ class Linux(BesideAnother, Publishing):
     """amd64 Linux's releases, beside Windows', with the AppImage to download."""
 
     CHANNEL = "linux-amd64"
-    BESIDE = "win"
+    BESIDE = "win-amd64"
     PACKAGE = "Roundhouse-0.1.1-linux-amd64-full.nupkg"
     DOWNLOADS = ("Roundhouse-linux-amd64.AppImage",)
 
