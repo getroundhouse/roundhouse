@@ -180,15 +180,13 @@ impl WorkspacePane {
             }
         });
         let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
-        // What the hub kept of each chat's composer, from when this app or another last had it.
-        let chats = keeping::kept_in(shown.sessions());
         let mut this = Self {
             client,
             records,
             shown,
             showing_next: None,
             active: None,
-            chats,
+            chats: HashMap::new(),
             keeper,
             attached: Attachments::default(),
             waiting: None,
@@ -211,6 +209,7 @@ impl WorkspacePane {
             window: window.window_handle(),
             subscriptions: vec![on_enter, on_settings],
         };
+        this.take_kept_drafts(cx);
         // The chat last worked in.
         let latest =
             this.open_sessions().max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms)).map(|s| s.id.clone());
@@ -218,8 +217,6 @@ impl WorkspacePane {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
         }
-        this.took_drafts();
-        this.bring_back_files(cx);
         this
     }
 
