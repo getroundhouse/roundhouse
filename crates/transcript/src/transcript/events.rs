@@ -3,6 +3,7 @@
 use client_core::FileToSend;
 use gpui_kit::FocusHandle;
 use protocol::model::ToolUseId;
+use protocol::prompt::Prompt;
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -10,7 +11,7 @@ pub enum TranscriptEvent {
     /// Something failed that the user should hear about.
     Error(String),
     /// A prompt couldn't be sent, so what was typed and attached is handed back, to be offered again.
-    NotSent { message: String, text: String, files: Vec<FileToSend> },
+    NotSent { message: String, prompt: Prompt<FileToSend> },
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
     /// The question in the composer's place changed: one came, or the one there was answered. `left` is the focus of

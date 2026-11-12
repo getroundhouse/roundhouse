@@ -3,9 +3,10 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::{Client, Daemon, FileToSend, HubAdmin};
+use client_core::{Client, Daemon, FileToSend, HubAdmin, Written};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
+use protocol::prompt::Prompt;
 use protocol::versions::Versions;
 
 use crate::agents::print_agents;
@@ -37,7 +38,8 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
             let files = attach.iter().map(|path| FileToSend::read(path)).collect::<Result<Vec<_>, _>>()?;
             // Generated here rather than left to the hub, so a retry of this exact send is safe.
             let msg_id = client_msg_id.unwrap_or_else(client_core::new_message_id);
-            let (seq, duplicate) = client.send_prompt_carrying(&session.id, &prompt, Some(msg_id), &files)?;
+            let written = Written { client_msg_id: msg_id, prompt: Prompt::carrying(prompt, files) };
+            let (seq, duplicate) = client.send_prompt(&session.id, &written)?;
             if duplicate {
                 eprintln!("(already recorded as event {seq})");
             }

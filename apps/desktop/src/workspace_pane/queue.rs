@@ -43,12 +43,9 @@ impl WorkspacePane {
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         // At once, so what's queued can't come back as a draft.
         self.keep_typed(true, cx);
-        let client_msg_id = client_core::new_message_id();
-        let attachments = files.iter().map(|file| file.attachment.clone()).collect();
-        let prompt =
-            QueuedPrompt { client_msg_id: client_msg_id.clone(), prompt: Prompt::carrying(text.clone(), attachments) };
-        self.queue_pending.push(Pending { session_id: session_id.clone(), prompt });
-        let written = Written { client_msg_id: client_msg_id.clone(), text, files };
+        let written = Written::new(Prompt::carrying(text, files));
+        let client_msg_id = written.client_msg_id.clone();
+        self.queue_pending.push(Pending { session_id: session_id.clone(), prompt: written.on_its_way() });
         let queueing = self.client.start_queueing(&session_id, written);
         cx.spawn(async move |this, cx| {
             let queued = queueing.recv().await;
@@ -56,8 +53,8 @@ impl WorkspacePane {
                 t.queue_pending.retain(|pending| pending.prompt.client_msg_id != client_msg_id);
                 match queued {
                     Ok(session) => t.took_reply(session, cx),
-                    Err(NotTaken { error, text, files }) => {
-                        t.give_back(Some(&session_id), text, files, cx);
+                    Err(NotTaken { error, prompt }) => {
+                        t.give_back(Some(&session_id), prompt, cx);
                         cx.emit(PaneEvent::Error(format!("couldn't queue that: {error}")));
                     }
                 }

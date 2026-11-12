@@ -215,8 +215,7 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
 fn nothing_typed(repo: &RepoId) -> Request {
     let (agent, permission_mode) = (AgentKind::Claude, PermissionMode::FullAccess);
-    let (prompt, files) = (String::new(), Vec::new());
-    Request { repo: repo.clone(), prompt, files, agent, model: None, effort: None, permission_mode }
+    Request { repo: repo.clone(), prompt: Prompt::default(), agent, model: None, effort: None, permission_mode }
 }
 
 #[gpui_kit::test]

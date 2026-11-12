@@ -121,9 +121,9 @@ fn live_events_never_build_up_past_the_limit() {
 #[test]
 fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
     let mut log = SessionLog::new(5);
-    log.add_pending("m1".into(), "hello".into(), Vec::new());
+    log.add_pending(QueuedPrompt { client_msg_id: "m1".into(), prompt: Prompt::new("hello") });
     assert_eq!(log.row_count(), 5, "it has no row of its own until it's recorded");
-    assert_eq!(log.pending()[0].text, "hello");
+    assert_eq!(log.pending()[0].prompt.text, "hello");
     assert_eq!(log.take_changes().rows, Some(5..6), "the tail changed");
 
     log.apply_event(event(6, EventBody::UserPrompt { client_msg_id: Some("m1".into()), prompt: Prompt::new("hello") }));
@@ -135,8 +135,8 @@ fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
 #[test]
 fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
     let mut log = SessionLog::new(0);
-    log.add_pending("m1".into(), "hello".into(), Vec::new());
-    assert_eq!(log.remove_pending(&"m1".into()).unwrap().text, "hello");
+    log.add_pending(QueuedPrompt { client_msg_id: "m1".into(), prompt: Prompt::new("hello") });
+    assert_eq!(log.remove_pending(&"m1".into()).unwrap().prompt.text, "hello");
     assert_eq!(log.row_count(), 0);
     assert_eq!(log.remove_pending(&"m1".into()), None);
 }
@@ -223,7 +223,7 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
 #[test]
 fn changes_gather_into_one_range_until_a_view_looks() {
     let mut log = SessionLog::new(0);
-    log.add_pending("p".into(), "hi".into(), Vec::new());
+    log.add_pending(QueuedPrompt { client_msg_id: "p".into(), prompt: Prompt::new("hi") });
     log.apply_event(event(1, EventBody::UserPrompt { client_msg_id: Some("p".into()), prompt: Prompt::new("hi") }));
     log.apply_event(event(
         2,
@@ -310,10 +310,10 @@ fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
 #[test]
 fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way() {
     let mut log = SessionLog::by_place(0);
-    log.add_pending("m".into(), "go".into(), Vec::new());
+    log.add_pending(QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go") });
 
     log.read_whole(5);
 
     assert_eq!(log.by(), By::Seq);
-    assert_eq!((log.row_count(), log.pending()[0].text.as_str()), (5, "go"));
+    assert_eq!((log.row_count(), log.pending()[0].prompt.text.as_str()), (5, "go"));
 }

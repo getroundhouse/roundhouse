@@ -6,6 +6,7 @@ use client_core::records::Snapshot;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{PermissionMode, Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
+use protocol::prompt::Prompt;
 
 use super::AppView;
 use crate::busy::Busy;
@@ -100,7 +101,7 @@ impl AppView {
         self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it.
-        let (typed, permission_mode) = (request.prompt.clone(), request.permission_mode);
+        let (typed, permission_mode) = (request.prompt.text.clone(), request.permission_mode);
         let creating = client.start(move |client| Ok(made::make(client, request)));
         cx.spawn(async move |this, cx| {
             let made = creating.recv().await;
@@ -111,7 +112,7 @@ impl AppView {
                     // Making it stopped partway, so it may have been made.
                     Err(e) => {
                         t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
-                        t.give_back_to_dialog(typed, Vec::new(), permission_mode, cx);
+                        t.give_back_to_dialog(Prompt::new(typed), permission_mode, cx);
                     }
                 }
                 cx.notify();
@@ -147,7 +148,7 @@ impl AppView {
         let Some(unsent) = unsent else { return };
         self.show_error(unsent.failed.failed(&unsent.error), cx);
         let Some(id) = made_id else {
-            self.give_back_to_dialog(unsent.text, unsent.files, unsent.permission_mode, cx);
+            self.give_back_to_dialog(unsent.prompt, unsent.permission_mode, cx);
             return;
         };
         // To the new chat's composer, or without one, to the first chat the pane shows, which the pane makes itself.
@@ -156,12 +157,12 @@ impl AppView {
         cx.defer(move |cx| {
             let _ = this.update(cx, |t, cx| match t.panes.get(&id).cloned() {
                 Some(pane) => pane.update(cx, |pane, cx| {
-                    pane.give_back(chat.as_ref(), unsent.text, unsent.files, cx);
+                    pane.give_back(chat.as_ref(), unsent.prompt, cx);
                     if unsent.permission_mode == PermissionMode::Plan {
                         pane.plan_given_back(chat.as_ref(), cx);
                     }
                 }),
-                None => t.give_back_to_dialog(unsent.text, unsent.files, unsent.permission_mode, cx),
+                None => t.give_back_to_dialog(unsent.prompt, unsent.permission_mode, cx),
             });
         });
     }

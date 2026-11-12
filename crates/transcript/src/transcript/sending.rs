@@ -3,7 +3,7 @@
 use client_core::{FileToSend, NotTaken, Written};
 use gpui_kit::Context;
 use protocol::model::WaitId;
-use protocol::prompt::says_or_carries;
+use protocol::prompt::Prompt;
 
 use super::{Transcript, TranscriptEvent};
 use crate::attachments::Picture;
@@ -11,38 +11,37 @@ use crate::attachments::Picture;
 impl Transcript {
     /// Shows the prompt at once, and takes it back if it can't be sent. Returns false if it's empty.
     pub fn send_prompt(&mut self, text: String, cx: &mut Context<Self>) -> bool {
-        self.send_prompt_with(text, Vec::new(), cx)
+        self.send_prompt_with(Prompt::new(text), cx)
     }
 
     /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt, in its
-    /// place in the chat's line. If any of that fails, it takes the prompt back and hands its text and files back with
+    /// place in the chat's line. If any of that fails, it takes the prompt back and hands it back with
     /// [`TranscriptEvent::NotSent`]. Returns false if there's nothing to send.
-    pub fn send_prompt_with(&mut self, text: String, files: Vec<FileToSend>, cx: &mut Context<Self>) -> bool {
-        if !says_or_carries(&text, files.len()) {
+    pub fn send_prompt_with(&mut self, prompt: Prompt<FileToSend>, cx: &mut Context<Self>) -> bool {
+        if !prompt.says_or_carries() {
             return false;
         }
-        let client_msg_id = client_core::new_message_id();
+        let written = Written::new(prompt);
         {
             let mut m = self.model.borrow_mut();
-            for file in files.iter().filter(|file| file.attachment.media_type.is_image()) {
+            for file in written.prompt.files.iter().filter(|file| file.attachment.media_type.is_image()) {
                 let picture = Picture::read(file.attachment.media_type, file.data.clone());
                 m.pictures.insert(file.attachment.id.clone(), picture);
             }
         }
-        let carried = files.iter().map(|file| file.attachment.clone()).collect();
-        self.session.add_pending(client_msg_id.clone(), text.clone(), carried);
+        self.session.add_pending(written.on_its_way());
         self.catch_up(cx);
         self.list.go_to_latest();
         cx.notify();
 
-        let written = Written { client_msg_id: client_msg_id.clone(), text, files };
+        let client_msg_id = written.client_msg_id.clone();
         let sending = self.client.start_sending(&self.session_id, written);
         cx.spawn(async move |this, cx| {
-            let Err(NotTaken { error, text, files }) = sending.recv().await else { return };
+            let Err(NotTaken { error, prompt }) = sending.recv().await else { return };
             let _ = this.update(cx, |t, cx| {
                 t.session.remove_pending(&client_msg_id);
                 t.catch_up(cx);
-                cx.emit(TranscriptEvent::NotSent { message: not_sent(&error), text, files });
+                cx.emit(TranscriptEvent::NotSent { message: not_sent(&error), prompt });
                 cx.notify();
             });
         })
@@ -60,7 +59,7 @@ impl Transcript {
             let Err(e) = asking.recv().await else { return };
             let message = couldnt("couldn't compact", &e);
             let _ = this.update(cx, |_, cx| match typed {
-                Some(text) => cx.emit(TranscriptEvent::NotSent { message, text, files: Vec::new() }),
+                Some(text) => cx.emit(TranscriptEvent::NotSent { message, prompt: Prompt::new(text) }),
                 None => cx.emit(TranscriptEvent::Error(message)),
             });
         })

@@ -156,8 +156,8 @@ impl WorkspacePane {
         let chat = session.id.clone();
         let events = cx.subscribe(&view, move |this, transcript, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
-            TranscriptEvent::NotSent { message, text, files } => {
-                this.give_back(Some(&chat), text.clone(), files.clone(), cx);
+            TranscriptEvent::NotSent { message, prompt } => {
+                this.give_back(Some(&chat), prompt.clone(), cx);
                 cx.emit(PaneEvent::Error(message.clone()));
             }
             TranscriptEvent::OpenSubagent { call, title } => {

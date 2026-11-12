@@ -4,14 +4,13 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{ClientMessageId, Place, Seq, Session, SessionId, ToolUseId};
+use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, SessionId, ToolUseId};
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
-use crate::session_log::{By, Changes, PendingPrompt, SessionLog};
+use crate::session_log::{By, Changes, SessionLog};
 use search::Searches;
 pub use search::{Search, Searched, Stretch};
 
@@ -96,13 +95,13 @@ impl OpenSession {
         self.follow.wake();
     }
 
-    /// Shows a prompt on its way, with what it carries.
-    pub fn add_pending(&self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
-        self.follow.update(|log| log.add_pending(client_msg_id, text, attachments));
+    /// Shows a prompt on its way, with what it carries, as [`crate::Written::on_its_way`] says.
+    pub fn add_pending(&self, prompt: QueuedPrompt) {
+        self.follow.update(|log| log.add_pending(prompt));
     }
 
     /// Takes back a prompt that couldn't be sent.
-    pub fn remove_pending(&self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
+    pub fn remove_pending(&self, client_msg_id: &ClientMessageId) -> Option<QueuedPrompt> {
         self.follow.update(|log| log.remove_pending(client_msg_id))
     }
 

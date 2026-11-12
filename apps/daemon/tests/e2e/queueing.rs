@@ -115,7 +115,9 @@ fn a_queued_prompt_carries_its_files_to_the_agent_and_a_change_keeps_them() {
     let log = b"error at line 42".to_vec();
     let log = client.attachment_add(&session.id, &"a1".into(), "build.log", MediaType::Text, log).unwrap();
 
-    let queued = client.session_queue_with(&session.id, "q1".into(), "say:before", vec![log.id.clone()]).unwrap();
+    let queued = client
+        .session_queue_with(&session.id, "q1".into(), Prompt::carrying("say:before", vec![log.id.clone()]))
+        .unwrap();
     let changed = change(&client, &session.id, "q1", "attached").unwrap().queued;
 
     assert_eq!(queued.queued[0].prompt.files, std::slice::from_ref(&log));
@@ -145,9 +147,10 @@ fn a_queued_prompt_needs_text_or_files_and_files_the_session_has() {
     wait_for_tool(&client, &session.id);
     let shot = client.attachment_add(&session.id, &"a1".into(), "shot.png", MediaType::Png, png(64)).unwrap();
 
-    let only_files = client.session_queue_with(&session.id, "q1".into(), "", vec![shot.id.clone()]).unwrap();
-    let empty = client.session_queue_with(&session.id, "q2".into(), " ", Vec::new());
-    let unknown = client.session_queue_with(&session.id, "q3".into(), "look", vec!["a9".into()]);
+    let only_files =
+        client.session_queue_with(&session.id, "q1".into(), Prompt::carrying("", vec![shot.id.clone()])).unwrap();
+    let empty = client.session_queue_with(&session.id, "q2".into(), Prompt::new(" "));
+    let unknown = client.session_queue_with(&session.id, "q3".into(), Prompt::carrying("look", vec!["a9".into()]));
 
     assert_eq!(only_files.queued[0].prompt.files, [shot]);
     assert_eq!(refused_with(empty), ErrorCode::InvalidRequest);
@@ -164,7 +167,8 @@ fn prompts_are_queued_in_the_order_they_were_written_though_the_first_is_still_a
     wait_for_tool(&client, &session.id);
     // Big enough to take far longer to add than a prompt with nothing to add takes to queue.
     let big = FileToSend::checked("big.log", MediaType::Text, vec![b'a'; 40 << 20]).unwrap();
-    let written = |id: &str, files| Written { client_msg_id: id.into(), text: format!("say:{id}"), files };
+    let written =
+        |id: &str, files| Written { client_msg_id: id.into(), prompt: Prompt::carrying(format!("say:{id}"), files) };
 
     let first = client.start_queueing(&session.id, written("q1", vec![big]));
     let second = client.start_queueing(&session.id, written("q2", Vec::new()));

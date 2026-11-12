@@ -1,8 +1,9 @@
 //! Making a workspace from what the new-workspace dialog held, then sending its first chat the prompt. It runs on the
 //! thread `Client::start` gives it, since each call blocks, and each step needs the one before.
 
-use client_core::{Client, ClientError, FileToSend};
+use client_core::{Client, ClientError, FileToSend, Written};
 use protocol::model::{PermissionMode, Session, SessionSettingsChange, Workspace};
+use protocol::prompt::Prompt;
 
 use crate::new_workspace::Request;
 
@@ -16,8 +17,7 @@ pub(super) struct Made {
 }
 
 pub(super) struct Unsent {
-    pub(super) text: String,
-    pub(super) files: Vec<FileToSend>,
+    pub(super) prompt: Prompt<FileToSend>,
     /// The mode the chat was to start in, which goes back with the prompt.
     pub(super) permission_mode: PermissionMode,
     pub(super) failed: Step,
@@ -47,17 +47,23 @@ impl Step {
     }
 }
 
-pub(super) fn make(client: &Client, request: Request) -> Made {
+pub(super) fn make(client: &Client, mut request: Request) -> Made {
     let mut made = Made { workspace: None, session: None, unsent: None };
-    if let Err((failed, error)) = make_into(client, &request, &mut made) {
-        let Request { prompt, files, permission_mode, .. } = request;
-        made.unsent = Some(Unsent { text: prompt, files, permission_mode, failed, error });
+    // Under one ID however far it gets, so a retry can't record it twice.
+    let written = Written::new(std::mem::take(&mut request.prompt));
+    if let Err((failed, error)) = make_into(client, &request, &written, &mut made) {
+        made.unsent = Some(Unsent { prompt: written.prompt, permission_mode: request.permission_mode, failed, error });
     }
     made
 }
 
 /// Each step, recording in `made` what it made, until one fails.
-fn make_into(client: &Client, request: &Request, made: &mut Made) -> Result<(), (Step, ClientError)> {
+fn make_into(
+    client: &Client,
+    request: &Request,
+    written: &Written,
+    made: &mut Made,
+) -> Result<(), (Step, ClientError)> {
     let at = |step| move |error| (step, error);
     let workspace = client
         .workspace_create(&request.repo, None, None, Some(client_core::new_request_id()))
@@ -78,9 +84,8 @@ fn make_into(client: &Client, request: &Request, made: &mut Made) -> Result<(), 
         let options = SessionSettingsChange { model, permission_mode: Some(request.permission_mode), effort };
         made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
     }
-    if request.has_prompt() {
-        let id = Some(client_core::new_message_id());
-        client.send_prompt_carrying(&chat, &request.prompt, id, &request.files).map_err(at(Step::Prompt))?;
+    if written.prompt.says_or_carries() {
+        client.send_prompt(&chat, written).map_err(at(Step::Prompt))?;
     }
     Ok(())
 }

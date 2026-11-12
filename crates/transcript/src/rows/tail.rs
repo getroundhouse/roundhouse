@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use client_core::calls::agent;
-use client_core::session_log::{By, PendingPrompt, SessionLog};
+use client_core::session_log::{By, SessionLog};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
@@ -16,7 +16,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, LineText, Signal, TaskRing};
 use protocol::event::{AgentTask, SessionEvent, TaskKind};
-use protocol::model::{Wait, WaitId, WaitUntil};
+use protocol::model::{QueuedPrompt, Wait, WaitId, WaitUntil};
 use protocol::tail::{BlockKind, Compacting, Tail};
 
 use super::around::Around;
@@ -44,7 +44,7 @@ pub(super) enum Waiting {
     /// Recorded, with what drawing it needs.
     Recorded(SessionEvent, Around),
     /// On its way to the hub, with the files it carries, whose images are already here.
-    Sending(PendingPrompt, Vec<Carried>),
+    Sending(QueuedPrompt, Vec<Carried>),
 }
 
 /// The prompts the agent hasn't read yet, oldest first: those recorded, then those on their way.
@@ -53,10 +53,8 @@ pub(super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
         .waiting_prompts()
         .into_iter()
         .map(|prompt| Waiting::Recorded(prompt.clone(), Around::read(log, m, prompt.seq, &prompt.body)));
-    let sending = log
-        .pending()
-        .iter()
-        .map(|prompt| Waiting::Sending(prompt.clone(), attachments::carried(m, &prompt.attachments)));
+    let sending =
+        log.pending().iter().map(|sent| Waiting::Sending(sent.clone(), attachments::carried(m, &sent.prompt.files)));
     recorded.chain(sending).collect()
 }
 
@@ -131,9 +129,9 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
 fn waiting_prompt(prompt: &Waiting, shared: &Shared, find: &FindLook, cx: &App) -> AnyElement {
     match prompt {
         Waiting::Recorded(event, around) => render_event(event, around, None, shared, find, cx),
-        Waiting::Sending(prompt, carried) => {
-            let key = ItemKey::Prompt(prompt.client_msg_id.clone());
-            let text = Prompt { text: &prompt.text, find };
+        Waiting::Sending(sent, carried) => {
+            let key = ItemKey::Prompt(sent.client_msg_id.clone());
+            let text = Prompt { text: &sent.prompt.text, find };
             prompt_bubble(&key, text, carried, Progress::Sending, shared, cx)
         }
     }

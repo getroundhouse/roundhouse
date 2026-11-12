@@ -2,25 +2,37 @@
 //! chat's line before the hub is sent it, so a chat's prompts are recorded in the order they were written, though an
 //! earlier one is still adding a large file. One that doesn't arrive is handed back whole, so nothing written is lost.
 
-use protocol::model::{AttachmentId, ClientMessageId, Seq, Session, SessionId};
+use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::attachments::FileToSend;
-use crate::client::{Client, ClientError, Place, Reply, Result};
+use crate::client::{Client, ClientError, Place, Reply, Result, new_message_id};
 
-/// A prompt as its person wrote it, with what it carries.
+/// A prompt as its person wrote it, with the bytes of what it carries, under the ID it keeps until it's recorded and
+/// after.
 pub struct Written {
     pub client_msg_id: ClientMessageId,
-    pub text: String,
-    pub files: Vec<FileToSend>,
+    pub prompt: Prompt<FileToSend>,
+}
+
+impl Written {
+    /// `prompt`, under an ID of its own.
+    pub fn new(prompt: Prompt<FileToSend>) -> Self {
+        Self { client_msg_id: new_message_id(), prompt }
+    }
+
+    /// The prompt as the hub will have it, with its record of each file, to show while it's on its way.
+    pub fn on_its_way(&self) -> QueuedPrompt {
+        let files = self.prompt.files.iter().map(|file| file.attachment.clone()).collect();
+        QueuedPrompt { client_msg_id: self.client_msg_id.clone(), prompt: Prompt::carrying(&*self.prompt.text, files) }
+    }
 }
 
 /// A prompt the hub didn't take, with why, handed back so it can be offered again.
 #[derive(Debug)]
 pub struct NotTaken {
     pub error: ClientError,
-    pub text: String,
-    pub files: Vec<FileToSend>,
+    pub prompt: Prompt<FileToSend>,
 }
 
 /// The reply to a prompt started with [`Client::start_sending`] or [`Client::start_queueing`].
@@ -36,7 +48,7 @@ impl<T> Taking<T> {
         match self.reply.recv().await {
             Ok(taken) => taken,
             // Only a call that never ran ends here, and its files went with it.
-            Err(error) => Err(NotTaken { error, text: self.text, files: Vec::new() }),
+            Err(error) => Err(NotTaken { error, prompt: Prompt::new(self.text) }),
         }
     }
 
@@ -45,54 +57,29 @@ impl<T> Taking<T> {
     pub fn wait(self) -> std::result::Result<T, NotTaken> {
         match self.reply.wait() {
             Ok(taken) => taken,
-            Err(error) => Err(NotTaken { error, text: self.text, files: Vec::new() }),
+            Err(error) => Err(NotTaken { error, prompt: Prompt::new(self.text) }),
         }
     }
 }
 
 impl Client {
-    /// Sends a prompt as [`Client::send_prompt_carrying`] does, on a thread of its own, as [`Client::start`] starts a
-    /// call, in its place in its chat's line from now.
+    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in
+    /// its place in its chat's line from now.
     pub fn start_sending(&self, id: &SessionId, written: Written) -> Taking<(Seq, bool)> {
-        self.start_in_line(id, written, |client, place, id, written| {
-            let Written { client_msg_id, text, files } = written;
-            client.send_in_line(place, id, text, Some(client_msg_id.clone()), files)
-        })
+        self.start_in_line(id, written, Client::send_in_line)
     }
 
-    /// Queues a prompt as [`Client::queue_prompt_carrying`] does, on a thread of its own, in its place in its chat's
-    /// line from now.
+    /// Queues a prompt as [`Client::start_sending`] sends one.
     pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
-        self.start_in_line(id, written, |client, place, id, written| {
-            let Written { client_msg_id, text, files } = written;
-            client.queue_in_line(place, id, client_msg_id.clone(), text, files)
-        })
+        self.start_in_line(id, written, Client::queue_in_line)
     }
 
     /// Adds each file the hub hasn't been given to the session, then sends the prompt that carries them once it's this
-    /// prompt's turn in its chat's line. A hub refuses a prompt naming a file it hasn't got, so they go first, in
-    /// order. With any, `text` can be empty. The files are only borrowed, so a caller can offer them again if this
-    /// fails, and their IDs mean none is added twice.
-    pub fn send_prompt_carrying(
-        &self,
-        id: &SessionId,
-        text: &str,
-        client_msg_id: Option<ClientMessageId>,
-        files: &[FileToSend],
-    ) -> Result<(Seq, bool)> {
-        self.send_in_line(&self.line_up(id), id, text, client_msg_id, files)
-    }
-
-    /// Adds each file to the session, then queues the prompt that carries them, as [`Client::send_prompt_carrying`]
-    /// sends one.
-    pub fn queue_prompt_carrying(
-        &self,
-        id: &SessionId,
-        client_msg_id: ClientMessageId,
-        text: &str,
-        files: &[FileToSend],
-    ) -> Result<Session> {
-        self.queue_in_line(&self.line_up(id), id, client_msg_id, text, files)
+    /// prompt's turn in its chat's line, and waits for it to be recorded. A hub refuses a prompt naming a file it
+    /// hasn't got, so they go first, in order. The prompt is only borrowed, so a caller can offer it again if this
+    /// fails, and its ID, and its files' IDs, mean nothing is recorded or added twice.
+    pub fn send_prompt(&self, id: &SessionId, written: &Written) -> Result<(Seq, bool)> {
+        self.send_in_line(&self.line_up(id), id, written)
     }
 
     fn start_in_line<T: Send + 'static>(
@@ -102,57 +89,41 @@ impl Client {
         call: fn(&Client, &Place, &SessionId, &Written) -> Result<T>,
     ) -> Taking<T> {
         let place = self.line_up(id);
-        let (id, text) = (id.clone(), written.text.clone());
+        let (id, text) = (id.clone(), written.prompt.text.clone());
         let reply = self.start(move |client| {
             let taken = call(client, &place, &id, &written);
-            Ok(taken.map_err(|error| NotTaken { error, text: written.text, files: written.files }))
+            Ok(taken.map_err(|error| NotTaken { error, prompt: written.prompt }))
         });
         Taking { reply, text }
     }
 
-    fn send_in_line(
-        &self,
-        place: &Place,
-        id: &SessionId,
-        text: &str,
-        client_msg_id: Option<ClientMessageId>,
-        files: &[FileToSend],
-    ) -> Result<(Seq, bool)> {
-        self.carrying(place, id, text, files, move |carried| {
-            self.session_prompt_with(id, text, client_msg_id.clone(), carried)
-        })
+    fn send_in_line(&self, place: &Place, id: &SessionId, written: &Written) -> Result<(Seq, bool)> {
+        let client_msg_id = Some(written.client_msg_id.clone());
+        self.carrying(place, id, &written.prompt, |carried| self.prompt_carried(id, client_msg_id.clone(), carried))
     }
 
-    fn queue_in_line(
-        &self,
-        place: &Place,
-        id: &SessionId,
-        client_msg_id: ClientMessageId,
-        text: &str,
-        files: &[FileToSend],
-    ) -> Result<Session> {
-        self.carrying(place, id, text, files, move |carried| {
-            self.session_queue_with(id, client_msg_id.clone(), text, carried)
-        })
+    fn queue_in_line(&self, place: &Place, id: &SessionId, written: &Written) -> Result<Session> {
+        let client_msg_id = &written.client_msg_id;
+        self.carrying(place, id, &written.prompt, |carried| self.queue_carried(id, client_msg_id.clone(), carried))
     }
 
     /// Checks the prompt as the hub would, adds each of its files the hub hasn't been given, in order, then once it's
-    /// this prompt's turn makes `call` with their IDs. A file this connection already gave the hub, such as one kept
-    /// with a draft, isn't sent again. If the hub says one isn't there after all, such as one it has let go of since,
-    /// each is added and the call made once more: the hub refuses a prompt naming a file it hasn't got before it
-    /// records anything, so trying again can't record it twice.
+    /// this prompt's turn makes `call` with the prompt as it names them. A file this connection already gave the hub,
+    /// such as one kept with a draft, isn't sent again. If the hub says one isn't there after all, such as one it has
+    /// let go of since, each is added and the call made once more: the hub refuses a prompt naming a file it hasn't got
+    /// before it records anything, so trying again can't record it twice.
     fn carrying<T>(
         &self,
         place: &Place,
         id: &SessionId,
-        text: &str,
-        files: &[FileToSend],
-        call: impl Fn(Vec<AttachmentId>) -> Result<T>,
+        prompt: &Prompt<FileToSend>,
+        call: impl Fn(Prompt<AttachmentId>) -> Result<T>,
     ) -> Result<T> {
-        let carried: Vec<AttachmentId> = files.iter().map(|file| file.attachment.id.clone()).collect();
-        Prompt::carrying(text, carried.clone()).check().map_err(protocol::client::ApiError::from)?;
+        prompt.check().map_err(protocol::client::ApiError::from)?;
+        let files = &prompt.files;
         let given: Vec<&FileToSend> = files.iter().filter(|file| self.has_given(id, &file.attachment.id)).collect();
         self.add_files(id, files.iter().filter(|file| !self.has_given(id, &file.attachment.id)))?;
+        let carried = Prompt::carrying(&*prompt.text, files.iter().map(|file| file.attachment.id.clone()).collect());
         place.wait_turn();
         match call(carried.clone()) {
             Err(e) if e.is_not_found() && !given.is_empty() => {

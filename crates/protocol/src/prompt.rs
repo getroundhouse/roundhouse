@@ -57,6 +57,13 @@ impl<F> Prompt<F> {
     }
 }
 
+/// Saying nothing and carrying nothing, whatever its files would be.
+impl<F> Default for Prompt<F> {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
 /// Whether what's typed, with `files` files, has anything to send, as [`Prompt::says_or_carries`] says, for what isn't
 /// a prompt yet, such as what's in a composer, without copying it into one.
 pub fn says_or_carries(text: &str, files: usize) -> bool {

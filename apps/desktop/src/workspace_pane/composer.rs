@@ -12,6 +12,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, InRegion as _, Off as _, Region};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
+use protocol::prompt::Prompt;
 
 use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
@@ -82,7 +83,7 @@ impl WorkspacePane {
             return cx.notify();
         }
         let files = self.attached.take();
-        if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
+        if transcript.update(cx, |t, cx| t.send_prompt_with(Prompt::carrying(text, files), cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
             // At once, so what was sent can't come back as a draft. A prompt that fails comes back as one.
             self.keep_typed(true, cx);

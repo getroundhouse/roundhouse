@@ -14,7 +14,7 @@ use gpui_kit::{
     Subscription, Window, px,
 };
 use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
-use protocol::prompt::says_or_carries;
+use protocol::prompt::Prompt;
 
 use crate::attached::{self, Attachments, joined};
 use crate::composing;
@@ -34,9 +34,9 @@ const RADIUS: Pixels = px(10.);
 #[derive(Debug)]
 pub struct Request {
     pub repo: RepoId,
-    /// What was typed. With nothing typed and no files, nothing is sent.
-    pub prompt: String,
-    pub files: Vec<FileToSend>,
+    /// What was typed and attached, which is sent once the workspace is made, unless it says nothing and carries
+    /// nothing, as [`Prompt::says_or_carries`] says.
+    pub prompt: Prompt<FileToSend>,
     /// The kind of agent its first chat runs.
     pub agent: AgentKind,
     /// The model and effort the dialog showed. `None` from a hub that doesn't describe its agents, with nothing picked,
@@ -45,13 +45,6 @@ pub struct Request {
     pub effort: Option<Effort>,
     /// Plan mode, if it was on in the dialog, and full access otherwise.
     pub permission_mode: PermissionMode,
-}
-
-impl Request {
-    /// Whether there's a prompt to send once the workspace is made.
-    pub fn has_prompt(&self) -> bool {
-        says_or_carries(&self.prompt, self.files.len())
-    }
 }
 
 /// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, and what the
@@ -176,7 +169,7 @@ impl NewWorkspaceDialog {
     /// effort for the next. The hub keeps it emptied at once, and lets go of the files it was given, which go with the
     /// first prompt.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
-        let prompt = self.prompt.read(cx).text().to_string();
+        let text = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, (model, effort)) = (self.repo.clone(), self.to_run());
         let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
@@ -186,19 +179,19 @@ impl NewWorkspaceDialog {
         self.let_go_of(&given);
         cx.notify();
         let agent = self.offer.agents.for_new_chat();
-        Request { repo, prompt, files, agent, model, effort, permission_mode }
+        Request { repo, prompt: Prompt::carrying(text, files), agent, model, effort, permission_mode }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
     /// mode if it was to be planned, so nothing is lost.
     pub(crate) fn give_back(
         &mut self,
-        text: String,
-        files: Vec<FileToSend>,
+        prompt: Prompt<FileToSend>,
         mode: PermissionMode,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let Prompt { text, files } = prompt;
         if mode == PermissionMode::Plan {
             self.mode = mode;
         }
