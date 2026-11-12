@@ -1,38 +1,20 @@
-use std::process::Command;
-
 use super::*;
-
-fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git").args(args).current_dir(dir).output().unwrap();
-    assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
-    String::from_utf8(output.stdout).unwrap()
-}
+use crate::git::tests::{changes, run};
 
 #[test]
 fn a_file_goes_in_the_attachments_folder_and_git_never_sees_it() {
     let worktree = tempfile::tempdir().unwrap();
-    git(worktree.path(), &["init", "-q"]);
+    run(worktree.path(), &["init", "-q"]);
 
     let path = write(worktree.path(), "build.log", b"error at line 42\n").unwrap();
 
     assert_eq!(path, worktree.path().join(".context/attachments/build.log"));
     assert_eq!(std::fs::read(&path).unwrap(), b"error at line 42\n");
-    assert_eq!(git(worktree.path(), &["status", "--porcelain", "--untracked-files=all"]), "");
+    assert_eq!(changes(worktree.path()), "");
     let mut there: Vec<_> =
         std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
     there.sort();
     assert_eq!(there, [".gitignore", "build.log"], "nothing partial is left behind");
-}
-
-#[test]
-fn a_link_where_the_folder_would_be_is_refused() {
-    let (worktree, elsewhere) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-    std::os::unix::fs::symlink(elsewhere.path(), worktree.path().join(".context")).unwrap();
-
-    let refused = write(worktree.path(), "build.log", b"x").unwrap_err();
-
-    assert!(refused.message.contains("isn't a folder"), "{}", refused.message);
-    assert_eq!(std::fs::read_dir(elsewhere.path()).unwrap().count(), 0, "nothing was written through the link");
 }
 
 #[test]

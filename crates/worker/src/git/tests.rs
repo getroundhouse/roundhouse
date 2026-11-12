@@ -14,6 +14,12 @@ pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
+/// What `git status` lists in the repository at `cwd`, each untracked file on its own, leaving out what only this
+/// machine's own git ignores, so a test of what a repository ignores can't pass because of it.
+pub(crate) fn changes(cwd: &Path) -> String {
+    run(cwd, &["-c", "core.excludesFile=/dev/null", "status", "--porcelain", "--untracked-files=all"])
+}
+
 pub(crate) fn new_repo(dir: &Path) -> PathBuf {
     let repo = dir.join("repo");
     std::fs::create_dir_all(&repo).unwrap();

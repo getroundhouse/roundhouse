@@ -21,6 +21,7 @@ mod effort;
 mod feed;
 mod finding_a_hub;
 mod hub_settings;
+mod instructions;
 mod launch_flags;
 mod misbehaving_worker;
 mod model_and_mode;

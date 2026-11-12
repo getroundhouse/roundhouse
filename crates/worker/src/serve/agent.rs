@@ -1,7 +1,7 @@
 //! Starting and stopping agents, forwarding what they say to the hub, and the one-off calls that title a prompt and
 //! read the agent's account.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -17,6 +17,8 @@ use tokio::task::JoinSet;
 use tracing::{info, warn};
 
 use super::{RunningAgent, State};
+use crate::context_dir::Folder;
+use crate::instructions::INSTRUCTIONS;
 
 /// Gives up once the worker is stopping, which ends the call, so a title nobody will see can't keep it running.
 pub(crate) async fn title_for(
@@ -36,7 +38,12 @@ pub(crate) async fn title_for(
 fn one_off(state: &State, what: &str) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
     let record = |dir: &std::path::PathBuf| dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"));
-    AgentOptions { binary: binary(state), pid_file: state.config.state_dir.as_ref().map(record), tools: None }
+    AgentOptions {
+        binary: binary(state),
+        pid_file: state.config.state_dir.as_ref().map(record),
+        tools: None,
+        instructions: None,
+    }
 }
 
 /// What `call` answers, unless the worker starts stopping first, which drops the call and so stops what it started.
@@ -80,10 +87,12 @@ pub(crate) async fn start_agent(
     let agent_file = |extension: &str| {
         state.config.state_dir.as_ref().map(|dir| dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}")))
     };
+    make_tmp_folder(&session_id, &worktree).await;
     let options = AgentOptions {
         binary: binary(state),
         pid_file: agent_file("pid"),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
+        instructions: Some(INSTRUCTIONS.to_string()),
     };
     let process = agents::spawn(spec, tx, options).await?;
     let pid = process.pid();
@@ -92,6 +101,19 @@ pub(crate) async fn start_agent(
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
+}
+
+/// Makes the folder the agent's instructions send it to for what it makes for its own use. An agent can work without
+/// it, though what it keeps there may then show as changes, or go elsewhere, so failing is logged rather than stopping
+/// the start.
+async fn make_tmp_folder(session_id: &SessionId, worktree: &Path) {
+    let at = worktree.to_path_buf();
+    let made = tokio::task::spawn_blocking(move || Folder::Tmp.make(&at).map(drop))
+        .await
+        .unwrap_or_else(|e| Err(std::io::Error::other(e)));
+    if let Err(e) = made {
+        warn!(%session_id, worktree = %worktree.display(), "couldn't make the agent's tmp folder: {e}");
+    }
 }
 
 /// Where the agent reaches the worker's tools: at the address they're served on, with the token its hub gave it, which

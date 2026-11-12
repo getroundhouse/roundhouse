@@ -320,6 +320,15 @@ Agents call tools of Roundhouse's own, such as one that says where the workspace
 - **What a tool says is written for the agent,** in full, and apart from what the app shows, since an agent reads it as words and gets wrong what a person wouldn't, such as reading a pull request in the merge queue as merged. *Unconfirmed.*
 - **An agent hears only what was read since it asked.** The hub reads the pull request for it at once, but no sooner than 10 s after the workspace's last read, and within the part of GitHub's limit that isn't kept for everything else. It fails rather than say what was known, which may be from before the agent pushed. So an agent asking in a loop reads at most six times a minute, and one asking again after it pushes waits 10 s at most. *Unconfirmed.*
 
+## What agents are told
+
+Every agent is told about working in Roundhouse, and so is each of its subagents, in text of the worker's own, `crates/worker/src/instructions.txt`. It's written for any agent and built into the worker, so it arrives and changes with the worker's build. It's plain text rather than Markdown, since the checks pass over a change that touches only Markdown. *Unconfirmed.*
+
+- **It says only what holds whether or not the agent has the worker's tools,** such as where to keep what it makes for its own use, and how to show the person an image. What the tools are for is in the tool server's own instructions, which come with the tools. *Unconfirmed.*
+- **Each adapter puts it in its agent's system prompt at every launch,** resumed ones included. The Claude adapter puts it after the CLI's own with `--append-system-prompt`, and gives it to subagents with `--append-subagent-system-prompt`, since they get none of the agent's own, as `docs/claude-cli.md` says. *Unconfirmed.*
+- **A chat goes on with what it was first told until it's compacted,** since the Claude CLI keeps a conversation's first system prompt when it's resumed, so new text reaches new chats, and older ones once they're compacted. *Unconfirmed.*
+- **What an agent makes for its own use goes in the worktree's `.context/tmp/`,** which the worker makes before each agent starts, with a `.gitignore` that ignores everything in it, as it makes `.context/attachments/` for a prompt's files. So nothing there shows as a change, whatever the repository ignores, and an image there can show in what the agent writes. It's deleted with the worktree when the workspace is archived. Agents otherwise reach for the system's temporary directory, where the person can't see what they made. The exception is something that mustn't be inside the repository, such as a throwaway project that would pick up the repository's own settings. The rest of `.context/` is left alone, since a repository can keep things of its own there. *Unconfirmed.*
+
 ## When a process dies
 
 Any process can die at any point, so nothing depends on a clean exit. Whatever survives works out what happened from the records.
