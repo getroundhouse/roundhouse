@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+build = "build/main.rs"
 
 [[bin]]
 name = "roundhouse-desktop"
@@ -41,9 +42,10 @@ image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "we
 objc2.workspace = true
 objc2-app-kit.workspace = true
 
-# Reads the file icons' manifest into tables, so the app never parses it.
+# Reads the file icons' manifest into tables, so the app never parses it, and says which file a failure was about.
 [build-dependencies]
 serde_json.workspace = true
+anyhow.workspace = true
 
 [dev-dependencies]
 desktop = { workspace = true, features = ["testing"] }
@@ -54,6 +56,7 @@ image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
 flate2.workspace = true
 parking_lot.workspace = true
+proptest.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple.workspace = true

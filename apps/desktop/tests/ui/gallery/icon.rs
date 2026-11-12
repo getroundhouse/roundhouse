@@ -1,6 +1,7 @@
 //! The app icon, in each style and at every size macOS keeps a drawing for, checked against its images in the
 //! style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns` the app
-//! is packaged with.
+//! is packaged with, and `tools/package/ico.py` packs five of its drawings into `AppIcon.ico` beside it, for Windows,
+//! which `tools/package/test_ico.py` fails on once the drawings change, until it's made again.
 
 #![cfg(test)]
 

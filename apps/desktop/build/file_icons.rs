@@ -1,17 +1,13 @@
 //! Builds the tables the file icons are found in, from `file-icons/`, which `tools/file-icons/update.py` writes: every
 //! icon there, embedded with its colours filled in from `palette.json` and at the size it's drawn, and the file names
 //! and extensions Catppuccin's manifest gives an icon, lowercased and sorted, so the app finds each by a binary search
-//! and never reads the manifest itself. On Windows it also puts the app's own icon in the program.
-
-// A module of the build script's own, kept apart from the app's source.
-#[path = "build/app_icon.rs"]
-mod app_icon;
+//! and never reads the manifest itself.
 
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Write as _;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
 
 use serde_json::Value;
 
@@ -45,23 +41,22 @@ const DRAWING: [&str; 17] = [
 const MAX_ICON_BYTES: usize = 16 * 1024;
 const MAX_ELEMENTS: usize = 64;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    app_icon::embed(Path::new(env!("CARGO_MANIFEST_DIR")))?;
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("file-icons");
+/// Writes `file_icons.rs` to `out_dir`, with each icon beside it in `file-icons/`, from the icons and the manifest in
+/// `dir`.
+pub(crate) fn write(dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     println!("cargo::rerun-if-changed={}", dir.display());
     let manifest: Value = serde_json::from_slice(&fs::read(dir.join("theme.json"))?)?;
     let palette: BTreeMap<String, String> = serde_json::from_slice(&fs::read(dir.join("palette.json"))?)?;
-    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let drawn = out_dir.join("file-icons");
     fs::create_dir_all(&drawn)?;
 
-    let mut out = String::from("// Built by build.rs from file-icons/.\n\n");
+    let mut out = String::from("// Built by build/file_icons.rs from file-icons/.\n\n");
     writeln!(
         out,
         "/// How big an icon is drawn, which each is embedded at.\npub(crate) const ICON_SIZE: f32 = {SIZE}.;\n"
     )?;
     let mut icons: Vec<(String, PathBuf)> = Vec::new();
-    for entry in fs::read_dir(&dir)? {
+    for entry in fs::read_dir(dir)? {
         let path = entry?.path();
         if path.extension() != Some("svg".as_ref()) {
             continue;

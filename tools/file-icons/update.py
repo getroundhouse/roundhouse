@@ -8,10 +8,10 @@ where the manifest is built, and it has to match the checksum pinned here. Only 
 those the manifest gives a file's name or extension, and the plain file, folder and open folder.
 
 Each icon is kept with its colours named rather than filled in, as `var(--vscode-ctp-blue)`, and `palette.json` says
-what each name is in the Mocha flavour, which `build.rs` fills in. The palette is read from the release's own Mocha
-icons, and the release is refused unless filling it in gives back every one of them exactly, so the app draws what
-Catppuccin does. Each icon is also checked for anything a picture shouldn't hold, such as a script or a link out,
-before anything is written.
+what each name is in the Mocha flavour, which `apps/desktop/build/file_icons.rs` fills in. The palette is read from
+the release's own Mocha icons, and the release is refused unless filling it in gives back every one of them exactly, so
+the app draws what Catppuccin does. Each icon is also checked for anything a picture shouldn't hold, such as a script
+or a link out, before anything is written.
 
 To update, set VERSION and INTEGRITY to the new release's, from https://github.com/catppuccin/vscode-icons/releases,
 run this, then `cargo test -p desktop`, and accept the gallery's screens if the icons look different.
@@ -50,7 +50,8 @@ HEX = re.compile(r"#[0-9a-f]{6}")
 # The elements a drawing of an icon is made of: those Catppuccin's are, and the few more a drawing like them would use.
 # Anything else, such as a script, text, a style sheet, a picture from elsewhere, or a `<use>`, which can repeat a part
 # of the drawing until it takes minutes to draw, is more than an icon needs, so an icon with one is turned away rather
-# than trusted. `apps/desktop/build.rs` checks the same, with the same limits, so a change to one belongs in both.
+# than trusted. `apps/desktop/build/file_icons.rs` checks the same, with the same limits, so a change to one belongs in
+# both.
 DRAWING = {
     "svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "clipPath", "mask",
     "linearGradient", "radialGradient", "stop", "title", "desc",
