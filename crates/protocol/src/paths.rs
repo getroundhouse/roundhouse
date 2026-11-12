@@ -74,6 +74,13 @@ impl Paths {
     }
 }
 
+/// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`].
+pub fn is_hub_copy_dir(name: &str) -> bool {
+    name.rsplit_once('-').is_some_and(|(version, number)| {
+        !version.is_empty() && number.parse::<u64>().is_ok_and(|parsed| parsed.to_string() == number)
+    })
+}
+
 /// macOS limits a socket path to 103 bytes.
 pub const MAX_SOCKET_PATH_BYTES: usize = 103;
 
@@ -248,6 +255,19 @@ mod tests {
         let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
 
         assert_eq!(copy, Path::new(&data).join("daemons/abc123-7").join(daemon_file()));
+    }
+
+    #[test]
+    fn a_hub_copy_s_directory_is_told_from_any_other_name() {
+        let (home, data) = (whole("/h"), whole("/d"));
+        let paths = resolve(env_of(&[(HOME_VAR, &home), (ENV_HOME, &data)])).unwrap();
+        let copy = paths.hub_copy(&StampedBuild::new("0.1.371", 1_794_519_400).unwrap());
+        let dir = copy.parent().unwrap().file_name().unwrap().to_str().unwrap();
+
+        assert!(is_hub_copy_dir(dir));
+        for other in ["notes", "abc123-new", "-7", "abc123-07", "abc123-+7"] {
+            assert!(!is_hub_copy_dir(other), "{other}");
+        }
     }
 
     /// Only where the hub is on a socket, which has a path.

@@ -3,6 +3,7 @@ use std::io::Write as _;
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 
 use super::*;
+use crate::stand_in_hub::{self, Does};
 
 const VERSION: &str = "abc123";
 
@@ -14,7 +15,7 @@ fn daemon_script(version: &str, body: &str) -> String {
 /// Writes down which file it was started from.
 const SAYS_WHERE_IT_RAN: &str = "echo \"$0\" > \"$ROUNDHOUSE_HOME/started-from\"";
 
-fn paths_in(dir: &Path) -> Paths {
+pub(super) fn paths_in(dir: &Path) -> Paths {
     protocol::paths::resolve(|name| match name {
         protocol::paths::ENV_HOME => Some(dir.join("home").to_string_lossy().into_owned()),
         protocol::paths::ENV_WORKSPACES => Some(dir.join("workspaces").to_string_lossy().into_owned()),
@@ -33,7 +34,7 @@ fn install(dir: &Path, name: &str, script: &str) -> PathBuf {
     app.join(DAEMON_NAME)
 }
 
-fn build(number: u64) -> StampedBuild {
+pub(super) fn build(number: u64) -> StampedBuild {
     StampedBuild::new(VERSION, number).unwrap()
 }
 
@@ -46,7 +47,7 @@ fn build_dir(paths: &Paths) -> PathBuf {
     paths.hub_copy(&build(1)).parent().unwrap().to_path_buf()
 }
 
-fn files_in(dir: &Path) -> Vec<String> {
+pub(super) fn files_in(dir: &Path) -> Vec<String> {
     let mut files: Vec<_> =
         std::fs::read_dir(dir).unwrap().map(|file| file.unwrap().file_name().to_string_lossy().into_owned()).collect();
     files.sort();
@@ -144,6 +145,31 @@ fn a_build_whose_copy_cannot_be_made_is_not_started_at_all() {
 
     assert!(started.is_err());
     assert!(!paths.data_dir.join("started-from").exists(), "it started the original instead");
+}
+
+/// Clients of two builds can start hubs at once, and the one whose hub is up first removes the copies nothing runs from,
+/// which can be the one the other was about to start. That one joins the hub that's up rather than fail.
+#[test]
+fn a_client_that_cannot_start_its_hub_joins_one_started_meanwhile() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths_in(dir.path());
+    let original = dir.path().join("pipe");
+    assert!(Command::new("mkfifo").arg(&original).status().unwrap().success());
+    let connecting = std::thread::spawn({
+        let (daemon, paths) = (stamped(&original, 1), paths.clone());
+        move || Client::connect_or_start(&paths, &daemon, "test").map(drop)
+    });
+    // It's copying, so it found no hub. Then another is up, and this copy doesn't turn out to be the build.
+    let mut pipe = wait_for("the copy to open the original", || {
+        OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(&original).ok()
+    });
+    stand_in_hub::listen(&paths.socket, |_| Does::Nothing);
+    pipe.write_all(daemon_script("another build", "").as_bytes()).unwrap();
+    drop(pipe);
+
+    let joined = connecting.join().unwrap();
+
+    assert!(joined.is_ok(), "{joined:?}");
 }
 
 #[test]
