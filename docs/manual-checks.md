@@ -27,4 +27,5 @@ Start with trackpad feel, then IME, then selection and copy.
 - The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen
 - The window opens where it was left: filling the screen, in full screen, out of full screen again, and on a second display, each after quitting, after closing the window, and after `Restart to update`
 - Settings: the strip along the top still moves the window, its switches respond at once, and going back leaves the workspace as it was, scrolled to the same place
+- On Windows, the strip along the top: dragging it moves the window, double-clicking it maximizes the window and restores it, pressing a button in it presses only the button, and letting go of the button off the window doesn't click it, dragging across what's typed in Home's search selects it, and dragging a sidebar's edge from inside the strip resizes the sidebar
 - Overall: does it feel like an app you want to live in all day?
