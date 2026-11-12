@@ -310,6 +310,7 @@ fn losing_the_hub_ends_a_subscription_with_a_clear_signal() {
     while subscription.items.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_ok() {}
 
     assert_eq!(subscription.ended(), Some(Ended::Disconnected));
+    assert!(client.is_disconnected());
     assert!(matches!(client.hub_status().unwrap_err(), ClientError::Disconnected | ClientError::Io(_)));
 }
 
