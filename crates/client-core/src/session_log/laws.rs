@@ -122,7 +122,7 @@ proptest! {
     }
 
     /// The runs of loaded rows name every row there's something to show of, and no other, in order, wherever the
-    /// session has been scrolled and with prompts sent that aren't recorded yet.
+    /// session has been scrolled and with prompts sent that aren't recorded yet, which the tail shows.
     #[test]
     fn the_loaded_rows_are_the_ones_that_hold_something(
         last_seq in 1u64..6_000,

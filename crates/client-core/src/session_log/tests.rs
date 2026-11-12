@@ -118,17 +118,19 @@ fn live_events_never_build_up_past_the_limit() {
 }
 
 #[test]
-fn a_prompt_shows_at_once_then_becomes_the_recorded_event() {
+fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
     let mut log = SessionLog::new(5);
     log.add_pending("m1".into(), "hello".into(), Vec::new());
-    assert_eq!(log.row_count(), 6);
-    assert!(matches!(log.row(5), Row::Pending(p) if p.text == "hello"));
+    assert_eq!(log.row_count(), 5, "it has no row of its own until it's recorded");
+    assert_eq!(log.pending()[0].text, "hello");
+    assert_eq!(log.take_changes().rows, Some(5..6), "the tail changed");
 
     log.apply_event(event(
         6,
         EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()), attachments: Vec::new() },
     ));
-    assert_eq!(log.row_count(), 6, "it swapped in place");
+    assert_eq!(log.row_count(), 6);
+    assert!(log.pending().is_empty());
     assert!(matches!(log.row(5), Row::Event(_)));
 }
 
@@ -310,6 +312,6 @@ fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way(
 
     log.read_whole(5);
 
-    assert_eq!((log.by(), log.row_count()), (By::Seq, 6));
-    assert!(matches!(log.row(5), Row::Pending(prompt) if prompt.text == "go"));
+    assert_eq!(log.by(), By::Seq);
+    assert_eq!((log.row_count(), log.pending()[0].text.as_str()), (5, "go"));
 }

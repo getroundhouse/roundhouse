@@ -114,7 +114,7 @@ fn rows(open: &OpenSession) -> Vec<Option<u64>> {
     open.read(|log| {
         let row = |ix| match log.row(ix) {
             Row::Event(event) => Some(event.seq),
-            Row::Unloaded | Row::Pending(_) => None,
+            Row::Unloaded => None,
         };
         (0..log.row_count()).map(row).collect()
     })

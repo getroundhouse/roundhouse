@@ -220,6 +220,13 @@ pub(crate) fn thinking_so_far() -> Vec<EventBody> {
     events
 }
 
+/// Partway through a thought, with a prompt sent as it began, which the agent reads once it's done.
+pub(crate) fn steered_thinking() -> Vec<EventBody> {
+    let mut events = thinking_so_far();
+    events.push(user_prompt("The depot test sets the caution speed to 10, if that helps."));
+    events
+}
+
 pub(crate) fn thinking_tail() -> Tail {
     writing("msg-3", BlockKind::Thinking, "So slow takes a target speed, and caution can pass half the line")
 }

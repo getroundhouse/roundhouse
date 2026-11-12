@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use client_core::OpenSession;
-use client_core::session_log::{By, PendingPrompt, Row};
+use client_core::session_log::{By, Row};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -17,7 +17,7 @@ use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, Noti
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
-use crate::attachments::{self, Carried};
+use crate::attachments;
 use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
@@ -48,9 +48,9 @@ pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_coun
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
-use around::{Around, BlockAround, drawn_in_its_call};
+use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
 use prompt::{Progress, Prompt, prompt_bubble};
-use tail::render_tail;
+use tail::{EndOfChat, Waiting, render_tail};
 use tools::Toggle;
 
 /// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
@@ -123,13 +123,14 @@ pub(crate) fn render_row(
 /// What a row shows, copied out so the log isn't held while it's drawn.
 #[expect(clippy::large_enum_variant, reason = "made for one row and matched straight away")]
 enum Shown {
-    /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab.
-    Tail(Tail, By),
+    /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab, and the
+    /// prompts the agent hasn't read yet.
+    Tail(Tail, By, Vec<Waiting>),
+    /// An event, which for a prompt is the one the row's event settled.
     Event(SessionEvent, Around),
-    Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
-    /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, or in the subagent tab,
-    /// its last words, which its report says.
+    /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, in the subagent tab, its
+    /// last words, which its report says, or a prompt, drawn where the agent took it or at the end.
     InCall,
 }
 
@@ -147,31 +148,34 @@ fn render_row_inner(
         let m = model.borrow();
         session.read(|log| {
             if ix >= tail || ix >= log.row_count() {
-                return Shown::Tail(log.tail().clone(), log.by());
+                return Shown::Tail(log.tail().clone(), log.by(), tail::waiting(log, &m));
             }
             match log.row(ix) {
                 Row::Event(event) if drawn_in_its_call(log, &m, event) || alone::repeats_report(log, &m, ix) => {
                     Shown::InCall
                 }
-                Row::Event(event) => Shown::Event(event.clone(), Around::read(log, &m, event.seq, &event.body)),
-                Row::Pending(prompt) => Shown::Pending(prompt.clone(), attachments::carried(&m, &prompt.attachments)),
+                Row::Event(event) => match drawn_in_row(log, event) {
+                    Some(drawn) => Shown::Event(drawn.clone(), Around::read(log, &m, drawn.seq, &drawn.body)),
+                    None => Shown::InCall,
+                },
                 Row::Unloaded => Shown::Unloaded,
             }
         })
     };
     Some(match shown {
-        Shown::Tail(tail, by) => {
+        Shown::Tail(tail, by, waiting) => {
+            for prompt in &waiting {
+                if let Waiting::Recorded(event, around) = prompt {
+                    attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
+                }
+            }
             let m = model.borrow();
-            render_tail(&tail, &m.at_work, shared, by, m.folds.thinking_open(), cx)
+            let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work };
+            render_tail(&end, shared, by, m.folds.thinking_open(), &find, cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
             render_event(&event, &around, shared, &find, cx)
-        }
-        Shown::Pending(prompt, carried) => {
-            let key = ItemKey::Prompt(prompt.client_msg_id);
-            let text = Prompt { text: &prompt.text, find: &find };
-            prompt_bubble(&key, text, &carried, Progress::Sending, shared, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => return None,

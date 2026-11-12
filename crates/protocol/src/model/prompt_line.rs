@@ -83,6 +83,12 @@ impl PromptLine {
         Self { settled: Some(at), ..self }
     }
 
+    /// The same line, saying nothing of where it was settled, for keeping apart from what keeps that.
+    #[must_use]
+    pub fn unsettled(self) -> Self {
+        Self { settled: None, ..self }
+    }
+
     /// The line for `event`, if it's a prompt, as the hub lists it.
     pub fn of(event: &SessionEvent) -> Option<Self> {
         let EventBody::UserPrompt { text, attachments, .. } = &event.body else { return None };

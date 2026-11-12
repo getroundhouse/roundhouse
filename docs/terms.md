@@ -90,7 +90,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Seq | An event's position in its log. The first is 1, and there are no gaps | `Seq` |
 | Place | An event's position among the events from the same agent or subagent in its log, as `seq` is among all of them. The first is 1, and there are no gaps | `Place`, `SessionEvent::place` |
 | Raw line | The agent's original output, stored beside the event made from it | `raw` |
-| Tail | Text the agent is still writing, which isn't in the log yet | `Tail` |
+| Tail | Text the agent is still writing, which isn't in the log yet. The end of the chat draws it, with the prompts the agent hasn't read yet and the working line | `Tail` |
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
 | Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |

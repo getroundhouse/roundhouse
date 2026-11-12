@@ -27,7 +27,8 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     let transcript = ui.transcript().unwrap();
     ui.wait("the outline", |ui| ui.has("outline"));
     let listed = stack.client().session_prompt_list(&session).unwrap();
-    let rows: Vec<usize> = listed.iter().map(|line| seq_index(line.seq()) - 1).collect();
+    // Each is drawn where the agent took it, which the hub lists with it.
+    let rows: Vec<usize> = listed.iter().map(|line| seq_index(line.settled().unwrap().seq) - 1).collect();
     let (first, second) = (rows[0], rows[1]);
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(second).is_none()), "the second prompt isn't loaded");
 
@@ -40,7 +41,7 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
 
     jump_to(&mut ui, first);
     ui.frame();
-    assert_eq!(scrolled_to_exactly(&ui), (first, px(0.)), "and the first, from there, is at the start");
+    assert_eq!(scrolled_to_exactly(&ui), (0, px(0.)), "and the first, from there, is at the start");
 }
 
 #[gpui_kit::test]
@@ -104,7 +105,12 @@ fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext
 
     jump_to(&mut ui, only);
 
-    assert_eq!(scrolled_to(&ui), only, "the prompt is at the top, as the first row, which can't reach the bottom");
+    // The rows before it, where the agent started, draw nothing.
+    assert_eq!(
+        scrolled_to_exactly(&ui),
+        (0, px(0.)),
+        "the chat is at its start, since the prompt can't reach the bottom"
+    );
     assert!(selected(&mut ui, row_id("outline-tick", only)), "and its tick is lit");
 }
 

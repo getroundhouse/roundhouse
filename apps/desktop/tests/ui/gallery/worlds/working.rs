@@ -45,6 +45,16 @@ pub(in crate::gallery) fn thinking_streaming() -> World {
     world
 }
 
+/// Partway through a thought, with a prompt sent meanwhile that it hasn't taken yet, under the thought.
+pub(in crate::gallery) fn steered_thinking() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Running, chats::steered_thinking());
+    world.tails.insert(chat.clone(), chats::thinking_tail());
+    world.working_for(&chat, 14_200);
+    world
+}
+
 fn three_queued() -> Vec<QueuedPrompt> {
     vec![
         QueuedPrompt {

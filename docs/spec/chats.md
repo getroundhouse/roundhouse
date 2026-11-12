@@ -94,6 +94,7 @@
 - **It finds what the chat shows: the prompts, and the agent's words and thinking, as their Markdown renders,** so `**parser** is` holds `parser is` and a link's address holds nothing, **and what calls were given and sent back,** such as a command and what it printed, a file's path and lines, and a search's pattern, **and what went wrong,** such as a failed turn's error, a notice, and what the agent last printed before it stopped unexpectedly. What the app writes itself isn't found, such as `Read 10 lines`, `Exit 1` and line numbers. A closed call's command on its line is marked but not counted, since it's counted where the call shows it open. Cards that ask something aren't found, and nor is a reply until it's recorded.
 - **Nor is a question the agent asked, once it's answered and drawn as a line,** what was asked or what was answered. *Unconfirmed.*
 - **Nor is a compaction,** what its rule says or the summary it opens to. *Unconfirmed.*
+- **Nor is a prompt the agent hasn't read yet, at the end of the chat,** until the agent reads it and it takes its place in the chat. *Unconfirmed.*
 - **A subagent's call is found in as it shows it open:** what it was asked, and its report, but not what it's done lately, which changes as it works. *Unconfirmed.*
 - **The count is of the whole chat, however long,** including what the app hasn't loaded, since the hub says which events hold the text, and the app reads those parts of the chat to count what each shows, then lets them go. Until it has, the count ends in `…`, and the first match waits until nothing above it can hold another. The hub looks past what Markdown marks text with, such as bold, and how much whitespace there is, but not past a link, so a phrase that runs across a link is found only where the chat is loaded.
 - **One character is found only in what's loaded,** since it's in nearly every part of a chat, and so is anything when the hub is too old to say or fails to. Then the count ends in `+`, such as `3 of 12+`, or says `No matches loaded`, unless the whole chat is loaded.
@@ -234,6 +235,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 ## Sending while the agent works
 
 - **Enter sends what's typed to the agent while it works, and the agent reads it at its next chance,** such as when a running tool finishes. Until then the prompt is faint, so it's clear the agent hasn't seen it. One sent while the agent writes its last reply starts a turn of its own straight after. *Unconfirmed.*
+- **A prompt sent while the agent works is at the end of the chat until the agent reads it, under what the agent is still writing and above the working line,** so it's where you're looking, even under a long thought. Once the agent reads it, it's where the agent read it, after what the agent did before then, so it doesn't go back up above the thought it was sent during. In a chat from before the hub recorded which prompts the agent read, each stays where it was sent. *Unconfirmed.*
 - **Stopping the agent drops a prompt it hasn't read yet, and the prompt says so,** since stopping means stopping. So does a prompt the agent never read because it went away. *Unconfirmed.*
 - **A chat's prompts reach the hub in the order they were sent, sent or queued,** even while one is still adding a large file and the next carries none, so the agent never reads them out of order. *Unconfirmed.*
 - **Cmd-Enter queues what's typed instead, for after the agent finishes.** Each queued prompt is a turn of its own, sent in order once the agent has nothing left to do, so it can't fold into a turn it wasn't meant for. With the agent idle, Cmd-Enter sends. What's attached goes with it, as it would with Enter, and until the hub has the prompt, it shows faint at the end of the queue, so a prompt whose files take a while to add doesn't seem lost. *Unconfirmed.*
@@ -247,6 +249,10 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 **A prompt sent while a tool runs, waiting for the agent.** *Unconfirmed.*
 
 ![A prompt waiting for the agent](screens/steered.png)
+
+**A prompt sent while the agent thinks, waiting under the thought.** *Unconfirmed.*
+
+![A prompt waiting under a thought](screens/steered-thinking.png)
 
 **Three prompts queued while the agent writes, the first with a file, and the pointer over another.** *Unconfirmed.*
 

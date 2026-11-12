@@ -1,8 +1,8 @@
 //! What drawing one event needs from the rest of the log and the model, read while they're held, so nothing is held
 //! while it's drawn.
 
-use client_core::session_log::{PromptState, SessionLog};
-use protocol::event::{ContentBlock, EventBody};
+use client_core::session_log::{PromptAt, PromptState, SessionLog};
+use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, PermissionMode, Seq};
 
 use crate::attachments::{self, Carried};
@@ -184,6 +184,16 @@ impl BlockAround {
         };
         Self { key, fold, open, whole, reply, subagent, with_call }
     }
+}
+
+/// What the row of `event` draws of the log: the event, or the prompt it settled, which is drawn where the agent took
+/// it, or nothing for a prompt drawn in another row or at the end, as [`PromptAt`] says.
+pub(crate) fn drawn_in_row<'a>(log: &'a SessionLog, event: &'a SessionEvent) -> Option<&'a SessionEvent> {
+    if let Some(prompt) = log.prompt_settled_in(event) {
+        return Some(prompt);
+    }
+    let elsewhere = matches!(event.body, EventBody::UserPrompt { .. }) && log.prompt_at(event.seq) != PromptAt::Own;
+    (!elsewhere).then_some(event)
 }
 
 /// Whether the result `tool_use_id`, in the event at `seq`, is drawn with its call, which is close enough before it to

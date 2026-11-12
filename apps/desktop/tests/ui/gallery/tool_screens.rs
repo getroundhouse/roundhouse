@@ -9,7 +9,7 @@ use protocol::model::SessionStatus;
 use super::frame::{CHAT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{chat_world, pointed, read_image, thinking_streaming};
+use super::worlds::{chat_world, pointed, read_image, steered_thinking, thinking_streaming};
 use super::{chats, file_chats, question_chats, tool_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
@@ -110,6 +110,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         name: "thinking-streaming",
         spec: "chats.md",
         world: Some(thinking_streaming),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "steered-thinking",
+        spec: "chats.md",
+        world: Some(steered_thinking),
         frame: CHAT,
         steps: &[Step::Select(FOCUS)],
     },

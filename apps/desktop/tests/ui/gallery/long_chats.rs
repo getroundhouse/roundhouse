@@ -59,9 +59,10 @@ pub(crate) const TURNS: [(&str, &str); 20] = [
 /// Events each turn takes: its prompt, the agent taking it, the reply, and the turn's end.
 const EVENTS_A_TURN: usize = 4;
 
-/// The fourteenth prompt's row in the outline's list. The list shows it when it opens at the end of the chat, and it has
-/// more than a screen of chat above it, so it can come to the bottom.
-pub(crate) const FOURTEENTH_PROMPT: &str = "outline-prompt/52";
+/// The fourteenth prompt's row in the outline's list, which is the row of the event that took it, where it's drawn. The
+/// list shows it when it opens at the end of the chat, and it has more than a screen of chat above it, so it can come
+/// to the bottom.
+pub(crate) const FOURTEENTH_PROMPT: &str = "outline-prompt/53";
 
 /// The twenty turns, in order.
 pub(crate) fn many_turns() -> Vec<EventBody> {
@@ -81,5 +82,6 @@ fn the_fourteenth_prompt_is_in_the_row_named() {
     let mut prompts = world.events_from(&chat, 1).filter(|event| matches!(event.body, EventBody::UserPrompt { .. }));
     let fourteenth = prompts.nth(13).unwrap();
 
-    assert_eq!(FOURTEENTH_PROMPT, format!("outline-prompt/{}", seq_index(fourteenth.seq) - 1));
+    // Taken straight after it's recorded, so in the row after its own.
+    assert_eq!(FOURTEENTH_PROMPT, format!("outline-prompt/{}", seq_index(fourteenth.seq)));
 }
