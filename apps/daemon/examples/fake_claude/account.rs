@@ -8,7 +8,9 @@ use serde_json::{Value, json};
 /// What the system prompt and tools take before anything is said, and what each line a conversation has seen adds.
 const BASE_TOKENS: u64 = 15_000;
 const TOKENS_A_LINE: u64 = 1_000;
+/// What the context holds, which its settings make a fifth of what its model holds, as a real CLI's can.
 const MAX_TOKENS: u64 = 200_000;
+pub(crate) const MODEL_TOKENS: u64 = 1_000_000;
 /// The start of 2100, in seconds, so the limit hasn't reset whenever a test runs.
 const RESETS_AT_S: u64 = 4_102_444_800;
 
@@ -36,6 +38,7 @@ pub(crate) fn context_usage(conversation: &Path) -> Value {
         "totalTokens": used,
         "maxTokens": MAX_TOKENS,
         "rawMaxTokens": MAX_TOKENS,
+        "autocompactSource": "settings",
         "percentage": used * 100 / MAX_TOKENS,
         "gridRows": [[{"color": "promptBorder", "isFilled": true, "categoryName": "Free space", "tokens": 1}]],
         "model": super::current_model(),

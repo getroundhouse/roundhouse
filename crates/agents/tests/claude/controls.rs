@@ -4,13 +4,15 @@
 
 #![cfg(test)]
 
-use agents::claude::{Normalizer, Parsed};
-use protocol::model::{LimitWindow, UsageLimit};
+use agents::claude::{ModelWindows, Normalizer, Parsed};
+use protocol::model::{LimitWindow, MaxSetBy, UsageLimit};
 use serde_json::Value;
 
 /// Control requests and the CLI's replies, from `../fixtures/claude_controls.jsonl`, by the same script with
 /// `--controls`. Its process was launched with the adapter's flags, which include `--effort high`.
 const CONTROLS: &str = include_str!("../fixtures/claude_controls.jsonl");
+/// A conversation's lines, from `../fixtures/claude.jsonl`, by the same script without `--controls`.
+const CONVERSATION: &str = include_str!("../fixtures/claude.jsonl");
 
 /// Each request sent, with what the adapter makes of the CLI's reply to it.
 fn exchanges() -> Vec<(Value, Result<Value, String>)> {
@@ -87,7 +89,12 @@ fn answer_to(subtype: &str) -> Result<Value, String> {
 
 #[test]
 fn the_cli_says_how_full_its_context_is_and_what_its_made_of() {
-    let context = agents::claude::context_usage(&answer_to("get_context_usage").unwrap()).unwrap();
+    // How much each model holds, from the conversation's `result` lines, since the reply doesn't say.
+    let mut windows = ModelWindows::default();
+    for line in CONVERSATION.lines().filter(|line| line.contains(r#""type": "result""#)) {
+        windows.heard(&serde_json::from_str(line).unwrap());
+    }
+    let context = agents::claude::context_usage(&answer_to("get_context_usage").unwrap(), &windows).unwrap();
 
     let tokens = |name: &str| context.parts.iter().find(|part| part.name == name).map(|part| part.tokens);
     assert!(context.used_tokens > 0, "the system prompt and tools are there before anything is said");
@@ -97,6 +104,9 @@ fn the_cli_says_how_full_its_context_is_and_what_its_made_of() {
     let (buffer, free) = (tokens("Autocompact buffer").unwrap(), tokens("Free space").unwrap());
     assert_eq!(context.used_tokens + buffer + free, context.max_tokens);
     assert!(tokens("System tools (deferred)").is_some());
+    // Captured with nothing set to make the context smaller, so it holds as much as its model does.
+    assert_eq!(context.max_set_by, Some(MaxSetBy::Model));
+    assert_eq!(context.model_tokens, Some(context.max_tokens));
 }
 
 /// Its numbers are made up as it's captured, since they're the account's, so this checks the keys the adapter reads.

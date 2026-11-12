@@ -8,12 +8,34 @@ use serde::{Deserialize, Serialize};
 pub struct ContextUsage {
     /// What's in the context now.
     pub used_tokens: u64,
-    /// The most it holds.
+    /// The most it holds. It can be less than its model holds, when something such as a setting makes it smaller.
     pub max_tokens: u64,
+    /// The most its model holds, once the agent has said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_tokens: Option<u64>,
+    /// What set `max_tokens`, when the agent said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_set_by: Option<MaxSetBy>,
     /// What it's made of, with whatever is set aside or free, in the agent's own words and order. Some parts aren't
     /// counted in `used_tokens`, such as tools the agent loads only when it needs them, so they don't add up to it.
     #[serde(default)]
     pub parts: Vec<ContextPart>,
+}
+
+/// What set the most a context holds. A setting can ask for more than the model holds, and then it's still the one
+/// that set it, so only [`ContextUsage::model_tokens`] says whether the context is smaller than its model's.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MaxSetBy {
+    /// Nothing but the model.
+    Model,
+    /// The agent's settings, such as a settings file of the user's.
+    Settings,
+    /// A variable in the agent's environment.
+    Environment,
+    /// Something this build doesn't know of.
+    #[serde(other)]
+    Unknown,
 }
 
 /// One part of a context, such as the conversation's messages or the room left.
@@ -51,6 +73,11 @@ impl ContextUsage {
         fraction(self.used_tokens, self.max_tokens)
     }
 
+    /// The most its model holds, when that's more than the context does, since something made the context smaller.
+    pub fn model_holds_more(&self) -> Option<u64> {
+        self.model_tokens.filter(|&model| model > self.max_tokens)
+    }
+
     /// How much of the context `tokens` is, from 0 to 1.
     pub fn fraction(&self, tokens: u64) -> f32 {
         fraction(tokens, self.max_tokens)
@@ -80,7 +107,7 @@ mod tests {
     use super::*;
 
     fn context(used_tokens: u64, max_tokens: u64) -> ContextUsage {
-        ContextUsage { used_tokens, max_tokens, parts: Vec::new() }
+        ContextUsage { used_tokens, max_tokens, model_tokens: None, max_set_by: None, parts: Vec::new() }
     }
 
     #[test]
@@ -89,6 +116,26 @@ mod tests {
 
         assert!((context.used_fraction() - 0.627).abs() < 1e-6);
         assert!((context.fraction(298_500) - 0.597).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_model_holds_more_only_when_its_more_than_the_context_does() {
+        let of_a_model = |model_tokens| ContextUsage { model_tokens, ..context(10, 500_000) };
+
+        assert_eq!(of_a_model(Some(1_000_000)).model_holds_more(), Some(1_000_000));
+        assert_eq!(of_a_model(Some(500_000)).model_holds_more(), None, "as much as the context");
+        assert_eq!(of_a_model(Some(200_000)).model_holds_more(), None, "less, which the context can't be");
+        assert_eq!(of_a_model(None).model_holds_more(), None, "nobody said");
+    }
+
+    #[test]
+    fn what_set_the_most_reads_even_from_a_newer_peer_and_whats_unsaid_is_left_out() {
+        let set_by = |by: &str| serde_json::from_str::<MaxSetBy>(&format!("\"{by}\"")).unwrap();
+        assert_eq!(set_by("settings"), MaxSetBy::Settings);
+        assert_eq!(set_by("a_newer_one"), MaxSetBy::Unknown);
+
+        let unsaid = serde_json::to_string(&context(5, 10)).unwrap();
+        assert!(!unsaid.contains("model_tokens") && !unsaid.contains("max_set_by"), "{unsaid}");
     }
 
     #[test]

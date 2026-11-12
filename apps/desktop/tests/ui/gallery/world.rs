@@ -252,6 +252,8 @@ impl World {
         let context = session.context.get_or_insert(ContextUsage {
             used_tokens: 313_500,
             max_tokens: 500_000,
+            model_tokens: None,
+            max_set_by: None,
             parts: Vec::new(),
         });
         let (model, tokens) = (Some(ModelName::named("claude-opus-5-5")), context.used_tokens);

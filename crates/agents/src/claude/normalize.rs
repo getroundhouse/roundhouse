@@ -166,7 +166,8 @@ fn parse_line(line: &str) -> Parsed {
     value_of(line).map_or_else(unparsed, |value| parse_value(&value))
 }
 
-fn value_of(line: &str) -> Option<Value> {
+/// A line as JSON, with what the CLI can write that JSON can't hold repaired.
+pub(crate) fn value_of(line: &str) -> Option<Value> {
     serde_json::from_str::<Value>(line)
         // JavaScript strings can hold half of a surrogate pair, and JSON.stringify writes it as an
         // escape. That's rare, and it can land in a line that matters, such as an approval.

@@ -13,7 +13,13 @@ fn chat(id: &str, used_tokens: u64) -> Session {
         "effort": "high", "status": "idle", "last_seq": 4, "created_at_ms": 0, "updated_at_ms": 0,
     }))
     .unwrap();
-    session.context = Some(ContextUsage { used_tokens, max_tokens: 1_000_000, parts: Vec::new() });
+    session.context = Some(ContextUsage {
+        used_tokens,
+        max_tokens: 1_000_000,
+        model_tokens: None,
+        max_set_by: None,
+        parts: Vec::new(),
+    });
     session.prompt_cache =
         Some(PromptCache { used_at_ms: SENT_MS, ttl: CacheTtl::OneHour, model: None, tokens: 313_500 });
     session

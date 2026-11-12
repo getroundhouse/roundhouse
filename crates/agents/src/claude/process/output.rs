@@ -73,6 +73,7 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
                 if opened || shared.confirmed.load(Ordering::SeqCst) {
+                    context::heard(&shared, &body, &line);
                     context::after(&shared, &body, &output);
                     usage::after(&shared, &body, &output);
                 }

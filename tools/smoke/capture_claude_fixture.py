@@ -362,10 +362,11 @@ def keep_only_whats_applied(value):
 
 def keep_only_what_the_context_holds(value):
     """`get_context_usage` also lists the user's skills, memory files and MCP tools by name and path, and the grid
-    `/context` draws. The adapter reads only how much is used, of how much, and each category."""
+    `/context` draws. The adapter reads only how much is used, of how much, which model's context it is, what set how
+    much it holds, and each category."""
     answer = value.get("response", {}).get("response")
     if value.get("type") == "control_response" and isinstance(answer, dict) and "categories" in answer:
-        kept = {key: answer[key] for key in ("totalTokens", "maxTokens") if key in answer}
+        kept = {key: answer[key] for key in ("totalTokens", "maxTokens", "model", "autocompactSource") if key in answer}
         kept["categories"] = [{key: category[key] for key in ("id", "name", "tokens", "kind") if key in category}
                               for category in answer["categories"]]
         value["response"]["response"] = kept

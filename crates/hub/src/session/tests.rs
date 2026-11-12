@@ -249,7 +249,7 @@ fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() 
 }
 
 fn context(used_tokens: u64) -> ContextUsage {
-    ContextUsage { used_tokens, max_tokens: 200_000, parts: Vec::new() }
+    ContextUsage { used_tokens, max_tokens: 200_000, model_tokens: None, max_set_by: None, parts: Vec::new() }
 }
 
 #[test]

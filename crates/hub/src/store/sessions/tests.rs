@@ -136,7 +136,7 @@ fn a_session_from_before_context_has_none_and_so_does_one_whose_context_this_hub
 }
 
 fn context(used_tokens: u64) -> ContextUsage {
-    ContextUsage { used_tokens, max_tokens: 200_000, parts: Vec::new() }
+    ContextUsage { used_tokens, max_tokens: 200_000, model_tokens: None, max_set_by: None, parts: Vec::new() }
 }
 
 #[test]

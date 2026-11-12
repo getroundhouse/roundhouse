@@ -30,7 +30,7 @@ pub use agent::{AgentDescription, AgentFeature, ModelChoice, NotOffered};
 pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
-pub use context::{ContextPart, ContextPartKind, ContextUsage};
+pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
 pub use draft::{AnswerDraft, AnswerSoFar, CommentDraft, Draft, NewDraft, WorkspaceDraft, WorkspaceDraftToKeep};
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
