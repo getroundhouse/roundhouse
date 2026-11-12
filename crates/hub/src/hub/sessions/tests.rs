@@ -8,6 +8,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::broadcast::error::RecvError;
 
 use super::*;
+use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -22,13 +23,8 @@ fn hub_in(dir: &Path) -> Arc<Hub> {
         shell: Some("/bin/sh".to_string()),
         path: None,
     };
-    Arc::new(Hub::new(
-        store,
-        dir.join("attachments"),
-        dir.join("worker-logs"),
-        Arc::new(LocalProvider::new(config)),
-        false,
-    ))
+    let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
+    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, false))
 }
 
 #[tokio::test]

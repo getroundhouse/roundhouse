@@ -4,18 +4,22 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod attachment_files;
+mod calls;
+mod child_process;
 mod error;
+mod frames;
 mod hub;
 mod listener;
 mod names;
 mod private;
+mod provider_link;
+mod provider_set;
 mod run;
 mod server;
 mod session;
 pub mod store;
 mod terminate;
 mod worker_link;
-mod worker_process;
 
 pub use crate::error::HubError;
 pub use crate::run::{HubConfig, run};

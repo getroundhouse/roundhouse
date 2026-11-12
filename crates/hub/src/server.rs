@@ -11,11 +11,12 @@ use protocol::client::{
 };
 use protocol::frame;
 use protocol::model::{Place, SessionId};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
+use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::listener::Listener;
 use crate::store::AddedBy;
@@ -74,18 +75,11 @@ async fn serve_connection(
     });
     let connection = Arc::new(Connection { frames: frames_tx, subscriptions: Mutex::new(HashMap::new()) });
 
-    let mut reader = BufReader::new(read);
-    let mut line = Vec::new();
+    let mut incoming = FrameReader::new(read);
     let mut greeted = false;
     loop {
-        frame::clear_buffer(&mut line);
-        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
-        match read {
-            Ok(0) | Err(_) => break,
-            Ok(_) if line.len() > frame::MAX_FRAME_BYTES => break,
-            Ok(_) => {}
-        }
-        let request: ClientFrame = match frame::decode(&line) {
+        let Ok(Some(line)) = incoming.next().await else { break };
+        let request: ClientFrame = match frame::decode(line) {
             Ok(request) => request,
             Err(e) => {
                 debug!("closing a connection that sent a bad frame: {e}");

@@ -1,72 +1,86 @@
-//! Runs the command a provider's `connect` answers with, whose stdin and stdout are the worker's stream, and ends
-//! it. The hub runs it rather than the provider, so a provider is never in a worker's stream, and ending the
-//! connection works the same whatever the provider.
+//! Runs a child of the hub whose stdin and stdout are a stream, and ends it: a worker's command, which its provider's
+//! `connect` answers with, or a provider's adapter. The hub runs a worker's command rather than its provider, so a
+//! provider is never in a worker's stream, and ending a connection works the same whatever the provider.
 
+use std::io;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode};
-use providers::WorkerCommand;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
 use tracing::{info, warn};
 
-/// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
-pub(crate) const STOP_GRACE: Duration = Duration::from_secs(10);
-
-/// The running command. Dropping this leaves it running, and the task watching it reaps it.
-pub(crate) struct WorkerProcess {
+/// The running child. Dropping this leaves it running, and the task watching it reaps it.
+pub(crate) struct ChildProcess {
+    program: String,
     kill: Arc<Notify>,
     exited: watch::Receiver<bool>,
 }
 
 pub(crate) struct Spawned {
-    pub process: WorkerProcess,
+    pub process: ChildProcess,
     pub reader: Box<dyn AsyncRead + Send + Unpin>,
     pub writer: Box<dyn AsyncWrite + Send + Unpin>,
 }
 
-/// Starts `command`, with what it writes to stderr appended to `log`.
-pub(crate) fn spawn(command: &WorkerCommand, log: &Path) -> Result<Spawned, ApiError> {
-    let failed = |what: String, e: std::io::Error| ApiError::new(ErrorCode::Worker, format!("{what}: {e}"));
-    if let Some(dir) = log.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| failed(format!("creating {}", dir.display()), e))?;
-    }
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log)
-        .map_err(|e| failed(format!("opening {}", log.display()), e))?;
-    let mut child = Command::new(&command.program);
+/// Where what a child writes to stderr goes.
+#[derive(Clone, Copy)]
+pub(crate) enum Stderr<'a> {
+    /// Appended to this file, which is made if need be.
+    Log(&'a Path),
+    /// The hub's own.
+    Hubs,
+}
+
+/// Starts `program` as the leader of a process group of its own, so Ctrl-C on a foreground hub goes through the hub's
+/// clean shutdown, and ending it ends whatever it started.
+pub(crate) fn spawn(
+    program: &str,
+    args: &[String],
+    env: &[(String, String)],
+    stderr: Stderr<'_>,
+) -> io::Result<Spawned> {
+    let context = |what: String| move |e: io::Error| io::Error::new(e.kind(), format!("{what}: {e}"));
+    let stderr = match stderr {
+        Stderr::Log(log) => {
+            if let Some(dir) = log.parent() {
+                std::fs::create_dir_all(dir).map_err(context(format!("creating {}", dir.display())))?;
+            }
+            let file = std::fs::OpenOptions::new().create(true).append(true).open(log);
+            Stdio::from(file.map_err(context(format!("opening {}", log.display())))?)
+        }
+        Stderr::Hubs => Stdio::inherit(),
+    };
+    let mut child = Command::new(program);
     child
-        .args(&command.args)
-        .envs(command.env.iter().map(|(name, value)| (name, value)))
+        .args(args)
+        .envs(env.iter().map(|(name, value)| (name, value)))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::from(log_file))
+        .stderr(stderr)
         .kill_on_drop(true);
-    // So Ctrl-C on a foreground hub goes through the hub's clean shutdown.
     process::own_group(child.as_std_mut());
-    let mut child = child.spawn().map_err(|e| failed(format!("starting {}", command.program), e))?;
+    let mut child = child.spawn().map_err(context(format!("starting {program}")))?;
     let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
-        return Err(ApiError::new(ErrorCode::Worker, format!("{} started without its pipes", command.program)));
+        return Err(io::Error::other(format!("{program} started without its pipes")));
     };
-    info!(pid = child.id(), program = command.program, "started a worker");
+    info!(pid = child.id(), program, "started a child of the hub");
     let kill = Arc::new(Notify::new());
     let (exited_tx, exited) = watch::channel(false);
     tokio::spawn(watch_child(child, kill.clone(), exited_tx));
-    Ok(Spawned { process: WorkerProcess { kill, exited }, reader: Box::new(reader), writer: Box::new(writer) })
+    let process = ChildProcess { program: program.to_string(), kill, exited };
+    Ok(Spawned { process, reader: Box::new(reader), writer: Box::new(writer) })
 }
 
 async fn watch_child(mut child: Child, kill: Arc<Notify>, exited: watch::Sender<bool>) {
     tokio::select! {
         _ = child.wait() => {}
         () = kill.notified() => {
-            // The whole group it leads, so nothing the command started outlives it. A worker's agents and scripts lead
-            // groups of their own, which its provider ends.
+            // The whole group it leads, so nothing it started outlives it. A worker's agents and scripts lead groups
+            // of their own, which its provider ends.
             match child.id() {
                 Some(pid) => process::signal_group(pid, process::Signal::Kill),
                 None => drop(child.start_kill()),
@@ -78,7 +92,7 @@ async fn watch_child(mut child: Child, kill: Arc<Notify>, exited: watch::Sender<
     exited.send_replace(true);
 }
 
-impl WorkerProcess {
+impl ChildProcess {
     /// Ends it at once, without waiting.
     pub(crate) fn kill(&self) {
         self.kill.notify_one();
@@ -88,8 +102,16 @@ impl WorkerProcess {
     pub(crate) async fn end(&self, grace: Duration) {
         let mut exited = self.exited.clone();
         if tokio::time::timeout(grace, exited.wait_for(|done| *done)).await.is_err() {
-            warn!("a worker didn't stop in time, killing it");
+            warn!(program = self.program, "it didn't stop in time, so it's being killed");
             self.kill();
+            let _ = exited.wait_for(|done| *done).await;
+        }
+    }
+
+    /// Resolves once it has exited, however that came about.
+    pub(crate) fn exited(&self) -> impl Future<Output = ()> + Send + 'static {
+        let mut exited = self.exited.clone();
+        async move {
             let _ = exited.wait_for(|done| *done).await;
         }
     }
@@ -105,8 +127,7 @@ mod tests {
     use super::*;
 
     fn sh(dir: &Path, script: &str) -> Spawned {
-        let command = WorkerCommand { program: "sh".into(), args: vec!["-c".into(), script.into()], env: Vec::new() };
-        spawn(&command, &dir.join("logs/worker.log")).unwrap()
+        spawn("sh", &["-c".into(), script.into()], &[], Stderr::Log(&dir.join("logs/worker.log"))).unwrap()
     }
 
     #[tokio::test]
@@ -116,9 +137,9 @@ mod tests {
         drop(writer);
         let started = Instant::now();
 
-        command.end(STOP_GRACE).await;
+        command.end(Duration::from_secs(10)).await;
 
-        assert!(started.elapsed() < STOP_GRACE / 2, "it should have exited by itself");
+        assert!(started.elapsed() < Duration::from_secs(5), "it should have exited by itself");
         drop(reader);
         let log = std::fs::read_to_string(dir.path().join("logs/worker.log")).unwrap();
         assert_eq!(log, "stopped\n", "what it writes to stderr goes to its log");

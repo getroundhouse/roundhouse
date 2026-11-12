@@ -48,3 +48,16 @@ fn a_hub_from_before_it_kept_settings_keeps_its_machine_awake() {
     assert!(settings.keep_awake);
     assert!(settings.rev > protocol::model::Rev::default(), "it has a revision, as every record does");
 }
+
+#[test]
+fn a_hub_is_given_an_id_once_and_keeps_it() {
+    let (first, second) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let store = store_with_session(first.path());
+    let id = store.hub_id().unwrap();
+    assert_eq!(id.as_str().len(), 32, "{id}");
+
+    drop(store);
+    let (path, backups) = (first.path().join("hub.db"), first.path().join("backups"));
+    assert_eq!(crate::store::Store::open(&path, &backups).unwrap().hub_id().unwrap(), id);
+    assert_ne!(store_with_session(second.path()).hub_id().unwrap(), id, "another hub is another");
+}

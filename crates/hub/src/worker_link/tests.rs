@@ -9,6 +9,7 @@ use protocol::worker::WorkerOutcome;
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
+use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 
 /// A local provider whose worker is `script`.
@@ -43,8 +44,13 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     let mut serving = std::process::Command::new("sleep").arg("100").process_group(0).spawn().unwrap();
     ProcessRecord::write(&dir.path().join("instances/i").join(WORKER_RECORD_FILE), serving.id()).unwrap();
     let store = Arc::new(store_with_session(dir.path()));
-    let hub =
-        Arc::new(Hub::new(store, dir.path().join("attachments"), dir.path().join("logs"), provider.clone(), false));
+    let hub = Arc::new(Hub::new(
+        store,
+        dir.path().join("attachments"),
+        dir.path().join("logs"),
+        ProviderSet::only(provider.clone()),
+        false,
+    ));
 
     let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
 

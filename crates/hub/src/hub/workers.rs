@@ -11,8 +11,7 @@ use tracing::warn;
 
 use super::{Hub, SHUTDOWN_GRACE, Wanted};
 use crate::session::Item;
-use crate::worker_link::WorkerLink;
-use crate::worker_process::STOP_GRACE;
+use crate::worker_link::{STOP_GRACE, WorkerLink};
 
 impl Hub {
     fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {

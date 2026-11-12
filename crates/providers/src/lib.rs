@@ -9,6 +9,7 @@
 
 mod error;
 pub mod local;
+pub mod serve;
 
 use async_trait::async_trait;
 use protocol::model::InstanceId;
