@@ -25,7 +25,7 @@ cargo xwin clippy --workspace --locked --target x86_64-pc-windows-msvc -- -D war
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
 ```
 
-Whenever you open the app, say why with `--note`, even if nobody is meant to look at it, since copies from several checkouts can be open at once.
+Whenever you open the app, say why with `--note`, even if nobody is meant to look at it, since copies from several checkouts can be open at once. As it quits, it says why on stderr. "Quit by whoever had it open" means they've finished with it, so don't look into why it exited, and don't open it again unless they ask.
 
 Roundhouse can be developed from inside Roundhouse, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `roundhouse-dev`, and only a release build uses the real data, which is what `tools/install.sh` installs. Set `ROUNDHOUSE_HOME` and `ROUNDHOUSE_WORKSPACES` to choose another.
 

@@ -34,6 +34,7 @@ mod sidebar;
 pub mod sidebar_tabs;
 mod sides;
 pub mod updates;
+pub mod why_quit;
 mod window_place;
 mod workspace_order;
 pub mod workspace_pane;
@@ -163,6 +164,7 @@ pub fn run(checkout: Option<Checkout>) {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
+        why_quit::say(checkout.as_ref(), cx);
         let opened = app::HubSource::default_local().and_then(|hub| {
             let data_dir = hub.paths.data_dir.clone();
             open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
@@ -171,7 +173,8 @@ pub fn run(checkout: Option<Checkout>) {
             Ok(data_dir) => updates::start(&data_dir, cx),
             Err(e) => {
                 eprintln!("couldn't open a window: {e:#}");
-                cx.quit();
+                // Not by quitting, which exits with 0, as an app that someone quit does. Nothing is open to wait for.
+                std::process::exit(1);
             }
         }
     });
