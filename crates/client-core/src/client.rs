@@ -9,6 +9,7 @@ mod feed;
 mod files;
 mod follow;
 mod lines;
+mod open_file;
 mod open_session;
 mod options;
 mod outline;
@@ -40,6 +41,7 @@ pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
 pub(crate) use lines::Place;
+pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use start::Daemon;
 

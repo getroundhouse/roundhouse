@@ -329,4 +329,4 @@ fn read_range(
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

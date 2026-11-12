@@ -22,7 +22,7 @@ pub(super) const LAST_SEQ: Seq = 600;
 /// A hub that answers each request but its hello as `answer` says, if it says to, on each connection it's given. Each
 /// is answered on a thread of its own, so an answer can wait without holding up the rest. It reports every request
 /// it's sent, as it comes.
-pub(super) fn start_hub_answering(
+pub(in crate::client) fn start_hub_answering(
     socket: &Path,
     answer: impl Fn(&ClientRequest) -> Option<ReplyOutcome> + Send + Sync + 'static,
 ) -> flume::Receiver<ClientRequest> {
@@ -89,7 +89,7 @@ pub(super) fn session() -> Session {
     serde_json::from_str(&record).unwrap()
 }
 
-pub(super) fn refused(code: ErrorCode, message: &str) -> ReplyOutcome {
+pub(in crate::client) fn refused(code: ErrorCode, message: &str) -> ReplyOutcome {
     ReplyOutcome::Error(ApiError::new(code, message))
 }
 
