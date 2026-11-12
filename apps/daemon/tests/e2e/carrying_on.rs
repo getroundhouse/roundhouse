@@ -14,8 +14,8 @@ use protocol::worker::{WorkerOutcome, WorkerRequest, WorkerResponse};
 use crate::attaching::Attached;
 
 use crate::support::{
-    self, Stack, assert_gapless, assistant_text, commit_settings, is_alive, pending_approval, read_all, started_pid,
-    wait_for_approval, wait_for_setup, wait_for_turn_end, wait_until,
+    self, Follower, Stack, assert_gapless, assistant_text, commit_settings, is_alive, pending_approval, read_all,
+    started_pid, wait_for_approval, wait_for_setup, wait_for_turn_end, wait_until,
 };
 
 /// As an update has the hub do: asks it to restart, and waits for it to go. A client starts the next one.
@@ -63,6 +63,35 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
 
     let events = wait_for_turn_end(&stack.client(), &session.id, 1);
     assert_one_agent_said_it_all_once(&events, "beforeafter");
+}
+
+/// A message the agent was writing as its hub went is whole in the next hub's tail, with what it wrote while there was
+/// no hub, rather than starting from the next delta, so a chat shows it as it was until it's finished.
+#[test]
+fn a_message_the_agent_is_writing_as_the_hub_restarts_is_whole_in_the_next_hub_s_tail() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    // Thinking for 30 s, so it's still writing once the next hub has started.
+    client.session_prompt(&session.id, "think:300:t", None).unwrap();
+    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let mut before = Follower::default();
+    before.drain_until(&subscription, "the agent to start thinking", |f| f.tail_text().contains("t2 "));
+    drop((subscription, client));
+
+    restart(&mut stack);
+    // So the agent writes with no hub there.
+    std::thread::sleep(Duration::from_millis(500));
+    stack.start_hub();
+
+    let client = stack.client();
+    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let mut after = Follower::default();
+    let heard = before.tail_text().len();
+    after.drain_until(&subscription, "the thinking to go on", |f| f.tail_text().len() > heard + 40);
+    let tail = after.tail_text();
+    let every_chunk = tail.split_whitespace().enumerate().all(|(i, chunk)| chunk == format!("t{i}"));
+    assert!(every_chunk, "the next hub's tail of the message is missing what came before: {tail:?}");
 }
 
 #[test]

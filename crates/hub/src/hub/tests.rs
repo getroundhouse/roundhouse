@@ -5,16 +5,19 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::Build;
-use protocol::client::ApiError;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, MergeState, ModelChoice, ModelName,
-    PermissionMode, PrState, PullRequest, Review, SessionSettings,
+    PermissionMode, PrState, PullRequest, Review, RunId, SessionId, SessionSettings,
 };
+use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
 use providers::local::{LocalConfig, LocalProvider};
+use tokio::sync::oneshot;
 
 use super::Hub;
 use crate::provider_set::ProviderSet;
+use crate::session::{CarriedOver, Item, LiveSession};
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
 
@@ -39,7 +42,7 @@ pub(super) fn described() -> AgentDescription {
 
 /// A hub whose store has the workspace `w` and its session `s`, with nothing sent in it, and that never starts a
 /// worker. Its agents are as [`described`] says.
-pub(super) fn hub_in(dir: &Path) -> Arc<Hub> {
+pub(crate) fn hub_in(dir: &Path) -> Arc<Hub> {
     hub_describing(dir, vec![described()])
 }
 
@@ -63,6 +66,38 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
         agents,
         false,
     ))
+}
+
+/// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.
+pub(crate) fn stand_in_worker(hub: &Hub) -> Arc<WorkerLink> {
+    let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
+    hub.workers.lock().insert("w".into(), link.clone());
+    link
+}
+
+/// The session `s` of a hub [`hub_in`] made, carried on with from an earlier hub whose agent of `run` is still running
+/// on `link`.
+pub(crate) fn carried_on(hub: &Arc<Hub>, link: &WorkerLink, run: RunId) -> Arc<LiveSession> {
+    let id: SessionId = "s".into();
+    let stored = hub.store.get_session(&id).unwrap();
+    let carried = CarriedOver { link: link.id, run, recorded: None, untaken: Vec::new() };
+    hub.sessions.lock().keep(&id, || LiveSession::start(hub, stored, &[], Some(carried))).unwrap()
+}
+
+/// Once everything the session has been sent is dealt with.
+pub(crate) async fn flushed(live: &LiveSession) {
+    let (done, taken) = oneshot::channel();
+    live.send_item(Item::Flush(done)).await;
+    taken.await.unwrap();
+}
+
+/// A worker's tail of `run`, with one message, named for `text`, that has `text` in it.
+pub(crate) fn writing(run: RunId, text: &str) -> Tail {
+    let mut tail = Tail::default();
+    let change = DeltaChange::Thinking { index: 0, text: text.into() };
+    let delta = StreamDelta { run: Some(run), message_id: text.into(), parent_tool_use_id: None, change };
+    tail.apply(&delta);
+    tail
 }
 
 /// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.

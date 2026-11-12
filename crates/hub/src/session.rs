@@ -58,6 +58,9 @@ pub(crate) enum LiveItem {
         ended_others: bool,
     },
     Delta(StreamDelta),
+    /// The tail changed by more than a delta says, as when the hub takes what a worker kept of what its agent is
+    /// writing, so each subscriber is sent it whole.
+    Rewritten,
 }
 
 /// `version` puts every change in one order, whichever task made it, so a subscriber can tell what

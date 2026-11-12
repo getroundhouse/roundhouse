@@ -8,15 +8,14 @@ use tokio::time::sleep_until;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{RunId, SessionId, SessionStatus};
+use protocol::model::{RunId, SessionStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
-use tokio::sync::oneshot;
 
 use super::*;
 use crate::hub::setup::SetupGate;
-use crate::hub::tests::hub_in;
-use crate::session::{CarriedOver, Item, LiveSession, Origin};
+use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
+use crate::session::{Item, LiveSession, Origin};
 
 const RUN: RunId = RunId::new(7);
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -32,8 +31,7 @@ fn prompt() -> EventBody {
 /// The hub, with a stand-in as `w`'s worker.
 fn with_worker(dir: &Path) -> (Arc<Hub>, Arc<WorkerLink>) {
     let hub = hub_in(dir);
-    let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
-    hub.workers.lock().insert(w(), link.clone());
+    let link = stand_in_worker(&hub);
     (hub, link)
 }
 
@@ -41,10 +39,7 @@ fn with_worker(dir: &Path) -> (Arc<Hub>, Arc<WorkerLink>) {
 /// which the stand-in doesn't say, so it asks again now and then.
 fn carrying_on(dir: &Path) -> (Arc<Hub>, Arc<WorkerLink>, Arc<LiveSession>) {
     let (hub, link) = with_worker(dir);
-    let id: SessionId = "s".into();
-    let stored = hub.store.get_session(&id).unwrap();
-    let carried = CarriedOver { link: link.id, run: RUN, recorded: None, untaken: Vec::new() };
-    let live = hub.sessions.lock().keep(&id, || LiveSession::start(&hub, stored, &[], Some(carried))).unwrap();
+    let live = carried_on(&hub, &link, RUN);
     (hub, link, live)
 }
 
@@ -65,9 +60,7 @@ async fn a_prompt_recorded_as_the_worker_is_replaced_isnt_interrupted_by_its_age
         stderr_tail: vec![],
     });
     live.send_item(Item::Event { run: RUN, body, raw: None, attachments: Vec::new(), seq: None }).await;
-    let (flushed, taken) = oneshot::channel();
-    live.send_item(Item::Flush(flushed)).await;
-    taken.await.unwrap();
+    flushed(&live).await;
 
     assert_eq!(live.status(), SessionStatus::Running);
 }

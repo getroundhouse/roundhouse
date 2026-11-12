@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::attachment::NewAttachment;
 use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
 use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
-use protocol::tail::StreamDelta;
+use protocol::tail::{StreamDelta, Tail};
 use tokio::sync::mpsc;
 use tracing::error;
 
@@ -24,6 +24,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
                 ingest_event(&session, run, *body, raw, attachments, seq).await;
             }
             Item::Delta { run, delta } => session.apply_delta(run, delta),
+            Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Context { run, context, .. } => session.note_context(run, context).await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
             Item::Cache { run, request, .. } => session.note_cache(run, request, crate::store::now_ms()).await,
@@ -158,6 +159,17 @@ impl LiveSession {
         delta.run = Some(run);
         state.tail.apply(&delta);
         publish(&mut state, LiveItem::Delta(delta));
+    }
+
+    /// Takes what the agent of `run` is writing from what its worker kept of it, in place of what this hub heard. Only
+    /// the current run's reaches anyone, as with its deltas.
+    fn take_tail(&self, run: RunId, tail: Tail) {
+        let mut state = self.state.lock();
+        if state.agent.is_none_or(|agent| agent.run != run) {
+            return;
+        }
+        state.tail.replace_run(run, tail);
+        publish(&mut state, LiveItem::Rewritten);
     }
 
     /// The agent said how full its context is. Only the current run speaks for the session, and only a change is kept

@@ -81,7 +81,7 @@ pub(super) async fn pump(
                     send_through(&hub, &id, subscription_id, &mut following, seq, &frames).await
                 }
                 // The client never sees the event, so a new snapshot gives it the tail that's left.
-                LiveItem::Appended { ended_others: true, .. } => continue 'resync,
+                LiveItem::Appended { ended_others: true, .. } | LiveItem::Rewritten => continue 'resync,
                 LiveItem::Delta(delta) if following.takes(delta.parent_tool_use_id.as_ref()) => {
                     frames.send(HubFrame::Delta { subscription_id, delta }).await.map_err(|_| ())
                 }
@@ -124,3 +124,6 @@ async fn send_through(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

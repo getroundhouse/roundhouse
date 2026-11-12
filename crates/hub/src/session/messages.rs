@@ -7,7 +7,7 @@ use protocol::model::{
     ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, RunId, Seq, Session, UsageLimit,
 };
 use protocol::prompt::Prompt;
-use protocol::tail::StreamDelta;
+use protocol::tail::{StreamDelta, Tail};
 use tokio::sync::oneshot;
 
 /// What arrives from a worker.
@@ -25,6 +25,12 @@ pub(crate) enum Item {
     Delta {
         run: RunId,
         delta: StreamDelta,
+    },
+    /// What the agent of `run` is writing, as its worker kept it for this hub, which missed the deltas that wrote it. It
+    /// comes after what the worker kept for the hub and before anything new, so the deltas after it follow on from it.
+    Tail {
+        run: RunId,
+        tail: Tail,
     },
     /// How full the agent's context is now. It comes in the queue with the agent's events, so it's never taken for
     /// a later run's, or kept after the run has gone.
