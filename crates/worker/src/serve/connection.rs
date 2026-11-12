@@ -1,0 +1,157 @@
+//! One hub's connection to the worker: its calls in, and the replies and what agents say out.
+
+use std::sync::Arc;
+
+use protocol::client::{ApiError, ErrorCode};
+use protocol::frame::{self, Call};
+use protocol::worker::{ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+use tracing::{error, warn};
+
+use super::scripts::setup_requested;
+use super::{Worker, handle, hello};
+
+/// Enough for a burst of what agents say, without holding much for a hub that's slow to read.
+const QUEUED_FRAMES: usize = 1024;
+
+/// What the hub said about losing it, which decides whether the worker carries on once it has gone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ended {
+    /// It asked the worker to stop, or never asked it to keep running without a hub.
+    Stop,
+    /// It asked the worker to keep running without a hub, and never to stop, or it went before saying hello.
+    Lost,
+}
+
+/// A connection the hub has stopped sending on, which can still send the hub whatever is on its way.
+pub(crate) struct Closing {
+    pub(crate) ended: Ended,
+    frames: mpsc::Sender<Arc<WorkerFrame>>,
+    writer: JoinHandle<()>,
+}
+
+impl Closing {
+    /// Once every reply under way has gone, and everything else sent to it, such as what agents said as they stopped.
+    /// The outbox has to have let go of it first.
+    pub(crate) async fn finish(self) {
+        drop(self.frames);
+        let _ = self.writer.await;
+    }
+
+    /// Without what hasn't gone yet. The outbox keeps that for the next hub, if this one asked.
+    pub(crate) fn abandon(self) {
+        self.writer.abort();
+    }
+}
+
+/// Until the hub stops sending. A worker that can't serve this hub, because of `refused`, answers every call by saying
+/// so, and sends it nothing else.
+pub(crate) async fn serve<R, W>(worker: &Worker, reader: R, writer: W, refused: Option<String>) -> Closing
+where
+    R: AsyncRead + Send + Unpin + 'static,
+    W: AsyncWrite + Send + Unpin + 'static,
+{
+    let (frames, outgoing) = mpsc::channel(QUEUED_FRAMES);
+    let writer = tokio::spawn(write_frames(writer, outgoing));
+    // `None` until the hub has said hello, and then whether it asked the worker to keep running without it.
+    let mut keep_running = None;
+    let mut asked_to_stop = false;
+    let mut reader = BufReader::new(reader);
+    let mut line = Vec::new();
+    while let Some(line) = next_line(&mut reader, &mut line).await {
+        let Call { id, request } = match line {
+            ToWorker::Call(call) => call,
+            // A refused hub was asked nothing.
+            ToWorker::Answer(answer) => {
+                if refused.is_none() {
+                    worker.state.asks.answer(answer);
+                }
+                continue;
+            }
+        };
+        let reply = move |answer: Result<WorkerResponse, ApiError>| {
+            let outcome = answer.map_or_else(WorkerOutcome::Error, WorkerOutcome::Response);
+            Arc::new(WorkerFrame::Reply { id, outcome })
+        };
+        if let Some(reason) = &refused {
+            let _ = frames.send(reply(Err(ApiError::new(ErrorCode::Conflict, reason.clone())))).await;
+            continue;
+        }
+        // Answered here rather than on a task of their own, since what the hub asks in them has to hold for every
+        // call after, and when the connection ends.
+        match request {
+            Ok(WorkerRequest::Hello { protocol_version, oldest_protocol_version, keep_running_without_hub }) => {
+                let answer = hello(protocol_version, oldest_protocol_version);
+                let greeted = answer.is_ok();
+                let _ = frames.send(reply(answer)).await;
+                if greeted {
+                    keep_running = Some(keep_running_without_hub);
+                    // After the reply, so the hub knows which version this is before anything else reaches it.
+                    worker.state.outbox.attach(frames.clone(), keep_running_without_hub).await;
+                    worker.state.asks.ask_again().await;
+                }
+            }
+            Ok(WorkerRequest::Stop) => {
+                asked_to_stop = true;
+                let _ = frames.send(reply(Ok(WorkerResponse::Ok))).await;
+            }
+            request => {
+                // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
+                // setup it's for has begun.
+                if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
+                    setup_requested(&worker.state);
+                }
+                let (worker, frames) = (worker.clone(), frames.clone());
+                tokio::spawn(async move {
+                    let answer = handle(&worker.state, &worker.forwarders, request).await;
+                    let _ = frames.send(reply(answer)).await;
+                });
+            }
+        }
+    }
+    let ended = if asked_to_stop || keep_running == Some(false) { Ended::Stop } else { Ended::Lost };
+    Closing { ended, frames, writer }
+}
+
+/// The next call the hub sends, or answer to what the worker asked, or `None` once it has stopped sending, or sent more
+/// than a frame can hold.
+async fn next_line<R: AsyncRead + Unpin>(reader: &mut BufReader<R>, line: &mut Vec<u8>) -> Option<ToWorker> {
+    loop {
+        frame::clear_buffer(line);
+        let limit = u64::try_from(frame::MAX_FRAME_BYTES).unwrap_or(u64::MAX).saturating_add(1);
+        match (&mut *reader).take(limit).read_until(b'\n', line).await {
+            Ok(0) => return None,
+            Ok(_) => {}
+            Err(e) => {
+                error!("reading from the hub failed: {e}");
+                return None;
+            }
+        }
+        if line.len() > frame::MAX_FRAME_BYTES {
+            error!("frame from the hub is too large");
+            return None;
+        }
+        match ToWorker::decode(line) {
+            Ok(read) => return Some(read),
+            Err(e) => warn!("ignoring a frame that didn't parse: {e}"),
+        }
+    }
+}
+
+async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<Arc<WorkerFrame>>) {
+    while let Some(item) = frames.recv().await {
+        let line = match frame::encode(item.as_ref()) {
+            Ok(line) => line,
+            Err(e) => {
+                error!("could not encode a frame: {e}");
+                continue;
+            }
+        };
+        if let Err(e) = writer.write_all(&line).await.and(writer.flush().await) {
+            // The hub is gone. Keep draining, so agents stop cleanly rather than blocking on us.
+            warn!("writing to the hub failed: {e}");
+        }
+    }
+}

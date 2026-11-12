@@ -21,9 +21,16 @@ pub(crate) struct Asks {
     /// How long to wait for an answer.
     patience: Duration,
     next: AtomicU64,
-    /// `None` once the hub has gone, so nothing waits for an answer that won't come.
-    waiting: Mutex<Option<HashMap<AskId, oneshot::Sender<AskOutcome>>>>,
+    /// `None` once the worker is stopping, so nothing waits for an answer that won't come.
+    waiting: Mutex<Option<HashMap<AskId, Waiting>>>,
     frames: mpsc::Sender<WorkerFrame>,
+}
+
+/// An ask whose answer is waited for, and what was asked, to ask again of a hub that connects meanwhile.
+struct Waiting {
+    answered: oneshot::Sender<AskOutcome>,
+    session_id: SessionId,
+    ask: WorkerAsk,
 }
 
 fn hub_gone() -> ApiError {
@@ -44,7 +51,8 @@ impl Asks {
     pub(crate) async fn ask(&self, session_id: SessionId, ask: WorkerAsk) -> Result<AskReply, ApiError> {
         let id = AskId::new(self.next.fetch_add(1, Ordering::Relaxed));
         let (answered, answer) = oneshot::channel();
-        self.waiting.lock().as_mut().ok_or_else(hub_gone)?.insert(id, answered);
+        let waiting = Waiting { answered, session_id: session_id.clone(), ask: ask.clone() };
+        self.waiting.lock().as_mut().ok_or_else(hub_gone)?.insert(id, waiting);
         // Forgets it however this ends, including when whoever asked stops waiting.
         let _forget = Forget { asks: self, id };
         let asking = async {
@@ -62,11 +70,33 @@ impl Asks {
     pub(crate) fn answer(&self, answer: AskAnswer) {
         let waiting = self.waiting.lock().as_mut().and_then(|waiting| waiting.remove(&answer.answer));
         if let Some(waiting) = waiting {
-            let _ = waiting.send(answer.outcome);
+            let _ = waiting.answered.send(answer.outcome);
         }
     }
 
-    /// The hub has gone, so whatever waits for an answer fails now, and so does anything asked from here on.
+    /// Asks a hub that has just connected whatever is still waiting for an answer, which the last hub may not have
+    /// heard, or went before answering. So every ask has to be safe to ask twice, as reading the workspace's pull
+    /// request is. Only the first answer reaches whoever asked.
+    pub(crate) async fn ask_again(&self) {
+        let again: Vec<_> = self
+            .waiting
+            .lock()
+            .iter()
+            .flatten()
+            .map(|(id, waiting)| WorkerFrame::Ask {
+                id: *id,
+                session_id: waiting.session_id.clone(),
+                ask: waiting.ask.clone(),
+            })
+            .collect();
+        for ask in again {
+            if self.frames.send(ask).await.is_err() {
+                return;
+            }
+        }
+    }
+
+    /// The worker is stopping, so whatever waits for an answer fails now, and so does anything asked from here on.
     pub(crate) fn close(&self) {
         self.waiting.lock().take();
     }

@@ -156,9 +156,7 @@ async fn forward_output(
                 }
             }
         };
-        if state.frames.send(frame).await.is_err() {
-            return;
-        }
+        state.outbox.send(frame).await;
     }
 }
 

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use protocol::model::{BranchName, Branches, Head};
+use tokio::sync::mpsc;
 
 use super::*;
 use crate::git::tests::{new_repo, run};
@@ -13,7 +14,8 @@ const QUIET: Duration = Duration::from_millis(500);
 
 struct Watching {
     worktree: PathBuf,
-    frames: mpsc::Receiver<WorkerFrame>,
+    /// What reached the hub, through the worker's outbox.
+    frames: mpsc::Receiver<Arc<WorkerFrame>>,
     _stopping: watch::Sender<bool>,
 }
 
@@ -21,17 +23,19 @@ impl Watching {
     /// Once it's said it's watching, by when it has sent the first frame.
     async fn start(worktree: &Path) -> Self {
         let (frames, received) = mpsc::channel(16);
+        let outbox = Arc::new(Outbox::default());
+        outbox.attach(frames, false).await;
         let stopping = watch::Sender::new(false);
         let (first, sent) = oneshot::channel();
-        tokio::spawn(watch(worktree.to_path_buf(), frames, stopping.subscribe(), first));
+        tokio::spawn(watch(worktree.to_path_buf(), outbox, stopping.subscribe(), first));
         tokio::time::timeout(PATIENCE, sent).await.expect("it never said").unwrap();
         Self { worktree: worktree.to_path_buf(), frames: received, _stopping: stopping }
     }
 
     async fn next(&mut self) -> Branches {
         let frame = tokio::time::timeout(PATIENCE, self.frames.recv()).await.expect("no frame came").unwrap();
-        let WorkerFrame::Branches { branches } = frame else { panic!("not the branches: {frame:?}") };
-        branches
+        let WorkerFrame::Branches { branches } = &*frame else { panic!("not the branches: {frame:?}") };
+        branches.clone()
     }
 
     fn git(&self, args: &[&str]) {
@@ -126,7 +130,7 @@ async fn it_sends_the_branches_at_once_and_again_when_they_change() {
     let mut watching = Watching::start(&worktree).await;
 
     let at_once = watching.frames.try_recv().expect("sent before it said it was watching");
-    let WorkerFrame::Branches { branches: at_once } = at_once else { panic!() };
+    let WorkerFrame::Branches { branches: at_once } = &*at_once else { panic!() };
     watching.git(&["switch", "-q", "-c", "header"]);
     let switched = watching.next().await;
 

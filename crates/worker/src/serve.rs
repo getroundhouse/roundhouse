@@ -1,4 +1,4 @@
-//! The worker's main loop: one stream in from the hub, one stream out.
+//! The worker's main loop: what it serves a hub on a connection, and what it keeps between connections.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -9,14 +9,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use agents::AgentProcess;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::frame::{self, Call};
 use protocol::model::{RunId, SessionId};
 use protocol::versions::Versions;
-use protocol::worker::{ToWorker, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinSet};
-use tracing::{error, info, warn};
+use tracing::info;
 
 use crate::asks::Asks;
 use crate::deleting::Deleter;
@@ -24,13 +23,24 @@ use crate::tools::Tools;
 use crate::{branch_watch, git, setup};
 
 mod agent;
+mod connection;
+#[cfg(unix)]
+mod listen;
+mod outbox;
 mod scripts;
 
+#[cfg(unix)]
+pub use listen::listen;
+
 use agent::{account_for, configure_agent, start_agent, stop_agent, title_for};
-use scripts::{Setup, run_archive_script, run_setup, setup_requested, stop_setup_script};
+use connection::Closing;
+pub(crate) use outbox::Outbox;
+use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 
 /// Enough to see what went wrong, without sending a whole install log across.
 const SETUP_LOG_TAIL_BYTES: u64 = 256 * 1024;
+/// Enough for every agent to be waiting on an answer at once.
+const QUEUED_ASKS: usize = 64;
 
 pub struct Config {
     pub workspaces_root: PathBuf,
@@ -63,8 +73,8 @@ struct State {
     agents: Mutex<HashMap<SessionId, RunningAgent>>,
     /// Serializes starts, so two requests can't launch two processes for one conversation.
     start_lock: tokio::sync::Mutex<()>,
-    /// Set under `start_lock` once the hub has gone, so a start still in flight can't add an agent
-    /// after the worker has decided what to stop.
+    /// Set under `start_lock` once the worker is stopping, so a start still in flight can't add an agent after the
+    /// worker has decided what to stop.
     shutting_down: AtomicBool,
     /// The setup script, so it can be stopped.
     setup: Arc<Mutex<Setup>>,
@@ -74,7 +84,8 @@ struct State {
     calls: AtomicU64,
     /// What's watching the worktree's branches, so a later watch can replace it.
     watching: Mutex<Option<AbortHandle>>,
-    frames: mpsc::Sender<WorkerFrame>,
+    /// What agents say, what the worker asks, and the branches it watches, on its way to the hub.
+    outbox: Arc<Outbox>,
     /// What the worker has asked its hub and waits to hear.
     asks: Arc<Asks>,
     tools: Arc<Tools>,
@@ -89,84 +100,69 @@ impl State {
     }
 }
 
-/// Runs until the hub closes the stream, then stops every agent and flushes what they said. Losing
-/// the hub ends the worker on purpose, so agents never run with nobody recording them. Milestone 2
-/// changes this, with an outbox that lets remote workers keep going.
+/// What a worker keeps for as long as it runs, whichever hub is connected.
+#[derive(Clone)]
+struct Worker {
+    state: Arc<State>,
+    /// Each agent's forwarder, so stopping can wait for what the agents said as they stopped.
+    forwarders: Arc<tokio::sync::Mutex<JoinSet<()>>>,
+}
+
+impl Worker {
+    fn new(config: Config) -> Self {
+        let outbox = Arc::new(Outbox::default());
+        // What the worker asks goes the way what agents say does, to whichever hub is connected. It isn't kept, since
+        // the asks are asked again of each hub that connects until they're answered.
+        let (asking, asked) = mpsc::channel::<WorkerFrame>(QUEUED_ASKS);
+        tokio::spawn(send_asks(asked, outbox.clone()));
+        let asks = Arc::new(Asks::new(asking));
+        let state = Arc::new(State {
+            config,
+            agents: Mutex::new(HashMap::new()),
+            start_lock: tokio::sync::Mutex::new(()),
+            shutting_down: AtomicBool::new(false),
+            setup: Arc::new(Mutex::new(Setup::Idle)),
+            stopping: watch::Sender::new(false),
+            calls: AtomicU64::new(0),
+            watching: Mutex::new(None),
+            outbox,
+            tools: Arc::new(Tools::new(asks.clone())),
+            asks,
+        });
+        Self { state, forwarders: Arc::new(tokio::sync::Mutex::new(JoinSet::new())) }
+    }
+
+    /// Stops every agent and the setup script, and sends what the agents said as they stopped to the hub on `last`,
+    /// if there's one.
+    async fn stop(&self, last: Option<Closing>) {
+        stop_everything(&self.state, &self.forwarders).await;
+        self.state.outbox.detach().await;
+        if let Some(last) = last {
+            last.finish().await;
+        }
+    }
+}
+
+/// Serves the hub on `reader` and `writer`, which are the worker's stdin and stdout, until the hub closes them, then
+/// stops every agent and sends the hub what they said as they stopped. They're the hub's pipes, so a worker on them
+/// can't outlive its hub, and it stops whatever the hub asked. One that can is served by `listen`.
 pub async fn serve<R, W>(reader: R, writer: W, config: Config)
 where
     R: AsyncRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
 {
-    let (frames, frames_rx) = mpsc::channel::<WorkerFrame>(1024);
-    let writer_task = tokio::spawn(write_frames(writer, frames_rx));
-    let asks = Arc::new(Asks::new(frames.clone()));
-
-    let state = Arc::new(State {
-        config,
-        agents: Mutex::new(HashMap::new()),
-        start_lock: tokio::sync::Mutex::new(()),
-        shutting_down: AtomicBool::new(false),
-        setup: Arc::new(Mutex::new(Setup::Idle)),
-        stopping: watch::Sender::new(false),
-        calls: AtomicU64::new(0),
-        watching: Mutex::new(None),
-        frames: frames.clone(),
-        tools: Arc::new(Tools::new(asks.clone())),
-        asks,
-    });
-    let forwarders = Arc::new(tokio::sync::Mutex::new(JoinSet::new()));
-
-    let mut reader = BufReader::new(reader);
-    let mut line = Vec::new();
-    loop {
-        frame::clear_buffer(&mut line);
-        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut line).await;
-        match read {
-            Ok(0) => break,
-            Ok(_) => {}
-            Err(e) => {
-                error!("reading from the hub failed: {e}");
-                break;
-            }
-        }
-        if line.len() > frame::MAX_FRAME_BYTES {
-            error!("frame from the hub is too large");
-            break;
-        }
-        take(&state, &forwarders, &line);
-    }
-
+    let refused = config.refused.clone();
+    let worker = Worker::new(config);
+    let last = connection::serve(&worker, reader, writer, refused).await;
     info!("hub stream closed, stopping agents");
-    stop_everything(&state, &forwarders).await;
-    drop(state);
-    drop(frames);
-    let _ = writer_task.await;
+    worker.stop(Some(last)).await;
 }
 
-/// Takes one line from the hub: an answer to something the worker asked, or a call, which is answered on a task of its
-/// own.
-fn take(state: &Arc<State>, forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>, line: &[u8]) {
-    let Call { id, request } = match ToWorker::decode(line) {
-        Ok(ToWorker::Call(call)) => call,
-        Ok(ToWorker::Answer(answer)) => {
-            state.asks.answer(answer);
-            return;
-        }
-        Err(e) => {
-            warn!("ignoring a frame that didn't parse: {e}");
-            return;
-        }
-    };
-    // Each request runs on a task of its own, so a stop read after this could otherwise be handled
-    // before the setup it's for has begun.
-    if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
-        setup_requested(state);
+/// Until the worker has gone, and with it every way to ask.
+async fn send_asks(mut asked: mpsc::Receiver<WorkerFrame>, outbox: Arc<Outbox>) {
+    while let Some(ask) = asked.recv().await {
+        outbox.send(ask).await;
     }
-    let (state, forwarders) = (state.clone(), forwarders.clone());
-    tokio::spawn(async move {
-        let outcome = handle(&state, &forwarders, request).await.into();
-        let _ = state.frames.send(WorkerFrame::Reply { id, outcome }).await;
-    });
 }
 
 async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<()>>) {
@@ -177,7 +173,7 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     }
     state.stopping.send_replace(true);
     state.asks.close();
-    // So it lets go of its frames now, rather than once whatever it's reading is done.
+    // So it stops now, rather than once whatever it's reading is done.
     if let Some(watching) = state.watching.lock().take() {
         watching.abort();
     }
@@ -195,40 +191,23 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     while forwarders.join_next().await.is_some() {}
 }
 
-async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<WorkerFrame>) {
-    while let Some(item) = frames.recv().await {
-        let line = match frame::encode(&item) {
-            Ok(line) => line,
-            Err(e) => {
-                error!("could not encode a frame: {e}");
-                continue;
-            }
-        };
-        if let Err(e) = writer.write_all(&line).await.and(writer.flush().await) {
-            // The hub is gone. Keep draining, so agents stop cleanly rather than blocking on us.
-            warn!("writing to the hub failed: {e}");
-        }
-    }
-}
-
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 async fn handle(
     state: &Arc<State>,
     forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>,
     request: Result<WorkerRequest, serde_json::Error>,
 ) -> Result<WorkerResponse, ApiError> {
-    if let Some(reason) = &state.config.refused {
-        return Err(ApiError::new(ErrorCode::Conflict, reason.clone()));
-    }
     // One this build can't read is a newer hub's, which does without whatever this worker refuses, where leaving it
     // unanswered would hold the hub's call until the connection closes.
     match request.map_err(|e| ApiError::unsupported_request("this worker", Some(&e)))? {
-        // A hub that asks it to keep running without one is a later layer's: until then, losing its hub stops it
-        // whatever it was told, so asking it to stop changes nothing, and there's nothing kept to let go of.
-        WorkerRequest::Hello { protocol_version, oldest_protocol_version, keep_running_without_hub: _ } => {
-            hello(protocol_version, oldest_protocol_version)
+        // About the connection they came on, which answers them itself.
+        WorkerRequest::Hello { .. } | WorkerRequest::Stop => {
+            Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
-        WorkerRequest::Stop | WorkerRequest::Received { .. } => Ok(WorkerResponse::Ok),
+        WorkerRequest::Received { through } => {
+            state.outbox.received(through).await;
+            Ok(WorkerResponse::Ok)
+        }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
         WorkerRequest::Unknown => Err(ApiError::unsupported_request("this worker", None)),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
@@ -268,7 +247,7 @@ async fn handle(
         }
         WorkerRequest::WatchBranches { path } => {
             let (first, sent) = oneshot::channel();
-            let watching = branch_watch::watch(path.into(), state.frames.clone(), state.stopping.subscribe(), first);
+            let watching = branch_watch::watch(path.into(), state.outbox.clone(), state.stopping.subscribe(), first);
             if let Some(earlier) = state.watching.lock().replace(tokio::spawn(watching).abort_handle()) {
                 earlier.abort();
             }

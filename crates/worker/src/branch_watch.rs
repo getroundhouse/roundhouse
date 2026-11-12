@@ -11,10 +11,11 @@ use notify::event::{AccessKind, AccessMode};
 use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use protocol::worker::WorkerFrame;
-use tokio::sync::{Notify, mpsc, oneshot, watch};
+use tokio::sync::{Notify, oneshot, watch};
 use tracing::{debug, warn};
 
 use crate::git::branches::{self, Places, Read};
+use crate::serve::Outbox;
 
 #[cfg(test)]
 mod tests;
@@ -44,11 +45,12 @@ struct Wakes {
     wake: Notify,
 }
 
-/// Sends what the worktree's branches are at once, and again each time they change, until the worker stops or the
-/// hub's gone. `first` is told once the first is sent, or can't be.
+/// Sends what the worktree's branches are at once, and again each time they change, to whichever hub is connected,
+/// until the worker stops or another watch replaces this one. `first` is told once the first is sent, or can't be.
+/// What's sent while no hub is connected is lost, since the next hub to connect watches them again.
 pub(crate) async fn watch(
     worktree: PathBuf,
-    frames: mpsc::Sender<WorkerFrame>,
+    outbox: Arc<Outbox>,
     mut stopping: watch::Receiver<bool>,
     first: oneshot::Sender<()>,
 ) {
@@ -58,9 +60,7 @@ pub(crate) async fn watch(
     // Watching before the first read, so a change made while it reads is heard.
     let _watching = start(&wakes);
     loop {
-        if !read_and_send(&worktree, &wakes, &frames).await {
-            return;
-        }
+        read_and_send(&worktree, &wakes, &outbox).await;
         if let Some(first) = first.take() {
             let _ = first.send(());
         }
@@ -145,13 +145,13 @@ fn mattered(wakes: &Wakes, event: &notify::Result<Event>) -> bool {
     event.paths.iter().any(|file| branches::matters(&wakes.places, last.as_ref(), file))
 }
 
-/// Reads the branches and sends them if they've changed. False once the hub's gone.
-async fn read_and_send(worktree: &Path, wakes: &Wakes, frames: &mpsc::Sender<WorkerFrame>) -> bool {
+/// Reads the branches and sends them if they've changed.
+async fn read_and_send(worktree: &Path, wakes: &Wakes, outbox: &Outbox) {
     let read = match branches::read(worktree, &wakes.places).await {
         Ok(read) => read,
         Err(e) => {
             debug!(worktree = %worktree.display(), "reading the branches: {}", e.message);
-            return true;
+            return;
         }
     };
     let news = {
@@ -160,9 +160,8 @@ async fn read_and_send(worktree: &Path, wakes: &Wakes, frames: &mpsc::Sender<Wor
         *last = Some(read);
         news
     };
-    match news {
-        Some(branches) => frames.send(WorkerFrame::Branches { branches }).await.is_ok(),
-        None => true,
+    if let Some(branches) = news {
+        outbox.send(WorkerFrame::Branches { branches }).await;
     }
 }
 
