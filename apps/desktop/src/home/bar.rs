@@ -30,11 +30,14 @@ pub(super) fn bar(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> im
         .border_b_1()
         .border_color(border)
         .child(
-            // In a box of its own, so a test can see where the search starts.
+            // In a box of its own, so a test can see where the search starts. It hides the strip it's in from the
+            // pointer, so on Windows a press here is an ordinary one in the window rather than one on a title bar,
+            // and the search hears where it goes as it selects.
             div()
                 .id("home-search")
                 .flex_1()
                 .min_w_0()
+                .occlude()
                 .child(
                     Input::new(&app.home.search)
                         .appearance(false)
