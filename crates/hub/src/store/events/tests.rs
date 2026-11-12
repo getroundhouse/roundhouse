@@ -6,6 +6,7 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::event::ContentBlock;
 use protocol::model::SessionStatus::{Idle, Running, WaitingApproval};
 use protocol::model::{AttachmentId, Session, SessionStatus};
+use protocol::prompt::Prompt;
 
 use super::*;
 use crate::store::tests::{notice, store_with_session};
@@ -97,7 +98,7 @@ pub(crate) fn prompt(text: &str, files: usize) -> EventBody {
         media_type: MediaType::Png,
         size_bytes: 4,
     };
-    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: (0..files).map(shot).collect() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying(text, (0..files).map(shot).collect()) }
 }
 
 /// An event someone sent: the hub, the agent, or one of a few subagents, by the number of the call that started it.

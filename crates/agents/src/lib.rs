@@ -17,6 +17,7 @@ use protocol::model::{
     AgentAccount, AgentDescription, AgentKind, ApprovalId, CacheRequest, ContextUsage, Seq, SessionSettingsChange,
     Title, UsageLimit,
 };
+use protocol::prompt::Prompt;
 use protocol::tail::StreamDelta;
 use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
@@ -109,10 +110,10 @@ pub trait AgentProcess: Send + Sync {
     /// The process has exited, or can't be reached. A new prompt needs a new process, even though
     /// its last output may still be on the way.
     fn is_gone(&self) -> bool;
-    /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true. `text` can be
-    /// empty when there are attachments, which are in the worktree already. `prompt` is where the prompt is recorded,
+    /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true. The prompt can
+    /// say nothing when it carries files, which are in the worktree already. `seq` is where the prompt is recorded,
     /// which the process names when it reports taking or dropping it.
-    async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError>;
+    async fn send_prompt(&self, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError>;
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError>;
     async fn interrupt(&self) -> Result<(), AgentError>;
     /// Asks the agent to compact its conversation, keeping what `keeping` says, in whatever way it's asked. `asked` is
@@ -152,17 +153,16 @@ pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path
     }
 }
 
-/// A short title for a prompt and the images it carried, from a one-off call to `kind`'s CLI that runs in an empty
+/// A short title for a prompt, with the images it carried, from a one-off call to `kind`'s CLI that runs in an empty
 /// directory made inside `scratch_dir`. `options.pid_file` records it while it runs.
 pub async fn title_for(
     kind: AgentKind,
-    prompt: &str,
-    images: &[NewAttachment],
+    prompt: &Prompt<NewAttachment>,
     options: &AgentOptions,
     scratch_dir: &Path,
 ) -> Result<Title, AgentError> {
     match kind {
-        AgentKind::Claude => claude::title_for(prompt, images, options, scratch_dir).await,
+        AgentKind::Claude => claude::title_for(prompt, options, scratch_dir).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

@@ -163,7 +163,7 @@ impl Needle {
 /// Whether `found` says yes for any text the event records, as [`Needle::is_in_event`] lists them.
 fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
     match body {
-        EventBody::UserPrompt { text, .. } => found(text),
+        EventBody::UserPrompt { prompt, .. } => found(&prompt.text),
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             blocks.iter().any(|block| any_text_in_block(block, found))
         }

@@ -15,6 +15,7 @@ use process::{Signal, signal_group};
 use protocol::attachment::AttachmentFile;
 use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Effort, Seq, SessionSettingsChange};
+use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -45,7 +46,7 @@ use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
 use prompt::user_message;
-pub(super) use prompt::{image_block, user_line};
+pub(super) use prompt::{image_block, user_line_saying};
 use run_files::RunFiles;
 use supervise::supervise;
 use usage::UsageWatch;
@@ -283,25 +284,25 @@ impl AgentProcess for ClaudeProcess {
         self.shared.gone.load(Ordering::SeqCst)
     }
 
-    async fn send_prompt(&self, prompt: Seq, text: &str, attachments: &[AttachmentFile]) -> Result<(), AgentError> {
-        let message = if attachments.is_empty() {
-            user_message(text, attachments)
+    async fn send_prompt(&self, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
+        let message = if prompt.files.is_empty() {
+            user_message(prompt)
         } else {
-            let (text, attachments) = (text.to_string(), attachments.to_vec());
-            match tokio::task::spawn_blocking(move || user_message(&text, &attachments)).await {
+            let prompt = prompt.clone();
+            match tokio::task::spawn_blocking(move || user_message(&prompt)).await {
                 Ok(message) => message,
                 // As if it had run here.
                 Err(e) => std::panic::resume_unwind(e.into_panic()),
             }
         };
-        send(self, prompt, message, None).await
+        send(self, seq, message, None).await
     }
 
     /// Claude is asked by typing `/compact`, with what to keep after it.
     async fn compact(&self, asked: Seq, keeping: Option<&str>) -> Result<(), AgentError> {
         let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
         let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
-        send(self, asked, user_message(&text, &[]), Some(asked_for)).await
+        send(self, asked, user_message(&Prompt::new(text)), Some(asked_for)).await
     }
 
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {

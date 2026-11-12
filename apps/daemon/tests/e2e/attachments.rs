@@ -10,6 +10,7 @@ use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
 use protocol::model::{AgentKind, AttachmentId, SessionId, SessionSettingsChange};
+use protocol::prompt::Prompt;
 
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
 
@@ -53,7 +54,7 @@ fn every_file_goes_in_the_worktree_and_the_agent_is_given_what_it_can_take_in_th
          | logs.zip: on disk, 4 bytes | long.log: on disk, 40000 bytes"
     );
     let recorded = events.iter().find_map(|e| match &e.body {
-        EventBody::UserPrompt { attachments, .. } => Some(attachments.clone()),
+        EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => Some(attachments.clone()),
         _ => None,
     });
     assert_eq!(recorded, Some(carried));
@@ -111,7 +112,7 @@ fn a_prompt_can_be_only_files() {
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert!(events.iter().any(
-        |e| matches!(&e.body, EventBody::UserPrompt { attachments, .. } if attachments == std::slice::from_ref(&shot))
+        |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } if attachments == std::slice::from_ref(&shot))
     ));
     let refused = client.session_prompt_with(&session.id, " ", None, Vec::new());
     assert_eq!(refused_with(refused), ErrorCode::InvalidRequest, "with no files, it still needs text");

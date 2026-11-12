@@ -8,7 +8,7 @@ use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AppContext as _, Context, Entity, Subscription, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
-use protocol::prompt::says_or_carries;
+use protocol::prompt::{Prompt, says_or_carries};
 
 use super::composer::Hub;
 use super::{PaneEvent, WorkspacePane};
@@ -45,7 +45,8 @@ impl WorkspacePane {
         self.keep_typed(true, cx);
         let client_msg_id = client_core::new_message_id();
         let attachments = files.iter().map(|file| file.attachment.clone()).collect();
-        let prompt = QueuedPrompt { client_msg_id: client_msg_id.clone(), text: text.clone(), attachments };
+        let prompt =
+            QueuedPrompt { client_msg_id: client_msg_id.clone(), prompt: Prompt::carrying(text.clone(), attachments) };
         self.queue_pending.push(Pending { session_id: session_id.clone(), prompt });
         let written = Written { client_msg_id: client_msg_id.clone(), text, files };
         let queueing = self.client.start_queueing(&session_id, written);
@@ -99,7 +100,7 @@ impl WorkspacePane {
         let Some(session_id) = self.active.clone() else { return };
         let input = cx.new(|cx| {
             let mut state = TextareaState::new(window, cx).auto_grow(1, 8).submit_on_enter(true);
-            state.set_value(queued.text.clone(), window, cx);
+            state.set_value(queued.prompt.text.clone(), window, cx);
             state
         });
         input.update(cx, |i, cx| i.focus(window, cx));
@@ -116,7 +117,7 @@ impl WorkspacePane {
     fn save_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(Editing { session_id, was, input, .. }) = self.queue_edit.take() else { return };
         let text = input.read(cx).text().to_string();
-        if says_or_carries(&text, was.attachments.len()) && text != was.text {
+        if says_or_carries(&text, was.prompt.files.len()) && text != was.prompt.text {
             self.change_queued(session_id, was.client_msg_id, text, cx);
         }
         self.focus_composer(window, cx);
@@ -157,7 +158,7 @@ impl WorkspacePane {
         if still_queued {
             return;
         }
-        let changed = *editing.input.read(cx).text() != editing.was.text;
+        let changed = *editing.input.read(cx).text() != editing.was.prompt.text;
         self.queue_edit = None;
         if changed {
             cx.emit(PaneEvent::Error("The agent got that before the change was saved.".to_string()));

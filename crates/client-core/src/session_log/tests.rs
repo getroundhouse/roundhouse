@@ -1,6 +1,7 @@
 use super::*;
 use protocol::event::{ApprovalOutcome, NoticeLevel};
 use protocol::model::Place;
+use protocol::prompt::Prompt;
 use protocol::tail::DeltaChange;
 use serde_json::Value;
 
@@ -125,10 +126,7 @@ fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
     assert_eq!(log.pending()[0].text, "hello");
     assert_eq!(log.take_changes().rows, Some(5..6), "the tail changed");
 
-    log.apply_event(event(
-        6,
-        EventBody::UserPrompt { text: "hello".into(), client_msg_id: Some("m1".into()), attachments: Vec::new() },
-    ));
+    log.apply_event(event(6, EventBody::UserPrompt { client_msg_id: Some("m1".into()), prompt: Prompt::new("hello") }));
     assert_eq!(log.row_count(), 6);
     assert!(log.pending().is_empty());
     assert!(matches!(log.row(5), Row::Event(_)));
@@ -226,10 +224,7 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
 fn changes_gather_into_one_range_until_a_view_looks() {
     let mut log = SessionLog::new(0);
     log.add_pending("p".into(), "hi".into(), Vec::new());
-    log.apply_event(event(
-        1,
-        EventBody::UserPrompt { text: "hi".into(), client_msg_id: Some("p".into()), attachments: Vec::new() },
-    ));
+    log.apply_event(event(1, EventBody::UserPrompt { client_msg_id: Some("p".into()), prompt: Prompt::new("hi") }));
     log.apply_event(event(
         2,
         EventBody::TurnEnded {
@@ -258,7 +253,7 @@ fn placed(seq: Seq, place: u64, body: EventBody) -> SessionEvent {
 }
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { text: "go".into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("go") }
 }
 
 #[test]

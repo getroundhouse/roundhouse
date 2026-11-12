@@ -63,7 +63,7 @@ impl Printer {
 
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
-            EventBody::UserPrompt { text, attachments, .. } => self.prompt(event.seq, text, attachments),
+            EventBody::UserPrompt { prompt, .. } => self.prompt(event.seq, &prompt.text, &prompt.files),
             EventBody::AgentStarted { pid, resumed } => {
                 let how = if *resumed { "resumed" } else { "started" };
                 self.line(event.seq, &format!("agent {how}, pid {pid}"));

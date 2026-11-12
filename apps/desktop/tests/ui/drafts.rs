@@ -9,6 +9,7 @@ use gpui_kit::{AppContext as _, Context, TestAppContext, Window};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{NewDraft, SessionId};
+use protocol::prompt::Prompt;
 
 use crate::support::{Frozen, Stack, Ui, pencil, sidebar_row, wait_until};
 
@@ -68,7 +69,7 @@ fn whats_attached_is_there_when_the_app_opens_again_until_its_sent(cx: &mut Test
     let mut carried = None;
     ui.wait("the prompt", |ui| {
         carried = ui.events().into_iter().find_map(|e| match e.body {
-            EventBody::UserPrompt { attachments, .. } => Some(attachments),
+            EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => Some(attachments),
             _ => None,
         });
         carried.is_some()

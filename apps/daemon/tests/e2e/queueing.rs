@@ -7,6 +7,7 @@ use protocol::attachment::MediaType;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, QueuedPrompt, Seq, Session, SessionId, SessionStatus};
+use protocol::prompt::Prompt;
 
 use crate::attachments::{png, refused_with};
 use crate::steering::wait_for_tool;
@@ -67,7 +68,7 @@ fn a_queued_prompt_changes_or_goes_until_its_sent_and_not_after() {
     let left = client.session_unqueue(&session.id, "q2".into()).unwrap().queued;
     let taken_out = change(&client, &session.id, "q2", "say:changed once it was out");
 
-    assert_eq!(changed[0].text, "say:after", "a change keeps its place");
+    assert_eq!(changed[0].prompt.text, "say:after", "a change keeps its place");
     assert_eq!(left.iter().map(|q| q.client_msg_id.as_str()).collect::<Vec<_>>(), ["q1"]);
     assert_eq!(refused_with(taken_out), ErrorCode::NotFound, "out, so a change doesn't queue it again");
     let events = wait_for_turn_end(&client, &session.id, 2);
@@ -117,12 +118,16 @@ fn a_queued_prompt_carries_its_files_to_the_agent_and_a_change_keeps_them() {
     let queued = client.session_queue_with(&session.id, "q1".into(), "say:before", vec![log.id.clone()]).unwrap();
     let changed = change(&client, &session.id, "q1", "attached").unwrap().queued;
 
-    assert_eq!(queued.queued[0].attachments, std::slice::from_ref(&log));
-    assert_eq!(changed[0].attachments, std::slice::from_ref(&log), "a change keeps them");
+    assert_eq!(queued.queued[0].prompt.files, std::slice::from_ref(&log));
+    assert_eq!(changed[0].prompt.files, std::slice::from_ref(&log), "a change keeps them");
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert_eq!(assistant_text(&events), "workingattached: build.log: error at line 42");
     let recorded = events.iter().find_map(|e| match &e.body {
-        EventBody::UserPrompt { client_msg_id: Some(id), attachments, .. } if id.as_str() == "q1" => Some(attachments),
+        EventBody::UserPrompt { client_msg_id: Some(id), prompt: Prompt { files: attachments, .. } }
+            if id.as_str() == "q1" =>
+        {
+            Some(attachments)
+        }
         _ => None,
     });
     assert_eq!(recorded, Some(&vec![log]));
@@ -144,7 +149,7 @@ fn a_queued_prompt_needs_text_or_files_and_files_the_session_has() {
     let empty = client.session_queue_with(&session.id, "q2".into(), " ", Vec::new());
     let unknown = client.session_queue_with(&session.id, "q3".into(), "look", vec!["a9".into()]);
 
-    assert_eq!(only_files.queued[0].attachments, [shot]);
+    assert_eq!(only_files.queued[0].prompt.files, [shot]);
     assert_eq!(refused_with(empty), ErrorCode::InvalidRequest);
     assert_eq!(refused_with(unknown), ErrorCode::NotFound);
     assert_eq!(client.session_get(&session.id).unwrap().queued.len(), 1, "neither was queued");
@@ -271,7 +276,7 @@ fn a_new_hub_sends_a_queue_the_last_one_left_ready() {
     // As a hub that went away with the agent idle, and before the queue went, leaves it.
     let store = hub::store::Store::open(&stack.paths().database, &stack.paths().backups_dir).unwrap();
     for (id, text) in [("q1", "say:first"), ("q2", "say:second")] {
-        let prompt = QueuedPrompt { client_msg_id: id.into(), text: text.into(), attachments: Vec::new() };
+        let prompt = QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text) };
         assert!(matches!(store.queue_prompt(&session.id, &prompt).unwrap(), hub::store::Queued::Done(_)));
     }
     drop(store);

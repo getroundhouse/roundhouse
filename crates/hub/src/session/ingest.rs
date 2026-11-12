@@ -61,7 +61,7 @@ async fn ingest_event(
     } else {
         None
     };
-    match session.record(Origin::Run { run, current, numbered }, body, raw, None).await {
+    match session.record(Origin::Run { run, current, numbered }, body, raw).await {
         // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
         Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
             session.heard_limits(run, limits, ts_ms);

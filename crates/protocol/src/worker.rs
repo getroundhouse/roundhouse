@@ -13,6 +13,7 @@ use crate::model::{
     FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange,
     WorktreeFiles,
 };
+use crate::prompt::Prompt;
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
@@ -162,14 +163,14 @@ pub enum WorkerRequest {
         pages: Vec<u32>,
     },
     AgentStart(AgentSpec),
-    /// Each of `attachments` has been written into the worktree first. `prompt` is where it's recorded, which the
+    /// Each of the prompt's files has been written into the worktree first. `seq` is where it's recorded, which the
     /// agent's [`crate::event::EventBody::PromptTaken`] names.
     AgentPrompt {
         session_id: SessionId,
-        prompt: Seq,
-        text: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<AttachmentFile>,
+        #[serde(rename = "prompt")]
+        seq: Seq,
+        #[serde(flatten)]
+        prompt: Prompt<AttachmentFile>,
     },
     AgentApproval {
         session_id: SessionId,

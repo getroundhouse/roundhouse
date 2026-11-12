@@ -1,6 +1,7 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
 use protocol::model::SettledAt;
 use protocol::model::{Place, Seq, seq_index};
+use protocol::prompt::Prompt;
 
 use super::*;
 use crate::session_log::Row;
@@ -19,7 +20,7 @@ fn event(seq: Seq, body: EventBody) -> SessionEvent {
 }
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { text: "steer".into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("steer") }
 }
 
 fn notice() -> EventBody {

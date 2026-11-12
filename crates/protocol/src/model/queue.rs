@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ClientMessageId;
 use crate::attachment::Attachment;
+use crate::prompt::Prompt;
 
 /// A prompt waiting its turn. The hub sends the first in a session's queue once the agent has nothing left to do, as a
 /// turn of its own, unless the queue is held. It's held once the person stops the agent, or the agent goes away
@@ -12,9 +13,8 @@ use crate::attachment::Attachment;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct QueuedPrompt {
     pub client_msg_id: ClientMessageId,
-    pub text: String,
-    /// The files it carries, in order, each added to the session before it was queued. They're the ones it was queued
-    /// with, since changing a queued prompt changes only its text. A prompt with any can have no text.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<Attachment>,
+    /// Its files were each added to the session before it was queued. They're the ones it was queued with, since
+    /// changing a queued prompt changes only its text.
+    #[serde(flatten)]
+    pub prompt: Prompt<Attachment>,
 }

@@ -35,7 +35,7 @@ impl LiveSession {
         let asked = EventBody::CompactionAsked { keeping: keeping.clone() };
         let refused =
             |state: &LiveState| refused_compaction(state.status, state.queue.idle_is_stale(), state.agent_opened);
-        let (event, _) = self.record_unless(Origin::Hub, asked, None, None, refused).await?;
+        let (event, _) = self.record_unless(Origin::Hub, asked, None, refused).await?;
         Ok((event.seq, keeping))
     }
 }

@@ -157,7 +157,7 @@ fn editing_row(editing: &Editing, cx: &mut Context<WorkspacePane>) -> AnyElement
 
 /// The prompt on one line, which Edit shows all of, and after it what it carries. A prompt of only files has no line.
 fn queued_line(prompt: &QueuedPrompt, text: Hsla, muted: Hsla) -> impl IntoElement {
-    let line = one_line(&prompt.text, usize::MAX);
+    let line = one_line(&prompt.prompt.text, usize::MAX);
     h_flex()
         .flex_1()
         .min_w_0()
@@ -170,7 +170,7 @@ fn queued_line(prompt: &QueuedPrompt, text: Hsla, muted: Hsla) -> impl IntoEleme
 /// What a queued prompt carries, after its text: the file's name, or how many there are. The text gives way first, so
 /// it shows even after a long line.
 fn carried(prompt: &QueuedPrompt, muted: Hsla) -> Option<AnyElement> {
-    let label = match prompt.attachments.as_slice() {
+    let label = match prompt.prompt.files.as_slice() {
         [] => return None,
         [only] => only.name.clone(),
         several => format!("{} files", several.len()),

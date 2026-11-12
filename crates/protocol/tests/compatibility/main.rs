@@ -15,6 +15,7 @@ mod agents;
 mod approvals;
 mod calls;
 mod hellos;
+mod prompts;
 mod refusals;
 mod restarts;
 mod worker;

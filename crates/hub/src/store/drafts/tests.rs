@@ -4,6 +4,7 @@ use protocol::model::{
     AnswerDraft, AnswerSoFar, AttachmentId, CommentDraft, DiffSide, Draft, NewDraft, QueuedPrompt, SessionId,
     WorkspaceId,
 };
+use protocol::prompt::Prompt;
 
 use crate::store::tests::{open_in, store_with_session};
 use crate::store::{AddedBy, Queued, StoreError, cancelled_approval};
@@ -123,9 +124,8 @@ fn add_files(store: &crate::store::Store, ids: &[&str]) {
 
 fn prompt_carrying(file: &str) -> EventBody {
     EventBody::UserPrompt {
-        text: "see this".to_string(),
         client_msg_id: None,
-        attachments: vec![log_file(file, "build.log")],
+        prompt: Prompt::carrying("see this", vec![log_file(file, "build.log")]),
     }
 }
 
@@ -135,11 +135,8 @@ fn a_file_the_draft_a_queued_prompt_or_a_sent_one_names_is_kept() {
     let store = store_with_session(dir.path());
     add_files(&store, &["drafted", "queued", "sent", "placed"]);
     store.set_draft(&id(), &with_files(&[log_file("drafted", "build.log")])).unwrap();
-    let waiting = QueuedPrompt {
-        client_msg_id: "q".into(),
-        text: String::new(),
-        attachments: vec![log_file("queued", "build.log")],
-    };
+    let waiting =
+        QueuedPrompt { client_msg_id: "q".into(), prompt: Prompt::carrying("", vec![log_file("queued", "build.log")]) };
     assert!(matches!(store.queue_prompt(&id(), &waiting).unwrap(), Queued::Done(_)));
     store.append(&id(), None, &prompt_carrying("sent"), None, None, None).unwrap();
     store.set_attachment_placed_at(&id(), &"placed".into(), ".context/attachments/build.log").unwrap();

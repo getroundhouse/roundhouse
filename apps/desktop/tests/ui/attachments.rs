@@ -13,6 +13,7 @@ use gpui_kit::{
 };
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
+use protocol::prompt::Prompt;
 use transcript::TranscriptEvent;
 
 use crate::support::{Stack, Ui};
@@ -56,7 +57,7 @@ fn a_pasted_image_goes_with_the_prompt_and_the_agent_sees_it(cx: &mut TestAppCon
     ui.wait_idle_with("the agent to see the image", |text| text == said);
     assert!(ui.attached().is_empty(), "sending takes what was attached");
     let carried = ui.events().into_iter().find_map(|e| match e.body {
-        EventBody::UserPrompt { attachments, .. } => attachments.into_iter().next(),
+        EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => attachments.into_iter().next(),
         _ => None,
     });
     let carried = carried.expect("the prompt carries the image");
@@ -199,7 +200,7 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
     // So nothing drawn after this moves the chat.
     ui.wait_idle_with("the agent to see the image", |text| text.starts_with("attached: image/png"));
     let carried = ui.events().into_iter().find_map(|e| match e.body {
-        EventBody::UserPrompt { attachments, .. } => attachments.into_iter().next(),
+        EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => attachments.into_iter().next(),
         _ => None,
     });
     let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.unwrap().id).into());

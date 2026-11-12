@@ -7,6 +7,7 @@ use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::find::Needle;
 use protocol::model::{Place, Rev, Seq, Subagent, SubagentStatus};
+use protocol::prompt::Prompt;
 use serde_json::json;
 
 use super::count::{At, Counts};
@@ -187,7 +188,7 @@ fn a_stretch_counts_what_came_back_in_its_call_s_row_by_place() {
 #[test]
 fn a_stretch_counts_a_prompt_where_the_chat_draws_it() {
     let prompt = |place| {
-        let body = EventBody::UserPrompt { text: "the parser".into(), client_msg_id: None, attachments: Vec::new() };
+        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("the parser") };
         placed(place, body)
     };
     // A prompt's `seq` is three times its place.

@@ -1,6 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
 use protocol::model::AttachmentId;
+use protocol::prompt::Prompt;
 
 use super::super::tests::{idle_session, store_with_session};
 use super::*;
@@ -94,7 +95,7 @@ fn a_workspaces_prompt_images_are_listed_oldest_first_across_its_chats() {
     store.insert_session(&second, None).unwrap();
     let image = |id: &str| Attachment { media_type: MediaType::Png, ..log_file(id, &format!("{id}.png")) };
     let sent = |chat: &str, at_ms: i64, attachments: Vec<Attachment>| {
-        let body = EventBody::UserPrompt { text: "look".to_string(), client_msg_id: None, attachments };
+        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying("look", attachments) };
         let seq = store.append(&chat.into(), None, &body, None, None, None).unwrap().event.seq;
         let when = "UPDATE events SET ts_ms = ?1 WHERE session_id = ?2 AND seq = ?3";
         lock(&store.writer).execute(when, params![at_ms, chat, seq.cast_signed()]).unwrap();

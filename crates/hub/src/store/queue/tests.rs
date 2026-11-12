@@ -1,6 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{ClientMessageId, QueuedPrompt, Session, SessionId};
+use protocol::prompt::Prompt;
 
 use crate::store::SessionChange;
 
@@ -8,7 +9,7 @@ use super::*;
 use crate::store::tests::store_with_session;
 
 fn queued(id: &str, text: &str) -> QueuedPrompt {
-    QueuedPrompt { client_msg_id: id.into(), text: text.into(), attachments: Vec::new() }
+    QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text) }
 }
 
 fn log(id: &str) -> Attachment {
@@ -64,7 +65,10 @@ fn queueing_a_prompt_again_is_a_retry_and_changes_nothing() {
 fn a_change_keeps_the_files_it_was_queued_with_and_can_leave_only_them() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let carrying = QueuedPrompt { attachments: vec![log("a1"), log("a2")], ..queued("a", "look at these") };
+    let carrying = QueuedPrompt {
+        client_msg_id: "a".into(),
+        prompt: Prompt::carrying("look at these", vec![log("a1"), log("a2")]),
+    };
     queue(&store, &carrying);
     queue(&store, &queued("b", "no files"));
 
@@ -72,7 +76,7 @@ fn a_change_keeps_the_files_it_was_queued_with_and_can_leave_only_them() {
     let files_only = changed(&store, "a", " ");
     let emptied = change(&store, "b", " ");
 
-    let kept = QueuedPrompt { text: " ".into(), ..carrying };
+    let kept = QueuedPrompt { prompt: Prompt::carrying(" ", carrying.prompt.files.clone()), ..carrying };
     assert_eq!(files_only.session.session.queued, [kept.clone(), queued("b", "no files")]);
     assert!(matches!(emptied, Changed::WouldBeEmpty));
     assert_eq!(session(&store).queued, [kept, queued("b", "no files")], "the refused change wasn't kept");
@@ -135,8 +139,7 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     queue(&store, &queued("a", "first"));
-    let prompt =
-        EventBody::UserPrompt { text: "first".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
+    let prompt = EventBody::UserPrompt { client_msg_id: Some("a".into()), prompt: Prompt::new("first") };
     store.append(&"s".into(), None, &prompt, None, Some(&"a".into()), None).unwrap();
 
     let refused = store.queue_prompt(&"s".into(), &queued("a", "queued again too late")).unwrap();
@@ -181,11 +184,7 @@ fn recording_a_queued_prompt_takes_it_out_of_the_queue_in_the_same_commit() {
     queue(&store, &queued("a", "sent"));
     queue(&store, &queued("b", "still waiting"));
     let before = session(&store).rev;
-    let prompt = |id: &str| EventBody::UserPrompt {
-        text: "sent".into(),
-        client_msg_id: Some(id.into()),
-        attachments: Vec::new(),
-    };
+    let prompt = |id: &str| EventBody::UserPrompt { client_msg_id: Some(id.into()), prompt: Prompt::new("sent") };
 
     let sent = store.append(&"s".into(), None, &prompt("a"), None, Some(&"a".into()), None).unwrap();
     let typed = store.append(&"s".into(), None, &prompt("c"), None, Some(&"c".into()), None).unwrap();
@@ -213,7 +212,7 @@ fn a_queued_prompt_is_the_persons_as_its_queued_and_not_again_as_the_hub_sends_i
     let queued_at = session(&store).user_active_at_ms;
     let workspace_at = workspace();
     forget();
-    let sent = EventBody::UserPrompt { text: "first".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
+    let sent = EventBody::UserPrompt { client_msg_id: Some("a".into()), prompt: Prompt::new("first") };
     let appended = store.append(&"s".into(), None, &sent, None, Some(&"a".into()), None).unwrap();
 
     assert!(queued_at.is_some_and(|at| at > 1), "{queued_at:?}");

@@ -12,7 +12,7 @@ use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
-use protocol::prompt::PromptProblem;
+use protocol::prompt::{Prompt, PromptProblem};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
@@ -23,8 +23,8 @@ use crate::store::{Changed, Queued, Reading};
 #[cfg(test)]
 mod tests;
 
-/// A recorded prompt to get to the agent: where it's recorded, what it says, and what it carries.
-type Delivery = (Seq, String, Vec<Attachment>);
+/// A recorded prompt to get to the agent, and where it's recorded.
+type Delivery = (Seq, Prompt<Attachment>);
 
 /// What the log says about whether the agent can take a queued prompt as a turn of its own.
 #[derive(Debug, Default)]
@@ -84,21 +84,20 @@ impl QueueWatch {
 }
 
 impl LiveSession {
-    /// Queues a prompt the hub has checked says or carries something. Each of `attachments` has to be one of the
-    /// session's.
+    /// Queues a prompt the hub has checked can go. Each of its files has to be one of the session's.
     pub(crate) async fn queue(
         &self,
         client_msg_id: ClientMessageId,
-        text: String,
-        attachments: Vec<AttachmentId>,
+        prompt: Prompt<AttachmentId>,
     ) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let id = self.id.clone();
         let queued = {
             let _not_while_sending = self.queue_lock.lock().await;
             hub.blocking(move |store| {
-                let attachments = store.attachments(&id, &attachments)?;
-                store.queue_prompt(&id, &QueuedPrompt { client_msg_id, text, attachments })
+                let Prompt { text, files } = prompt;
+                let prompt = Prompt::carrying(text, store.attachments(&id, &files)?);
+                store.queue_prompt(&id, &QueuedPrompt { client_msg_id, prompt })
             })
             .await?
         };
@@ -180,8 +179,8 @@ impl LiveSession {
                 Err(e) => return warn!(session = %self.id, "couldn't send a queued prompt: {}", e.message),
             }
         };
-        if let Some((seq, text, attachments)) = to_deliver {
-            self.deliver_prompt(&hub, seq, text, attachments).await;
+        if let Some((seq, prompt)) = to_deliver {
+            self.deliver_prompt(&hub, seq, prompt).await;
         }
     }
 
@@ -218,8 +217,8 @@ impl LiveSession {
         };
         let id = self.id.clone();
         let _ = reply.send(hub.blocking(move |store| store.get_session(&id)).await.map(|stored| stored.session));
-        if let Some((seq, text, attachments)) = to_deliver {
-            self.deliver_prompt(&hub, seq, text, attachments).await;
+        if let Some((seq, prompt)) = to_deliver {
+            self.deliver_prompt(&hub, seq, prompt).await;
         }
     }
 
@@ -227,9 +226,9 @@ impl LiveSession {
     /// caller holds `queue_lock`, so a change can't land between reading the prompt and recording it, and be lost.
     /// Returns what to deliver, which is nothing if the prompt was recorded already.
     async fn send_from_queue(&self, hub: &Arc<Hub>, prompt: QueuedPrompt) -> Result<Option<Delivery>, ApiError> {
-        let QueuedPrompt { client_msg_id, text, attachments } = prompt;
-        let (seq, duplicate) = self.record_carrying(hub, &text, Some(client_msg_id), &attachments).await?;
-        Ok((!duplicate).then_some((seq, text, attachments)))
+        let QueuedPrompt { client_msg_id, prompt } = prompt;
+        let (seq, duplicate) = self.record_carrying(hub, Some(client_msg_id), &prompt).await?;
+        Ok((!duplicate).then_some((seq, prompt)))
     }
 
     /// Tells everyone following the feed, if the queue changed.

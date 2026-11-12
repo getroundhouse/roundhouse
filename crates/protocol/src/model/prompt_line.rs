@@ -91,9 +91,9 @@ impl PromptLine {
 
     /// The line for `event`, if it's a prompt, as the hub lists it.
     pub fn of(event: &SessionEvent) -> Option<Self> {
-        let EventBody::UserPrompt { text, attachments, .. } = &event.body else { return None };
-        let files = u32::try_from(attachments.len()).unwrap_or(u32::MAX);
-        Some(Self::new(event.seq, text, files).placed(event.place))
+        let EventBody::UserPrompt { prompt, .. } = &event.body else { return None };
+        let files = u32::try_from(prompt.files.len()).unwrap_or(u32::MAX);
+        Some(Self::new(event.seq, &prompt.text, files).placed(event.place))
     }
 
     /// Where the prompt is in the log.
@@ -128,6 +128,7 @@ impl PromptLine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prompt::Prompt;
 
     fn line(text: &str) -> String {
         PromptLine::new(4, text, 0).text
@@ -170,7 +171,7 @@ mod tests {
             body,
             raw: None,
         };
-        let body = EventBody::UserPrompt { text: "Fix\nit".to_string(), client_msg_id: None, attachments: Vec::new() };
+        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Fix\nit") };
 
         assert_eq!(PromptLine::of(&event(4, 3, body)), Some(PromptLine::new(4, "Fix it", 0).placed(Place::new(3))));
         assert_eq!(PromptLine::of(&event(2, 2, EventBody::PromptTaken { prompt: 1 })), None);

@@ -13,6 +13,7 @@ use crate::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
     Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
+use crate::prompt::Prompt;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
@@ -246,14 +247,13 @@ pub enum ClientRequest {
     /// Resolves once the prompt is recorded. Sending the same `client_msg_id` twice records it once,
     /// so retrying after a disconnect can't send it twice. A retry only records: if the hub stopped
     /// before delivering the original, the session shows as interrupted, and the prompt needs sending
-    /// again with a new ID. Each of `attachments` has to have been added to this session first, and a
+    /// again with a new ID. Each of the prompt's files has to have been added to this session first, and a
     /// prompt with any can have no text.
     SessionPrompt {
         id: SessionId,
-        text: String,
         client_msg_id: Option<ClientMessageId>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<AttachmentId>,
+        #[serde(flatten)]
+        prompt: Prompt<AttachmentId>,
     },
     /// Adds a file to a session, for a prompt to carry. Sending the same `id` again returns the attachment it
     /// made, whatever else it says. Refused if the file is too big, or isn't the kind it says, as

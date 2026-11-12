@@ -10,6 +10,7 @@ use agents::AgentProcess;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{RunId, SessionId};
+use protocol::prompt::Prompt;
 use protocol::versions::Versions;
 use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -300,10 +301,10 @@ async fn handle(
             Ok(WorkerResponse::FilePages(pages))
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
-        WorkerRequest::AgentPrompt { session_id, prompt, text, attachments } => {
+        WorkerRequest::AgentPrompt { session_id, seq, prompt } => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
-                Some(agent) => agent.send_prompt(prompt, &text, &attachments).await.is_ok(),
+                Some(agent) => agent.send_prompt(seq, &prompt).await.is_ok(),
                 None => false,
             }))
         }
@@ -330,7 +331,9 @@ async fn handle(
         }
         WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,
+        WorkerRequest::TitleFor { agent, prompt, images } => {
+            title_for(state, agent, &Prompt::carrying(prompt, images)).await
+        }
         WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
         WorkerRequest::ServeTools { port } => Ok(WorkerResponse::ToolsServing { port: state.tools.serve(port).await? }),
     }

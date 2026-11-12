@@ -3,6 +3,7 @@ use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, Turn
 use serde_json::json;
 
 use protocol::find::Needle;
+use protocol::prompt::Prompt;
 
 use super::{count, of_row, rows_drawing};
 use crate::find::Part;
@@ -11,7 +12,7 @@ use crate::folds::Fold;
 use crate::transcript::Model;
 
 fn prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { text: text.into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
 }
 
 fn agent(blocks: Vec<ContentBlock>) -> EventBody {

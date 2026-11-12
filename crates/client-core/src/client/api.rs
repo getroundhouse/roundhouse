@@ -10,6 +10,7 @@ use protocol::model::{
     GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
     Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
 };
+use protocol::prompt::Prompt;
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
 
@@ -299,7 +300,7 @@ impl Client {
         attachments: Vec<AttachmentId>,
     ) -> Result<(Seq, bool)> {
         let request =
-            ClientRequest::SessionPrompt { id: id.clone(), text: text.to_string(), client_msg_id, attachments };
+            ClientRequest::SessionPrompt { id: id.clone(), client_msg_id, prompt: Prompt::carrying(text, attachments) };
         let reply = self.call(request)?;
         let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
             return unexpected(&reply);

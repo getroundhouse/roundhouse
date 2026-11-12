@@ -1,7 +1,6 @@
 //! Prompts waiting their turn, kept on their session's record.
 
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
-use protocol::prompt::says_or_carries;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::sessions::queue_from;
@@ -66,10 +65,11 @@ impl Store {
         let Some(queued) = queue.iter_mut().find(|queued| queued.client_msg_id == *client_msg_id) else {
             return Ok(Changed::NotQueued);
         };
-        if !says_or_carries(text, queued.attachments.len()) {
+        text.clone_into(&mut queued.prompt.text);
+        // Nothing's written if it's refused, so the queue keeps what was there.
+        if !queued.prompt.says_or_carries() {
             return Ok(Changed::WouldBeEmpty);
         }
-        text.clone_into(&mut queued.text);
         Ok(Changed::Done(Box::new(write_queue(&conn, id, &queue, None)?)))
     }
 

@@ -9,6 +9,7 @@
 //! checked.
 
 use protocol::attachment::{AttachmentBytes, AttachmentFile, MediaType};
+use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
 /// The most image bytes one prompt gives in itself, which keeps its line to the CLI to about 43 MB as base64. An image
@@ -20,17 +21,23 @@ const INLINE_TEXT_BYTES: u64 = 32 * 1024;
 const CLOSING_TAG: &str = "</attachment>";
 
 /// Reads the files it gives in full, so it's called off the async threads.
-pub(super) fn user_message(text: &str, attachments: &[AttachmentFile]) -> Value {
+pub(super) fn user_message(prompt: &Prompt<AttachmentFile>) -> Value {
     let mut images_left = INLINE_IMAGE_BYTES;
-    let mut content: Vec<Value> = attachments.iter().flat_map(|file| blocks(file, &mut images_left)).collect();
-    if !text.trim().is_empty() || content.is_empty() {
-        content.push(json!({"type": "text", "text": text}));
+    let content = prompt.files.iter().flat_map(|file| blocks(file, &mut images_left)).collect();
+    user_line_saying(content, prompt)
+}
+
+/// A `user` line of `content`'s blocks, made from the prompt's files, and after them what the prompt says, unless it
+/// says nothing and they're something.
+pub(in crate::claude) fn user_line_saying<F>(mut content: Vec<Value>, prompt: &Prompt<F>) -> Value {
+    if prompt.says_anything() || content.is_empty() {
+        content.push(json!({"type": "text", "text": prompt.text}));
     }
     user_line(content)
 }
 
 /// A `user` line of `content`'s blocks, as the CLI reads one on stdin.
-pub(in crate::claude) fn user_line(content: Vec<Value>) -> Value {
+fn user_line(content: Vec<Value>) -> Value {
     json!({
         "type": "user",
         "session_id": "",

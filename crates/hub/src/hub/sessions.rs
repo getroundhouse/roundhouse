@@ -11,7 +11,7 @@ use protocol::model::{
     NewDraft, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
     SessionStatus, TitleSource, ToolUseId, WorkspaceId,
 };
-use protocol::prompt::check_prompt;
+use protocol::prompt::Prompt;
 use tokio::sync::oneshot;
 use tracing::warn;
 
@@ -249,14 +249,13 @@ impl Hub {
     pub(crate) async fn session_prompt(
         self: &Arc<Self>,
         id: SessionId,
-        text: String,
         client_msg_id: Option<ClientMessageId>,
-        attachments: Vec<AttachmentId>,
+        prompt: Prompt<AttachmentId>,
     ) -> Result<(Seq, bool), ApiError> {
-        check_prompt(&text, attachments.len())?;
+        prompt.check()?;
         let session = self.live_session(&id).await?;
         let (reply, recorded) = oneshot::channel();
-        session.command(Command::Prompt { text, client_msg_id, attachments, reply }).await?;
+        session.command(Command::Prompt { client_msg_id, prompt, reply }).await?;
         recorded.await.map_err(|_| internal("the session has stopped"))?
     }
 

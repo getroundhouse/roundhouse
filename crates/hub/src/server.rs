@@ -289,8 +289,8 @@ async fn handle(
             }
             C::Ok
         }
-        R::SessionPrompt { id, text, client_msg_id, attachments } => {
-            let (seq, duplicate) = hub.session_prompt(id, text, client_msg_id, attachments).await?;
+        R::SessionPrompt { id, client_msg_id, prompt } => {
+            let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt).await?;
             C::PromptRecorded { seq, duplicate }
         }
         R::AttachmentAdd { session_id, id, name, media_type, data } => {
@@ -318,8 +318,8 @@ async fn handle(
             C::Ok
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
-        R::SessionQueue(queue::SessionQueue { id, client_msg_id, text, attachments }) => {
-            C::Session(hub.session_queue(id, client_msg_id, text, attachments).await?)
+        R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
+            C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }
         R::SessionChangeQueued(queue::SessionChangeQueued { id, client_msg_id, text }) => {
             C::Session(hub.session_change_queued(id, client_msg_id, text).await?)

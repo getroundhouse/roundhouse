@@ -5,19 +5,19 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{AttachmentId, ClientMessageId, SessionId};
+use crate::prompt::Prompt;
 
 /// Puts a prompt at the end of the queue. Sending it again under the same `client_msg_id` changes nothing, so a
 /// retry is safe, and `SessionChangeQueued` is what changes it. Refused with `Conflict` once that prompt has been
 /// sent, since the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the
-/// queue is held, as `Session::queue_held` says. As with `SessionPrompt`, each of `attachments` has to have been
+/// queue is held, as `Session::queue_held` says. As with `SessionPrompt`, each of the prompt's files has to have been
 /// added to this session first, and a prompt with any can have no text.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionQueue {
     pub id: SessionId,
     pub client_msg_id: ClientMessageId,
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<AttachmentId>,
+    #[serde(flatten)]
+    pub prompt: Prompt<AttachmentId>,
 }
 
 /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and the files it was queued

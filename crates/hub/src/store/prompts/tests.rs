@@ -1,11 +1,12 @@
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionId};
+use protocol::prompt::Prompt;
 
 use super::*;
 use crate::store::tests::store_with_session;
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { text: "x".into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") }
 }
 
 fn append(store: &Store, body: &EventBody) -> Option<Vec<Seq>> {
