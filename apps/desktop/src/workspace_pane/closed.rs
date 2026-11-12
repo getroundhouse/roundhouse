@@ -43,7 +43,7 @@ impl WorkspacePane {
     /// Nothing while no chat is closed. The menu is made each time it opens, so how long ago is as of then.
     pub(super) fn closed_chats(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         let mut closed: Vec<ClosedChat> = self
-            .sessions
+            .sessions()
             .iter()
             .filter_map(|session| {
                 let closed_at_ms = session.closed_at_ms?;

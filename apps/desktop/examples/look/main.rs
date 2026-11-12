@@ -113,7 +113,7 @@ async fn click_each(handle: gpui_kit::AnyWindowHandle, targets: Vec<SharedString
 fn comment_on_the_first_change(view: &gpui_kit::Entity<AppView>, text: &str, cx: &mut gpui_kit::AsyncApp) {
     let (pane, client) =
         view.read_with(cx, |v: &AppView, _| (v.panes[v.selected.as_ref().unwrap()].clone(), v.client().unwrap()));
-    let id = pane.read_with(cx, |p, _| p.workspace.id.clone());
+    let id = pane.read_with(cx, |p, _| p.workspace().id.clone());
     let diff = client.workspace_diff(&id).unwrap();
     if let Some((path, line)) = first_added_line(&diff.patch) {
         let request = Some(client_core::new_request_id());

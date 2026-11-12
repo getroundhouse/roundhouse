@@ -110,8 +110,8 @@ impl WorkspacePane {
 
     /// Makes the diff, and the views of the worktree, of which the diff's start loading it.
     fn make_diff(&mut self, cx: &mut Context<Self>) {
-        let (client, records, id) = (self.client.clone(), self.records.clone(), self.workspace.id.clone());
-        let comments = self.comments.clone();
+        let (client, records, id) = (self.client.clone(), self.records.clone(), self.workspace().id.clone());
+        let comments = self.shown.comments().to_vec();
         let review = cx.new(|cx| Review::new(client.clone(), records, id.clone(), comments, cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
@@ -167,7 +167,7 @@ impl WorkspacePane {
         let diff = self.diff.as_ref()?;
         let shown = Side::Right.shown(cx)?;
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
-        let bar = crate::pull_request::bar(&self.pull_request, &self.busy, &self.workspace.id, act, cx);
+        let bar = crate::pull_request::bar(&self.pull_request, &self.busy, &self.workspace().id, act, cx);
         let changed = diff.review.read(cx).files.as_ref().map(Vec::len);
         let chosen = diff.sidebar_tab.tab();
         let (controls, list) = match chosen {

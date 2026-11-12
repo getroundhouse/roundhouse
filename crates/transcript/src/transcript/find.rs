@@ -256,8 +256,7 @@ impl Transcript {
             && let Some(stretch) = query.search.take()
         {
             // The subagents' records, which draw what their calls show.
-            let records =
-                model.borrow().subagents.iter().map(|(call, record)| (call.clone(), (**record).clone())).collect();
+            let records = model.borrow().subagents.clone();
             let known = stretch::Known { records, settled };
             query.counting = Some(Self::count_stretch(stretch, query.needle.clone(), known, cx));
         }

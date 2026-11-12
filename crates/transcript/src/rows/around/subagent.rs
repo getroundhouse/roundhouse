@@ -7,7 +7,7 @@
 //! drawn where it is instead, so nothing the subagent did goes missing.
 
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use client_core::calls::agent;
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
@@ -36,7 +36,7 @@ pub(in crate::rows) struct Subagent {
     /// Its work is kept apart from the chat's, in the subagent tab, so it's drawn from its record.
     pub(in crate::rows) apart: bool,
     /// Its record, once the hub has sent it.
-    pub(in crate::rows) record: Option<Rc<Record>>,
+    pub(in crate::rows) record: Option<Arc<Record>>,
     /// From its record, while it works and its call is open: what it's done lately, as blocks, oldest first, each
     /// with what drawing it needs.
     pub(in crate::rows) lately: Vec<(ContentBlock, BlockAround)>,

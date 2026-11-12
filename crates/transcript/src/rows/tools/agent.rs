@@ -269,7 +269,7 @@ fn gathered(
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use protocol::model::{ModelName, Subagent as Record, SubagentStatus};
 
@@ -284,7 +284,7 @@ mod tests {
             calls,
             events: None,
             apart: true,
-            record: Some(Rc::new(record)),
+            record: Some(Arc::new(record)),
             lately: Vec::new(),
         }
     }

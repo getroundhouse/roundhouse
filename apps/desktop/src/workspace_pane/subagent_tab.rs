@@ -3,10 +3,12 @@
 //! left, just after the file tab, as tabs that are replaced rather than added to usually do, so its band names the
 //! chat whose subagent it shows. It closes with that chat, since its agent stops then.
 //!
-//! Also each chat's subagents' records, which the chat draws their calls from and the tab its top.
+//! Each chat's subagents' records, which the chat draws their calls from and the tab its top, are client-core's, and the
+//! pane passes them on as they change.
 
-use std::collections::HashMap;
+use std::sync::Arc;
 
+use client_core::records::{Changes, Snapshot};
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
@@ -18,19 +20,16 @@ use gpui_kit::{
     relative,
 };
 use look::Hand as _;
-use protocol::model::{Rev, SessionId, Subagent, ToolUseId};
+use protocol::model::{SessionId, Subagent, ToolUseId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
 use super::view::{TAB_GROUP, TAB_WIDTH, chat_title};
 use super::{PaneEvent, Showing, WorkspacePane};
 
-/// The subagent tab, while it's open, and the records it and the chats draw from.
+/// The subagent tab, while it's open.
 #[derive(Default)]
 pub(super) struct Subagents {
     tab: Option<SubagentTab>,
-    /// Each chat's subagents, as client-core last had them, for the chats that have a transcript, with the newest
-    /// revision among them, which says when they've changed.
-    records: HashMap<SessionId, (Option<Rev>, Vec<Subagent>)>,
 }
 
 struct SubagentTab {
@@ -69,20 +68,16 @@ impl Subagents {
         self.tab.as_ref().map(|tab| &tab.focus)
     }
 
-    fn of(&self, session: &SessionId) -> &[Subagent] {
-        self.records.get(session).map_or(&[], |(_, list)| list.as_slice())
-    }
-
     /// The subagent the tab shows, once its record has come.
-    fn shown(&self) -> Option<&Subagent> {
+    fn shown<'a>(&self, records: &'a Snapshot) -> Option<&'a Subagent> {
         let tab = self.tab.as_ref()?;
-        self.of(&tab.session).iter().find(|subagent| subagent.call == tab.call)
+        records.subagent(&tab.session, &tab.call).map(AsRef::as_ref)
     }
 
     /// What the tab's subagent is for.
-    fn title(&self) -> Option<String> {
+    fn title(&self, records: &Snapshot) -> Option<String> {
         let tab = self.tab.as_ref()?;
-        Some(self.shown().and_then(|s| s.description.clone()).unwrap_or_else(|| tab.title.clone()))
+        Some(self.shown(records).and_then(|s| s.description.clone()).unwrap_or_else(|| tab.title.clone()))
     }
 }
 
@@ -98,9 +93,9 @@ impl WorkspacePane {
         self.transcripts.values().map(|(transcript, _)| transcript).chain(tab)
     }
 
-    /// A chat's subagents as client-core has them now, for a transcript to start with.
-    pub(super) fn subagents_of(&self, session: &SessionId) -> Vec<Subagent> {
-        self.records.snapshot().subagents(session).iter().map(|subagent| Subagent::clone(subagent)).collect()
+    /// A chat's subagents as the pane last had them, for a transcript to start with.
+    pub(super) fn subagents_of(&self, session: &SessionId) -> &[Arc<Subagent>] {
+        self.shown.all().subagents(session)
     }
 
     /// Shows the work of the subagent `call` started, in the chat `session`, in the subagent tab, opening the tab if
@@ -108,8 +103,8 @@ impl WorkspacePane {
     pub fn open_subagent_tab(&mut self, session: SessionId, call: ToolUseId, title: String, cx: &mut Context<Self>) {
         let tab = self.subagents.tab.as_ref();
         let showing = tab.is_some_and(|tab| tab.session == session && tab.call == call);
-        if !showing && let Some(chat) = self.sessions.iter().find(|s| s.id == session).cloned() {
-            let (client, records, shown) = (self.client.clone(), self.subagents_of(&session), call.clone());
+        if !showing && let Some(chat) = self.shown.session(&session).cloned() {
+            let (client, records, shown) = (self.client.clone(), self.subagents_of(&session).to_vec(), call.clone());
             let transcript = cx.new(|cx| {
                 let mut transcript = Transcript::subagent(client, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
@@ -154,33 +149,25 @@ impl WorkspacePane {
         }
     }
 
-    /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed.
-    /// This runs on every change to any record, so they're only copied once their newest revision says they changed.
-    pub(super) fn pass_on_subagents(&mut self, cx: &mut Context<Self>) {
-        let (held, records) = (&self.subagents.records, self.records.snapshot());
-        let changed = self.transcripts.keys().filter_map(|id| {
-            let newest = records.subagents(id).iter().map(|subagent| subagent.rev).max();
-            let same = held.get(id).is_some_and(|(rev, _)| *rev == newest);
-            let copies = || records.subagents(id).iter().map(|subagent| Subagent::clone(subagent)).collect();
-            (!same).then(|| (id.clone(), newest, copies()))
-        });
-        let changed: Vec<(SessionId, Option<Rev>, Vec<Subagent>)> = changed.collect();
-        for (id, newest, list) in changed {
-            if let Some((transcript, _)) = self.transcripts.get(&id) {
-                transcript.update(cx, |t, cx| t.set_subagents(&list, cx));
+    /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed
+    /// since the pane last looked, as `changes` says.
+    pub(super) fn pass_on_subagents(&self, changes: &Changes<'_>, cx: &mut Context<Self>) {
+        for (id, (transcript, _)) in &self.transcripts {
+            if !changes.subagents(id) {
+                continue;
             }
-            if let Some(tab) = self.subagents.tab.as_ref().filter(|tab| tab.session == id) {
-                tab.transcript.update(cx, |t, cx| t.set_subagents(&list, cx));
+            let list = self.subagents_of(id);
+            transcript.update(cx, |t, cx| t.set_subagents(list, cx));
+            if let Some(tab) = self.subagents.tab.as_ref().filter(|tab| &tab.session == id) {
+                tab.transcript.update(cx, |t, cx| t.set_subagents(list, cx));
             }
-            self.subagents.records.insert(id, (newest, list));
         }
-        self.subagents.records.retain(|id, _| self.transcripts.contains_key(id));
     }
 
     /// The subagent tab, built as the file tab is. It has the call's icon, and what the subagent is for, in italics,
     /// since it's replaced rather than added to.
     pub(super) fn subagent_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let title = self.subagents.title()?;
+        let title = self.subagents.title(self.shown.all())?;
         let selected = self.showing() == Showing::Subagent;
         let muted = cx.theme().muted_foreground;
         let close = Button::new("close-subagent-tab")
@@ -235,10 +222,10 @@ impl WorkspacePane {
             .flex_1()
             .min_h_0()
             .w_full()
-            .children(self.subagents.title().map(|title| {
-                let chat = self.sessions.iter().find(|s| s.id == tab.session);
+            .children(self.subagents.title(self.shown.all()).map(|title| {
+                let chat = self.shown.session(&tab.session);
                 let from = chat.map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
-                band(from, title, self.subagents.shown(), cx)
+                band(from, title, self.subagents.shown(self.shown.all()), cx)
             }))
             .child(div().flex_1().min_h_0().w_full().child(tab.transcript.clone()))
             .into_any_element()

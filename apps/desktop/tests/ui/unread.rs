@@ -15,7 +15,7 @@ fn row_unread(ui: &Ui, workspace: &WorkspaceId) -> bool {
 /// Whether the workspace showing has a tab that shows this chat as unread.
 fn tab_unread(ui: &Ui, chat: &SessionId) -> bool {
     let pane = ui.pane().unwrap();
-    ui.cx.read_entity(&pane, |p, _| p.sessions.iter().any(|s| &s.id == chat && p.shows_unread(s)))
+    ui.cx.read_entity(&pane, |p, _| p.sessions().iter().any(|s| &s.id == chat && p.shows_unread(s)))
 }
 
 /// What the hub says of a chat, once it has a reply.

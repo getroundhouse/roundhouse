@@ -2,10 +2,7 @@
 //! Each shows a card while the pointer rests on it: what the context holds, or how much of the limits is left and
 //! whose account it is.
 
-use std::collections::HashMap;
 use std::f32::consts::TAU;
-
-use client_core::records::Snapshot;
 
 use gpui_kit::base::plot::shape::{Arc, ArcData};
 use gpui_kit::component::ActiveTheme as _;
@@ -14,7 +11,7 @@ use gpui_kit::{
     Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px, relative,
 };
-use protocol::model::{Account, AccountId, Session, UsageLimit};
+use protocol::model::{Account, UsageLimit};
 
 use super::WorkspacePane;
 use super::composer::{Hub, Slot, middle};
@@ -32,12 +29,6 @@ const CROSSING: std::time::Duration = std::time::Duration::from_millis(300);
 /// whole number of pixels either side of the slot's middle.
 const LIMIT: Pixels = px(4.);
 const BETWEEN_LIMITS: Pixels = px(4.);
-
-/// The records of the accounts `sessions` name, from client-core's copy, for a pane to draw them from.
-pub(crate) fn accounts_named(records: &Snapshot, sessions: &[Session]) -> HashMap<AccountId, Account> {
-    let named = sessions.iter().filter_map(|session| session.account.as_ref());
-    named.filter_map(|id| Some((id.clone(), records.account(id)?.clone()))).collect()
-}
 
 /// The account the chat showing runs under, as its record says, with each of its limits there's something true to
 /// say of, and what it's called, shortest window first as the hub gives them. Worked out once each time the pane is
@@ -60,7 +51,7 @@ impl WorkspacePane {
     /// The record of the account the chat showing runs under, and which of its limits are shown. `None` until its
     /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
     pub(super) fn usage(&self, cx: &App) -> Option<Usage> {
-        let account = self.accounts.get(self.session()?.account.as_ref()?)?.clone();
+        let account = self.shown.all().account(self.session()?.account.as_ref()?)?.clone();
         let limits = shown(&account.limits, look::now_ms(cx));
         Some(Usage { account, limits })
     }

@@ -159,7 +159,7 @@ impl Driver {
         let view = self.view.clone();
         let chat = self.cx.update(|cx| {
             let pane = selected_pane(view.read(cx)).unwrap();
-            let open: Vec<_> = pane.read(cx).sessions.iter().filter(|s| s.closed_at_ms.is_none()).collect();
+            let open: Vec<_> = pane.read(cx).sessions().iter().filter(|s| s.closed_at_ms.is_none()).collect();
             open[position].id.clone()
         });
         self.point(format!("chat-{chat}"));

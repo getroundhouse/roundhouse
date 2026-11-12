@@ -44,7 +44,7 @@ impl WorkspacePane {
             loop {
                 cx.background_executor().timer(SETUP_LOG_REFRESH).await;
                 let running = this.update(cx, |t, cx| {
-                    let running = t.workspace.setup == SetupStatus::Running;
+                    let running = t.workspace().setup == SetupStatus::Running;
                     if running {
                         t.load_setup_log(cx);
                     }
@@ -59,7 +59,7 @@ impl WorkspacePane {
     }
 
     pub(super) fn load_setup_log(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.workspace.id.clone());
+        let (client, id) = (self.client.clone(), self.workspace().id.clone());
         cx.spawn(async move |this, cx| {
             let log = cx.background_spawn(async move { client.workspace_setup_log(&id) }).await;
             let _ = this.update(cx, |t, cx| {
@@ -73,7 +73,7 @@ impl WorkspacePane {
     }
 
     pub fn rerun_setup(&mut self, cx: &mut Context<Self>) {
-        let id = self.workspace.id.clone();
+        let id = self.workspace().id.clone();
         let starting = self.client.start(move |client| client.workspace_rerun_setup(&id));
         cx.spawn(async move |this, cx| {
             let started = starting.recv().await;
@@ -87,7 +87,7 @@ impl WorkspacePane {
 
     /// A line above the composer while setup matters: when it's running, or if it failed.
     pub(super) fn setup_line(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let (message, running) = match self.workspace.setup {
+        let (message, running) = match self.workspace().setup {
             SetupStatus::Running => ("Setting up this workspace. Messages you send now wait until it's ready.", true),
             SetupStatus::Failed { code: Some(_) } => ("Setup failed, so the agent may find things missing.", false),
             SetupStatus::Failed { code: None } => ("Setup didn't finish, so the agent may find things missing.", false),

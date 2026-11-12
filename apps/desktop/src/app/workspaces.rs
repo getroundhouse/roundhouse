@@ -24,15 +24,12 @@ impl AppView {
     pub(super) fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.selected.clone() else { return };
         if !self.panes.contains_key(&id) {
-            let (Some(client), Some(workspace)) = (self.client(), self.records.workspace(&id).cloned()) else {
-                return;
-            };
-            if workspace.status != WorkspaceStatus::Ready {
+            let (Some(client), Some(shown)) = (self.client(), self.records.in_workspace(&id)) else { return };
+            if shown.workspace().status != WorkspaceStatus::Ready {
                 return;
             }
-            let sessions = self.records.sessions(&id).to_vec();
             let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
-            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, workspace, sessions, window, cx));
+            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {
                 pane.set_busy(busy, cx);

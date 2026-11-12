@@ -1,7 +1,7 @@
 //! How what's counted follows what the log holds, and what the bar says of it.
 
 use std::collections::{BTreeSet, HashMap};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
@@ -66,7 +66,7 @@ fn reported(call: &str, report: &str) -> Records {
         rev: Rev::default(),
         ..record(call, SubagentStatus::Finished)
     };
-    HashMap::from([(call.into(), record)])
+    HashMap::from([(call.into(), Arc::new(record))])
 }
 
 /// Whatever else happened, so the events that matter are on pages of their own.
@@ -151,8 +151,8 @@ fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
 
     let known = Known { records: reported("helper", "The parser is fixed"), ..Known::default() };
     let read = counted_in(vec![call()], &[1], &needle, known);
-    let subagents = reported("helper", "The parser is fixed").into_iter().map(|(call, s)| (call, Rc::new(s)));
-    let m = Model { subagents: subagents.collect(), ..Model::default() };
+    let subagents = reported("helper", "The parser is fixed");
+    let m = Model { subagents, ..Model::default() };
     let mut counts = Counts::default();
     count(&own([call()]), &m, &needle, [0].into(), &mut counts);
 

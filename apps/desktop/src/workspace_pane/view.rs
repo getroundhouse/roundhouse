@@ -166,7 +166,7 @@ impl WorkspacePane {
             Sidebar::Open => None,
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
-                crate::pull_request::controls(&self.pull_request, &self.busy, &self.workspace.id, on_action, cx)
+                crate::pull_request::controls(&self.pull_request, &self.busy, &self.workspace().id, on_action, cx)
             }
         };
         h_flex()
@@ -203,11 +203,11 @@ impl WorkspacePane {
         let muted = cx.theme().muted_foreground;
         let LineText { body, small, code } = line_text;
         let words = || div().min_w_0().overflow_hidden().text_ellipsis();
-        let title = self.workspace.label().to_string();
+        let title = self.workspace().label().to_string();
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
-        let branch = words().text_color(muted).child(self.workspace.branch.to_string());
+        let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(look::faint());
-        let base = base.child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?")));
+        let base = base.child(format!("from {}", self.workspace().base_ref.as_deref().unwrap_or("?")));
         h_flex()
             .flex_1()
             .min_w_0()
@@ -225,7 +225,7 @@ impl WorkspacePane {
     /// waits on the model, and is greyed out until there's a title, which the first prompt gives. A workspace renamed
     /// by hand before that has one with nothing to make another from, and the hub says so.
     fn regenerate_title_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let id = self.workspace.id.clone();
+        let id = self.workspace().id.clone();
         Button::new("regenerate-title")
             .ghost()
             .xsmall()
@@ -234,7 +234,7 @@ impl WorkspacePane {
             .tooltip("Regenerate title")
             .loading(self.retitling)
             // Under the arrow while it waits, as it is while it's greyed out.
-            .when(!self.retitling, |button| button.off_while(self.workspace.title.is_none()))
+            .when(!self.retitling, |button| button.off_while(self.workspace().title.is_none()))
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(PaneEvent::RegenerateTitle(id.clone()))))
     }
 }

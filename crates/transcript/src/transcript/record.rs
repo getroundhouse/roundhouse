@@ -4,7 +4,7 @@
 //! are drawn from, and in the subagent tab, the one it shows, which says whether that one is at work, and what the hub
 //! says of the chat's agent.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::{Context, SharedString, Task};
@@ -117,14 +117,15 @@ impl Transcript {
         }
     }
 
-    /// Follows the records of the session's subagents, and measures again each row that draws one that changed.
-    pub fn set_subagents(&mut self, subagents: &[Subagent], cx: &mut Context<Self>) {
+    /// Follows the records of the session's subagents, as client-core's snapshot shares them, and measures again each
+    /// row that draws one that changed. A copy that's shared already is the one held.
+    pub fn set_subagents(&mut self, subagents: &[Arc<Subagent>], cx: &mut Context<Self>) {
         let (rows, shown) = {
             let mut m = self.model.borrow_mut();
-            let changed: Vec<&Subagent> = subagents
-                .iter()
-                .filter(|subagent| m.subagents.get(&subagent.call).map(Rc::as_ref) != Some(*subagent))
-                .collect();
+            let held = |subagent: &Arc<Subagent>| {
+                m.subagents.get(&subagent.call).is_some_and(|held| Arc::ptr_eq(held, subagent))
+            };
+            let changed: Vec<&Arc<Subagent>> = subagents.iter().filter(|subagent| !held(subagent)).collect();
             if changed.is_empty() {
                 return;
             }
@@ -140,7 +141,7 @@ impl Transcript {
                 m.at_work = at_work;
             }
             for subagent in changed {
-                m.subagents.insert(subagent.call.clone(), Rc::new(subagent.clone()));
+                m.subagents.insert(subagent.call.clone(), Arc::clone(subagent));
             }
             (rows, shown.is_some())
         };
