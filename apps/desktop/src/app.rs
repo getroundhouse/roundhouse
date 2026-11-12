@@ -91,6 +91,8 @@ pub struct AppView {
     focus_once_closed: Option<WorkspaceId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
+    /// Whether a left press has had no release, for the release the system can keep.
+    unreleased: crate::lost_release::Unreleased,
     focus: FocusHandle,
     /// Settings, when it shows in place of the sidebar and the workspace.
     settings: Option<settings::Shown>,
@@ -155,6 +157,7 @@ impl AppView {
             new_workspace: None,
             focus_once_closed: None,
             moving_window: false,
+            unreleased: crate::lost_release::Unreleased::default(),
             focus,
             settings: None,
             settings_focus: cx.focus_handle(),

@@ -74,7 +74,7 @@ pub(crate) fn in_a_new_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
 }
 
 /// Runs `command`, opens its call as [`open_a_call`] does, and gives the IDs of the block's command and of its output.
-fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
+pub(crate) fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
     open_a_call(ui, &format!("tool:{command}"), COMMAND_LINE);
     assert_eq!(command_open(ui), Some(true));
     (ui.shown("command/").remove(0), ui.shown("output/").remove(0))
@@ -103,7 +103,7 @@ fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
 }
 
 /// Where the element is drawn.
-fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
+pub(crate) fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
     let id = id.into();
     ui.frame();
     ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
