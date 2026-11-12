@@ -254,13 +254,14 @@ async fn read_frames(connection: Weak<Connection>, reader: Box<dyn AsyncRead + S
             Ok(ProviderFrame::Reply { id, outcome }) => connection.calls.reply(id, outcome),
             Ok(ProviderFrame::Event { event }) => heard(&event),
             // A reply from a newer adapter ends its call rather than leaving it to wait until the connection closes.
-            Err(e) => match frame::reply_id(line) {
-                Some(id) => {
+            Err(e) => {
+                if let Some(id) = frame::reply_id(line) {
                     let message = format!("a reply from the provider's adapter this hub can't read: {e}");
                     connection.calls.reply(id, ProviderOutcome::Error(ApiError::new(ErrorCode::Worker, message)));
+                } else {
+                    warn!("ignoring a frame from a provider's adapter that didn't parse: {e}");
                 }
-                None => warn!("ignoring a frame from a provider's adapter that didn't parse: {e}"),
-            },
+            }
         }
     }
     if let Some(connection) = connection.upgrade() {

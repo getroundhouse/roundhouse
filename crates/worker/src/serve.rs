@@ -125,13 +125,7 @@ where
         let call: WorkerCall = match frame::decode(&line) {
             Ok(call) => call,
             Err(e) => {
-                // One that names its call is a newer hub's, and the hub does without whatever this worker refuses.
-                if let Some(id) = frame::request_id(&line) {
-                    let refused = unsupported(format!("can't read that request: {e}"));
-                    let _ = state.frames.send(WorkerFrame::Reply { id, outcome: WorkerOutcome::Error(refused) }).await;
-                } else {
-                    warn!("ignoring a frame that didn't parse: {e}");
-                }
+                refuse_unreadable(&state, &line, &e).await;
                 continue;
             }
         };
@@ -307,6 +301,17 @@ async fn handle(
         WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,
         WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
     }
+}
+
+/// A frame that didn't decode. One that names its call is a newer hub's, and the hub does without whatever this
+/// worker refuses, where leaving it unanswered would hold the hub's call until the connection closes.
+async fn refuse_unreadable(state: &State, line: &[u8], error: &serde_json::Error) {
+    let Some(id) = frame::request_id(line) else {
+        warn!("ignoring a frame that didn't parse: {error}");
+        return;
+    };
+    let refused = unsupported(format!("can't read that request: {error}"));
+    let _ = state.frames.send(WorkerFrame::Reply { id, outcome: WorkerOutcome::Error(refused) }).await;
 }
 
 /// A request from a newer hub, which this worker refuses so the hub can do without it.
