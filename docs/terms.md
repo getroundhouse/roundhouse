@@ -147,7 +147,7 @@ These sound alike, and do different things.
 | Stop, in the interface | A turn | The Stop button and `Cmd-.` mean cancel, not a process stop. On a wait's line, Stop calls the wait off | As for cancel |
 | Call off | A wait | Ends a wait on the pull request before what it waits for: by its agent, by the person, by a wait the agent starts after it, or by closing its chat or archiving its workspace. `session_call_off_wait`, `WaitEnd::Cancelled`, `CalledOffByPerson`, `Replaced` | The agent hears, in a turn of its own, unless it called it off itself, or its chat or workspace went with it |
 | Interrupt | A turn | What the agent CLI calls a cancel. Only the adapter says this, as in `AgentProcess::interrupt` | As for cancel |
-| Interrupted | A session | A status, not an action: the agent went away mid-turn without being asked. A cancel doesn't cause it | The next prompt resumes the conversation |
+| Interrupted | A session | A status, not an action: the agent went away mid-turn rather than ending the turn, whatever the reason, as when it exits by itself, its worker goes, or it's stopped by closing its chat, archiving its workspace or stopping the hub. A cancel ends the turn first, so it doesn't cause it | The next prompt resumes the conversation |
 | Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
 | Kill | An instance | Like stop, without the time. For a worker that isn't responding. `Provider::kill` | The next prompt starts a new one |
 | Close | A session | Stops its agent and hides it from the tabs. The history stays. `session_close` | It can be reopened with `session_reopen` |
