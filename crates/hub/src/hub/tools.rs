@@ -89,7 +89,11 @@ impl Hub {
             }
             WorkerAsk::Wait(ReadWait { wait }) => self.wait_of(&session_id, wait).await.map(AskReply::Wait),
             WorkerAsk::CancelWait(CancelWait { wait }) => self.cancel_wait(&session_id, wait).await.map(AskReply::Wait),
-            WorkerAsk::Unknown => Err(self.unsupported(None)),
+            // This hub keeps no worktree but a workspace's own, so it refuses these as it does an ask it doesn't know.
+            WorkerAsk::CreateWorktree(_)
+            | WorkerAsk::RemoveWorktree(_)
+            | WorkerAsk::ListWorktrees
+            | WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }
 }

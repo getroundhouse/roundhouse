@@ -29,6 +29,7 @@ mod sessions;
 mod worker;
 mod worker_calls;
 mod workspaces;
+mod worktrees;
 
 /// `message` is written as `line`, and `line` reads as `message`, for the calls each protocol spells out.
 fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T, line: &str) {

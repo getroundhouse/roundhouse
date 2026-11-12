@@ -23,12 +23,12 @@ fn login() -> AgentLogin {
 }
 
 /// `request` is written as `{"id":7,"request":<form>}`, and that reads as `request`.
-fn asked(request: WorkerRequest, form: &str) {
+pub(super) fn asked(request: WorkerRequest, form: &str) {
     keeps_its_form(&WorkerCall { id: 7, request }, &format!(r#"{{"id":7,"request":{form}}}"#));
 }
 
 /// `response` is written as a reply to call 7 whose response is `form`, and that reads as `response`.
-fn answered(response: WorkerResponse, form: &str) {
+pub(super) fn answered(response: WorkerResponse, form: &str) {
     let reply = WorkerFrame::Reply { id: 7, outcome: WorkerOutcome::Response(response) };
     keeps_its_form(&reply, &format!(r#"{{"frame":"reply","id":7,"response":{form}}}"#));
 }
@@ -66,12 +66,16 @@ fn every_request_about_the_connection_and_the_workspace_keeps_its_form() {
         branch: "birch".into(),
     });
     asked(restore, r#"{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}"#);
-    let remove = WorkerRequest::RemoveWorkspace(worker::RemoveWorkspace {
-        repo_path: "/r".into(),
-        path: "/w".into(),
-        force: true,
-    });
-    asked(remove, r#"{"method":"remove_workspace","repo_path":"/r","path":"/w","force":true}"#);
+    let remove = worker::RemoveWorkspace { repo_path: "/r".into(), path: "/w".into(), force: true, own: None };
+    let another = worker::RemoveWorkspace { path: "/c".into(), own: Some("/w".into()), ..remove.clone() };
+    asked(
+        WorkerRequest::RemoveWorkspace(remove),
+        r#"{"method":"remove_workspace","repo_path":"/r","path":"/w","force":true}"#,
+    );
+    asked(
+        WorkerRequest::RemoveWorkspace(another),
+        r#"{"method":"remove_workspace","repo_path":"/r","path":"/c","force":true,"own":"/w"}"#,
+    );
     let env = vec![("PORT".to_string(), "55000".to_string())];
     let setup =
         WorkerRequest::SetupWorkspace(worker::SetupWorkspace { repo_path: "/r".into(), path: "/w".into(), env });

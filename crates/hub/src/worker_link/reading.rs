@@ -113,8 +113,11 @@ pub(super) async fn read_frames(
 /// Passes one of the agents' frames on to its session, and notes what's numbered to acknowledge once it's recorded.
 pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame) {
     let (session_id, item, seq) = match frame {
-        // Taken where they're read.
-        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => return,
+        // Taken where they're read, but for another worktree's branches, which this hub asks no worker to watch.
+        WorkerFrame::Reply { .. }
+        | WorkerFrame::Ask { .. }
+        | WorkerFrame::Branches { .. }
+        | WorkerFrame::ChildBranches { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
@@ -149,7 +152,10 @@ pub(super) fn newest_runs<'a>(frames: impl IntoIterator<Item = &'a WorkerFrame>)
 
 fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
     match frame {
-        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => None,
+        WorkerFrame::Reply { .. }
+        | WorkerFrame::Ask { .. }
+        | WorkerFrame::Branches { .. }
+        | WorkerFrame::ChildBranches { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }
         | WorkerFrame::AgentDelta { session_id, run, .. }
         | WorkerFrame::AgentContext { session_id, run, .. }

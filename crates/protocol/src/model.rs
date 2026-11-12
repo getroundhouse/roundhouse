@@ -24,6 +24,7 @@ mod settings;
 mod subagent;
 mod title;
 mod wait;
+mod worktrees;
 
 pub use account::{Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, SessionAccount, UsageLimit};
 pub use agent::{AgentDescription, AgentFeature, ModelChoice, NotOffered};
@@ -51,6 +52,7 @@ pub use settings::{SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};
+pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};
 
 /// Declares ID types: text that's only compared and passed along, with a type each so that one
 /// can't be passed as another. They're plain strings on the wire and in storage.
@@ -131,6 +133,13 @@ ids!(
     BranchName,
     /// A remote of a repository, such as `origin`, as git's config names it.
     RemoteName,
+    /// The hub's ID for one of a workspace's other worktrees, as a UUID, since a path names a new one once the last
+    /// there is removed.
+    ChildWorktreeId,
+    /// A worker's own name for something it asks its hub to make, as a UUID or the agent's ID for the tool call that
+    /// asked, so a hub that hears the ask again, as each new hub does what the last didn't answer, makes it once.
+    /// Unique within the session that asked, as a tool use's ID is.
+    AskKey,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.

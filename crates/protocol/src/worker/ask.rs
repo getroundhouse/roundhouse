@@ -13,8 +13,13 @@ use crate::client::Outcome;
 use crate::frame::{self, Call};
 
 mod pull_requests;
+mod worktrees;
 
 pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, StartWait, WaitAnswer};
+pub use worktrees::{
+    CreateWorktree, ListWorktrees, ListedChild, NewWorktreeOn, OwnWorktree, RemoveWorktree, WorktreeCreated,
+    WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,
+};
 
 /// Which of a worker's asks an answer is for. They're numbered by the worker, apart from the hub's calls.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -108,6 +113,10 @@ pub enum WorkerAsk {
     StartWait(StartWait),
     Wait(ReadWait),
     CancelWait(CancelWait),
+    CreateWorktree(CreateWorktree),
+    RemoveWorktree(RemoveWorktree),
+    /// See [`ListWorktrees`].
+    ListWorktrees,
     #[serde(other)]
     Unknown,
 }
@@ -118,12 +127,18 @@ pub enum WorkerAsk {
 pub enum AskReply {
     PullRequest(PullRequestAnswer),
     Wait(WaitAnswer),
+    WorktreeCreated(WorktreeCreated),
+    WorktreeRemoved(WorktreeRemoved),
+    WouldLose(WouldLose),
+    Worktrees(Worktrees),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::client::ErrorCode;
+    use crate::fixtures;
+    use crate::model::GitStatus;
 
     #[test]
     fn a_call_reads_as_a_call_and_an_answer_as_an_answer() {
@@ -191,6 +206,21 @@ mod tests {
 
         assert_eq!(PullRequestAnswer::read(pull_request.clone()), Ok(PullRequestAnswer { pull_request: None }));
         assert_eq!(WaitAnswer::read(pull_request.clone()), Err(pull_request));
+    }
+
+    /// An agent told a worktree wasn't removed is told what it would lose, which is an answer of its own.
+    #[test]
+    fn a_removal_reads_either_of_its_answers_and_gives_any_other_back() {
+        let removed = WorktreeRemoved { worktree: fixtures::child_worktree("c"), last: None };
+        let would_lose = WouldLose { status: GitStatus::default() };
+        let pull_request = AskReply::PullRequest(PullRequestAnswer { pull_request: None });
+
+        let read = WorktreeRemoval::read;
+        assert_eq!(read(AskReply::WorktreeRemoved(removed.clone())), Ok(WorktreeRemoval::Removed(removed)));
+        assert_eq!(read(AskReply::WouldLose(would_lose.clone())), Ok(WorktreeRemoval::WouldLose(would_lose.clone())));
+        assert_eq!(read(pull_request.clone()), Err(pull_request));
+        let sent = AskReply::from(WorktreeRemoval::WouldLose(would_lose.clone()));
+        assert_eq!(sent, AskReply::WouldLose(would_lose), "and each goes back as the answer it was read from");
     }
 
     #[test]

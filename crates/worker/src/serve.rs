@@ -226,7 +226,11 @@ async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::Unknown => Err(unsupported(None)),
+        // This worker makes and watches no worktree but its workspace's own, so it refuses these as it does a
+        // request it doesn't know.
+        WorkerRequest::AddChildWorktree(_) | WorkerRequest::WatchChildBranches(_) | WorkerRequest::Unknown => {
+            Err(unsupported(None))
+        }
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,

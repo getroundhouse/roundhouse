@@ -7,8 +7,9 @@ use serde_json::Value;
 
 use crate::event::{CallKind, ContentBlock, EventBody, SessionEvent};
 use crate::model::{
-    AgentKind, Call, CallResult, Draft, Effort, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session,
-    SessionStatus, SetupStatus, Subagent, SubagentStatus, TitleSource, Workspace, WorkspaceStatus,
+    AgentKind, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy, ModelName,
+    PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentStatus,
+    TitleSource, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -76,6 +77,23 @@ pub fn workspace(id: &str) -> Workspace {
         branches: None,
         pull_request_branch: None,
         worker_build: None,
+    }
+}
+
+/// The workspace `w`'s other worktree `id`, which the agent of the session `s` made on the branch `w/<id>`, where a
+/// hub puts one for a workspace whose own worktree is at `/ws/w`, and which is there, with its branches not read.
+pub fn child_worktree(id: &str) -> ChildWorktree {
+    ChildWorktree {
+        id: id.into(),
+        workspace_id: "w".into(),
+        path: format!("/ws/.children/w/{id}"),
+        branch: BranchName::from(format!("w/{id}")),
+        session_id: "s".into(),
+        made_by: MadeBy::Agent,
+        created_at_ms: 0,
+        status: ChildStatus::Ready,
+        branches: None,
+        rev: Rev::default(),
     }
 }
 

@@ -18,6 +18,7 @@ pub const WORKER_PROTOCOL_VERSION: u32 = 3;
 
 mod agents;
 mod ask;
+mod children;
 mod connection;
 mod frames;
 mod github;
@@ -30,9 +31,11 @@ pub use agents::{
     AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentSpec, AgentStarted, AgentStop, Delivery,
 };
 pub use ask::{
-    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait,
-    StartWait, ToWorker, WaitAnswer, WorkerAsk,
+    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, ListWorktrees, ListedChild,
+    NewWorktreeOn, OwnWorktree, PullRequestAnswer, ReadPullRequest, ReadWait, RemoveWorktree, StartWait, ToWorker,
+    WaitAnswer, WorkerAsk, WorktreeCreated, WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,
 };
+pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
 pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
@@ -96,10 +99,12 @@ pub enum WorkerRequest {
     RestoreWorkspace(RestoreWorkspace),
     RemoveWorkspace(RemoveWorkspace),
     WorktreeThere(WorktreeThere),
+    AddChildWorktree(AddChildWorktree),
     GitStatus(GitStatus),
     GitDiff(GitDiff),
     PullRequest(PullRequest),
     WatchBranches(WatchBranches),
+    WatchChildBranches(WatchChildBranches),
     GithubRateLimit(GithubRateLimit),
     SetupWorkspace(SetupWorkspace),
     /// See [`CancelSetup`].
@@ -139,6 +144,7 @@ pub enum WorkerResponse {
     NamesGitHas(NamesGitHasReply),
     WorkspaceReady(WorkspaceReady),
     WorktreeThere(WorktreeThereReply),
+    ChildWorktreeAdded(ChildWorktreeAdded),
     GitStatus(model::GitStatus),
     GitDiff(model::GitDiff),
     PullRequest(PullRequestReply),

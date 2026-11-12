@@ -95,7 +95,7 @@ impl Hub {
         // workspace archived would end that one with no client told.
         self.call_off_waits_of(id).await?;
         // Checks again unless forced, because the agent may have written files before it stopped.
-        link.call(RemoveWorkspace { repo_path: repo.path, path, force }).await?;
+        link.call(RemoveWorkspace { repo_path: repo.path, path, force, own: None }).await?;
         let provider = self.provider(&workspace.provider)?;
         self.close_worker(workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
