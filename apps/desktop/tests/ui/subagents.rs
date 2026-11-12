@@ -28,7 +28,7 @@ pub(crate) fn showing(ui: &Ui<'_>) -> Showing {
 
 /// How many of the chat's subagents' records client-core holds.
 fn records_held(ui: &Ui<'_>, chat: &SessionId) -> usize {
-    ui.view().feed().unwrap().read(|records| records.subagents().of(chat).len())
+    ui.view().feed().unwrap().snapshot().subagents(chat).len()
 }
 
 /// Has the agent start a subagent and finish its turn, and opens the subagent's call. The ID of the button on its line

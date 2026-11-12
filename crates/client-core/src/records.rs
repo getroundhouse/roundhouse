@@ -1,34 +1,63 @@
 //! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, the
-//! accounts its agents run under, and the subagents of the sessions a view is showing.
+//! accounts its agents run under, and the subagents of the sessions a view is showing. Views read them through a
+//! [`Snapshot`].
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy
 //! has the newer revision, so the result is the same however they interleave. A hub that doesn't keep
 //! revisions sends 0, and then the copy that arrives last wins. One ordered connection keeps that
 //! right for lists and notices, though a reply can still overtake a notice.
 
+use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use protocol::client::{HubNotice, RecordNotice};
-use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, Record, RecordKey, Records, Repo, Rev, Session, Workspace,
-    WorkspaceDraft, WorkspaceId,
-};
+use protocol::model::{Record, RecordKey, Records, Rev};
 
 #[cfg(test)]
 mod laws;
+mod snapshot;
 mod subagents;
 
-pub use subagents::Subagents;
+pub use snapshot::{Changes, InWorkspace, Snapshot};
+pub(crate) use subagents::Subagents;
+
+use snapshot::Listed;
 
 #[derive(Debug, Default)]
 pub struct HubRecords {
-    held: HashMap<RecordKey, Record>,
+    held: HashMap<RecordKey, Kept<Record>>,
     /// Records removed since the newest list, and when, so an older copy that arrives late can't bring
     /// one back.
     removed: HashMap<RecordKey, Rev>,
     /// The newest list taken in. Everything up to it is already reflected.
     listed: Rev,
     subagents: Subagents,
+    /// The newest copy taken in.
+    taken: Taken,
+    /// What views read of the records, made when they next look after a change.
+    shown: OnceCell<Arc<Listed>>,
+}
+
+/// A copy held, and when it was taken in.
+#[derive(Clone, Debug, PartialEq)]
+struct Kept<T> {
+    record: T,
+    taken: Taken,
+}
+
+/// When a copy was taken in, as a count of the copies taken in before it, so a copy taken in later is newer. It tells
+/// views which copies they've already seen, which a record's revision can't, since a hub that doesn't keep revisions
+/// gives every copy the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct Taken(u64);
+
+impl Taken {
+    /// The next copy's.
+    fn next(&mut self) -> Taken {
+        self.0 += 1;
+        *self
+    }
 }
 
 impl HubRecords {
@@ -40,17 +69,23 @@ impl HubRecords {
         if at != Rev::default() && at < self.listed {
             return false;
         }
-        let mut next: HashMap<RecordKey, Record> = HashMap::new();
+        let mut next: HashMap<RecordKey, Kept<Record>> = HashMap::new();
         for record in list.into_records() {
             let key = record.key();
             if self.removed.get(&key).is_some_and(|&gone| at != Rev::default() && gone > record.rev()) {
                 continue;
             }
-            next.insert(key, record);
+            // The copy held, when it's the same, so a view doesn't take it for another.
+            let taken = match self.held.get(&key) {
+                Some(held) if held.record == record => held.taken,
+                _ => self.taken.next(),
+            };
+            next.insert(key, Kept { record, taken });
         }
         for (key, held) in &self.held {
-            let newer_than_list = at != Rev::default() && held.rev() > at;
-            let newer_than_listed = next.get(key).is_none_or(|listed| !listed.rev().supersedes(held.rev()));
+            let newer_than_list = at != Rev::default() && held.record.rev() > at;
+            let newer_than_listed =
+                next.get(key).is_none_or(|listed| !listed.record.rev().supersedes(held.record.rev()));
             if newer_than_list && newer_than_listed {
                 next.insert(key.clone(), held.clone());
             }
@@ -59,6 +94,9 @@ impl HubRecords {
         self.listed = self.listed.max(at);
         let changed = next != self.held;
         self.held = next;
+        if changed {
+            self.shown.take();
+        }
         changed
     }
 
@@ -85,11 +123,14 @@ impl HubRecords {
         }
         let (key, rev) = (record.key(), record.rev());
         let removed_since = self.removed.get(&key).is_some_and(|&gone| !rev.supersedes(gone));
-        let held_is_newer = self.held.get(&key).is_some_and(|held| !rev.supersedes(held.rev()));
-        if self.already_listed(rev) || removed_since || held_is_newer || self.held.get(&key) == Some(&record) {
+        let held = self.held.get(&key).map(|held| &held.record);
+        let held_is_newer = held.is_some_and(|held| !rev.supersedes(held.rev()));
+        if self.already_listed(rev) || removed_since || held_is_newer || held == Some(&record) {
             return false;
         }
-        self.held.insert(key, record);
+        let taken = self.taken.next();
+        self.held.insert(key, Kept { record, taken });
+        self.shown.take();
         true
     }
 
@@ -99,90 +140,27 @@ impl HubRecords {
         }
         let gone = self.removed.entry(key.clone()).or_default();
         *gone = (*gone).max(rev);
-        if self.held.get(key).is_some_and(|held| rev.supersedes(held.rev())) {
+        if self.held.get(key).is_some_and(|held| rev.supersedes(held.record.rev())) {
             self.held.remove(key);
+            self.shown.take();
             return true;
         }
         false
     }
 
-    /// By name.
-    pub fn repos(&self) -> Vec<Repo> {
-        let mut repos: Vec<Repo> =
-            self.of_kind(|record| if let Record::Repo(repo) = record { Some(repo.clone()) } else { None });
-        repos.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
-        repos
+    /// The records as they are now, for a view to read and keep. It's made once for each change, however many views
+    /// ask for it.
+    pub fn snapshot(&self) -> Snapshot {
+        let records =
+            self.shown.get_or_init(|| Arc::new(Listed::of(self.held.values().map(|held| (&held.record, held.taken)))));
+        Snapshot::new(records.clone(), self.subagents.listed())
     }
 
-    /// Oldest first, archived ones included.
-    pub fn workspaces(&self) -> Vec<Workspace> {
-        let mut workspaces: Vec<Workspace> = self
-            .of_kind(|record| if let Record::Workspace(workspace) = record { Some(workspace.clone()) } else { None });
-        workspaces.sort_by(|a, b| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id)));
-        workspaces
-    }
-
-    /// Each workspace's sessions, oldest first. A workspace with none has no entry.
-    pub fn sessions(&self) -> HashMap<WorkspaceId, Vec<Session>> {
-        let sessions =
-            self.of_kind(|record| if let Record::Session(session) = record { Some(session.clone()) } else { None });
-        by_workspace(sessions, |s| (&s.workspace_id, s.created_at_ms, s.id.as_str()))
-    }
-
-    /// Each workspace's comments, oldest first. A workspace with none has no entry.
-    pub fn comments(&self) -> HashMap<WorkspaceId, Vec<DiffComment>> {
-        let comments =
-            self.of_kind(|record| if let Record::Comment(comment) = record { Some(comment.clone()) } else { None });
-        by_workspace(comments, |c| (&c.workspace_id, c.created_at_ms, c.id.as_str()))
-    }
-
-    /// The hub's own settings. `None` until they've arrived, and for good from a hub from before it kept any.
-    pub fn hub_settings(&self) -> Option<HubSettings> {
-        let Some(Record::HubSettings(settings)) = self.held.get(&RecordKey::HubSettings) else { return None };
-        Some(settings.clone())
-    }
-
-    /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived, and for good
-    /// from a hub from before it kept one.
-    pub fn workspace_draft(&self) -> Option<WorkspaceDraft> {
-        let Some(Record::WorkspaceDraft(draft)) = self.held.get(&RecordKey::WorkspaceDraft) else { return None };
-        Some(draft.clone())
-    }
-
-    /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.
-    pub fn account(&self, id: &AccountId) -> Option<Account> {
-        let Some(Record::Account(account)) = self.held.get(&RecordKey::Account { id: id.clone() }) else { return None };
-        Some(account.clone())
-    }
-
-    /// The subagents of the sessions a view asked for.
-    pub fn subagents(&self) -> &Subagents {
+    pub(crate) fn subagents(&self) -> &Subagents {
         &self.subagents
     }
 
     pub(crate) fn subagents_mut(&mut self) -> &mut Subagents {
         &mut self.subagents
     }
-
-    fn of_kind<T>(&self, pick: impl Fn(&Record) -> Option<T>) -> Vec<T> {
-        self.held.values().filter_map(pick).collect()
-    }
-}
-
-/// Groups records by workspace, each group oldest first. `place` gives a record's workspace, when it was
-/// made, and its ID, which settles a tie.
-fn by_workspace<T>(
-    mut records: Vec<T>,
-    place: impl Fn(&T) -> (&WorkspaceId, i64, &str),
-) -> HashMap<WorkspaceId, Vec<T>> {
-    records.sort_by(|a, b| {
-        let ((_, a_at, a_id), (_, b_at, b_id)) = (place(a), place(b));
-        (a_at, a_id).cmp(&(b_at, b_id))
-    });
-    let mut grouped: HashMap<WorkspaceId, Vec<T>> = HashMap::new();
-    for record in records {
-        let workspace = place(&record).0.clone();
-        grouped.entry(workspace).or_default().push(record);
-    }
-    grouped
 }

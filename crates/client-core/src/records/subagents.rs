@@ -3,23 +3,32 @@
 //! keeps them current from then on.
 //!
 //! No IO. As with every record, a list and the feed's notices can arrive in any order, and each subagent keeps
-//! whichever copy has the newer revision, as [`Rev::supersedes`] says. The hub never removes a subagent's record, so
-//! one goes only when no view wants its session any more.
+//! whichever copy has the newer revision, as [`protocol::model::Rev::supersedes`] says. The hub never removes a
+//! subagent's record, so one goes only when no view wants its session any more.
 
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
-use protocol::model::{Rev, SessionId, Subagent, ToolUseId};
+use protocol::model::{SessionId, Subagent, ToolUseId};
+
+use super::snapshot::SubagentsListed;
+use super::{Kept, Taken};
 
 #[derive(Debug, Default)]
-pub struct Subagents {
-    /// By session, then by the call that started each.
-    held: HashMap<SessionId, BTreeMap<ToolUseId, Subagent>>,
+pub(crate) struct Subagents {
+    /// By session, then by the call that started each. Each is shared with what views read.
+    held: HashMap<SessionId, BTreeMap<ToolUseId, Kept<Arc<Subagent>>>>,
     /// The sessions a view asked for, whose subagents are kept.
     wanted: BTreeSet<SessionId>,
     /// Of those, the ones listed on this connection.
     listed: BTreeSet<SessionId>,
     /// The hub is from before subagents had records, so there's nothing to list.
     unkept: bool,
+    /// The newest copy taken in.
+    taken: Taken,
+    /// What views read of them, made when they next look after a change.
+    shown: OnceCell<Arc<SubagentsListed>>,
 }
 
 impl Subagents {
@@ -31,11 +40,13 @@ impl Subagents {
         let session = self.held.entry(subagent.session_id.clone()).or_default();
         // As for every record. A hub that keeps subagents' records keeps revisions, so a copy without one only comes
         // from a hub that doesn't, which has none to send.
-        let held = session.get(&subagent.call);
-        if held.is_some_and(|held| !subagent.rev.supersedes(held.rev) || *held == subagent) {
+        let held = session.get(&subagent.call).map(|held| &held.record);
+        if held.is_some_and(|held| !subagent.rev.supersedes(held.rev) || **held == subagent) {
             return false;
         }
-        session.insert(subagent.call.clone(), subagent);
+        let taken = self.taken.next();
+        session.insert(subagent.call.clone(), Kept { record: Arc::new(subagent), taken });
+        self.shown.take();
         true
     }
 
@@ -62,7 +73,9 @@ impl Subagents {
     pub(crate) fn forget(&mut self, session: &SessionId) {
         self.wanted.remove(session);
         self.listed.remove(session);
-        self.held.remove(session);
+        if self.held.remove(session).is_some() {
+            self.shown.take();
+        }
     }
 
     /// `session` needs no list on this connection, such as when the hub has no such session.
@@ -92,27 +105,21 @@ impl Subagents {
     }
 
     /// Whether the hub keeps subagents' records. Until it's been asked, it's taken to.
-    pub fn kept(&self) -> bool {
+    #[cfg(test)]
+    fn kept(&self) -> bool {
         !self.unkept
     }
 
-    /// A session's subagents, in the order they started.
-    pub fn of(&self, session: &SessionId) -> Vec<Subagent> {
-        let mut subagents: Vec<Subagent> =
-            self.held.get(session).into_iter().flat_map(|s| s.values().cloned()).collect();
-        subagents.sort_by(|a, b| (a.started_at_ms, &a.call).cmp(&(b.started_at_ms, &b.call)));
-        subagents
-    }
-
-    /// The newest revision among a session's subagents, which moves whenever one of them changes, so a view can tell
-    /// without copying them.
-    pub fn newest(&self, session: &SessionId) -> Option<Rev> {
-        self.held.get(session)?.values().map(|subagent| subagent.rev).max()
-    }
-
-    /// The subagent `call` started, in `session`.
-    pub fn get(&self, session: &SessionId, call: &ToolUseId) -> Option<&Subagent> {
-        self.held.get(session)?.get(call)
+    /// What views read of them now.
+    pub(super) fn listed(&self) -> Arc<SubagentsListed> {
+        let listed = self.shown.get_or_init(|| {
+            let sessions = self
+                .held
+                .iter()
+                .map(|(session, its)| (session, its.values().map(|held| (held.record.clone(), held.taken)).collect()));
+            Arc::new(SubagentsListed::of(sessions))
+        });
+        listed.clone()
     }
 }
 

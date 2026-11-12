@@ -166,7 +166,8 @@ impl WorkspacePane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let comments = records.read(|r| r.comments().remove(&workspace.id)).unwrap_or_default();
+        let held = records.snapshot();
+        let comments = held.comments(&workspace.id).to_vec();
         let (composer, on_enter) = composer::new_input(window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
@@ -174,7 +175,7 @@ impl WorkspacePane {
             }
         });
         let pull_request = Lookup::recorded(&workspace).unwrap_or(Lookup::Looking);
-        let accounts = records.read(|held| accounts_named(held, &sessions));
+        let accounts = accounts_named(&held, &sessions);
         // What the hub kept of each chat's composer, from when this app or another last had it.
         let (drafts, restoring) = (keeping::drafts_kept_in(&sessions), keeping::files_kept_in(&sessions));
         let mut this = Self {

@@ -100,7 +100,7 @@ impl WorkspacePane {
 
     /// A chat's subagents as client-core has them now, for a transcript to start with.
     pub(super) fn subagents_of(&self, session: &SessionId) -> Vec<Subagent> {
-        self.records.read(|records| records.subagents().of(session))
+        self.records.snapshot().subagents(session).iter().map(|subagent| Subagent::clone(subagent)).collect()
     }
 
     /// Shows the work of the subagent `call` started, in the chat `session`, in the subagent tab, opening the tab if
@@ -157,15 +157,14 @@ impl WorkspacePane {
     /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed.
     /// This runs on every change to any record, so they're only copied once their newest revision says they changed.
     pub(super) fn pass_on_subagents(&mut self, cx: &mut Context<Self>) {
-        let held = &self.subagents.records;
-        let changed: Vec<(SessionId, Option<Rev>, Vec<Subagent>)> = self.records.read(|records| {
-            let changed = self.transcripts.keys().filter_map(|id| {
-                let newest = records.subagents().newest(id);
-                let same = held.get(id).is_some_and(|(rev, _)| *rev == newest);
-                (!same).then(|| (id.clone(), newest, records.subagents().of(id)))
-            });
-            changed.collect()
+        let (held, records) = (&self.subagents.records, self.records.snapshot());
+        let changed = self.transcripts.keys().filter_map(|id| {
+            let newest = records.subagents(id).iter().map(|subagent| subagent.rev).max();
+            let same = held.get(id).is_some_and(|(rev, _)| *rev == newest);
+            let copies = || records.subagents(id).iter().map(|subagent| Subagent::clone(subagent)).collect();
+            (!same).then(|| (id.clone(), newest, copies()))
         });
+        let changed: Vec<(SessionId, Option<Rev>, Vec<Subagent>)> = changed.collect();
         for (id, newest, list) in changed {
             if let Some((transcript, _)) = self.transcripts.get(&id) {
                 transcript.update(cx, |t, cx| t.set_subagents(&list, cx));

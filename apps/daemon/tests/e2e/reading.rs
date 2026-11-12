@@ -3,14 +3,13 @@
 #![cfg(test)]
 
 use client_core::RecordsFeed;
-use client_core::records::HubRecords;
-use protocol::model::SessionId;
+use protocol::model::{Session, SessionId};
 
 use crate::support::{Stack, wait_for_turn_end, wait_until};
 
 /// Whether client-core's copy says this session has a reply nobody has read.
 fn unread_in(feed: &RecordsFeed, id: &SessionId) -> bool {
-    feed.read(|records: &HubRecords| records.sessions().values().flatten().any(|s| &s.id == id && s.unread()))
+    feed.snapshot().session(id).is_some_and(Session::unread)
 }
 
 #[test]

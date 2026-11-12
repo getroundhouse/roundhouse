@@ -2,7 +2,6 @@
 //! one can be made now, and what the hub keeps of it. It makes what the dialog asks for, and gives back a prompt for a
 //! workspace that couldn't be made.
 
-use client_core::records::HubRecords;
 use client_core::{Client, FileToSend};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
@@ -37,7 +36,7 @@ impl AppView {
         let client = self.client().or_else(|| self.joining.clone());
         let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
-        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.read(HubRecords::workspace_draft)) {
+        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.snapshot().workspace_draft().cloned()) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
         }
         cx.subscribe_in(&dialog, window, |t, dialog, event: &DialogEvent, window, cx| match event {
@@ -78,7 +77,7 @@ impl AppView {
         };
         let offer = self.offer();
         cx.defer(move |cx| {
-            let Some(kept) = feed.read(HubRecords::workspace_draft) else { return };
+            let Some(kept) = feed.snapshot().workspace_draft().cloned() else { return };
             let _ = handle.update(cx, |_, window, cx| {
                 dialog.update(cx, |dialog, cx| {
                     dialog.set_offer(offer, cx);

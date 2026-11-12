@@ -260,7 +260,7 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     feed.follow_subagents(&"!missing".into());
     feed.follow_subagents(&session.id);
     let finished = |feed: &RecordsFeed| {
-        let record = feed.read(|records| records.subagents().get(&session.id, &call).cloned());
+        let record = feed.snapshot().subagent(&session.id, &call).map(|record| Subagent::clone(record));
         record.filter(|record| record.status == SubagentStatus::Finished)
     };
     wait_until("the feed to keep its record", || finished(&feed).is_some());

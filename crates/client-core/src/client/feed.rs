@@ -6,7 +6,7 @@ use protocol::model::{Record, Records, SessionId};
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, ClientError, Result, Subscription, SubscriptionItem};
-use crate::records::HubRecords;
+use crate::records::{HubRecords, Snapshot};
 
 /// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
 /// given to [`RecordsFeed::reconnect`].
@@ -29,9 +29,10 @@ impl RecordsFeed {
         &self.follow.changed
     }
 
-    /// The records as they are now.
-    pub fn read<T>(&self, read: impl FnOnce(&HubRecords) -> T) -> T {
-        self.follow.read(read)
+    /// The records as they are now, for a view to read and keep until they next change. It's made once for each
+    /// change, however many views ask, so asking again with nothing changed costs a pointer.
+    pub fn snapshot(&self) -> Snapshot {
+        self.follow.read(HubRecords::snapshot)
     }
 
     /// Keeps the subagents of `session` from now on, listing them first. Asking again does nothing. Readers hear of

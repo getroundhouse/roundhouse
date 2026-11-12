@@ -234,7 +234,7 @@ fn a_draft_changed_elsewhere_as_the_chat_showing_closes_brings_each_file_once(cx
     stack.client().session_close(&showing).unwrap();
     // Both in client-core before the pane hears of either.
     wait_until("client-core to hear of both", || {
-        let sessions = records.read(|held| held.sessions().into_values().flatten().collect::<Vec<_>>());
+        let sessions: Vec<_> = records.snapshot().every_session().cloned().collect();
         // Or gone, as a chat nothing was sent in goes as it closes.
         let closed = !sessions.iter().any(|s| s.id == showing && s.closed_at_ms.is_none());
         closed && sessions.iter().any(|s| s.id == next && s.draft.text == "look at this")
@@ -310,8 +310,7 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     // Arrived in client-core, but nothing has run on the main thread since, so the pane hasn't seen it.
     let records = ui.view().records().unwrap();
     let draft_in = |records: &client_core::RecordsFeed| {
-        let sessions = records.read(|held| held.sessions().into_values().flatten().find(|s| s.id == chat));
-        sessions.map(|s| s.draft.text).unwrap_or_default()
+        records.snapshot().session(&chat).map(|s| s.draft.text.clone()).unwrap_or_default()
     };
     wait_until("client-core to hear of the change", || draft_in(&records) == "typed elsewhere");
 
