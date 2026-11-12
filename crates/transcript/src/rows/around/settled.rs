@@ -26,7 +26,9 @@ impl Settled {
     /// waits on a question, so little else is recorded before it's closed.
     pub(super) fn read(log: &SessionLog, seq: Seq, id: &ApprovalId) -> Self {
         let closed = nearby::events_after(log, seq, NEAR).find_map(|event| {
-            let EventBody::ApprovalResolved { approval_id, outcome, answers } = &event.body else { return None };
+            let EventBody::ApprovalResolved { approval_id, outcome, answers_by_text: answers, .. } = &event.body else {
+                return None;
+            };
             (approval_id == id).then_some((*outcome, answers.as_ref()))
         });
         match closed {

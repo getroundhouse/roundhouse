@@ -201,12 +201,12 @@ impl QuestionPanel {
             return;
         }
         let asked = self.asked.iter().map(|asked| &asked.question);
-        self.answer(ApprovalDecision::Answer { answers: answers(asked.zip(answered)) }, cx);
+        self.answer(ApprovalDecision::AnswerByText { answers: answers(asked.zip(answered)) }, cx);
     }
 
     fn skip(&mut self, cx: &mut Context<Self>) {
         if !self.answered {
-            self.answer(ApprovalDecision::Deny { message: SKIPPED.to_string(), interrupt: false }, cx);
+            self.answer(ApprovalDecision::Deny { message: Some(SKIPPED.to_string()), interrupt: false }, cx);
         }
     }
 

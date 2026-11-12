@@ -22,6 +22,7 @@ use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, warn};
 
+use super::approvals::Waiting;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
 mod asking;
@@ -82,8 +83,9 @@ struct Shared {
     untaken: Mutex<HashMap<String, Seq>>,
     /// Which of them is a `/compact`, and which one the CLI took, so its compaction can name it.
     compacts: Mutex<AskedToCompact>,
-    /// Tool inputs waiting on an answer. "Allow" must send the input back to the CLI.
-    pending_inputs: Mutex<HashMap<ApprovalId, Value>>,
+    /// Requests waiting on the person, with the tool's input, which allowing one sends back to the CLI, and what each
+    /// asks, which answering one goes by.
+    waiting: Mutex<HashMap<ApprovalId, Waiting>>,
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
     /// tells whoever's waiting.
     pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
@@ -133,7 +135,7 @@ pub async fn spawn_at(
         unconfirmed_prompts: Mutex::new(Vec::new()),
         untaken: Mutex::new(HashMap::new()),
         compacts: Mutex::new(AskedToCompact::default()),
-        pending_inputs: Mutex::new(HashMap::new()),
+        waiting: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
         context: Mutex::new(ContextWatch::default()),
         usage: Mutex::new(UsageWatch::default()),
@@ -303,29 +305,8 @@ impl AgentProcess for ClaudeProcess {
     }
 
     async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {
-        let original_input = self.shared.pending_inputs.lock().remove(approval_id);
-        let response = match decision {
-            ApprovalDecision::Allow { updated_input, updated_permissions } => {
-                let mut body = json!({
-                    "behavior": "allow",
-                    "updatedInput": updated_input.clone().or(original_input).unwrap_or_else(|| json!({})),
-                });
-                if let Some(permissions) = updated_permissions {
-                    body["updatedPermissions"] = permissions.clone();
-                }
-                body
-            }
-            ApprovalDecision::Deny { message, interrupt } => {
-                json!({"behavior": "deny", "message": message, "interrupt": interrupt})
-            }
-            // The CLI takes these as part of the tool's input. Allowing without them tells the agent
-            // that the user didn't answer.
-            ApprovalDecision::Answer { answers } => {
-                let mut input = original_input.unwrap_or_else(|| json!({}));
-                input["answers"] = json!(answers);
-                json!({"behavior": "allow", "updatedInput": input})
-            }
-        };
+        let waiting = self.shared.waiting.lock().remove(approval_id);
+        let response = super::approvals::response(decision, waiting);
         write_line(
             &self.shared,
             &json!({"type":"control_response","response":{

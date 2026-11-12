@@ -46,7 +46,7 @@ pub(super) fn approval_card(
         let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
         let plan_id = ItemKey::Event(seq, 0).element("plan");
         let keep_planning = ApprovalDecision::Deny {
-            message: "The user wants to keep planning. Ask them what to change.".to_string(),
+            message: Some("The user wants to keep planning. Ask them what to change.".to_string()),
             interrupt: false,
         };
         (
@@ -61,7 +61,7 @@ pub(super) fn approval_card(
                 .child(answer_button("keep-planning", "Keep planning", keep_planning)),
         )
     } else {
-        let deny = ApprovalDecision::Deny { message: "The user denied this.".to_string(), interrupt: false };
+        let deny = ApprovalDecision::Deny { message: Some("The user denied this.".to_string()), interrupt: false };
         (
             format!("{tool_name} needs approval"),
             div()

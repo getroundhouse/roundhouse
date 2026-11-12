@@ -108,7 +108,8 @@ fn answer(call: &str, approval: &str, answers: &[(&str, &str)]) -> Vec<EventBody
     let closed = EventBody::ApprovalResolved {
         approval_id: approval.into(),
         outcome: ApprovalOutcome::Allowed,
-        answers: Some(answers),
+        answers_by_text: Some(answers),
+        answers_by_position: None,
     };
     vec![closed, tool_result(call, &told)]
 }

@@ -42,6 +42,15 @@ pub struct Question {
     pub multiple: bool,
 }
 
+impl Question {
+    /// What `answer` says to this question, a part at a time: the label of each option it picked, leaving out any the
+    /// question doesn't offer, then what was typed.
+    pub fn said<'a>(&'a self, answer: &'a QuestionAnswer) -> impl Iterator<Item = &'a str> {
+        let picked = answer.picked.iter().filter_map(|&option| self.options.get(usize::try_from(option).ok()?));
+        picked.map(|option| option.label.as_str()).chain(answer.typed.as_deref())
+    }
+}
+
 /// One of the answers a question offers.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct QuestionOption {
@@ -49,4 +58,42 @@ pub struct QuestionOption {
     /// What choosing it means, when the agent says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// What the person answered one question, by position: the options they chose, by their place among its options, in
+/// the order it offers them, and what they typed as an answer of their own. One with neither wasn't answered.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct QuestionAnswer {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub picked: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typed: Option<String>,
+}
+
+impl QuestionAnswer {
+    /// Nothing chosen and nothing typed, which is no answer.
+    pub fn is_empty(&self) -> bool {
+        self.picked.is_empty() && self.typed.is_none()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Question, QuestionAnswer, QuestionOption};
+
+    #[test]
+    fn an_answer_says_its_options_in_order_then_what_was_typed_and_nothing_the_question_doesnt_offer() {
+        let option = |label: &str| QuestionOption { label: label.into(), description: None };
+        let colors = Question {
+            text: "Colors?".into(),
+            header: None,
+            options: vec![option("Red"), option("Green"), option("Blue")],
+            multiple: true,
+        };
+        let answer = QuestionAnswer { picked: vec![0, 2, 7], typed: Some("Teal".into()) };
+
+        assert_eq!(colors.said(&answer).collect::<Vec<_>>(), ["Red", "Blue", "Teal"]);
+        assert_eq!(colors.said(&QuestionAnswer::default()).count(), 0);
+        assert!(QuestionAnswer::default().is_empty() && !answer.is_empty());
+    }
 }

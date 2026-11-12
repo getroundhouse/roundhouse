@@ -51,14 +51,14 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Approve { session, approval_id, deny } => {
             let session = find_session(&client, &session)?;
             let decision = match deny {
-                Some(message) => ApprovalDecision::Deny { message, interrupt: false },
+                Some(message) => ApprovalDecision::Deny { message: Some(message), interrupt: false },
                 None => ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
             };
             client.session_approve(&session.id, &approval_id, decision)?;
         }
         Cmd::Answer { session, approval_id, question, answer } => {
             let session = find_session(&client, &session)?;
-            let decision = ApprovalDecision::Answer { answers: std::iter::once((question, answer)).collect() };
+            let decision = ApprovalDecision::AnswerByText { answers: std::iter::once((question, answer)).collect() };
             client.session_approve(&session.id, &approval_id, decision)?;
         }
         Cmd::Cancel { session } => {

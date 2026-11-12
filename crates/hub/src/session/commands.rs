@@ -329,13 +329,20 @@ impl LiveSession {
                 return Err(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
             }
         }
-        // The answers are recorded as well as passed on, since the agent's own words for them are its to choose.
-        let (outcome, answers) = match &decision {
-            ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None),
-            ApprovalDecision::Answer { answers } => (ApprovalOutcome::Allowed, Some(answers.clone())),
-            ApprovalDecision::Deny { .. } => (ApprovalOutcome::Denied, None),
+        // The answers are recorded as well as passed on, in the form they came, since the agent's own words for them
+        // are its adapter's to choose.
+        let (outcome, answers_by_text, answers_by_position) = match &decision {
+            ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None, None),
+            ApprovalDecision::AnswerByText { answers } => (ApprovalOutcome::Allowed, Some(answers.clone()), None),
+            ApprovalDecision::AnswerByPosition { answers } => (ApprovalOutcome::Allowed, None, Some(answers.clone())),
+            ApprovalDecision::Deny { .. } => (ApprovalOutcome::Denied, None, None),
         };
-        let resolved = EventBody::ApprovalResolved { approval_id: approval_id.clone(), outcome, answers };
+        let resolved = EventBody::ApprovalResolved {
+            approval_id: approval_id.clone(),
+            outcome,
+            answers_by_text,
+            answers_by_position,
+        };
         self.record(Origin::Hub, resolved, None, None).await?;
         let hub = self.hub()?;
         let link = hub

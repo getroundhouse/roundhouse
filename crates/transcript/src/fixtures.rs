@@ -106,5 +106,5 @@ pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
 /// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.
 pub(crate) fn closed(id: &str, outcome: ApprovalOutcome, answers: Option<&[(&str, &str)]>) -> EventBody {
     let answers = answers.map(|pairs| pairs.iter().map(|(q, a)| ((*q).to_string(), (*a).to_string())).collect());
-    EventBody::ApprovalResolved { approval_id: id.into(), outcome, answers }
+    EventBody::ApprovalResolved { approval_id: id.into(), outcome, answers_by_text: answers, answers_by_position: None }
 }
