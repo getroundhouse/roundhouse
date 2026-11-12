@@ -1,13 +1,16 @@
 use std::rc::Rc;
 
+use client_core::Answered;
 use client_core::session_log::SessionLog;
 use protocol::attachment::{Attachment, MediaType};
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
 use protocol::model::{Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus};
 use serde_json::json;
 
-use super::{Around, Reply, block_key};
-use crate::fixtures::{asked, calls, calls_to, closed, event, from_the_agent, log, record, result, within};
+use super::{Around, Reply, Settled, block_key};
+use crate::fixtures::{
+    asked, asking, calls, calls_to, closed, closed_by_position, event, from_the_agent, log, record, result, within,
+};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::transcript::Model;
@@ -37,6 +40,30 @@ fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
 
     assert!(Around::read(&answered, &m, 1, &question).asked.is_some());
     assert!(Around::read(&answered, &m, 1, &asked("a", "Bash")).asked.is_none(), "only a question is a line");
+}
+
+/// The transcript goes by what the adapter says a request asks, whatever its tool is called.
+#[test]
+fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
+    let question = Question { text: "Red or blue?".into(), header: None, options: Vec::new(), multiple: false };
+    let questions = asking("q", Asking::Questions { questions: vec![question.clone()] });
+    let tool = asking("t", Asking::ToolUse);
+    let answered = closed_by_position("q", vec![QuestionAnswer { picked: Vec::new(), typed: Some("Blue".into()) }]);
+    let log = log([event(1, questions.clone()), event(2, answered.clone()), event(3, tool.clone())]);
+    let m = Model::default();
+
+    let asked = Around::read(&log, &m, 1, &questions).asked.unwrap();
+
+    assert_eq!(asked.questions, [question]);
+    assert_eq!(
+        asked.settled,
+        Settled::Answered(Answered::ByPosition(vec![QuestionAnswer {
+            picked: Vec::new(),
+            typed: Some("Blue".into())
+        }]))
+    );
+    assert!(Around::read(&log, &m, 2, &answered).closes_a_question);
+    assert!(Around::read(&log, &m, 3, &tool).asked.is_none(), "a tool's use is a card");
 }
 
 #[test]

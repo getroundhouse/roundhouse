@@ -10,8 +10,8 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, div, px,
 };
+use protocol::event::Question;
 use protocol::model::Seq;
-use serde_json::Value;
 
 use super::around::{AnswerTo, Asked, Settled};
 use super::line::{self, Line, Part};
@@ -21,7 +21,6 @@ use crate::calls::first_line;
 use crate::find::FindLook;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::questions::{self, Question};
 
 const ICON: IconName = IconName::MessageCircleQuestionMark;
 /// What's said for a question nobody answered.
@@ -31,8 +30,8 @@ const BETWEEN: &str = " · ";
 /// Puts the arrow beside the first line of an answer at body size.
 const ARROW_DROP: f32 = 3.0;
 
-pub(super) fn draw(seq: Seq, input: &Value, asked: &Asked, shared: &Shared, cx: &App) -> AnyElement {
-    let questions = questions::parse(input);
+pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyElement {
+    let questions = &asked.questions;
     // Nothing's found in a question, so nothing it draws is marked.
     let find = FindLook::default();
     let (key, open) = (&asked.key, asked.open);
@@ -45,9 +44,9 @@ pub(super) fn draw(seq: Seq, input: &Value, asked: &Asked, shared: &Shared, cx: 
         line = line.part(Part::Chip(header.into()));
     }
     // Opened, the block says what was answered, so the line doesn't say it twice.
-    let said = summary(&questions, &asked.settled).filter(|_| !asked.open);
+    let said = summary(questions, &asked.settled).filter(|_| !asked.open);
     let line = line.part(said.map(|said| Part::Summary(said.into())));
-    let opened = (asked.open && !questions.is_empty()).then(|| answers(&questions, asked, cx));
+    let opened = (asked.open && !questions.is_empty()).then(|| answers(questions, asked, cx));
     // On its own row, spaced as a row of calls is, so it reads as one of them.
     row().pb_2().child(line::drawn(line, None, opened, &toggle, cx)).into_any_element()
 }
@@ -58,11 +57,11 @@ fn summary(questions: &[Question], settled: &Settled) -> Option<String> {
     if *settled == Settled::Unknown {
         return None;
     }
-    let said = |question: &Question| match settled.answer_to(&question.text) {
-        AnswerTo::Said(answer) => Some(first_line(answer)),
+    let said = |(at, question): (usize, &Question)| match settled.answer_to(at, question) {
+        AnswerTo::Said(answer) => Some(first_line(&answer).to_string()),
         AnswerTo::NotAnswered | AnswerTo::Unknown => None,
     };
-    let answered: Vec<&str> = questions.iter().filter_map(said).collect();
+    let answered: Vec<String> = questions.iter().enumerate().filter_map(said).collect();
     Some(if answered.is_empty() { NOT_ANSWERED.to_string() } else { answered.join(BETWEEN) })
 }
 
@@ -76,7 +75,7 @@ fn answers(questions: &[Question], asked: &Asked, cx: &App) -> AnyElement {
         if i > 0 {
             list = list.child(block::separator(cx));
         }
-        let answer = asked.settled.answer_to(&question.text);
+        let answer = asked.settled.answer_to(i, question);
         list = list.child(
             v_flex()
                 .px_3()
@@ -112,7 +111,7 @@ fn answered(key: &ItemKey, i: usize, answer: AnswerTo, cx: &App) -> Option<AnyEl
         .items_start()
         .gap_2()
         .child(arrow)
-        .child(text(key.element(&format!("answer-{i}-text")), answer, cx.theme().foreground).flex_1())
+        .child(text(key.element(&format!("answer-{i}-text")), &answer, cx.theme().foreground).flex_1())
         .test_support()
         .into_any_element();
     Some(row)
@@ -125,40 +124,53 @@ fn text(id: ElementId, text: &str, color: Hsla) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use client_core::Answered;
+    use protocol::event::{Question, QuestionAnswer, QuestionOption};
 
     use super::{Settled, summary};
-    use crate::questions;
 
-    fn two_questions() -> Vec<questions::Question> {
-        questions::parse(&json!({"questions": [
-            {"question": "Red or blue?", "header": "Color"},
-            {"question": "Which days?", "header": "Days", "multiSelect": true},
-        ]}))
+    fn two_questions() -> Vec<Question> {
+        let option = |label: &str| QuestionOption { label: label.into(), description: None };
+        let colors = vec![option("Red"), option("Blue")];
+        let days = vec![option("Monday"), option("Wednesday"), option("Friday")];
+        vec![
+            Question { text: "Red or blue?".into(), header: Some("Color".into()), options: colors, multiple: false },
+            Question { text: "Which days?".into(), header: Some("Days".into()), options: days, multiple: true },
+        ]
+    }
+
+    fn answer(picked: &[u32], typed: Option<&str>) -> QuestionAnswer {
+        QuestionAnswer { picked: picked.to_vec(), typed: typed.map(str::to_string) }
+    }
+
+    fn by_position(answers: Vec<QuestionAnswer>) -> Settled {
+        Settled::Answered(Answered::ByPosition(answers))
     }
 
     #[test]
     fn the_line_says_what_was_answered_in_the_questions_order() {
-        let answered = Settled::Answered(
+        let answered = by_position(vec![answer(&[1], None), answer(&[0, 2], None)]);
+        let by_text = Settled::Answered(Answered::ByText(
             [("Which days?".into(), "Monday, Friday".into()), ("Red or blue?".into(), "Blue".into())].into(),
-        );
+        ));
 
         assert_eq!(summary(&two_questions(), &answered).as_deref(), Some("Blue · Monday, Friday"));
+        assert_eq!(summary(&two_questions(), &by_text).as_deref(), Some("Blue · Monday, Friday"), "as a client before");
     }
 
     #[test]
     fn an_answer_of_several_lines_shows_its_first_on_the_line() {
-        let typed = Settled::Answered([("Red or blue?".into(), "Neither\nGreen, if it's there".into())].into());
+        let typed = by_position(vec![answer(&[], Some("Neither\nGreen, if it's there"))]);
 
         assert_eq!(summary(&two_questions(), &typed).as_deref(), Some("Neither"));
     }
 
     #[test]
     fn the_line_leaves_out_what_was_left_out_and_says_when_nothing_was_answered() {
-        let one = Settled::Answered([("Which days?".into(), "Monday".into())].into());
+        let one = by_position(vec![QuestionAnswer::default(), answer(&[0], None)]);
 
         assert_eq!(summary(&two_questions(), &one).as_deref(), Some("Monday"));
-        assert_eq!(summary(&two_questions(), &Settled::Answered([].into())).as_deref(), Some("Not answered"));
+        assert_eq!(summary(&two_questions(), &by_position(Vec::new())).as_deref(), Some("Not answered"));
         assert_eq!(summary(&two_questions(), &Settled::NotAnswered).as_deref(), Some("Not answered"));
         assert_eq!(summary(&two_questions(), &Settled::Unknown), None, "nothing, where it isn't known");
     }

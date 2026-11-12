@@ -3,6 +3,7 @@
 
 use std::time::{Duration, Instant};
 
+use client_core::Approval;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
@@ -11,11 +12,10 @@ use gpui_kit::{
     KeyDownEvent, ParentElement, Render, Styled, Subscription, WeakEntity, Window, div, px,
 };
 use look::{Hand as _, InRegion as _, Off as _, Region};
-use protocol::event::ApprovalDecision;
+use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
 use protocol::model::{AnswerDraft, AnswerSoFar, ApprovalId};
 
-use super::choice::{Choice, answers, next_unanswered};
-use super::{Question, SKIPPED};
+use super::choice::{Choice, next_unanswered};
 use crate::transcript::{Transcript, TranscriptEvent};
 
 mod options;
@@ -29,6 +29,8 @@ pub(crate) const SETTLE: Duration = Duration::from_millis(500);
 pub struct QuestionPanel {
     transcript: WeakEntity<Transcript>,
     approval_id: ApprovalId,
+    /// What it asks, which says how an answer is sent.
+    approval: Approval<'static>,
     asked: Vec<Asked>,
     showing: usize,
     focus: FocusHandle,
@@ -57,8 +59,8 @@ impl Asked {
         self.other.as_ref().map(|other| other.input.read(cx).text().to_string()).unwrap_or_default()
     }
 
-    fn answer(&self, cx: &App) -> Option<String> {
-        self.choice.answer(&self.question, &self.typed(cx))
+    fn answer(&self, cx: &App) -> Option<QuestionAnswer> {
+        self.choice.answer(&self.typed(cx))
     }
 }
 
@@ -66,16 +68,16 @@ impl QuestionPanel {
     pub(crate) fn new(
         transcript: WeakEntity<Transcript>,
         approval_id: ApprovalId,
-        asked: Vec<Question>,
+        approval: Approval<'static>,
         cx: &mut Context<Self>,
     ) -> Self {
+        let questions = approval.questions().unwrap_or_default().iter().cloned();
+        let asked = questions.map(|question| Asked { question, choice: Choice::default(), other: None }).collect();
         Self {
             transcript,
             approval_id,
-            asked: asked
-                .into_iter()
-                .map(|question| Asked { question, choice: Choice::default(), other: None })
-                .collect(),
+            approval,
+            asked,
             showing: 0,
             focus: cx.focus_handle(),
             quiet_until: cx.background_executor().now() + SETTLE,
@@ -144,7 +146,7 @@ impl QuestionPanel {
     }
 
     /// Each question's answer, if it has one yet.
-    fn answers_so_far(&self, cx: &App) -> Vec<Option<String>> {
+    fn answers_so_far(&self, cx: &App) -> Vec<Option<QuestionAnswer>> {
         self.asked.iter().map(|asked| asked.answer(cx)).collect()
     }
 
@@ -194,19 +196,19 @@ impl QuestionPanel {
         }
     }
 
-    /// Sends the answers there are. A question left without one is left out, so the agent can tell.
+    /// Sends the answers there are. A question left without one is sent with nothing in it, so the agent can tell.
     fn send(&mut self, cx: &mut Context<Self>) {
         let answered = self.answers_so_far(cx);
         if self.answered || answered.iter().all(Option::is_none) {
             return;
         }
-        let asked = self.asked.iter().map(|asked| &asked.question);
-        self.answer(ApprovalDecision::AnswerByText { answers: answers(asked.zip(answered)) }, cx);
+        let answers = answered.into_iter().map(Option::unwrap_or_default).collect();
+        self.answer(self.approval.answered(answers), cx);
     }
 
     fn skip(&mut self, cx: &mut Context<Self>) {
         if !self.answered {
-            self.answer(ApprovalDecision::Deny { message: Some(SKIPPED.to_string()), interrupt: false }, cx);
+            self.answer(self.approval.refused(), cx);
         }
     }
 

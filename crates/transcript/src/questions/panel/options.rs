@@ -9,9 +9,9 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::Hand as _;
+use protocol::event::{Question, QuestionOption};
 
 use super::QuestionPanel;
-use crate::questions::{Question, QuestionOption};
 
 /// About seven options with a line of description each. A longer list scrolls, so the transcript keeps its room.
 const OPTIONS_MOST_HEIGHT: f32 = 360.;

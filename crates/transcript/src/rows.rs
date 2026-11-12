@@ -17,6 +17,7 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments;
+use crate::calls;
 use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
@@ -24,7 +25,6 @@ use crate::long_texts::LongTexts;
 use crate::prose::{Of, Prose};
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
-use crate::{calls, questions};
 
 mod alone;
 mod approval;
@@ -53,7 +53,7 @@ pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_coun
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
-use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
+use around::{Around, BlockAround, asks_questions, drawn_in_its_call, drawn_in_row};
 use column::column;
 use prompt::{Progress, Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
@@ -253,12 +253,10 @@ fn render_event(
     let (seq, body) = (event.seq, &event.body);
     match body {
         // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
-        EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == questions::TOOL_NAME => {
-            match &around.asked {
-                Some(asked) => asked::draw(seq, input, asked, shared, cx),
-                None => empty(),
-            }
-        }
+        EventBody::ApprovalRequested { .. } if asks_questions(body) => match &around.asked {
+            Some(asked) => asked::draw(seq, asked, shared, cx),
+            None => empty(),
+        },
         // The compaction says all there is of what asked for it, and of a turn that was only it.
         EventBody::CompactionAsked { .. } | EventBody::TurnEnded { only_compacted: true, .. } => empty(),
         EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
@@ -288,9 +286,7 @@ fn render_event(
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, around.cache.as_ref(), find, cx),
-        EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
-            approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, shared, cx)
-        }
+        EventBody::ApprovalRequested { .. } => approval_card(seq, body, around.approval_open, shared, cx),
         // A question's line says what became of it.
         EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),

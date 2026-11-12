@@ -1,37 +1,30 @@
 //! The card that asks for a tool's approval, or a plan's.
 
+use client_core::Approval;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
 };
 use look::Hand as _;
-use protocol::event::ApprovalDecision;
-use protocol::model::{ApprovalId, Seq};
-use serde_json::Value;
+use protocol::event::{ApprovalDecision, Asking, EventBody};
+use protocol::model::Seq;
 
-use super::{Shared, row};
-use crate::calls::{self, summarize_input};
+use super::{Shared, empty, row};
+use crate::calls::summarize_input;
 use crate::item_key::ItemKey;
 use crate::prose::{TextAt, Written};
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "each is a separate input to the card, and a struct would only bundle them for this call"
-)]
-pub(super) fn approval_card(
-    seq: Seq,
-    approval_id: &ApprovalId,
-    tool_name: &str,
-    input: &Value,
-    description: Option<&str>,
-    open: bool,
-    shared: &Shared,
-    cx: &App,
-) -> AnyElement {
+/// The card for the request `body`, recorded at `seq`, with its buttons while it's `open`. A plan has its own, and
+/// anything else is asked about as a tool's use, by its tool and input.
+pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared, cx: &App) -> AnyElement {
     use gpui_kit::component::button::{Button, ButtonVariants as _};
+    let (EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. }, Some(approval)) =
+        (body, Approval::of(body))
+    else {
+        return empty();
+    };
     let theme = cx.theme();
-    let summary = description.map_or_else(|| summarize_input(input), str::to_string);
     let answer = |decision: ApprovalDecision| {
         let (this, approval_id) = (shared.this.clone(), approval_id.clone());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -42,39 +35,34 @@ pub(super) fn approval_card(
     let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
         Button::new(ElementId::NamedInteger(name.into(), seq)).hand().label(label).on_click(answer(decision))
     };
-    let (title, content, buttons): (String, AnyElement, Div) = if tool_name == calls::PLAN {
-        let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
-        let plan_id = ItemKey::Event(seq, 0).element("plan");
-        let keep_planning = ApprovalDecision::Deny {
-            message: Some("The user wants to keep planning. Ask them what to change.".to_string()),
-            interrupt: false,
-        };
-        (
+    let (title, content, buttons): (String, AnyElement, Div) = match approval.asking() {
+        Asking::Plan { plan } => (
             "Plan".to_string(),
             // Nothing's found in what asks the person something.
-            shared
-                .prose
-                .draw(&shared.selection, &Written::unfound(TextAt::only(seq, 0), plan_id, &plan), None, || None),
+            shared.prose.draw(
+                &shared.selection,
+                &Written::unfound(TextAt::only(seq, 0), ItemKey::Event(seq, 0).element("plan"), plan),
+                None,
+                || None,
+            ),
             h_flex()
                 .gap_2()
                 .child(answer_button("approve-plan", "Approve plan", allow).primary())
-                .child(answer_button("keep-planning", "Keep planning", keep_planning)),
-        )
-    } else {
-        let deny = ApprovalDecision::Deny { message: Some("The user denied this.".to_string()), interrupt: false };
-        (
-            format!("{tool_name} needs approval"),
-            div()
-                .text_xs()
-                .font_family(theme.mono_font_family.clone())
-                .text_color(theme.muted_foreground)
-                .child(summary)
-                .into_any_element(),
-            h_flex()
-                .gap_2()
-                .child(answer_button("allow", "Allow", allow).primary())
-                .child(answer_button("deny", "Deny", deny)),
-        )
+                .child(answer_button("keep-planning", "Keep planning", approval.refused())),
+        ),
+        Asking::ToolUse | Asking::Questions { .. } | Asking::Unknown => {
+            let deny = answer_button("deny", "Deny", approval.refused());
+            (
+                format!("{tool_name} needs approval"),
+                div()
+                    .text_xs()
+                    .font_family(theme.mono_font_family.clone())
+                    .text_color(theme.muted_foreground)
+                    .child(description.clone().unwrap_or_else(|| summarize_input(input)))
+                    .into_any_element(),
+                h_flex().gap_2().child(answer_button("allow", "Allow", allow).primary()).child(deny),
+            )
+        }
     };
     row()
         .child(
