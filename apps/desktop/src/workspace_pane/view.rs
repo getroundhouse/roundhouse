@@ -16,7 +16,7 @@ use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
-use crate::sides::{self, Side, Sidebar};
+use crate::sides::{self, AtTheTop, Side, Sidebar};
 use crate::{prompt_cache, right_click};
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
@@ -158,16 +158,10 @@ impl WorkspacePane {
     }
 
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
-    /// its bar's action instead. `inset` is how far the workspace's name starts from the header's left end, to clear
-    /// the window's buttons while the sidebar on the left is hidden.
-    fn header(
-        &self,
-        sidebar: Sidebar,
-        inset: Pixels,
-        line_text: &LineText,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    /// its bar's action instead. It's in the strip along the window's top, clear of the window's buttons at both ends.
+    fn header(&self, sidebar: Sidebar, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
+        let clear = sides::clearance(AtTheTop::Header, cx);
         let controls = match sidebar {
             Sidebar::Open => None,
             Sidebar::Hidden => {
@@ -180,8 +174,8 @@ impl WorkspacePane {
             .flex_none()
             .w_full()
             .h(HEADER_HEIGHT)
-            .pl(px(16.) + inset)
-            .pr_3()
+            .pl(px(16.) + clear.start)
+            .pr(px(12.) + clear.end)
             .gap_2()
             .border_b_1()
             .border_color(border)
@@ -254,8 +248,7 @@ impl Render for WorkspacePane {
         // What the header says goes by what's chosen, from the moment it is, rather than by how far the sidebar has
         // slid. Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
         let sidebar = if self.diff.is_some() { Side::Right.chosen(cx).sidebar } else { Sidebar::Hidden };
-        let inset = sides::header_inset(cx);
-        let header = self.header(sidebar, inset, &line_text, cx).into_any_element();
+        let header = self.header(sidebar, &line_text, cx).into_any_element();
         let tabs = self.chat_tabs(cx).into_any_element();
         let tab =
             self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {

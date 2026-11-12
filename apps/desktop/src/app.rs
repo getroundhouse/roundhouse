@@ -27,6 +27,7 @@ mod settings;
 mod shortcuts;
 mod title_bar;
 mod view;
+mod window_buttons;
 mod workspaces;
 
 pub use build_line::{Agents, BuildLine};
