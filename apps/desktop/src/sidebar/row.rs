@@ -149,7 +149,7 @@ fn row_menu(
     move |menu, window, cx| {
         // Built as it opens, so this is when the order starts to hold still for it.
         let opened = cx.entity();
-        let _ = holds.update(cx, |t, cx| super::kept::hold_while_open(t, &opened, cx));
+        let _ = holds.update(cx, |t, cx| crate::reorder::hold_while_open(t, &opened, |t| &mut t.sidebar.hold, cx));
         let (retitle, archive) = (retitle.clone(), archive.clone());
         let regenerate = PopupMenuItem::new("Regenerate title").icon(Lucide::PencilSparkles);
         let menu =

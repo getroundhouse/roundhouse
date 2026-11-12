@@ -3,7 +3,7 @@
 use gpui_kit::{Context, Window};
 use protocol::model::RepoId;
 
-use super::AppView;
+use super::{AppView, Connection};
 use crate::home::{ArchiveFilter, Home};
 use crate::workspace_order::Sort;
 
@@ -20,6 +20,18 @@ pub(crate) enum Main {
 impl AppView {
     pub(crate) fn home_showing(&self) -> bool {
         self.main == Main::Home
+    }
+
+    /// Whether Home is drawn this frame: it's showing, Settings doesn't fill the window, and there's a hub, or the
+    /// workspace stays drawn while the app connects to one again. Otherwise what there is to say about the hub shows
+    /// in its place.
+    pub(super) fn home_drawn(&self) -> bool {
+        let hub = match &self.connection {
+            Connection::Ready(_) => true,
+            Connection::Connecting => self.pane_to_draw().is_some(),
+            Connection::Failed(_) | Connection::AcrossABreak(_) => false,
+        };
+        self.home_showing() && !self.settings_open() && hub
     }
 
     /// Shows Home, with its search focused, since the composer under it is hidden. It shows what it did when it was

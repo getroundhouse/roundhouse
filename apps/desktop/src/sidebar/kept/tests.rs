@@ -1,6 +1,6 @@
 use protocol::model::{InstanceId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceStatus};
 
-use super::{Kept, hold};
+use super::Kept;
 
 fn workspace(name: &str) -> Workspace {
     Workspace {
@@ -23,17 +23,6 @@ fn workspace(name: &str) -> Workspace {
         title_source: TitleSource::default(),
         pull_request: None,
     }
-}
-
-#[test]
-fn a_held_order_keeps_each_where_it_was_and_puts_one_that_came_since_after_them_in_the_order_they_were() {
-    let workspaces = ["alder", "birch", "cedar", "elm", "fir"].map(workspace);
-    let held = ["cedar".into(), "alder".into(), "birch".into()];
-    let mut listed = vec![4, 3, 1, 0, 2];
-
-    hold(&mut listed, &workspaces, &held);
-
-    assert_eq!(listed, [2, 0, 1, 4, 3]);
 }
 
 #[test]

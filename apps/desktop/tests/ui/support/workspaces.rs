@@ -1,5 +1,5 @@
 //! Workspaces as the tests find them: a window opened with a repository, the first repository, a workspace's worktree,
-//! and its row in Home. `new_workspace.rs` makes them.
+//! and its rows in the sidebar and in Home. `new_workspace.rs` makes them.
 
 use std::path::PathBuf;
 
@@ -7,6 +7,11 @@ use gpui_kit::{ElementId, SharedString, TestAppContext};
 use protocol::model::{RepoId, WorkspaceId};
 
 use super::{Stack, Ui};
+
+/// A workspace's row in the sidebar.
+pub(crate) fn sidebar_row(id: &WorkspaceId) -> ElementId {
+    ElementId::Name(SharedString::from(format!("workspace-{id}")))
+}
 
 /// A workspace's row in Home.
 pub(crate) fn home_row(id: &WorkspaceId) -> ElementId {

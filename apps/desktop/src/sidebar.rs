@@ -6,12 +6,12 @@ use std::time::Instant;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, MouseMoveEvent,
-    ParentElement, Pixels, Size, StatefulInteractiveElement as _, Styled, Window, div, px, size,
+    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, Size, Styled, Window, div, px, size,
 };
 use look::{Hand as _, LineText};
 use look::{Signal, Work};
-use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
 use crate::workspace_order::Sort;
@@ -21,14 +21,10 @@ mod footer;
 mod heading;
 mod kept;
 mod nav;
-mod places;
 mod row;
 pub(crate) mod signal;
 
-#[cfg(feature = "testing")]
-pub(crate) use kept::HOLDS_FOR;
 pub(crate) use kept::Kept;
-use places::LineId;
 pub(crate) use row::doing;
 
 /// The orders the sidebar can list each project's workspaces in, in the order its heading's menu offers them.
@@ -63,6 +59,16 @@ enum Line {
     Creating,
 }
 
+/// What a line shows, which stays the same while its place in the list changes, so it slides there.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+enum LineId {
+    Heading,
+    Repo(RepoId),
+    Workspace(WorkspaceId),
+    /// The note in place of a new workspace on its way, of which there's only ever one.
+    Creating,
+}
+
 impl Line {
     fn height(self) -> Pixels {
         match self {
@@ -94,13 +100,13 @@ impl Line {
 /// Every line, repository by repository, each one's workspaces in `sort`'s order, under the heading. The heading shows
 /// before there's a repository too, since it has the button that adds one, but only once there's a hub to add it to.
 /// Repositories listed while the hub is away, such as while it restarts, keep it over them. While someone is using the
-/// list, at `now`, the workspaces stay in the order they were in, as [`Kept::held`] says, and any that come meanwhile
-/// go after them. A workspace on its way has a note in its place until it's listed: where `sort` will put it, or after
-/// the others while the order holds.
+/// list, at `now`, the workspaces stay in the order they were in, as [`Hold::held`](crate::reorder::Hold::held) says,
+/// and any that come meanwhile go after them. A workspace on its way has a note in its place until it's listed: where
+/// `sort` will put it, or after the others while the order holds.
 fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
     let heading = connected(app) || !app.repos.is_empty();
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
-    let held = app.sidebar.held(sort, now);
+    let held = app.sidebar.hold.held(&sort, now);
     let workspaces = &app.workspaces;
     for (r, repo) in app.repos.iter().enumerate() {
         lines.push(Line::Repo(r));
@@ -108,7 +114,7 @@ fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
             (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && lists(&workspaces[w])).collect();
         sort.sort(&mut listed, workspaces);
         if let Some(held) = held {
-            kept::hold(&mut listed, workspaces, held);
+            crate::reorder::keep_held(&mut listed, workspaces, held);
         }
         let creating = app.busy.creating_in() == Some(&repo.id) && !app.sidebar.made_is_listed(workspaces, &listed);
         let note_first = held.is_none() && sort.puts_new_first();
@@ -138,15 +144,9 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arran
     let sort = crate::settings::get(cx).sidebar_sort;
     let lines: Rc<[Line]> = lines(app, sort, cx.background_executor().now()).into();
     let sizes = sizes(&lines);
-    let tops = sizes.iter().scan(px(0.), |top, size| {
-        let this = *top;
-        *top += size.height;
-        Some(this)
-    });
     let ids: Vec<LineId> = lines.iter().map(|line| line.id(app)).collect();
-    app.sidebar.places.go(ids.iter().cloned().zip(tops), cx);
-    let offsets = ids.iter().map(|id| app.sidebar.places.offset(id, window, cx)).collect();
-    app.sidebar.showed(sort, listed_in(app, &lines));
+    let offsets = app.sidebar.places.arrange(ids.into_iter().zip(sizes.iter().map(|s| s.height)), window, cx);
+    app.sidebar.hold.showed(sort, listed_in(app, &lines));
     Arranged { lines, offsets, sizes: Rc::new(sizes) }
 }
 
@@ -186,9 +186,7 @@ fn line(app: &AppView, line: Line, offset: Pixels, line_text: &LineText, cx: &mu
         Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], line_text, cx),
         Line::Creating => creating(cx),
     };
-    // The list lays each line out on its own, which takes no offset, so the line is offset inside a box that fills
-    // its place.
-    div().size_full().child(div().size_full().relative().top(offset).child(drawn)).into_any_element()
+    crate::reorder::offset_by(drawn, offset)
 }
 
 /// Where a workspace stands, as its row shows it, in the sidebar or in Home.
@@ -295,20 +293,12 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(nav::nav(app, cx))
         .child(
-            // The list can't hear the pointer itself, so a box that fills the same room does, for the order to hold
-            // still while it's there.
-            div()
-                .id("workspaces-list")
-                .flex_1()
-                .min_h_0()
-                .flex()
-                .flex_col()
-                .on_hover(cx.listener(|t, pointing: &bool, _, cx| {
-                    t.sidebar.pointing = *pointing;
-                    cx.notify();
-                }))
-                .on_mouse_move(cx.listener(|t, _: &MouseMoveEvent, _, cx| kept::pointer_moved(t, cx)))
-                .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5()),
+            crate::reorder::hears_the_pointer(
+                div().id("workspaces-list").flex_1().min_h_0().flex().flex_col(),
+                |t| &mut t.sidebar.hold,
+                cx,
+            )
+            .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5()),
         )
         .child(footer::footer(app, cx))
 }

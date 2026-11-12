@@ -16,6 +16,7 @@ mod finding;
 #[cfg(target_os = "macos")]
 mod gallery;
 mod home;
+mod home_order;
 mod images;
 #[cfg(target_os = "macos")]
 mod marks;

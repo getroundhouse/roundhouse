@@ -25,6 +25,7 @@ mod model_picker;
 pub mod new_workspace;
 pub mod pull_request;
 mod rename;
+mod reorder;
 pub mod review;
 mod right_click;
 mod saving;
@@ -42,9 +43,10 @@ use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
 
-/// How long the sidebar's order holds still after the pointer last moved over it, which a test can wait out.
+/// How long a list's order holds still after the pointer last moved over it, the sidebar's or Home's, which a test can
+/// wait out.
 #[cfg(feature = "testing")]
-pub const SIDEBAR_ORDER_HOLDS_FOR: std::time::Duration = sidebar::HOLDS_FOR;
+pub const ORDER_HOLDS_FOR: std::time::Duration = reorder::HOLDS_FOR;
 
 /// How long after the window last moved its place is saved, which a test can wait out.
 #[cfg(feature = "testing")]
