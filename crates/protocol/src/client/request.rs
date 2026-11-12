@@ -16,10 +16,13 @@ use crate::model::{
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum ClientRequest {
-    /// Must come first on a connection.
+    /// Must come first on a connection. It names the newest version of the protocol the client speaks, and the
+    /// oldest, which a client from before ranges leaves out, since it speaks only the one.
     Hello {
         protocol_version: u32,
         client: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        oldest_protocol_version: Option<u32>,
     },
     /// Works without a hello, and so does `HubShutdown`, so a client of any version can see a hub and
     /// stop it. Neither can change form, even in a real break.

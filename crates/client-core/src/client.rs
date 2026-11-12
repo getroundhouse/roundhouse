@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
 };
@@ -180,11 +180,21 @@ impl Client {
     /// Connects and checks the protocol version.
     pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
         let client = Client::open(socket)?;
-        let reply = client
-            .call(ClientRequest::Hello { protocol_version: PROTOCOL_VERSION, client: client_name.to_string() })?;
-        let ClientResponse::Hello { hub_version, .. } = reply else {
+        let reply = client.call(ClientRequest::Hello {
+            protocol_version: CLIENT_PROTOCOL_VERSION,
+            client: client_name.to_string(),
+            // A client speaks only its own version, and a hub the one before its own as well after a break.
+            oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
+        })?;
+        let ClientResponse::Hello { protocol_version, hub_version } = reply else {
             return unexpected(&reply);
         };
+        // A client speaks only its own version, so it can't follow a hub that chose another.
+        if protocol_version != CLIENT_PROTOCOL_VERSION {
+            let message =
+                format!("the hub chose protocol {protocol_version}, and this client speaks {CLIENT_PROTOCOL_VERSION}");
+            return Err(ApiError::new(ErrorCode::VersionMismatch, message).into());
+        }
         let _ = client.inner.hub_version.set(hub_version);
         Ok(client)
     }

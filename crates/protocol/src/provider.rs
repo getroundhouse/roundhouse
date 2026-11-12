@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::client::ApiError;
 use crate::model::{HubId, InstanceId, WorkerTarget};
 
-/// The provider protocol's own version, apart from [`crate::PROTOCOL_VERSION`], so a break in one doesn't break
+/// The provider protocol's own version, apart from the client and worker protocols', so a break in one doesn't break
 /// the other.
 pub const PROVIDER_PROTOCOL_VERSION: u32 = 1;
 

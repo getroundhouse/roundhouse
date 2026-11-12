@@ -10,6 +10,7 @@ use protocol::model::HubId;
 use protocol::provider::{
     PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
 };
+use protocol::versions::Versions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -52,9 +53,10 @@ where
         let reply = move |outcome| ProviderFrame::Reply { id, outcome };
         match (request, &serving) {
             (Ok(ProviderRequest::Hello { protocol_version, oldest_protocol_version, hub_id, .. }), _) => {
-                let outcome = match hello(&mut make, &mut serving, protocol_version, oldest_protocol_version, hub_id) {
-                    Ok(provider) => ProviderOutcome::Response(ProviderResponse::Hello {
-                        protocol_version: PROVIDER_PROTOCOL_VERSION,
+                let theirs = Versions::from_hello(protocol_version, Some(oldest_protocol_version));
+                let outcome = match hello(&mut make, &mut serving, theirs, hub_id) {
+                    Ok((provider, chosen)) => ProviderOutcome::Response(ProviderResponse::Hello {
+                        protocol_version: chosen,
                         adapter: provider.name().to_string(),
                         build: build.to_string(),
                         capabilities: provider.capabilities(),
@@ -112,33 +114,29 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
     }
 }
 
-/// The provider, made at the first hello. A later one, as from a hub that lost its replies, gets the same answer.
+/// The provider, made at the first hello, and the version chosen. A later one, as from a hub that lost its replies, gets
+/// the same answer. An adapter speaks only its own version.
 fn hello(
     make: &mut Option<MakeProvider>,
     serving: &mut Option<(HubId, Arc<dyn Provider>)>,
-    newest: u32,
-    oldest: u32,
+    theirs: Versions,
     hub_id: HubId,
-) -> Result<Arc<dyn Provider>, ApiError> {
-    if !(oldest..=newest).contains(&PROVIDER_PROTOCOL_VERSION) {
-        return Err(ApiError::new(
-            ErrorCode::VersionMismatch,
-            format!(
-                "this adapter speaks version {PROVIDER_PROTOCOL_VERSION} of the provider protocol, and the hub \
-                 {oldest} to {newest}"
-            ),
-        ));
-    }
+) -> Result<(Arc<dyn Provider>, u32), ApiError> {
+    let ours = Versions::only(PROVIDER_PROTOCOL_VERSION);
+    let Some(chosen) = ours.newest_shared(theirs) else {
+        let message = format!("this adapter speaks {ours} of the provider protocol, and the hub {theirs}");
+        return Err(ApiError::new(ErrorCode::VersionMismatch, message));
+    };
     if let Some((serving_id, provider)) = serving {
         if *serving_id != hub_id {
             return Err(ApiError::new(ErrorCode::Conflict, format!("this adapter is serving hub {serving_id}")));
         }
-        return Ok(provider.clone());
+        return Ok((provider.clone(), chosen));
     }
     let make = make.take().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the provider couldn't be made"))?;
     let provider = make(&hub_id).map_err(|e| e.to_api_error())?;
     *serving = Some((hub_id, provider.clone()));
-    Ok(provider)
+    Ok((provider, chosen))
 }
 
 async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<ProviderResponse, ProviderError> {

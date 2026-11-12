@@ -76,3 +76,19 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
     assert!(asked.elapsed() < HELLO_TIMEOUT / 2, "it waited for the time limit");
 }
+
+/// One that chose a version this hub doesn't speak, which no worker should, since a worker chooses one both speak.
+#[tokio::test]
+async fn a_worker_that_chose_another_version_is_not_used() {
+    let dir = tempfile::tempdir().unwrap();
+    let reply = r#"{"frame":"reply","id":1,"response":{"result":"hello","protocol_version":9999}}"#;
+    let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
+    let instance_id: InstanceId = "i".into();
+    provider.create(&instance_id, None, None, "i").await.unwrap();
+    let hub = hub_using(dir.path(), &provider);
+
+    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+
+    let Err(e) = opened else { panic!("it was used") };
+    assert_eq!(e.code, ErrorCode::VersionMismatch, "{e:?}");
+}
