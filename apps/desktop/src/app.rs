@@ -74,6 +74,8 @@ pub struct AppView {
     pub error: Option<String>,
     /// Where the sidebar's list is scrolled to. The list is made again each frame, so it can't keep that itself.
     pub(crate) sidebar_scroll: VirtualListScrollHandle,
+    /// What the sidebar keeps from one frame to the next, besides where it's scrolled to.
+    pub(crate) sidebar: crate::sidebar::Kept,
     /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
     pub(crate) pointing_at: Option<WorkspaceId>,
     pub busy: Busy,
@@ -137,6 +139,7 @@ impl AppView {
             panes: HashMap::new(),
             error: None,
             sidebar_scroll: VirtualListScrollHandle::new(),
+            sidebar: crate::sidebar::Kept::default(),
             pointing_at: None,
             busy: Busy::Free,
             retitling: HashSet::new(),
@@ -296,7 +299,8 @@ impl AppView {
         let still_there =
             self.selected.as_ref().is_some_and(|id| self.visible_workspaces().iter().any(|w| &w.id == id));
         if !still_there {
-            self.selected = self.visible_workspaces().first().map(|w| w.id.clone());
+            // The top of the sidebar.
+            self.selected = crate::sidebar::listed(self, cx).into_iter().next();
         }
         let has_pane = self.selected.as_ref().is_some_and(|id| self.panes.contains_key(id));
         if !still_there || !has_pane {
@@ -324,8 +328,9 @@ impl AppView {
         cx.notify();
     }
 
+    /// Moves `by` workspaces down the sidebar, in the order it lists them.
     fn step_selection(&mut self, by: isize, cx: &mut Context<Self>) {
-        let visible: Vec<WorkspaceId> = self.visible_workspaces().iter().map(|w| w.id.clone()).collect();
+        let visible = crate::sidebar::listed(self, cx);
         if visible.is_empty() {
             return;
         }

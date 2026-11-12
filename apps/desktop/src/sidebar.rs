@@ -1,26 +1,38 @@
 //! Workspaces grouped by repository, each with its status, under a heading with the Add project button.
 
 use std::rc::Rc;
+use std::time::Instant;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement, ParentElement, Pixels, Size, Styled, div,
-    px, size,
+    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, MouseMoveEvent,
+    ParentElement, Pixels, Size, StatefulInteractiveElement as _, Styled, Window, div, px, size,
 };
-use look::{Hand as _, LineText, Off as _};
+use look::{Hand as _, LineText};
 use look::{Signal, Work};
-use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceStatus};
+use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
+use crate::workspace_order::Sort;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 mod footer;
+mod heading;
+mod kept;
 mod nav;
+mod places;
 mod row;
 pub(crate) mod signal;
 
+#[cfg(feature = "testing")]
+pub(crate) use kept::HOLDS_FOR;
+pub(crate) use kept::Kept;
+use places::LineId;
 pub(crate) use row::doing;
+
+/// The orders the sidebar can list each project's workspaces in, in the order its heading's menu offers them.
+pub(crate) const SORTS: [Sort; 2] = [Sort::LastActive, Sort::Oldest];
 
 /// The heading over the projects, and over Settings' pages.
 pub(crate) const HEADING_HEIGHT: Pixels = px(28.);
@@ -47,7 +59,7 @@ enum Line {
     /// A repository's name, with the button for a new workspace in it.
     Repo(usize),
     Workspace(usize),
-    /// A new workspace on its way, below its repository's others.
+    /// A new workspace on its way, where it will go among its repository's others.
     Creating,
 }
 
@@ -57,6 +69,15 @@ impl Line {
             Line::Heading => HEADING_HEIGHT,
             Line::Repo(_) => REPO_HEIGHT,
             Line::Workspace(_) | Line::Creating => ROW_HEIGHT,
+        }
+    }
+
+    fn id(self, app: &AppView) -> LineId {
+        match self {
+            Line::Heading => LineId::Heading,
+            Line::Repo(r) => LineId::Repo(app.repos[r].id.clone()),
+            Line::Workspace(w) => LineId::Workspace(app.workspaces[w].id.clone()),
+            Line::Creating => LineId::Creating,
         }
     }
 
@@ -70,21 +91,75 @@ impl Line {
     }
 }
 
-/// Every line, repository by repository, each one's workspaces in the order the hub lists them, under the heading. The
-/// heading shows before there's a repository too, since it has the button that adds one, but only once there's a hub
-/// to add it to. Repositories listed while the hub is away, such as while it restarts, keep it over them.
-fn lines(app: &AppView) -> Vec<Line> {
+/// Every line, repository by repository, each one's workspaces in `sort`'s order, under the heading. The heading shows
+/// before there's a repository too, since it has the button that adds one, but only once there's a hub to add it to.
+/// Repositories listed while the hub is away, such as while it restarts, keep it over them. While someone is using the
+/// list, at `now`, the workspaces stay in the order they were in, as [`Kept::held`] says, and any that come meanwhile
+/// go after them. A workspace on its way has a note in its place until it's listed: where `sort` will put it, or after
+/// the others while the order holds.
+fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
     let heading = connected(app) || !app.repos.is_empty();
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
+    let held = app.sidebar.held(sort, now);
+    let workspaces = &app.workspaces;
     for (r, repo) in app.repos.iter().enumerate() {
         lines.push(Line::Repo(r));
-        let listed = app.workspaces.iter().enumerate().filter(|(_, w)| w.repo_id == repo.id && lists(w));
-        lines.extend(listed.map(|(w, _)| Line::Workspace(w)));
-        if app.busy.creating_in() == Some(&repo.id) {
+        let mut listed: Vec<usize> =
+            (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && lists(&workspaces[w])).collect();
+        sort.sort(&mut listed, workspaces);
+        if let Some(held) = held {
+            kept::hold(&mut listed, workspaces, held);
+        }
+        let creating = app.busy.creating_in() == Some(&repo.id) && !app.sidebar.made_is_listed(workspaces, &listed);
+        let note_first = held.is_none() && sort.puts_new_first();
+        if creating && note_first {
+            lines.push(Line::Creating);
+        }
+        lines.extend(listed.into_iter().map(Line::Workspace));
+        if creating && !note_first {
             lines.push(Line::Creating);
         }
     }
     lines
+}
+
+/// The lines in this frame, how far each is from its place on its way there, and the space each takes.
+pub(crate) struct Arranged {
+    lines: Rc<[Line]>,
+    offsets: Rc<[Pixels]>,
+    sizes: Rc<Vec<Size<Pixels>>>,
+}
+
+/// Works out the lines in the order the sidebar is in, and sends each to its place, so one that has moved slides
+/// there. Done on every frame, whether or not the sidebar shows, so a line that moved while it was hidden is in its
+/// place by the time it shows. Where each line has got to is read here, once for the frame, and asks for the next
+/// frame while one moves.
+pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arranged {
+    let sort = crate::settings::get(cx).sidebar_sort;
+    let lines: Rc<[Line]> = lines(app, sort, cx.background_executor().now()).into();
+    let sizes = sizes(&lines);
+    let tops = sizes.iter().scan(px(0.), |top, size| {
+        let this = *top;
+        *top += size.height;
+        Some(this)
+    });
+    let ids: Vec<LineId> = lines.iter().map(|line| line.id(app)).collect();
+    app.sidebar.places.go(ids.iter().cloned().zip(tops), cx);
+    let offsets = ids.iter().map(|id| app.sidebar.places.offset(id, window, cx)).collect();
+    app.sidebar.showed(sort, listed_in(app, &lines));
+    Arranged { lines, offsets, sizes: Rc::new(sizes) }
+}
+
+/// The workspaces the sidebar lists, in its order, which is the order the keys that move between them go in.
+pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
+    let sort = crate::settings::get(cx).sidebar_sort;
+    listed_in(app, &lines(app, sort, cx.background_executor().now()))
+}
+
+fn listed_in(app: &AppView, lines: &[Line]) -> Vec<WorkspaceId> {
+    let workspace =
+        |line: &Line| if let Line::Workspace(w) = line { Some(app.workspaces[*w].id.clone()) } else { None };
+    lines.iter().filter_map(workspace).collect()
 }
 
 /// Whether the sidebar lists this workspace. An archived one is only in Home, which can show it and bring it back.
@@ -103,13 +178,17 @@ fn connected(app: &AppView) -> bool {
     matches!(app.connection, Connection::Ready(_))
 }
 
-fn line(app: &AppView, line: Line, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
-    match line {
-        Line::Heading => heading(connected(app), cx),
+/// The line, drawn `offset` from its place, which the list lays it out in, as it slides there.
+fn line(app: &AppView, line: Line, offset: Pixels, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
+    let drawn = match line {
+        Line::Heading => heading::heading(app, connected(app), cx),
         Line::Repo(r) => repo_header(app, &app.repos[r], cx),
         Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], line_text, cx),
         Line::Creating => creating(cx),
-    }
+    };
+    // The list lays each line out on its own, which takes no offset, so the line is offset inside a box that fills
+    // its place.
+    div().size_full().child(div().size_full().relative().top(offset).child(drawn)).into_any_element()
 }
 
 /// Where a workspace stands, as its row shows it, in the sidebar or in Home.
@@ -182,28 +261,6 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
         .into_any_element()
 }
 
-/// What the list is, small and faint, as a section's label, and at its right end the Add project button, in words, so
-/// it isn't taken for a repository's button for a new workspace under it. Greyed out while there's no hub to add to.
-fn heading(connected: bool, cx: &mut Context<AppView>) -> AnyElement {
-    let faint = cx.theme().muted_foreground.opacity(0.7);
-    h_flex()
-        .w_full()
-        .h(HEADING_HEIGHT)
-        .px_1p5()
-        .child(div().flex_1().text_xs().font_weight(FontWeight::MEDIUM).text_color(faint).child("Workspaces"))
-        .child(
-            Button::new("add-project")
-                .ghost()
-                .xsmall()
-                .icon(IconName::Plus)
-                .label("Add project")
-                .text_color(faint)
-                .off_while(!connected)
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-        )
-        .into_any_element()
-}
-
 /// Level with the names of the workspaces above it.
 fn creating(cx: &mut Context<AppView>) -> AnyElement {
     div()
@@ -217,17 +274,16 @@ fn creating(cx: &mut Context<AppView>) -> AnyElement {
         .into_any_element()
 }
 
-/// The sidebar, filling the frame `sides` puts it in.
-pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+/// The sidebar, filling the frame `sides` puts it in, with the lines `arrange` worked out for this frame.
+pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (background, border) = (theme.sidebar, theme.sidebar_border);
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
-    let lines: Rc<[Line]> = lines(app).into();
-    let sizes = Rc::new(sizes(&lines));
+    let Arranged { lines, offsets, sizes } = arranged;
     let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, window, cx| {
         let line_text = LineText::new(window, cx);
-        range.map(|ix| line(app, lines[ix], &line_text, cx)).collect::<Vec<_>>()
+        range.map(|ix| line(app, lines[ix], offsets[ix], &line_text, cx)).collect::<Vec<_>>()
     });
     v_flex()
         .size_full()
@@ -238,7 +294,22 @@ pub(crate) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
         // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(nav::nav(app, cx))
-        .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5())
+        .child(
+            // The list can't hear the pointer itself, so a box that fills the same room does, for the order to hold
+            // still while it's there.
+            div()
+                .id("workspaces-list")
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .on_hover(cx.listener(|t, pointing: &bool, _, cx| {
+                    t.sidebar.pointing = *pointing;
+                    cx.notify();
+                }))
+                .on_mouse_move(cx.listener(|t, _: &MouseMoveEvent, _, cx| kept::pointer_moved(t, cx)))
+                .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5()),
+        )
         .child(footer::footer(app, cx))
 }
 

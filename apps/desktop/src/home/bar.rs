@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Off as _};
 
-use super::{ArchiveFilter, Sort};
+use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
 use crate::workspace_pane::HEADER_HEIGHT;
 
@@ -104,7 +104,7 @@ fn sort(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let this = cx.weak_entity();
     filter("home-sort", Lucide::ArrowUpDown, current.label().to_string(), cx).dropdown_menu(
         move |menu: PopupMenu, _: &mut Window, _| {
-            Sort::ALL.into_iter().fold(menu, |menu, sort| {
+            SORTS.into_iter().fold(menu, |menu, sort| {
                 let pick = move |t: &mut AppView, cx: &mut Context<AppView>| t.sort_home(sort, cx);
                 menu.item(menu_item(&this, sort.label(), sort == current, pick))
             })

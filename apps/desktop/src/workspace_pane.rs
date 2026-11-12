@@ -217,7 +217,8 @@ impl WorkspacePane {
             subscriptions: vec![on_enter, on_settings],
         };
         // The chat last worked in.
-        let latest = this.open_sessions().max_by_key(|s| (s.updated_at_ms, s.created_at_ms)).map(|s| s.id.clone());
+        let latest =
+            this.open_sessions().max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms)).map(|s| s.id.clone());
         match latest {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),

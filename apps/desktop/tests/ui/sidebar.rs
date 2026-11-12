@@ -44,7 +44,8 @@ fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &
     let mut ui = Ui::open(cx, &stack);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == WORKSPACES);
     let listed: Vec<WorkspaceId> = ui.view().visible_workspaces().iter().map(|w| w.id.clone()).collect();
-    let (first, last) = (row(&listed[0]), row(&listed[WORKSPACES - 1]));
+    // Nobody has worked in any of them, so the sidebar lists the newest first.
+    let (first, last) = (row(&listed[WORKSPACES - 1]), row(&listed[0]));
 
     assert!(ui.has(first.clone()));
     assert!(!ui.has(last.clone()), "a row below the bottom isn't drawn");
