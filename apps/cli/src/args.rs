@@ -133,7 +133,7 @@ pub(crate) enum WorkspaceCmd {
     Restore {
         workspace: String,
     },
-    /// Change what it's called. Its name, which is its directory and branch, stays.
+    /// Change what it's called. Its name, which is its directory and the folder of its branches, stays.
     Rename {
         workspace: String,
         title: String,

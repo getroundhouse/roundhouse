@@ -1,12 +1,44 @@
-//! What a hub asks of a workspace's worktree as a whole: making it, putting it back from its branch and removing it,
-//! and running its setup and archive scripts.
+//! What a hub asks of a workspace's worktree as a whole: which names git already has, before one is made, making it,
+//! putting it back from its branch and removing it, and running its setup and archive scripts.
 
 use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches};
 
-/// Creates the worktree and its branch. Fails with `NameTaken` if either already exists.
+/// The names git already has in the repository, which a new workspace can't take, since its branches go in a folder of
+/// its name, which is its own: the first part of each local branch's name, and of each of `origin`'s as last fetched,
+/// each remote's name, `HEAD` where there's a remote, and each directory where the repository's workspaces go. As git
+/// and the file system spell them, for the hub to compare whatever their case, since git keeps a branch as a file, and
+/// a file system that doesn't tell case apart takes `Holly` for `holly`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct NamesGitHas {
+    pub repo_name: String,
+    pub repo_path: String,
+}
+
+impl Request for NamesGitHas {
+    type Reply = NamesGitHasReply;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::NamesGitHas(self)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct NamesGitHasReply {
+    pub names: Vec<String>,
+}
+
+impl Reply for NamesGitHasReply {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::NamesGitHas(names) = response else { return Err(response) };
+        Ok(names)
+    }
+}
+
+/// Creates the worktree and its branch. Fails with `NameTaken` if the worktree's directory exists, or the branch, or a
+/// branch git can't have beside it, whatever its case.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PrepareWorkspace {
     pub repo_name: String,

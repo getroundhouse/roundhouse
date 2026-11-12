@@ -194,14 +194,19 @@ impl Store {
         self.get_workspace(id)
     }
 
-    /// Gives a workspace still being made another name, and the branch of the same name, as when git already has a
-    /// branch or directory by the one it had. Only before it's ready, since a workspace's name is its worktree's
-    /// directory once it has one. Returns the workspace renamed, or `None` if another in its repository has the name,
-    /// or it's no longer being made.
-    pub fn rename_unready_workspace(&self, id: &WorkspaceId, name: &str) -> Result<Option<Workspace>, StoreError> {
+    /// Gives a workspace still being made another name, and the branch it starts on in that name's folder, as when git
+    /// already has a directory, a branch or a folder of branches by the one it had. Only before it's ready, since a
+    /// workspace's name is its worktree's directory once it has one. Returns the workspace renamed, or `None` if
+    /// another in its repository has the name, or it's no longer being made.
+    pub fn rename_unready_workspace(
+        &self,
+        id: &WorkspaceId,
+        name: &str,
+        branch: &BranchName,
+    ) -> Result<Option<Workspace>, StoreError> {
         let changed = lock(&self.writer).execute(
-            "UPDATE OR IGNORE workspaces SET name = ?1, branch = ?1 WHERE id = ?2 AND status = ?3",
-            params![name, id.as_str(), text_of(&WorkspaceStatus::Creating)],
+            "UPDATE OR IGNORE workspaces SET name = ?, branch = ? WHERE id = ? AND status = ?",
+            params![name, branch.as_str(), id.as_str(), text_of(&WorkspaceStatus::Creating)],
         )?;
         if changed == 0 {
             return Ok(None);

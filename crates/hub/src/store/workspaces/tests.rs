@@ -97,11 +97,11 @@ fn only_a_workspace_being_made_takes_a_new_name_and_only_one_nobody_else_has() {
     };
     let Some(Made::New(made)) = store.insert_workspace(&workspace, None).unwrap() else { panic!("not made") };
 
-    let renamed = store.rename_unready_workspace(&making, "cedar").unwrap().unwrap();
-    let taken = store.rename_unready_workspace(&making, "alder").unwrap();
-    let ready = store.rename_unready_workspace(&before.id, "elm").unwrap();
+    let renamed = store.rename_unready_workspace(&making, "cedar", &"cedar/start".into()).unwrap().unwrap();
+    let taken = store.rename_unready_workspace(&making, "alder", &"alder/start".into()).unwrap();
+    let ready = store.rename_unready_workspace(&before.id, "elm", &"elm/start".into()).unwrap();
 
-    assert_eq!((renamed.name.as_str(), renamed.branch.as_str()), ("cedar", "cedar"));
+    assert_eq!((renamed.name.as_str(), renamed.branch.as_str()), ("cedar", "cedar/start"));
     assert!(renamed.rev > made.rev);
     assert_eq!(taken, None, "w has it");
     assert_eq!(ready, None, "w has a worktree by its name");

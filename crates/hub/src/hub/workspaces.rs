@@ -1,7 +1,6 @@
 //! Making workspaces, and listing them. `archiving.rs` archives and restores them.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
@@ -18,6 +17,9 @@ use crate::error::{internal, provider_failed};
 use crate::store::{Made, Store, now_ms};
 
 mod archiving;
+mod naming;
+
+use naming::{Names, name_taken};
 
 /// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
 pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
@@ -34,34 +36,6 @@ pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, 
         env.push(("CONDUCTOR_WORKSPACE_PATH".to_string(), path.clone()));
     }
     env
-}
-
-/// The names a new workspace tries, in turn. One the person chose gets one try. One the hub picks gets a few, since it
-/// can collide with a branch or directory the hub doesn't know about.
-struct Names {
-    chosen: Option<String>,
-    left: usize,
-}
-
-impl Names {
-    fn new(chosen: Option<String>) -> Self {
-        let left = if chosen.is_some() { 1 } else { 8 };
-        Self { chosen, left }
-    }
-
-    /// The next name to try in the repository, or `None` once there are no tries left.
-    async fn next(&mut self, hub: &Hub, repo_id: &RepoId) -> Result<Option<String>, ApiError> {
-        let Some(left) = self.left.checked_sub(1) else { return Ok(None) };
-        self.left = left;
-        match &self.chosen {
-            Some(name) => Ok(Some(name.clone())),
-            None => hub.next_name(repo_id).await.map(Some),
-        }
-    }
-}
-
-fn name_taken(name: &str, repo: &Repo) -> ApiError {
-    ApiError::new(ErrorCode::NameTaken, format!("{name} is already taken in {}", repo.name))
 }
 
 impl Hub {
@@ -96,13 +70,6 @@ impl Hub {
             self.discard_workspace(&workspace, provider.as_ref()).await;
         }
         made
-    }
-
-    async fn next_name(&self, repo_id: &RepoId) -> Result<String, ApiError> {
-        let owned = repo_id.clone();
-        let taken = self.blocking(move |store| store.names_in_repo(&owned)).await?;
-        let salt = self.name_salt.fetch_add(1, Ordering::Relaxed);
-        Ok(crate::names::pick(&taken, salt))
     }
 
     /// Records a workspace in `repo`, being made, by the first of `names` that no other workspace there has, and
@@ -145,7 +112,7 @@ impl Hub {
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {
-            (workspace.name, workspace.branch) = (name.clone(), BranchName::from(name.as_str()));
+            (workspace.name, workspace.branch) = (name.clone(), crate::names::start_branch(&name));
             let (record, request) = (workspace.clone(), client_request_id.clone());
             match self.blocking(move |store| store.insert_workspace(&record, request.as_ref())).await? {
                 Some(Made::New(made)) => {
@@ -160,9 +127,10 @@ impl Hub {
     }
 
     /// Makes the worktree for a workspace recorded as being made, and records it ready. A name git already has a
-    /// branch or directory by is refused before anything is fetched or made, so the workspace tries the next of
-    /// `names` in place, keeping its ID, and its place in every client's list. Its instance is made again under each
-    /// new name, since the provider's own tools call it by the name it was made with, and recorded as it is.
+    /// directory, a branch or a folder of branches by is refused before anything is fetched or made, so the workspace
+    /// tries the next of `names` in place, keeping its ID, and its place in every client's list. Its instance is made
+    /// again under each new name, since the provider's own tools call it by the name it was made with, and recorded as
+    /// it is.
     async fn prepare_new_workspace(
         self: &Arc<Self>,
         repo: &Repo,
@@ -180,15 +148,17 @@ impl Hub {
             let instance_id = workspace.instance_id.clone();
             self.blocking(move |store| store.instance_made(&instance_id)).await?;
             let link = self.ensure_worker(&workspace.id).await?;
-            let asked = link
-                .call(PrepareWorkspace {
-                    repo_name: repo.name.clone(),
-                    repo_path: repo.path.clone(),
-                    workspace_name: workspace.name.clone(),
-                    branch: workspace.branch.clone(),
-                    base_ref: base_ref.clone(),
-                })
-                .await;
+            let prepare = PrepareWorkspace {
+                repo_name: repo.name.clone(),
+                repo_path: repo.path.clone(),
+                workspace_name: workspace.name.clone(),
+                branch: workspace.branch.clone(),
+                base_ref: base_ref.clone(),
+            };
+            let asked = match self.refuse_a_name_git_has(&link, repo, &workspace.name, names).await {
+                Ok(()) => link.call(prepare).await,
+                Err(refused) => Err(refused),
+            };
             match asked {
                 Err(e) if e.code == ErrorCode::NameTaken => {
                     workspace = self.rename_unready(workspace, names, e).await?;
@@ -214,27 +184,6 @@ impl Hub {
         // Once it's announced, so what the watch sees comes after.
         self.watch_branches(&ready, &link).await;
         self.start_setup(repo.clone(), ready).await
-    }
-
-    /// Gives a workspace still being made the next of `names` that no other workspace has, and announces it. Fails
-    /// with `refused`, what refused the name it has, or the last tried, once there are none left to try.
-    async fn rename_unready(
-        &self,
-        workspace: Workspace,
-        names: &mut Names,
-        mut refused: ApiError,
-    ) -> Result<Workspace, ApiError> {
-        while let Some(name) = names.next(self, &workspace.repo_id).await? {
-            let (id, new_name) = (workspace.id.clone(), name.clone());
-            match self.blocking(move |store| store.rename_unready_workspace(&id, &new_name)).await? {
-                Some(renamed) => {
-                    self.notify(HubNotice::Workspace(renamed.clone()));
-                    return Ok(renamed);
-                }
-                None => refused = ApiError::new(ErrorCode::NameTaken, format!("{name} is already taken")),
-            }
-        }
-        Err(refused)
     }
 
     /// Ends the workspace's worker, if it has one, and destroys its instance, whose record goes once it's gone.

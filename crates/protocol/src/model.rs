@@ -240,12 +240,13 @@ pub enum WorkspaceStatus {
 pub struct Workspace {
     pub id: WorkspaceId,
     pub repo_id: RepoId,
-    /// Its worktree's directory, the branch it started on, and `CONDUCTOR_WORKSPACE_NAME`. Unique in its
+    /// Its worktree's directory, the folder its branches go in, and `CONDUCTOR_WORKSPACE_NAME`. Unique in its
     /// repository, and never changes once it's ready, because renaming a worktree under a running agent would break
-    /// it. While it's being made it can take another, if git already has a branch or directory by the one it has.
+    /// it. While it's being made it can take another, if git already has a directory, a branch or a folder of
+    /// branches by the one it has.
     pub name: String,
-    /// The branch it was made on, which is its name, until it's archived, which records the one its worktree had
-    /// checked out then, so restoring puts that one back.
+    /// The branch it started on, `holly/start` for `holly`, or `holly` itself for one made before its branches went in
+    /// a folder. Once it's archived, the branch it had checked out, which restoring checks out again.
     pub branch: BranchName,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.
     pub base_ref: Option<String>,

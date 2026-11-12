@@ -23,7 +23,7 @@ A worktree is a directory, not a sandbox. An agent can read and change anything 
 
 A workspace has both, and they're different things:
 
-- **Its name,** such as `holly`, is its directory and the branch it starts on. It never changes, since renaming a worktree under a running agent would break it.
+- **Its name,** such as `holly`, is its directory and the folder its branches go in, so it starts on the branch `holly/start`. It never changes, since renaming a worktree under a running agent would break it.
 - **Its title** is what the sidebar shows, such as "Fix login redirect". It's written from your first prompt, and you can change it.
 
 ## A chat is a conversation with an agent

@@ -47,6 +47,8 @@ fn every_request_about_the_connection_and_the_workspace_keeps_its_form() {
     asked(WorkerRequest::Stop, r#"{"method":"stop"}"#);
     asked(WorkerRequest::RunningAgents, r#"{"method":"running_agents"}"#);
     asked(WorkerRequest::Received(worker::Received { through: 12 }), r#"{"method":"received","through":12}"#);
+    let names = WorkerRequest::NamesGitHas(worker::NamesGitHas { repo_name: "r".into(), repo_path: "/r".into() });
+    asked(names, r#"{"method":"names_git_has","repo_name":"r","repo_path":"/r"}"#);
     let prepare = WorkerRequest::PrepareWorkspace(worker::PrepareWorkspace {
         repo_name: "r".into(),
         repo_path: "/r".into(),
@@ -234,6 +236,8 @@ fn every_reply_about_the_connection_and_the_workspace_keeps_its_form() {
         r#"{"result":"running_agents","agents":[{"session_id":"s","run":4}]}"#,
     );
     answered(WorkerResponse::Ok, r#"{"result":"ok"}"#);
+    let names = WorkerResponse::NamesGitHas(worker::NamesGitHasReply { names: vec!["aspen".into(), "main".into()] });
+    answered(names, r#"{"result":"names_git_has","names":["aspen","main"]}"#);
     let ready = WorkerResponse::WorkspaceReady(worker::WorkspaceReady {
         path: "/w".into(),
         branch: "aspen".into(),
