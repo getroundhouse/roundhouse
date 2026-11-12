@@ -46,6 +46,7 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
+            draft: protocol::model::Draft::default(),
             rev: Rev::default(),
             status: SessionStatus::Idle,
             last_seq: 0,

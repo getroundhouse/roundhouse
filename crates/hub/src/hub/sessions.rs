@@ -7,9 +7,9 @@ use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PermissionMode, Place, PromptLine,
-    RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource,
-    ToolUseId, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Draft, NewDraft, PermissionMode, Place,
+    PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus,
+    TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
 };
 use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
@@ -96,6 +96,7 @@ impl Hub {
                 prompt_cache: None,
                 queued: Vec::new(),
                 queue_held: false,
+                draft: Draft::default(),
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
@@ -301,17 +302,22 @@ impl Hub {
     }
 
     pub(crate) async fn session_mark_read(&self, id: SessionId, through_seq: Seq) -> Result<Session, ApiError> {
-        self.change_reading(move |store| store.mark_read(&id, through_seq)).await
+        self.change_session(move |store| store.mark_read(&id, through_seq)).await
     }
 
     pub(crate) async fn session_mark_unread(&self, id: SessionId) -> Result<Session, ApiError> {
-        self.change_reading(move |store| store.mark_unread(&id)).await
+        self.change_session(move |store| store.mark_unread(&id)).await
     }
 
-    /// Changes how far a session is read. Only the store's lock orders this against an agent's events, which needs
-    /// nothing more, as each reads the session back with the revision its change gave it. Nothing is announced when
-    /// nothing changed, since the revision didn't move.
-    async fn change_reading(
+    pub(crate) async fn session_draft(&self, id: SessionId, draft: NewDraft) -> Result<Session, ApiError> {
+        self.change_session(move |store| store.set_draft(&id, &draft)).await
+    }
+
+    /// Changes something kept on a session that its agent doesn't need to hear of, such as how far it's read. Only
+    /// the store's lock orders this against an agent's events, which needs nothing more, as each reads the session
+    /// back with the revision its change gave it. Nothing is announced when nothing changed, since the revision didn't
+    /// move.
+    async fn change_session(
         &self,
         change: impl FnOnce(&Store) -> Result<Reading, StoreError> + Send + 'static,
     ) -> Result<Session, ApiError> {

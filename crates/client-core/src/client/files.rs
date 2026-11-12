@@ -39,6 +39,15 @@ impl Client {
         Ok(data.into_vec())
     }
 
+    /// See [`ClientRequest::AttachmentRemove`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn attachment_remove(&self, session_id: &SessionId, id: &AttachmentId) -> Result<()> {
+        let reply = self.call(ClientRequest::AttachmentRemove { session_id: session_id.clone(), id: id.clone() })?;
+        let ClientResponse::Ok = reply else {
+            return unexpected(&reply);
+        };
+        Ok(())
+    }
+
     /// See [`ClientRequest::WorkspaceFiles`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_files(&self, id: &WorkspaceId) -> Result<WorktreeFiles> {
         let reply = self.call(ClientRequest::WorkspaceFiles { id: id.clone() })?;

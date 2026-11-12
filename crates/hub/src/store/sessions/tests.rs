@@ -1,6 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{AttachmentId, CacheTtl, ContextUsage, Effort, ModelName, PermissionMode, PromptCache};
 
+use super::super::AddedBy;
 use super::super::tests::{notice, store_with_session};
 use super::super::{older, schema};
 use super::*;
@@ -201,7 +202,7 @@ fn a_file_no_prompt_carried_goes_with_its_session() {
     let store = store_with_session(dir.path());
     let file =
         Attachment { id: AttachmentId::from("a"), name: "a.log".into(), media_type: MediaType::Text, size_bytes: 1 };
-    store.add_attachment(&"s".into(), &file).unwrap();
+    store.add_attachment(&"s".into(), &file, AddedBy::Client).unwrap();
 
     assert!(store.delete_unused_session(&"s".into()).unwrap().is_some());
 

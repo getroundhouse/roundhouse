@@ -184,6 +184,7 @@ impl World {
             prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
+            draft: protocol::model::Draft::default(),
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);

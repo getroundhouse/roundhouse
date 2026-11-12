@@ -50,8 +50,11 @@ const VENDORED: &[(&str, &str, &str)] = &[
 /// The most lines a Rust file can have, tests included. `docs/rust.md` has the reasoning.
 const MAX_FILE_LINES: usize = 400;
 
-/// Files allowed past that limit, as (path from the repo root, why). Empty so far.
-const LONG_FILES: &[(&str, &str)] = &[];
+/// Files allowed past that limit, as (path from the repo root, why).
+const LONG_FILES: &[(&str, &str)] = &[(
+    "crates/protocol/src/client/request.rs",
+    "Every request a client can make, as the one enum the wire format is, with each one's rules beside it",
+)];
 
 fn metadata() -> Value {
     let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");

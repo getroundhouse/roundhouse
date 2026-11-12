@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Effort, ModelName, PermissionMode, PromptCache, QueuedPrompt,
-    Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
+    AccountId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode, PromptCache,
+    QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
 };
 use crate::event::AgentTask;
 
@@ -128,6 +128,10 @@ pub struct Session {
     /// The queue waits for the person, as [`QueuedPrompt`] says.
     #[serde(default)]
     pub queue_held: bool,
+    /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty from a hub that doesn't
+    /// keep it, and once the chat is closed.
+    #[serde(default, skip_serializing_if = "Draft::is_empty")]
+    pub draft: Draft,
     #[serde(default)]
     pub rev: Rev,
     #[serde(default)]

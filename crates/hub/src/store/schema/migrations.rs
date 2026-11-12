@@ -1,6 +1,8 @@
-//! The database's migrations. `before.rs` has how many there were before some of them, for tests.
+//! The database's migrations, from the first, which `first.rs` has. `before.rs` has how many there were before some of
+//! them, for tests.
 
 mod activity;
+mod drafts;
 mod first;
 mod subagents;
 
@@ -384,4 +386,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
+    // What's typed and attached in each session's composer and not sent, and which files a client added, in `drafts`.
+    drafts::DRAFT,
+    drafts::ADDED_BY_CLIENT,
 ];

@@ -17,6 +17,7 @@ mod accounts;
 mod attachments;
 mod backup;
 mod comments;
+mod drafts;
 mod error;
 mod events;
 mod find;
@@ -41,6 +42,7 @@ mod workspaces;
 use schema::{migrate, open_connection};
 
 pub use accounts::Launched;
+pub use attachments::AddedBy;
 pub use error::{BackupError, StoreError};
 pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use made::{Made, MadeByRequest};
