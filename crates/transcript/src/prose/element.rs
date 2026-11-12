@@ -11,6 +11,7 @@ use gpui_kit::{
     InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div, px, size,
 };
 
+use super::parsing::Apart;
 use super::{Images, Parsed, Prose, TextAt};
 use crate::find::Marks;
 use crate::selection::Selection;
@@ -18,7 +19,7 @@ use crate::selection::Selection;
 /// What a text draws: its blocks, or until it's parsed on another thread, `meanwhile`, or nothing if that's `None`.
 pub(super) enum Drawing {
     Parsed(Rc<Parsed>),
-    Unparsed { source: String, meanwhile: Option<AnyElement> },
+    Meanwhile(Option<AnyElement>),
 }
 
 pub(super) struct ProseElement {
@@ -27,6 +28,8 @@ pub(super) struct ProseElement {
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
     pub(super) text: Drawing,
+    /// How it's to be parsed on another thread, if it is, which it's drawn as `text` until it's in.
+    pub(super) apart: Option<Apart>,
     /// What's found in each leaf, by key.
     pub(super) marks: Vec<Marks>,
     pub(super) images: Option<Images>,
@@ -89,11 +92,11 @@ impl Element for ProseElement {
                 .text_color(style.foreground())
                 .child(div().children(blocks(&parsed.blocks, &context, window, cx)))
                 .into_any_element(),
-            Drawing::Unparsed { source, meanwhile } => {
-                self.prose.parse_apart(self.at, source, cx);
-                meanwhile.take().unwrap_or_else(|| div().into_any_element())
-            }
+            Drawing::Meanwhile(meanwhile) => meanwhile.take().unwrap_or_else(|| div().into_any_element()),
         };
+        if let Some(apart) = self.apart.take() {
+            self.prose.parse_apart(self.at, apart, cx);
+        }
         (element.request_layout(window, cx), (element, style.selection()))
     }
 
@@ -154,11 +157,15 @@ impl ProseElement {
     }
 }
 
-/// `blocks`, each laid out as the kit's text view lays it out among the others.
+/// `blocks`, each laid out as the kit's text view lays it out among the others. Each is known by its place among them,
+/// since where the kit's parser says a block is in a text that went on counts from where it was parsed again from, and
+/// the kit would know blocks by that.
 fn blocks(blocks: &[BlockNode], context: &RenderContext, window: &mut Window, cx: &mut App) -> Vec<AnyElement> {
     let all: Vec<&BlockNode> = blocks.iter().collect();
     let last = all.len().saturating_sub(1);
     (blocks.iter().enumerate())
-        .map(|(ix, block)| block.render(ix, FlowPosition::at(&all, ix, ix == last), context, window, cx))
+        .map(|(ix, block)| {
+            block.render_with_id(("block", ix), FlowPosition::at(&all, ix, ix == last), context, window, cx)
+        })
         .collect()
 }

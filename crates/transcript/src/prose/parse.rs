@@ -23,28 +23,138 @@ pub(crate) struct Parsed {
     /// Where each reference link, such as `[the docs][1]`, goes, by what it's defined as. The kit's parser leaves
     /// these in the blocks for its text view to find, so a text drawn from its blocks is given them itself.
     pub(super) links: BTreeMap<SharedString, LinkMark>,
+    /// Where each block starts, to parse a text that goes on from it again from there, or `None` when it's to be
+    /// parsed whole, as one that may define a link is, or one with a block the kit's parser didn't say the place of.
+    starts: Option<Vec<Start>>,
+}
+
+/// Where a block starts: its byte in the text, and its first leaf's key.
+#[derive(Clone, Copy, Debug)]
+struct Start {
+    byte: usize,
+    leaf: usize,
 }
 
 /// Parses `source`, and keys each of its leaves by its place in it. One the kit's parser can't read is a paragraph, as
 /// it's written.
 pub(super) fn parse(source: String) -> Parsed {
-    let blocks = read(&source).unwrap_or_else(|| {
+    let (mut blocks, mut leaves, mut starts) = (Vec::new(), Vec::new(), Some(Vec::new()));
+    if let Some(read) = read(&source) {
+        more(read, 0, &mut blocks, &mut leaves, &mut starts);
+    } else {
         let mut paragraph = Paragraph::default();
         paragraph.push(InlineNode::new(source.clone()));
-        vec![BlockNode::Paragraph(paragraph)]
-    });
-    let mut leaves = Vec::new();
-    let blocks: Vec<BlockNode> = blocks.into_iter().map(|block| keyed(block, &mut leaves)).collect();
-    let mut links = BTreeMap::new();
-    defined(&blocks, &mut links);
-    Parsed { source, blocks, leaves: leaves.into(), links }
+        blocks.push(BlockNode::Paragraph(leaf(paragraph, &mut leaves)));
+        starts = None;
+    }
+    if may_define(&source) {
+        starts = None;
+    }
+    made(source, blocks, leaves, starts)
 }
 
-/// `source`'s blocks, as the kit's parser reads them, if it can. The `markdown` crate it parses with panics on some
-/// texts, such as `"a\n===\n---\nb\n==="`, which the agent can write, and which would end the app, so a text it panics
-/// on is one it can't read. Rust's default hook still says so on stderr each time, which a short text drawn again after
-/// its blocks were put away, or counted by find, is.
-fn read(source: &str) -> Option<Vec<BlockNode>> {
+/// Where a text that goes on from one parsed is parsed again from: the byte its block starts at, which block that is,
+/// and its first leaf's key.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Again {
+    pub(super) byte: usize,
+    block: usize,
+    leaf: usize,
+}
+
+/// Where `source` is parsed again from, if it goes on from what `parsed` was parsed from: the line its last block
+/// starts on that has a blank line before it, and no list just before. The blocks before it are kept. So a block the
+/// new text continues, such as a list or a fenced code block, isn't split in two, as the kit's text view parses a text
+/// it's given more of. Nor is one that ended a paragraph by starting under it, such as a table or a heading, which more
+/// can show isn't one, as a table's second line does, and then it's part of the paragraph again. Nor is a list, which
+/// takes in a block after a blank line that more shows is another of its items. It's parsed from the line's start, not
+/// the block's, since a fence indented by a few spaces takes as many off each of its lines.
+///
+/// The kit's parser reads a few things in a text by what's far before them, which none of this follows, such as a
+/// table after a quote's lazy line, so what a text that goes on is parsed as can differ from a whole parse, as it can
+/// in the kit's text view.
+pub(super) fn again(parsed: &Parsed, source: &str) -> Option<Again> {
+    let starts = parsed.starts.as_ref()?;
+    if source.len() <= parsed.source.len() || !source.starts_with(&parsed.source) {
+        return None;
+    }
+    let after_list = |block: usize| block > 0 && matches!(parsed.blocks[block - 1], BlockNode::List { .. });
+    let block = (0..starts.len()).rev().find(|&block| apart(source, starts[block].byte) && !after_list(block))?;
+    let Start { byte, leaf } = starts[block];
+    let byte = source[..byte].trim_end_matches([' ', '\t']).len();
+    (!may_define(&source[byte..])).then_some(Again { byte, block, leaf })
+}
+
+/// `source`, which goes on from `parsed` as `again` says, parsed again from there.
+pub(super) fn gone_on(parsed: &Parsed, again: Again, source: String) -> Parsed {
+    match read(&source[again.byte..]) {
+        Some(rest) => joined(parsed, again, source, rest),
+        None => parse(source),
+    }
+}
+
+/// `source`, which goes on from `parsed` as `again` says, with `rest`, its blocks from there on, as [`read`] read them.
+pub(super) fn joined(parsed: &Parsed, again: Again, source: String, rest: Vec<BlockNode>) -> Parsed {
+    let Again { byte, block, leaf } = again;
+    let (mut blocks, mut leaves) = (parsed.blocks[..block].to_vec(), parsed.leaves[..leaf].to_vec());
+    let mut starts = parsed.starts.as_ref().map(|starts| starts[..block].to_vec());
+    more(rest, byte, &mut blocks, &mut leaves, &mut starts);
+    made(source, blocks, leaves, starts)
+}
+
+/// Whether the block that starts at `byte` of `source` has a blank line before it, or nothing, so no block before it
+/// ended there because it started.
+fn apart(source: &str, byte: usize) -> bool {
+    fn blank_end(text: &str) -> &str {
+        text.trim_end_matches([' ', '\t', '\r'])
+    }
+    let before = blank_end(&source[..byte]);
+    before.strip_suffix('\n').map_or(before.is_empty(), |above| {
+        let above = blank_end(above);
+        above.is_empty() || above.ends_with('\n')
+    })
+}
+
+/// Whether `text` may define a link, such as `[docs]: https://example.com`, or a footnote, which decides how a
+/// reference to it is read, before it as well as after, so a text with one is parsed whole. A definition starts a line,
+/// after any indent, quote or list marker, with `[`, and its label ends with `]:`, on that line or a later one. Code
+/// such as TypeScript's `[key: string]: T` looks like one too, which costs only the time a whole parse takes.
+fn may_define(text: &str) -> bool {
+    let marker = |c: char| c.is_whitespace() || c.is_ascii_digit() || matches!(c, '>' | '-' | '*' | '+' | '.' | ')');
+    text.contains("]:") && text.lines().any(|line| line.trim_start_matches(marker).starts_with('['))
+}
+
+/// Keys `parsed`, parsed from byte `from` of the text on, after `blocks` and their `leaves`, and says where each of
+/// its blocks starts, unless one has no place.
+fn more(
+    parsed: Vec<BlockNode>,
+    from: usize,
+    blocks: &mut Vec<BlockNode>,
+    leaves: &mut Vec<String>,
+    starts: &mut Option<Vec<Start>>,
+) {
+    for block in parsed {
+        let start = block.span().map(|span| Start { byte: from + span.start, leaf: leaves.len() });
+        match (starts.as_mut(), start) {
+            (Some(starts), Some(start)) => starts.push(start),
+            (Some(_), None) => *starts = None,
+            (None, _) => {}
+        }
+        blocks.push(keyed(block, leaves));
+    }
+}
+
+fn made(source: String, blocks: Vec<BlockNode>, leaves: Vec<String>, starts: Option<Vec<Start>>) -> Parsed {
+    let mut links = BTreeMap::new();
+    defined(&blocks, &mut links);
+    Parsed { source, blocks, leaves: leaves.into(), links, starts }
+}
+
+/// `source`'s blocks, as the kit's parser reads them, if it can, on any thread. The `markdown` crate it parses with
+/// panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write, and which would end the app, so a
+/// text it panics on is one it can't read. Rust's default hook still says so on stderr each time, which a short text
+/// drawn again after its blocks were put away, or counted by find, is.
+pub(super) fn read(source: &str) -> Option<Vec<BlockNode>> {
     std::panic::catch_unwind(|| parse_markdown(source, Arc::default())).ok()?.ok()
 }
 
@@ -140,43 +250,4 @@ fn next_key(leaves: &[String]) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{ATOM, leaves, parse};
-
-    #[test]
-    fn each_paragraph_heading_code_block_and_cell_is_a_leaf_in_order() {
-        let source = "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n```rust\nlet x = 1;\n```\n\n| a | b |\n|---|---|\n| c | d |\n";
-
-        assert_eq!(*leaves(source), ["Title", "Some bold text.", "one", "two", "let x = 1;", "a", "b", "c", "d"]);
-    }
-
-    #[test]
-    fn an_image_in_text_is_one_character_of_its_leaf_and_one_alone_is_no_leaf() {
-        let source = "Before ![a picture](a.png) after\n\n![alone](b.png)\n\nThe end";
-
-        assert_eq!(*leaves(source), [format!("Before {ATOM} after"), "The end".to_string()]);
-    }
-
-    #[test]
-    fn a_reference_link_goes_where_its_first_definition_says_even_inside_a_quote() {
-        let source =
-            "See [the docs][docs].\n\n> [docs]: https://example.com/first\n\n[docs]: https://example.com/second";
-
-        let links = parse(source.to_owned()).links;
-
-        assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
-        assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");
-    }
-
-    #[test]
-    fn a_text_the_parser_panics_on_is_one_paragraph_as_it_is_written() {
-        let source = "a\n===\n---\nb\n===";
-
-        assert_eq!(*leaves(source), [source]);
-    }
-
-    #[test]
-    fn a_link_is_its_words_and_not_its_address() {
-        assert_eq!(*leaves("See [the docs](https://example.com) and `cargo test`."), ["See the docs and cargo test."]);
-    }
-}
+mod tests;
