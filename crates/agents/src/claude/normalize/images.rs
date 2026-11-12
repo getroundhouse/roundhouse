@@ -7,6 +7,8 @@ use protocol::event::ContentBlock;
 use protocol::model::AttachmentId;
 use serde_json::Value;
 
+use super::each_string;
+
 /// The CLI doesn't say what an image is called, and the call that read it names the file.
 const NAME: &str = "image";
 
@@ -56,21 +58,12 @@ fn image(part: &Value) -> Option<Taken> {
 /// session's attachments by its marker.
 pub(super) fn without(line: &Value, taken: &[Taken]) -> String {
     let mut line = line.clone();
-    swap(&mut line, taken);
-    line.to_string()
-}
-
-fn swap(value: &mut Value, taken: &[Taken]) {
-    match value {
-        Value::String(text) => {
-            if let Some(found) = taken.iter().find(|found| found.base64 == *text) {
-                *text = marker(&found.kept.attachment.id);
-            }
+    each_string(&mut line, &mut |text| {
+        if let Some(found) = taken.iter().find(|found| found.base64 == *text) {
+            *text = marker(&found.kept.attachment.id);
         }
-        Value::Array(items) => items.iter_mut().for_each(|item| swap(item, taken)),
-        Value::Object(fields) => fields.values_mut().for_each(|field| swap(field, taken)),
-        Value::Null | Value::Bool(_) | Value::Number(_) => {}
-    }
+    });
+    line.to_string()
 }
 
 /// What stands in a kept line where an image's base64 was.
