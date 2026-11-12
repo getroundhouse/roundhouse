@@ -14,12 +14,17 @@ use tracing::warn;
 #[cfg(test)]
 mod tests;
 
-/// A hub answers in seconds, even when it reads GitHub for the answer, and one from before workers could ask never
-/// does.
+/// A hub answers most asks in seconds, even when it reads GitHub for the answer, and one from before workers could ask
+/// never does.
 const ANSWER_TIMEOUT: Duration = Duration::from_mins(1);
 
+/// How many times as long an ask that makes or removes a worktree is waited for, since a fetch, checking out a large
+/// repository and copying its ignored files can take minutes, and the hub has a removal wait for every one being made,
+/// and one being made wait for a removal under way.
+const SLOW: u32 = 10;
+
 pub(crate) struct Asks {
-    /// How long to wait for an answer.
+    /// How long to wait for an answer to most asks. [`SLOW`] says which are waited for longer.
     patience: Duration,
     next: AtomicU64,
     /// `None` once the worker is stopping, so nothing waits for an answer that won't come.
@@ -68,15 +73,28 @@ impl Asks {
         self.waiting.lock().as_mut().ok_or_else(hub_gone)?.insert(id, waiting);
         // Forgets it however this ends, including when whoever asked stops waiting.
         let _forget = Forget { asks: self, id };
+        let patience = self.patience_for(&ask);
         let asking = async {
             self.frames.send(WorkerFrame::Ask { id, session_id, ask }).await.map_err(|_| hub_gone())?;
             answer.await.map_err(|_| hub_gone())
         };
-        let Ok(answered) = tokio::time::timeout(self.patience, asking).await else {
-            let message = format!("the hub didn't answer within {:?}", self.patience);
+        let Ok(answered) = tokio::time::timeout(patience, asking).await else {
+            let message = format!("the hub didn't answer within {patience:?}");
             return Err(ApiError::new(ErrorCode::Unavailable, message));
         };
         answered?.into_result()
+    }
+
+    fn patience_for(&self, ask: &WorkerAsk) -> Duration {
+        match ask {
+            WorkerAsk::CreateWorktree(_) | WorkerAsk::RemoveWorktree(_) => self.patience * SLOW,
+            WorkerAsk::PullRequest
+            | WorkerAsk::StartWait(_)
+            | WorkerAsk::Wait(_)
+            | WorkerAsk::CancelWait(_)
+            | WorkerAsk::ListWorktrees
+            | WorkerAsk::Unknown => self.patience,
+        }
     }
 
     /// Hands the hub's answer to whoever asked, if they're still waiting.

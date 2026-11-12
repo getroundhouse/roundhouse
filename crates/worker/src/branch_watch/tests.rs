@@ -7,7 +7,7 @@ use super::*;
 use crate::git::tests::{new_repo, run};
 
 /// Long enough for a busy machine, and only waited out when the watcher has failed to send.
-const PATIENCE: Duration = Duration::from_secs(20);
+pub(crate) const PATIENCE: Duration = Duration::from_secs(20);
 
 /// How long a watcher has to stay asleep to count as not woken, which is waited out each time.
 const QUIET: Duration = Duration::from_millis(500);
@@ -22,12 +22,16 @@ struct Watching {
 impl Watching {
     /// Once it's said it's watching, by when it has sent the first frame.
     async fn start(worktree: &Path) -> Self {
+        Self::start_as(worktree, Whose::Own).await
+    }
+
+    async fn start_as(worktree: &Path, whose: Whose) -> Self {
         let (frames, received) = mpsc::channel(16);
         let outbox = Arc::new(Outbox::default());
         outbox.attach(frames, false).await;
         let stopping = watch::Sender::new(false);
         let (first, sent) = oneshot::channel();
-        tokio::spawn(watch(worktree.to_path_buf(), outbox, stopping.subscribe(), first));
+        tokio::spawn(watch(worktree.to_path_buf(), whose, outbox, stopping.subscribe(), first));
         tokio::time::timeout(PATIENCE, sent).await.expect("it never said").unwrap();
         Self { worktree: worktree.to_path_buf(), frames: received, _stopping: stopping }
     }
@@ -181,4 +185,18 @@ async fn it_sends_a_switch_in_a_reftable_worktree() {
     watching.git(&["switch", "-q", "header"]);
 
     assert_eq!(watching.next().await.head, Head::Branch { name: BranchName::from("header") });
+}
+
+/// Another worktree's branches go in a frame that names it, so the hub can tell whose they are.
+#[tokio::test]
+async fn another_worktree_s_branches_are_sent_naming_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let mut watching = Watching::start_as(&repo, Whose::Child).await;
+
+    let frame = tokio::time::timeout(PATIENCE, watching.frames.recv()).await.expect("no frame came").unwrap();
+
+    let WorkerFrame::ChildBranches { path, branches } = &*frame else { panic!("not another's: {frame:?}") };
+    assert_eq!(Path::new(path), repo);
+    assert_eq!(branches.head, Head::Branch { name: BranchName::from("main") });
 }

@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use protocol::client::ApiError;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::BranchName;
 
 use super::git_ok;
@@ -40,17 +40,20 @@ pub async fn names_git_has(root: &Path, repo_name: &str, repo_path: &str) -> Res
     Ok(names.into_iter().collect())
 }
 
-/// A local branch git can't make `branch` beside: one of its name, or one it would be a folder of or in, as `holly`
-/// is for `holly/start`. Whatever their case, since git keeps a branch as a file, and a file system that doesn't tell
-/// case apart takes `Holly/start` for `holly/start`.
-pub(super) async fn branch_in_the_way(repo: &Path, branch: &BranchName) -> Result<Option<String>, ApiError> {
+/// Refuses, as `NameTaken`, a new branch git has one in the way of: one of its name, or one it would be a folder of or
+/// in, as `holly` is for `holly/start`. Whatever their case, since git keeps a branch as a file, and a file system that
+/// doesn't tell case apart takes `Holly/start` for `holly/start`.
+pub(super) async fn no_branch_in_the_way(repo: &Path, branch: &BranchName) -> Result<(), ApiError> {
     let wanted = branch.as_str().to_ascii_lowercase();
     let clashes = |had: &&str| {
         let had = had.to_ascii_lowercase();
         had == wanted || wanted.starts_with(&format!("{had}/")) || had.starts_with(&format!("{wanted}/"))
     };
     let listed = refs(repo, &[BRANCHES]).await?;
-    Ok(listed.iter().filter_map(|name| name.strip_prefix(BRANCHES)).find(clashes).map(str::to_string))
+    match listed.iter().filter_map(|name| name.strip_prefix(BRANCHES)).find(clashes) {
+        Some(taken) => Err(ApiError::new(ErrorCode::NameTaken, format!("branch {taken} already exists"))),
+        None => Ok(()),
+    }
 }
 
 /// Every ref under each of `under`, by its full name.

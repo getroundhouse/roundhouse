@@ -10,6 +10,7 @@ use std::time::Duration;
 use notify::event::{AccessKind, AccessMode};
 use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
+use protocol::model::Branches;
 use protocol::worker::WorkerFrame;
 use tokio::sync::{Notify, oneshot, watch};
 use tracing::{debug, warn};
@@ -18,7 +19,7 @@ use crate::git::branches::{self, Places, Read};
 use crate::serve::Outbox;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// How long git has to have stopped writing before the branches are read, since a checkout or a commit writes several
 /// files one after another. Short enough that the hub hears of a push at once.
@@ -36,6 +37,24 @@ const LOOK_FOR_THE_REPOSITORY_EVERY: Duration = Duration::from_mins(1);
 /// user has used up their inotify instances.
 const POLL_EVERY: Duration = Duration::from_secs(1);
 
+/// Whose branches a watch is of, which says which frame they go in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Whose {
+    /// The workspace's own worktree's.
+    Own,
+    /// Another worktree's, made for the workspace's work.
+    Child,
+}
+
+impl Whose {
+    fn frame(self, worktree: &Path, branches: Branches) -> WorkerFrame {
+        match self {
+            Self::Own => WorkerFrame::Branches { branches },
+            Self::Child => WorkerFrame::ChildBranches { path: worktree.to_string_lossy().into_owned(), branches },
+        }
+    }
+}
+
 /// What the OS's watcher and the loop that reads share.
 struct Wakes {
     places: Places,
@@ -50,6 +69,7 @@ struct Wakes {
 /// What's sent while no hub is connected is lost, since the next hub to connect watches them again.
 pub(crate) async fn watch(
     worktree: PathBuf,
+    whose: Whose,
     outbox: Arc<Outbox>,
     mut stopping: watch::Receiver<bool>,
     first: oneshot::Sender<()>,
@@ -60,7 +80,7 @@ pub(crate) async fn watch(
     // Watching before the first read, so a change made while it reads is heard.
     let _watching = start(&wakes);
     loop {
-        read_and_send(&worktree, &wakes, &outbox).await;
+        read_and_send(&worktree, whose, &wakes, &outbox).await;
         if let Some(first) = first.take() {
             let _ = first.send(());
         }
@@ -146,7 +166,7 @@ fn mattered(wakes: &Wakes, event: &notify::Result<Event>) -> bool {
 }
 
 /// Reads the branches and sends them if they've changed.
-async fn read_and_send(worktree: &Path, wakes: &Wakes, outbox: &Outbox) {
+async fn read_and_send(worktree: &Path, whose: Whose, wakes: &Wakes, outbox: &Outbox) {
     let read = match branches::read(worktree, &wakes.places).await {
         Ok(read) => read,
         Err(e) => {
@@ -161,7 +181,7 @@ async fn read_and_send(worktree: &Path, wakes: &Wakes, outbox: &Outbox) {
         news
     };
     if let Some(branches) = news {
-        outbox.send(WorkerFrame::Branches { branches }).await;
+        outbox.send(whose.frame(worktree, branches)).await;
     }
 }
 

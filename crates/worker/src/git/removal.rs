@@ -1,5 +1,6 @@
-//! Removing a worktree when its workspace is archived. A build's output can be tens of thousands of files, which take
-//! seconds to delete, so the worktree is moved aside, and deleted once archiving has finished.
+//! Removing a worktree, as its workspace is archived, or another made for the workspace's work when its hub asks. A
+//! build's output can be tens of thousands of files, which take seconds to delete, so the worktree is moved aside, and
+//! deleted once it's forgotten.
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -7,9 +8,10 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use protocol::client::{ApiError, ErrorCode};
+use protocol::worker::RemoveWorkspace;
 use tracing::{error, info, warn};
 
-use super::{git_error, git_ok, status};
+use super::{git, git_error, git_ok, off_thread, status};
 use crate::deleting::Deleter;
 
 #[cfg(test)]
@@ -20,17 +22,41 @@ pub(crate) const DELETING: &str = ".deleting";
 /// In [`DELETING`], and never deleted, since workers that archive at once share it. See [`Deleting`].
 pub(crate) const LOCK: &str = ".lock";
 
-/// Keeps the branch, so committed work is never lost by archiving. Returns once the worktree's path is free and git
-/// has forgotten it, which can be before its files are deleted.
-pub async fn remove_workspace(repo_path: &str, path: &str, force: bool, deleter: &Deleter) -> Result<(), ApiError> {
-    let repo = PathBuf::from(repo_path);
-    let worktree = Path::new(path);
-    let deleting = worktree.with_file_name(DELETING);
+/// How hard git is told to remove a worktree.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Force {
+    No,
+    Yes,
+    /// And past git's own lock on one it was stopped part way through making, which nothing will finish, and git
+    /// removes only when told twice. A lock a person put on a worktree is still theirs to take off.
+    PartMade,
+}
+
+/// Removes the worktree asked, a workspace's own or another made for it, and keeps its branch, so committed work is
+/// never lost by archiving. Returns once the worktree's path is free and git has forgotten it, which can be before its
+/// files are deleted.
+pub async fn remove_workspace(asked: &RemoveWorkspace, deleter: &Deleter) -> Result<(), ApiError> {
+    let worktree = Path::new(&asked.path);
+    // Another of a workspace's worktrees waits to be deleted where the workspace's own would, beside the workspaces,
+    // since every archive in the repository clears what waits there, and nothing clears a folder of `.children/`.
+    let beside = asked.own.as_deref().map_or(worktree, Path::new);
+    remove(Path::new(&asked.repo_path), worktree, asked.force, &beside.with_file_name(DELETING), deleter).await?;
+    if asked.own.is_some()
+        && let Some(folder) = worktree.parent()
+    {
+        // Its workspace's folder of `.children/`, once this was the last in it, which is the only time it goes.
+        let _ = off_thread(folder.to_path_buf(), std::fs::remove_dir).await;
+    }
+    Ok(())
+}
+
+async fn remove(repo: &Path, worktree: &Path, force: bool, deleting: &Path, deleter: &Deleter) -> Result<(), ApiError> {
+    let path = &*worktree.to_string_lossy();
     if !off_thread(worktree.to_path_buf(), |worktree| Ok(worktree.exists())).await.unwrap_or(true) {
         // Already gone, perhaps deleted by hand, or moved aside by a worker that stopped before git forgot it, which
         // was to be deleted next. Under the lock, so this prune can't forget one moved aside meanwhile.
         // Without it, a worktree moved aside meanwhile is still safe, since `forget` sees git has forgotten it.
-        let held = match Deleting::lock(&deleting).await {
+        let held = match Deleting::lock(deleting).await {
             Ok(held) => Some(held),
             // The folder it was in has gone too, and with it anything waiting.
             Err(e) if e.kind() == io::ErrorKind::NotFound => None,
@@ -39,7 +65,7 @@ pub async fn remove_workspace(repo_path: &str, path: &str, force: bool, deleter:
                 None
             }
         };
-        git_ok(&repo, &["worktree", "prune"]).await?;
+        git_ok(repo, &["worktree", "prune"]).await?;
         if let Some(held) = held {
             held.delete_waiting(deleter).await;
         }
@@ -55,38 +81,79 @@ pub async fn remove_workspace(repo_path: &str, path: &str, force: bool, deleter:
         // Git refuses these unless forced, since a submodule's own commits are in the worktree. Moving it aside would
         // skip that check, so git removes it as it always has.
         if has_submodules(worktree, &record).await? {
-            return remove_in_place(&repo, path, force).await;
+            return remove_in_place(repo, path, Force::No).await;
         }
     }
+    let force = match force {
+        false => Force::No,
+        true if locked_part_made(&record).await => Force::PartMade,
+        true => Force::Yes,
+    };
     // `forget` takes the record being gone to mean git has forgotten the worktree, so it has to be there to begin with.
     if !off_thread(record.clone(), |record| Ok(record.is_dir())).await.unwrap_or(false) {
         warn!(path, record = %record.display(), "git's record of the worktree isn't where git said, so deleting in place");
-        return remove_in_place(&repo, path, force).await;
+        return remove_in_place(repo, path, force).await;
     }
-    let held = match Deleting::lock(&deleting).await {
+    let held = match Deleting::lock(deleting).await {
         Ok(held) => held,
         Err(e) => {
             warn!(path = %deleting.display(), "couldn't delete a worktree in there, so deleting it in place: {e}");
-            return remove_in_place(&repo, path, force).await;
+            return remove_in_place(repo, path, force).await;
         }
     };
     let Some(moved) = held.move_in(worktree).await else {
         drop(held);
-        return remove_in_place(&repo, path, force).await;
+        return remove_in_place(repo, path, force).await;
     };
-    forget(&repo, worktree, force, &record, &moved).await?;
+    forget(repo, worktree, force, &record, &moved).await?;
     held.delete_waiting(deleter).await;
     Ok(())
 }
 
-async fn remove_in_place(repo: &Path, path: &str, force: bool) -> Result<(), ApiError> {
+async fn remove_in_place(repo: &Path, path: &str, force: Force) -> Result<(), ApiError> {
     let mut args = vec!["worktree", "remove"];
-    if force {
-        args.push("--force");
-    }
+    args.extend(match force {
+        Force::No => &[][..],
+        Force::Yes => &["--force"],
+        Force::PartMade => &["--force", "--force"],
+    });
     args.push(path);
     git_ok(repo, &args).await?;
     Ok(())
+}
+
+/// Removes the worktree at `worktree` if it's one a `git worktree add` was stopped part way through, as when the
+/// worker or the machine went, and says whether it was. Git leaves such a one with its branch checked out, only some of
+/// its files, and its own lock, and nothing finishes it. Once git has forgotten it, what's left of the directory goes
+/// too, since git's own checkout can still be writing there for a moment after git is stopped, which fails git's
+/// removal after it has forgotten the worktree. One git won't forget, such as another repository's, is left as it is.
+pub(super) async fn remove_part_made(repo: &Path, worktree: &Path) -> Result<bool, ApiError> {
+    if !worktree.join(".git").exists() {
+        return Ok(false);
+    }
+    let found = git(worktree, &["rev-parse", "--absolute-git-dir"]).await?;
+    let record = PathBuf::from(found.stdout.trim());
+    if !found.success || !locked_part_made(&record).await {
+        return Ok(false);
+    }
+    if let Err(refused) = remove_in_place(repo, &worktree.to_string_lossy(), Force::PartMade).await
+        && off_thread(record, |record| Ok(record.exists())).await.unwrap_or(true)
+    {
+        return Err(refused);
+    }
+    match off_thread(worktree.to_path_buf(), std::fs::remove_dir_all).await {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => {
+            Err(git_error(format!("deleting what was left of {}: {e}", worktree.display())))
+        }
+        _ => Ok(true),
+    }
+}
+
+/// Whether git's record of a worktree, at `record`, has the lock git holds while it makes one, which it only leaves
+/// behind when it's stopped part way.
+async fn locked_part_made(record: &Path) -> bool {
+    let reason = off_thread(record.join("locked"), std::fs::read_to_string).await;
+    reason.is_ok_and(|reason| reason.trim() == "initializing")
 }
 
 /// Whether git might find submodules in the worktree: a gitlink in its index, or a submodule's repository in its git
@@ -103,7 +170,7 @@ async fn has_submodules(worktree: &Path, record: &Path) -> Result<bool, ApiError
 /// it. If git refuses, such as for a locked worktree, it goes back, so a refusal changes nothing. Git may have
 /// forgotten it already, since a `git worktree prune` forgets a worktree whose directory is missing, as restoring a
 /// workspace beside this one does, and `git gc` does too. Then there's nothing to put back.
-async fn forget(repo: &Path, worktree: &Path, force: bool, record: &Path, moved: &Path) -> Result<(), ApiError> {
+async fn forget(repo: &Path, worktree: &Path, force: Force, record: &Path, moved: &Path) -> Result<(), ApiError> {
     let path = worktree.to_string_lossy();
     let Err(refused) = remove_in_place(repo, &path, force).await else { return Ok(()) };
     if !off_thread(record.to_path_buf(), |record| Ok(record.exists())).await.unwrap_or(true) {
@@ -200,12 +267,4 @@ fn file_name(path: &Path) -> String {
 async fn rename(from: &Path, to: &Path) -> io::Result<()> {
     let to = to.to_path_buf();
     off_thread(from.to_path_buf(), move |from| std::fs::rename(from, to)).await
-}
-
-/// Filesystem calls block, so they run where that can't hold up other requests.
-async fn off_thread<T: Send + 'static>(
-    path: PathBuf,
-    work: impl FnOnce(PathBuf) -> io::Result<T> + Send + 'static,
-) -> io::Result<T> {
-    tokio::task::spawn_blocking(move || work(path)).await.map_err(io::Error::other)?
 }
