@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 use look::Work;
 use look::{Hand as _, Off as _};
-use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace, WorkspaceId};
+use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
 use transcript::PullRequestStanding;
 
 use crate::busy::Busy;
@@ -98,12 +98,13 @@ pub(crate) fn recorded_work(workspace: &Workspace) -> Option<Work> {
 }
 
 /// The bar at the top of the sidebar: the pull request's number, which opens it, what stands in its way, and the
-/// one thing to do about it, all in its colour. `busy` greys out Archive, as every button that archives is while a
-/// workspace is being made, archived or restored, and it says Archiving… while `workspace`, the one this is for, is.
+/// one thing to do about it, all in its colour. `busy` greys out Archive, as every button that archives is while the
+/// app is making, archiving or restoring a workspace, and it says what the workspace it's for is `doing` in its place,
+/// such as `Archiving…`, as [`crate::busy::doing`] reads it from its record.
 pub fn bar(
     lookup: &Lookup,
     busy: &Busy,
-    workspace: &WorkspaceId,
+    doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> AnyElement {
@@ -139,7 +140,7 @@ pub fn bar(
         .text_color(text)
         .child(title);
     row.child(giving_way(pr.map(|pr| number(pr, work, cx)), title))
-        .children(words::action(standing).map(|action| action_button(action, work, (busy, workspace), on_action, cx)))
+        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action, cx)))
         .into_any_element()
 }
 
@@ -169,17 +170,18 @@ fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
 pub fn controls(
     lookup: &Lookup,
     busy: &Busy,
-    workspace: &WorkspaceId,
+    doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> Option<AnyElement> {
     let standing = lookup.standing()?;
     let work = lookup.work();
     let pr = lookup.pull_request();
-    let controls =
-        h_flex().id("pull-request-controls").gap_2().children(pr.map(|pr| number(pr, work, cx))).children(
-            words::action(standing).map(|action| action_button(action, work, (busy, workspace), on_action, cx)),
-        );
+    let controls = h_flex()
+        .id("pull-request-controls")
+        .gap_2()
+        .children(pr.map(|pr| number(pr, work, cx)))
+        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action, cx)));
     Some(controls.into_any_element())
 }
 
@@ -204,14 +206,15 @@ fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
 fn action_button(
     action: Action,
     work: Work,
-    (busy, workspace): (&Busy, &WorkspaceId),
+    (busy, doing): (&Busy, Option<&'static str>),
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> AnyElement {
-    // Greyed out while a workspace is being made, archived or restored, as every button that archives is, so it can't
-    // be pressed twice. The other actions only ask the agent.
-    let disabled = action == Action::Archive && !busy.is_free();
-    let label = busy.doing(workspace).filter(|_| action == Action::Archive).unwrap_or(action.label());
+    // Greyed out while the app is making, archiving or restoring a workspace, as every button that archives is, so it
+    // can't be pressed twice, and while this one is on its way out, whoever asked. The other actions only ask the agent.
+    let doing = doing.filter(|_| action == Action::Archive);
+    let disabled = action == Action::Archive && (!busy.is_free() || doing.is_some());
+    let label = doing.unwrap_or(action.label());
     let button = Button::new("pull-request-action").small().label(label).off_while(disabled);
     let button = match work.hue() {
         // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and

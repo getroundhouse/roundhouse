@@ -36,7 +36,7 @@ pub(super) fn workspace_row(
     let label = workspace.label().to_string();
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
     let retitling = app.retitling.contains(&workspace.id).then_some("Renaming…");
-    let waiting = app.busy.doing(&workspace.id).or(retitling);
+    let waiting = crate::busy::doing(workspace.status).or(retitling);
     // Not on the workspace showing, whose composer is in view, but while Home shows in its place. A workspace not shown
     // since the app opened has only what the hub keeps.
     let drafted = !selected
@@ -203,7 +203,7 @@ fn row_menu(
     });
     let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
     let (to_retitle, retitled, holds) = (to_archive.clone(), workspace.id.clone(), to_archive.clone());
-    let going = app.busy.doing(&workspace.id).is_some();
+    let going = crate::busy::doing(workspace.status).is_some();
     let cant_retitle = going || workspace.title.is_none() || app.retitling.contains(&workspace.id);
     let retitle = Rc::new(move |cx: &mut App| {
         let _ = to_retitle.update(cx, |t, cx| t.regenerate_title(retitled.clone(), cx));
@@ -221,6 +221,6 @@ fn row_menu(
             shared(menu, window, cx).item(regenerate.disabled(cant_retitle).on_click(move |_, _, cx| retitle(cx)));
         let item = PopupMenuItem::new("Archive").icon(Lucide::Archive);
         let item = item.when(showing, |item| item.action(Box::new(ArchiveWorkspace)));
-        menu.separator().item(item.disabled(busy).on_click(move |_, _, cx| archive(cx)))
+        menu.separator().item(item.disabled(busy || going).on_click(move |_, _, cx| archive(cx)))
     }
 }

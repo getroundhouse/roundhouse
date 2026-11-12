@@ -75,17 +75,19 @@ impl AppView {
         self.records.repo(id)
     }
 
-    /// Shows the workspace, or brings it back first if it's archived, as clicking its row does.
+    /// Shows the workspace, or brings it back first if it's archived, as clicking its row does. One on its way back
+    /// shows once it's there.
     pub(crate) fn open_workspace(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let archived = self
-            .records
-            .workspace(&id)
-            .is_some_and(|w| matches!(w.status, WorkspaceStatus::Archived | WorkspaceStatus::Restoring));
-        if archived {
-            self.restore(id, cx);
-        } else {
-            self.select(id, cx);
+        match self.status_of(&id) {
+            Some(WorkspaceStatus::Archived) => self.restore(id, cx),
+            Some(WorkspaceStatus::Restoring) => {}
+            Some(_) | None => self.select(id, cx),
         }
+    }
+
+    /// The workspace's status, as its record says.
+    fn status_of(&self, id: &WorkspaceId) -> Option<WorkspaceStatus> {
+        self.records.workspace(id).map(|w| w.status)
     }
 
     /// Whether a workspace can be made now: there's a hub, and nothing else is being made, archived or restored.
@@ -248,14 +250,15 @@ impl AppView {
         cx.notify();
     }
 
-    /// Archives, and asks before losing uncommitted work. Does nothing while a workspace is being made, archived or
-    /// restored, so a key pressed twice archives once.
+    /// Archives, and asks before losing uncommitted work. Does nothing while the app is making, archiving or restoring
+    /// a workspace, so a key pressed twice archives once, nor for one that isn't ready, such as one already on its way
+    /// out, whoever asked. Its record says it's being archived from the moment the hub has the request.
     pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        if !self.busy.is_free() {
+        if !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Ready) {
             return;
         }
-        self.set_busy(Busy::Archiving(id.clone()), cx);
+        self.set_busy(Busy::Moving, cx);
         let target = id.clone();
         let archiving = client.start(move |client| client.workspace_archive(&target, force));
         cx.spawn(async move |this, cx| {
@@ -295,14 +298,14 @@ impl AppView {
         .detach();
     }
 
-    /// Restores an archived workspace. Does nothing while a workspace is being made, archived or restored, as
-    /// [`AppView::archive`] doesn't.
+    /// Restores an archived workspace. Does nothing while the app is making, archiving or restoring a workspace, nor
+    /// for one that isn't archived, as [`AppView::archive`] doesn't.
     pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        if !self.busy.is_free() {
+        if !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Archived) {
             return;
         }
-        self.set_busy(Busy::Restoring(id.clone()), cx);
+        self.set_busy(Busy::Moving, cx);
         let restoring = client.start(move |client| client.workspace_restore(&id));
         cx.spawn(async move |this, cx| {
             let result = restoring.recv().await;
@@ -322,8 +325,9 @@ impl AppView {
         .detach();
     }
 
-    /// Says whether a workspace is being made, archived or restored, which greys out every button that archives: in
-    /// the sidebar, in Home, and on every pane's pull request bar. The one it's for says so in place of its button.
+    /// Says whether the app is making, archiving or restoring a workspace, which greys out every button that archives:
+    /// in the sidebar, in Home, and on every pane's pull request bar. What the one being archived or restored says in
+    /// place of its button is its record's to say.
     fn set_busy(&mut self, busy: Busy, cx: &mut Context<Self>) {
         for pane in self.panes.values() {
             pane.update(cx, |pane, cx| pane.set_busy(busy.clone(), cx));

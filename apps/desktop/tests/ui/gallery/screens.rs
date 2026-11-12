@@ -13,7 +13,7 @@ use super::frame::{
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    approval, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
+    approval, archiving, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
     setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, working_background,
 };
 use super::{chats, long_chats, pictures, question_chats};
@@ -274,10 +274,10 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "archiving",
         spec: "sidebar.md",
-        world: Some(conversation),
-        // The screen's hub never answers, so the first workspace stays archiving after the pointer leaves it.
+        // Its record says it's being archived, which its row draws whichever app asked, with the pointer away from it.
+        world: Some(archiving),
         frame: SIDEBAR,
-        steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1"), Step::Click("archive-ws-1"), Step::MoveAway],
+        steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "drafts",

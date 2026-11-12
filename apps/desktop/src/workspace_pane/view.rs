@@ -166,7 +166,8 @@ impl WorkspacePane {
             Sidebar::Open => None,
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
-                crate::pull_request::controls(&self.pull_request, &self.busy, &self.workspace().id, on_action, cx)
+                let doing = crate::busy::doing(self.workspace().status);
+                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action, cx)
             }
         };
         h_flex()
