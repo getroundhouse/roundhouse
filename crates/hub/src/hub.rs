@@ -8,6 +8,7 @@ mod accounts;
 mod attachments;
 mod awake;
 mod comments;
+mod feed;
 mod hub_settings;
 mod instances;
 mod pull_requests;
@@ -20,6 +21,7 @@ mod workers;
 mod workspaces;
 mod worktree;
 
+use feed::Feed;
 use sessions::Sessions;
 
 use crate::attachment_files::AttachmentFiles;
@@ -43,8 +45,6 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
 use tokio::task::JoinSet;
 use tracing::warn;
 
-/// Status changes are rare, so a client only overflows this if it has stopped reading.
-const FEED_CAPACITY: usize = 256;
 /// Agents get 3 s to stop, then up to 5 s for each of their two streams to end, which something an agent left
 /// running can hold open, and the worker exits within a second of flushing after that. So this is only reached if
 /// something is stuck.
@@ -79,7 +79,7 @@ pub(crate) struct Hub {
     awake: Arc<Awake>,
     /// Held while the hub's settings change.
     configuring: AsyncMutex<()>,
-    feed: broadcast::Sender<HubNotice>,
+    feed: Feed,
     on_demand: bool,
     started_at_ms: i64,
     pub(crate) shutdown: Notify,
@@ -119,7 +119,7 @@ impl Hub {
             pull_requests: pull_requests::Reading::new(),
             awake: Arc::default(),
             configuring: AsyncMutex::new(()),
-            feed: broadcast::channel(FEED_CAPACITY).0,
+            feed: Feed::new(),
             started_at_ms: now_ms(),
             shutdown: Notify::new(),
             shutting_down: AtomicBool::new(false),
@@ -177,9 +177,9 @@ impl Hub {
         self.feed.subscribe()
     }
 
+    /// Tells every client following the feed of `notice`, as [`Feed::send`] says.
     pub(crate) fn notify(&self, notice: HubNotice) {
-        // An error only means nobody is listening.
-        let _ = self.feed.send(notice);
+        self.feed.send(notice);
     }
 
     /// Output for a session goes through here on its way to the log.
