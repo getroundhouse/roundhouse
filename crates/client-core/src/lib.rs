@@ -21,7 +21,7 @@ mod sending;
 mod stand_in_hub;
 
 pub use attachments::{FileToSend, NotAttached};
-pub use drafts::Drafts;
+pub use drafts::{Drafts, Where};
 pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{

@@ -1,29 +1,60 @@
-//! Keeping what's typed and attached in each chat's composer on the hub, so it's there after the app restarts, and in
-//! every client. A client hands over each change as it's made, and a thread of its own keeps the newest of each chat,
-//! one call at a time, so they reach the hub in the order they were made. Each file goes before any draft that names
-//! it, since the hub leaves out a file it hasn't got, and one let go of goes after the draft that stopped naming it,
-//! since the hub keeps any a draft names. What a hub can't take, because the connection went or it doesn't keep drafts,
-//! waits for the next connection. Each chat's count of what hasn't reached the hub says what quitting would lose, and
-//! quitting waits for it with [`Drafts::flushed`], which needs no other thread. The same count, and the last copy of the
-//! chat's draft that this client and the hub agree on, say whether a chat's draft on the hub was made somewhere else,
-//! such as in another client, which [`Drafts::from_elsewhere`] says.
+//! Keeping what's typed and not sent on the hub, so it's there after the app restarts, and in every client: what's
+//! typed and attached in each chat's composer, what's chosen and typed in answer to each chat's question, and the
+//! comment being written on each workspace's diff. A client hands over each change as it's made, and a thread of its
+//! own keeps the newest of each, one call at a time, so they reach the hub in the order they were made. Each file goes
+//! before any draft that names it, since the hub leaves out a file it hasn't got, and one let go of goes after the
+//! draft that stopped naming it, since the hub keeps any a draft names. What a hub can't take, because the connection
+//! went or it doesn't keep that kind, waits for the next connection. The count of what hasn't reached the hub, for each
+//! place something's typed, says what quitting would lose, and quitting waits for it with [`Drafts::flushed`], which
+//! needs no other thread. The same count, and the last copy of what's there that this client and the hub agree on, say
+//! whether what's on the hub was made somewhere else, such as in another client, as [`Drafts::from_elsewhere`] says.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 
-use protocol::model::{AttachmentId, Draft, NewDraft, Rev, Session, SessionId};
+use protocol::model::{
+    AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, Rev, Session, SessionId, Workspace, WorkspaceId,
+};
 
-use crate::{Client, ClientError, FileToSend};
+use crate::{Client, FileToSend};
 
+mod keeper;
 #[cfg(test)]
 mod tests;
 
 /// The longest a change waits to be kept while typing goes on, so typing a word isn't a call for each letter, and an
 /// app that stops without quitting loses at most this much of it.
 pub(crate) const PAUSE: Duration = Duration::from_millis(500);
+
+/// Where something's typed, each kept apart from the rest: a chat's composer, its answer to its question, or the
+/// comment being written on a workspace's diff.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Where {
+    Composer(SessionId),
+    Answer(SessionId),
+    Comment(WorkspaceId),
+}
+
+/// What's typed in one place now, for the hub to keep in place of what was.
+#[derive(Clone, Debug, PartialEq)]
+enum Change {
+    Composer(SessionId, NewDraft),
+    Answer(SessionId, Option<AnswerDraft>),
+    Comment(WorkspaceId, Option<CommentDraft>),
+}
+
+impl Change {
+    fn at(&self) -> Where {
+        match self {
+            Self::Composer(id, _) => Where::Composer(id.clone()),
+            Self::Answer(id, _) => Where::Answer(id.clone()),
+            Self::Comment(id, _) => Where::Comment(id.clone()),
+        }
+    }
+}
 
 /// Keeps drafts on the hub. A clone is another handle on the same thread, which ends once every handle has gone.
 #[derive(Clone)]
@@ -33,30 +64,48 @@ pub struct Drafts {
     caught_up: flume::Receiver<()>,
 }
 
-/// What the client and the thread share of each chat, under one lock, so a chat is never counted as having nothing on
-/// its way before the copy its last draft was kept as is known.
+/// What the client and the thread share of each place something's typed, under one lock, so a place is never counted
+/// as having nothing on its way before the copy its last change was kept as is known.
 #[derive(Default)]
 struct Counted {
-    /// How many of each chat's drafts and files haven't reached the hub, counted as each is handed over and as the hub
-    /// takes it, or it's replaced by a newer draft. A chat with none has nothing in its composer that only this client
-    /// has.
-    unkept: HashMap<SessionId, usize>,
-    /// The newest copy of each chat's draft that this client and the hub agree on: the one the hub gave back as it kept
-    /// one of this client's, or one this client took from the chat's record.
-    agreed: HashMap<SessionId, Agreed>,
+    /// How many of each place's changes and files haven't reached the hub, counted as each is handed over and as the
+    /// hub takes it, or it's replaced by a newer change. A place with none has nothing that only this client has.
+    unkept: HashMap<Where, usize>,
+    /// The newest copy of what's in each place that this client and the hub agree on: the one the hub gave back as it
+    /// kept one of this client's changes there, or one this client took from the record.
+    agreed: HashMap<Where, Agreed>,
 }
 
-/// A copy of a chat's draft, and the revision of the record it was on.
-#[derive(Clone, Default)]
+/// A copy of what's in one place, and the revision of the record it was on.
+#[derive(Clone)]
 struct Agreed {
     rev: Rev,
-    draft: Draft,
+    said: Said,
+}
+
+/// What a record says is in one place, as a client compares it with a copy it agreed on.
+#[derive(Clone, PartialEq)]
+enum Said {
+    Composer(Draft),
+    Answer(Option<AnswerDraft>),
+    Comment(Option<CommentDraft>),
+}
+
+impl Said {
+    /// What a record says of a place where nothing's typed.
+    fn nothing(at: &Where) -> Self {
+        match at {
+            Where::Composer(_) => Self::Composer(Draft::default()),
+            Where::Answer(_) => Self::Answer(None),
+            Where::Comment(_) => Self::Comment(None),
+        }
+    }
 }
 
 type Counts = Arc<Mutex<Counted>>;
 
 enum Request {
-    Changed { id: SessionId, draft: NewDraft, now: bool },
+    Changed { change: Change, now: bool },
     Attach { id: SessionId, file: FileToSend },
     Detach { id: SessionId, file: AttachmentId },
     Reconnect(Client),
@@ -69,19 +118,7 @@ impl Drafts {
         let (requests, received) = flume::unbounded();
         let (catching_up, caught_up) = flume::bounded(1);
         let counts = Counts::default();
-        let keeper = Keeper {
-            client: client.clone(),
-            pending: HashMap::new(),
-            adding: VecDeque::new(),
-            removing: Vec::new(),
-            stalled: false,
-            answered: false,
-            counts: counts.clone(),
-            catching_up,
-            flushing: Vec::new(),
-        };
-        // Without the thread, nothing is kept, and the count says so, since it only goes down as the hub takes each.
-        let _ = std::thread::Builder::new().name("hub-drafts".to_string()).spawn(move || keeper.run(&received));
+        keeper::start(client.clone(), received, counts.clone(), catching_up);
         Self { requests, counts, caught_up }
     }
 
@@ -90,21 +127,39 @@ impl Drafts {
         let _ = self.requests.send(Request::Reconnect(client.clone()));
     }
 
-    /// What's typed in the chat now, kept within [`PAUSE`].
+    /// What's typed in the chat's composer now, kept within [`PAUSE`].
     pub fn typed(&self, id: &SessionId, draft: NewDraft) {
-        self.handed(id);
-        let _ = self.requests.send(Request::Changed { id: id.clone(), draft, now: false });
+        self.change(Change::Composer(id.clone(), draft), false);
     }
 
     /// The same, kept at once, for a change nobody's still typing, such as the composer emptied by sending.
     pub fn set(&self, id: &SessionId, draft: NewDraft) {
-        self.handed(id);
-        let _ = self.requests.send(Request::Changed { id: id.clone(), draft, now: true });
+        self.change(Change::Composer(id.clone(), draft), true);
+    }
+
+    /// What's chosen and typed in answer to the chat's question now, kept within [`PAUSE`], or `None` for nothing.
+    pub fn typed_answer(&self, id: &SessionId, draft: Option<AnswerDraft>) {
+        self.change(Change::Answer(id.clone(), draft), false);
+    }
+
+    /// The same, kept at once, such as `None` as the answer is sent, or something chosen rather than typed.
+    pub fn set_answer(&self, id: &SessionId, draft: Option<AnswerDraft>) {
+        self.change(Change::Answer(id.clone(), draft), true);
+    }
+
+    /// The comment being written on the workspace's diff now, kept within [`PAUSE`], or `None` for none.
+    pub fn typed_comment(&self, id: &WorkspaceId, draft: Option<CommentDraft>) {
+        self.change(Change::Comment(id.clone(), draft), false);
+    }
+
+    /// The same, kept at once, such as `None` as the comment is saved or cancelled.
+    pub fn set_comment(&self, id: &WorkspaceId, draft: Option<CommentDraft>) {
+        self.change(Change::Comment(id.clone(), draft), true);
     }
 
     /// A file for the chat's drafts to name, added to the chat before any draft given after this is kept.
     pub fn attach(&self, id: &SessionId, file: FileToSend) {
-        self.handed(id);
+        self.handed(&Where::Composer(id.clone()));
         let _ = self.requests.send(Request::Attach { id: id.clone(), file });
     }
 
@@ -123,228 +178,95 @@ impl Drafts {
         flushed
     }
 
-    /// Whether something handed over for the chat, a draft or a file, hasn't reached the hub yet, and would be lost if
-    /// the app stopped now.
+    /// Whether something handed over for the chat's composer, a draft or a file, hasn't reached the hub yet, and would
+    /// be lost if the app stopped now.
     pub fn unkept(&self, id: &SessionId) -> bool {
-        self.counts.lock().unkept.contains_key(id)
+        self.unkept_in(&Where::Composer(id.clone()))
+    }
+
+    /// The same, for any place something's typed.
+    pub fn unkept_in(&self, at: &Where) -> bool {
+        self.counts.lock().unkept.contains_key(at)
     }
 
     /// Whether the draft on the hub's `session` record was made somewhere else, such as in another client, so a client
-    /// shows it in place of its own. Nothing handed over for the chat is still on its way, and the record is newer than
-    /// the last copy of its draft that this client kept there or took from it, as [`Drafts::took`] says, and its draft
-    /// isn't that copy. So a record that's newer for something else, such as its status, isn't, and nor is an older
-    /// one that arrives late. While one of this client's is on its way, that one goes on and replaces whatever was made
-    /// elsewhere meanwhile, and [`Drafts::caught_up`] says once it has arrived.
+    /// shows it in place of its own. Nothing handed over for the chat's composer is still on its way, and the record is
+    /// newer than the last copy of its draft that this client kept there or took from it, as [`Drafts::took`] says, and
+    /// its draft isn't that copy. So a record that's newer for something else, such as its status, isn't, and nor is an
+    /// older one that arrives late. While one of this client's is on its way, that one goes on and replaces whatever
+    /// was made elsewhere meanwhile, and [`Drafts::caught_up`] says once it has arrived.
     pub fn from_elsewhere(&self, session: &Session) -> bool {
-        let counts = self.counts.lock();
-        let none = Agreed::default();
-        let agreed = counts.agreed.get(&session.id).unwrap_or(&none);
-        !counts.unkept.contains_key(&session.id) && session.rev > agreed.rev && session.draft != agreed.draft
+        self.elsewhere(&Where::Composer(session.id.clone()), session.rev, &Said::Composer(session.draft.clone()))
+    }
+
+    /// The same, for what's chosen and typed in answer to the chat's question.
+    pub fn answer_from_elsewhere(&self, session: &Session) -> bool {
+        self.elsewhere(&Where::Answer(session.id.clone()), session.rev, &Said::Answer(session.answer_draft.clone()))
+    }
+
+    /// The same, for the comment being written on the workspace's diff.
+    pub fn comment_from_elsewhere(&self, workspace: &Workspace) -> bool {
+        let said = Said::Comment(workspace.comment_draft.clone());
+        self.elsewhere(&Where::Comment(workspace.id.clone()), workspace.rev, &said)
     }
 
     /// Says that this client shows the draft on `session`'s record, such as one it started with, or one made
     /// elsewhere that it took, so a newer record carrying the same draft isn't from elsewhere.
     pub fn took(&self, session: &Session) {
-        let copy = Agreed { rev: session.rev, draft: session.draft.clone() };
-        agree(&mut self.counts.lock(), &session.id, copy);
+        let said = Said::Composer(session.draft.clone());
+        self.agree(Where::Composer(session.id.clone()), Agreed { rev: session.rev, said });
     }
 
-    /// Says that a chat now has nothing on its way to the hub, so a draft made elsewhere that
+    /// The same, for what's chosen and typed in answer to the chat's question.
+    pub fn took_answer(&self, session: &Session) {
+        let said = Said::Answer(session.answer_draft.clone());
+        self.agree(Where::Answer(session.id.clone()), Agreed { rev: session.rev, said });
+    }
+
+    /// The same, for the comment being written on the workspace's diff.
+    pub fn took_comment(&self, workspace: &Workspace) {
+        let said = Said::Comment(workspace.comment_draft.clone());
+        self.agree(Where::Comment(workspace.id.clone()), Agreed { rev: workspace.rev, said });
+    }
+
+    /// Says that a place something's typed now has nothing on its way to the hub, so a change made elsewhere that
     /// [`Drafts::from_elsewhere`] held back meanwhile can be shown. It holds one signal at a time, so signals nobody has
     /// looked at yet gather into one, and each goes to one receiver, so one reader listens.
     pub fn caught_up(&self) -> &flume::Receiver<()> {
         &self.caught_up
     }
 
+    /// Whether a record at `rev` that says `said` is at `at` is newer than the copy this client agreed on there, and
+    /// says something else, with nothing from here still on its way.
+    fn elsewhere(&self, at: &Where, rev: Rev, said: &Said) -> bool {
+        let counts = self.counts.lock();
+        if counts.unkept.contains_key(at) {
+            return false;
+        }
+        match counts.agreed.get(at) {
+            Some(agreed) => rev > agreed.rev && *said != agreed.said,
+            None => *said != Said::nothing(at),
+        }
+    }
+
+    fn agree(&self, at: Where, copy: Agreed) {
+        agree(&mut self.counts.lock(), at, copy);
+    }
+
+    fn change(&self, change: Change, now: bool) {
+        self.handed(&change.at());
+        let _ = self.requests.send(Request::Changed { change, now });
+    }
+
     /// Counted before it's sent, so the thread can't take it, and count it down, first.
-    fn handed(&self, id: &SessionId) {
-        *self.counts.lock().unkept.entry(id.clone()).or_default() += 1;
+    fn handed(&self, at: &Where) {
+        *self.counts.lock().unkept.entry(at.clone()).or_default() += 1;
     }
 }
 
-/// The thread's side.
-struct Keeper {
-    client: Client,
-    /// The newest draft of each chat that isn't kept yet, and when to keep it.
-    pending: HashMap<SessionId, Pending>,
-    /// Files to add to their chats before any draft is kept, in the order they came.
-    adding: VecDeque<(SessionId, FileToSend)>,
-    /// Files to let go of, each once its chat has no draft waiting to be kept.
-    removing: Vec<(SessionId, AttachmentId)>,
-    /// The connection went, so nothing more is tried until the next.
-    stalled: bool,
-    /// The hub has answered a draft on this connection. Until it has, each is kept at once, so a hub that doesn't
-    /// keep them is found out straight away.
-    answered: bool,
-    counts: Counts,
-    /// Signals [`Drafts::caught_up`].
-    catching_up: flume::Sender<()>,
-    /// Waiting for everything given so far to be kept.
-    flushing: Vec<flume::Sender<()>>,
-}
-
-struct Pending {
-    draft: NewDraft,
-    due: Instant,
-}
-
-impl Keeper {
-    fn run(mut self, requests: &flume::Receiver<Request>) {
-        loop {
-            let next = self.pending.values().map(|p| p.due).min().filter(|_| !self.stalled);
-            let request = match next {
-                Some(due) => requests.recv_deadline(due),
-                None => requests.recv().map_err(|_| flume::RecvTimeoutError::Disconnected),
-            };
-            match request {
-                Ok(request) => self.take(request),
-                Err(flume::RecvTimeoutError::Timeout) => {}
-                // Every handle has gone. One about to go, such as an app quitting, keeps what's left first, with
-                // `flushed`, since a process that's exiting wouldn't wait for this thread.
-                Err(flume::RecvTimeoutError::Disconnected) => return,
-            }
-            let now = Instant::now();
-            self.keep(|pending| pending.due <= now);
-            if self.stalled || (self.pending.is_empty() && self.adding.is_empty() && self.removing.is_empty()) {
-                for done in self.flushing.drain(..) {
-                    let _ = done.send(());
-                }
-            }
-        }
-    }
-
-    fn take(&mut self, request: Request) {
-        let now = Instant::now();
-        match request {
-            Request::Changed { id, draft, now: at_once } => {
-                // A change while one waits keeps its time, so typing that goes on is still kept every so often.
-                let waiting = self.pending.get(&id).map_or(now + PAUSE, |p| p.due);
-                let due = if at_once || !self.answered { now } else { waiting };
-                if self.pending.insert(id.clone(), Pending { draft, due }).is_some() {
-                    // The one it replaces never needs to reach the hub.
-                    self.reached(&id, None);
-                }
-            }
-            Request::Attach { id, file } => self.adding.push_back((id, file)),
-            Request::Detach { id, file } => self.removing.push((id, file)),
-            Request::Reconnect(client) => {
-                // It may be another hub, which may keep drafts where the last didn't.
-                (self.client, self.stalled, self.answered) = (client, false, false);
-                for pending in self.pending.values_mut() {
-                    pending.due = now;
-                }
-            }
-            Request::Flush(done) => {
-                for pending in self.pending.values_mut() {
-                    pending.due = now;
-                }
-                self.flushing.push(done);
-            }
-        }
-    }
-
-    /// Adds every file waiting, then keeps each draft `due` picks, then lets go of the files whose chats have no draft
-    /// left waiting, unless the connection goes.
-    fn keep(&mut self, due: impl Fn(&Pending) -> bool) {
-        self.add_files();
-        self.keep_drafts(due);
-        self.remove_files();
-    }
-
-    fn keep_drafts(&mut self, due: impl Fn(&Pending) -> bool) {
-        let ids: Vec<SessionId> = self.pending.iter().filter(|(_, p)| due(p)).map(|(id, _)| id.clone()).collect();
-        for id in ids {
-            if self.stalled {
-                return;
-            }
-            let Some(pending) = self.pending.remove(&id) else { continue };
-            let answer = self.client.session_draft(&id, &pending.draft);
-            // For the next connection, which may be to a hub that keeps drafts, such as this one once it's restarted as
-            // the build that does.
-            let held = answer
-                .as_ref()
-                .is_err_and(|e| e.is_unsupported() || matches!(e, ClientError::Io(_) | ClientError::Disconnected));
-            if held {
-                self.pending.insert(id, pending);
-                self.stalled = true;
-            } else {
-                // Kept, or the hub answered and won't keep this one however often it's asked, such as for a chat
-                // that's closed or gone.
-                self.answered = true;
-                self.reached(&id, answer.ok().map(|session| Agreed { rev: session.rev, draft: session.draft }));
-            }
-        }
-    }
-
-    fn add_files(&mut self) {
-        while !self.stalled
-            && let Some((id, file)) = self.adding.pop_front()
-        {
-            let attachment = &file.attachment;
-            // Such as a file of a prompt that came back because it couldn't be sent.
-            if self.client.has_given(&id, &attachment.id) {
-                self.reached(&id, None);
-                continue;
-            }
-            let added = self.client.attachment_add(
-                &id,
-                &attachment.id,
-                &attachment.name,
-                attachment.media_type,
-                file.data.clone(),
-            );
-            match added {
-                // Added, or the hub won't take it however often it's asked, and then a draft goes without it.
-                Ok(_) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&id, None),
-                Err(ClientError::Io(_) | ClientError::Disconnected) => {
-                    self.adding.push_front((id, file));
-                    self.stalled = true;
-                }
-            }
-        }
-    }
-
-    fn remove_files(&mut self) {
-        let mut left = Vec::new();
-        for (id, file) in std::mem::take(&mut self.removing) {
-            if self.stalled || self.pending.contains_key(&id) {
-                left.push((id, file));
-                continue;
-            }
-            match self.client.attachment_remove(&id, &file) {
-                // Let go of, or the hub keeps it, such as for a prompt that carries it.
-                Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => {}
-                Err(ClientError::Io(_) | ClientError::Disconnected) => {
-                    left.push((id, file));
-                    self.stalled = true;
-                }
-            }
-        }
-        self.removing = left;
-    }
-
-    /// Counts down one of the chat's drafts or files, which has reached the hub, or never needs to, along with the
-    /// copy the hub gave back if it kept a draft.
-    fn reached(&self, id: &SessionId, kept: Option<Agreed>) {
-        let mut counts = self.counts.lock();
-        if let Some(kept) = kept {
-            agree(&mut counts, id, kept);
-        }
-        if let Some(count) = counts.unkept.get_mut(id) {
-            *count -= 1;
-            if *count == 0 {
-                counts.unkept.remove(id);
-                // Full only while a signal is waiting, which says the same.
-                let _ = self.catching_up.try_send(());
-            }
-        }
-    }
-}
-
-/// Takes `copy` as the one the client and the hub agree on for the chat, unless the one it has is newer.
-fn agree(counts: &mut Counted, id: &SessionId, copy: Agreed) {
-    let agreed = counts.agreed.entry(id.clone()).or_default();
-    if copy.rev > agreed.rev {
-        *agreed = copy;
+/// Takes `copy` as the one the client and the hub agree on at `at`, unless the one it has is newer.
+fn agree(counts: &mut Counted, at: Where, copy: Agreed) {
+    if counts.agreed.get(&at).is_none_or(|agreed| copy.rev > agreed.rev) {
+        counts.agreed.insert(at, copy);
     }
 }
