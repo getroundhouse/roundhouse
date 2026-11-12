@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{HubId, InstanceId};
@@ -52,6 +53,8 @@ pub(crate) type Open = Box<dyn Fn() -> io::Result<Opened> + Send + Sync>;
 pub(crate) struct AdapterProvider {
     name: String,
     hub_id: HubId,
+    /// The hub's, which its hello tells the adapter.
+    build: Build,
     open: Open,
     /// As the newest hello declared them.
     capabilities: Mutex<Capabilities>,
@@ -62,10 +65,11 @@ pub(crate) struct AdapterProvider {
 
 impl AdapterProvider {
     /// Its adapter starts when it's first asked something, or told to say hello.
-    pub(crate) fn new(name: String, hub_id: HubId, open: Open) -> Self {
+    pub(crate) fn new(name: String, hub_id: HubId, build: Build, open: Open) -> Self {
         Self {
             name,
             hub_id,
+            build,
             open,
             capabilities: Mutex::new(Capabilities::default()),
             connection: AsyncMutex::new(None),
@@ -106,7 +110,7 @@ impl AdapterProvider {
             protocol_version: versions::PROVIDERS.newest,
             oldest_protocol_version: versions::PROVIDERS.oldest,
             hub_id: self.hub_id.clone(),
-            build: protocol::BUILD_VERSION.to_string(),
+            build: self.build.version().to_string(),
         };
         let failed = |e: io::Error| ProviderError::io(format!("saying hello to provider {}", self.name), e);
         let answer = tokio::select! {

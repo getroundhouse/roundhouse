@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::ApiError;
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, MergeState, ModelChoice, ModelName,
@@ -53,7 +54,15 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, agents, false))
+    Arc::new(Hub::new(
+        Build::UNSTAMPED,
+        store,
+        dir.join("attachments"),
+        dir.join("worker-logs"),
+        providers,
+        agents,
+        false,
+    ))
 }
 
 /// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.

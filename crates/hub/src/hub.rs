@@ -43,6 +43,7 @@ use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::versions;
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{AgentDescription, ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
@@ -79,6 +80,7 @@ enum Wanted {
 }
 
 pub(crate) struct Hub {
+    build: Build,
     store: Arc<Store>,
     attachment_files: AttachmentFiles,
     /// What each worker's command writes to stderr, a file per instance. Apart from any provider's own files.
@@ -120,6 +122,7 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 
 impl Hub {
     pub(crate) fn new(
+        build: Build,
         store: Arc<Store>,
         attachments_dir: PathBuf,
         worker_logs_dir: PathBuf,
@@ -128,6 +131,7 @@ impl Hub {
         on_demand: bool,
     ) -> Self {
         Self {
+            build,
             store,
             attachment_files: AttachmentFiles::new(attachments_dir),
             worker_logs_dir,
@@ -152,6 +156,16 @@ impl Hub {
             clients: AtomicU32::new(0),
             requests: AtomicU32::new(0),
         }
+    }
+
+    /// Which build this hub is.
+    pub(crate) fn build(&self) -> Build {
+        self.build
+    }
+
+    /// The refusal of a request this hub doesn't know, or can't read.
+    pub(crate) fn unsupported(&self, unreadable: Option<&serde_json::Error>) -> ApiError {
+        ApiError::unsupported_request("this hub", self.build.version(), unreadable)
     }
 
     /// A workspace's provider. One the hub isn't set up with, such as one taken out of its settings, is unavailable
@@ -283,14 +297,14 @@ impl Hub {
         let running_sessions = self.sessions.lock().live.values().filter(|session| session.counts_as_running()).count();
         HubStatus {
             pid: std::process::id(),
-            hub_version: protocol::BUILD_VERSION.to_string(),
+            hub_version: self.build.version().to_string(),
             protocol_version: versions::CLIENTS.newest,
             started_at_ms: self.started_at_ms,
             workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
             on_demand: self.on_demand,
-            build_number: protocol::BUILD_NUMBER,
+            build_number: self.build.number(),
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
             keeping_awake: self.awake.holding(),

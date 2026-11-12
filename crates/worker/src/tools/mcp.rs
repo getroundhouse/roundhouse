@@ -2,6 +2,7 @@
 //! version, which has no handshake, so each request is answered alone, from what it says. A wait is an MCP task, of
 //! the tasks extension, for a client that offers to take one.
 
+use protocol::Build;
 use protocol::model::SessionId;
 use serde_json::{Map, Value, json};
 
@@ -150,7 +151,7 @@ impl<'a> Method<'a> {
 
 /// Answers one message, from the agent in `session_id`. Only a JSON-RPC request or notification is taken, since a
 /// client sends nothing else.
-pub(super) async fn answer(asks: &Asks, session_id: &SessionId, headers: &Headers, body: &[u8]) -> Reply {
+pub(super) async fn answer(asks: &Asks, build: Build, session_id: &SessionId, headers: &Headers, body: &[u8]) -> Reply {
     let message: Value = match serde_json::from_slice(body) {
         Ok(message) => message,
         Err(e) => return refused(Value::Null, Code::Parse, format!("that isn't JSON: {e}")),
@@ -170,7 +171,7 @@ pub(super) async fn answer(asks: &Asks, session_id: &SessionId, headers: &Header
     };
     let Some(id) = id else { return Reply::Accepted };
     let params = message.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
-    Reply::Answer(Answer { id, outcome: request(asks, session_id, headers, method, &params).await })
+    Reply::Answer(Answer { id, outcome: request(asks, build, session_id, headers, method, &params).await })
 }
 
 fn refused(id: Value, code: Code, message: impl Into<String>) -> Reply {
@@ -179,6 +180,7 @@ fn refused(id: Value, code: Code, message: impl Into<String>) -> Reply {
 
 async fn request(
     asks: &Asks,
+    build: Build,
     session_id: &SessionId,
     headers: &Headers,
     name: &str,
@@ -204,7 +206,7 @@ async fn request(
         requested => return Err(unsupported(requested)),
     }
     match method {
-        Method::Discover => Ok(discover()),
+        Method::Discover => Ok(discover(build)),
         Method::Ping => Ok(json!({ "resultType": "complete" })),
         Method::ListTools => Ok(json!({
             "resultType": "complete",
@@ -269,12 +271,12 @@ fn unsupported(requested: Option<&str>) -> RpcError {
 }
 
 /// Never cached for long, since the tools change with the worker's build, which can't say so as it's replaced.
-fn discover() -> Value {
+fn discover(build: Build) -> Value {
     json!({
         "resultType": "complete",
         "supportedVersions": [VERSION],
         "capabilities": { "tools": {}, "extensions": { TASKS: {} } },
-        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "roundhouse", "version": protocol::BUILD_VERSION } },
+        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "roundhouse", "version": build.version() } },
         "instructions": "Roundhouse's tools, for this workspace. get_pull_request says where the workspace's pull \
             request stands, as Roundhouse reads it from GitHub, and wait_for_pull_request waits in the background \
             until it's merged or closed, or needs you.",

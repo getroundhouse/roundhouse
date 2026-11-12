@@ -88,7 +88,7 @@ impl Hub {
             }
             WorkerAsk::Wait { wait } => self.wait_of(&session_id, wait).await.map(waited),
             WorkerAsk::CancelWait { wait } => self.cancel_wait(&session_id, wait).await.map(waited),
-            WorkerAsk::Unknown => Err(ApiError::unsupported_request("this hub", None)),
+            WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }
 }

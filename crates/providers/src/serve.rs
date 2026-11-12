@@ -71,7 +71,7 @@ where
             }
             // A newer hub's, so it's refused as one this adapter doesn't do, rather than leaving the hub waiting.
             (Err(e), Some(_)) => {
-                let refused = ApiError::unsupported_request("this adapter", Some(&e));
+                let refused = ApiError::unsupported_request("this adapter", build, Some(&e));
                 let _ = frames.send(reply(ProviderOutcome::Error(refused))).await;
             }
             (Ok(request), Some((_, provider))) => answer_on_a_task(provider.clone(), request, id, frames.clone()),

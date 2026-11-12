@@ -4,6 +4,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use hyper::header::{AUTHORIZATION, HOST, HeaderMap, HeaderValue, ORIGIN};
 use hyper::{Method, StatusCode, Uri};
+use protocol::Build;
 use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -15,7 +16,7 @@ const PORT: u16 = 50_123;
 
 fn tools() -> Tools {
     let (frames, _) = mpsc::channel(8);
-    let tools = Tools::new(Arc::new(Asks::new(frames)));
+    let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED);
     tools.admit(ToolsToken::new("token-s"), "s".into());
     tools
 }

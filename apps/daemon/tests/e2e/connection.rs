@@ -20,8 +20,10 @@ fn a_client_knows_which_build_its_hub_is() {
 
     let client = stack.client();
 
-    assert_eq!(client.hub_version(), protocol::BUILD_VERSION);
-    assert_eq!(client.hub_status().unwrap().hub_version, protocol::BUILD_VERSION);
+    // The daemon's build, which was compiled with the same stamp as this test.
+    let build = protocol::this_build!().version();
+    assert_eq!(client.hub_version(), build);
+    assert_eq!(client.hub_status().unwrap().hub_version, build);
 }
 
 /// A connection that sends frames as written here, for what `Client` has no way to send.

@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
 use protocol::worker::{AskAnswer, RunningAgent, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse};
@@ -184,10 +185,10 @@ impl WorkerLink {
         self.kept.load(Ordering::Relaxed)
     }
 
-    /// Whether the worker is another build than this hub, as its hello said, such as one an earlier hub left. One that
+    /// Whether the worker is another build than `hub`, as its hello said, such as one an earlier hub left. One that
     /// didn't say is from before workers said, so it's another too.
-    pub(crate) fn is_another_build(&self) -> bool {
-        self.build.get().is_some_and(|build| build.as_deref() != Some(protocol::BUILD_VERSION))
+    pub(crate) fn is_another_build(&self, hub: Build) -> bool {
+        self.build.get().is_some_and(|build| build.as_deref() != Some(hub.version()))
     }
 
     /// The build its hello named, for the log.

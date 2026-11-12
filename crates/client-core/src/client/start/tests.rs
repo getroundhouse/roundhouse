@@ -267,15 +267,15 @@ fn builds_with_the_same_version_and_another_number_get_copies_of_their_own() {
 #[test]
 fn a_daemon_named_by_hand_is_started_where_it_is_and_any_other_is_the_one_beside_this_binary() {
     assert_eq!(
-        Daemon::find(Some("/elsewhere/roundhoused".into())).unwrap(),
+        Daemon::find(Some("/elsewhere/roundhoused".into()), build(3).into()).unwrap(),
         Daemon::in_place("/elsewhere/roundhoused")
     );
 
-    let beside = Daemon::find(None).unwrap();
+    let beside = Daemon::find(None, build(3).into()).unwrap();
 
     let this_binary = std::env::current_exe().unwrap().canonicalize().unwrap();
     assert_eq!(beside.path, this_binary.with_file_name(DAEMON_NAME));
-    assert_eq!(beside.build, protocol::STAMPED_BUILD);
+    assert_eq!(beside.build, Some(build(3)));
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn the_daemon_beside_a_linked_binary_is_in_the_version_the_link_named() {
     std::fs::write(version.join("roundhouse"), "").unwrap();
     std::os::unix::fs::symlink(&version, dir.path().join("current")).unwrap();
 
-    let daemon = Daemon::beside(&dir.path().join("current/roundhouse")).unwrap();
+    let daemon = Daemon::beside(&dir.path().join("current/roundhouse"), Build::UNSTAMPED).unwrap();
 
     assert_eq!(daemon.path, version.join(DAEMON_NAME));
 }

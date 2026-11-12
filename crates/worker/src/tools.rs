@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::SessionId;
 use protocol::worker::ToolsToken;
@@ -40,6 +41,8 @@ const MAX_CONNECTIONS: usize = 64;
 
 pub(crate) struct Tools {
     asks: Arc<Asks>,
+    /// The worker's, which the server says it is.
+    build: Build,
     /// Whose each token is, as each agent starts. Kept while the worker runs, since a session's token doesn't change.
     tokens: Mutex<HashMap<ToolsToken, SessionId>>,
     /// Held while it starts serving, so two agents starting at once can't start two servers, and one can't start once
@@ -58,8 +61,8 @@ enum Serving {
 }
 
 impl Tools {
-    pub(crate) fn new(asks: Arc<Asks>) -> Self {
-        Self { asks, tokens: Mutex::new(HashMap::new()), serving: tokio::sync::Mutex::new(Serving::NotYet) }
+    pub(crate) fn new(asks: Arc<Asks>, build: Build) -> Self {
+        Self { asks, build, tokens: Mutex::new(HashMap::new()), serving: tokio::sync::Mutex::new(Serving::NotYet) }
     }
 
     /// Lets calls carrying `token` through, as the agent in `session_id`'s.

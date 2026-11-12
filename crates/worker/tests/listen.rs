@@ -7,6 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use protocol::Build;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::frame;
@@ -38,6 +39,7 @@ impl Listening {
         std::fs::write(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
         std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
         let config = Config {
+            build: Build::UNSTAMPED,
             workspaces_root: dir.path().to_path_buf(),
             state_dir: None,
             home: None,

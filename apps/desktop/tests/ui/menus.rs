@@ -265,5 +265,5 @@ fn about_says_which_build_this_is(cx: &mut TestAppContext) {
     ui.wait("the alert", |ui| ui.cx.has_pending_prompt());
     let (message, detail) = ui.cx.pending_prompt().unwrap();
     assert_eq!(message, "Roundhouse");
-    assert_eq!(detail, format!("Version {}", protocol::BUILD_VERSION));
+    assert_eq!(detail, format!("Version {}", stack.hub.build_version));
 }

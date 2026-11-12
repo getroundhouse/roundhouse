@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use protocol::model::{ApprovalId, ClientMessageId, Effort, ModelName, PermissionMode, Seq};
 
 #[derive(Parser)]
-#[command(name = "roundhouse", version = protocol::BUILD_VERSION, about = "Run coding agents in parallel, each in its own worktree")]
+#[command(name = "roundhouse", version = crate::BUILD.version(), about = "Run coding agents in parallel, each in its own worktree")]
 pub(crate) struct Args {
     #[command(subcommand)]
     pub(crate) command: Cmd,

@@ -88,7 +88,7 @@ where
         Err(e) if e.is::<LengthLimitError>() => return empty(StatusCode::PAYLOAD_TOO_LARGE),
         Err(_) => return empty(StatusCode::BAD_REQUEST),
     };
-    match mcp::answer(&tools.asks, &session_id, &headers_of(headers), &body).await {
+    match mcp::answer(&tools.asks, tools.build, &session_id, &headers_of(headers), &body).await {
         Reply::Accepted => empty(StatusCode::ACCEPTED),
         Reply::Answer(answer) => {
             let status = match &answer.outcome {

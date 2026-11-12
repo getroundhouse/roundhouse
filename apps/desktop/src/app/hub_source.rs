@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Context as _;
 use client_core::{Client, ClientError, Daemon, IdleStop, Restart};
 use gpui_kit::Result;
+use protocol::Build;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
 
@@ -42,12 +43,12 @@ pub(super) fn restarts_at_once(hub: &HubStatus, app_build: Option<u64>) -> bool 
 }
 
 impl HubSource {
-    /// The default hub for this user, with the daemon next to this binary.
-    pub fn default_local() -> anyhow::Result<Self> {
+    /// The default hub for this user, with the daemon next to this binary, for an app that's `build`.
+    pub fn default_local(build: Build) -> anyhow::Result<Self> {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
         let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
-        let daemon = Daemon::find(named).context("finding the daemon next to this binary")?;
-        Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
+        let daemon = Daemon::find(named, build).context("finding the daemon next to this binary")?;
+        Ok(Self { paths, daemon, build_number: build.number(), build_version: build.version() })
     }
 
     /// Connects, starting a hub if there's none, restarting one that [`restarts_at_once`] says to, and replacing one

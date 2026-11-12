@@ -78,7 +78,7 @@ fn ok() -> ProviderOutcome {
 
 /// One that's said hello.
 async fn started(open: Open) -> AdapterProvider {
-    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), open);
+    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, open);
     provider.say_hello().await.unwrap();
     provider
 }
@@ -143,7 +143,7 @@ async fn an_adapter_that_doesnt_say_hello_within_ten_seconds_isnt_used() {
         let _held = stdio;
         std::future::pending::<()>().await;
     });
-    let provider = AdapterProvider::new("silent".into(), "h".into(), open);
+    let provider = AdapterProvider::new("silent".into(), "h".into(), Build::UNSTAMPED, open);
     let asked = tokio::time::Instant::now();
 
     let said = tokio::time::timeout(Duration::from_secs(60), provider.say_hello()).await.expect("no time limit");
@@ -157,7 +157,7 @@ async fn an_adapter_that_doesnt_say_hello_within_ten_seconds_isnt_used() {
 async fn a_hello_that_the_adapter_refuses_fails_whatever_needed_it_as_io() {
     let refused = ProviderOutcome::Error(ApiError::new(ErrorCode::Conflict, "serving hub g"));
     let open = opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(refused.clone())], Arc::default()));
-    let provider = AdapterProvider::new("taken".into(), "h".into(), open);
+    let provider = AdapterProvider::new("taken".into(), "h".into(), Build::UNSTAMPED, open);
 
     let stopped = provider.stop(&"i".into()).await;
 
@@ -176,7 +176,7 @@ async fn an_adapter_that_chose_another_version_is_not_used() {
     });
     let open =
         opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(chose_another.clone())], Arc::default()));
-    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), open);
+    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, open);
 
     let said = provider.say_hello().await;
 
@@ -256,7 +256,7 @@ async fn an_adapter_that_exits_leaving_its_stdout_open_isnt_waited_for() {
 async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters() {
     let opens = Arc::new(AtomicUsize::new(0));
     let open = opening(opens.clone(), |_, stdio| scripted(stdio, vec![], Arc::default()));
-    let provider = Arc::new(AdapterProvider::new("slow".into(), "h".into(), open));
+    let provider = Arc::new(AdapterProvider::new("slow".into(), "h".into(), Build::UNSTAMPED, open));
     let hello = tokio::spawn({
         let provider = provider.clone();
         async move { provider.say_hello().await }

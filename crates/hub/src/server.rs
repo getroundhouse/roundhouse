@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files, queue, waits,
 };
@@ -91,7 +92,7 @@ async fn serve_connection(
             }
         };
         if !greeted && !request.as_ref().is_ok_and(works_without_hello) {
-            let (outcome, version_ok) = hello(request.as_ref().ok());
+            let (outcome, version_ok) = hello(hub.build(), request.as_ref().ok());
             let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
             if !version_ok {
                 break;
@@ -107,7 +108,7 @@ async fn serve_connection(
         tokio::spawn(async move {
             let answered = match request {
                 Ok(request) => handle(&hub, &connection, request).await,
-                Err(e) => Err(ApiError::unsupported_request("this hub", Some(&e))),
+                Err(e) => Err(hub.unsupported(Some(&e))),
             };
             let outcome = match answered {
                 Ok(response) => ReplyOutcome::Response(response),
@@ -131,7 +132,7 @@ fn works_without_hello(request: &ClientRequest) -> bool {
 }
 
 /// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
-fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
+fn hello(build: Build, request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
     let Some(ClientRequest::Hello { protocol_version, oldest_protocol_version, .. }) = request else {
         return error("the first request on a connection must be hello".to_string());
@@ -141,13 +142,13 @@ fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
         Some(chosen) => (
             ReplyOutcome::Response(ClientResponse::Hello {
                 protocol_version: chosen,
-                hub_version: protocol::BUILD_VERSION.to_string(),
+                hub_version: build.version().to_string(),
             }),
             true,
         ),
         None => error(format!(
             "this hub is version {} on {}, and this client speaks {theirs}. Stopping the hub, which also stops its agents, lets one that matches start",
-            protocol::BUILD_VERSION,
+            build.version(),
             versions::CLIENTS,
         )),
     }
@@ -194,7 +195,7 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => return Err(ApiError::unsupported_request("this hub", None)),
+        R::Unknown => return Err(hub.unsupported(None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_stop();
