@@ -1,7 +1,7 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{
-    AgentKind, ApprovalId, ClientRequestId, DiffComment, ModelName, Repo, Rev, SessionSettingsChange, SessionStatus,
-    SetupStatus, Title, TitleSource, Workspace, WorkspaceStatus,
+    ApprovalId, ClientRequestId, DiffComment, ModelName, Repo, Rev, SessionSettingsChange, SessionStatus, SetupStatus,
+    Title, Workspace,
 };
 
 use super::*;
@@ -23,70 +23,31 @@ pub(crate) fn store_with_session(dir: &Path) -> Store {
     store
 }
 
-/// The session `s`, in the workspace `w`, with nothing said in it.
+/// The session `s`, in the workspace `w`, with nothing said in it, and with no approval, no prompt and no conversation
+/// open, as the hub makes one.
 pub(crate) fn idle_session(now: i64) -> StoredSession {
     StoredSession {
         session: Session {
-            account: None,
-            id: "s".into(),
-            workspace_id: "w".into(),
-            agent: AgentKind::Claude,
-            model: protocol::model::ModelName::named("opus"),
-            permission_mode: protocol::model::PermissionMode::FullAccess,
-            effort: protocol::model::Effort::Xhigh,
-            title: None,
-            title_source: TitleSource::FirstLine,
-            closed_at_ms: None,
-            reply_seq: 0,
-            read_seq: 0,
-            turn_started_at_ms: None,
-            user_active_at_ms: None,
-            background_tasks: Vec::new(),
-            wait: None,
-            context: None,
-            prompt_cache: None,
-            queued: Vec::new(),
-            queue_held: false,
-            draft: protocol::model::Draft::default(),
-            answer_draft: None,
+            created_at_ms: now,
+            updated_at_ms: now,
             open_approvals: Some(Vec::new()),
             untaken: Some(Vec::new()),
             agent_opened: Some(false),
-            rev: Rev::default(),
-            status: SessionStatus::Idle,
-            last_seq: 0,
-            created_at_ms: now,
-            updated_at_ms: now,
+            ..protocol::fixtures::session("s")
         },
         agent_session_id: "s".into(),
         agent_opened: false,
     }
 }
 
-/// The workspace `w`, ready in the repository `r`.
+/// The workspace `w`, ready in the repository `r`, before its setup has started.
 pub(crate) fn workspace_w(now: i64) -> Workspace {
     Workspace {
-        id: "w".into(),
-        repo_id: "r".into(),
         name: "alder".into(),
         branch: "alder".into(),
-        base_ref: None,
-        path: None,
-        status: WorkspaceStatus::Ready,
-        provider: "local".into(),
-        instance_id: "w".into(),
         created_at_ms: now,
-        archived_at_ms: None,
-        user_active_at_ms: None,
         setup: SetupStatus::NotStarted,
-        port_base: 55_000,
-        rev: Rev::default(),
-        title: None,
-        title_source: TitleSource::FirstLine,
-        pull_request: None,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
+        ..protocol::fixtures::workspace("w")
     }
 }
 

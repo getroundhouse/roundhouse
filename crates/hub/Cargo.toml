@@ -26,6 +26,7 @@ uuid.workspace = true
 [dev-dependencies]
 process = { workspace = true, features = ["testing"] }
 proptest.workspace = true
+protocol = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 # For tests that pause time, so a timeout passes without being waited for.
 tokio = { workspace = true, features = ["test-util"] }
