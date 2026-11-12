@@ -4,7 +4,8 @@ use gpui_kit::{Context, Window};
 use protocol::model::RepoId;
 
 use super::AppView;
-use crate::home::{ArchiveFilter, Home, Sort};
+use crate::home::{ArchiveFilter, Home};
+use crate::workspace_order::Sort;
 
 /// What shows beside the sidebar, while Settings doesn't fill the window.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]

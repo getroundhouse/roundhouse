@@ -9,7 +9,7 @@ fn file() -> (tempfile::TempDir, SettingsFile) {
 #[test]
 fn what_is_saved_reads_back_the_same() {
     let (_dir, file) = file();
-    let chosen = Settings { always_expand_thinking: true, ..Settings::default() };
+    let chosen = Settings { always_expand_thinking: true, sidebar_sort: Sort::Oldest, ..Settings::default() };
 
     file.write(&chosen).unwrap();
 
@@ -44,7 +44,22 @@ fn saving_keeps_what_a_newer_build_wrote() {
     file.write(&settings).unwrap();
 
     let saved: Value = serde_json::from_str(&std::fs::read_to_string(&file.path).unwrap()).unwrap();
-    assert_eq!(saved, serde_json::json!({"always_expand_thinking": true, "from_later": [1, 2]}));
+    assert_eq!(
+        saved,
+        serde_json::json!({"always_expand_thinking": true, "sidebar_sort": "last_active", "from_later": [1, 2]})
+    );
+}
+
+#[test]
+fn an_order_for_the_sidebar_that_a_newer_build_chose_reads_as_last_active_and_the_rest_still_reads() {
+    let (_dir, file) = file();
+    std::fs::create_dir_all(file.path.parent().unwrap()).unwrap();
+    std::fs::write(&file.path, r#"{"always_expand_thinking": true, "sidebar_sort": "by_colour"}"#).unwrap();
+
+    let settings = file.read();
+
+    assert!(settings.always_expand_thinking);
+    assert_eq!(settings.sidebar_sort, Sort::LastActive);
 }
 
 #[test]

@@ -58,6 +58,7 @@ impl AppView {
     /// request, untouched, when a workspace can't be made now.
     pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
         let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
+        self.sidebar.making_among(&self.workspaces);
         self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it.

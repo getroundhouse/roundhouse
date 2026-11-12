@@ -26,6 +26,10 @@ impl Render for AppView {
         self.keep_menus_current(cx);
         self.keep_dialog_current(cx);
         self.place_sidebars(window, cx);
+        let arranged = crate::sidebar::arrange(self, window, cx);
+        if self.settings_open() || Side::Left.shown(cx).is_none() {
+            self.sidebar.not_drawn();
+        }
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
@@ -37,7 +41,7 @@ impl Render for AppView {
         let main = self.beside_the_sidebar(sides::header_inset(cx), cx);
         // Built only while some of it shows.
         let sidebar = Side::Left.shown(cx).map(|shown| {
-            let sidebar = crate::sidebar::render(self, cx).into_any_element();
+            let sidebar = crate::sidebar::render(self, arranged, cx).into_any_element();
             sides::frame(Side::Left, shown, sidebar, cx)
         });
         let root = self.with_shortcuts(h_flex(), cx);

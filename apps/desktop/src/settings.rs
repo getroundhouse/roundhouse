@@ -1,4 +1,5 @@
-//! What someone has chosen in Settings, and Settings itself. A setting of the app's own belongs to this Mac rather than
+//! What someone has chosen in Settings, and in a few places that choose how the app looks there and then, such as the
+//! order of the sidebar, and Settings itself. A setting of the app's own belongs to this Mac rather than
 //! to a hub, since the app can show several hubs, so they're kept in a file in the app's data directory and read once,
 //! as the app opens. A setting a hub carries out is one of that hub's records, which Settings shows and changes.
 
@@ -15,6 +16,7 @@ mod tests;
 pub(crate) use page::{FIND_KEY, KEY_CONTEXT, OfHub, page};
 
 use crate::saving::{Failure, Saver, write_json};
+use crate::workspace_order::Sort;
 
 /// Every setting that's the app's own, each with the value it has when nobody has chosen. A setting a hub carries
 /// out is the hub's, which keeps it.
@@ -23,6 +25,10 @@ pub(crate) struct Settings {
     /// Thinking shows in full, rather than as a line to open.
     #[serde(default)]
     pub(crate) always_expand_thinking: bool,
+    /// The order of the sidebar's workspaces, in each project, last active first unless another is chosen. Chosen
+    /// from the sidebar's heading rather than in Settings, and kept here so it lasts.
+    #[serde(default)]
+    pub(crate) sidebar_sort: Sort,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     others: Map<String, Value>,

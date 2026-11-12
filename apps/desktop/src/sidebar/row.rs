@@ -137,7 +137,7 @@ fn row_menu(
         let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
     });
     let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
-    let (to_retitle, retitled) = (to_archive.clone(), workspace.id.clone());
+    let (to_retitle, retitled, holds) = (to_archive.clone(), workspace.id.clone(), to_archive.clone());
     let going = app.busy.doing(&workspace.id).is_some();
     let cant_retitle = going || workspace.title.is_none() || app.retitling.contains(&workspace.id);
     let retitle = Rc::new(move |cx: &mut App| {
@@ -147,6 +147,9 @@ fn row_menu(
         let _ = to_archive.update(cx, |t, cx| t.archive(id.clone(), false, cx));
     });
     move |menu, window, cx| {
+        // Built as it opens, so this is when the order starts to hold still for it.
+        let opened = cx.entity();
+        let _ = holds.update(cx, |t, cx| super::kept::hold_while_open(t, &opened, cx));
         let (retitle, archive) = (retitle.clone(), archive.clone());
         let regenerate = PopupMenuItem::new("Regenerate title").icon(Lucide::PencilSparkles);
         let menu =

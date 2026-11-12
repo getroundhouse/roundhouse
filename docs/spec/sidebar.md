@@ -8,6 +8,15 @@
 - **A workspace's mark speaks for its open chat with the most going on:** one whose agent is working, then one that stopped short, then one that only left something running. *Unconfirmed.*
 - **A workspace's row shows how many lines it has added and removed,** in green and red at its right, with either left out when it's none. *Not built:* the hub doesn't send them.
 
+## Order
+
+- **Each project's workspaces are listed last active first,** unless oldest first is chosen instead. *Unconfirmed:* oldest first.
+- **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-[` and `Cmd-]` go in the order shown. *Unconfirmed.*
+- **Last active puts first the workspace someone most recently did something in,** by the hub's clock, so every client agrees. Nothing its agents do counts, not even finishing a turn, so the workspaces at work stay where they are until someone turns to one.
+- **What counts is making the workspace, making a chat in it, sending one of its agents a prompt, and answering one of its agents' questions or approvals.** A prompt counts as it's sent, or as it's queued for when the agent finishes, rather than when the queue sends it, so a workspace doesn't jump up long after anyone touched it. A new workspace starts at the top, and the note that one is on its way is where it will go. *Unconfirmed.*
+- **While someone is using the list, the order holds still,** so a row doesn't move out from under a click: while the pointer moves over the list and for a second and a half after it stops, and while a row's menu is open, which would go if its row moved. Pressing a key ends it until the pointer moves again, so the order goes on changing while someone types with the pointer resting there. A workspace that comes meanwhile, and the note that one is on its way, go after the others until it ends, and then each row slides to its place. Choosing another order from the heading takes at once. *Unconfirmed.*
+- **When the order changes, or a row comes or goes, each row that moves slides from where it was to its new place,** in a fifth of a second, as the sidebars do, so it's plain where it went. One turned back partway slides from where it had got to, and Reduce Motion skips the slide. *Unconfirmed.*
+
 ## Hiding and widening
 
 - **A button beside the window's buttons hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the button: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.

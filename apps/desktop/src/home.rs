@@ -17,10 +17,11 @@ use gpui_kit::{
     size,
 };
 use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
-use protocol::model::{RepoId, Session, Workspace, WorkspaceStatus};
+use protocol::model::{RepoId, Workspace, WorkspaceStatus};
 
 use crate::app::AppView;
 use crate::sidebar::{Standing, doing, standing};
+use crate::workspace_order::Sort;
 
 const ROW_HEIGHT: Pixels = px(44.);
 /// The repository's column, wide enough for most names.
@@ -89,39 +90,13 @@ impl ArchiveFilter {
     }
 }
 
-/// The order of the list.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Sort {
-    /// The workspace last worked in first, by when one of its chats last changed.
-    LastActive,
-    /// The newest first.
-    Created,
-    /// By name, from A.
-    Name,
-}
-
-impl Sort {
-    pub(crate) const ALL: [Sort; 3] = [Sort::LastActive, Sort::Created, Sort::Name];
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Sort::LastActive => "Last active",
-            Sort::Created => "Created",
-            Sort::Name => "Name",
-        }
-    }
-}
-
-/// When a workspace was last worked in: when a chat in it last changed, or when it was made, if none has.
-fn last_active(workspace: &Workspace, sessions: &[Session]) -> i64 {
-    sessions.iter().map(|s| s.updated_at_ms).max().unwrap_or(workspace.created_at_ms)
-}
+/// The orders the list can be in.
+pub(crate) const SORTS: [Sort; 3] = [Sort::LastActive, Sort::Newest, Sort::Name];
 
 /// The workspaces the list shows, by where they are in `workspaces`, in its order. The search matches the name or the
 /// branch, in any case.
 fn listed(
     workspaces: &[Workspace],
-    last_active: impl Fn(&Workspace) -> i64,
     repo: Option<&RepoId>,
     archived: ArchiveFilter,
     sort: Sort,
@@ -137,19 +112,14 @@ fn listed(
             repo.is_none_or(|repo| &w.repo_id == repo) && archived.lists(w.status) && matches(w)
         })
         .collect();
-    match sort {
-        Sort::LastActive => listed.sort_by_key(|&i| std::cmp::Reverse(last_active(&workspaces[i]))),
-        Sort::Created => listed.sort_by_key(|&i| std::cmp::Reverse(workspaces[i].created_at_ms)),
-        Sort::Name => listed.sort_by_cached_key(|&i| workspaces[i].label().to_lowercase()),
-    }
+    sort.sort(&mut listed, workspaces);
     listed
 }
 
 pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
     let home = &app.home;
     let search = home.search.read(cx).value().to_string();
-    let active = |w: &Workspace| last_active(w, app.sessions.get(&w.id).map_or(&[], Vec::as_slice));
-    let rows: Rc<[usize]> = listed(&app.workspaces, active, app.home_repo(), home.archived, home.sort, &search).into();
+    let rows: Rc<[usize]> = listed(&app.workspaces, app.home_repo(), home.archived, home.sort, &search).into();
     let empty = rows.is_empty();
     let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); rows.len()]);
     // A moving mark builds this view again on every frame, so only the rows on screen are built.

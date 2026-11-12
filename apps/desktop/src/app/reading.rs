@@ -56,7 +56,7 @@ impl AppView {
     fn last_replied(&self, id: &WorkspaceId) -> Option<&Session> {
         let sessions = self.sessions.get(id).into_iter().flatten();
         let replied = sessions.filter(|s| s.closed_at_ms.is_none() && s.reply_seq > 0);
-        replied.max_by_key(|s| (s.updated_at_ms, s.created_at_ms))
+        replied.max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms))
     }
 
     /// Marks chats as the sidebar's menu offered when it was drawn, from the copies it had then, so a reply that has

@@ -34,12 +34,17 @@ pub mod sidebar_tabs;
 mod sides;
 pub mod updates;
 mod window_place;
+mod workspace_order;
 pub mod workspace_pane;
 
 pub use assets::Assets;
 use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
+
+/// How long the sidebar's order holds still after the pointer last moved over it, which a test can wait out.
+#[cfg(feature = "testing")]
+pub const SIDEBAR_ORDER_HOLDS_FOR: std::time::Duration = sidebar::HOLDS_FOR;
 
 /// How long after the window last moved its place is saved, which a test can wait out.
 #[cfg(feature = "testing")]
