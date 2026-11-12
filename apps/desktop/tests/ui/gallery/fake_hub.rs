@@ -228,10 +228,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
         | R::AttachmentRemove { .. }
-        | R::SessionQueue { .. }
-        | R::SessionChangeQueued { .. }
-        | R::SessionUnqueue { .. }
-        | R::SessionSendQueued { .. }
+        | R::SessionQueue(_)
+        | R::SessionChangeQueued(_)
+        | R::SessionUnqueue(_)
+        | R::SessionSendQueued(_)
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
         | R::SessionCompact { .. }

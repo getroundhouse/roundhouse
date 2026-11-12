@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files, queue,
 };
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
@@ -310,14 +310,18 @@ async fn handle(
             C::Ok
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
-        R::SessionQueue { id, client_msg_id, text, attachments } => {
+        R::SessionQueue(queue::SessionQueue { id, client_msg_id, text, attachments }) => {
             C::Session(hub.session_queue(id, client_msg_id, text, attachments).await?)
         }
-        R::SessionChangeQueued { id, client_msg_id, text } => {
+        R::SessionChangeQueued(queue::SessionChangeQueued { id, client_msg_id, text }) => {
             C::Session(hub.session_change_queued(id, client_msg_id, text).await?)
         }
-        R::SessionUnqueue { id, client_msg_id } => C::Session(hub.session_unqueue(id, client_msg_id).await?),
-        R::SessionSendQueued { id, client_msg_id } => C::Session(hub.session_send_queued(id, client_msg_id).await?),
+        R::SessionUnqueue(queue::SessionUnqueue { id, client_msg_id }) => {
+            C::Session(hub.session_unqueue(id, client_msg_id).await?)
+        }
+        R::SessionSendQueued(queue::SessionSendQueued { id, client_msg_id }) => {
+            C::Session(hub.session_send_queued(id, client_msg_id).await?)
+        }
         R::SessionApprove { id, approval_id, decision } => {
             hub.session_approve(id, approval_id, decision).await?;
             C::Ok

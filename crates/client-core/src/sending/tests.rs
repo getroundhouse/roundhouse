@@ -6,7 +6,7 @@ use std::path::Path;
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::client::CLIENT_PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, queue};
 use protocol::frame;
 
 use super::*;
@@ -52,7 +52,7 @@ fn hub_that_says(socket: &Path, mut missing: usize) -> (Client, flume::Receiver<
         // Only what these tests send is answered.
         let (prompt, taken) = if matches!(request, ClientRequest::SessionPrompt { .. }) {
             ("prompt", ClientResponse::PromptRecorded { seq: 1, duplicate: false })
-        } else if let ClientRequest::SessionQueue { id, .. } = &request {
+        } else if let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = &request {
             ("queued", ClientResponse::Session(stand_in_hub::session(id.as_str())))
         } else if let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request {
             let _ = said.send(format!("add {id}"));

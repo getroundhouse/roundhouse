@@ -14,6 +14,7 @@ use crate::tail::{StreamDelta, Tail};
 
 pub mod drafts;
 pub mod files;
+pub mod queue;
 mod request;
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It

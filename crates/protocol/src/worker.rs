@@ -7,22 +7,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::attachment::{AttachmentBytes, AttachmentFile, NewAttachment};
 use crate::client::Outcome;
-use crate::event::{ApprovalDecision, EventBody};
+use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentAccount, AgentKind, AgentSessionId, ApprovalId, BranchName, Branches, CacheRequest, CommitId, ContextUsage,
-    FileContents, FileOpened, FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings,
-    SessionSettingsChange, UsageLimit, WorktreeFiles,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, BranchName, Branches, CommitId, FileContents, FileOpened,
+    FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange,
+    WorktreeFiles,
 };
-use crate::tail::StreamDelta;
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
 pub const WORKER_PROTOCOL_VERSION: u32 = 3;
 
 mod ask;
+mod frames;
 mod tools;
 
 pub use ask::{AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk};
+pub use frames::WorkerFrame;
 pub use tools::ToolsToken;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -323,83 +324,6 @@ pub enum WorkerResponse {
 pub struct RunningAgent {
     pub session_id: SessionId,
     pub run: RunId,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "frame", rename_all = "snake_case")]
-pub enum WorkerFrame {
-    Reply {
-        id: u64,
-        #[serde(flatten)]
-        outcome: WorkerOutcome,
-    },
-    AgentEvent {
-        session_id: SessionId,
-        run: RunId,
-        body: EventBody,
-        /// The agent's original line, kept by the hub beside the event, without the bytes of any of `attachments`.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        raw: Option<String>,
-        /// Images the event names, such as one a tool sent back, for the hub to keep before it records the event.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<NewAttachment>,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    AgentDelta {
-        session_id: SessionId,
-        run: RunId,
-        delta: StreamDelta,
-    },
-    /// How full the agent's context is now. It isn't an event: it answers the worker's own question rather than
-    /// being something the agent said, and only the newest matters, which the hub keeps on the session's record.
-    AgentContext {
-        session_id: SessionId,
-        run: RunId,
-        context: ContextUsage,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    /// One of the agent's own requests to its model, as the model started to answer it. It isn't an event, since a
-    /// turn makes many, but each matters: the hub keeps what the newest left on the session's record, and compares
-    /// each with the one before to find a cache that had expired.
-    AgentCache {
-        session_id: SessionId,
-        run: RunId,
-        request: CacheRequest,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    /// What's used of each of the account's limits, as the agent answered when the worker asked. It isn't an event,
-    /// as how full the context is isn't: the agent wasn't told it as it worked, and the hub keeps the newest on the
-    /// account's record, as it does what the agent hears by itself.
-    AgentLimits {
-        session_id: SessionId,
-        run: RunId,
-        limits: Vec<UsageLimit>,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    /// Something the agent in `session_id` called one of the worker's tools for, which only the hub can answer. The
-    /// hub answers with an [`AskAnswer`] naming `id`, which counts apart from the hub's calls.
-    Ask {
-        id: AskId,
-        session_id: SessionId,
-        ask: WorkerAsk,
-    },
-    /// What the watched worktree's branches are now, whole, as [`WorkerRequest::WatchBranches`] asked, so a frame
-    /// replaces every one before it, and only the newest matters.
-    Branches {
-        branches: Branches,
-    },
 }
 
 pub type WorkerOutcome = Outcome<WorkerResponse>;
