@@ -83,6 +83,8 @@ pub enum EventBody {
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {
         agent_session_id: Option<AgentSessionId>,
+        /// As the agent said it, which is untrusted. A [`ModelName`] refuses some names as it's read, so one in the log
+        /// would fail every read that reached this event. Where a model is kept as one, one that names none is dropped.
         model: Option<String>,
         cwd: Option<String>,
         permission_mode: Option<PermissionMode>,
@@ -134,6 +136,7 @@ pub enum EventBody {
         message_id: Option<MessageId>,
         #[serde(default)]
         parent_tool_use_id: Option<ToolUseId>,
+        /// As the agent said it, for the reason [`EventBody::AgentInit`]'s is.
         model: Option<String>,
         blocks: Vec<ContentBlock>,
         /// Where the first of `blocks` sits in its message, as the deltas that streamed it numbered it,
