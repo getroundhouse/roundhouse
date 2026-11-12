@@ -114,6 +114,11 @@ impl Client {
         self.inner.lines.join(session_id)
     }
 
+    /// Whether a prompt written in the chat, to send or to queue, is still on its way, so the hub hasn't answered it.
+    pub fn is_sending(&self, session_id: &SessionId) -> bool {
+        self.inner.lines.holds(session_id)
+    }
+
     /// The calls started on this connection, which can be waited for after it's gone.
     pub fn commands(&self) -> Commands {
         Commands(self.inner.running.clone())

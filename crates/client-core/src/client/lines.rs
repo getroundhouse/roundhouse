@@ -41,6 +41,11 @@ impl Lines {
         line.next += 1;
         Place { lines: self.clone(), session_id: session_id.clone(), number }
     }
+
+    /// Whether any of the chat's places hasn't left yet.
+    pub(super) fn holds(&self, session_id: &SessionId) -> bool {
+        self.lines.lock().contains_key(session_id)
+    }
 }
 
 impl Place {

@@ -69,10 +69,10 @@ impl Client {
         })
     }
 
-    /// Adds each file to the session, then sends the prompt that carries them once it's this prompt's turn in its
-    /// chat's line. A hub refuses a prompt naming a file it hasn't got, so they go first, in order. With any, `text`
-    /// can be empty. The files are only borrowed, so a caller can offer them again if this fails, and their IDs mean
-    /// none is added twice.
+    /// Adds each file the hub hasn't been given to the session, then sends the prompt that carries them once it's this
+    /// prompt's turn in its chat's line. A hub refuses a prompt naming a file it hasn't got, so they go first, in
+    /// order. With any, `text` can be empty. The files are only borrowed, so a caller can offer them again if this
+    /// fails, and their IDs mean none is added twice.
     pub fn send_prompt_carrying(
         &self,
         id: &SessionId,
@@ -118,9 +118,9 @@ impl Client {
         client_msg_id: Option<ClientMessageId>,
         files: &[FileToSend],
     ) -> Result<(Seq, bool)> {
-        let carried = self.check_and_add(id, text, files)?;
-        place.wait_turn();
-        self.session_prompt_with(id, text, client_msg_id, carried)
+        self.carrying(place, id, text, files, move |carried| {
+            self.session_prompt_with(id, text, client_msg_id.clone(), carried)
+        })
     }
 
     fn queue_in_line(
@@ -131,19 +131,47 @@ impl Client {
         text: &str,
         files: &[FileToSend],
     ) -> Result<Session> {
-        let carried = self.check_and_add(id, text, files)?;
-        place.wait_turn();
-        self.session_queue_with(id, client_msg_id, text, carried)
+        self.carrying(place, id, text, files, move |carried| {
+            self.session_queue_with(id, client_msg_id.clone(), text, carried)
+        })
     }
 
-    /// Checks the prompt as the hub would, then adds each of its files to the session, in order, and returns their IDs
-    /// for it to name.
-    fn check_and_add(&self, id: &SessionId, text: &str, files: &[FileToSend]) -> Result<Vec<AttachmentId>> {
+    /// Checks the prompt as the hub would, adds each of its files the hub hasn't been given, in order, then once it's
+    /// this prompt's turn makes `call` with their IDs. A file this connection already gave the hub, such as one kept
+    /// with a draft, isn't sent again. If the hub says one isn't there after all, such as one it has let go of since,
+    /// each is added and the call made once more: the hub refuses a prompt naming a file it hasn't got before it
+    /// records anything, so trying again can't record it twice.
+    fn carrying<T>(
+        &self,
+        place: &Place,
+        id: &SessionId,
+        text: &str,
+        files: &[FileToSend],
+        call: impl Fn(Vec<AttachmentId>) -> Result<T>,
+    ) -> Result<T> {
         check_prompt(text, files.len()).map_err(protocol::client::ApiError::from)?;
+        let given: Vec<&FileToSend> = files.iter().filter(|file| self.has_given(id, &file.attachment.id)).collect();
+        self.add_files(id, files.iter().filter(|file| !self.has_given(id, &file.attachment.id)))?;
+        let carried: Vec<AttachmentId> = files.iter().map(|file| file.attachment.id.clone()).collect();
+        place.wait_turn();
+        match call(carried.clone()) {
+            Err(e) if e.is_not_found() && !given.is_empty() => {
+                for file in &given {
+                    self.forget_given(id, &file.attachment.id);
+                }
+                self.add_files(id, given.into_iter())?;
+                call(carried)
+            }
+            answered => answered,
+        }
+    }
+
+    /// Adds each file to the session, in order.
+    fn add_files<'a>(&self, id: &SessionId, files: impl Iterator<Item = &'a FileToSend>) -> Result<()> {
         for FileToSend { attachment, data } in files {
             self.attachment_add(id, &attachment.id, &attachment.name, attachment.media_type, data.clone())?;
         }
-        Ok(files.iter().map(|file| file.attachment.id.clone()).collect())
+        Ok(())
     }
 }
 
