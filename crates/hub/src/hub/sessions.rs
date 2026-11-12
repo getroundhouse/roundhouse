@@ -324,9 +324,9 @@ impl Hub {
     }
 
     /// Changes something kept on a session that its agent doesn't need to hear of, such as how far it's read. Only
-    /// the store's lock orders this against an agent's events, which needs nothing more, as each reads the session
-    /// back with the revision its change gave it. Nothing is announced when nothing changed, since the revision didn't
-    /// move.
+    /// the store's lock orders this against an agent's events, so this can announce its copy after one of theirs that's
+    /// newer, which the feed then leaves out, as `Feed::send` says. Nothing is announced when nothing changed, since the
+    /// revision didn't move.
     async fn change_session(
         &self,
         change: impl FnOnce(&Store) -> Result<Reading, StoreError> + Send + 'static,

@@ -1,5 +1,5 @@
-//! The feed: each change to a record, for every client following it, with each record's copies in the order of their
-//! revisions.
+//! The feed: the hub's notices, for every client following it, leaving out any copy of a record that's no newer than
+//! one it has told of.
 
 use std::collections::HashMap;
 
@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use protocol::client::HubNotice;
 use protocol::model::{RecordKey, Rev, SessionId, ToolUseId};
 use tokio::sync::broadcast;
+use tracing::trace;
 
 #[cfg(test)]
 mod tests;
@@ -38,19 +39,22 @@ impl Feed {
     }
 
     /// Tells every client following the feed of `notice`, unless it's a copy of a record no newer than one it has told
-    /// of, or of that record's removal. Several tasks can announce one record, each reading it back once its own change
-    /// has committed, so two can read the same copy, and they can finish in either order. A client would drop such a
-    /// copy, but the feed is meant to tell of each change once, and in order. The check and the sending happen under
-    /// one lock, so the order they're checked in is the order clients hear them.
+    /// of, or than that record's removal, so each copy of a record that a client hears is newer than the last. Several
+    /// tasks can announce one record, each with a copy read at or after its own change, so two can carry the same copy,
+    /// or finish in the other order, and a change made while another's copy was read is told of only by the newer
+    /// copy. A client would drop an older copy anyway, as [`Rev::supersedes`] says. The check and the sending happen
+    /// under one lock, so the order they're checked in is the order clients hear them.
     pub(super) fn send(&self, notice: HubNotice) {
         let mut sent = self.sent.lock();
-        // A copy with no revision can't be put in order, and a client always takes one, so it's sent as it is.
-        if let Some((of, rev)) = of(&notice).filter(|(_, rev)| *rev != Rev::default()) {
+        if let Some((of, rev)) = of(&notice) {
             let newest = sent.entry(of).or_default();
-            if *newest >= rev {
+            // Only a hub that doesn't keep revisions makes a copy without one, which is always sent, as a client always
+            // takes it.
+            if !rev.supersedes(*newest) {
+                trace!(rev = rev.get(), newest = newest.get(), "left out a copy no newer than one told of");
                 return;
             }
-            *newest = rev;
+            *newest = rev.max(*newest);
         }
         // An error only means nobody is listening.
         let _ = self.sender.send(notice);
