@@ -105,7 +105,7 @@ async fn a_worker_that_chose_another_version_is_not_used() {
 #[tokio::test]
 async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_the_calls_that_takes() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest };
+    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest, build: None };
     let no_limit = WorkerOutcome::Error(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
     let none = WorkerResponse::PullRequest { pull_request: None, branch: None };
     frames_in(
@@ -140,7 +140,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
 #[tokio::test]
 async fn an_ask_this_hub_cant_read_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest };
+    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest, build: None };
     frames_in(dir.path(), &[("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) })]);
     let ask = r#"{"frame":"ask","id":9,"session_id":{"newer":true},"ask":{"method":"pull_request"}}"#;
     let d = dir.path().display();

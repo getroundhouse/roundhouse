@@ -193,7 +193,8 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => return Err(ApiError::unsupported_request("this hub", None)),
+        // A restart, not yet, as its status says it doesn't keep its workers.
+        R::Unknown | R::HubRestart => return Err(ApiError::unsupported_request("this hub", None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_shutdown();

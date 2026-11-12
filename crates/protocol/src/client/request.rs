@@ -36,6 +36,10 @@ pub enum ClientRequest {
     ///
     /// [`HubStatus::is_idle`]: super::HubStatus::is_idle
     HubShutdownIfIdle,
+    /// Stops the hub without stopping its workers, whose agents carry on, for the next hub to connect to again. It
+    /// waits for setup scripts that are running and requests under way to finish first. Works without a hello, as
+    /// `HubShutdown` does. Only a hub whose status says [`keeps_workers`](super::HubStatus::keeps_workers) knows it.
+    HubRestart,
     /// Changes the hub's own settings, which it keeps and every client shows. A setting left out is left as it is. Sent
     /// again, it sets the same again.
     HubConfigure {

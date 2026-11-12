@@ -344,6 +344,8 @@ mod tests {
             running_setups: setups,
             requests: 1,
             keeping_awake: false,
+            keeps_workers: false,
+            oldest_protocol_version: None,
         }
     }
 

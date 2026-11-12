@@ -24,13 +24,19 @@ fn a_clients_hello_keeps_its_form_with_its_range_and_without() {
 
 #[test]
 fn a_hubs_hello_to_a_worker_keeps_its_form_with_its_range_and_without() {
-    let hello = WorkerRequest::Hello { protocol_version: 4, oldest_protocol_version: Some(3) };
-    let line = br#"{"method":"hello","protocol_version":4,"oldest_protocol_version":3}"#;
+    let hello =
+        WorkerRequest::Hello { protocol_version: 4, oldest_protocol_version: Some(3), keep_running_without_hub: true };
+    let line =
+        br#"{"method":"hello","protocol_version":4,"oldest_protocol_version":3,"keep_running_without_hub":true}"#;
     assert_eq!(frame::encode(&hello).unwrap(), [&line[..], b"\n"].concat());
 
     let before_ranges: WorkerRequest = frame::decode(br#"{"method":"hello","protocol_version":3}"#).unwrap();
-    assert_eq!(before_ranges, WorkerRequest::Hello { protocol_version: 3, oldest_protocol_version: None });
+    let before =
+        WorkerRequest::Hello { protocol_version: 3, oldest_protocol_version: None, keep_running_without_hub: false };
+    assert_eq!(before_ranges, before, "and before a hub could ask its worker to keep running without it");
 
     let reply: WorkerResponse = frame::decode(br#"{"result":"hello","protocol_version":3}"#).unwrap();
-    assert_eq!(reply, WorkerResponse::Hello { protocol_version: 3 });
+    assert_eq!(reply, WorkerResponse::Hello { protocol_version: 3, build: None });
+    let named: WorkerResponse = frame::decode(br#"{"result":"hello","protocol_version":3,"build":"0.1.9"}"#).unwrap();
+    assert_eq!(named, WorkerResponse::Hello { protocol_version: 3, build: Some("0.1.9".into()) });
 }

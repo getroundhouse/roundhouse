@@ -40,6 +40,22 @@ pub enum WorkerRequest {
         protocol_version: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         oldest_protocol_version: Option<u32>,
+        /// The hub asks with [`WorkerRequest::Stop`] when it means the worker to stop, so a worker that loses it
+        /// without being asked keeps its agents running for the next hub, and numbers what it sends, so the next one
+        /// gets what this one didn't record. A hub from before this stops a worker by closing the connection, so a
+        /// worker it didn't say this to stops when it loses it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep_running_without_hub: bool,
+    },
+    /// Stops the worker's agents and setup script once the hub closes the connection, and then the worker, as losing
+    /// a hub that didn't say [`WorkerRequest::Hello::keep_running_without_hub`] does. Answered at once.
+    Stop,
+    /// The agents running, so a hub that connects again carries on with their sessions rather than taking them for
+    /// stopped.
+    RunningAgents,
+    /// What the hub has recorded, through the frame numbered `through`, so the worker can stop keeping it.
+    Received {
+        through: u64,
     },
     /// Creates the worktree and its branch. Fails with `NameTaken` if either already exists.
     PrepareWorkspace {
@@ -240,6 +256,13 @@ pub enum WorkerResponse {
     Hello {
         /// The one chosen: the newest both sides speak.
         protocol_version: u32,
+        /// Which build the worker is, as `BUILD_VERSION` says, so a hub can move a worker from another build onto
+        /// its own once nothing is at work in its workspace. `None` from a worker from before this.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        build: Option<String>,
+    },
+    RunningAgents {
+        agents: Vec<RunningAgent>,
     },
     Ok,
     WorkspaceReady {
@@ -295,6 +318,13 @@ pub enum WorkerResponse {
     },
 }
 
+/// An agent a worker is running, as [`WorkerResponse::RunningAgents`] lists it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RunningAgent {
+    pub session_id: SessionId,
+    pub run: RunId,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "frame", rename_all = "snake_case")]
 pub enum WorkerFrame {
@@ -313,6 +343,10 @@ pub enum WorkerFrame {
         /// Images the event names, such as one a tool sent back, for the hub to keep before it records the event.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<NewAttachment>,
+        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
+        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     AgentDelta {
         session_id: SessionId,
@@ -325,6 +359,10 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         context: ContextUsage,
+        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
+        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     /// One of the agent's own requests to its model, as the model started to answer it. It isn't an event, since a
     /// turn makes many, but each matters: the hub keeps what the newest left on the session's record, and compares
@@ -333,6 +371,10 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         request: CacheRequest,
+        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
+        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     /// What's used of each of the account's limits, as the agent answered when the worker asked. It isn't an event,
     /// as how full the context is isn't: the agent wasn't told it as it worked, and the hub keeps the newest on the
@@ -341,6 +383,10 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         limits: Vec<UsageLimit>,
+        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
+        /// [`WorkerRequest::Hello::keep_running_without_hub`]. `None` otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     /// Something the agent in `session_id` called one of the worker's tools for, which only the hub can answer. The
     /// hub answers with an [`AskAnswer`] naming `id`, which counts apart from the hub's calls.

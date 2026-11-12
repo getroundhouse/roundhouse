@@ -125,12 +125,18 @@ async fn forward_output(
             AgentOutput::Event { body, raw, mut attachments } => {
                 let (body, linked) = crate::linked_images::keep_in(&worktree, body).await;
                 attachments.extend(linked);
-                WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments }
+                WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments, seq: None }
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
-            AgentOutput::Context(context) => WorkerFrame::AgentContext { session_id: session_id.clone(), run, context },
-            AgentOutput::Cache(request) => WorkerFrame::AgentCache { session_id: session_id.clone(), run, request },
-            AgentOutput::Limits(limits) => WorkerFrame::AgentLimits { session_id: session_id.clone(), run, limits },
+            AgentOutput::Context(context) => {
+                WorkerFrame::AgentContext { session_id: session_id.clone(), run, context, seq: None }
+            }
+            AgentOutput::Cache(request) => {
+                WorkerFrame::AgentCache { session_id: session_id.clone(), run, request, seq: None }
+            }
+            AgentOutput::Limits(limits) => {
+                WorkerFrame::AgentLimits { session_id: session_id.clone(), run, limits, seq: None }
+            }
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();
@@ -146,6 +152,7 @@ async fn forward_output(
                     body,
                     raw: None,
                     attachments: Vec::new(),
+                    seq: None,
                 }
             }
         };
