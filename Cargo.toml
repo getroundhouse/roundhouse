@@ -78,6 +78,8 @@ parking_lot = "0.12"
 # Already under GPUI, through `url`. Reads the address of an image the agent's text points to, which can be escaped.
 percent-encoding = "2"
 proptest = "1"
+# Already under GPUI. The window's handle on Windows, for asking Windows to do what a window button does.
+raw-window-handle = "0.6"
 # Already under rustls. Checks the update feed's signature.
 ring = "0.17"
 rusqlite = { version = "0.37", features = ["bundled"] }

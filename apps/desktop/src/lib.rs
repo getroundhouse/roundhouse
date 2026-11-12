@@ -137,9 +137,9 @@ pub fn open_main_window(
     let options = WindowOptions {
         window_bounds: Some(window_bounds),
         display_id,
-        // No title bar of its own: the sidebar and the workspace header run to the top edge, and the window's
-        // buttons sit in the sidebar's empty corner, level with the header. The title still names the
-        // window in the Window menu and Mission Control.
+        // No title bar of its own: the sidebar and the workspace header run to the top edge, and on a Mac the
+        // window's buttons sit in the sidebar's empty corner, level with the header. On Windows the app draws
+        // them, in `app::window_buttons`. The title still names the window in the Window menu and Mission Control.
         titlebar: Some(TitlebarOptions {
             title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,

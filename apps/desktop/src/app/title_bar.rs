@@ -1,7 +1,7 @@
 //! The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
 //! dragging it moves the window, and double-clicking it does what double-clicking a title bar does, which on a Mac is
 //! what its setting says, and on Windows maximizes or restores the window. A press there that a control took, such as
-//! a button in the header, is the control's.
+//! a button in the header, is the control's. On Windows it also holds the window's buttons.
 
 use gpui_kit::{
     App, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement as _,
@@ -9,6 +9,7 @@ use gpui_kit::{
 };
 
 use super::AppView;
+use crate::sides::WindowButtons;
 use crate::workspace_pane::HEADER_HEIGHT;
 
 /// Who moves the window from the strip, which goes by the system.
@@ -17,12 +18,24 @@ pub enum TitleBar {
     /// The app, once a press on the strip moves, and it asks the system what a double click does. On a Mac and Linux.
     App,
     /// Windows, from its own hit test, which takes the strip for a title bar, and it maximizes or restores the window
-    /// on a double click. GPUI's Windows backend can't start a move or answer a double click for the app.
+    /// on a double click. GPUI's Windows backend can't start a move or answer a double click for the app. The app draws
+    /// Windows' buttons at the strip's right end, which GPUI answers the same hit test with.
     Windows,
 }
 
 impl TitleBar {
     const OF_THE_SYSTEM: Self = if cfg!(target_os = "windows") { Self::Windows } else { Self::App };
+}
+
+/// Where the window's buttons are in the frame the window is starting to draw. In full screen the system puts them
+/// away.
+pub(super) fn buttons_in_this_frame(window: &Window, cx: &App) -> WindowButtons {
+    match title_bar(cx) {
+        _ if window.is_fullscreen() => WindowButtons::Absent,
+        TitleBar::Windows => WindowButtons::AtTheEnd,
+        TitleBar::App if cfg!(target_os = "macos") => WindowButtons::InTheCorner,
+        TitleBar::App => WindowButtons::Absent,
+    }
 }
 
 /// The window's, as the system has it, or as a test says in its place.
