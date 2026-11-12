@@ -127,6 +127,7 @@ impl Transcript {
             .region(Region::FindBar)
             .on_action(cx.listener(|t, _: &Escape, _, cx| t.close_find(cx)))
             .child(bar);
-        Some(div().absolute().top(TOP).right(RIGHT).child(raised))
+        // A press on it is its own, not the chat's under it, but the wheel still scrolls the chat.
+        Some(div().absolute().top(TOP).right(RIGHT).block_mouse_except_scroll().child(raised))
     }
 }

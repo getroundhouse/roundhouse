@@ -184,6 +184,21 @@ fn bounds(ui: &mut Ui<'_>, id: &'static str) -> Bounds<Pixels> {
     ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
+/// The wheel over the button scrolls the chat under it, as it does anywhere else in it.
+#[gpui_kit::test]
+fn the_wheel_over_the_button_scrolls_the_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_on_a_long_session(cx, &stack);
+    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
+    assert!(shows(&mut ui));
+    let before = thumb(&ui);
+
+    ui.scroll(button(&ui), ScrollDelta::Pixels(point(px(0.), px(300.))));
+    ui.settle(A_FRAME);
+
+    assert!(thumb(&ui) < before, "it went on up, to {} from {before}", thumb(&ui));
+}
+
 /// The button back down to the latest row of the session shown.
 fn button(ui: &Ui<'_>) -> ElementId {
     let session = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.session_id().to_string());

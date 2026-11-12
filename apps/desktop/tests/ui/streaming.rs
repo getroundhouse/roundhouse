@@ -58,6 +58,45 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     assert!(shown.contains(&reply), "{reply:?} shows as {shown:?}");
 }
 
+/// A long reply, which the transcript parses on another thread once it's recorded, goes on showing the text view it
+/// streamed into while that's done, rather than going blank between.
+#[gpui_kit::test]
+fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    // About 6 KB over three seconds, which is more than is parsed where it's drawn.
+    let phrase = "the signal box keeps a ledger of every train that passes, and the lever frame holds each route clear \
+        until the train has gone by, so the ledger says which train took which route, and this is part";
+    stack.client().session_prompt(&session, &format!("slow:30:{phrase}"), None).unwrap();
+    ui.wait("the reply to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().len() > 5 * 1024));
+    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
+    let recorded = seq_index(stack.client().session_get(&session).unwrap().last_seq);
+    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.row_count()) >= recorded);
+    ui.wait_idle_with("the recorded reply", |text| text.contains("part29"));
+    ui.settle(Duration::from_millis(16));
+
+    let heights = ui.cx.read_entity(&transcript, |t, _| {
+        let reply = |row: &usize| t.event_at(*row).is_some_and(|event| says(&event.body, "part29"));
+        let row = (0..t.row_count()).find(reply).expect("the recorded reply");
+        t.list().heights_measured(row)
+    });
+    let last = *heights.last().unwrap();
+    let tall = heights.iter().position(|height| *height > last / 2.).unwrap();
+    assert!(tall + 1 < heights.len(), "it was drawn as it streamed, before it was parsed: {heights:?}");
+    assert!(heights[tall..].iter().all(|height| *height > last / 2.), "and never went blank after: {heights:?}");
+}
+
+/// Whether the agent's words in `body` say `text`.
+fn says(body: &EventBody, text: &str) -> bool {
+    let EventBody::Assistant { blocks, .. } = body else { return false };
+    blocks
+        .iter()
+        .any(|block| matches!(block, protocol::event::ContentBlock::Text { text: said, .. } if said.contains(text)))
+}
+
 #[gpui_kit::test]
 fn the_stop_button_stops_the_turn(cx: &mut TestAppContext) {
     let stack = Stack::new();

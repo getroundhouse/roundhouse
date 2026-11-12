@@ -143,6 +143,8 @@ pub fn open_main_window(
         KeyBinding::new("cmd-f", FindInChat, None),
         KeyBinding::new("cmd-g", FindNext, None),
         KeyBinding::new("cmd-shift-g", FindPrevious, None),
+        // Selects all of the agent's words in a chat that has focus, which a press on them gives it.
+        KeyBinding::new("cmd-a", gpui_kit::base::input::SelectAll, Some(transcript::KEY_CONTEXT)),
     ]);
     menus::set(cx);
     std::thread::spawn(look::preload_highlighting);

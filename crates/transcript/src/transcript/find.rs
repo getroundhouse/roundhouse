@@ -354,7 +354,7 @@ fn count_held(
         .map(|row| {
             let found = found_in_row(log, m, needle, row);
             let count = found.iter().map(|found| found.matches).sum();
-            let markdown = found.into_iter().filter(|found| found.markdown).map(|found| found.id).collect();
+            let markdown = found.into_iter().filter(|found| found.kit_view).map(|found| found.id).collect();
             (row, count, markdown)
         })
         .collect()

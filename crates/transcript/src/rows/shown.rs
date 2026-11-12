@@ -16,7 +16,7 @@ use protocol::model::{Seq, seq_index};
 use super::around::{
     Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
 };
-use super::tools;
+use super::{InRow, tools};
 use crate::calls;
 use crate::find::{self, Part, TextId};
 use crate::folds::Fold;
@@ -29,9 +29,9 @@ use crate::transcript::Model;
 pub(crate) struct Found {
     pub(crate) id: TextId,
     pub(crate) matches: usize,
-    /// Whether it's Markdown, which is drawn rendered: its matches are found in what it renders, and the view the
-    /// transcript keeps of it draws them.
-    pub(crate) markdown: bool,
+    /// Whether the kit's text view draws it, as Markdown, rendered. The view the transcript keeps of it draws its
+    /// matches, and brings the one being shown into view itself.
+    pub(crate) kit_view: bool,
     /// The folds to open to show it, outermost first.
     pub(crate) opens: Vec<(ItemKey, Fold)>,
 }
@@ -111,12 +111,18 @@ pub(in crate::rows) struct Gather<'n> {
 impl Gather<'_> {
     /// `text`, as it's drawn, if it has matches.
     pub(in crate::rows) fn plain(&mut self, key: &ItemKey, part: Part, text: &str) {
-        self.add(key, part, text, false);
+        self.add(key, part, text, Drawn::Plain);
     }
 
-    /// `text`, which is Markdown, as it was written, if what it renders has matches.
+    /// `text`, which is Markdown the kit's text view draws, as it was written, if what it renders has matches.
     pub(in crate::rows) fn markdown(&mut self, key: &ItemKey, part: Part, text: &str) {
-        self.add(key, part, text, true);
+        self.add(key, part, text, Drawn::KitView);
+    }
+
+    /// `text`, which is Markdown the transcript draws from the kit's blocks, as `crate::prose` has it, as it was
+    /// written, if what it renders has matches.
+    fn prose(&mut self, key: &ItemKey, part: Part, text: &str) {
+        self.add(key, part, text, Drawn::Prose);
     }
 
     /// Gathers what the block `key` shows once its `fold` is open.
@@ -126,16 +132,24 @@ impl Gather<'_> {
         self.opens.pop();
     }
 
-    fn add(&mut self, key: &ItemKey, part: Part, text: &str, markdown: bool) {
-        let matches = if markdown {
-            find::markdown::count(self.needle, &images_apart(text))
-        } else {
-            self.needle.ranges(text).count()
+    fn add(&mut self, key: &ItemKey, part: Part, text: &str, drawn: Drawn) {
+        let matches = match drawn {
+            Drawn::Plain => self.needle.ranges(text).count(),
+            Drawn::KitView | Drawn::Prose => find::markdown::count(self.needle, &images_apart(text)),
         };
         if matches > 0 {
-            self.found.push(Found { id: (key.clone(), part), matches, markdown, opens: self.opens.clone() });
+            let (id, opens, kit_view) = ((key.clone(), part), self.opens.clone(), drawn == Drawn::KitView);
+            self.found.push(Found { id, matches, kit_view, opens });
         }
     }
+}
+
+/// How a text is drawn, which is how its matches are counted.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Drawn {
+    Plain,
+    KitView,
+    Prose,
 }
 
 fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
@@ -145,8 +159,8 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
             gather.markdown(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-            for (block, drawing) in blocks.iter().zip(&around.blocks) {
-                of_block(block, drawing, gather);
+            for (ix, (block, drawing)) in blocks.iter().zip(&around.blocks).enumerate() {
+                of_block(block, drawing, InRow::Own(ix), gather);
             }
         }
         EventBody::Notice { message, .. } => gather.plain(&ItemKey::Event(seq, 0), Part::Notice, message),
@@ -185,10 +199,11 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     }
 }
 
-/// What a block shows, as [`super::render_block`] draws it.
-pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gather: &mut Gather) {
+/// What a block shows, as [`super::render_block`] draws it in the row `in_row` says.
+pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_row: InRow, gather: &mut Gather) {
     let key = &drawing.key;
     match block {
+        ContentBlock::Text { text, .. } if matches!(in_row, InRow::Own(_)) => gather.prose(key, Part::Text, text),
         ContentBlock::Text { text, .. } => gather.markdown(key, Part::Text, text),
         ContentBlock::Thinking { text } if text.is_empty() => {}
         ContentBlock::Thinking { text } => {

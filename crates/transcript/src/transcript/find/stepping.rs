@@ -106,7 +106,7 @@ impl Transcript {
             m.find = Rc::new(FindLook::new(Some(needle), Some(spot.clone()), reveal.clone()));
             m.find.clone()
         };
-        if found.markdown {
+        if found.kit_view {
             self.texts.mark(&found.id, &find, cx);
         }
         self.texts.show_here(&find, cx);
@@ -116,7 +116,7 @@ impl Transcript {
             self.list.go_to_row(at.row);
         }
         reveal.want();
-        let markdown = found.markdown.then(|| spot.text.clone());
+        let markdown = found.kit_view.then(|| spot.text.clone());
         if let Some(id) = &markdown {
             self.texts.reveal(id, cx);
         }

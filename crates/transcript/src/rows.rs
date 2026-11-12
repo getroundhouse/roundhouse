@@ -22,6 +22,8 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
+use crate::prose::{Prose, TextAt, Written};
+use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -99,6 +101,9 @@ pub(crate) struct Shared {
     pub(crate) line_text: LineText,
     /// Where every text view the rows draw is made.
     pub(crate) texts: LongTexts,
+    /// The agent's words the rows draw from the kit's blocks, and what's selected of them.
+    pub(crate) prose: Prose,
+    pub(crate) selection: Selection,
 }
 
 pub(crate) fn render_row(
@@ -291,7 +296,9 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, shared, find, cx))
+                .filter_map(|((ix, block), drawing)| {
+                    render_block(seq, InRow::Own(ix), block, drawing, shared, find, cx)
+                })
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -344,8 +351,18 @@ fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
     row().child(div().text_sm().text_color(color).child(find::marked(text.into(), marks, &[], None))).into_any_element()
 }
 
+/// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
+/// words are.
+#[derive(Clone, Copy)]
+pub(in crate::rows) enum InRow {
+    Own(usize),
+    Call,
+}
+
+/// A block of the event at `seq`, drawn in the row `in_row` says.
 fn render_block(
     seq: Seq,
+    in_row: InRow,
     block: &ContentBlock,
     drawing: &BlockAround,
     shared: &Shared,
@@ -356,6 +373,17 @@ fn render_block(
     let (fold, open, whole) = (drawing.fold, drawing.open, drawing.whole);
     let toggle = Toggle { seq, key, fold, open, whole, shared, find };
     Some(match block {
+        // In a row of its own, the transcript draws it from the kit's blocks, and selects it itself.
+        ContentBlock::Text { text, images } if let InRow::Own(block) = in_row => {
+            let written = Written { at: TextAt { seq, block }, id: (key.clone(), Part::Text), text };
+            // The view the agent wrote it into, until the record has a parse of its own.
+            let meanwhile = || {
+                let view = shared.texts.kept(text_id(key), text)?.image_source(shared.linked.resolver(seq, images));
+                Some(find::markdown_view(view, &written.id, find, None))
+            };
+            shared.prose.draw(&shared.selection, find, &written, shared.linked.resolver(seq, images), meanwhile)
+        }
+        // In a call's row, as a subagent's words are, it's the kit's text view.
         ContentBlock::Text { text, images } => {
             let view = agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images));
             find::markdown_view(view, &(key.clone(), Part::Text), find, None)

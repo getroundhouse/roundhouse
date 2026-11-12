@@ -1,6 +1,7 @@
-//! One session's transcript: its history by range and its live output, in a list of its own and the kit's
-//! `TextView`. `docs/ui.md` has why it's built on those. Everything GPUI about a transcript is in
-//! here, and the data is in `client_core::session_log`, which knows nothing about rendering.
+//! One session's transcript: its history by range and its live output, in a list of its own, with the agent's words
+//! drawn from the kit's Markdown blocks, and the rest by the kit's `TextView`. `docs/ui.md` has why it's built on
+//! those. Everything GPUI about a transcript is in here, and the data is in `client_core::session_log`, which knows
+//! nothing about rendering.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -17,10 +18,12 @@ mod list;
 mod log_block;
 mod long_texts;
 mod model_names;
+mod prose;
 mod questions;
 mod rows;
 mod scroll_area;
 mod selectable_lines;
+mod selection;
 mod transcript;
 
 pub use attachments::{file_card, image_format};
@@ -28,6 +31,7 @@ pub use calls::agent::shown_kind;
 pub use list::{Place, TranscriptList};
 pub use questions::QuestionPanel;
 pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, subagent_standing};
+pub use selection::KEY_CONTEXT;
 pub use transcript::{Transcript, TranscriptEvent};
 
 /// How long a new question ignores keys, which a test can wait out.

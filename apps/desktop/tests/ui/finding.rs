@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use gpui_kit::AppContext as _;
-use gpui_kit::TestAppContext;
 use gpui_kit::test::ElementSnapshot;
+use gpui_kit::{ScrollDelta, TestAppContext, point, px};
 use protocol::model::{SettledAt, seq_index};
 use transcript::Transcript;
 
@@ -87,6 +87,41 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     assert_eq!(command_open(&mut ui), Some(true), "and what it opened stays open");
 }
 
+/// The agent's words, which the transcript draws from the kit's blocks, say where they drew the match being shown, so
+/// one far up the chat is brought into view below the bar. What's counted in them is what they show, and not a link's
+/// address.
+#[gpui_kit::test]
+fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:The **needle** is in [this reply](https://example.com/needle), once");
+    let replies: Vec<String> = (0..30).map(|reply| format!("prose:3:{reply}")).collect();
+    stack.run(&session, &replies.join("; "));
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the chat", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+
+    ui.press("cmd-f");
+    ui.input("needle");
+    ui.cx.executor().advance_clock(PAUSE);
+
+    // Once in the prompt that asked for it and once in the reply, in its words, and not in the link's address.
+    ui.wait("the matches to be counted", |ui| says(ui).as_deref() == Some("1 of 2"));
+    ui.press("enter");
+    assert_eq!(says(&ui).as_deref(), Some("2 of 2"));
+    let row = found_row(&ui).unwrap();
+    let in_a_reply = |ui: &Ui<'_>| {
+        ui.cx.read_entity(&transcript, |t, _| {
+            t.event_at(row).is_some_and(|event| matches!(event.body, protocol::event::EventBody::Assistant { .. }))
+        })
+    };
+    ui.wait("the reply to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
+    assert!(in_a_reply(&ui), "the second is in the reply");
+    ui.wait("the match to come into view below the bar", |ui| {
+        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
+    });
+}
+
 #[gpui_kit::test]
 fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -153,4 +188,26 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     ui.wait("the match to be drawn in the view that marks it", |ui| {
         ui.cx.read_entity(&transcript, Transcript::match_in_its_view) == Some(true)
     });
+}
+
+/// The wheel over the bar scrolls the chat under it, as it does anywhere else in it.
+#[gpui_kit::test]
+fn the_wheel_over_the_bar_scrolls_the_chat(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let script: Vec<String> = (0..100).map(|i| format!("say:message {i}")).collect();
+    stack.run(&session, &script.join("; "));
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the chat", |ui| ui.transcript().is_some());
+    ui.press("cmd-f");
+    ui.input("zebra");
+    ui.cx.executor().advance_clock(PAUSE);
+    ui.wait("the bar to say so", |ui| says(ui).is_some_and(|says| says.contains("No matches")));
+    let top = |ui: &Ui<'_>| ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().top());
+    let before = top(&ui);
+
+    ui.scroll("find-says", ScrollDelta::Pixels(point(px(0.), px(300.))));
+    ui.settle(Duration::from_millis(16));
+
+    assert_ne!(top(&ui), before, "it scrolled");
 }

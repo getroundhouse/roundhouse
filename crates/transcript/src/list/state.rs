@@ -61,6 +61,9 @@ pub(super) struct State {
     /// How many times a row has been drawn, for a test to see that few are.
     #[cfg(feature = "testing")]
     pub(super) rows_drawn: u64,
+    /// Each height each row has been measured at, in turn, for a test to see a row never went blank.
+    #[cfg(feature = "testing")]
+    pub(super) measures: std::collections::HashMap<usize, Vec<Pixels>>,
 }
 
 impl State {
@@ -240,6 +243,8 @@ impl State {
 
     /// Notes what a row was measured at, as the list is now.
     pub(super) fn measured(&mut self, row: usize, height: Pixels) {
+        #[cfg(feature = "testing")]
+        self.measures.entry(row).or_default().push(height);
         self.heights.measure(row, height);
         self.up_to_date(row);
     }

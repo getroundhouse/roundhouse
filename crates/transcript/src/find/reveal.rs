@@ -3,9 +3,10 @@
 //! transcript scrolls its list to it, so it's below the bar. Each frame says where it's drawn now, so the two settle in
 //! a frame or two.
 //!
-//! Markdown is drawn by the kit's text view, which scrolls the transcript's list to a match itself, and says where it
-//! is only while it's out of view. So while it's being brought into view, it's laid out as if what the bar covers were
-//! out of view too, and what it says goes the same two ways.
+//! The agent's recorded words say where a match is as plain text does. Other Markdown is drawn by the kit's text view,
+//! which scrolls the transcript's list to a match itself, and says where it is only while it's out of view. So while
+//! it's being brought into view, it's laid out as if what the bar covers were out of view too, and what it says goes
+//! the same two ways.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -101,8 +102,8 @@ impl Reveal {
         }
     }
 
-    /// Whether the match was last drawn in view below the bar, once it has been drawn since it was wanted. Markdown's
-    /// view says where it is only while it isn't in view, so this is for a match in plain text.
+    /// Whether the match was last drawn in view below the bar, once it has been drawn since it was wanted. The kit's
+    /// text view says where one is only while it isn't in view, so this is for a match that isn't in one.
     #[cfg(feature = "testing")]
     pub(crate) fn shows_in_view(&self) -> Option<bool> {
         let slot = self.0.borrow();
