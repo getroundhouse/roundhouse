@@ -5,13 +5,13 @@ use std::io::Write;
 
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, EventBody, SessionEvent, SubagentOutcome, TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
 };
-use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
+use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use serde_json::Value;
 
-use crate::run::short;
+mod approval;
 
 /// How much of a tool's result to show. The full text stays in the log.
 const RESULT_PREVIEW_LINES: usize = 6;
@@ -27,6 +27,8 @@ pub(crate) struct Printer {
     background: Option<String>,
     /// What each subagent that hasn't ended was started for, so its end can say which it was.
     subagents: HashMap<ToolUseId, String>,
+    /// The questions each open approval asks, so what was answered can be said by question.
+    asked: HashMap<ApprovalId, Vec<Question>>,
 }
 
 impl Printer {
@@ -86,14 +88,8 @@ impl Printer {
                 self.printed.clear();
                 self.turn_ended(event.seq, *outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors);
             }
-            EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
-                let summary = description.clone().unwrap_or_else(|| summarize_input(input));
-                self.line(event.seq, &format!("APPROVAL NEEDED: {tool_name}: {summary}"));
-                self.line(event.seq, &format!("  roundhouse approve {} {approval_id}", event.session_id));
-            }
-            EventBody::ApprovalResolved { approval_id, outcome, .. } => {
-                self.line(event.seq, &format!("approval {} {outcome:?}", short(approval_id.as_str())));
-            }
+            EventBody::ApprovalRequested { .. } => self.approval_requested(event),
+            EventBody::ApprovalResolved { .. } => self.approval_resolved(event),
             EventBody::AgentExited { .. } => self.exited(event),
             EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
             EventBody::AgentMode { permission_mode } => {
