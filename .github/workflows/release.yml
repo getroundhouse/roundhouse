@@ -1,17 +1,9 @@
-# Builds the app from each merge to main and publishes it as an update: signed, notarized, and listed in a feed signed
-# so the app can check it. The build job has no secrets. On a PR that changes how the app is built, packaged or
-# released, it packages the app signed ad hoc and runs the checks a release gets, so the PR shows packaging still
-# works. Nothing here can block a merge, since the ruleset requires only ci.yml's `checks`, which runs publish.py's
-# tests. The keys are in the `release` environment, which only main can use, so signing, notarizing and publishing
-# only run after a merge. The merge queue has already run the checks by then.
+# Builds each merge to main and publishes it as a signed, notarized update in a signed feed. On a PR that touches
+# building, packaging or releasing, it packages signed ad hoc and runs a release's checks. It can't block a merge. The
+# keys are in the `release` environment, which only main can use, and the build jobs have none.
 #
-# The Windows app goes the same way in jobs of its own, so neither platform's release waits on the other's or fails
-# with it: built on Windows, with no secrets, then packaged by vpk on Linux, which packages for Windows, and published
-# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. amd64 and
-# ARM64 each go through those jobs, and one failing leaves the other's release alone.
-#
-# The Linux app goes the same way, as an AppImage: built in Ubuntu 22.04, so it needs no glibc newer than 22.04's, then
-# packaged by vpk on Linux and published to a feed of its own, for amd64 and for ARM64.
+# Each Windows and Linux build, amd64 and ARM64, is packaged by vpk on Linux and published to a feed of its own, apart
+# from the others. The Windows app is unsigned. The Linux app is an AppImage built in Ubuntu 22.04, for its older glibc.
 #
 # The `release` environment's secrets:
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
@@ -22,14 +14,13 @@
 #   B2_RELEASES_KEY_ID, B2_RELEASES_KEY                      A Backblaze key that can read and write the bucket
 # The repository's variables:
 #   RELEASES_BUCKET, RELEASES_S3_ENDPOINT, RELEASES_REGION   The bucket, through its S3 API
-# Where apps read the update feed, and its public key, are the ones the app builds in, from
-# apps/desktop/src/updates/update-feed.url and update-feed.key.
+# The feed's address and key are apps/desktop/src/updates/update-feed.url and update-feed.key.
 name: Release
 
 on:
   push:
     branches: [main]
-    # Docs and the marketing site don't change the app, so alone they'd only publish an update with nothing in it.
+    # Docs and the site alone would publish an empty update.
     paths-ignore:
       - "**.md"
       - docs/**
@@ -50,11 +41,12 @@ on:
 permissions:
   contents: read
 
-# One release at a time. A build on main is never cancelled: merges come about as often as a build takes, so
-# cancelling would mean none ever finishes, and GitHub keeps only the newest run waiting behind it. A PR's run is
-# only a check, so a newer push replaces it.
+# A PR's run is a check, so a newer push replaces it. On main, each platform and processor has a group for builds and
+# one for releases, so a slow Windows build delays only Windows, and a build runs while the last is released. A group
+# keeps only its newest waiting job, so a newer merge replaces a build that hasn't started. Started builds are never
+# cancelled, or with merges this frequent none would finish. Releases stay in merge order, as publish.py needs.
 concurrency:
-  group: release-${{ github.event.pull_request.number || github.ref }}
+  group: release-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -66,6 +58,8 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 45
+    concurrency:
+      group: release-build-mac-${{ github.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,7 +74,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # Not mac-, which mac.yml restores from, since this target/ holds release builds.
+          # Not mac.yml's, since this holds release builds.
           key: release-mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: release-mac-
       - name: Build
@@ -88,11 +82,10 @@ jobs:
         run: |
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-      # From the binaries, as the release job packages them. Signed ad hoc, so package.sh also checks the signature,
-      # the hardened runtime and the entitlements. The runner image has .NET's SDKs.
+      # Signed ad hoc, so package.sh checks the signature, hardened runtime and entitlements.
       - name: Package, signed ad hoc
         run: tools/package/package.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package" --sign -
-      # Short, because a hub left running by a step that failed could hold the step open.
+      # Short, since a hub a failed step left running could hold it open.
       - name: Run the packaged CLI and a hub from the package
         timeout-minutes: 5
         env:
@@ -122,21 +115,22 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # Signs, notarizes and publishes the build job's binaries. It compiles nothing, and each key is only in the steps
-  # that use it, which remove what they wrote. Running it again is safe: it finishes a release that stopped partway,
-  # and leaves a finished one be.
+  # Signs, notarizes and publishes the build's binaries. Each key is only in the steps that use it, which remove what
+  # they wrote. Safe to rerun.
   release:
     needs: build
     if: github.ref == 'refs/heads/main'
     environment: release
     runs-on: macos-26
     timeout-minutes: 60
+    concurrency:
+      group: release-publish-mac-${{ github.ref }}
     env:
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
       NOTARY_PROFILE: roundhouse
-      # How many releases the feed lists, and the bucket keeps packages for.
+      # How many releases the feed and the bucket keep.
       KEEP: "10"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,13 +141,13 @@ jobs:
         with:
           name: binaries
           path: ${{ runner.temp }}
-      # Outside the checkout, and empty, since publish.py starts from an empty directory.
+      # Outside the checkout, and empty, as publish.py needs.
       - run: |
           echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
           echo "KEYCHAIN=$RUNNER_TEMP/signing.keychain-db" >> "$GITHUB_ENV"
           version="$(tools/package/package.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          # So the feed is checked, signed and published for the apps this publishes.
+          # The feed address and key the app builds in.
           key="$(cat apps/desktop/src/updates/update-feed.key)"
           echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
           url="$(cat apps/desktop/src/updates/update-feed.url)"
@@ -161,9 +155,8 @@ jobs:
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
 
-      # Before any key is set up, so a version no app would take, one that isn't newer than every published release,
-      # stops here. Only once the published feed matches its signature, so nothing in the bucket gets into the feed
-      # this signs.
+      # Before any key is set up: stops a version no newer than the feed's, and checks the published feed's signature,
+      # so nothing else in the bucket gets into the feed this signs.
       - name: Read the published feed
         id: feed
         env:
@@ -187,9 +180,9 @@ jobs:
           security create-keychain -p "$password" "$KEYCHAIN"
           security set-keychain-settings -lut 3600 "$KEYCHAIN"
           security unlock-keychain -p "$password" "$KEYCHAIN"
-          # Decrypted with OpenSSL 3, not macOS's LibreSSL, and the password from the environment, since a command
-          # line is visible to every process. -legacy reads the RC2 a .p12 that macOS exported uses, as well as AES.
-          # Then imported as the key and certificate it holds, which need no password.
+          # OpenSSL 3, not LibreSSL, with the password from the environment, since a command line is visible to every
+          # process. -legacy reads RC2, which macOS exports with. Then imported as a key and certificate, with no
+          # password.
           openssl="$(tools/package/feed-signature.sh openssl)"
           (umask 077 && printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12")
           (umask 077 && "$openssl" pkcs12 -legacy -in "$RUNNER_TEMP/developer-id.p12" -passin env:P12_PASSWORD -nodes \
@@ -197,7 +190,7 @@ jobs:
           # -x leaves the private key unexportable.
           security import "$RUNNER_TEMP/developer-id.pem" -k "$KEYCHAIN" -f pemseq -t agg -x -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$KEYCHAIN" > /dev/null
-          # codesign only finds an identity in a keychain on the search list, which keeps the ones already on it.
+          # codesign only looks in keychains on the search list.
           keychains=()
           while IFS= read -r keychain; do
             keychains+=("$keychain")
@@ -216,15 +209,14 @@ jobs:
           ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           trap 'rm -f "$RUNNER_TEMP/notary.p8"' EXIT
-          # The .p8 file's text. The file ends in one newline, whether the secret ends in one or not.
+          # The .p8 file's text, ending in one newline either way.
           key="${KEY%$'\n'}"
           [[ "$key" == "-----BEGIN PRIVATE KEY-----"$'\n'* ]] \
             || { echo "::error::APPLE_API_KEY_P8 isn't the text of a .p8 file"; exit 1; }
           (umask 077 && printf '%s\n' "$key" > "$RUNNER_TEMP/notary.p8")
           xcrun notarytool store-credentials "$NOTARY_PROFILE" --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" \
             --issuer "$ISSUER" --keychain "$KEYCHAIN"
-      # vpk makes a delta from the newest full package, which prepare put in releases/. package.sh checks Gatekeeper
-      # takes the app as notarized, and that the ticket is stapled.
+      # vpk deltas from the newest full package, which prepare fetched. package.sh checks notarization and stapling.
       - name: Package, sign and notarize
         if: steps.feed.outputs.state == 'new'
         run: |
@@ -242,7 +234,7 @@ jobs:
           feed="$(tools/package/publish.py merge --version "$VERSION" --keep "$KEEP" --work "$PACKAGE")"
           trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
           (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
-          # Checks the signature against the app's key too, since a feed signed with another, every app refuses.
+          # Against the app's key too, since apps refuse any other.
           tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
       - name: Publish
         if: steps.feed.outputs.state == 'new'
@@ -257,28 +249,30 @@ jobs:
           tools/package/publish.py check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" --version "$VERSION" \
             --work "$PACKAGE"
 
-  # The Windows binaries, built where they run, on the org's 8-core Windows runners, since a cold build took half an
-  # hour on the standard one. It compiles every dependency, so no key is here.
+  # Built where it runs, with no keys. On the free runners, since only the next Windows build waits. Named per
+  # processor, so release-windows can find it.
   build-windows:
+    name: build-windows (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: amd64
             target: x86_64-pc-windows-msvc
-            runner: windows-latest-amd64-8cores
+            runner: windows-2025-vs2026
           - arch: arm64
             target: aarch64-pc-windows-msvc
-            runner: windows-latest-arm64-8cores
+            runner: windows-11-vs2026-arm
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: release-build-windows-${{ matrix.arch }}-${{ github.ref }}
     env:
-      # Named, so the binaries are for this processor whichever one the runner's own toolchain is for. build.sh
-      # reads it too.
+      # So the binaries are for this processor whatever the runner's default. build.sh reads it too.
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     timeout-minutes: 90
     defaults:
       run:
-        # Git's, which the runner has, so tools/build.sh runs as it does on a Mac.
+        # Git's bash, as on a Mac.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -294,17 +288,18 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # Not windows-, which windows.yml restores from, since this target/ holds release builds.
-          key: release-windows-${{ matrix.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: release-windows-${{ matrix.arch }}-
+          # Named for the runner, since a target/ fits only its image and checkout path. Not windows.yml's, since this
+          # holds release builds.
+          key: release-${{ matrix.runner }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: release-${{ matrix.runner }}-
       - name: Build
         id: build
         run: |
           rustup target add "$CARGO_BUILD_TARGET"
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-      # What packaging on Linux can't run. A package's build is its version, so this is what the hub and the CLI will
-      # say they are. Short, because a hub left running by a step that failed could hold the step open.
+      # What packaging on Linux can't run, including the version the hub and the CLI report. Short, since a hub a failed
+      # step left running could hold it open.
       - name: Run the built CLI and a hub from the build
         timeout-minutes: 5
         env:
@@ -330,9 +325,7 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # On a PR, packages the Windows binaries as the release job below does, so the PR shows packaging still works. The
-  # runner image has .NET's SDK. It runs even if one processor's build failed, and then only that one's fails here,
-  # for want of its binaries.
+  # On a PR, packages as release-windows does, to show packaging works. Only a processor whose build failed fails here.
   package-windows:
     needs: build-windows
     if: ${{ !cancelled() && github.ref != 'refs/heads/main' }}
@@ -358,9 +351,8 @@ jobs:
             --out "$RUNNER_TEMP/package"
       - run: ls -l "$RUNNER_TEMP/package/releases"
 
-  # Packages and publishes the Windows binaries. It compiles nothing, and each key is only in the steps that use it.
-  # Running it again is safe, as for the Mac's. Each processor's goes to a channel of its own, and runs even if the
-  # other's build failed.
+  # Packages and publishes each processor's binaries to a channel of its own. Each key is only in the steps that use it.
+  # Safe to rerun.
   release-windows:
     needs: build-windows
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
@@ -375,25 +367,49 @@ jobs:
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: release-publish-windows-${{ matrix.arch }}-${{ github.ref }}
+    permissions:
+      contents: read
+      # To see whether this processor's build was replaced.
+      actions: read
     env:
       ARCH: ${{ matrix.arch }}
       CHANNEL: ${{ matrix.channel }}
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
-      # How many releases the feed lists, and the bucket keeps packages for.
+      # How many releases the feed and the bucket keep.
       KEEP: "10"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # If a newer merge replaced this processor's build, that merge releases it. This job starts anyway, since needs
+      # covers the whole matrix, so check the jobs API: a replaced build never got a runner.
+      - name: See whether a newer merge's build replaced this one's
+        id: own-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB: build-windows (${{ matrix.arch }})
+        run: |
+          build="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name == env.JOB)] | select(length == 1) | .[0] | "\(.conclusion) \(.runner_id)"')"
+          [ -n "$build" ] || { echo "::error::This run has no one job named $JOB"; exit 1; }
+          if [ "$build" = "cancelled 0" ]; then
+            echo "::notice::A newer merge's build replaced $JOB, so that merge's run releases it"
+            echo "replaced=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.own-build.outputs.replaced != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: steps.own-build.outputs.replaced != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}/binaries
-      # Outside the checkout, and empty, since publish.py starts from an empty directory.
-      - run: |
+      # Outside the checkout, and empty, as publish.py needs.
+      - if: steps.own-build.outputs.replaced != 'true'
+        run: |
           echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
           version="$(tools/package/package-windows.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -402,10 +418,10 @@ jobs:
           url="$(cat apps/desktop/src/updates/update-feed.url)"
           echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
 
-      # Before the feed's key is set up, so a version no app would take stops here, and only once the published feed
-      # matches its signature, so nothing in the bucket gets into the feed this signs.
+      # As for the Mac.
       - name: Read the published feed
         id: feed
+        if: steps.own-build.outputs.replaced != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
@@ -442,14 +458,15 @@ jobs:
           tools/package/publish.py --channel "$CHANNEL" upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"
       - name: Check what apps read
+        if: steps.own-build.outputs.replaced != 'true'
         run: |
           tools/package/publish.py --channel "$CHANNEL" check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"
 
-  # The Linux binaries, built in Ubuntu 22.04, so they need no glibc newer than its 2.35, and the app runs on 22.04 and
-  # every distro since. The org's 8-core runner for ARM64, as ci.yml's checks use. It compiles every dependency, so no
-  # key is here.
+  # Built in Ubuntu 22.04, with no keys, so the app runs on 22.04 and every distro since. On the free runners, the ARM64
+  # one with ci.yml's 8-core image. Named per processor, so release-linux can find it.
   build-linux:
+    name: build-linux (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -457,26 +474,27 @@ jobs:
           - arch: amd64
             runner: ubuntu-latest
           - arch: arm64
-            runner: ubuntu-latest-arm64-8cores
+            runner: ubuntu-26.04-arm
     runs-on: ${{ matrix.runner }}
     container: ubuntu:22.04
+    concurrency:
+      group: release-build-linux-${{ matrix.arch }}-${{ github.ref }}
     timeout-minutes: 90
     defaults:
       run:
         shell: bash
     env:
       DEBIAN_FRONTEND: noninteractive
-      # ci.yml's LINUX_PACKAGES, which GPUI's Linux crates build against, and then what the steps here need, with
-      # zstd for actions/cache, which otherwise falls back to gzip.
+      # ci.yml's LINUX_PACKAGES, then what these steps need, with zstd so actions/cache skips gzip.
       PACKAGES: >-
         pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
         libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
         build-essential ca-certificates curl git jq
         zstd
-      # rustup's own installer, pinned by version and checksum. It installs the toolchain rust-toolchain.toml names.
+      # rustup's installer, pinned by version and checksum.
       RUSTUP_VERSION: 1.29.3
     steps:
-      # Before the checkout, which fetches the history the version counts only with git.
+      # Before the checkout, which needs git for the history.
       - name: Install what the build needs
         run: |
           apt-get update -qq
@@ -499,8 +517,7 @@ jobs:
           # build.sh counts the commits for the version.
           fetch-depth: 0
           persist-credentials: false
-      # The checkout is the runner's user's, and the container runs as root, and git reads no repository someone else
-      # owns until it's told to.
+      # The container runs as root, and git won't read a repository another user owns until told to.
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -510,7 +527,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # Not linux-, which ci.yml restores from, since this target/ holds release builds made on 22.04.
+          # Not ci.yml's, since this holds release builds made on 22.04.
           key: release-linux-${{ matrix.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: release-linux-${{ matrix.arch }}-
       - name: Build
@@ -518,8 +535,7 @@ jobs:
         run: |
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-      # What packaging can't run, as for Windows. Short, because a hub left running by a step that failed could hold
-      # the step open.
+      # As for Windows. Short, since a hub a failed step left running could hold it open.
       - name: Run the built CLI and a hub from the build
         timeout-minutes: 5
         env:
@@ -528,8 +544,8 @@ jobs:
       - name: Show the hub's log
         if: always()
         run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
-      # In a tar, since an artifact keeps no file's mode. On a PR too, since packaging is checked from them. Its path
-      # is the container's, which runner.temp isn't in a container's job.
+      # A tar, since artifacts drop file modes, and on a PR too, for packaging. Its path is the container's, which
+      # runner.temp isn't.
       - id: tar
         run: |
           tar -cf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries" .
@@ -550,9 +566,7 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # On a PR, packages the Linux binaries as the release job below does, so the PR shows packaging still works. The
-  # runner image has .NET's SDK, and vpk makes the AppImage with squashfs-tools. It runs even if one processor's build
-  # failed, and then only that one's fails here, for want of its binaries.
+  # On a PR, packages as release-linux does, to show packaging works. Only a processor whose build failed fails here.
   package-linux:
     needs: build-linux
     if: ${{ !cancelled() && github.ref != 'refs/heads/main' }}
@@ -582,9 +596,7 @@ jobs:
           tools/package/package-linux.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package"
       - run: ls -l "$RUNNER_TEMP/package/releases"
 
-  # Packages and publishes the Linux binaries. It compiles nothing, and each key is only in the steps that use it.
-  # Running it again is safe, as for the Mac's. Each processor's goes to a channel of its own, and runs even if the
-  # other's build failed.
+  # As release-windows, for Linux.
   release-linux:
     needs: build-linux
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
@@ -599,27 +611,51 @@ jobs:
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: release-publish-linux-${{ matrix.arch }}-${{ github.ref }}
+    permissions:
+      contents: read
+      # To see whether this processor's build was replaced.
+      actions: read
     env:
       ARCH: ${{ matrix.arch }}
       CHANNEL: ${{ matrix.channel }}
       STORE: s3://${{ vars.RELEASES_BUCKET }}
       S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
       S3_REGION: ${{ vars.RELEASES_REGION }}
-      # How many releases the feed lists, and the bucket keeps packages for.
+      # How many releases the feed and the bucket keep.
       KEEP: "10"
       LINUX_PACKAGES: squashfs-tools
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As for Windows.
+      - name: See whether a newer merge's build replaced this one's
+        id: own-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB: build-linux (${{ matrix.arch }})
+        run: |
+          build="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name == env.JOB)] | select(length == 1) | .[0] | "\(.conclusion) \(.runner_id)"')"
+          [ -n "$build" ] || { echo "::error::This run has no one job named $JOB"; exit 1; }
+          if [ "$build" = "cancelled 0" ]; then
+            echo "::notice::A newer merge's build replaced $JOB, so that merge's run releases it"
+            echo "replaced=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.own-build.outputs.replaced != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: steps.own-build.outputs.replaced != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: linux-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}
-      - run: .github/install-linux-packages.sh
-      # Outside the checkout, and empty, since publish.py starts from an empty directory.
-      - run: |
+      - if: steps.own-build.outputs.replaced != 'true'
+        run: .github/install-linux-packages.sh
+      # Outside the checkout, and empty, as publish.py needs.
+      - if: steps.own-build.outputs.replaced != 'true'
+        run: |
           echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
           version="$(tools/package/package-linux.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -630,10 +666,10 @@ jobs:
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
 
-      # Before the feed's key is set up, so a version no app would take stops here, and only once the published feed
-      # matches its signature, so nothing in the bucket gets into the feed this signs.
+      # As for the Mac.
       - name: Read the published feed
         id: feed
+        if: steps.own-build.outputs.replaced != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
@@ -665,6 +701,7 @@ jobs:
           tools/package/publish.py --channel "$CHANNEL" upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"
       - name: Check what apps read
+        if: steps.own-build.outputs.replaced != 'true'
         run: |
           tools/package/publish.py --channel "$CHANNEL" check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
             --version "$VERSION" --work "$PACKAGE"

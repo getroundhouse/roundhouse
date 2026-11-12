@@ -1,6 +1,5 @@
-# What only a Mac catches: a build that breaks on macOS, mostly after a dependency changes, and the hub and worker
-# behaving differently there. It runs only when the dependencies, toolchain or Cargo config change, and the merge
-# queue doesn't wait for it. The full checks also run on the Mac before each PR is pushed.
+# What only a Mac catches, mostly after a dependency changes. The queue doesn't wait for it, and the full checks also
+# run on a Mac before each push.
 name: Mac
 
 on:
@@ -51,7 +50,7 @@ jobs:
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: mac-
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      # The gallery's images are exact to the Mac that approved them, and this one can draw a pixel differently.
+      # The gallery's images match the Mac that approved them, pixel for pixel.
       - run: cargo test --workspace --locked -- --skip 'gallery::'
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
