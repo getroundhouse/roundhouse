@@ -14,7 +14,7 @@ mod title;
 mod usage;
 
 pub use account::account;
-pub use context::context_usage;
+pub use context::{ModelWindows, context_usage};
 pub use description::description;
 pub use effort::applied_effort;
 pub use normalize::{Normalized, Normalizer, Parsed};

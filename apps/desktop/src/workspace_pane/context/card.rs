@@ -196,7 +196,7 @@ mod tests {
 
     fn context(used_tokens: u64, max_tokens: u64, parts: &[(&str, u64, ContextPartKind)]) -> ContextUsage {
         let parts = parts.iter().map(|&(name, tokens, kind)| ContextPart { name: name.to_string(), tokens, kind });
-        ContextUsage { used_tokens, max_tokens, parts: parts.collect() }
+        ContextUsage { used_tokens, max_tokens, model_tokens: None, max_set_by: None, parts: parts.collect() }
     }
 
     #[test]

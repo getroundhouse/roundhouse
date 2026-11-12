@@ -4,13 +4,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use protocol::event::EventBody;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tracing::debug;
 
 use super::asking::{Over, Work, work};
 use super::{Shared, control};
-use crate::claude::context::context_usage;
+use crate::claude::context::{ModelWindows, context_usage};
+use crate::claude::normalize::value_of;
 use crate::{AgentError, AgentOutput};
 
 /// The least time between two asks in the middle of a turn. Each report that differs is an event in the session's
@@ -25,6 +26,8 @@ pub(super) struct ContextWatch {
     ask: Ask,
     /// Why nothing more is asked or reported, once that's so.
     over: Option<Over>,
+    /// How much each model holds, which every report says of its own.
+    windows: ModelWindows,
 }
 
 /// Whether the CLI is being asked now.
@@ -82,6 +85,17 @@ impl ContextWatch {
     }
 }
 
+/// Notes how much each model holds from the `line` a turn's end came in, the only line that says, so the report its
+/// end asks for has it.
+pub(super) fn heard(shared: &Shared, body: &EventBody, line: &str) {
+    if !matches!(body, EventBody::TurnEnded { .. }) {
+        return;
+    }
+    if let Some(result) = value_of(line) {
+        shared.context.lock().windows.heard(&result);
+    }
+}
+
 /// Asks after an event that says the context has moved: the start of a turn, something the agent itself wrote, and
 /// a turn's end. The answer comes through the loop that calls this, so the ask runs on a task of its own.
 pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sender<AgentOutput>) {
@@ -109,10 +123,10 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
 /// Reports what the CLI answered. It's sent under the lock, without waiting, so it can't come after the process's
 /// exit, and a report there's no room for is dropped, since only the newest matters and the next ask brings one.
 /// Whether it's a change is the hub's to say, which knows what the session's record has.
-fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<serde_json::Value, AgentError>) {
+fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<Value, AgentError>) {
     let mut watch = shared.context.lock();
     let context = match answer {
-        Ok(reply) => context_usage(&reply),
+        Ok(reply) => context_usage(&reply, &watch.windows),
         Err(e) => {
             debug!("the agent didn't say how full its context is: {e}");
             if let Some(over) = Over::after(&e) {

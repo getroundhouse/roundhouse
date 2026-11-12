@@ -9,20 +9,23 @@ use client_core::{Client, ClientError, SubscriptionItem};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    Account, AccountId, AgentAccount, AgentKind, ContextPart, ContextPartKind, ContextUsage, LimitWindow, SessionId,
-    SessionStatus, UsageLimit,
+    Account, AccountId, AgentAccount, AgentKind, ContextPart, ContextPartKind, ContextUsage, LimitWindow, MaxSetBy,
+    SessionId, SessionStatus, UsageLimit,
 };
 use serde_json::json;
 
 use crate::support::{Stack, TIMEOUT, wait_for_status, wait_for_turn_end, wait_until};
 
-/// What the fake agent says its context holds once a conversation has seen this many prompts.
+/// What the fake agent says its context holds once a conversation has seen this many prompts, and a turn has ended
+/// since it launched. Its settings make the context a fifth of what its model holds, which only a turn's end says.
 fn after_prompts(prompts: u64) -> ContextUsage {
     let part = |name: &str, tokens, kind| ContextPart { name: name.to_string(), tokens, kind };
     let messages = prompts * 1_000;
     ContextUsage {
         used_tokens: 15_000 + messages,
         max_tokens: 200_000,
+        model_tokens: Some(1_000_000),
+        max_set_by: Some(MaxSetBy::Settings),
         parts: vec![
             part("System prompt", 3_000, ContextPartKind::Used),
             part("System tools", 12_000, ContextPartKind::Used),
@@ -62,15 +65,16 @@ fn a_chats_record_says_how_full_its_agents_context_is_and_follows_it() {
     wait_for_turn_end(&client, &session.id, 1);
     wait_for_context(&client, &session.id, &after_prompts(1));
 
-    // The feed says so, so a client that isn't asking sees it.
-    let told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
+    // The feed says so, so a client that isn't asking sees it. What the turn's start said may come first, which can be
+    // from before anything said how much the model holds.
+    let mut told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).filter_map(|item| match item {
         SubscriptionItem::Notice(notice) => match *notice {
             HubNotice::Session(told) => told.context,
             _ => None,
         },
         _ => None,
     });
-    assert_eq!(told, Some(after_prompts(1)));
+    assert_eq!(told.find(|context| context == &after_prompts(1)), Some(after_prompts(1)));
 
     client.session_prompt(&session.id, "say:more", None).unwrap();
     wait_for_turn_end(&client, &session.id, 2);

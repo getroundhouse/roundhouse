@@ -8,7 +8,7 @@ use protocol::client::{
 };
 use protocol::event::{AgentTask, CompactedBy, CompactionOutcome, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
-use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, MaxSetBy, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::{Compacting, StreamDelta, Tail};
 
 mod approvals;
@@ -130,10 +130,11 @@ fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_it
     assert_eq!(session.context, None);
 
     // Spelled out, since a hub's stored rows hold this form too.
-    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"parts":[{"name":"Messages","tokens":5}]}}"#;
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
     let context = session.context.unwrap();
     assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));
+    assert_eq!((context.model_tokens, context.max_set_by), (Some(20), Some(MaxSetBy::Settings)));
 }
 
 /// Spelled out, since the log holds this form for good.

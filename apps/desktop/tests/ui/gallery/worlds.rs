@@ -74,6 +74,8 @@ pub(super) fn context() -> World {
     world.sessions.last_mut().unwrap().context = Some(ContextUsage {
         used_tokens: 313_500,
         max_tokens: 500_000,
+        model_tokens: None,
+        max_set_by: None,
         parts: vec![
             part("System prompt", 4_000, ContextPartKind::Used),
             part("System tools", 4_500, ContextPartKind::Used),
