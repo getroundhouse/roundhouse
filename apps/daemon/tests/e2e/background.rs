@@ -2,8 +2,9 @@
 
 #![cfg(test)]
 
-use protocol::event::{EventBody, TaskKind};
-use protocol::model::SessionStatus;
+use client_core::Client;
+use protocol::event::{EventBody, SessionEvent, TaskKind};
+use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{
     Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end, wait_until,
@@ -35,6 +36,61 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     assert_eq!(finished.status, SessionStatus::Idle);
     assert!(finished.background_tasks.is_empty());
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
+}
+
+/// Starts work in the background that finishes once `done` exists, waits until the turn has ended with it going, and
+/// then has it finish, with the agent picking up again by itself `pause_ms` after.
+fn finish_and_pause(stack: &Stack, client: &Client, session_id: &SessionId, pause_ms: u64) {
+    let done = stack.path("done");
+    client.session_prompt(session_id, &format!("background:{}", done.display()), None).unwrap();
+    wait_for_status(client, session_id, SessionStatus::Background);
+    // Moved into place whole, so the agent can't find it before it says how long.
+    let pause = stack.path("pause");
+    std::fs::write(&pause, pause_ms.to_string()).unwrap();
+    std::fs::rename(&pause, &done).unwrap();
+    wait_until("the work in the background to finish", || {
+        read_all(client, session_id)
+            .iter()
+            .any(|event| matches!(&event.body, EventBody::AgentTasks { tasks, .. } if tasks.is_empty()))
+    });
+}
+
+/// Between its work in the background finishing and the turn it starts to take that in, nothing has said the agent
+/// is done, so the chat is still at work, and an update still waits for it.
+#[test]
+fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks_up_again() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+
+    finish_and_pause(&stack, &client, &session.id, 1500);
+
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
+    assert_eq!(client.hub_status().unwrap().running_sessions, 1);
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
+}
+
+/// Longer than the hub waits for the agent to pick up again, so it takes the agent to be idle first, and the turn the
+/// agent starts after that is a turn all the same.
+#[test]
+fn an_agent_that_takes_too_long_to_pick_up_again_is_taken_to_be_idle_and_its_turn_is_still_one() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+
+    finish_and_pause(&stack, &client, &session.id, 18_000);
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
+    wait_for_status(&client, &session.id, SessionStatus::Idle);
+
+    let from_the_hub = |event: &SessionEvent| event.run.is_none() && matches!(event.body, EventBody::AgentState { .. });
+    let idle = read_all(&client, &session.id);
+    assert_eq!(idle.iter().filter(|event| from_the_hub(event)).count(), 1, "{idle:#?}");
+    assert_eq!(idle.iter().filter(|event| matches!(event.body, EventBody::TurnEnded { .. })).count(), 1);
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
 }
 
 /// The agent only says a task is a monitor's a line after it first lists it, so the record has to follow the list

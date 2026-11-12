@@ -55,6 +55,9 @@ pub(crate) enum Item {
         link: u64,
         reason: ExitReason,
     },
+    /// The agent has had long enough to pick up again after its work in the background, as [`super::pickup`] says.
+    /// In the queue with the agent's events, which may have ended the wait.
+    PickupDue,
     /// Resolves once everything queued ahead of it has been recorded.
     Flush(oneshot::Sender<()>),
     /// The session is gone. What's queued ahead of this is dealt with, and then the task stops.

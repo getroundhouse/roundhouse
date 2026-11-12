@@ -29,6 +29,7 @@ mod commands;
 mod ingest;
 mod limits;
 mod messages;
+mod pickup;
 mod queue;
 mod record;
 mod status;
@@ -39,6 +40,8 @@ mod waits;
 use commands::run_commands;
 use ingest::run_ingest;
 pub(crate) use messages::{Command, Item};
+#[cfg(test)]
+pub(crate) use pickup::PICKS_UP_WITHIN;
 use queue::QueueWatch;
 
 const LIVE_CAPACITY: usize = 4096;

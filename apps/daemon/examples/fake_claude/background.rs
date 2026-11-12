@@ -68,7 +68,11 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        finished(&config, &out, &id, "completed", format!("say:finished {}", file.display()));
+        // As long as the file says, if it says, so a test can see what the moment before the agent picks up again is
+        // taken for.
+        let ms = std::fs::read_to_string(&file).ok().and_then(|said| said.trim().parse().ok());
+        let pause = Duration::from_millis(ms.unwrap_or(0));
+        finished(&config, &out, &id, "completed", format!("say:finished {}", file.display()), pause);
     });
     false
 }
@@ -84,12 +88,13 @@ pub(crate) fn started(config: &Config, out: &Out, id: &str, kind: &'static str, 
     );
 }
 
-/// Ends a task that `completed` or `failed` by itself, taking it out of the list, and has the agent pick up again with
-/// `told`, the prompt it gives, as the real CLI tells the agent either way, which starts a turn of its own, or joins
-/// the one that's running.
-pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str, told: String) {
+/// Ends a task that `completed` or `failed` by itself, taking it out of the list, and has the agent pick up again
+/// `pause` later with `told`, the prompt it gives, as the real CLI tells the agent either way, which starts a turn of its
+/// own, or joins the one that's running.
+pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str, told: String, pause: Duration) {
     notify(config, out, id, status);
     unlisted(config, out, id);
+    std::thread::sleep(pause);
     let _ = config.input.send(Input::Resume(Prompt { text: told, uuid: None }));
 }
 

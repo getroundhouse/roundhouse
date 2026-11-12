@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod background;
 mod contract;
 mod controls;
 mod process;
