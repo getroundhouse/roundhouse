@@ -6,7 +6,7 @@ use protocol::model::{
 };
 
 use super::{Hub, new_id};
-use crate::store::{Made, now_ms};
+use crate::store::{Commented, Made, now_ms};
 
 /// Why a comment, or one being written, on a side of a diff from a newer client is refused.
 const UNKNOWN_SIDE: &str = "this hub doesn't know that side of a diff";
@@ -58,9 +58,12 @@ impl Hub {
             created_at_ms: now_ms(),
             rev: Rev::default(),
         };
-        match self.blocking(move |store| store.add_comment(&comment, client_request_id.as_ref())).await? {
+        let Commented { made, workspace } =
+            self.blocking(move |store| store.add_comment(&comment, client_request_id.as_ref())).await?;
+        match made {
             Made::New(made) => {
                 self.notify(HubNotice::Comment(made.clone()));
+                self.told_of_writing(workspace);
                 Ok(made)
             }
             Made::Earlier(made) => Ok(made),
@@ -75,17 +78,27 @@ impl Hub {
         if text.trim().is_empty() {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "a comment can't be empty"));
         }
-        let edited = self.blocking(move |store| store.edit_comment(&id, &text)).await?;
-        self.notify(HubNotice::Comment(edited.clone()));
-        Ok(edited)
+        let Commented { made, workspace } = self.blocking(move |store| store.edit_comment(&id, &text)).await?;
+        self.notify(HubNotice::Comment(made.clone()));
+        self.told_of_writing(workspace);
+        Ok(made)
     }
 
     pub(crate) async fn comment_delete(&self, id: CommentId) -> Result<(), ApiError> {
         let deleted = id.clone();
-        if let Some(rev) = self.blocking(move |store| store.delete_comment(&deleted)).await? {
+        let Commented { made, workspace } = self.blocking(move |store| store.delete_comment(&deleted)).await?;
+        if let Some(rev) = made {
             self.notify(HubNotice::Removed { record: RecordKey::Comment { id }, rev });
         }
+        self.told_of_writing(workspace);
         Ok(())
+    }
+
+    /// Tells the feed of the workspace, if the comment being written on its diff changed with a comment.
+    fn told_of_writing(&self, workspace: Option<Workspace>) {
+        if let Some(workspace) = workspace {
+            self.notify(HubNotice::Workspace(workspace));
+        }
     }
 }
 

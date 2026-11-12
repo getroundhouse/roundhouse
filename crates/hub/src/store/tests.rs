@@ -242,9 +242,9 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
         created_at_ms: 0,
         rev: Rev::default(),
     };
-    let Made::New(added) = store.add_comment(&comment, None).unwrap() else { panic!("made before") };
+    let Made::New(added) = store.add_comment(&comment, None).unwrap().made else { panic!("made before") };
     newer(added.rev, "a comment");
-    newer(store.delete_comment(&"c".into()).unwrap().unwrap(), "removing a comment");
+    newer(store.delete_comment(&"c".into()).unwrap().made.unwrap(), "removing a comment");
     let repo = Repo { id: "r2".into(), name: "two".into(), path: "/two".into(), created_at_ms: 0, rev: Rev::default() };
     newer(store.add_repo(&repo).unwrap().rev, "a repository");
 
@@ -252,7 +252,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     assert_eq!(records.rev, seen);
     let revs = records.repos.iter().map(|r| r.rev).chain(records.workspaces.iter().map(|w| w.rev));
     assert!(revs.chain(records.sessions.iter().map(|s| s.rev)).all(|rev| rev <= records.rev));
-    assert_eq!(store.delete_comment(&"c".into()).unwrap(), None, "nothing to remove");
+    assert_eq!(store.delete_comment(&"c".into()).unwrap().made, None, "nothing to remove");
 }
 
 /// Two of the same request can both get past the hub's check before either is stored, so the store finds
@@ -289,9 +289,9 @@ fn a_request_sent_again_gets_what_it_made_the_first_time() {
         rev: Rev::default(),
     };
     let request = ClientRequestId::from("add a comment");
-    let Made::New(first) = store.add_comment(&comment, Some(&request)).unwrap() else { panic!() };
+    let Made::New(first) = store.add_comment(&comment, Some(&request)).unwrap().made else { panic!() };
     comment.id = "c2".into();
-    assert_eq!(store.add_comment(&comment, Some(&request)).unwrap(), Made::Earlier(first), "a comment");
+    assert_eq!(store.add_comment(&comment, Some(&request)).unwrap().made, Made::Earlier(first), "a comment");
     assert_eq!(store.list_comments(&"w".into()).unwrap().len(), 1);
 }
 
@@ -309,7 +309,7 @@ fn comments_belong_to_a_workspace_and_can_be_removed() {
         created_at_ms: 1,
         rev: Rev::default(),
     };
-    let Made::New(stored) = store.add_comment(&comment, None).unwrap() else { panic!("made before") };
+    let Made::New(stored) = store.add_comment(&comment, None).unwrap().made else { panic!("made before") };
     assert_eq!(stored, DiffComment { rev: stored.rev, ..comment });
     assert_eq!(store.list_comments(&"w".into()).unwrap(), vec![stored]);
     assert_eq!(store.list_comments(&"other".into()).unwrap(), vec![]);

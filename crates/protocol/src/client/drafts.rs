@@ -29,8 +29,10 @@ pub struct SessionAnswerDraft {
 }
 
 /// Keeps `draft` as the comment being written on the workspace's diff, in place of what was kept. `None` clears it,
-/// which a client sends once the comment is saved or cancelled, and one on a side of a diff the hub doesn't know is
-/// refused, as `CommentAdd` refuses it. Answers with the workspace.
+/// which a client sends once the comment is cancelled. Saving it lets go of it on the hub, as `CommentAdd` and
+/// `CommentEdit` say, so a client has the hub keep what it saves before saving it, rather than clearing it first, which
+/// would lose it if the save failed. One on a side of a diff the hub doesn't know is refused, as `CommentAdd` refuses
+/// it. Answers with the workspace.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceCommentDraft {
     pub id: WorkspaceId,

@@ -124,7 +124,8 @@ pub enum ClientRequest {
         id: WorkspaceId,
     },
     /// Sending the same `client_request_id` again returns the comment it made, unless it's been deleted
-    /// since, which forgets the ID.
+    /// since, which forgets the ID. The comment being written on the workspace's diff goes with it if it's on the
+    /// same line, says the same and changes no comment, since it's this one saved.
     CommentAdd {
         workspace_id: WorkspaceId,
         path: String,
@@ -137,12 +138,14 @@ pub enum ClientRequest {
     CommentList {
         workspace_id: WorkspaceId,
     },
-    /// Replaces a comment's text, keeping its place in the diff. Sending it again sets the same text.
+    /// Replaces a comment's text, keeping its place in the diff. Sending it again sets the same text. The comment
+    /// being written goes with it if it changes this one and says the same.
     CommentEdit {
         id: CommentId,
         text: String,
     },
-    /// Deleting a comment that's already gone does nothing.
+    /// Deleting a comment that's already gone does nothing. The comment being written, if it changes this one,
+    /// becomes a new comment on the same line, so what's typed in it isn't lost.
     CommentDelete {
         id: CommentId,
     },
