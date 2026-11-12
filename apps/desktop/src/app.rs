@@ -25,6 +25,7 @@ mod records;
 mod restarts;
 mod settings;
 mod shortcuts;
+mod title_bar;
 mod view;
 mod workspaces;
 

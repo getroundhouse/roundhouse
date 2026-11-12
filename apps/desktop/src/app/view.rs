@@ -4,16 +4,15 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Pixels, Render, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _,
-    Window, div, px,
+    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
+    Render, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::Hand as _;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, corner, hub_source};
+use super::{AppView, Connection, corner, hub_source, title_bar};
 use crate::sides::{self, Side};
-use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
+use crate::workspace_pane::WorkspacePane;
 use crate::{CloseSettings, OpenSettings};
 
 impl Render for AppView {
@@ -120,7 +119,7 @@ impl AppView {
         let (background, foreground) = (theme.background, theme.foreground);
         // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
         // sizes and its spacing come out as the web's do.
-        moves_window(root.id("app"), cx)
+        title_bar::moves_window(root.id("app"), cx)
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
@@ -130,35 +129,6 @@ impl AppView {
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
             .child(self.unreleased.hears())
     }
-}
-
-/// The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
-/// dragging it moves the window, and double-clicking it does what the system's setting says. A press there that
-/// a control took, such as a button in the header, is the control's. Every one of the kit's buttons, and anything
-/// that takes focus, marks its press as taken before it gets here, since this is the outermost element. A press on
-/// a sidebar's edge never gets here at all, because the kit's resize handle hides what's under it from the pointer.
-fn moves_window(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
-    root.on_mouse_down(
-        MouseButton::Left,
-        cx.listener(|t, event: &MouseDownEvent, window, _| {
-            t.moving_window = event.position.y < HEADER_HEIGHT && !window.default_prevented();
-            if !t.moving_window {
-                return;
-            }
-            // Pressing a title bar leaves focus where it was.
-            window.prevent_default();
-            if event.click_count == 2 {
-                t.moving_window = false;
-                window.titlebar_double_click();
-            }
-        }),
-    )
-    .on_mouse_move(cx.listener(|t, event: &MouseMoveEvent, window, _| {
-        if std::mem::take(&mut t.moving_window) && event.pressed_button == Some(MouseButton::Left) {
-            window.start_window_move();
-        }
-    }))
-    .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.moving_window = false))
 }
 
 /// `inset` is how far its words start from its left end, to clear the window's buttons while the sidebar is hidden.
