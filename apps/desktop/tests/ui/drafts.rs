@@ -3,8 +3,9 @@
 #![cfg(test)]
 
 use client_core::FileToSend;
+use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::{AppContext as _, Context, TestAppContext, Window};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{NewDraft, SessionId};
@@ -177,9 +178,72 @@ fn a_file_attached_elsewhere_shows_here_until_its_taken_out_there(cx: &mut TestA
     elsewhere.session_draft(&chat, &NewDraft { text: "look".to_string(), files: vec![id] }).unwrap();
 
     ui.wait("the file", |ui| ui.composer_text() == "look" && ui.attached() == ["build.log"]);
+    let pane = ui.pane().unwrap();
+    ui.cx.update_entity(&pane, |p, cx| p.composer.update(cx, |c, cx| c.set_selected_range(0..0, cx)));
     elsewhere.session_draft(&chat, &NewDraft::new("look")).unwrap();
     ui.wait("the file to go", |ui| ui.attached().is_empty());
     assert_eq!(ui.composer_text(), "look");
+    let cursor = ui.cx.read_entity(&pane, |p, cx| p.composer.read(cx).cursor());
+    assert_eq!(cursor, 0, "what's typed is left as it is, cursor and all");
+}
+
+/// Text an input method is still composing isn't handed over until it's done, so the composer can say more than the
+/// hub has. A record that changes for something else, as an agent's does as it works, leaves the composer as it is,
+/// even in an app opened again, which hasn't kept anything there yet.
+#[gpui_kit::test]
+fn a_record_that_changes_for_something_else_leaves_the_composer_as_it_is(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    ui.input("typed here");
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.open_again(&stack);
+    ui.wait("what was typed", |ui| ui.composer_text() == "typed here");
+    // As text being composed is put in, without a change for the pane to hand over.
+    let pane = ui.pane().unwrap();
+    let composing = |p: &mut WorkspacePane, window: &mut Window, cx: &mut Context<WorkspacePane>| {
+        p.composer.update(cx, |c, cx| c.set_value("typed here, and being composed", window, cx));
+    };
+    ui.cx.update_window(ui.handle, |_, window, cx| pane.update(cx, |p, cx| composing(p, window, cx))).unwrap();
+
+    stack.client().session_rename(&chat, "Renamed elsewhere").unwrap();
+
+    let title = |ui: &Ui<'_>| ui.cx.read_entity(&pane, |p, _| p.session().unwrap().title.clone());
+    ui.wait("the pane to hear of it", |ui| title(ui).is_some_and(|title| title.as_str() == "Renamed elsewhere"));
+    assert_eq!(ui.composer_text(), "typed here, and being composed");
+}
+
+/// A draft changed elsewhere for the chat that shows next is that chat's, so its files come once, though the same
+/// change to the records closes the chat that showed.
+#[gpui_kit::test]
+fn a_draft_changed_elsewhere_as_the_chat_showing_closes_brings_each_file_once(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    ui.new_workspace();
+    let showing = ui.active_chat();
+    let next = ui.new_chat();
+    ui.attach_a_file("build.log", "error at line 42\n");
+    ui.input("look");
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.show_chat(&showing);
+    let files = kept_files(&stack, &next).into_iter().map(|file| file.id).collect();
+    let records = ui.view().records().unwrap();
+
+    stack.client().session_draft(&next, &NewDraft { text: "look at this".to_string(), files }).unwrap();
+    stack.client().session_close(&showing).unwrap();
+    // Both in client-core before the pane hears of either.
+    wait_until("client-core to hear of both", || {
+        let sessions = records.read(|held| held.sessions().into_values().flatten().collect::<Vec<_>>());
+        // Or gone, as a chat nothing was sent in goes as it closes.
+        let closed = !sessions.iter().any(|s| s.id == showing && s.closed_at_ms.is_none());
+        closed && sessions.iter().any(|s| s.id == next && s.draft.text == "look at this")
+    });
+
+    ui.wait("the change, in the chat that shows next", |ui| {
+        ui.active_chat() == next && ui.composer_text() == "look at this"
+    });
+    assert_eq!(ui.attached(), ["build.log"]);
 }
 
 /// The hub keeps a chat's files as they're read back, so what's typed meanwhile is kept with them.
@@ -229,7 +293,9 @@ fn a_file_still_on_its_way_as_its_chat_closes_is_let_go_of_too(cx: &mut TestAppC
 }
 
 /// A change made elsewhere while something from here is on its way to the hub waits for it, and then shows, though
-/// nothing on the chat's record changes again to say so.
+/// nothing on the chat's record changes again to say so. That's when the hub tells of a change made elsewhere before
+/// its reply to one of this app's drafts kept just before, which a test can't make it do, so a file handed over alone
+/// stands in for that draft: either way, something from here is on its way as the pane hears of the change.
 #[gpui_kit::test]
 fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_its_arrived(cx: &mut TestAppContext) {
     let stack = Stack::new();

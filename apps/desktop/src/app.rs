@@ -16,6 +16,7 @@ use crate::workspace_pane::WorkspacePane;
 
 mod build_line;
 mod corner;
+mod drafts;
 mod home;
 mod hub_source;
 mod pull_requests;

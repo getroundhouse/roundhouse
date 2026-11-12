@@ -100,47 +100,40 @@ impl WorkspacePane {
         }
     }
 
+    /// Says that each open chat shows the draft on its record, as a pane does as it starts, so a newer record carrying
+    /// the same draft isn't taken for one made elsewhere.
+    pub(super) fn took_drafts(&self) {
+        for session in self.open_sessions() {
+            self.keeper.took(session);
+        }
+    }
+
     /// Shows in each open chat a draft made elsewhere since, such as in another client, in place of this app's. What's
     /// on its way to the hub from here goes on and replaces it, as [`client_core::Drafts::from_elsewhere`] says, so
     /// what's typed here is never undone as it's typed. Whatever comes in its place is the hub's already, so none of it
     /// is kept again.
     pub(crate) fn take_drafts_from_elsewhere(&mut self, cx: &mut Context<Self>) {
-        let elsewhere = self.open_sessions().filter(|s| self.keeper.from_elsewhere(s) && !self.has_draft(s, cx));
-        let elsewhere: Vec<(SessionId, Draft)> = elsewhere.map(|s| (s.id.clone(), s.draft.clone())).collect();
-        for (id, draft) in elsewhere {
-            self.take_draft(&id, draft, cx);
+        let elsewhere: Vec<Session> = self.open_sessions().filter(|s| self.keeper.from_elsewhere(s)).cloned().collect();
+        for session in elsewhere {
+            self.keeper.took(&session);
+            self.take_draft(&session.id, session.draft, cx);
         }
-    }
-
-    /// Whether the chat here has the text and files of the draft on its record, in whatever order.
-    fn has_draft(&self, session: &Session, cx: &App) -> bool {
-        let id = &session.id;
-        let none = Attachments::default();
-        let (text, files) = match self.drafts.get(id) {
-            _ if self.active.as_ref() == Some(id) => (self.composer.read(cx).text().to_string(), &self.attached),
-            Some(draft) => (draft.text.clone(), &draft.files),
-            None => (String::new(), &none),
-        };
-        let coming_back = self.restoring.get(id).into_iter().flatten().map(|file| file.id.clone());
-        let here: HashSet<AttachmentId> = coming_back.chain(files.ids()).collect();
-        let there: HashSet<AttachmentId> = session.draft.files.iter().map(|file| file.id.clone()).collect();
-        text == session.draft.text && here == there
     }
 
     /// Puts a draft made elsewhere in its chat here: its text, the files here that it still names, and the rest once
     /// they're read back. A file it stopped naming is let go of by whoever took it out.
     fn take_draft(&mut self, id: &SessionId, draft: Draft, cx: &mut Context<Self>) {
         let named: HashSet<AttachmentId> = draft.files.iter().map(|file| file.id.clone()).collect();
-        let showing = self.active.as_ref() == Some(id);
         let files = self.files_for(Some(id));
         files.retain(|file| named.contains(file));
         let here: HashSet<AttachmentId> = files.ids().collect();
         let missing: Vec<Attachment> = draft.files.into_iter().filter(|file| !here.contains(&file.id)).collect();
-        if showing {
+        if self.active.as_ref() == Some(id) {
             let (chat, text) = (id.clone(), draft.text);
             self.with_window(cx, move |t, window, cx| {
-                // Another chat may be showing by now, and it has its own.
-                if t.active.as_ref() != Some(&chat) {
+                // Another chat may be showing by now, and it has its own. Setting the same text would still move the
+                // cursor to the end and forget what undo had.
+                if t.active.as_ref() != Some(&chat) || *t.composer.read(cx).text() == text {
                     return;
                 }
                 let end = text.len();
@@ -149,7 +142,9 @@ impl WorkspacePane {
                     c.set_selected_range(end..end, cx);
                 });
             });
-        } else if let Some(here) = self.drafts.get_mut(id) {
+        } else {
+            // Its files are its draft's, which `files_for` made if it had none.
+            let here = self.drafts.entry(id.clone()).or_default();
             here.text = draft.text;
             if here.text.is_empty() && here.files.is_empty() {
                 self.drafts.remove(id);
@@ -192,9 +187,9 @@ impl WorkspacePane {
         .detach();
     }
 
-    /// Puts a chat's kept files back in its composer, before any attached since, then has the hub keep what the chat
-    /// has now if that isn't what its record says, such as with something typed meanwhile. Keeping it otherwise could
-    /// undo a change made elsewhere that hasn't arrived yet. Without a connection, they're read again on the next.
+    /// Puts a chat's kept files back in its composer, before any attached since, where every draft kept meanwhile has
+    /// named them, so nothing needs keeping again, which could undo a change made elsewhere that hasn't arrived yet.
+    /// Without a connection, they're read again on the next.
     fn brought_back(&mut self, chat: &SessionId, read: Vec<ReadBack>, cx: &mut Context<Self>) {
         // Not once they've come back, nor when the chat is waiting for others, such as a draft made elsewhere names.
         let read_ids = read.iter().map(|(file, _)| &file.id);
@@ -213,9 +208,6 @@ impl WorkspacePane {
         }
         for problem in self.files_for(Some(chat)).bring_back(files, chat) {
             cx.emit(PaneEvent::Error(problem));
-        }
-        if self.sessions.iter().find(|s| &s.id == chat).is_none_or(|s| !self.has_draft(s, cx)) {
-            self.keep_draft(chat, cx);
         }
         cx.notify();
     }
