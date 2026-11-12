@@ -4,14 +4,16 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::event::ExitReason;
 use protocol::model::{InstanceId, Workspace, WorkspaceId};
+use protocol::worker::RunningAgent;
 use providers::Provider;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::{Hub, SHUTDOWN_GRACE, Wanted};
 use crate::session::Item;
-use crate::worker_link::{STOP_GRACE, WorkerLink};
+use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
 impl Hub {
     fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
@@ -69,20 +71,84 @@ impl Hub {
         if let Some(ended) = &ended {
             ended.stop(STOP_GRACE).await;
         }
-        // As may a worker that an earlier hub left. It stops once its stdin closes, but may not have yet.
+        // Or what an earlier hub left that this one didn't carry on with, such as a worker that was stopping, or the
+        // agents of one that was killed. Or a stop that failed.
         if ended.is_some() || !*cleared {
             *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
         }
         // Whichever provider runs it, what its worker writes to stderr is kept here.
         let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
-        let instance_id = workspace.instance_id.clone();
-        let link = WorkerLink::open(self.clone(), provider, workspace.id.clone(), instance_id, &log).await?;
+        let (id, instance_id) = (workspace.id.clone(), workspace.instance_id.clone());
+        let link = WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::Started).await?;
         if wanted == Wanted::ForAnything {
             link.keep();
         }
         self.workers.lock().insert(workspace.id.clone(), link.clone());
         self.watch_branches(&workspace, &link).await;
         Ok(link)
+    }
+
+    /// The worker an earlier hub left running on the workspace's instance, as the hub starts, and what it's running.
+    /// What it sends is held until [`WorkerLink::release`], so the hub can say first which agent each of its sessions
+    /// has. Not kept, until a session carries on with it. One that can't be reached, or doesn't say what it's running,
+    /// is ended, as [`Hub::end_left_running`] says.
+    pub(crate) async fn worker_left_running(
+        self: &Arc<Self>,
+        workspace_id: &WorkspaceId,
+    ) -> Result<(Arc<WorkerLink>, Vec<RunningAgent>), ApiError> {
+        let workspace = self.workspace(workspace_id).await?;
+        let provider = self.provider(&workspace.provider)?;
+        let gate = self.worker_gate(workspace_id);
+        let mut cleared = gate.lock().await;
+        let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
+        let (id, instance_id) = (workspace.id.clone(), workspace.instance_id);
+        let link = match WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::LeftRunning).await {
+            Ok(link) => link,
+            Err(e) => {
+                drop(cleared);
+                self.end_left_running(workspace.id, None);
+                return Err(e);
+            }
+        };
+        // It holds the instance, so nothing else is running there.
+        *cleared = true;
+        self.workers.lock().insert(workspace.id.clone(), link.clone());
+        drop(cleared);
+        match link.running_agents().await {
+            Ok(running) => Ok((link, running)),
+            Err(e) => {
+                link.release(self).await;
+                self.end_left_running(workspace.id, Some(link));
+                Err(e)
+            }
+        }
+    }
+
+    /// Ends what an earlier hub left on the workspace's instance that this hub doesn't carry on with: its worker, with
+    /// `link` if it was reached, and the agents with it, so none goes on unseen. Such as a worker that's stopping, one
+    /// that doesn't answer, or one nothing carried on with, which is no more wanted than one started for a read nobody
+    /// asked for. On its own, since the hub needn't wait for that to serve, and under the workspace's gate, so a worker
+    /// wanted meanwhile starts once it's done.
+    pub(super) fn end_left_running(self: &Arc<Self>, workspace_id: WorkspaceId, link: Option<Arc<WorkerLink>>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let ended = hub.workspace(&workspace_id).await.and_then(|workspace| {
+                let provider = hub.provider(&workspace.provider)?;
+                Ok((workspace, provider))
+            });
+            let (workspace, provider) = match ended {
+                Ok(ended) => ended,
+                Err(e) => return warn!(%workspace_id, "ending a worker an earlier hub left: {}", e.message),
+            };
+            if let Some(link) = link {
+                return hub.stop_worker_only_read(&workspace, &link).await;
+            }
+            let gate = hub.worker_gate(&workspace.id);
+            let mut cleared = gate.lock().await;
+            if !*cleared {
+                *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
+            }
+        });
     }
 
     /// Stops a worker that only a read nobody asked for has wanted, so a hub with many workspaces doesn't keep one
@@ -144,14 +210,14 @@ impl Hub {
             .cloned()
             .collect();
         for session in sessions {
-            session.send_item(Item::WorkerLost(link.id)).await;
+            session.send_item(Item::AgentLost { link: link.id, reason: ExitReason::WorkerLost }).await;
         }
     }
 
     /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]
     /// says.
     pub(super) async fn close_worker(&self, workspace: &Workspace, link: &WorkerLink, provider: &dyn Provider) {
-        link.close();
+        link.close().await;
         if tokio::time::timeout(SHUTDOWN_GRACE, link.wait_closed()).await.is_ok() {
             return;
         }

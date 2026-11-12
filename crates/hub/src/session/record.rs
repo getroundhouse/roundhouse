@@ -39,7 +39,7 @@ fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
     let changed = next != state.status || background_tasks.is_some();
     let status = changed.then_some(StatusChange { status: next, turn, background_tasks });
     let queue_held = state.queue.held_after(&body, state.status, next);
-    After { body, status: next, change: SessionChange { status, queue_held }, tasks }
+    After { body, status: next, change: SessionChange { status, queue_held, recorded: None }, tasks }
 }
 
 impl LiveSession {
@@ -68,13 +68,17 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let After { body, status: next, change, tasks } = {
+        let After { body, status: next, mut change, tasks } = {
             let state = self.state.lock();
             if let Some(refusal) = refused(&state) {
                 return Err(refusal);
             }
             after(&state, origin, body)
         };
+        // In the same commit as the event, so a hub that connects to the worker again knows what it has.
+        if let Origin::Run { run, numbered: Some(through), .. } = origin {
+            change.recorded = Some((run, through));
+        }
         let (announce, held) = (!change.is_none(), change.queue_held);
         let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
         let id = self.id.clone();

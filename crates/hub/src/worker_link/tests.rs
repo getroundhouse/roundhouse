@@ -60,7 +60,9 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     ProcessRecord::write(&dir.path().join("instances/i").join(WORKER_RECORD_FILE), serving.id()).unwrap();
     let hub = hub_using(dir.path(), &provider);
 
-    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+    let opened =
+        WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log"), Opening::Started)
+            .await;
 
     assert!(matches!(&opened, Err(e) if e.code == ErrorCode::Conflict), "{:?}", opened.err());
     assert!(serving.try_wait().unwrap().is_none(), "the worker serving the instance was ended");
@@ -79,7 +81,9 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     let hub = hub_using(dir.path(), &provider);
     let asked = std::time::Instant::now();
 
-    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+    let opened =
+        WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log"), Opening::Started)
+            .await;
 
     let Err(e) = opened else { panic!("the hello's reply was read") };
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
@@ -96,7 +100,9 @@ async fn a_worker_that_chose_another_version_is_not_used() {
     provider.create(&instance_id, None, None, "i").await.unwrap();
     let hub = hub_using(dir.path(), &provider);
 
-    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+    let opened =
+        WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log"), Opening::Started)
+            .await;
 
     let Err(e) = opened else { panic!("it was used") };
     assert_eq!(e.code, ErrorCode::VersionMismatch, "{e:?}");
@@ -127,7 +133,10 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
     provider.create(&"i".into(), None, None, "i").await.unwrap();
     let hub = hub_using(dir.path(), &provider);
 
-    let link = WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log")).await.unwrap();
+    let link =
+        WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log"), Opening::Started)
+            .await
+            .unwrap();
 
     let answer = answered(dir.path()).await;
     let outcome = AskOutcome::Response(AskReply::PullRequest { pull_request: None });
@@ -149,7 +158,10 @@ async fn an_ask_this_hub_cant_read_is_refused() {
     provider.create(&"i".into(), None, None, "i").await.unwrap();
     let hub = hub_using(dir.path(), &provider);
 
-    let link = WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log")).await.unwrap();
+    let link =
+        WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log"), Opening::Started)
+            .await
+            .unwrap();
 
     let answer = answered(dir.path()).await;
     assert_eq!(answer.answer, AskId::new(9));

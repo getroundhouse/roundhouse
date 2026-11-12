@@ -126,7 +126,7 @@ async fn serve_connection(
 /// stopped. Anyone who can reach this socket is this user, as `bind_socket` makes sure. A connection from
 /// elsewhere, once there are any, shouldn't get this, because stopping a shared hub is for its admins.
 fn works_without_hello(request: &ClientRequest) -> bool {
-    matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown)
+    matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown | ClientRequest::HubRestart)
 }
 
 /// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
@@ -193,8 +193,7 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        // A restart, not yet, as its status says it doesn't keep its workers.
-        R::Unknown | R::HubRestart => return Err(ApiError::unsupported_request("this hub", None)),
+        R::Unknown => return Err(ApiError::unsupported_request("this hub", None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_shutdown();
@@ -202,6 +201,10 @@ async fn handle(
         }
         R::HubShutdownIfIdle => {
             hub.shutdown_if_idle()?;
+            C::Ok
+        }
+        R::HubRestart => {
+            hub.request_restart()?;
             C::Ok
         }
         R::HubConfigure { settings } => C::HubSettings(hub.hub_configure(settings).await?),

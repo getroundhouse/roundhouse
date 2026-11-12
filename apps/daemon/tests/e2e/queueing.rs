@@ -248,7 +248,7 @@ fn a_queue_whose_agent_went_away_mid_turn_is_held_and_sending_from_it_resumes_th
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:after the restart");
 
-    stack.kill_hub();
+    stack.kill_hub_and_workers();
     stack.start_hub();
     let client = stack.client();
     let found = client.session_get(&session.id).unwrap();

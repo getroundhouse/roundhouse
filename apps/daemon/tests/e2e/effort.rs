@@ -37,7 +37,7 @@ fn an_effort_reaches_the_running_agent_and_the_next_launch() {
 
     // A new process starts with it, from the hub's own record.
     drop(client);
-    stack.kill_hub();
+    stack.stop_hub();
     stack.start_hub();
     let client = stack.client();
     assert_eq!(client.session_get(&session.id).unwrap().effort, Effort::Medium);

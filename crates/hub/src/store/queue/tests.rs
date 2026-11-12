@@ -152,7 +152,7 @@ fn the_hold_commits_with_its_event_and_comes_off_with_another() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let before = session(&store).rev;
-    let hold = |held| Some(SessionChange { status: None, queue_held: Some(held) });
+    let hold = |held| Some(SessionChange { queue_held: Some(held), ..SessionChange::default() });
 
     store.append(&"s".into(), None, &EventBody::Unknown, None, None, hold(true)).unwrap();
     let while_held = session(&store);

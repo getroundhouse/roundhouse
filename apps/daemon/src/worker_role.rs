@@ -65,13 +65,20 @@ fn on_stdio(given: Given) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// In the instance's directory, where the socket is named relative to it.
+/// In the instance's directory, where the socket is named relative to it. A worker that's stopping has removed its
+/// socket but still holds the instance, and this fails rather than waiting for it, since it may be stuck: the hub ends
+/// it, as it does whatever it finds on an instance that it doesn't know of.
 #[cfg(unix)]
 fn attach(given: &Given) -> anyhow::Result<()> {
     let state_dir = in_state_dir(given)?;
     let exe = std::env::current_exe().context("finding this binary to start a worker with")?;
     let socket = Path::new(protocol::paths::WORKER_SOCKET_FILE);
-    worker::attach(socket, || start_listening(&exe, &given.workspaces_root, &state_dir))?;
+    worker::attach(socket, || {
+        if worker::instance_claimed(&state_dir)? {
+            return Err(std::io::Error::other("a worker that's stopping still holds the instance"));
+        }
+        start_listening(&exe, &given.workspaces_root, &state_dir)
+    })?;
     Ok(())
 }
 

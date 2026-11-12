@@ -74,8 +74,9 @@ fn stopping_the_hub_with_work_in_the_background_interrupts_it() {
     assert!(recovered.background_tasks.is_empty());
 }
 
+/// As when the machine goes down. A hub that only crashed leaves the agent running with its work.
 #[test]
-fn a_hub_crash_with_work_in_the_background_interrupts_it() {
+fn an_agent_gone_with_its_hub_with_work_in_the_background_is_interrupted() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
@@ -85,8 +86,8 @@ fn a_hub_crash_with_work_in_the_background_interrupts_it() {
     drop(client);
 
     // Nothing the agent says on its way out is recorded, so the next hub finds it at work.
-    stack.kill_hub();
-    wait_until("the agent to stop after the hub died", || !is_alive(agent));
+    stack.kill_hub_and_workers();
+    wait_until("the agent to stop", || !is_alive(agent));
     stack.start_hub();
 
     let recovered = stack.client().session_get(&session.id).unwrap();

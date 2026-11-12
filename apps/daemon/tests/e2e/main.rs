@@ -8,6 +8,7 @@ mod attaching;
 mod attachments;
 mod background;
 mod cancelling;
+mod carrying_on;
 mod chats;
 mod claiming;
 mod client_restart;

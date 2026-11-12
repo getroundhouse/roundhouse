@@ -130,7 +130,7 @@ impl LiveSession {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;
             let started = EventBody::AgentStarted { pid, resumed: resume };
-            self.record_or_log(Origin::Run { run, current }, started).await;
+            self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
         }
         Ok(())
     }

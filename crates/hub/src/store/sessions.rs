@@ -4,7 +4,7 @@ use protocol::model::{
     AgentKind, ClientRequestId, ContextUsage, Draft, ModelName, PromptCache, QueuedPrompt, Rev, Session,
     SessionSettingsChange, SessionStatus, Title,
 };
-use protocol::model::{AttachmentId, SessionId, WorkspaceId};
+use protocol::model::{AttachmentId, RunId, SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 use super::drafts::forget_drafts;
@@ -136,6 +136,19 @@ impl Store {
             )
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
+    }
+
+    /// The run whose worker the session last recorded something from that the worker numbered, and its number.
+    pub fn recorded_from_worker(&self, id: &SessionId) -> Result<Option<(RunId, u64)>, StoreError> {
+        let found: Option<(Option<i64>, Option<i64>)> = lock(&self.reader)
+            .query_row("SELECT recorded_run, recorded_through FROM sessions WHERE id = ?", [id.as_str()], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?;
+        Ok(match found {
+            Some((Some(run), Some(through))) => Some((RunId::new(run.cast_unsigned()), through.cast_unsigned())),
+            _ => None,
+        })
     }
 
     pub fn list_sessions(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>, StoreError> {

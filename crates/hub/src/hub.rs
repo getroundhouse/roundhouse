@@ -1,6 +1,7 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
 use awake::Awake;
+pub(crate) use carrying_on::LeftAtWork;
 use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
@@ -8,6 +9,7 @@ mod accounts;
 mod attachments;
 mod awake;
 mod branches;
+mod carrying_on;
 mod comments;
 mod feed;
 mod hub_settings;
@@ -54,6 +56,14 @@ use tracing::warn;
 /// running can hold open, and the worker exits within a second of flushing after that. So this is only reached if
 /// something is stuck.
 pub(super) const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
+/// How long the hub waits for a provider as it starts, before it serves, to list its instances or say how to reach a
+/// worker an earlier hub left running there. One that takes longer has its sessions interrupted, as if their workers had
+/// gone, so a slow one doesn't keep every client waiting.
+pub(crate) const BEFORE_SERVING: Duration = Duration::from_secs(5);
+
+/// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
+/// since there are no Unix sockets there to serve them on, so they stop with it.
+const KEEPS_WORKERS: bool = cfg!(unix);
 
 /// What a worker is wanted for, which says whether it's stopped again after.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -89,6 +99,8 @@ pub(crate) struct Hub {
     started_at_ms: i64,
     pub(crate) shutdown: Notify,
     shutting_down: AtomicBool,
+    /// Asked to restart, which leaves its workers running for the next hub, rather than to stop.
+    restarting: AtomicBool,
     name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
@@ -128,6 +140,7 @@ impl Hub {
             started_at_ms: now_ms(),
             shutdown: Notify::new(),
             shutting_down: AtomicBool::new(false),
+            restarting: AtomicBool::new(false),
             name_salt: AtomicU64::new(now_ms().cast_unsigned()),
             clients: AtomicU32::new(0),
             requests: AtomicU32::new(0),
@@ -207,13 +220,38 @@ impl Hub {
                 Ok((stored, approvals))
             })
             .await?;
-        self.sessions.lock().keep(id, || LiveSession::start(self, stored, approvals))
+        self.sessions.lock().keep(id, || LiveSession::start(self, stored, approvals, None))
     }
 
     // Platform API --------------------------------------------------------------------------------
 
     pub(crate) fn request_shutdown(&self) {
         self.shutdown.notify_one();
+    }
+
+    /// Stops once no setup script is running, and no request but this is under way, leaving the workers running for
+    /// the next hub, so their agents carry on.
+    pub(crate) fn request_restart(self: &Arc<Self>) -> Result<(), ApiError> {
+        if !KEEPS_WORKERS {
+            return Err(ApiError::new(ErrorCode::Unsupported, "a restart would stop this hub's agents, so it stops"));
+        }
+        if self.restarting.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        let hub = self.clone();
+        tokio::spawn(async move {
+            // Counted as it's read, so this request is among them until its reply has gone.
+            while !hub.setup_gates.lock().is_empty() || hub.requests.load(Ordering::SeqCst) > 1 {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            hub.request_shutdown();
+        });
+        Ok(())
+    }
+
+    /// Whether the hub is stopping to restart, which leaves its workers running.
+    pub(crate) fn restarting(&self) -> bool {
+        self.restarting.load(Ordering::SeqCst)
     }
 
     /// Stops if nothing would notice, as the one asking sees it, and refuses otherwise. What that client sent before
@@ -243,7 +281,7 @@ impl Hub {
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
             keeping_awake: self.awake.holding(),
-            keeps_workers: false,
+            keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
         }
     }
@@ -259,7 +297,7 @@ impl Hub {
         self.shutting_down.store(true, Ordering::SeqCst);
         let links: Vec<_> = self.workers.lock().iter().map(|(id, link)| (id.clone(), link.clone())).collect();
         for (_, link) in &links {
-            link.close();
+            link.close().await;
         }
         // One deadline for all of them, so several stuck workers don't add up.
         let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
@@ -273,6 +311,29 @@ impl Hub {
             }
         }
         stuck.join_all().await;
+        self.flush_sessions().await;
+    }
+
+    /// Leaves every worker running for the next hub, once it has heard what this hub recorded, and waits until what
+    /// they sent is recorded, and each has let this hub go, so the next hub, which may start at once, isn't refused as
+    /// a second hub.
+    pub(crate) async fn leave_workers(self: &Arc<Self>) {
+        self.shutting_down.store(true, Ordering::SeqCst);
+        let links: Vec<_> = self.workers.lock().values().cloned().collect();
+        for link in &links {
+            link.leave(self).await;
+        }
+        let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
+        for link in &links {
+            if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
+                warn!("a worker didn't let this hub go in time");
+                break;
+            }
+        }
+        self.flush_sessions().await;
+    }
+
+    async fn flush_sessions(&self) {
         let sessions: Vec<_> = self.sessions.lock().live.values().cloned().collect();
         for session in sessions {
             let (done, flushed) = oneshot::channel();

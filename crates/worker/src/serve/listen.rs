@@ -26,6 +26,21 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
     let mut alone_since = Instant::now();
     let last = loop {
         tokio::select! {
+            // A hub that has gone first, so the next one, which may have connected since, isn't refused for it.
+            biased;
+            closing = ending(&mut serving) => {
+                serving = None;
+                match closing {
+                    Ok(closing) if closing.ended == Ended::Stop => break Some(closing),
+                    Ok(closing) => {
+                        info!("the hub went, and asked this worker to keep running without it");
+                        worker.state.outbox.detach().await;
+                        closing.abandon();
+                    }
+                    Err(e) => error!("serving a hub failed: {e}"),
+                }
+                alone_since = Instant::now();
+            }
             accepted = listener.accept() => match accepted {
                 Ok((stream, _)) => {
                     let (reader, writer) = stream.into_split();
@@ -44,19 +59,6 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             },
-            closing = ending(&mut serving) => {
-                serving = None;
-                match closing {
-                    Ok(closing) if closing.ended == Ended::Stop => break Some(closing),
-                    Ok(closing) => {
-                        info!("the hub went, and asked this worker to keep running without it");
-                        worker.state.outbox.detach().await;
-                        closing.abandon();
-                    }
-                    Err(e) => error!("serving a hub failed: {e}"),
-                }
-                alone_since = Instant::now();
-            }
             () = tokio::time::sleep_until(alone_since + idle_limit), if serving.is_none() => {
                 info!("no hub has connected for {idle_limit:?}, stopping agents");
                 break None;

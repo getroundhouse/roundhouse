@@ -124,18 +124,6 @@ impl Stack {
         self.hub.as_ref().unwrap().id()
     }
 
-    pub(crate) fn kill_hub(&mut self) {
-        let mut hub = self.hub.take().unwrap();
-        hub.kill().unwrap();
-        hub.wait().unwrap();
-    }
-
-    /// Kills the hub, as a crash would, and starts another on the same data.
-    pub(crate) fn restart_hub(&mut self) {
-        self.kill_hub();
-        self.start_hub();
-    }
-
     pub(crate) fn workspace(&self, client: &Client) -> (Workspace, Session) {
         self.workspace_with(client, SessionSettingsChange::default())
     }
@@ -156,24 +144,6 @@ impl Stack {
 /// Settings that set only the approval mode.
 pub(crate) fn in_mode(mode: PermissionMode) -> SessionSettingsChange {
     SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() }
-}
-
-impl Drop for Stack {
-    fn drop(&mut self) {
-        if let Some(mut hub) = self.hub.take() {
-            // SIGTERM first, so the worker and agent get to stop rather than being left over.
-            terminate(hub.id());
-            let deadline = Instant::now() + Duration::from_secs(10);
-            while Instant::now() < deadline {
-                if !matches!(hub.try_wait(), Ok(None)) {
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            let _ = hub.kill();
-            let _ = hub.wait();
-        }
-    }
 }
 
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> String {

@@ -8,7 +8,9 @@ use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::SessionId;
 
 use crate::support::gh::{OPEN, StandInGh};
-use crate::support::{Stack, is_alive, parent_of, started_pid, wait_for_turn_end, wait_until};
+use crate::support::{
+    Stack, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_turn_end, wait_until,
+};
 
 /// What each of the turn's calls to a tool came back with, and whether it failed, in order.
 fn results(events: &[SessionEvent]) -> Vec<(String, bool)> {
@@ -70,8 +72,9 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     let before = last_told(&stack);
     let worker = parent_of(started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap());
 
-    stack.kill_hub();
-    // Its worker stops with it, and its port is the one to have again, though its connections may still be closing.
+    // As when the machine goes down, so a new worker starts, and its port is the one to have again, though its
+    // connections may still be closing. A hub that only crashed leaves its worker serving the tools.
+    stack.kill_hub_and_workers();
     wait_until("the worker to exit", || !is_alive(worker));
     stack.start_hub();
     let client = stack.client();
@@ -80,4 +83,28 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     assert_eq!(last_told(&stack), before, "the same address and token");
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.starts_with("Pull request #7"), "{text}");
+}
+
+/// A hub that crashes leaves its worker serving the tools, so the agent the next hub carries on with reaches them as it
+/// did, and the next hub answers what the worker asks for it.
+#[test]
+fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    gh.say(OPEN);
+    let client = stack.client();
+    let (_, chat) = stack.workspace(&client);
+    let answered = run(&client, &chat.id, "mcp:get_pull_request", 1);
+    assert!(!answered[0].1, "{answered:?}");
+    let agent = started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap();
+    drop(client);
+
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    let answered = run(&client, &chat.id, "mcp:get_pull_request", 2);
+
+    let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
+    assert!(text.starts_with("Pull request #7"), "{text}");
+    assert_eq!(latest_started_pid(&read_all(&client, &chat.id)), Some(agent), "the agent the last hub started");
 }

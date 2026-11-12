@@ -14,7 +14,7 @@ fn a_deleted_conversation_starts_fresh_with_a_warning() {
     client.session_prompt(&session.id, "say:first", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     drop(client);
-    stack.kill_hub();
+    stack.stop_hub();
     // The hub thinks this conversation exists, because it saw it open.
     std::fs::remove_file(stack.agent_state().join(session.id.as_str())).unwrap();
 
