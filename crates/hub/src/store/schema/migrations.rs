@@ -3,6 +3,7 @@
 
 mod activity;
 mod cache;
+mod comments;
 mod drafts;
 mod first;
 mod providers;
@@ -13,18 +14,8 @@ mod tools;
 pub(super) const MIGRATIONS: &[&str] = &[
     // What the hub began with.
     first::FIRST,
-    r"
-    CREATE TABLE diff_comments (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-        path TEXT NOT NULL,
-        side TEXT NOT NULL,
-        line INTEGER NOT NULL,
-        text TEXT NOT NULL,
-        created_at_ms INTEGER NOT NULL
-    );
-    CREATE INDEX diff_comments_by_workspace ON diff_comments (workspace_id, created_at_ms);
-",
+    // Comments on each workspace's diff, in `comments`.
+    comments::DIFF_COMMENTS,
     r#"
     ALTER TABLE workspaces ADD COLUMN setup TEXT NOT NULL DEFAULT '{"state":"not_started"}';
     ALTER TABLE workspaces ADD COLUMN port_base INTEGER NOT NULL DEFAULT 0;
@@ -386,4 +377,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     subagents::MODELS,
     // The port each workspace's worker last served its tools on, and each session's token for them, in `tools`.
     tools::PORTS_AND_TOKENS,
+    // What's chosen and typed in answer to each session's question, and the comment being written on each workspace's
+    // diff, and not sent.
+    drafts::ANSWER_DRAFT,
+    drafts::COMMENT_DRAFT,
 ];

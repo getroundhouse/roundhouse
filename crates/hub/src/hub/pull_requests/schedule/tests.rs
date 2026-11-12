@@ -44,6 +44,7 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Works
         title: None,
         title_source: TitleSource::FirstLine,
         pull_request: Some(PullRequestFound { pull_request: state.map(pull_request) }),
+        comment_draft: None,
     }
 }
 

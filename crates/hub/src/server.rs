@@ -214,6 +214,7 @@ async fn handle(
         R::WorkspaceArchive { id, force } => C::Workspace(hub.workspace_archive(id, force).await?),
         R::WorkspaceRestore { id } => C::Workspace(hub.workspace_restore(id).await?),
         R::WorkspaceRename { id, title } => C::Workspace(hub.workspace_rename(id, &title).await?),
+        R::WorkspaceCommentDraft { id, draft } => C::Workspace(hub.workspace_comment_draft(id, draft).await?),
         R::WorkspaceRegenerateTitle { id } => C::Workspace(hub.workspace_regenerate_title(id).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
@@ -309,6 +310,7 @@ async fn handle(
         R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
         R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
         R::SessionDraft { id, draft } => C::Session(hub.session_draft(id, draft).await?),
+        R::SessionAnswerDraft { id, draft } => C::Session(hub.session_answer_draft(id, draft).await?),
         R::SessionRename { id, title } => C::Session(hub.session_rename(id, &title).await?),
         R::SessionCancel { id } => {
             hub.session_cancel(id).await?;

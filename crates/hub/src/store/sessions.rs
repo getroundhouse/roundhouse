@@ -11,7 +11,7 @@ use super::drafts::forget_draft;
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
@@ -58,7 +58,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
                 .get::<_, Option<String>>(25)?
                 .and_then(|json| serde_json::from_str(&json).ok())
                 .unwrap_or_default(),
-            rev: rev_of(row, 26)?,
+            // The same.
+            answer_draft: row.get::<_, Option<String>>(26)?.and_then(|json| serde_json::from_str(&json).ok()),
+            rev: rev_of(row, 27)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -82,7 +84,7 @@ impl Store {
         tx.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -111,6 +113,7 @@ impl Store {
                 session.user_active_at_ms,
                 session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
                 draft_column(&session.draft)?,
+                session.answer_draft.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

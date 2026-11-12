@@ -15,7 +15,7 @@ const FIRST_PORT_BASE: u16 = 55_000;
 
 const PORTS_PER_WORKSPACE: u16 = 10;
 
-pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft";
 
 pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -36,8 +36,10 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         title_source: from_text(row.get(14)?)?,
         // One that no longer reads, from a build whose idea of a pull request this one doesn't share, is looked for again.
         pull_request: row.get::<_, Option<String>>(15)?.and_then(|found| serde_json::from_str(&found).ok()),
+        // Written only by this hub, as JSON. One it can't read is as good as none.
+        comment_draft: row.get::<_, Option<String>>(17)?.and_then(|json| serde_json::from_str(&json).ok()),
         user_active_at_ms: row.get(16)?,
-        rev: rev_of(row, 17)?,
+        rev: rev_of(row, 18)?,
     })
 }
 
@@ -62,7 +64,7 @@ impl Store {
         let added = tx.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -83,6 +85,7 @@ impl Store {
                 text_of(&workspace.title_source),
                 found_text(workspace.pull_request.as_ref())?,
                 workspace.user_active_at_ms,
+                workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

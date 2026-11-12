@@ -7,9 +7,9 @@ use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft, NewDraft,
-    PermissionMode, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
-    SessionStatus, TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
+    AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
+    NewDraft, PermissionMode, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings,
+    SessionSettingsChange, SessionStatus, TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
 };
 use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
@@ -97,6 +97,7 @@ impl Hub {
                 queued: Vec::new(),
                 queue_held: false,
                 draft: Draft::default(),
+                answer_draft: None,
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
@@ -321,6 +322,14 @@ impl Hub {
 
     pub(crate) async fn session_draft(&self, id: SessionId, draft: NewDraft) -> Result<Session, ApiError> {
         self.change_session(move |store| store.set_draft(&id, &draft)).await
+    }
+
+    pub(crate) async fn session_answer_draft(
+        &self,
+        id: SessionId,
+        draft: Option<AnswerDraft>,
+    ) -> Result<Session, ApiError> {
+        self.change_session(move |store| store.set_answer_draft(&id, draft.as_ref())).await
     }
 
     /// Changes something kept on a session that its agent doesn't need to hear of, such as how far it's read. Only

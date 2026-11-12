@@ -47,6 +47,7 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             queued: Vec::new(),
             queue_held: false,
             draft: protocol::model::Draft::default(),
+            answer_draft: None,
             rev: Rev::default(),
             status: SessionStatus::Idle,
             last_seq: 0,
@@ -79,6 +80,7 @@ pub(super) fn workspace_w(now: i64) -> Workspace {
         title: None,
         title_source: TitleSource::FirstLine,
         pull_request: None,
+        comment_draft: None,
     }
 }
 

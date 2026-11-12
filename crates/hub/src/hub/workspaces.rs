@@ -136,6 +136,7 @@ impl Hub {
             title: None,
             title_source: TitleSource::FirstLine,
             pull_request: None,
+            comment_draft: None,
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {

@@ -1,12 +1,27 @@
-//! Comments left on a diff.
+//! Comments left on a diff, and the one being written there.
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{ClientRequestId, CommentId, DiffComment, DiffSide, RecordKey, Rev, WorkspaceId};
+use protocol::model::{
+    ClientRequestId, CommentDraft, CommentId, DiffComment, DiffSide, RecordKey, Rev, Workspace, WorkspaceId,
+};
 
 use super::{Hub, new_id};
 use crate::store::{Made, now_ms};
 
 impl Hub {
+    /// Keeps the comment being written on the workspace's diff, and tells the feed if that changed it.
+    pub(crate) async fn workspace_comment_draft(
+        &self,
+        id: WorkspaceId,
+        draft: Option<CommentDraft>,
+    ) -> Result<Workspace, ApiError> {
+        let (workspace, changed) = self.blocking(move |store| store.set_comment_draft(&id, draft.as_ref())).await?;
+        if changed {
+            self.notify(HubNotice::Workspace(workspace.clone()));
+        }
+        Ok(workspace)
+    }
+
     pub(crate) async fn comment_add(
         &self,
         workspace_id: WorkspaceId,

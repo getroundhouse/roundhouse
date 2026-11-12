@@ -10,8 +10,9 @@ use super::files;
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
-    NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
+    AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentDraft, CommentId,
+    DiffSide, HubSettingsChange, NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId,
+    WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -387,6 +388,22 @@ pub enum ClientRequest {
     SessionDraft {
         id: SessionId,
         draft: NewDraft,
+    },
+    /// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place
+    /// of what was kept, so it's there after the app restarts, and in every client. `None` clears it, as answering
+    /// does. Keeping what's kept already changes nothing, so sending it again does nothing more. Answers with the
+    /// session. A hub older than this refuses it, as `is_unsupported` says.
+    SessionAnswerDraft {
+        id: SessionId,
+        draft: Option<AnswerDraft>,
+    },
+    /// Keeps `draft` as the comment being written on the workspace's diff, in place of what was kept, so it's there
+    /// after the app restarts, and in every client. `None` clears it, as saving or cancelling the comment does. Keeping
+    /// what's kept already changes nothing, so sending it again does nothing more. Answers with the workspace. A hub
+    /// older than this refuses it, as `is_unsupported` says.
+    WorkspaceCommentDraft {
+        id: WorkspaceId,
+        draft: Option<CommentDraft>,
     },
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {

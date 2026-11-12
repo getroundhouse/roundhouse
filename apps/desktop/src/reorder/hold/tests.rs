@@ -24,6 +24,7 @@ fn workspace(name: &str) -> Workspace {
         title: None,
         title_source: TitleSource::default(),
         pull_request: None,
+        comment_draft: None,
     }
 }
 

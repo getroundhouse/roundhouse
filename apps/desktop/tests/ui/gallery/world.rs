@@ -108,6 +108,7 @@ impl World {
             title: None,
             title_source: TitleSource::FirstLine,
             pull_request: None,
+            comment_draft: None,
         });
         id
     }
@@ -185,6 +186,7 @@ impl World {
             queued: Vec::new(),
             queue_held: false,
             draft: protocol::model::Draft::default(),
+            answer_draft: None,
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);
