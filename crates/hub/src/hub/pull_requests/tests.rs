@@ -1,6 +1,9 @@
 //! Reading a pull request for an agent and for a client, through a stand-in for the workspace's worker, on tokio's
 //! clock, which moves on by itself while every task waits for it.
 
+use std::sync::atomic::AtomicUsize;
+
+use protocol::model::{Branches, Head};
 use protocol::worker::RateLimit;
 
 use super::*;
@@ -81,4 +84,36 @@ async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
 
     assert_eq!(title.as_deref(), Some("Pushed"), "read again");
     assert!(moved_at.elapsed() >= AGENT_SPACING, "after {:?}", moved_at.elapsed());
+}
+
+/// A read that began once the worktree had checked out another branch may have found that branch's already, and then
+/// the read the switch asked for doesn't read again.
+#[tokio::test(start_paused = true)]
+async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counted = reads.clone();
+    let link = WorkerLink::answering(move |request| {
+        Some(Ok(if matches!(request, WorkerRequest::PullRequest { .. }) {
+            counted.fetch_add(1, Ordering::SeqCst);
+            WorkerResponse::PullRequest { pull_request: Some(open()), branch: Some(BranchName::from("header")) }
+        } else {
+            WorkerResponse::Ok
+        }))
+    });
+    let id = WorkspaceId::from("w");
+    let on_header = Branches { head: Head::Branch { name: BranchName::from("header") }, had: Vec::new() };
+    hub.store.set_workspace_branches(&id, &on_header).unwrap();
+    let found = PullRequestFound { pull_request: Some(open()) };
+
+    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("header"))).unwrap();
+    hub.read_pull_request(&id, "/w".into(), &link, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
+    let found_on_it = reads.load(Ordering::SeqCst);
+    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("aspen"))).unwrap();
+    hub.read_pull_request(&id, "/w".into(), &link, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
+    let found_elsewhere = reads.load(Ordering::SeqCst);
+
+    assert_eq!(found_on_it, 0, "what's known was found on the branch checked out");
+    assert_eq!(found_elsewhere, 1);
 }
