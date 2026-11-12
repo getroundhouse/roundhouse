@@ -1,5 +1,5 @@
 //! What stands in for process groups and `ps` on Windows: a process's descendants, found from each process's parent,
-//! and its start time, both through the Win32 API.
+//! and its start time, both through the Win32 API. Also which of a process's handles its children get.
 //!
 //! A descendant whose own parent has exited isn't found, since nothing links it to the tree any more. A job object
 //! would hold it.
@@ -8,7 +8,10 @@ use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
 use std::os::windows::process::CommandExt as _;
 use std::process::Command;
 
-use windows_sys::Win32::Foundation::{FILETIME, INVALID_HANDLE_VALUE, WAIT_TIMEOUT};
+use windows_sys::Win32::Foundation::{
+    FILETIME, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, WAIT_TIMEOUT,
+};
+use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
@@ -87,6 +90,21 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
     }
 }
 
+pub(crate) fn keep_stdio_from_children() {
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: GetStdHandle takes any of the three and touches no memory. It returns a handle, or null or
+        // INVALID_HANDLE_VALUE for a process without that one.
+        keep_from_children(unsafe { GetStdHandle(which) });
+    }
+}
+
+/// Stops the children this process starts from here on getting a copy of `handle`. Anything that isn't an open
+/// handle, such as null, is left as it is.
+fn keep_from_children(handle: HANDLE) {
+    // SAFETY: SetHandleInformation takes any value as a handle, failing for one that isn't, and touches no memory.
+    unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
+}
+
 /// In the system's own count, as a number.
 pub(crate) fn start_time(pid: u32) -> Option<String> {
     Process::open(pid, 0).map(|process| process.started.to_string())
@@ -147,7 +165,7 @@ fn parents() -> Vec<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead as _, BufReader};
+    use std::io::{BufRead as _, BufReader, Read as _};
     use std::process::Stdio;
     use std::time::{Duration, Instant};
 
@@ -178,6 +196,29 @@ mod tests {
             assert!(Instant::now() < deadline, "what the leader started is still running");
             std::thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    #[test]
+    fn a_pipe_kept_from_children_ends_when_its_owner_lets_go() {
+        let (mut reader, writer) = std::io::pipe().unwrap();
+        // Passed on to children, as a process's own output is when it was started with it.
+        // SAFETY: `writer` is an open handle, and the call touches no memory.
+        unsafe { SetHandleInformation(writer.as_raw_handle(), HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) };
+        keep_from_children(writer.as_raw_handle());
+        // Given none of the pipe, and still running after the pipe's owner lets go, as what an agent left behind is.
+        let mut command = Command::new("cmd");
+        command.args(["/c", "ping -n 30 127.0.0.1"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        own_group(&mut command);
+        let mut started = command.spawn().unwrap();
+
+        drop(writer);
+
+        let (ended, end) = std::sync::mpsc::channel();
+        std::thread::spawn(move || ended.send(reader.read_to_end(&mut Vec::new()).is_ok()));
+        let read = end.recv_timeout(Duration::from_secs(10));
+        signal_group(started.id(), Signal::Kill);
+        started.wait().unwrap();
+        assert_eq!(read, Ok(true), "what this process started still holds the pipe");
     }
 
     #[test]

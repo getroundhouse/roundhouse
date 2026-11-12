@@ -138,19 +138,12 @@ fn detach(command: &mut Command, _home: &Path) {
 #[cfg(windows)]
 fn detach(command: &mut Command, home: &Path) {
     use std::os::windows::process::CommandExt;
-    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
     use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
     command.creation_flags(CREATE_NO_WINDOW).current_dir(home);
-    // A child on Windows gets every handle its parent can pass on, wanted or not, and this client's own input and
-    // output are among them when it was started with them. The hub would hold them for as long as it runs, so
-    // whatever reads this client's output to its end, such as the next command in a pipeline, would wait that long.
-    // The hub has the log for its own. Anything this client starts later still gets them, since std gives each
-    // child a copy made for it.
-    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
-        // SAFETY: both calls take any value as a handle, and neither touches memory.
-        unsafe { SetHandleInformation(GetStdHandle(which), HANDLE_FLAG_INHERIT, 0) };
-    }
+    // Otherwise the hub would hold this client's own input and output for as long as it runs, so whatever reads this
+    // client's output to its end, such as the next command in a pipeline, would wait that long. The hub has the log
+    // for its own.
+    process::keep_stdio_from_children();
 }
 
 /// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for

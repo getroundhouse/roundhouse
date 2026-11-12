@@ -1,10 +1,13 @@
 //! One binary that runs as a hub or a worker. A hub starts its workers by running this same binary,
 //! so on a Mac they're separate processes from day one.
 
+mod runtime;
+
 use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
+use runtime::run_to_end;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -70,6 +73,9 @@ fn forget_hub_variables() {
 fn main() -> anyhow::Result<()> {
     #[cfg(unix)]
     unblock_signals();
+    // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
+    // has exited when its output ends.
+    process::keep_stdio_from_children();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_env(protocol::paths::ENV_LOG).unwrap_or_else(|_| EnvFilter::new("info")))
@@ -81,7 +87,6 @@ fn main() -> anyhow::Result<()> {
     if matches!(args.role, Role::Worker { .. }) {
         forget_hub_variables();
     }
-    let runtime = || tokio::runtime::Builder::new_multi_thread().enable_all().build();
     match args.role {
         Role::Hub { on_demand } => {
             let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
@@ -91,7 +96,7 @@ fn main() -> anyhow::Result<()> {
                 .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            runtime()?.block_on(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))?;
+            run_to_end(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))??;
             Ok(())
         }
         Role::Delete { paths } => {
@@ -111,7 +116,7 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => return Err(e.into()),
             };
             let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
-            runtime()?.block_on(worker::serve(
+            run_to_end(worker::serve(
                 tokio::io::stdin(),
                 tokio::io::stdout(),
                 worker::Config {
@@ -124,7 +129,7 @@ fn main() -> anyhow::Result<()> {
                     deleter: worker::Deleter::new(exe, ["delete", "--"]),
                     refused,
                 },
-            ));
+            ))?;
             Ok(())
         }
     }

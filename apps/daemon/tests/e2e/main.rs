@@ -34,6 +34,7 @@ mod setup;
 mod staying_awake;
 mod steering;
 mod stopping_if_idle;
+mod stopping_the_hub;
 mod subagents;
 #[cfg(test)]
 mod support;

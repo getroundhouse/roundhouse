@@ -147,15 +147,32 @@ impl Hub {
         }
     }
 
-    /// Asks a worker to stop and waits for its output to end. If it's stuck, its provider ends it, under the gate, so
-    /// that can't end a worker started meanwhile.
+    /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]
+    /// says.
     pub(super) async fn close_worker(&self, workspace: &Workspace, link: &WorkerLink, provider: &dyn Provider) {
         link.close();
         if tokio::time::timeout(SHUTDOWN_GRACE, link.wait_closed()).await.is_ok() {
             return;
         }
+        warn!(instance_id = %workspace.instance_id, "a worker didn't stop in time");
+        self.end_stuck_worker(workspace, link, provider).await;
+    }
+
+    /// The same as [`Hub::end_stuck_worker`], for the worker of the workspace `id`, as the hub stops.
+    pub(super) async fn end_stuck_worker_of(&self, id: &WorkspaceId, link: &WorkerLink) {
+        match self.workspace(id).await.and_then(|workspace| Ok((self.provider(&workspace.provider)?, workspace))) {
+            Ok((provider, workspace)) => self.end_stuck_worker(&workspace, link, provider.as_ref()).await,
+            Err(e) => {
+                warn!(%id, "ending a stuck worker without its workspace: {}", e.message);
+                link.kill();
+            }
+        }
+    }
+
+    /// Ends a worker that didn't stop when asked, and has its provider end what it left running, such as its agents.
+    /// Under the gate, so that can't end a worker started meanwhile.
+    async fn end_stuck_worker(&self, workspace: &Workspace, link: &WorkerLink, provider: &dyn Provider) {
         let instance_id = &workspace.instance_id;
-        warn!(%instance_id, "a worker didn't stop in time");
         let gate = self.worker_gate(&workspace.id);
         let mut cleared = gate.lock().await;
         link.kill();
