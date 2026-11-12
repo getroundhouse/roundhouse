@@ -8,7 +8,8 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
 use protocol::model::HubId;
 use protocol::provider::{
-    PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
+    Connect, Create, Destroy, Hello, HelloReply, Instances, Kill, MakeBaseImage, PROVIDER_PROTOCOL_VERSION,
+    ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start, Stop,
 };
 use protocol::versions::Versions;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
@@ -52,15 +53,15 @@ where
         };
         let reply = move |outcome| ProviderFrame::Reply { id, outcome };
         match (request, &serving) {
-            (Ok(ProviderRequest::Hello { protocol_version, oldest_protocol_version, hub_id, .. }), _) => {
+            (Ok(ProviderRequest::Hello(Hello { protocol_version, oldest_protocol_version, hub_id, .. })), _) => {
                 let theirs = Versions::from_hello(protocol_version, Some(oldest_protocol_version));
                 let outcome = match hello(&mut make, &mut serving, theirs, hub_id) {
-                    Ok((provider, chosen)) => ProviderOutcome::Response(ProviderResponse::Hello {
+                    Ok((provider, chosen)) => ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
                         protocol_version: chosen,
                         adapter: provider.name().to_string(),
                         build: build.to_string(),
                         capabilities: provider.capabilities(),
-                    }),
+                    })),
                     Err(e) => ProviderOutcome::Error(e),
                 };
                 let _ = frames.send(reply(outcome)).await;
@@ -141,20 +142,22 @@ fn hello(
 
 async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<ProviderResponse, ProviderError> {
     match request {
-        ProviderRequest::Create { instance_id, from, size, display_name } => {
+        ProviderRequest::Create(Create { instance_id, from, size, display_name }) => {
             provider.create(&instance_id, from.as_ref(), size, &display_name).await?;
         }
-        ProviderRequest::Start { instance_id, workers } => provider.start(&instance_id, &workers).await?,
-        ProviderRequest::Stop { instance_id } => provider.stop(&instance_id).await?,
-        ProviderRequest::Kill { instance_id } => provider.kill(&instance_id).await?,
-        ProviderRequest::Destroy { instance_id } => provider.destroy(&instance_id).await?,
-        ProviderRequest::MakeBaseImage { instance_id } => provider.make_base_image(&instance_id).await?,
-        ProviderRequest::List => return Ok(ProviderResponse::Instances { instances: provider.list().await? }),
-        ProviderRequest::Connect { instance_id } => {
+        ProviderRequest::Start(Start { instance_id, workers }) => provider.start(&instance_id, &workers).await?,
+        ProviderRequest::Stop(Stop { instance_id }) => provider.stop(&instance_id).await?,
+        ProviderRequest::Kill(Kill { instance_id }) => provider.kill(&instance_id).await?,
+        ProviderRequest::Destroy(Destroy { instance_id }) => provider.destroy(&instance_id).await?,
+        ProviderRequest::MakeBaseImage(MakeBaseImage { instance_id }) => provider.make_base_image(&instance_id).await?,
+        ProviderRequest::List => {
+            return Ok(ProviderResponse::Instances(Instances { instances: provider.list().await? }));
+        }
+        ProviderRequest::Connect(Connect { instance_id }) => {
             return Ok(ProviderResponse::Command(provider.connect(&instance_id).await?));
         }
         // Answered before any request reaches here.
-        ProviderRequest::Hello { .. } => return Err(ProviderError::Unsupported("say hello twice")),
+        ProviderRequest::Hello(_) => return Err(ProviderError::Unsupported("say hello twice")),
         ProviderRequest::Unknown => return Err(ProviderError::Unsupported("answer a request from a newer hub")),
     }
     Ok(ProviderResponse::Ok)

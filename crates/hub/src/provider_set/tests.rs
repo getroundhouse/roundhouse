@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use protocol::frame;
-use protocol::provider::{PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderResponse};
+use protocol::provider::{HelloReply, PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderResponse};
 use providers::local::{LocalConfig, LocalProvider};
 use providers::{Capabilities, ProviderError};
 
@@ -19,12 +19,12 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
 
 /// A script that says hello as an adapter called `name` would, then waits for its stdin to close.
 fn adapter(dir: &Path, name: &str) -> PathBuf {
-    let hello = ProviderResponse::Hello {
+    let hello = ProviderResponse::Hello(HelloReply {
         protocol_version: PROVIDER_PROTOCOL_VERSION,
         adapter: name.into(),
         build: "test".into(),
         capabilities: Capabilities::default(),
-    };
+    });
     let reply = frame::encode(&ProviderFrame::Reply { id: 1, outcome: ProviderOutcome::Response(hello) }).unwrap();
     let path = dir.join(name);
     let reply = String::from_utf8(reply).unwrap();
