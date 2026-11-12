@@ -4,6 +4,7 @@ description = "A session's history and live output, on gpui-kit's list and text 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 # What only tests read: where the scrollbar's thumb is, and how long a new question ignores keys, which a test can wait

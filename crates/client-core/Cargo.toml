@@ -3,6 +3,7 @@ name = "client-core"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 # What only tests use, such as asking for a session's account as clients did before accounts were records.
