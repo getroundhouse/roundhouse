@@ -1,13 +1,14 @@
 //! Keeping what's typed and not sent on the hub, so it's there after the app restarts, and in every client: what's
-//! typed and attached in each chat's composer, what's chosen and typed in answer to each chat's question, and the
-//! comment being written on each workspace's diff. A client hands over each change as it's made, and a thread of its
-//! own keeps the newest of each, one call at a time, so they reach the hub in the order they were made. Each file goes
-//! before any draft that names it, since the hub leaves out a file it hasn't got, and one let go of goes after the
-//! draft that stopped naming it, since the hub keeps any a draft names. What a hub can't take, because the connection
-//! went or it doesn't keep that kind, waits for the next connection. The count of what hasn't reached the hub, for each
-//! place something's typed, says what quitting would lose, and quitting waits for it with [`Drafts::flushed`], which
-//! needs no other thread. The same count, and the last copy of what's there that this client and the hub agree on, say
-//! whether what's on the hub was made somewhere else, such as in another client, as [`Drafts::from_elsewhere`] says.
+//! typed and attached in each chat's composer, what's chosen and typed in answer to each chat's question, the comment
+//! being written on each workspace's diff, and what's in the new-workspace dialog, files included. A client hands over
+//! each change as it's made, and a thread of its own keeps the newest of each, one call at a time, so they reach the
+//! hub in the order they were made. Each file goes before any draft that names it, since the hub leaves out a file it
+//! hasn't got, and one let go of goes after the draft that stopped naming it, since the hub keeps any a draft names.
+//! What a hub can't take, because the connection went or it doesn't keep that kind, waits for the next connection. The
+//! count of what hasn't reached the hub, for each place something's typed, says what quitting would lose, and quitting
+//! waits for it with [`Drafts::flushed`], which needs no other thread. The same count, and the last copy of what's
+//! there that this client and the hub agree on, say whether what's on the hub was made somewhere else, such as in
+//! another client, as [`Drafts::from_elsewhere`] says.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,8 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 use protocol::model::{
-    AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, Rev, Session, SessionId, Workspace, WorkspaceId,
+    AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, Rev, Session, SessionId, Workspace, WorkspaceDraft,
+    WorkspaceDraftToKeep, WorkspaceId,
 };
 
 use crate::{Client, FileToSend};
@@ -29,13 +31,31 @@ mod tests;
 /// app that stops without quitting loses at most this much of it.
 pub(crate) const PAUSE: Duration = Duration::from_millis(500);
 
-/// Where something's typed, each kept apart from the rest: a chat's composer, its answer to its question, or the
-/// comment being written on a workspace's diff.
+/// Where something's typed, each kept apart from the rest: a chat's composer, its answer to its question, the comment
+/// being written on a workspace's diff, or the new-workspace dialog, which a person has one of.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Where {
     Composer(SessionId),
     Answer(SessionId),
     Comment(WorkspaceId),
+    NewWorkspace,
+}
+
+/// Where files are attached, for what's typed there to name: a chat's composer, or the new-workspace dialog.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum FilesFor {
+    Chat(SessionId),
+    NewWorkspace,
+}
+
+impl FilesFor {
+    /// Where what names them is typed.
+    fn at(&self) -> Where {
+        match self {
+            Self::Chat(id) => Where::Composer(id.clone()),
+            Self::NewWorkspace => Where::NewWorkspace,
+        }
+    }
 }
 
 /// What's typed in one place now, for the hub to keep in place of what was.
@@ -44,6 +64,7 @@ enum Change {
     Composer(SessionId, NewDraft),
     Answer(SessionId, Option<AnswerDraft>),
     Comment(WorkspaceId, Option<CommentDraft>),
+    NewWorkspace(WorkspaceDraftToKeep),
 }
 
 impl Change {
@@ -52,6 +73,7 @@ impl Change {
             Self::Composer(id, _) => Where::Composer(id.clone()),
             Self::Answer(id, _) => Where::Answer(id.clone()),
             Self::Comment(id, _) => Where::Comment(id.clone()),
+            Self::NewWorkspace(_) => Where::NewWorkspace,
         }
     }
 }
@@ -89,15 +111,22 @@ enum Said {
     Composer(Draft),
     Answer(Option<AnswerDraft>),
     Comment(Option<CommentDraft>),
+    /// With no revision, which is the record's rather than what it says.
+    NewWorkspace(WorkspaceDraft),
 }
 
 impl Said {
+    fn new_workspace(draft: &WorkspaceDraft) -> Self {
+        Self::NewWorkspace(WorkspaceDraft { rev: Rev::default(), ..draft.clone() })
+    }
+
     /// What a record says of a place where nothing's typed.
     fn nothing(at: &Where) -> Self {
         match at {
             Where::Composer(_) => Self::Composer(Draft::default()),
             Where::Answer(_) => Self::Answer(None),
             Where::Comment(_) => Self::Comment(None),
+            Where::NewWorkspace => Self::NewWorkspace(WorkspaceDraft::default()),
         }
     }
 }
@@ -106,8 +135,8 @@ type Counts = Arc<Mutex<Counted>>;
 
 enum Request {
     Changed { change: Change, now: bool },
-    Attach { id: SessionId, file: FileToSend },
-    Detach { id: SessionId, file: AttachmentId },
+    Attach { to: FilesFor, file: FileToSend },
+    Detach { from: FilesFor, file: AttachmentId },
     Reconnect(Client),
     Flush(flume::Sender<()>),
 }
@@ -122,8 +151,10 @@ impl Drafts {
         Self { requests, counts, caught_up }
     }
 
-    /// Carries on on a new connection, keeping first what the last one couldn't.
+    /// Carries on on a new connection, keeping first what the last one couldn't. It may be to another hub, whose
+    /// revisions can be lower, and the dialog is the same place on every hub, so its copy agreed on goes.
     pub fn reconnect(&self, client: &Client) {
+        self.counts.lock().agreed.remove(&Where::NewWorkspace);
         let _ = self.requests.send(Request::Reconnect(client.clone()));
     }
 
@@ -157,15 +188,40 @@ impl Drafts {
         self.change(Change::Comment(id.clone(), draft), true);
     }
 
+    /// What's in the new-workspace dialog now, kept within [`PAUSE`].
+    pub fn typed_new_workspace(&self, draft: WorkspaceDraftToKeep) {
+        self.change(Change::NewWorkspace(draft), false);
+    }
+
+    /// The same, kept at once, such as one emptied as the workspace is made, or something picked rather than typed.
+    pub fn set_new_workspace(&self, draft: WorkspaceDraftToKeep) {
+        self.change(Change::NewWorkspace(draft), true);
+    }
+
     /// A file for the chat's drafts to name, added to the chat before any draft given after this is kept.
     pub fn attach(&self, id: &SessionId, file: FileToSend) {
-        self.handed(&Where::Composer(id.clone()));
-        let _ = self.requests.send(Request::Attach { id: id.clone(), file });
+        self.attach_to(FilesFor::Chat(id.clone()), file);
+    }
+
+    /// The same, for the new-workspace dialog's drafts, kept by the hub until it's let go of, since no chat exists yet
+    /// to add it to.
+    pub fn attach_to_new_workspace(&self, file: FileToSend) {
+        self.attach_to(FilesFor::NewWorkspace, file);
     }
 
     /// Lets go of a file the chat's draft no longer names, once the draft given before this is kept.
     pub fn detach(&self, id: &SessionId, file: &AttachmentId) {
-        let _ = self.requests.send(Request::Detach { id: id.clone(), file: file.clone() });
+        let _ = self.requests.send(Request::Detach { from: FilesFor::Chat(id.clone()), file: file.clone() });
+    }
+
+    /// The same, for the new-workspace dialog's draft.
+    pub fn detach_from_new_workspace(&self, file: &AttachmentId) {
+        let _ = self.requests.send(Request::Detach { from: FilesFor::NewWorkspace, file: file.clone() });
+    }
+
+    fn attach_to(&self, to: FilesFor, file: FileToSend) {
+        self.handed(&to.at());
+        let _ = self.requests.send(Request::Attach { to, file });
     }
 
     /// Keeps everything given so far at once, and hears once it's kept, or once that's as far as it can get, such as
@@ -210,6 +266,11 @@ impl Drafts {
         self.elsewhere(&Where::Comment(workspace.id.clone()), workspace.rev, &said)
     }
 
+    /// The same, for what's in the new-workspace dialog, which is a record of its own.
+    pub fn new_workspace_from_elsewhere(&self, draft: &WorkspaceDraft) -> bool {
+        self.elsewhere(&Where::NewWorkspace, draft.rev, &Said::new_workspace(draft))
+    }
+
     /// Says that this client shows the draft on `session`'s record, such as one it started with, or one made
     /// elsewhere that it took, so a newer record carrying the same draft isn't from elsewhere.
     pub fn took(&self, session: &Session) {
@@ -227,6 +288,11 @@ impl Drafts {
     pub fn took_comment(&self, workspace: &Workspace) {
         let said = Said::Comment(workspace.comment_draft.clone());
         self.agree(Where::Comment(workspace.id.clone()), Agreed { rev: workspace.rev, said });
+    }
+
+    /// The same, for what's in the new-workspace dialog.
+    pub fn took_new_workspace(&self, draft: &WorkspaceDraft) {
+        self.agree(Where::NewWorkspace, Agreed { rev: draft.rev, said: Said::new_workspace(draft) });
     }
 
     /// Says that a place something's typed now has nothing on its way to the hub, so a change made elsewhere that
