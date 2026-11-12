@@ -34,7 +34,8 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     jump_to(&mut ui, second);
 
     ui.wait("the second prompt to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(second).is_some()));
-    ui.frame();
+    // What loaded with it is laid out over the frames after, as many as that takes.
+    ui.wait("the rows down to it to be laid out", |ui| laid_out_down_to(ui, second));
     assert_at_the_bottom(&mut ui, second, "the second prompt");
     assert!(selected(&mut ui, row_id("outline-tick", second)), "and its tick is lit");
     assert!(!ui.has("outline-list"), "the list closes, so it isn't over where it jumped to");
@@ -183,6 +184,12 @@ fn place_of(ui: &Ui<'_>, row: usize) -> (Pixels, Pixels) {
     let (top, offset) = scrolled_to_exactly(ui);
     let start = (top..row).map(|row| row_height(ui, row)).fold(-offset, |down, height| down + height);
     (start, start + row_height(ui, row))
+}
+
+/// Whether the last frame measured every row from the top of the chat down to the one drawn in `row`.
+fn laid_out_down_to(ui: &Ui<'_>, row: usize) -> bool {
+    let top = scrolled_to_exactly(ui).0;
+    (top..=row).all(|row| ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().row_height(row)).is_some())
 }
 
 fn row_height(ui: &Ui<'_>, row: usize) -> Pixels {
