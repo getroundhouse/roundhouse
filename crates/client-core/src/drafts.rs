@@ -4,9 +4,9 @@
 //! it, since the hub leaves out a file it hasn't got, and one let go of goes after the draft that stopped naming it,
 //! since the hub keeps any a draft names. What a hub can't take, because the connection went or it doesn't keep drafts,
 //! waits for the next connection. Each chat's count of what hasn't reached the hub says what quitting would lose, and
-//! quitting waits for it with [`Drafts::flushed`], which needs no other thread. The same count, and the revision the hub
-//! gave back for the last draft kept, say whether a chat's draft on the hub was made somewhere else, such as in another
-//! client, which [`Drafts::from_elsewhere`] says.
+//! quitting waits for it with [`Drafts::flushed`], which needs no other thread. The same count, and the last copy of the
+//! chat's draft that this client and the hub agree on, say whether a chat's draft on the hub was made somewhere else,
+//! such as in another client, which [`Drafts::from_elsewhere`] says.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use protocol::model::{AttachmentId, NewDraft, Rev, Session, SessionId};
+use protocol::model::{AttachmentId, Draft, NewDraft, Rev, Session, SessionId};
 
 use crate::{Client, ClientError, FileToSend};
 
@@ -34,15 +34,23 @@ pub struct Drafts {
 }
 
 /// What the client and the thread share of each chat, under one lock, so a chat is never counted as having nothing on
-/// its way before the revision its last draft was kept at is known.
+/// its way before the copy its last draft was kept as is known.
 #[derive(Default)]
 struct Counted {
     /// How many of each chat's drafts and files haven't reached the hub, counted as each is handed over and as the hub
     /// takes it, or it's replaced by a newer draft. A chat with none has nothing in its composer that only this client
     /// has.
     unkept: HashMap<SessionId, usize>,
-    /// The newest revision the hub gave the chat's record as it kept one of this client's drafts.
-    kept: HashMap<SessionId, Rev>,
+    /// The newest copy of each chat's draft that this client and the hub agree on: the one the hub gave back as it kept
+    /// one of this client's, or one this client took from the chat's record.
+    agreed: HashMap<SessionId, Agreed>,
+}
+
+/// A copy of a chat's draft, and the revision of the record it was on.
+#[derive(Clone, Default)]
+struct Agreed {
+    rev: Rev,
+    draft: Draft,
 }
 
 type Counts = Arc<Mutex<Counted>>;
@@ -123,13 +131,22 @@ impl Drafts {
 
     /// Whether the draft on the hub's `session` record was made somewhere else, such as in another client, so a client
     /// shows it in place of its own. Nothing handed over for the chat is still on its way, and the record is newer than
-    /// any the hub gave back as it kept this client's drafts there. A record can be newer for something else, such as
-    /// its status, and then its draft is this client's anyway. While one of this client's is on its way, that one goes
-    /// on and replaces whatever was made elsewhere meanwhile, and [`Drafts::caught_up`] says once it has arrived.
+    /// the last copy of its draft that this client kept there or took from it, as [`Drafts::took`] says, and its draft
+    /// isn't that copy. So a record that's newer for something else, such as its status, isn't, and nor is an older
+    /// one that arrives late. While one of this client's is on its way, that one goes on and replaces whatever was made
+    /// elsewhere meanwhile, and [`Drafts::caught_up`] says once it has arrived.
     pub fn from_elsewhere(&self, session: &Session) -> bool {
         let counts = self.counts.lock();
-        let kept = counts.kept.get(&session.id).copied().unwrap_or_default();
-        !counts.unkept.contains_key(&session.id) && session.rev > kept
+        let none = Agreed::default();
+        let agreed = counts.agreed.get(&session.id).unwrap_or(&none);
+        !counts.unkept.contains_key(&session.id) && session.rev > agreed.rev && session.draft != agreed.draft
+    }
+
+    /// Says that this client shows the draft on `session`'s record, such as one it started with, or one made
+    /// elsewhere that it took, so a newer record carrying the same draft isn't from elsewhere.
+    pub fn took(&self, session: &Session) {
+        let copy = Agreed { rev: session.rev, draft: session.draft.clone() };
+        agree(&mut self.counts.lock(), &session.id, copy);
     }
 
     /// Says that a chat now has nothing on its way to the hub, so a draft made elsewhere that
@@ -254,7 +271,7 @@ impl Keeper {
                 // Kept, or the hub answered and won't keep this one however often it's asked, such as for a chat
                 // that's closed or gone.
                 self.answered = true;
-                self.reached(&id, answer.ok().map(|session| session.rev));
+                self.reached(&id, answer.ok().map(|session| Agreed { rev: session.rev, draft: session.draft }));
             }
         }
     }
@@ -307,12 +324,11 @@ impl Keeper {
     }
 
     /// Counts down one of the chat's drafts or files, which has reached the hub, or never needs to, along with the
-    /// revision the hub gave the chat's record if it kept a draft.
-    fn reached(&self, id: &SessionId, kept: Option<Rev>) {
+    /// copy the hub gave back if it kept a draft.
+    fn reached(&self, id: &SessionId, kept: Option<Agreed>) {
         let mut counts = self.counts.lock();
-        if let Some(rev) = kept {
-            let newest = counts.kept.entry(id.clone()).or_default();
-            *newest = (*newest).max(rev);
+        if let Some(kept) = kept {
+            agree(&mut counts, id, kept);
         }
         if let Some(count) = counts.unkept.get_mut(id) {
             *count -= 1;
@@ -322,5 +338,13 @@ impl Keeper {
                 let _ = self.catching_up.try_send(());
             }
         }
+    }
+}
+
+/// Takes `copy` as the one the client and the hub agree on for the chat, unless the one it has is newer.
+fn agree(counts: &mut Counted, id: &SessionId, copy: Agreed) {
+    let agreed = counts.agreed.entry(id.clone()).or_default();
+    if copy.rev > agreed.rev {
+        *agreed = copy;
     }
 }
