@@ -14,14 +14,14 @@ use protocol::model::{RunId, SessionId};
 use protocol::versions::Versions;
 use protocol::worker::{ToWorker, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, watch};
-use tokio::task::JoinSet;
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::task::{AbortHandle, JoinSet};
 use tracing::{error, info, warn};
 
 use crate::asks::Asks;
 use crate::deleting::Deleter;
 use crate::tools::Tools;
-use crate::{git, setup};
+use crate::{branch_watch, git, setup};
 
 mod agent;
 mod scripts;
@@ -72,6 +72,8 @@ struct State {
     stopping: watch::Sender<bool>,
     /// How many one-off calls have started, which numbers their records.
     calls: AtomicU64,
+    /// What's watching the worktree's branches, so a later watch can replace it.
+    watching: Mutex<Option<AbortHandle>>,
     frames: mpsc::Sender<WorkerFrame>,
     /// What the worker has asked its hub and waits to hear.
     asks: Arc<Asks>,
@@ -107,6 +109,7 @@ where
         setup: Arc::new(Mutex::new(Setup::Idle)),
         stopping: watch::Sender::new(false),
         calls: AtomicU64::new(0),
+        watching: Mutex::new(None),
         frames: frames.clone(),
         tools: Arc::new(Tools::new(asks.clone())),
         asks,
@@ -174,6 +177,10 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     }
     state.stopping.send_replace(true);
     state.asks.close();
+    // So it lets go of its frames now, rather than once whatever it's reading is done.
+    if let Some(watching) = state.watching.lock().take() {
+        watching.abort();
+    }
     stop_setup_script(state);
     let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
@@ -235,6 +242,7 @@ async fn handle(
                 branch: prepared.branch,
                 base_ref: prepared.base_ref,
                 warnings: prepared.warnings,
+                branches: prepared.branches,
             })
         }
         WorkerRequest::RestoreWorkspace { repo_path, path, branch } => {
@@ -250,7 +258,19 @@ async fn handle(
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
         }
         WorkerRequest::PullRequest { path } => {
-            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await? })
+            // `gh` finds the pull request by the branch checked out.
+            let branch = git::branches::checked_out(Path::new(&path)).await;
+            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await?, branch })
+        }
+        WorkerRequest::WatchBranches { path } => {
+            let (first, sent) = oneshot::channel();
+            let watching = branch_watch::watch(path.into(), state.frames.clone(), state.stopping.subscribe(), first);
+            if let Some(earlier) = state.watching.lock().replace(tokio::spawn(watching).abort_handle()) {
+                earlier.abort();
+            }
+            // The first frame is queued by then, ahead of this reply, on the same stream.
+            let _ = sent.await;
+            Ok(WorkerResponse::Ok)
         }
         WorkerRequest::GithubRateLimit { path } => Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&path).await?)),
         WorkerRequest::SetupWorkspace { repo_path, path, env } => run_setup(state, &repo_path, &path, &env).await,

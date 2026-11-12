@@ -281,6 +281,8 @@ async fn read_frames(
             WorkerFrame::Ask { id, session_id, ask } => {
                 start_answering(&hub, &link, &workspace_id, id, session_id, ask);
             }
+            // Only for a watch, which this hub doesn't ask for yet.
+            WorkerFrame::Branches { .. } => {}
         }
     }
     debug!(%instance_id, "worker connection ended");

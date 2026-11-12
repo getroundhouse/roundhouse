@@ -9395,6 +9395,7 @@ dependencies = [
  "hyper-util",
  "markdown",
  "memchr",
+ "notify",
  "parking_lot",
  "percent-encoding",
  "process",

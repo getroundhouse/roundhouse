@@ -9,8 +9,8 @@ use crate::attachment::{AttachmentBytes, AttachmentFile, NewAttachment};
 use crate::client::Outcome;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
-    AgentAccount, AgentKind, AgentSessionId, ApprovalId, CacheRequest, CommitId, ContextUsage, FileContents,
-    FileOpened, FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, BranchName, Branches, CacheRequest, CommitId, ContextUsage,
+    FileContents, FileOpened, FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings,
     SessionSettingsChange, UsageLimit, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
@@ -68,6 +68,13 @@ pub enum WorkerRequest {
         base_ref: Option<String>,
     },
     PullRequest {
+        path: String,
+    },
+    /// Watches the branches of the worktree at `path`, and sends a [`WorkerFrame::Branches`] with what they are at
+    /// once, and again each time they change, until the worker stops. A later watch replaces it. Replies `Ok` once
+    /// it's watching and has sent that first frame, or found it can't read them, so a hub that waits for the reply
+    /// has the frame first.
+    WatchBranches {
         path: String,
     },
     /// How much of GitHub's hourly limit is left for the `gh` that runs in this worktree. Asking costs none of it.
@@ -241,11 +248,18 @@ pub enum WorkerResponse {
         base_ref: String,
         #[serde(default)]
         warnings: Vec<String>,
+        /// The worktree's branches, as it was made, which a watch then starts from. `None` when they couldn't be read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branches: Option<Branches>,
     },
     GitStatus(GitStatus),
     GitDiff(GitDiff),
     PullRequest {
         pull_request: Option<PullRequest>,
+        /// The branch checked out as it looked, whose pull request this is. `None` on a detached HEAD, and from a
+        /// worker that doesn't say.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<BranchName>,
     },
     GithubRateLimit(RateLimit),
     SetupDone {
@@ -334,6 +348,11 @@ pub enum WorkerFrame {
         id: AskId,
         session_id: SessionId,
         ask: WorkerAsk,
+    },
+    /// What the watched worktree's branches are now, whole, as [`WorkerRequest::WatchBranches`] asked, so a frame
+    /// replaces every one before it, and only the newest matters.
+    Branches {
+        branches: Branches,
     },
 }
 

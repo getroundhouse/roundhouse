@@ -4,6 +4,7 @@
 
 mod asks;
 pub mod attachments;
+mod branch_watch;
 mod claim;
 mod deleting;
 mod files;

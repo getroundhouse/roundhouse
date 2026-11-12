@@ -78,6 +78,8 @@ libc = "0.2"
 markdown = "1"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2"
+# Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.
+notify = "8"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width.

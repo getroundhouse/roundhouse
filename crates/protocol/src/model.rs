@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 mod account;
+mod branches;
 mod cache;
 mod compaction_line;
 mod context;
@@ -22,6 +23,7 @@ mod subagent;
 mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
@@ -112,6 +114,10 @@ ids!(
     /// A commit, by the full object ID git gives it. It holds any string, as every ID here does, so it's the worker
     /// reading it that refuses one that isn't a full object ID.
     CommitId,
+    /// A branch, by its name without `refs/heads/`, such as `aspen`, as git spells it.
+    BranchName,
+    /// A remote of a repository, such as `origin`, as git's config names it.
+    RemoteName,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.

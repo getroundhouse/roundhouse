@@ -66,7 +66,7 @@ pub(super) fn reading(hub: &Hub, says: &Says) -> Arc<WorkerLink> {
     let says = says.clone();
     let link = WorkerLink::answering(move |request| {
         Some(if matches!(request, WorkerRequest::PullRequest { .. }) {
-            says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request })
+            says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request, branch: None })
         } else {
             Ok(WorkerResponse::Ok)
         })
