@@ -11,6 +11,7 @@ use tracing::warn;
 
 use super::Hub;
 use super::attachments::checked;
+use crate::attachment_files::FilesOf;
 use crate::store::{Store, now_ms};
 
 #[cfg(test)]
@@ -44,7 +45,7 @@ impl Hub {
             Vec::new()
         });
         for id in unnamed {
-            if let Err(e) = self.attachment_files.remove_draft_file(&id).await {
+            if let Err(e) = self.attachment_files.remove(FilesOf::NewWorkspace, &id).await {
                 warn!(attachment = %id, "couldn't let go of a file nothing will send: {e}");
             }
         }
@@ -55,7 +56,7 @@ impl Hub {
     pub(crate) async fn tidy_draft_files(&self) {
         self.let_go_of_unnamed_draft_files().await;
         let tidied = match self.blocking(Store::new_workspace_draft_file_ids).await {
-            Ok(kept) => self.attachment_files.remove_draft_files_except(kept).await,
+            Ok(kept) => self.attachment_files.remove_new_workspace_files_except(kept).await,
             Err(e) => Err(e),
         };
         if let Err(e) = tidied {
@@ -72,7 +73,7 @@ impl Hub {
         media_type: MediaType,
         data: AttachmentBytes,
     ) -> Result<Attachment, ApiError> {
-        self.attachment_files.check_draft_file(&id)?;
+        self.attachment_files.check(FilesOf::NewWorkspace, &id)?;
         let earlier = {
             let id = id.clone();
             self.blocking(move |store| store.new_workspace_draft_file(&id)).await?
@@ -83,10 +84,10 @@ impl Hub {
         checked(media_type, &data)?;
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
         let file = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
-        self.attachment_files.write_draft_file(&id, data.into_vec()).await?;
+        self.attachment_files.write(FilesOf::NewWorkspace, &id, data.into_vec()).await?;
         let added = self.blocking(move |store| store.add_new_workspace_draft_file(&file)).await;
         if added.is_err() {
-            let _ = self.attachment_files.remove_draft_file(&id).await;
+            let _ = self.attachment_files.remove(FilesOf::NewWorkspace, &id).await;
         }
         added
     }
@@ -99,7 +100,7 @@ impl Hub {
         let Some(file) = file else {
             return Err(ApiError::new(ErrorCode::NotFound, format!("no attachment {id}")));
         };
-        match self.attachment_files.read_draft_file(&id).await? {
+        match self.attachment_files.read(FilesOf::NewWorkspace, &id).await? {
             Some(bytes) => Ok(AttachmentBytes::new(bytes)),
             None => Err(ApiError::new(
                 ErrorCode::NotFound,
@@ -111,12 +112,12 @@ impl Hub {
     /// Lets go of a file the draft doesn't name, and of its bytes. One whose bytes can't be let go of is only left on
     /// disk, so it's logged.
     pub(crate) async fn new_workspace_draft_file_remove(&self, id: AttachmentId) -> Result<(), ApiError> {
-        self.attachment_files.check_draft_file(&id)?;
+        self.attachment_files.check(FilesOf::NewWorkspace, &id)?;
         let removed = {
             let id = id.clone();
             self.blocking(move |store| store.let_go_of_new_workspace_draft_file(&id)).await?
         };
-        if removed && let Err(e) = self.attachment_files.remove_draft_file(&id).await {
+        if removed && let Err(e) = self.attachment_files.remove(FilesOf::NewWorkspace, &id).await {
             warn!(attachment = %id, "couldn't let go of a file nothing will send: {e}");
         }
         Ok(())

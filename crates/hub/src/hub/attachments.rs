@@ -13,6 +13,7 @@ use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
 
 use super::Hub;
+use crate::attachment_files::FilesOf;
 use crate::error::internal;
 use crate::store::AddedBy;
 use crate::worker_link::WorkerLink;
@@ -42,7 +43,7 @@ impl Hub {
         data: AttachmentBytes,
         by: AddedBy,
     ) -> Result<Attachment, ApiError> {
-        self.attachment_files.check(&session_id, &id)?;
+        self.attachment_files.check(FilesOf::Session(&session_id), &id)?;
         let earlier = {
             let (session_id, id) = (session_id.clone(), id.clone());
             self.blocking(move |store| {
@@ -57,12 +58,12 @@ impl Hub {
         checked(media_type, &data)?;
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
         let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
-        self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
+        self.attachment_files.write(FilesOf::Session(&session_id), &id, data.into_vec()).await?;
         let session = session_id.clone();
         let added = self.blocking(move |store| store.add_attachment(&session, &attachment, by)).await;
         if added.is_err() {
             // Such as because its session was deleted meanwhile, which takes the session's files with it.
-            let _ = self.attachment_files.remove(&session_id, &id).await;
+            let _ = self.attachment_files.remove(FilesOf::Session(&session_id), &id).await;
         }
         added
     }
@@ -96,7 +97,7 @@ impl Hub {
         let Some(attachment) = attachment else {
             return Err(ApiError::new(ErrorCode::NotFound, format!("no attachment {id}")));
         };
-        if let Some(bytes) = self.attachment_files.read(&session_id, &id).await? {
+        if let Some(bytes) = self.attachment_files.read(FilesOf::Session(&session_id), &id).await? {
             return Ok(AttachmentBytes::new(bytes));
         }
         let why = if attachment.media_type.is_image() {
@@ -110,7 +111,7 @@ impl Hub {
     /// Lets go of a file a client added that nothing will send, as [`crate::store::Store::let_go_of_attachment`]
     /// decides, and of its bytes.
     pub(crate) async fn attachment_remove(&self, session_id: SessionId, id: AttachmentId) -> Result<(), ApiError> {
-        self.attachment_files.check(&session_id, &id)?;
+        self.attachment_files.check(FilesOf::Session(&session_id), &id)?;
         let removed = {
             let (session_id, id) = (session_id.clone(), id.clone());
             self.blocking(move |store| store.let_go_of_attachment(&session_id, &id)).await?
@@ -124,7 +125,7 @@ impl Hub {
     /// The bytes of files the store has let go of. One that can't be is only left on disk, so it's logged.
     pub(crate) async fn let_go_of_bytes(&self, session_id: &SessionId, files: &[AttachmentId]) {
         for id in files {
-            if let Err(e) = self.attachment_files.remove(session_id, id).await {
+            if let Err(e) = self.attachment_files.remove(FilesOf::Session(session_id), id).await {
                 warn!(session = %session_id, attachment = %id, "couldn't let go of a file nothing will send: {e}");
             }
         }
@@ -166,7 +167,7 @@ impl Hub {
         worktree: &str,
         attachment: &Attachment,
     ) -> Result<String, ApiError> {
-        let Some(data) = self.attachment_files.read(session_id, &attachment.id).await? else {
+        let Some(data) = self.attachment_files.read(FilesOf::Session(session_id), &attachment.id).await? else {
             return Err(internal(format!("the hub doesn't have {} to send", attachment.name)));
         };
         let (path, name, data) = (worktree.to_string(), attachment.name.clone(), AttachmentBytes::new(data));
@@ -177,7 +178,7 @@ impl Hub {
         let (session, id, kept) = (session_id.clone(), attachment.id.clone(), path.clone());
         self.blocking(move |store| store.set_attachment_placed_at(&session, &id, &kept)).await?;
         if !attachment.media_type.is_image()
-            && let Err(e) = self.attachment_files.remove(session_id, &attachment.id).await
+            && let Err(e) = self.attachment_files.remove(FilesOf::Session(session_id), &attachment.id).await
         {
             warn!(attachment = %attachment.id, "couldn't let go of a sent attachment: {e}");
         }
