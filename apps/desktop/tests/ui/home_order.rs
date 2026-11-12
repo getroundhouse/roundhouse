@@ -40,6 +40,23 @@ fn a_row_in_home_slides_to_its_new_place_and_comes_to_rest_there(cx: &mut TestAp
 }
 
 #[gpui_kit::test]
+fn the_rows_a_search_keeps_are_in_their_places_at_once_rather_than_sliding_there(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, [first, ..], _) = home_over_three(cx, &stack);
+    let was = top(&mut ui, home_row(&first));
+    let branch = ui.view().workspaces.iter().find(|w| w.id == first).unwrap().branch.clone();
+    ui.allow_motion();
+
+    ui.input(&branch);
+
+    let at_once = top(&mut ui, home_row(&first));
+    ui.play(look::motion::PANEL);
+    let at_rest = top(&mut ui, home_row(&first));
+    assert!(at_rest < was, "the oldest, at the bottom, is the only one left, at the top: {at_rest:?}, {was:?}");
+    assert_eq!(at_once, at_rest);
+}
+
+#[gpui_kit::test]
 fn homes_order_holds_still_while_the_pointer_is_on_its_list_and_changes_once_it_has_rested(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, [first, second, third], [_, chat, _]) = home_over_three(cx, &stack);
