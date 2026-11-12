@@ -1,5 +1,6 @@
-//! Runs workers on this machine. Each one is a separate process, which the hub starts with the command `connect`
-//! answers with, so a remote worker only changes the command.
+//! Runs workers on this machine. Each one is a separate process, which the hub reaches with the command `connect`
+//! answers with, so a remote worker only changes the command. That's the daemon's own `worker --attach`, which starts
+//! the worker in a session of its own if none is serving the instance, so the worker can outlive its hub.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -24,11 +25,14 @@ const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(5);
 /// agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
 const PATH_MARKER: &str = "__ROUNDHOUSE_LOGIN_PATH__";
+/// How the hub reaches a worker. Through its socket, so the worker can outlive its hub, but on Windows, where there's
+/// no Unix socket to serve it on, on the pipes of the hub, which it stops with.
+const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 /// How long a process sent SIGKILL gets to be gone.
 const KILLED_GRACE: Duration = Duration::from_secs(2);
 
 pub struct LocalConfig {
-    /// The binary that runs `worker --stdio`.
+    /// The binary that runs a worker, as `worker --attach` or `worker --stdio`.
     pub worker_exe: PathBuf,
     /// One directory per instance, holding its worker's records.
     pub instances_dir: PathBuf,
@@ -320,7 +324,7 @@ impl Provider for LocalProvider {
             program: text(&self.config.worker_exe),
             args: vec![
                 "worker".into(),
-                "--stdio".into(),
+                TRANSPORT.into(),
                 "--workspaces-root".into(),
                 text(&self.config.workspaces_root),
                 "--state-dir".into(),

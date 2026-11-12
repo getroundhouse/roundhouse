@@ -17,6 +17,18 @@ pub(crate) fn own_group(command: &mut Command) {
     command.process_group(0);
 }
 
+pub(crate) fn own_session(command: &mut Command) {
+    // SAFETY: setsid is async-signal-safe, which is all pre_exec requires.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
 /// It does nothing for PID 0 or 1, because `kill(-0)` would signal our own group, and -1 means every process we're
 /// allowed to signal.
 pub(crate) fn signal_group(leader: u32, signal: Signal) {

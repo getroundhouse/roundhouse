@@ -119,16 +119,7 @@ fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
 /// Detaches the hub from this terminal and process group, so closing the client doesn't reach it.
 #[cfg(unix)]
 fn detach(command: &mut Command, _home: &Path) {
-    use std::os::unix::process::CommandExt;
-    // SAFETY: setsid is async-signal-safe, which is all pre_exec requires.
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    process::own_session(command);
 }
 
 /// Gives the hub a console of its own with no window, so closing the client's doesn't reach it. It needs one, or
