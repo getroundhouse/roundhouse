@@ -40,6 +40,7 @@ mod subagent_records;
 mod tool_chats;
 mod tool_screens;
 mod update_screens;
+mod workspace_screens;
 mod worktree;
 mod world;
 mod worlds;
@@ -142,6 +143,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(compaction_chats::SCREENS)
         .chain(cache_screens::SCREENS)
         .chain(UPDATE_SCREENS)
+        .chain(workspace_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
