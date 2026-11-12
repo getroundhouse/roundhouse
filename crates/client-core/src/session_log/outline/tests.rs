@@ -139,7 +139,7 @@ fn a_prompt_is_drawn_at_the_end_until_the_agent_takes_it_and_then_where_it_took_
 #[test]
 fn a_prompt_the_hub_listed_as_settled_is_where_the_hub_says() {
     let mut log = SessionLog::new(600);
-    let settled = protocol::model::SettledAt { seq: 9, place: Place::new(7) };
+    let settled = protocol::model::SettledAt { seq: 9, place: Place::new(7), how: None };
     log.list_prompts(vec![line(3).placed(Place::new(2)).settled_at(settled)]);
 
     assert_eq!(log.prompt_row(log.prompt_lines().next().unwrap()), 8);

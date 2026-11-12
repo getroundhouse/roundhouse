@@ -7,13 +7,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, Rev, Seq, Session, ToolUseId};
+use protocol::model::{AgentSessionId, OpenApproval, Rev, Seq, Session, ToolUseId};
 use rusqlite::{Connection, Row};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 mod accounts;
+mod approvals;
 mod attachments;
 mod backup;
 mod comments;
@@ -86,6 +87,8 @@ pub struct Appended {
     pub by_the_person: bool,
     /// The prompts the agent has yet to take, oldest first, if the event changed them.
     pub untaken: Option<Vec<Seq>>,
+    /// The approvals the agent is waiting on, oldest first, if the event changed them.
+    pub approvals: Option<Vec<OpenApproval>>,
     /// The subagents whose records the event changed.
     pub subagents: Vec<ToolUseId>,
 }

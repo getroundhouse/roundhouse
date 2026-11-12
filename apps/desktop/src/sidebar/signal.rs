@@ -76,6 +76,9 @@ mod tests {
             queue_held: false,
             draft: protocol::model::Draft::default(),
             answer_draft: None,
+            open_approvals: None,
+            untaken: None,
+            agent_opened: None,
             rev: protocol::model::Rev::default(),
             title_source: protocol::model::TitleSource::FirstLine,
         }

@@ -3,8 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountId, AnswerDraft, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode,
-    PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, Wait, WorkspaceId,
+    AccountId, AnswerDraft, ApprovalId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName,
+    PermissionMode, PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, Wait,
+    WorkspaceId,
 };
 use crate::event::{AgentTask, TaskKind};
 
@@ -202,13 +203,41 @@ pub struct Session {
     /// question that has gone means nothing. `None` from a hub that doesn't keep it, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer_draft: Option<AnswerDraft>,
+    /// The approvals the agent is waiting on, oldest first, changed in the same commit as the event that changes them.
+    /// `None` from a hub that doesn't say, whose client finds them among the events it has loaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_approvals: Option<Vec<OpenApproval>>,
+    /// The prompts the agent has yet to take or drop, oldest first, by where each is recorded, a compaction asked for
+    /// included, changed in the same commit as the event that changes them. Until the agent has taken them all, the
+    /// queue doesn't send and a compaction is refused. `None` from a hub that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub untaken: Option<Vec<Seq>>,
+    /// Whether the agent has opened its conversation, so there's something to compact. `None` from a hub that doesn't
+    /// say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_opened: Option<bool>,
     #[serde(default)]
     pub rev: Rev,
     #[serde(default)]
     pub title_source: TitleSource,
 }
 
+/// An approval the agent is waiting on: where its request is in the log, and its ID.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct OpenApproval {
+    pub seq: Seq,
+    pub approval_id: ApprovalId,
+}
+
 impl Session {
+    /// Whether the hub would refuse to ask the agent to compact now, as far as the record says: while the agent is on a
+    /// turn, has a prompt it hasn't taken, or hasn't opened its conversation. The hub has the last word, and a hub
+    /// that doesn't say what the agent has yet to take, or whether it has opened, is refused only for the turn.
+    pub fn compaction_waits(&self) -> bool {
+        let untaken = self.untaken.as_ref().is_some_and(|untaken| !untaken.is_empty());
+        self.status.in_turn() || untaken || self.agent_opened == Some(false)
+    }
+
     /// What it runs with.
     pub fn settings(&self) -> SessionSettings {
         SessionSettings { model: self.model.clone(), permission_mode: self.permission_mode, effort: self.effort }
@@ -348,5 +377,21 @@ mod tests {
         assert!(session("idle", 9_000).idle_cache().is_some());
         assert!(session("running", 9_000).idle_cache().is_none());
         assert!(session("thinking_hard", 9_000).idle_cache().is_none(), "a status from a newer hub might be working");
+    }
+
+    /// As the hub refuses one, so the button to ask is off when asking would be refused.
+    #[test]
+    fn a_compaction_waits_for_the_turn_for_every_prompt_to_be_taken_and_for_a_conversation() {
+        let says = |status, untaken: &[Seq], agent_opened| Session {
+            untaken: Some(untaken.to_vec()),
+            agent_opened: Some(agent_opened),
+            ..session(status, 9_000)
+        };
+        assert!(!says("idle", &[], true).compaction_waits());
+        assert!(says("running", &[], true).compaction_waits());
+        assert!(says("idle", &[5], true).compaction_waits(), "a prompt or compaction on its way");
+        assert!(says("idle", &[], false).compaction_waits(), "nothing to compact yet");
+        assert!(session("running", 9_000).compaction_waits(), "a hub that doesn't say still says when it's working");
+        assert!(!session("idle", 9_000).compaction_waits(), "and is asked otherwise");
     }
 }

@@ -93,6 +93,9 @@ impl Hub {
                 queue_held: false,
                 draft: Draft::default(),
                 answer_draft: None,
+                open_approvals: Some(Vec::new()),
+                untaken: Some(Vec::new()),
+                agent_opened: Some(false),
                 rev: Rev::default(),
             },
             // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the

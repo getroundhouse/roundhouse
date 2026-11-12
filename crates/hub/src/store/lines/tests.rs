@@ -1,5 +1,5 @@
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody};
-use protocol::model::{SettledAt, Workspace};
+use protocol::model::{SettledAt, Settlement, Workspace};
 use rusqlite::params;
 
 use super::*;
@@ -31,7 +31,11 @@ fn every_prompt_is_listed_in_order_as_a_line_and_nothing_else_is() {
     append(&prompt("", 2));
 
     let placed = |seq, text, files, place| PromptLine::new(seq, text, files).placed(Place::new(place));
-    let taken = placed(1, "Fix this", 0, 1).settled_at(SettledAt { seq: 2, place: Place::new(2) });
+    let taken = placed(1, "Fix this", 0, 1).settled_at(SettledAt {
+        seq: 2,
+        place: Place::new(2),
+        how: Some(Settlement::Taken),
+    });
     assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [taken, placed(5, "", 2, 4)]);
     assert!(store.prompt_lines(&"other".into()).unwrap().is_empty());
 }

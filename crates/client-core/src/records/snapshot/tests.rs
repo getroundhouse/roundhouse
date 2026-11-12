@@ -63,6 +63,9 @@ fn session(id: &str, workspace: &str, created_at_ms: i64, rev: u64) -> Session {
         queue_held: false,
         draft: Draft::default(),
         answer_draft: None,
+        open_approvals: None,
+        untaken: None,
+        agent_opened: None,
         rev: Rev::new(rev),
         title_source: TitleSource::FirstLine,
     }

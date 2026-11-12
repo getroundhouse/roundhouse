@@ -81,7 +81,10 @@ impl LiveSession {
         // a question answered while another is open changes none either, but it takes any answer being typed to it. The
         // feed leaves out a copy whose revision didn't move, so one that took none costs only the read.
         let answered = matches!(appended.event.body, EventBody::ApprovalResolved { .. });
-        if (announce || appended.dequeued || appended.by_the_person || answered)
+        // What the agent waits on and has yet to take are on the record too, and an event can change them with no
+        // change of status, as a prompt taken mid-turn does.
+        let waiting_changed = appended.untaken.is_some() || appended.approvals.is_some();
+        if (announce || appended.dequeued || appended.by_the_person || answered || waiting_changed)
             && let Err(e) = self.announce(&hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");

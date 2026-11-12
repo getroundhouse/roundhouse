@@ -54,6 +54,9 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         queue_held: false,
         draft: protocol::model::Draft::default(),
         answer_draft: None,
+        open_approvals: None,
+        untaken: None,
+        agent_opened: None,
         rev: Rev::new(rev),
         title_source: TitleSource::FirstLine,
     }

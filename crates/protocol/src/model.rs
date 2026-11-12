@@ -38,13 +38,13 @@ pub use git::{GitDiff, GitFile, GitStatus};
 pub use hub_settings::{HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
-pub use prompt_line::{PromptLine, SettledAt};
+pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use pull_request::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
-pub use session::{AgentKind, Session, SessionStatus};
+pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use settings::{SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};

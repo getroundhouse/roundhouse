@@ -3,10 +3,11 @@
 #![cfg(test)]
 
 use client_core::Client;
+use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Seq, SessionId};
+use protocol::model::{Seq, Session, SessionId, SessionStatus};
 
-use crate::support::{Stack, assistant_text, parent_of, read_all, signal, wait_for_turn_end, wait_until};
+use crate::support::{Stack, assistant_text, next_notice, parent_of, read_all, signal, wait_for_turn_end, wait_until};
 
 /// Waits until the agent is running a tool, which is when a prompt sent now has to wait.
 pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
@@ -66,6 +67,33 @@ fn a_prompt_sent_mid_turn_is_taken_only_once_the_running_tool_has_finished() {
     let taken_at = position(&events, taken(steered)).expect("taken in the end");
     assert!(taken_at > finished, "after the tool's result");
     assert!(assistant_text(&events).ends_with("steered"));
+}
+
+/// The record says what the agent has yet to take, which is what a client tells from it whether a compaction can be
+/// asked, and the feed tells of the agent taking it, though that changes no status.
+#[test]
+fn the_feed_tells_of_a_prompt_sent_mid_turn_until_the_agent_takes_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "hang:1500", None).unwrap();
+    wait_for_tool(&client, &session.id);
+    let feed = client.feed_subscribe().unwrap();
+
+    let (steered, _) = client.session_prompt(&session.id, "say:steered", None).unwrap();
+
+    let told = |what: &str, wanted: &dyn Fn(&Session) -> bool| loop {
+        if let HubNotice::Session(told) = next_notice(&feed, what)
+            && told.id == session.id
+            && wanted(&told)
+        {
+            break told;
+        }
+    };
+    let waiting = told("the prompt on its way", &|told| told.untaken.as_deref() == Some(&[steered][..]));
+    assert!(waiting.compaction_waits());
+    let taken = told("the prompt taken", &|told| told.untaken.as_deref() == Some(&[][..]));
+    assert_eq!(taken.status, SessionStatus::Running, "before its turn has ended");
 }
 
 #[test]
