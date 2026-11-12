@@ -29,6 +29,8 @@ pub enum Region {
     Outline,
     /// The bar that finds text in the chat, over its top.
     FindBar,
+    /// The button back down to the chat's latest row, which shows once the chat is scrolled away from it.
+    LatestButton,
     /// A question the agent asked, in the composer's place.
     Question,
     /// What an edit changed, shown while the pointer is on its line.
@@ -61,6 +63,7 @@ impl Region {
             Region::Transcript => "transcript",
             Region::Outline => "outline",
             Region::FindBar => "find-bar",
+            Region::LatestButton => "latest-button",
             Region::Question => "question",
             Region::EditPreview => "edit-preview",
             Region::TurnCard => "turn-card",

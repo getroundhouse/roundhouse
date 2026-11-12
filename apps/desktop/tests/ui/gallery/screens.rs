@@ -194,6 +194,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen {
+        name: "latest-button",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, long_chats::many_turns())),
+        frame: Frame::Around(Part::Region(Region::LatestButton), &[Part::Region(Region::Composer)]),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Hover { on: Target::Id(Region::Outline.id()), shows: "outline-list" },
+            Step::Click(long_chats::FOURTEENTH_PROMPT),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
         name: "plan-mode",
         spec: "chats.md",
         world: Some(planning),

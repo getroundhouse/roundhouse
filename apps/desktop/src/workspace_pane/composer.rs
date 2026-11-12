@@ -195,7 +195,7 @@ impl WorkspacePane {
         let queue = self.queue_card(cx);
         let around = |inside: AnyElement| transcript::around_column(v_flex().w_full().children(queue).child(inside));
         if let Some(question) = self.transcript().and_then(|t| t.read(cx).question().cloned()) {
-            return around(question.into_any_element()).flex_none().pb_4().pt_1();
+            return around(question.into_any_element()).flex_none().pb_4().pt(transcript::ABOVE_THE_COMPOSER);
         }
         let planning = self.planning();
         let attached = self.attached_tiles(cx);
@@ -212,7 +212,7 @@ impl WorkspacePane {
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
             .child(bar);
-        around(composer.into_any_element()).flex_none().pb_4().pt_1()
+        around(composer.into_any_element()).flex_none().pb_4().pt(transcript::ABOVE_THE_COMPOSER)
     }
 
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the `+` menu, then

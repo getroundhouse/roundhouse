@@ -9,7 +9,8 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, SharedString, Styled, WeakEntity, div, px,
+    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, Pixels, SharedString, Styled, WeakEntity, div,
+    px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -55,6 +56,14 @@ use tools::Toggle;
 const COLUMN: f32 = 848.0;
 /// How far the composer reaches past the column on each side, so the transcript's text sits inside its edges.
 const COMPOSER_REACH: f32 = 24.0;
+/// The room the composer's row leaves between the chat's rows and the composer, or a question in its place.
+pub const ABOVE_THE_COMPOSER: Pixels = px(4.);
+
+/// What's left between the list and what's under it: the composer's room in a chat, and nothing in a subagent's tab,
+/// which has no composer, since a subagent can't be prompted.
+pub(crate) fn room_under(m: &Model) -> Pixels {
+    if m.alone.is_some() { Pixels::ZERO } else { ABOVE_THE_COMPOSER }
+}
 
 /// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
 /// width. It's inset as the list insets each row, and then as the row is.
@@ -62,8 +71,9 @@ pub fn in_column(content: impl IntoElement) -> Div {
     div().w_full().px_3().child(column(content))
 }
 
-/// The composer under the transcript, centred under the column and wider than it on each side. In a pane too narrow
-/// for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
+/// As wide as the composer under the transcript, which is centred under the column and wider than it on each side, for
+/// the composer, and for the list's button back to its latest row, which sits on the composer's left edge. In a pane
+/// too narrow for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
 pub fn around_column(content: impl IntoElement) -> Div {
     let width = px(COLUMN + 2. * COMPOSER_REACH);
     div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(width).child(content))

@@ -48,7 +48,8 @@
 
 ## Finding a prompt
 
-- **A chat scrolled away from its end shows a button at its bottom that scrolls back down to the end,** in three tenths of a second, slowing as it arrives, so it's plain where the chat went. From more than two screens of chat up, it goes straight to a screen above the end and scrolls the rest, since rows passed any faster can't be followed. The button fades as soon as it's clicked, what arrives on the way is scrolled to as well, and the wheel or the scrollbar stops the scroll where it is. Reduce Motion skips it. *Unconfirmed.*
+- **A chat scrolled away from its end shows a button that scrolls back down to the end,** in three tenths of a second, slowing as it arrives, so it's plain where the chat went. From more than two screens of chat up, it goes straight to a screen above the end and scrolls the rest, since rows passed any faster can't be followed. The button fades as soon as it's clicked, what arrives on the way is scrolled to as well, and the wheel or the scrollbar stops the scroll where it is. Reduce Motion skips it. *Unconfirmed.*
+- **The button sits at the bottom left of the chat, with its left edge on the composer's,** so it's over the edge of the column, a few pixels into it, and clear of the prompts at the column's right. In a pane too narrow for the composer to reach its full 24px past the column, the button stays on the composer's edge, and so reaches further into the column. It's a 28px square with a control's 6px corners, on the pane's colour with the lighter edge a field has, and a small chevron pointing down in the text colour, so it reads as something to press over whatever is under it. It takes the pointer from what's under it, so a click on it doesn't also open a call there. It rests 8px above the composer, or above the bottom of a subagent's tab, which has no composer, and it rises 4px to there as it fades in.
 - **A chat with more than one prompt has an outline at its right: a short tick for each prompt, top to bottom in the order they were sent, with the one being read in white,** so a long chat shows how far it goes and where you are in it. The one being read is the last to have reached the top of the chat, and at the end of the chat it's the last prompt, since nothing after it can reach the top. A chat with one prompt has nowhere to jump to, so it has no outline. *Unconfirmed.*
 - **The outline shows sixteen ticks at most.** A longer chat shows those around the prompt being read, and a tick at an end with more past it is fainter. *Unconfirmed.*
 - **The ticks sit at the top, in the margin between the scrollbar and the column,** narrow enough that in a narrow pane they stay clear of a prompt at the right of the column. They're a place to rest the pointer, not to click, so they can be that small. The wheel over them scrolls the chat, and doesn't open the list however long it turns, since a trackpad's wheel leaves the pointer resting there without asking for it. The list opens once the pointer moves over them. *Unconfirmed.*
@@ -64,6 +65,10 @@
 **The outline's list, open over its ticks.** *Unconfirmed.*
 
 ![The outline's list](screens/outline-list.png)
+
+**The button back down to the end of a long chat, scrolled up to its fourteenth prompt, in a pane wide enough for the composer to reach its full 24px past the column.** *Unconfirmed.*
+
+![The button back down](screens/latest-button.png)
 
 ## Finding text
 

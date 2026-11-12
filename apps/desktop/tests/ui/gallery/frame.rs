@@ -120,6 +120,7 @@ impl Frame {
 fn region_in_the_column(region: Region) -> bool {
     match region {
         Region::Composer
+        | Region::LatestButton
         | Region::Queue
         | Region::Question
         | Region::EditPreview
