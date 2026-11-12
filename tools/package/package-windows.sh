@@ -26,8 +26,9 @@ source "$HERE/../build.sh"
 # PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer and full_package.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
-# The app's icon, a drawing for each size. `docs/spec/look.md` says which style it is.
-ICONSET="$ROOT/apps/desktop/icons/working.iconset"
+# The app's icon, with a drawing for each size, which `ico.py` makes and the program has too. `docs/spec/look.md` says
+# which style it is.
+ICON="$ROOT/apps/desktop/icons/AppIcon.ico"
 
 # Which processor a Windows program is built for, as this script names them, from the program's header.
 built_for() {
@@ -42,8 +43,8 @@ print({0x8664: "amd64", 0xAA64: "arm64"}.get(machine, "something else"))
 PYTHON
 }
 
-# Puts the binaries in `bins/`, and the icon beside it, in a directory of their own, once each binary is this build,
-# for this processor. The binaries can't be run here to ask them, but each holds its build.
+# Puts the binaries in `bins/`, in a directory of their own, once each binary is this build, for this processor. The
+# binaries can't be run here to ask them, but each holds its build.
 stage() {
   local staging=$1 prebuilt=$2 bin for
   mkdir "$staging/bins"
@@ -54,7 +55,6 @@ stage() {
     [ "$for" = "$ARCH" ] || die "$bin.exe in $prebuilt is built for $for, not $ARCH"
     cp "$prebuilt/$bin.exe" "$staging/bins/$bin.exe"
   done
-  python3 "$HERE/ico.py" "$ICONSET" "$staging/AppIcon.ico"
 }
 
 # Checks vpk made what the release workflow publishes, under the names it publishes them by.
@@ -86,7 +86,7 @@ package() {
   # `[win]` has vpk package for Windows wherever it runs.
   dotnet_here vpk '[win]' --skip-updates pack --packId "$PACK_ID" --packVersion "$VERSION" --packTitle Roundhouse \
     --runtime "$RUNTIME" --channel "$CHANNEL" --packDir "$staging/bins" --mainExe roundhouse-desktop.exe \
-    --icon "$staging/AppIcon.ico" --outputDir "$out/releases"
+    --icon "$ICON" --outputDir "$out/releases"
   check "$out/releases"
   echo "Packaged $VERSION for Windows on $ARCH, build $BUILD:"
   echo "  $out/releases/$PACK_ID-$CHANNEL-Setup.exe"

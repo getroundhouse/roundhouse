@@ -42,6 +42,12 @@ mod window_place;
 mod workspace_order;
 pub mod workspace_pane;
 
+// The build script's `.res` writer, which puts the app's icon in the program on Windows. Its tests run here, since a
+// build script's never do.
+#[cfg(test)]
+#[path = "../build/app_icon/res.rs"]
+mod app_icon_res;
+
 pub use assets::Assets;
 use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};

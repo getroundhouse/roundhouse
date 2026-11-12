@@ -6,6 +6,12 @@
 An .ico holds a picture for each size, and since Windows Vista each can be a PNG as it is, so this only writes the
 directory in front of them. It takes the drawing made for each size on a display that isn't Retina, and the 64-pixel
 one, which the iconset holds as 32 points at twice the scale. An .ico can't hold one wider than 256.
+
+The app's is checked in as apps/desktop/icons/AppIcon.ico, which the installer has, and which the desktop app's build
+script puts in the program, so neither needs Python or knows the drawings. test_ico.py fails when it isn't what this
+makes from working.iconset now. To make it again, from the repo's root:
+
+  python3 tools/package/ico.py apps/desktop/icons/working.iconset apps/desktop/icons/AppIcon.ico
 """
 
 from __future__ import annotations

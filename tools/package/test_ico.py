@@ -1,4 +1,4 @@
-"""Tests for ico.py, against the app's own drawings.
+"""Tests for ico.py, against the app's own drawings, and that the app's checked-in icon is what it makes from them now.
 
     python3 -m unittest discover -s tools/package
 """
@@ -11,10 +11,24 @@ from pathlib import Path
 
 import ico
 
-ICONSET = Path(__file__).resolve().parent.parent.parent / "apps" / "desktop" / "icons" / "working.iconset"
+ICONS = Path(__file__).resolve().parent.parent.parent / "apps" / "desktop" / "icons"
+ICONSET = ICONS / "working.iconset"
+APP_ICON = ICONS / "AppIcon.ico"
+MAKE_AGAIN = "python3 tools/package/ico.py apps/desktop/icons/working.iconset apps/desktop/icons/AppIcon.ico"
 
 
 class Ico(unittest.TestCase):
+    def test_the_apps_icon_is_what_ico_makes_from_its_drawings_now(self) -> None:
+        made = ico.ico([(name, (ICONSET / name).read_bytes()) for name in ico.DRAWINGS])
+
+        # Not assertEqual, which would print both icons' bytes.
+        self.assertTrue(
+            APP_ICON.read_bytes() == made,
+            "apps/desktop/icons/AppIcon.ico isn't what ico.py makes from working.iconset now, so the program and the "
+            "installer would show drawings that have since changed. Make it again, from the repo's root, with: "
+            + MAKE_AGAIN,
+        )
+
     def test_the_icon_holds_each_drawing_whole_under_its_size(self) -> None:
         pngs = [(name, (ICONSET / name).read_bytes()) for name in ico.DRAWINGS]
 
