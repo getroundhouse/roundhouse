@@ -158,8 +158,14 @@ fn jump_to(ui: &mut Ui<'_>, row: usize) {
     ui.frame();
 }
 
-/// Asserts that the end of the row drawn in `row` is at the bottom of the chat, to within a pixel.
+/// Asserts that the end of the row drawn in `row` is at the bottom of the chat, to within a pixel. It waits first for
+/// every row from the top of the chat down to it to have been measured, since a row jumped to can load before the rows
+/// above it, which can be in a page that comes after its own, and a row that hasn't come isn't measured.
 fn assert_at_the_bottom(ui: &mut Ui<'_>, row: usize, what: &str) {
+    ui.wait("the rows down to it to be measured", |ui| {
+        let top = scrolled_to(ui);
+        (top..=row).all(|row| measured(ui, row).is_some())
+    });
     let (end, tall) = (place_of(ui, row).1, bounds(ui, "transcript").size.height);
     assert!((end - tall).abs() < px(1.), "{what} ends {end:?} down a chat {tall:?} tall");
 }
@@ -186,5 +192,10 @@ fn place_of(ui: &Ui<'_>, row: usize) -> (Pixels, Pixels) {
 }
 
 fn row_height(ui: &Ui<'_>, row: usize) -> Pixels {
-    ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().row_height(row)).unwrap()
+    measured(ui, row).unwrap()
+}
+
+/// How tall the row drawn in `row` was when it was last measured, if it has been.
+fn measured(ui: &Ui<'_>, row: usize) -> Option<Pixels> {
+    ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().row_height(row))
 }
