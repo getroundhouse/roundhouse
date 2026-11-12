@@ -10,6 +10,7 @@ mod hub_settings;
 mod providers;
 mod subagents;
 mod tools;
+mod workspaces;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 pub(super) const MIGRATIONS: &[&str] = &[
@@ -236,11 +237,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ",
-    // What the hub last found of each workspace's pull request, as JSON, which is `null` when it found none. NULL until
-    // it has looked, as for every workspace from before this. The workspaces' trigger takes every column.
-    r"
-    ALTER TABLE workspaces ADD COLUMN pull_request TEXT;
-",
+    // What the hub last found of each workspace's pull request, in `workspaces`.
+    workspaces::PULL_REQUEST,
     // How full each session's agent's context is, as its newest report said, as JSON. A session from before this has
     // none until its agent next says. A Session record shows it, so the trigger names it.
     r"
@@ -368,4 +366,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     drafts::COMMENT_DRAFT,
     // What's in the new-workspace dialog and not made yet, with its files.
     drafts::WORKSPACE_DRAFT,
+    // What each workspace's worker last read of its worktree's branches, in `workspaces`.
+    workspaces::BRANCHES,
 ];

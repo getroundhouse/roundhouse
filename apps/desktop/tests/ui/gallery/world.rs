@@ -109,6 +109,8 @@ impl World {
             title_source: TitleSource::FirstLine,
             pull_request: None,
             comment_draft: None,
+            branches: None,
+            pull_request_branch: None,
         });
         id
     }

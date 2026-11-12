@@ -7,6 +7,7 @@ pub(crate) use workspaces::workspace_env;
 mod accounts;
 mod attachments;
 mod awake;
+mod branches;
 mod comments;
 mod feed;
 mod hub_settings;

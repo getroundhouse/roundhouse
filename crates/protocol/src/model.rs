@@ -295,12 +295,31 @@ pub struct Workspace {
     /// keep it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment_draft: Option<CommentDraft>,
+    /// Its worktree's branches, as its worker last read them, kept across restarts. `None` until a worker has watched
+    /// it, and from a hub too old to watch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branches: Option<Branches>,
+    /// The branch the worktree had checked out when the hub last looked for its pull request, which is the branch
+    /// `pull_request` is. `None` before the hub kept it, and when HEAD was detached.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_request_branch: Option<BranchName>,
 }
 
 impl Workspace {
     /// Its pull request, if the hub has found one.
     pub fn known_pull_request(&self) -> Option<&PullRequest> {
         self.pull_request.as_ref().and_then(|found| found.pull_request.as_ref())
+    }
+
+    /// Whether what the hub last found of its pull request was for another branch than the one checked out, so it's
+    /// no longer what the workspace's branch has, whatever it says. Not when nothing's been found yet, nor when it's
+    /// not known what's checked out, or HEAD is detached, which has no pull request. Nor when none was found on no
+    /// branch, as where `gh` can't work at all, such as without a login, which checking out another doesn't change.
+    pub fn pull_request_found_on_another_branch(&self) -> bool {
+        let Some(Head::Branch { name }) = self.branches.as_ref().map(|branches| &branches.head) else { return false };
+        let found_on_a_branch = self.pull_request.is_some() && self.pull_request_branch.is_some();
+        let found = self.known_pull_request().is_some() || found_on_a_branch;
+        found && self.pull_request_branch.as_ref() != Some(name)
     }
 
     /// What to call it on screen: its title, or its name until it has one.

@@ -137,6 +137,8 @@ impl Hub {
             title_source: TitleSource::FirstLine,
             pull_request: None,
             comment_draft: None,
+            branches: None,
+            pull_request_branch: None,
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {
@@ -166,7 +168,7 @@ impl Hub {
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
-        let reply = loop {
+        let (reply, link) = loop {
             let display_name = format!("roundhouse-{}", workspace.name);
             provider
                 .create(&workspace.instance_id, None, None, &display_name)
@@ -192,19 +194,23 @@ impl Hub {
                     let (instance_id, provider_name) = (workspace.instance_id.clone(), workspace.provider.clone());
                     self.blocking(move |store| store.instance_creating(&instance_id, &provider_name)).await?;
                 }
-                asked => break asked?,
+                asked => break (asked?, link),
             }
         };
-        let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings, .. } = reply else {
+        let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings, branches } = reply else {
             return Err(unexpected(&reply));
         };
         for warning in &warnings {
             warn!(workspace = workspace.name, "{warning}");
         }
         let id = workspace.id.clone();
-        let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
+        let ready = self
+            .blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref, branches.as_ref()))
+            .await?;
         self.nothing_to_read_yet(&ready.id);
         self.notify(HubNotice::Workspace(ready.clone()));
+        // Once it's announced, so what the watch sees comes after.
+        self.watch_branches(&ready, &link).await;
         self.start_setup(repo.clone(), ready).await
     }
 
@@ -362,6 +368,9 @@ impl Hub {
             return Err(unexpected(&reply));
         }
         let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
+        // The worktree has only the branch it's restored on now, which its record says before it's announced.
+        self.watch_branches_from_now(&restored, &link).await;
+        let restored = self.workspace(&restored.id).await?;
         self.notify(HubNotice::Workspace(restored.clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
         self.start_setup(setup_repo, restored).await

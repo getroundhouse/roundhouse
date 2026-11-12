@@ -1,5 +1,6 @@
 //! The hub's end of one worker connection.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -175,6 +176,15 @@ impl WorkerLink {
         self.tools_unserved.load(Ordering::Relaxed)
     }
 
+    /// Whether it's the workspace's worker in `workers`, rather than one that's been replaced or stopped.
+    pub(crate) fn is_current(
+        self: &Arc<Self>,
+        workers: &HashMap<WorkspaceId, Arc<WorkerLink>>,
+        id: &WorkspaceId,
+    ) -> bool {
+        workers.get(id).is_some_and(|current| Arc::ptr_eq(current, self))
+    }
+
     pub(crate) fn is_open(&self) -> bool {
         !*self.closed.borrow() && self.calls.is_open()
     }
@@ -281,8 +291,7 @@ async fn read_frames(
             WorkerFrame::Ask { id, session_id, ask } => {
                 start_answering(&hub, &link, &workspace_id, id, session_id, ask);
             }
-            // Only for a watch, which this hub doesn't ask for yet.
-            WorkerFrame::Branches { .. } => {}
+            WorkerFrame::Branches { branches } => hub.branches_read(&workspace_id, &link, branches).await,
         }
     }
     debug!(%instance_id, "worker connection ended");
