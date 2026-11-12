@@ -5,9 +5,13 @@ use std::rc::Rc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{Anchor, App, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, div};
+use gpui_kit::{
+    Anchor, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div,
+};
 use look::Hand as _;
 use protocol::model::{Effort, ModelName};
 
@@ -44,14 +48,17 @@ pub(crate) fn effort_label(effort: Effort) -> Option<&'static str> {
     }
 }
 
-/// One button for the model and its effort, which opens one menu with both, showing what's chosen now.
+/// One button for the model and its effort, which opens one menu with both, showing what's chosen now. Pointing at
+/// another model says `switching`, when there's something to say of it, such as what the chat's cache costs to write
+/// again.
 pub(crate) fn model_picker(
     id: &'static str,
     model: &ModelName,
     effort: Effort,
+    switching: Option<String>,
     on_pick: impl Fn(Picked, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    ModelPicker { id, model: model.clone(), effort, on_pick: Rc::new(on_pick) }
+    ModelPicker { id, model: model.clone(), effort, switching: switching.map(Into::into), on_pick: Rc::new(on_pick) }
 }
 
 /// What's done with a pick, shared by every item in the menu.
@@ -62,6 +69,7 @@ struct ModelPicker {
     id: &'static str,
     model: ModelName,
     effort: Effort,
+    switching: Option<SharedString>,
     on_pick: OnPick,
 }
 
@@ -72,7 +80,7 @@ impl RenderOnce for ModelPicker {
         let effort = effort_label(self.effort);
         let muted = cx.theme().muted_foreground;
         let label = model_label(&self.model).to_string();
-        let (model, chosen, on_pick) = (self.model, self.effort, self.on_pick);
+        let (model, chosen, switching, on_pick) = (self.model, self.effort, self.switching, self.on_pick);
         Button::new(self.id)
             .hand()
             .ghost()
@@ -80,14 +88,38 @@ impl RenderOnce for ModelPicker {
             .dropdown_caret(true)
             .label(label)
             .when_some(effort, |button, effort| button.child(div().text_color(muted).child(effort)))
-            .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, _, _| menu_of(menu, &model, chosen, &on_pick))
+            .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, _, _| {
+                menu_of(menu, &model, chosen, switching.as_ref(), &on_pick)
+            })
     }
 }
 
-/// The models, then the levels, with what's chosen checked.
-fn menu_of(mut menu: PopupMenu, model: &ModelName, effort: Effort, on_pick: &OnPick) -> PopupMenu {
+/// The models, then the levels, with what's chosen checked. Each model but the chosen one says `switching` while it's
+/// pointed at.
+fn menu_of(
+    mut menu: PopupMenu,
+    model: &ModelName,
+    effort: Effort,
+    switching: Option<&SharedString>,
+    on_pick: &OnPick,
+) -> PopupMenu {
     for (id, label) in MODELS {
-        menu = menu.item(picks(PopupMenuItem::new(label).checked(id == *model), Picked::Model(id), on_pick));
+        let item = match switching.filter(|_| id != *model).cloned() {
+            // Named for assistive apps as a plain item is, which they're told the note of too, since they don't
+            // read the tooltip out.
+            Some(note) => PopupMenuItem::element(move |_, _| {
+                let (note, described) = (note.clone(), note.clone());
+                div()
+                    .id(label)
+                    .flex_1()
+                    .aria_label(label)
+                    .aria_description(described)
+                    .tooltip(move |window, cx| Tooltip::new(note.clone()).build(window, cx))
+                    .child(label)
+            }),
+            None => PopupMenuItem::new(label),
+        };
+        menu = menu.item(picks(item.checked(id == *model), Picked::Model(id), on_pick));
     }
     menu = menu.separator().label("Effort");
     for level in Effort::ALL {

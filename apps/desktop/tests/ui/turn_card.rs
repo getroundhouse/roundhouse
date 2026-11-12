@@ -39,6 +39,8 @@ fn resting_on_a_finished_turn_shows_what_it_asked_of_the_model_just_above_its_li
     for said in ["Input 6", "Output 550", "Cache read 1.1M", "Cache write 1.6k"] {
         assert_eq!(ui.labelled(said).len(), 1, "{said}");
     }
+    // The fake's model takes a minute to start answering, so its request was sent a minute before the hub heard.
+    assert_eq!(ui.labelled("Cache 59 min left").len(), 1, "what the hub keeps of the turn's request");
     let (card, line) = (bounds(&mut ui, "turn-card"), bounds(&mut ui, line));
     assert!(card.bottom() <= line.top() && line.top() - card.bottom() < px(8.), "just above: {card:?} {line:?}");
     assert!((card.center().x - line.center().x).abs() < px(1.), "centred on it: {card:?} over {line:?}");

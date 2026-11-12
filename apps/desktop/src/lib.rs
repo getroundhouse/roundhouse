@@ -23,6 +23,7 @@ pub mod image_diff;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
+mod prompt_cache;
 pub mod pull_request;
 mod rename;
 mod reorder;

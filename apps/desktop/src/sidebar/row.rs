@@ -1,5 +1,6 @@
-//! A workspace's row in the sidebar: its mark and name, a pencil while something typed in it isn't sent, the button
-//! that archives it under the pointer, what it's waiting on the hub for, and what a right-click on it offers.
+//! A workspace's row in the sidebar: its mark and name, a pencil while something typed in it isn't sent, a clock while
+//! one of its chats' caches is about to expire, the button that archives it under the pointer, what it's waiting on the
+//! hub for, and what a right-click on it offers.
 
 use std::rc::Rc;
 
@@ -17,8 +18,8 @@ use protocol::model::Workspace;
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
 use crate::app::AppView;
-use crate::right_click;
 use crate::{ArchiveWorkspace, MarkWorkspace};
+use crate::{prompt_cache, right_click};
 
 pub(super) fn workspace_row(
     app: &AppView,
@@ -43,7 +44,9 @@ pub(super) fn workspace_row(
             Some(pane) => pane.read(cx).has_unsent(cx),
             None => app.sessions.get(&workspace.id).is_some_and(|chats| crate::workspace_pane::drafted(chats)),
         };
-    let end = right_end(app, workspace, End { drafted, pointing, waiting }, &line_text.small, cx);
+    let its_chats = app.sessions.get(&workspace.id).into_iter().flatten();
+    let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
+    let end = right_end(app, workspace, End { drafted, expiring, pointing, waiting }, &line_text.small, cx);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .hand()
         .accessibility_label(label.clone())
@@ -92,16 +95,19 @@ pub(super) fn workspace_row(
 struct End {
     /// Something typed or attached in one of its chats isn't sent.
     drafted: bool,
+    /// How long the soonest to expire of its chats' caches has left, of those about to.
+    expiring: Option<i64>,
     /// The pointer is over the row.
     pointing: bool,
     /// What it's waiting on the hub for, if anything.
     waiting: Option<&'static str>,
 }
 
-/// A pencil while something typed in the workspace isn't sent, and after it what the workspace is waiting on the hub
-/// for, or else under the pointer the button that archives it. While there's a pencil, the button's place is kept
-/// beside it, so the pencil stays put as the pointer comes and goes. None when there's nothing, so the name has the
-/// row's width.
+/// A pencil while something typed in the workspace isn't sent, then a clock while one of its chats' caches is about to
+/// expire, and after them what the workspace is waiting on the hub for, or else under the pointer the button that
+/// archives it. While there's a pencil or a clock, the button's place is kept beside it, so it stays put as the pointer
+/// comes and goes. Nothing says the cache while the workspace is waiting on the hub, since that's it going or coming.
+/// None when there's nothing, so the name has the row's width.
 fn right_end(
     app: &AppView,
     workspace: &Workspace,
@@ -109,8 +115,9 @@ fn right_end(
     small: &Placed,
     cx: &mut Context<AppView>,
 ) -> Option<AnyElement> {
-    let End { drafted, pointing, waiting } = end;
-    if !drafted && !pointing && waiting.is_none() {
+    let End { drafted, expiring, pointing, waiting } = end;
+    let expiring = expiring.filter(|_| waiting.is_none());
+    if !drafted && expiring.is_none() && !pointing && waiting.is_none() {
         return None;
     }
     let pencil = icon_box(Lucide::Pencil, cx.theme().muted_foreground)
@@ -118,9 +125,15 @@ fn right_end(
         .role(Role::Image)
         .aria_label("Draft")
         .test_support();
-    // Against the button's box, whose padding is the room between the two icons: a little more than if they were set
-    // edge to edge, so they don't run together.
-    let end = h_flex().flex_none().when(drafted, |d| d.child(pencil));
+    // In a box as wide as the pencil's, so the two sit as the sidebar's icons do.
+    let clock = expiring.map(|left_ms| {
+        let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, cx.theme().muted_foreground);
+        div().flex_none().size_4().flex().items_center().justify_center().child(clock)
+    });
+    // Against the button's box, whose padding is the room between the icons and it: a little more than if they were
+    // set edge to edge, so they don't run together.
+    let icons = h_flex().gap_1().when(drafted, |d| d.child(pencil)).children(clock);
+    let end = h_flex().flex_none().child(icons);
     let end = match waiting {
         // Text has no padding of its own to keep it off the pencil, as the button has.
         Some(waiting) => {

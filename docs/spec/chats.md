@@ -361,6 +361,43 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ![A compaction that failed](screens/compaction-failed.png)
 
+## The prompt cache
+
+The API keeps what an agent's requests read and write for a while, so the next request needn't send it again. A prompt sent once that cache has expired writes the whole conversation to it again, which in a long chat is the most a prompt can cost: writing at 1h costs 2× the input price, and reading costs 0.05× on Opus 5.5, so coming back to a 300k-token chat just after its cache has expired costs about what 40 prompts would while it's warm. So the chat says when that's coming, and when it has happened.
+
+- **A cache expires one TTL after the agent's newest request was sent,** an hour for the agent's own on a Claude account, since each request that reads it or writes it starts its time again. A subagent caches a conversation of its own, so only the agent's own requests count. The hub keeps when that was, and the TTL, on the chat's record, from what the agent's adapter says of each request, so every client says the same, and still says it after the hub restarts. A compaction leaves the chat with nothing cached, since what the cache held is no longer the conversation, and so does choosing another model, whose cache doesn't hold it. *Unconfirmed:* the compaction, and choosing another model.
+- **A cache is about to expire with a quarter of its TTL left, or 2 minutes, whichever is longer:** 15 minutes for a 1h cache, and 2 minutes rather than 75 seconds for a 5m one, so there's time to act.
+- **A chat under 50k tokens of context says nothing of its cache but in the newest turn's card,** since writing that again costs little: about 15k tokens, which every chat shares, stay cached anyway.
+- **Nothing says the cache is about to expire while the agent works,** since each request keeps it warm and there's nothing to do about it mid-turn. A chat waiting on the person for an answer or an approval does say so, on its tab, its workspace's row and Home, and above its composer, since answering is something to do about it. Its transcript doesn't, since the newest turn hasn't ended, and the line and card before it are an earlier turn's. *Unconfirmed:* while it waits.
+- **The words are "expires" while that's ahead and "expired" once it's past,** in the transcript too, as a compaction's rule says `Compacted`.
+- **The newest turn's card says how long the cache has left,** under its cache read and write: `Cache`, then a small wedge for what's left beside the time, such as `42 min left`, and under it when it expires and how long the cache lasts, such as `Expires at 3:15 PM` and `1h cache`. Once it has expired, the wedge is a clock, the time is `Expired`, and under it is `Expired at 3:15 PM`. The wedge isn't a bar or a ring, so it can't be taken for the context's. It says so whatever the chat's size, and goes while the agent works. An older turn's card says nothing of the cache, since only the newest turn's can still be warm.
+- **The line under the newest reply has the same mark after its time, but only once the cache is getting cold:** nothing until it's about to expire, then the wedge, then the clock once it has expired. Pointing at the mark opens the turn's card, as pointing at the time does, since the card says what the mark means. The context's ring and its card say nothing of the cache, since the cache isn't the context.
+- **Once it has expired, a line above the composer says so,** with a clock, how long ago in the app's words for that, and what the next prompt writes again, which is what the context holds: `Cache expired 12m ago · this prompt writes 313.5k tokens again`. *Unconfirmed:* the clock, and `12m` for `12 min`, as the app says how long ago elsewhere.
+- **While the cache is warm, pointing at another model in the picker says switching writes the chat's tokens to the cache again,** such as `Switching writes this chat's 313.5k tokens to the cache again`, since a cache belongs to one model. Once it has expired, switching costs no more than staying, so the picker says nothing.
+- **A prompt that wrote the conversation to the cache again has a rule after it,** drawn as a compaction's is, with a clock, such as `Cache expired · 1h 20m idle · 313.5k tokens written again`. It's after the prompt, before what the agent wrote, since that's where it happened in the chat's history, and each row draws only its own event. The hub records it when the first request for a prompt reads less than half of what the request before it left in the cache, since a warm cache is read at least that far however much the prompt adds, so it's right even when the cache expired sooner than expected. A request to another model writes the conversation again too, which the person chose after the picker said so, so that has no rule. *Unconfirmed:* after the prompt rather than before it, and no rule for another model.
+- **Once it's about to expire, a chat says so where it's listed:** a clock on its tab and at the right end of its workspace's row in the sidebar, where pointing at the row shows its archive button instead, which say `Cache expires in 9 min` when pointed at, and those words on the workspace's row on Home, before its repository, for the soonest of its chats. Once it has expired, they say nothing, since every chat's cache expires sooner or later and a clock that stayed would be on almost every row, and the chat itself still says so. *Unconfirmed:* where on Home.
+- **What's said moves on by itself,** as each minute goes while the cache is about to expire, and as the line above the composer's time moves on, with nothing drawn between.
+
+**The newest turn's card while its cache is warm.** *Unconfirmed.*
+
+![A turn's card, saying how long the cache has left](screens/turn-card-cache.png)
+
+**The newest turn's card once its cache has expired.** *Unconfirmed.*
+
+![A turn's card, saying the cache has expired](screens/turn-card-cache-expired.png)
+
+**A chat whose cache is about to expire: a wedge on the newest reply's line, and a clock on its tab and its workspace's row.** *Unconfirmed.*
+
+![A chat whose cache is about to expire](screens/cache-expiring.png)
+
+**A chat whose cache has expired: a clock on the newest reply's line, and a line above the composer.** *Unconfirmed.*
+
+![A chat whose cache has expired](screens/cache-expired.png)
+
+**A prompt sent after the chat had been idle for over an hour, which found the cache expired.** *Unconfirmed.*
+
+![A prompt that found the cache expired](screens/cache-expired-rule.png)
+
 ## Tabs
 
 - **The chat showing is underlined, not filled.** A 2px pale copper line runs under its tab, over the bar's bottom edge, and its title looks as it does when it isn't showing, as `look.md` says for lists. A fill would make the tab one more raised thing on the pane.

@@ -14,15 +14,24 @@ use protocol::model::AgentKind;
 use super::{empty, marked_line, muted_line, row, turn_times};
 use crate::find::{FindLook, Marks, Part};
 use crate::item_key::ItemKey;
+use crate::transcript::IdleCache;
 use card::TurnCard;
 
+mod cache;
 mod card;
 mod words;
 
 /// How the turn `ended`, in a chat with `agent`. A finished one says how long it took and when it ended, with a button
 /// that copies what the agent said last, its `result`, and resting the pointer on what it says shows the turn's card.
-/// A failed one says what went wrong, with its matches.
-pub(super) fn line(ended: &SessionEvent, agent: AgentKind, find: &FindLook, cx: &App) -> AnyElement {
+/// The newest one's also says what the cache holds, `cache`, as [`cache`] says. A failed one says what went wrong,
+/// with its matches.
+pub(super) fn line(
+    ended: &SessionEvent,
+    agent: AgentKind,
+    cache: Option<&IdleCache>,
+    find: &FindLook,
+    cx: &App,
+) -> AnyElement {
     let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, models, tokens, .. } = &ended.body
     else {
         return empty();
@@ -45,8 +54,10 @@ pub(super) fn line(ended: &SessionEvent, agent: AgentKind, find: &FindLook, cx: 
                 ended_at_ms: ended.ts_ms,
                 took: took_ms.map(|ms| turn_times::took(Duration::from_millis(ms))),
                 tokens: *tokens,
+                cache: cache.map(|cache| cache.cache.clone()),
             };
-            finished(ended, result.as_deref(), card, cx)
+            let mark = cache.and_then(|cache| cache::on_the_line(cache, cx));
+            finished(ended, result.as_deref(), card, mark, cx)
         }
     }
 }
@@ -61,13 +72,22 @@ fn timed(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64>)
     (started_at_ms, took_ms.or(duration_ms))
 }
 
-/// A finished turn's line, which says how long it took, as the working line counted it, and when it ended.
-fn finished(ended: &SessionEvent, result: Option<&str>, card: TurnCard, cx: &App) -> AnyElement {
+/// A finished turn's line, which says how long it took, as the working line counted it, and when it ended, then
+/// `mark`, which says the cache is about to expire or has. Resting the pointer on any of that shows the turn's card.
+fn finished(
+    ended: &SessionEvent,
+    result: Option<&str>,
+    card: TurnCard,
+    mark: Option<impl IntoElement>,
+    cx: &App,
+) -> AnyElement {
     let when = look::day_and_time(ended.ts_ms, cx);
     let said = card.took.clone().into_iter().chain(when).collect::<Vec<_>>().join(" · ");
     // It only shows something while the pointer rests on it, so it keeps the arrow. The card opens centred above it,
     // where it covers neither the line nor the composer, and moves only to stay in the window.
-    let said = div().id(ItemKey::Event(ended.seq, 0).element("turn-end")).child(said).test_support();
+    // The mark is part of what the card opens from, since the card says what it means.
+    let said = h_flex().id(ItemKey::Event(ended.seq, 0).element("turn-end")).gap_1().child(said).children(mark);
+    let said = said.test_support();
     let said = look::hover_card(ItemKey::Event(ended.seq, 0).element("turn-card"))
         .appearance(false)
         .anchor(Anchor::BottomCenter)
@@ -85,7 +105,8 @@ fn finished(ended: &SessionEvent, result: Option<&str>, card: TurnCard, cx: &App
         let hand = div().absolute().inset_0().hand();
         div().flex().items_center().h_0().child(div().relative().child(copy).child(hand))
     });
-    row().child(h_flex().gap_1().text_xs().text_color(look::faint()).child(said).children(copy)).into_any_element()
+    let line = h_flex().gap_1().text_xs().text_color(look::faint()).child(said).children(copy);
+    row().child(line).into_any_element()
 }
 
 #[cfg(test)]
