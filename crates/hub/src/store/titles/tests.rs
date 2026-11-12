@@ -166,7 +166,13 @@ fn retitling_one_record_leaves_the_others_alone() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for (id, name) in [("w2", "birch"), ("w3", "cedar")] {
-        let other = Workspace { id: id.into(), name: name.into(), branch: name.into(), ..workspace_w(1) };
+        let other = Workspace {
+            id: id.into(),
+            name: name.into(),
+            branch: name.into(),
+            instance_id: id.into(),
+            ..workspace_w(1)
+        };
         store.insert_workspace(&other, None).unwrap();
     }
     for id in ["t", "u"] {

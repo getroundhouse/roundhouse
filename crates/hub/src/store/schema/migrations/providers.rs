@@ -10,3 +10,17 @@ pub(super) const HUB_IDENTITY: &str = r"
     );
     INSERT INTO hub_identity (id, hub_id) VALUES (1, lower(hex(randomblob(16))));
 ";
+
+/// Each instance the hub asks a provider for, recorded before it asks, as `store::instances` says. Each workspace's is
+/// recorded as made, or as being made if the workspace is.
+pub(super) const INSTANCES: &str = r"
+    CREATE TABLE instances (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+    );
+    INSERT INTO instances (id, provider, stage, created_at_ms)
+        SELECT instance_id, provider, CASE status WHEN 'creating' THEN 'creating' ELSE 'ready' END, created_at_ms
+            FROM workspaces;
+";

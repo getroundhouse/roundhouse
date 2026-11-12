@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use protocol::client::{ApiError, ErrorCode, HubNotice, error_chain};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
     ClientRequestId, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
@@ -138,6 +138,8 @@ impl Hub {
     ) -> Result<Workspace, ApiError> {
         let display_name = format!("roundhouse-{}", workspace.name);
         provider.create(&workspace.instance_id, None, None, &display_name).await.map_err(|e| provider_failed(&e))?;
+        let instance_id = workspace.instance_id.clone();
+        self.blocking(move |store| store.instance_made(&instance_id)).await?;
         let link = self.ensure_worker(&workspace.id).await?;
         let reply = link
             .call(WorkerRequest::PrepareWorkspace {
@@ -167,8 +169,8 @@ impl Hub {
         if let Some(link) = link {
             self.close_worker(workspace, &link, provider).await;
         }
-        if let Err(e) = provider.destroy(&workspace.instance_id).await {
-            warn!(%id, "cleaning up a failed workspace: {}", error_chain(&e));
+        if let Err(e) = self.destroy_instance(provider, &workspace.instance_id).await {
+            warn!(%id, "cleaning up a failed workspace: {e}");
         }
         let owned = id.clone();
         match self.blocking(move |store| store.delete_workspace(&owned)).await {
