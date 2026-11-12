@@ -16,7 +16,7 @@ fn settings_showing(ui: &mut Ui<'_>) -> bool {
 }
 
 /// Opens Settings from the app menu, as the menu bar does.
-fn open_settings(ui: &mut Ui<'_>) {
+pub(crate) fn open_settings(ui: &mut Ui<'_>) {
     let menus = ui.cx.update(|cx| cx.get_menus()).unwrap();
     let action = menus[0].items.iter().find_map(|item| match item {
         OwnedMenuItem::Action { name, action, .. } if name == "Settings…" => Some(action.boxed_clone()),

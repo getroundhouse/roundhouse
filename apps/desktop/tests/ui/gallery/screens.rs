@@ -353,6 +353,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings],
     },
+    Screen {
+        name: "settings-notifications",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, Step::Click("settings-page-notifications")],
+    },
 ];
 
 /// A screenshot of a bug, pasted into the new-workspace dialog.

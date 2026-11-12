@@ -4,7 +4,7 @@
 use gpui_kit::Context;
 use gpui_kit::component::WindowExt as _;
 
-use super::{Showing, WorkspacePane};
+use super::{PaneEvent, Showing, WorkspacePane};
 
 impl WorkspacePane {
     /// What's in front under the tabs.
@@ -25,6 +25,7 @@ impl WorkspacePane {
         self.subagents.set_in_front(front == Showing::Subagent);
         // The chat is read only while it's in front.
         self.read_showing(cx);
+        cx.emit(PaneEvent::Showing);
         // Not behind a dialog, where typing meant for it would come here unseen. The app focuses the pane showing once
         // the dialog closes.
         self.with_window(cx, |t, window, cx| {
