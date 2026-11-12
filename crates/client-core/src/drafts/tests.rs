@@ -261,3 +261,51 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "+f1")]));
     assert!(!drafts.unkept(&chat("a")), "it counts as having reached the hub");
 }
+
+/// A hub that keeps every draft, and answers with the chat's record at the next of its revisions, from `first`.
+fn keeping_hub(socket: &Path, first: u64) -> Client {
+    let mut rev = first;
+    stand_in_hub::connect(socket, move |request| {
+        let ClientRequest::SessionDraft { id, .. } = request else { return Does::Nothing };
+        let session = Session { rev: Rev::new(rev), ..stand_in_hub::session(id.as_str()) };
+        rev += 1;
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Session(session))))
+    })
+}
+
+/// The chat's record as the hub's feed might tell of it, at `rev`.
+fn told(id: &str, rev: u64) -> Session {
+    Session { rev: Rev::new(rev), ..stand_in_hub::session(id) }
+}
+
+#[test]
+fn a_record_newer_than_the_one_a_draft_from_here_was_kept_in_was_made_elsewhere() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafts = Drafts::start(&keeping_hub(&dir.path().join("hub.sock"), 5));
+
+    drafts.set(&chat("a"), NewDraft::new("typed here"));
+    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
+
+    assert!(!drafts.from_elsewhere(&told("a", 5)), "the record the hub kept it in is this client's");
+    assert!(!drafts.from_elsewhere(&told("a", 4)), "and so is an older one that arrives late");
+    assert!(drafts.from_elsewhere(&told("a", 6)));
+    assert!(drafts.from_elsewhere(&told("b", 1)), "nothing was typed there here");
+}
+
+#[test]
+fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
+    let dir = tempfile::tempdir().unwrap();
+    let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
+    let drafts = Drafts::start(&gone);
+    drafts.typed(&chat("a"), NewDraft::new("typed as the hub went"));
+    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
+
+    assert!(!drafts.from_elsewhere(&told("a", 100)), "what's typed here goes on and replaces it");
+    assert!(drafts.caught_up().try_recv().is_err());
+    drafts.reconnect(&keeping_hub(&dir.path().join("hub.sock"), 5));
+
+    drafts.caught_up().recv_timeout(TIMEOUT).unwrap();
+    assert!(!drafts.unkept(&chat("a")));
+    assert!(drafts.from_elsewhere(&told("a", 100)), "a newer record, once nothing is on its way");
+    assert!(!drafts.from_elsewhere(&told("a", 5)));
+}
