@@ -1,5 +1,6 @@
 //! The database's migrations. `before.rs` has how many there were before some of them, for tests.
 
+mod activity;
 mod first;
 mod subagents;
 
@@ -364,4 +365,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
 ",
     // What each subagent has done lately, which its record shows while it works.
     subagents::RECENT_WORK,
+    // When the person last sent each session's agent something, and last did something in each workspace, in
+    // `activity`, since they're long.
+    activity::BY_SESSION,
+    activity::BY_WORKSPACE,
 ];

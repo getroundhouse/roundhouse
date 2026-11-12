@@ -10,7 +10,7 @@ use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
@@ -44,7 +44,8 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
             context: row.get::<_, Option<String>>(21)?.and_then(|json| serde_json::from_str(&json).ok()),
             account: row.get::<_, Option<String>>(22)?.map(Into::into),
-            rev: rev_of(row, 23)?,
+            user_active_at_ms: row.get(23)?,
+            rev: rev_of(row, 24)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -52,21 +53,23 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
 }
 
 impl Store {
-    /// Returns the session as stored, with its revision.
+    /// Returns the session as stored, with its revision. Making it is when the person last did something in its
+    /// workspace, which moves in the same commit.
     pub fn insert_session(
         &self,
         stored: &StoredSession,
         client_request_id: Option<&ClientRequestId>,
     ) -> Result<Made<StoredSession>, StoreError> {
-        let conn = lock(&self.writer);
-        if let Some(made) = made_by(&conn, client_request_id)? {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        if let Some(made) = made_by(&tx, client_request_id)? {
             return Ok(Made::Earlier(made));
         }
         let session = &stored.session;
-        conn.execute(
+        tx.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -92,10 +95,18 @@ impl Store {
                 text_of(&session.effort),
                 session.context.as_ref().map(serde_json::to_string).transpose()?,
                 session.account.as_ref().map(protocol::model::AccountId::as_str),
+                session.user_active_at_ms,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
-        Ok(inserted(&conn, session.id.as_str())?)
+        // Making a chat is doing something in its workspace.
+        tx.execute(
+            "UPDATE workspaces SET user_active_at_ms = ? WHERE id = ?",
+            params![session.created_at_ms, session.workspace_id.as_str()],
+        )?;
+        let made = inserted(&tx, session.id.as_str())?;
+        tx.commit()?;
+        Ok(made)
     }
 
     pub fn get_session(&self, id: &SessionId) -> Result<StoredSession, StoreError> {

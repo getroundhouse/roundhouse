@@ -35,6 +35,38 @@ fn a_turn_starts_when_the_event_that_starts_it_was_recorded() {
     assert_eq!(session(&store).turn_started_at_ms, Some(prompt.ts_ms), "it stays the newest turn's once it's over");
 }
 
+/// Each event, whether it was from a run, and whether recording it is when the person was last active.
+#[test]
+fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothing_else_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let answer = |outcome| EventBody::ApprovalResolved { approval_id: "a".into(), outcome, answers: None };
+    let sent = [
+        (None, prompt("go", 0), true),
+        (None, answer(ApprovalOutcome::Allowed), true),
+        (None, answer(ApprovalOutcome::Denied), true),
+        (None, answer(ApprovalOutcome::Cancelled), false),
+        (Some(RunId::new(1)), answer(ApprovalOutcome::Allowed), false),
+        (None, notice("x"), false),
+    ];
+    for (run, body, by_the_person) in sent {
+        // Earlier than any clock could say, so a change can't land on the same moment.
+        let forget = "UPDATE sessions SET user_active_at_ms = 1; UPDATE workspaces SET user_active_at_ms = 1";
+        lock(&store.writer).execute_batch(forget).unwrap();
+
+        let appended = store.append(&"s".into(), run, &body, None, None, None).unwrap();
+
+        let at = Some(appended.event.ts_ms);
+        assert_eq!(session(&store).user_active_at_ms == at, by_the_person, "{body:?}");
+        assert_eq!(
+            store.get_workspace(&"w".into()).unwrap().user_active_at_ms == at,
+            by_the_person,
+            "and its workspace"
+        );
+        assert_eq!(appended.by_the_person, by_the_person, "{body:?}");
+    }
+}
+
 #[test]
 fn the_next_turn_moves_it_and_its_revision() {
     let dir = tempfile::tempdir().unwrap();

@@ -88,6 +88,7 @@ impl Hub {
     ) -> Result<Workspace, ApiError> {
         let id = WorkspaceId::from(new_id());
         let provider = self.provider(&self.default_provider)?;
+        let now = now_ms();
         let workspace = Workspace {
             id: id.clone(),
             repo_id: repo.id.clone(),
@@ -98,8 +99,10 @@ impl Hub {
             status: WorkspaceStatus::Creating,
             provider: self.default_provider.clone(),
             instance_id: id.as_str().into(),
-            created_at_ms: now_ms(),
+            created_at_ms: now,
             archived_at_ms: None,
+            // Making it is the first thing the person did in it.
+            user_active_at_ms: Some(now),
             setup: SetupStatus::NotStarted,
             port_base: self.blocking(Store::next_port_base).await?,
             rev: Rev::default(),
@@ -171,6 +174,16 @@ impl Hub {
             Ok(Some(rev)) => self.notify(HubNotice::Removed { record: RecordKey::Workspace { id: id.clone() }, rev }),
             Ok(None) => {}
             Err(e) => error!(%id, "removing a failed workspace: {e}"),
+        }
+    }
+
+    /// Tells everyone following the feed what the workspace is now, read back from the store, after something with no
+    /// notice of its own has changed it, such as the person sending one of its agents something. A failure is only
+    /// logged, since what changed it has happened.
+    pub(crate) async fn announce_workspace(&self, id: &WorkspaceId) {
+        match self.workspace(id).await {
+            Ok(workspace) => self.notify(HubNotice::Workspace(workspace)),
+            Err(e) => error!(%id, "could not announce a change to a workspace: {e}"),
         }
     }
 

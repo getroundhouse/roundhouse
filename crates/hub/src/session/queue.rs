@@ -100,7 +100,12 @@ impl LiveSession {
         let Queued::Done(reading) = queued else {
             return Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent"));
         };
+        // Queuing it moved when the person last did something in its workspace, if it changed the queue.
+        let moved = reading.changed;
         let session = self.changed_queue(*reading);
+        if moved {
+            hub.announce_workspace(&self.workspace_id).await;
+        }
         // The turn may have ended while this was on its way.
         if self.ready_for_queue() {
             self.wake_queue();

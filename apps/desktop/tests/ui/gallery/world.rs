@@ -101,6 +101,7 @@ impl World {
             instance_id: InstanceId::from("local"),
             created_at_ms,
             archived_at_ms: None,
+            user_active_at_ms: Some(created_at_ms),
             setup: SetupStatus::Succeeded,
             port_base,
             rev: Rev::default(),
@@ -127,6 +128,15 @@ impl World {
 
     pub(crate) fn workspace_mut(&mut self, id: &WorkspaceId) -> &mut Workspace {
         self.workspaces.iter_mut().find(|w| &w.id == id).unwrap()
+    }
+
+    /// The person did something in the chat at `at_ms`, such as making it or sending the prompt that started a turn,
+    /// which the hub notes on its workspace's record, unless they've done something there since. A chat made on its
+    /// own, for a test of what's in it, has no workspace here to note it on.
+    fn worked_in(&mut self, chat: &SessionId, at_ms: i64) {
+        let workspace = &self.sessions.iter().find(|s| &s.id == chat).unwrap().workspace_id;
+        let Some(workspace) = self.workspaces.iter_mut().find(|w| &w.id == workspace) else { return };
+        workspace.user_active_at_ms = workspace.user_active_at_ms.max(Some(at_ms));
     }
 
     /// A chat holding these events. Its title is the start of the first prompt, and what's running in the background
@@ -168,6 +178,7 @@ impl World {
             reply_seq: 0,
             read_seq: 0,
             turn_started_at_ms: None,
+            user_active_at_ms: None,
             background_tasks,
             context: None,
             queued: Vec::new(),
@@ -175,6 +186,7 @@ impl World {
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);
+        self.worked_in(&id, created_at_ms);
         id
     }
 
@@ -183,6 +195,7 @@ impl World {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
         assert_eq!(session.status, SessionStatus::Running, "only a running chat has a turn going");
         session.turn_started_at_ms = Some(NOW_MS - so_far_ms);
+        self.worked_in(id, NOW_MS - so_far_ms);
     }
 
     /// Has the turn that ends a chat's log taken this long by the hub's clock, as the hub says on its end and on the
@@ -193,6 +206,7 @@ impl World {
         *started_at_ms = Some(ended.ts_ms - took_ms);
         let started = *started_at_ms;
         self.sessions.iter_mut().find(|s| &s.id == id).unwrap().turn_started_at_ms = started;
+        self.worked_in(id, started.unwrap());
     }
 
     /// Has the turn that ends the last chat's log run from 11:57 PM to 12:04 AM the night before the picture, by the
@@ -206,6 +220,8 @@ impl World {
         let EventBody::TurnEnded { started_at_ms, .. } = &mut ended.body else { panic!("the log ends mid-turn") };
         *started_at_ms = Some(started_ms);
         ended.ts_ms = midnight_ms + 4 * MINUTE_MS;
+        let chat = session.id.clone();
+        self.worked_in(&chat, started_ms);
         self
     }
 

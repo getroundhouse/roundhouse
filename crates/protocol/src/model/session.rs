@@ -91,6 +91,12 @@ pub struct Session {
     /// It moves with a change of status, so the feed announces it.
     #[serde(default)]
     pub turn_started_at_ms: Option<i64>,
+    /// When the person last sent the agent something, by the hub's clock: a prompt, as it's sent or as it's queued
+    /// for when the agent finishes, rather than when the hub sends it from the queue, or an answer to a question or
+    /// an approval. `None` until then, and from a hub that doesn't keep it. Each moves the record, so the feed
+    /// announces it. [`Session::last_active_at_ms`] says when the chat was last worked in from it.
+    #[serde(default)]
+    pub user_active_at_ms: Option<i64>,
     /// How far the person has read, so a reply past it is unread. It's theirs rather than the session's, which a
     /// hub with several people would keep for each.
     #[serde(default)]
@@ -130,5 +136,13 @@ impl Session {
     /// The agent has replied since the person last read this chat.
     pub fn unread(&self) -> bool {
         self.reply_seq > self.read_seq
+    }
+
+    /// When the person last worked in this chat, by the hub's clock: when they made it, or last sent its agent
+    /// something, as `user_active_at_ms` says. Only what they did counts, so it doesn't move as the agent works or
+    /// replies. A hub too old to keep that keeps when the newest turn started, which a prompt mostly starts.
+    pub fn last_active_at_ms(&self) -> i64 {
+        let sent = self.user_active_at_ms.or(self.turn_started_at_ms);
+        sent.map_or(self.created_at_ms, |sent| sent.max(self.created_at_ms))
     }
 }

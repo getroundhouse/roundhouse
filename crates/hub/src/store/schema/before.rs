@@ -39,3 +39,9 @@ pub(crate) const BEFORE_FULL_ACCESS: usize = 23;
 
 /// How many migrations there were before subagents' records kept what each has done lately.
 pub(crate) const BEFORE_RECENT_WORK: usize = 24;
+
+/// How many migrations there were before sessions kept when the person last sent their agent something.
+pub(crate) const BEFORE_USER_ACTIVITY: usize = 25;
+
+/// How many migrations there were before workspaces kept when the person last did something in them.
+pub(crate) const BEFORE_WORKSPACE_ACTIVITY: usize = 26;

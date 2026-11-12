@@ -4,6 +4,7 @@ use protocol::event::{AgentTask, TaskKind};
 
 use super::*;
 use crate::store::backup::files_in;
+use crate::store::older::store_from_before;
 use crate::store::tests::store_with_session;
 
 /// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
@@ -152,4 +153,59 @@ fn a_chat_from_before_full_access_keeps_only_plan_mode() {
     };
     let modes: Vec<_> = ["asks", "edits", "planning", "full", "unset"].map(mode).into();
     assert_eq!(modes, ["bypassPermissions", "bypassPermissions", "plan", "bypassPermissions", "bypassPermissions"]);
+}
+
+/// What the person sent before sessions kept when they last did, by the log: their prompts and answers, and not an
+/// answer nobody gave, nor what the agent recorded, nor anything else. A session they sent nothing in has nothing.
+/// The one filled in gets a newer revision, so a client holding the copy from before takes it: newer than the one
+/// left alone, which was made after it.
+#[test]
+fn what_the_person_sent_before_the_migration_is_when_they_were_last_active() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = r#"
+        INSERT INTO sessions (id, workspace_id, agent, model, effort, permission_mode, agent_session_id, status,
+            last_seq, created_at_ms, updated_at_ms)
+            VALUES ('s', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 's', 'idle', 5, 0, 0),
+                ('t', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 't', 'idle', 0, 0, 0);
+        INSERT INTO events (session_id, seq, ts_ms, kind, run, place, body) VALUES
+            ('s', 1, 1700, 'user_prompt', NULL, 1, '{"type":"user_prompt","text":"go","attachments":[]}'),
+            ('s', 2, 1800, 'approval_resolved', NULL, 2,
+                '{"type":"approval_resolved","approval_id":"a","outcome":"allowed"}'),
+            ('s', 3, 1900, 'approval_resolved', NULL, 3,
+                '{"type":"approval_resolved","approval_id":"b","outcome":"cancelled"}'),
+            ('s', 4, 2000, 'approval_resolved', 3, 4,
+                '{"type":"approval_resolved","approval_id":"c","outcome":"allowed"}'),
+            ('s', 5, 2100, 'notice', NULL, 5, '{"type":"notice","level":"info","message":"a"}');
+    "#;
+
+    let store = store_from_before(dir.path(), BEFORE_USER_ACTIVITY, rows);
+
+    let (sent, unsent) =
+        (store.get_session(&"s".into()).unwrap().session, store.get_session(&"t".into()).unwrap().session);
+    assert_eq!((sent.user_active_at_ms, unsent.user_active_at_ms), (Some(1800), None));
+    assert!(sent.rev > unsent.rev, "{:?} isn't past {:?}", sent.rev, unsent.rev);
+}
+
+/// When the person last did something in each workspace before workspaces kept it, by its chats: the latest of when
+/// it was made, when a chat in it was made, and when the person last sent one something. Each gets a newer revision,
+/// so a client holding the copy from before takes it: newer than the chats, which were made after them.
+#[test]
+fn what_the_person_did_in_a_workspace_before_the_migration_is_when_they_were_last_active_in_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = "
+        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
+            VALUES ('x', 'r', 'birch', 'birch', 'ready', 'local', 'x', 300);
+        INSERT INTO sessions (id, workspace_id, agent, model, effort, permission_mode, agent_session_id, status,
+            last_seq, created_at_ms, updated_at_ms, user_active_at_ms)
+            VALUES ('s', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 's', 'idle', 0, 100, 9000, 1800),
+                ('t', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 't', 'idle', 0, 1200, 9000, NULL);
+    ";
+
+    let store = store_from_before(dir.path(), BEFORE_WORKSPACE_ACTIVITY, rows);
+
+    let workspace = |id: &str| store.get_workspace(&id.into()).unwrap();
+    let (worked_in, never) = (workspace("w"), workspace("x"));
+    assert_eq!((worked_in.user_active_at_ms, never.user_active_at_ms), (Some(1800), Some(300)));
+    let chat = store.get_session(&"t".into()).unwrap().session;
+    assert!(worked_in.rev > chat.rev && never.rev > chat.rev, "{worked_in:?}, {never:?}, {chat:?}");
 }

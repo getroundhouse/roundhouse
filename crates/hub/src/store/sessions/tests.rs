@@ -236,3 +236,18 @@ fn chats_closed_unused_before_that_deleted_them_go_once_migrated() {
     assert!(kept("used") && kept("queued") && kept("open"));
     assert!(kept("filed"), "only the hub can let go of a file's bytes");
 }
+
+#[test]
+fn making_a_chat_is_when_the_person_last_did_something_in_its_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let before = store.get_workspace(&"w".into()).unwrap();
+    let mut chat = super::super::tests::idle_session(before.created_at_ms + 50);
+    chat.session.id = "t".into();
+
+    store.insert_session(&chat, None).unwrap();
+
+    let after = store.get_workspace(&"w".into()).unwrap();
+    assert_eq!(after.user_active_at_ms, Some(before.created_at_ms + 50));
+    assert!(after.rev > before.rev, "a client only takes a newer copy");
+}
