@@ -1,22 +1,22 @@
 //! The hub's end of one worker connection.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{InstanceId, WorkspaceId};
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
-use providers::{Provider, WorkerStream};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, oneshot, watch};
+use providers::Provider;
+use tokio::sync::watch;
 use tracing::{debug, warn};
 
+use crate::calls::{Calls, NotSent};
+use crate::child_process::{self, ChildProcess, Spawned, Stderr};
 use crate::error::{internal, provider_failed};
+use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
 
@@ -25,19 +25,19 @@ static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 /// A worker on this machine answers in milliseconds. Hitting this means something is wrong with it.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
-type Reply = oneshot::Sender<Result<WorkerResponse, ApiError>>;
+/// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
+pub(crate) const STOP_GRACE: Duration = Duration::from_secs(10);
 
 pub(crate) struct WorkerLink {
     /// Distinguishes this connection from an earlier one to the same workspace.
     pub id: u64,
-    next_call: AtomicU64,
-    /// Dropping this closes the worker's stdin, which is how it's told to stop.
-    calls: Mutex<Option<mpsc::Sender<Vec<u8>>>>,
-    /// `None` once the connection has ended, so a call can't register for a reply that won't come.
-    pending: Mutex<Option<HashMap<u64, Reply>>>,
+    /// Closing these closes the worker's stdin, which is how it's told to stop.
+    calls: Calls<Result<WorkerResponse, ApiError>>,
     closed: watch::Sender<bool>,
     /// Something other than a read nobody asked for has wanted it, so it's kept running.
     kept: AtomicBool,
+    /// The command the hub runs to reach the worker.
+    process: ChildProcess,
 }
 
 fn lost() -> ApiError {
@@ -52,26 +52,29 @@ impl WorkerLink {
         provider: Arc<dyn Provider>,
         workspace_id: WorkspaceId,
         instance_id: InstanceId,
+        log: &std::path::Path,
     ) -> Result<Arc<WorkerLink>, ApiError> {
-        provider.start(&instance_id).await.map_err(|e| provider_failed(&e))?;
-        let stream = match provider.connect(&instance_id).await {
-            Ok(stream) => stream,
+        // The local provider runs the hub's own executable, so there are no other builds of the worker to give it.
+        provider.start(&instance_id, &[]).await.map_err(|e| provider_failed(&e))?;
+        let connected = match provider.connect(&instance_id).await {
+            Ok(command) => child_process::spawn(&command.program, &command.args, &command.env, Stderr::Log(log))
+                .map_err(|e| ApiError::new(ErrorCode::Worker, e.to_string())),
+            Err(e) => Err(provider_failed(&e)),
+        };
+        let Spawned { process, reader, writer } = match connected {
+            Ok(spawned) => spawned,
             Err(e) => {
                 let _ = provider.kill(&instance_id).await;
-                return Err(provider_failed(&e));
+                return Err(e);
             }
         };
-        let (calls_tx, calls_rx) = mpsc::channel::<Vec<u8>>(256);
         let link = Arc::new(WorkerLink {
             id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
-            next_call: AtomicU64::new(1),
-            calls: Mutex::new(Some(calls_tx)),
-            pending: Mutex::new(Some(HashMap::new())),
+            calls: Calls::new(writer),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
+            process,
         });
-        let WorkerStream { reader, writer } = stream;
-        tokio::spawn(write_calls(writer, calls_rx));
         tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
 
         let hello = link.call(WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION });
@@ -81,8 +84,12 @@ impl WorkerLink {
             Ok(Err(e)) => e,
             Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {HELLO_TIMEOUT:?}")),
         };
-        link.close();
-        if let Err(e) = provider.kill(&instance_id).await {
+        link.kill();
+        // A worker refused its instance says so, because another worker is serving it, which ending the instance would
+        // end too.
+        if failure.code != ErrorCode::Conflict
+            && let Err(e) = provider.kill(&instance_id).await
+        {
             warn!(%instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
         }
         Err(failure)
@@ -98,21 +105,11 @@ impl WorkerLink {
         &self,
         request: WorkerRequest,
     ) -> Result<impl Future<Output = Result<WorkerResponse, ApiError>> + use<>, ApiError> {
-        let id = self.next_call.fetch_add(1, Ordering::Relaxed);
-        let line = frame::encode(&WorkerCall { id, request }).map_err(|e| internal(e.to_string()))?;
-        let calls = self.calls.lock().clone().ok_or_else(lost)?;
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.pending.lock().as_mut().ok_or_else(lost)?.insert(id, reply_tx);
-        if calls.send(line).await.is_err() {
-            if let Some(pending) = self.pending.lock().as_mut() {
-                pending.remove(&id);
-            }
-            return Err(lost());
-        }
-        // Not held while waiting. A long call, like setup, would otherwise keep the worker's stdin open
-        // after `close`, and it wouldn't find out that it should stop.
-        drop(calls);
-        Ok(async move { reply_rx.await.map_err(|_| lost())? })
+        let replied = self.calls.send(|id| WorkerCall { id, request }).await.map_err(|e| match e {
+            NotSent::Closed => lost(),
+            NotSent::Encoding(e) => internal(e.to_string()),
+        })?;
+        Ok(async move { replied.await.map_err(|_| lost())? })
     }
 
     /// Marks it wanted by something other than a read nobody asked for, so it isn't stopped after that read. Only
@@ -128,12 +125,25 @@ impl WorkerLink {
     }
 
     pub(crate) fn is_open(&self) -> bool {
-        !*self.closed.borrow() && self.calls.lock().is_some()
+        !*self.closed.borrow() && self.calls.is_open()
     }
 
     /// Closes the worker's stdin. It stops its agents, flushes, and exits.
     pub(crate) fn close(&self) {
-        self.calls.lock().take();
+        self.calls.close();
+    }
+
+    /// Closes its stdin, then waits up to `grace` for the worker's command to exit, as it does once its agents have
+    /// stopped, and ends it if it hasn't.
+    pub(crate) async fn stop(&self, grace: Duration) {
+        self.close();
+        self.process.end(grace).await;
+    }
+
+    /// Closes its stdin and ends the worker's command at once.
+    pub(crate) fn kill(&self) {
+        self.close();
+        self.process.kill();
     }
 
     /// Resolves once the worker's output has been fully read.
@@ -141,16 +151,6 @@ impl WorkerLink {
         let mut closed = self.closed.subscribe();
         let _ = closed.wait_for(|done| *done).await;
     }
-}
-
-async fn write_calls(mut writer: Box<dyn tokio::io::AsyncWrite + Send + Unpin>, mut calls: mpsc::Receiver<Vec<u8>>) {
-    while let Some(line) = calls.recv().await {
-        if let Err(e) = writer.write_all(&line).await.and(writer.flush().await) {
-            warn!("writing to a worker failed: {e}");
-            break;
-        }
-    }
-    let _ = writer.shutdown().await;
 }
 
 async fn read_frames(
@@ -161,24 +161,17 @@ async fn read_frames(
     instance_id: InstanceId,
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
-    let mut reader = BufReader::new(reader);
-    let mut bytes = Vec::new();
+    let mut incoming = FrameReader::new(reader);
     loop {
-        frame::clear_buffer(&mut bytes);
-        let read = (&mut reader).take(frame::MAX_FRAME_BYTES as u64 + 1).read_until(b'\n', &mut bytes).await;
-        match read {
-            Ok(0) => break,
-            Ok(_) if bytes.len() > frame::MAX_FRAME_BYTES => {
-                warn!("a worker sent an oversized frame");
-                break;
-            }
-            Ok(_) => {}
+        let bytes = match incoming.next().await {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => break,
             Err(e) => {
-                warn!("reading from a worker failed: {e}");
+                warn!("reading from a worker failed: {}", error_chain(&e));
                 break;
             }
-        }
-        let parsed: WorkerFrame = match frame::decode(&bytes) {
+        };
+        let parsed: WorkerFrame = match frame::decode(bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
                 warn!("ignoring a worker frame that didn't parse: {e}");
@@ -186,15 +179,13 @@ async fn read_frames(
             }
         };
         match parsed {
-            WorkerFrame::Reply { id, outcome } => {
-                let reply = link.pending.lock().as_mut().and_then(|pending| pending.remove(&id));
-                if let Some(reply) = reply {
-                    let _ = reply.send(match outcome {
-                        WorkerOutcome::Response(response) => Ok(response),
-                        WorkerOutcome::Error(error) => Err(error),
-                    });
-                }
-            }
+            WorkerFrame::Reply { id, outcome } => link.calls.reply(
+                id,
+                match outcome {
+                    WorkerOutcome::Response(response) => Ok(response),
+                    WorkerOutcome::Error(error) => Err(error),
+                },
+            ),
             WorkerFrame::AgentEvent { session_id, run, body, raw, attachments } => {
                 hub.route(&session_id, Item::Event { run, body, raw, attachments }).await;
             }
@@ -213,11 +204,14 @@ async fn read_frames(
         }
     }
     debug!(%instance_id, "worker connection ended");
-    link.close();
-    // Dropping these wakes each waiting call with an error.
-    drop(link.pending.lock().take());
+    // Wakes each waiting call with an error.
+    link.calls.end();
     hub.worker_gone(&workspace_id, &link, provider.as_ref(), &instance_id).await;
     // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
     // the value unset, and whoever waits later would wait forever.
     link.closed.send_replace(true);
 }
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests;

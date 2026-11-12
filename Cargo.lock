@@ -1075,6 +1075,7 @@ dependencies = [
  "flume 0.11.1",
  "libc",
  "parking_lot",
+ "process",
  "proptest",
  "protocol",
  "serde",
@@ -1476,6 +1477,7 @@ version = "0.1.0"
 dependencies = [
  "agents",
  "anyhow",
+ "async-trait",
  "clap",
  "client-core",
  "flume 0.11.1",
@@ -1484,6 +1486,7 @@ dependencies = [
  "parking_lot",
  "process",
  "protocol",
+ "providers",
  "serde_json",
  "tempfile",
  "tokio",
@@ -1556,6 +1559,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "protocol",
+ "raw-window-handle",
  "ring",
  "serde",
  "serde_json",
@@ -1564,6 +1568,7 @@ dependencies = [
  "transcript",
  "ureq",
  "velopack",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3602,6 +3607,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 name = "hub"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "parking_lot",
  "process",
  "proptest",
@@ -5867,6 +5873,7 @@ dependencies = [
  "process",
  "protocol",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -9381,6 +9388,7 @@ dependencies = [
  "protocol",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
  "tracing",

@@ -76,22 +76,7 @@ mod tests {
     }
 
     fn record(recent: RecentWork, latest: Option<Call>) -> Subagent {
-        Subagent {
-            session_id: "s".into(),
-            call: "agent".into(),
-            kind: None,
-            description: None,
-            prompt: None,
-            in_background: true,
-            status: SubagentStatus::Working,
-            started_at_ms: 0,
-            ended_at_ms: None,
-            calls: 4,
-            latest_call: latest,
-            recent,
-            report: None,
-            rev: protocol::model::Rev::new(1),
-        }
+        Subagent { calls: 4, latest_call: latest, recent, ..crate::fixtures::record("agent", SubagentStatus::Working) }
     }
 
     /// Each block as `(what it is, its key, what came back)`, to compare.

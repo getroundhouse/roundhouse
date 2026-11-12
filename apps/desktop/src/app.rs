@@ -25,7 +25,9 @@ mod records;
 mod restarts;
 mod settings;
 mod shortcuts;
+mod title_bar;
 mod view;
+mod window_buttons;
 mod workspaces;
 
 pub use build_line::{Agents, BuildLine};
@@ -33,6 +35,9 @@ pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
 pub use restarts::UpdateQuestion;
+pub use title_bar::TitleBar;
+#[cfg(feature = "testing")]
+pub use title_bar::the_title_bar_is;
 
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
 #[cfg(feature = "testing")]
@@ -87,10 +92,12 @@ pub struct AppView {
     pub(crate) retitling: HashSet<WorkspaceId>,
     /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
     pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
-    /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
-    focus_after_dialog: Option<WorkspaceId>,
+    /// The workspace selected while a dialog or Settings was open, whose pane is focused once that closes.
+    focus_once_closed: Option<WorkspaceId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
+    /// Whether a left press has had no release, for the release the system can keep.
+    unreleased: crate::lost_release::Unreleased,
     focus: FocusHandle,
     /// Settings, when it shows in place of the sidebar and the workspace.
     settings: Option<settings::Shown>,
@@ -153,8 +160,9 @@ impl AppView {
             busy: Busy::Free,
             retitling: HashSet::new(),
             new_workspace: None,
-            focus_after_dialog: None,
+            focus_once_closed: None,
             moving_window: false,
+            unreleased: crate::lost_release::Unreleased::default(),
             focus,
             settings: None,
             settings_focus: cx.focus_handle(),

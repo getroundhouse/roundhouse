@@ -1,6 +1,7 @@
 use gpui_kit::{Pixels, TestAppContext, px};
 use look::motion::Sliding;
 
+use super::clearance::{AtTheTop, Clearance, Insets, WindowButtons};
 use super::{Beside, Change, Chosen, Placed, Side, Sidebar, Sides, dragged};
 
 /// A window with room for either sidebar at its widest.
@@ -159,4 +160,62 @@ fn an_edge_dragged_in_and_back_out_gets_back_the_width_it_had() {
     both.left.width = dragged_beside(both, Side::Left, 290., 1000.);
 
     assert_eq!(both.fitted(px(1000.), OPEN), (px(290.), px(350.)));
+}
+
+/// What the strip keeps clear of with Windows' buttons at its right end, `shown` of each sidebar, left then right, and
+/// an error above the header or not.
+fn on_windows(shown: (f32, f32), above_the_header: bool) -> Clearance {
+    Clearance::new(WindowButtons::AtTheEnd, (px(shown.0), px(shown.1)), above_the_header)
+}
+
+fn insets(start: f32, end: f32) -> Insets {
+    Insets { start: px(start), end: px(end) }
+}
+
+#[test]
+fn the_header_ends_before_as_much_of_windows_buttons_as_the_sidebar_of_changes_leaves_uncovered() {
+    // The sidebar of changes sliding in, at its narrowest: none of it, part of it, and then more than the three.
+    let ends: Vec<f32> = [0., 50., 137., 138., 300.]
+        .map(|shown| f32::from(on_windows((290., shown), false).of(AtTheTop::Header).end))
+        .into();
+
+    assert_eq!(ends, [138., 88., 1., 0., 0.]);
+}
+
+#[test]
+fn with_the_sidebar_hidden_the_header_starts_after_the_button_that_shows_it() {
+    assert_eq!(on_windows((0., 300.), false).of(AtTheTop::Header), insets(36., 0.), "12px in, then the 24px button");
+    assert_eq!(on_windows((20., 300.), false).of(AtTheTop::Header), insets(16., 0.), "what it doesn't cover yet");
+    assert_eq!(on_windows((220., 300.), false).of(AtTheTop::Header), insets(0., 0.), "none at its narrowest");
+
+    let on_a_mac = Clearance::new(WindowButtons::InTheCorner, (px(0.), px(300.)), false);
+    assert_eq!(on_a_mac.of(AtTheTop::Header), insets(102., 0.), "after macOS's buttons, 6px, and the button");
+}
+
+#[test]
+fn under_an_error_the_header_and_the_sidebars_top_are_below_the_buttons_and_the_error_clears_them() {
+    let under = on_windows((0., 50.), true);
+
+    assert_eq!(under.of(AtTheTop::Header), Insets::default());
+    assert_eq!(under.of(AtTheTop::RightSidebar), Insets::default());
+    assert_eq!(under.of(AtTheTop::AboveTheHeader), insets(36., 138.));
+}
+
+/// The bar at the top of the sidebar of changes is laid out at the sidebar's whole width, so while it slides in, its
+/// end is past the window's and passes under the buttons, rather than being laid out again on every frame.
+#[test]
+fn the_top_of_the_sidebar_of_changes_ends_before_all_of_windows_buttons_however_much_of_it_shows() {
+    for shown in [50., 300., 432.] {
+        assert_eq!(on_windows((290., shown), false).of(AtTheTop::RightSidebar), insets(0., 138.), "{shown} showing");
+    }
+}
+
+#[test]
+fn without_windows_buttons_nothing_ends_early() {
+    for buttons in [WindowButtons::InTheCorner, WindowButtons::Absent] {
+        let clearance = Clearance::new(buttons, (px(0.), px(0.)), false);
+        for at in [AtTheTop::Header, AtTheTop::RightSidebar, AtTheTop::AboveTheHeader] {
+            assert_eq!(clearance.of(at).end, px(0.), "{buttons:?} at {at:?}");
+        }
+    }
 }

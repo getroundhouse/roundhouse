@@ -15,6 +15,7 @@ anyhow.workspace = true
 clap.workspace = true
 hub.workspace = true
 libc.workspace = true
+process.workspace = true
 protocol.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
@@ -23,9 +24,12 @@ worker.workspace = true
 
 [dev-dependencies]
 agents = { workspace = true, features = ["testing"] }
+async-trait.workspace = true
 process = { workspace = true, features = ["testing"] }
+providers.workspace = true
 parking_lot.workspace = true
 client-core = { workspace = true, features = ["testing"] }
+hub = { workspace = true, features = ["testing"] }
 flume.workspace = true
 libc.workspace = true
 serde_json.workspace = true

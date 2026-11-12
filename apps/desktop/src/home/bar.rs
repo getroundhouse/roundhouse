@@ -6,35 +6,39 @@ use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
-    Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, Styled, TestSupportExt as _, WeakEntity,
-    Window, div, px,
+    Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
+    px,
 };
 use look::{Hand as _, Off as _};
 
 use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
+use crate::sides::{self, AtTheTop};
 use crate::workspace_pane::HEADER_HEIGHT;
 
-/// `inset` is how far the search starts from the bar's left end, to clear the window's buttons while the sidebar is
-/// hidden.
-pub(super) fn bar(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
+/// In the strip, clear of the window's buttons at both ends as the workspace's header is.
+pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let theme = cx.theme();
     let (border, muted) = (theme.border, theme.muted_foreground);
+    let clear = sides::clearance(AtTheTop::Header, cx);
     h_flex()
         .flex_none()
         .w_full()
         .h(HEADER_HEIGHT)
-        .pl(px(16.) + inset)
-        .pr_2()
+        .pl(px(16.) + clear.start)
+        .pr(px(8.) + clear.end)
         .gap_1()
         .border_b_1()
         .border_color(border)
         .child(
-            // In a box of its own, so a test can see where the search starts.
+            // In a box of its own, so a test can see where the search starts. It hides the strip it's in from the
+            // pointer, so on Windows a press here is an ordinary one in the window rather than one on a title bar,
+            // and the search hears where it goes as it selects.
             div()
                 .id("home-search")
                 .flex_1()
                 .min_w_0()
+                .occlude()
                 .child(
                     Input::new(&app.home.search)
                         .appearance(false)

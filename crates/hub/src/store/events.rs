@@ -1,10 +1,7 @@
 //! Each session's event log.
 
 use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{
-    ApprovalId, ClientMessageId, Place, PromptLine, RunId, Seq, SessionId, SessionStatus, ToolUseId, WorkspaceId,
-};
-use rusqlite::types::ValueRef;
+use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SessionStatus, ToolUseId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::prompts::note_prompts;
@@ -291,47 +288,6 @@ impl Store {
         }
         Ok(open)
     }
-
-    /// Every prompt recorded in the session, oldest first, each as one line. It reads only prompts, by their kind, and
-    /// of each only its text and how many files it carries, so a long session costs no more than its prompts' text.
-    pub fn prompt_lines(&self, session_id: &SessionId) -> Result<Vec<PromptLine>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(
-            "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments'), place FROM events \
-             WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq",
-        )?;
-        lines_of(statement.query([session_id.as_str()])?)
-    }
-
-    /// Every prompt recorded in the workspace's chats, oldest first whichever chat it was in, each as one line, read as
-    /// [`Store::prompt_lines`] reads one chat's. A line's `seq` is its place in its own chat's log.
-    pub fn workspace_prompt_lines(&self, workspace_id: &WorkspaceId) -> Result<Vec<PromptLine>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(
-            "SELECT e.seq, json_extract(e.body, '$.text'), json_array_length(e.body, '$.attachments'), e.place \
-             FROM sessions s JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
-             WHERE s.workspace_id = ? ORDER BY e.ts_ms, s.created_at_ms, e.seq",
-        )?;
-        lines_of(statement.query([workspace_id.as_str()])?)
-    }
-}
-
-/// The line for each row of a prompt's `seq`, text, how many files it carries, and place.
-fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError> {
-    let mut lines = Vec::new();
-    while let Some(row) = rows.next()? {
-        let seq = row.get::<_, i64>(0)?.cast_unsigned();
-        // Borrowed rather than copied, since a pasted log can be long and only its start is kept. A JSON string
-        // comes out as text, and a missing one as null.
-        let text = match row.get_ref(1)? {
-            ValueRef::Text(text) => String::from_utf8_lossy(text),
-            ValueRef::Null | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Blob(_) => "".into(),
-        };
-        let files = u32::try_from(row.get::<_, Option<i64>>(2)?.unwrap_or(0)).unwrap_or(u32::MAX);
-        let place = Place::new(row.get::<_, i64>(3)?.cast_unsigned());
-        lines.push(PromptLine::new(seq, &text, files).placed(place));
-    }
-    Ok(lines)
 }
 
 /// The event already recorded with this `client_msg_id`, if there is one.
@@ -390,4 +346,4 @@ fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionE
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

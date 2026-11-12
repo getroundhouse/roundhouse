@@ -19,6 +19,7 @@ mod gallery;
 mod home;
 mod home_order;
 mod images;
+mod lost_release;
 #[cfg(target_os = "macos")]
 mod marks;
 mod menus;
@@ -50,4 +51,5 @@ mod tools;
 mod turn_card;
 mod unread;
 mod updating;
+mod window_buttons;
 mod window_place;

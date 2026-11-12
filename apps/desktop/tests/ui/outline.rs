@@ -1,15 +1,16 @@
-//! The outline at the right of a chat: a tick for each prompt, and the list that opens over them.
+//! The outline at the right of a chat: a tick for each prompt and a dot for each compaction, and the list that opens
+//! over them.
 
 #![cfg(test)]
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::event::EventBody;
-use protocol::model::{Seq, seq_index};
+use protocol::model::{Seq, SessionId, SessionStatus, seq_index};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, TIMEOUT, Ui};
 
 mod jumps;
 
@@ -215,6 +216,37 @@ fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
     open_the_list(&mut ui);
 
     assert!(ui.has("outline-list"));
+}
+
+#[gpui_kit::test]
+fn a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:only");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the outline", |ui| ui.has("outline"));
+
+    compact(&stack, &session);
+
+    let compaction = stack.client().session_compaction_list(&session).unwrap()[0].clone();
+    let row = seq_index(compaction.seq) - 1;
+    ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
+    let only = row_id("outline-tick", prompt_rows(&ui)[0]);
+    let (tick, dot) = (bounds(&mut ui, only), bounds(&mut ui, row_id("outline-dot", row)));
+    assert!(dot.top() >= tick.bottom(), "under the prompt it came after: {tick:?} {dot:?}");
+}
+
+/// Asks the hub to compact the chat now, and waits for the agent to have.
+fn compact(stack: &Stack, session: &SessionId) {
+    let client = stack.client();
+    client.session_compact(session, None).unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while client.session_compaction_list(session).unwrap().is_empty()
+        || client.session_get(session).unwrap().status != SessionStatus::Idle
+    {
+        assert!(Instant::now() < deadline, "the agent never compacted");
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn open_the_list(ui: &mut Ui<'_>) {

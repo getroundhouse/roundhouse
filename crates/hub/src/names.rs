@@ -1,6 +1,6 @@
 //! Default workspace names. Short, easy to say, and valid as branch names and directory names.
 
-const NAMES: &[&str] = &[
+pub(crate) const NAMES: &[&str] = &[
     "acacia",
     "alder",
     "almond",

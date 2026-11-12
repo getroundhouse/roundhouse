@@ -14,8 +14,6 @@ pub(crate) enum Fold {
     Thinking,
     /// What a tool sent back.
     Output,
-    /// An image a prompt carried, drawn small until it's opened.
-    Picture,
     /// An opened call's command, shown whole rather than cut off at the end of its line.
     Command,
 }
@@ -32,8 +30,7 @@ impl Fold {
 pub(crate) struct Folds {
     /// What the person chose, for each fold they've opened or closed, by its kind, so finding one borrows its key.
     chosen: HashMap<Fold, HashMap<ItemKey, bool>>,
-    /// Whether thinking starts open. Output always starts closed, since it's mostly long and rarely read, and so does
-    /// a picture, which would push the reply off screen.
+    /// Whether thinking starts open. Output always starts closed, since it's mostly long and rarely read.
     thinking_open: bool,
 }
 
@@ -41,7 +38,7 @@ impl Folds {
     pub(crate) fn is_open(&self, key: &ItemKey, fold: Fold) -> bool {
         self.chosen.get(&fold).and_then(|chosen| chosen.get(key)).copied().unwrap_or(match fold {
             Fold::Thinking => self.thinking_open,
-            Fold::Output | Fold::Picture | Fold::Command => false,
+            Fold::Output | Fold::Command => false,
         })
     }
 

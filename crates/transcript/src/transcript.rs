@@ -124,7 +124,7 @@ pub struct Transcript {
     _changes: Task<()>,
     /// Draws the time so far again while the agent works, and how long the cache has left while it doesn't.
     ticking: Option<Task<()>>,
-    prompts: outline::Prompts,
+    outline: outline::Outline,
     /// The oldest question waiting on an answer, to be asked in the composer's place.
     asking: Option<Entity<QuestionPanel>>,
     /// Where every question waiting on an answer is in the log. The transcript draws them once they're answered.
@@ -181,7 +181,7 @@ impl Transcript {
             list,
             _changes: following,
             ticking,
-            prompts: outline::Prompts::default(),
+            outline: outline::Outline::default(),
             asking: None,
             waiting: Vec::new(),
             finding: None,
@@ -331,8 +331,9 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Fetches an image a row is drawing, and measures the row again once it's here, since an opened image is as tall
-    /// as its shape makes it.
+    /// Fetches an image a row is drawing, and measures the row again once it's here, since its shape can change the
+    /// row's height: one a tool sent back is as tall as its shape makes it, and a prompt's is as wide as its shape
+    /// makes it, which can take the next one onto another line.
     pub(crate) fn load_picture(&mut self, seq: Option<Seq>, attachment: Attachment, cx: &mut Context<Self>) {
         let (client, session) = (self.client.clone(), self.session_id.clone());
         cx.spawn(async move |this, cx| {

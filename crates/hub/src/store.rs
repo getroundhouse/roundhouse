@@ -22,6 +22,8 @@ mod error;
 mod events;
 mod find;
 mod hub_settings;
+mod instances;
+mod lines;
 mod made;
 #[cfg(test)]
 mod older;
@@ -45,6 +47,7 @@ pub use accounts::Launched;
 pub use attachments::AddedBy;
 pub use error::{BackupError, StoreError};
 pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
+pub use instances::{InstanceStage, RecordedInstance};
 pub use made::{Made, MadeByRequest};
 pub use queue::{Changed, Queued};
 pub use reading::Reading;

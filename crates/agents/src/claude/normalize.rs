@@ -30,6 +30,7 @@ mod limits;
 mod pending;
 mod prompt;
 mod request;
+mod result_text;
 mod subagents;
 mod surrogates;
 mod tasks;
@@ -220,6 +221,16 @@ fn string_of(value: &Value, key: &str) -> Option<String> {
     str_of(value, key).map(str::to_string)
 }
 
+/// Changes every string in `value`, wherever it is.
+fn each_string(value: &mut Value, change: &mut impl FnMut(&mut String)) {
+    match value {
+        Value::String(text) => change(text),
+        Value::Array(items) => items.iter_mut().for_each(|item| each_string(item, change)),
+        Value::Object(fields) => fields.values_mut().for_each(|field| each_string(field, change)),
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn control_reply(value: &Value) -> Parsed {
     let response = value.get("response").unwrap_or(&Value::Null);
     match str_of(response, "request_id") {
@@ -264,12 +275,16 @@ fn system(value: &Value) -> Parsed {
     }
 }
 
+/// The CLI's name for the model of a message it wrote itself, such as one saying the API failed. No model wrote it, so
+/// it's recorded as naming none, and a turn or a subagent isn't taken to have run on it.
+const NO_MODEL: &str = "<synthetic>";
+
 fn assistant(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
         message_id: id_of(message, "id"),
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
-        model: string_of(message, "model"),
+        model: str_of(message, "model").filter(|model| *model != NO_MODEL).map(str::to_string),
         blocks: blocks(message.get("content")),
         // A Normalizer knows it from the deltas before.
         first_index: None,
@@ -297,7 +312,7 @@ fn block(value: &Value) -> ContentBlock {
         Some("tool_result") => ContentBlock::ToolResult {
             tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
             is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-            text: tool_result_text(value.get("content")),
+            text: result_text::read(value.get("content")),
             // Only a user line's results have images, and `images` takes them from it.
             images: Vec::new(),
             change: None,
@@ -308,24 +323,6 @@ fn block(value: &Value) -> ContentBlock {
             ContentBlock::Image { media_type: value.get("source").and_then(|s| string_of(s, "media_type")) }
         }
         _ => ContentBlock::Unknown,
-    }
-}
-
-/// A tool result's content is a string, or an array of text and image blocks.
-fn tool_result_text(content: Option<&Value>) -> String {
-    match content {
-        Some(Value::String(text)) => text.clone(),
-        Some(Value::Array(items)) => {
-            let mut text = String::new();
-            for item in items.iter().filter(|item| str_of(item, "type") == Some("text")) {
-                if !text.is_empty() {
-                    text.push('\n');
-                }
-                text.push_str(str_of(item, "text").unwrap_or_default());
-            }
-            text
-        }
-        _ => String::new(),
     }
 }
 

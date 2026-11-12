@@ -89,12 +89,16 @@ impl AppView {
     }
 
     /// Focuses the workspace's pane, unless a dialog is open, where typing meant for the dialog would go to the pane
-    /// unseen. Then it's focused once the dialog closes. While Home shows, as when the selection goes away under it,
-    /// its search keeps the keys.
+    /// unseen, or Settings is, which leaves the pane undrawn, so the keys would reach nothing, not even Settings'. Then
+    /// it's focused once that closes. While Home shows, as when the selection goes away under it, its search keeps the
+    /// keys, and nothing waits to take them once a dialog or Settings closes over it.
     pub(in crate::app) fn focus_pane(&mut self, id: WorkspaceId, window: &mut Window, cx: &mut App) {
-        if window.has_active_dialog(cx) {
-            self.focus_after_dialog = Some(id);
-        } else if let Some(pane) = self.panes.get(&id).filter(|_| !self.home_showing()) {
+        if self.home_showing() {
+            return;
+        }
+        if window.has_active_dialog(cx) || self.settings_open() {
+            self.focus_once_closed = Some(id);
+        } else if let Some(pane) = self.panes.get(&id) {
             pane.update(cx, |pane, cx| pane.focus_showing(window, cx));
         }
     }
@@ -102,7 +106,7 @@ impl AppView {
     /// Closing the dialog gives focus back to what had it before, which is no longer drawn if another workspace was
     /// selected meanwhile, so that one is focused instead.
     fn dialog_closed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(id) = self.focus_after_dialog.take().filter(|id| self.selected.as_ref() == Some(id)) {
+        if let Some(id) = self.focus_once_closed.take().filter(|id| self.selected.as_ref() == Some(id)) {
             self.focus_pane(id, window, cx);
         }
     }

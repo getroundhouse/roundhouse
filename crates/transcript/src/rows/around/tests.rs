@@ -3,11 +3,11 @@ use std::rc::Rc;
 use client_core::session_log::SessionLog;
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Rev, Subagent, SubagentStatus};
+use protocol::model::{Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus};
 use serde_json::json;
 
 use super::{Around, Reply, block_key};
-use crate::fixtures::{asked, calls, calls_to, closed, event, from_the_agent, log, result, within};
+use crate::fixtures::{asked, calls, calls_to, closed, event, from_the_agent, log, record, result, within};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::transcript::Model;
@@ -128,22 +128,7 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
 }
 
 fn working(call: &str, recent: RecentWork) -> Subagent {
-    Subagent {
-        session_id: "s".into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: true,
-        status: SubagentStatus::Working,
-        started_at_ms: 0,
-        ended_at_ms: None,
-        calls: 1,
-        latest_call: None,
-        recent,
-        report: None,
-        rev: Rev::new(1),
-    }
+    Subagent { calls: 1, recent, ..record(call, SubagentStatus::Working) }
 }
 
 #[test]

@@ -18,12 +18,15 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
   publish.py merge --version VERSION --keep COUNT --work DIR
       Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
       DIR/releases, checked against their files, without releases older than the newest COUNT.
+  publish.py bridge --version VERSION --work DIR
+      For a channel that took over from an older one, writes the older channel's feed to sign, listing only the full
+      package of VERSION the feed in DIR/feed has, and prints its path. Prints nothing for any other channel.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
-      Uploads the new packages and what people download, then the signed feed, reads the feed back, and then deletes
-      the packages that left it.
+      Uploads the new packages and what people download, then the signed feed, reads the feed back, then the older
+      channel's feed, if `bridge` wrote one, and then deletes the packages that left the feed.
   publish.py check --url URL --key KEY --version VERSION --work DIR
-      Checks that URL, where apps read the feed, serves the one in DIR/feed, and VERSION's full package. A host with a
-      cache can take a while to, so it tries for a minute.
+      Checks that URL, where apps read the feed, serves the one in DIR/feed, the older channel's, if this run
+      published one, and VERSION's full package. A host with a cache can take a while to, so it tries for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
 without a bucket. KEY is the app's public key, in the form `apps/desktop/src/updates/source.rs` says.
@@ -80,12 +83,20 @@ CHANNELS = {
 }
 
 
+# The channel each one took over from. An app looks for updates in the channel it was packaged for, so one packaged
+# before the change still reads the older channel's feed. Each release also signs that feed, listing only its own full
+# package, which was packaged for the newer channel, so such an app takes it and looks there from then on. amd64
+# Windows was `win` before 0.1.245.
+TAKES_OVER = {"win-amd64": "win"}
+
+
 def use_channel(channel: str) -> None:
     """Chooses which platform's releases every step below publishes. A run publishes one."""
-    global FEED, STAGED_FEED, DOWNLOADS  # noqa: PLW0603, since a run has one channel, chosen once as it starts
+    global FEED, STAGED_FEED, DOWNLOADS, OLDER_FEED  # noqa: PLW0603, since a run has one channel, chosen once as it starts
     FEED = f"releases.{channel}.json"
     STAGED_FEED = "staging/" + FEED
     DOWNLOADS = CHANNELS[channel]
+    OLDER_FEED = f"releases.{TAKES_OVER[channel]}.json" if channel in TAKES_OVER else None
 
 
 use_channel("osx")
@@ -241,16 +252,19 @@ def write_pair(directory: Path, pair: tuple[bytes, bytes]) -> None:
     (directory / (FEED + ".sig")).write_bytes(pair[1])
 
 
-def read_pair(directory: Path) -> tuple[bytes, bytes] | None:
-    feed, signature = directory / FEED, directory / (FEED + ".sig")
+def read_pair(directory: Path, file: str | None = None) -> tuple[bytes, bytes] | None:
+    """The feed in `directory`, this channel's unless `file` names another, and its signature."""
+    file = file or FEED
+    feed, signature = directory / file, directory / (file + ".sig")
     if not feed.exists():
         return None
     return feed.read_bytes(), signature.read_bytes() if signature.exists() else b""
 
 
-def put_pair(store: DirStore | S3Store, name: str, directory: Path) -> None:
-    store.put(name, directory / FEED, "application/json")
-    store.put(name + ".sig", directory / (FEED + ".sig"), "application/octet-stream")
+def put_pair(store: DirStore | S3Store, name: str, directory: Path, file: str | None = None) -> None:
+    file = file or FEED
+    store.put(name, directory / file, "application/json")
+    store.put(name + ".sig", directory / (file + ".sig"), "application/octet-stream")
 
 
 def fetch(url: str, method: str = "GET") -> tuple[bytes, int] | None:
@@ -325,6 +339,36 @@ def merge(version: str, keep: int, work: Path) -> Path:
     return path
 
 
+def full_of(feed: bytes, version: str) -> list[dict]:
+    return [asset for asset in assets_of(feed) if asset["Version"] == version and asset["Type"] == "Full"]
+
+
+def bridge(version: str, work: Path) -> Path | None:
+    if OLDER_FEED is None:
+        return None
+    # Only the full package, since a delta starts from the release before it in this channel, not the app's.
+    fulls = full_of((work / "feed" / FEED).read_bytes(), version)
+    if len(fulls) != 1:
+        raise Refused(f"the feed to publish doesn't list one full package for {version}")
+    path = work / "bridge" / OLDER_FEED
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"Assets": fulls}, separators=(",", ":")))
+    return path
+
+
+def bridged(key: str, version: str, feed: bytes, work: Path) -> tuple[bytes, bytes] | None:
+    """The older channel's feed that `bridge` wrote, and its signature, once it's signed and offers exactly what `feed`
+    has for `version`. None if it wrote none. What the older channel's feed held before isn't kept, or read."""
+    older = read_pair(work / "bridge", OLDER_FEED) if OLDER_FEED else None
+    if older is None:
+        return None
+    if not signed(*older, key):
+        raise Refused(f"{OLDER_FEED} isn't signed with the app's key")
+    if assets_of(older[0]) != full_of(feed, version):
+        raise Refused(f"{OLDER_FEED} should offer only {version}'s full package, as the signed feed has it")
+    return older
+
+
 def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> None:
     pair = read_pair(work / "feed")
     if pair is None or not signed(*pair, key):
@@ -338,6 +382,7 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
     if not (unchanged and adds_this):
         raise Refused(f"the feed to publish should add {version}'s packages to the published one, and change "
                       "nothing else")
+    older = bridged(key, version, pair[0], work)
     for asset in added:
         path = work / "releases" / asset["FileName"]
         if not file_matches(path, asset):
@@ -349,8 +394,25 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
     put_pair(store, FEED, work / "feed")
     if (store.get(FEED), store.get(FEED + ".sig")) != pair:
         raise Refused("the published feed doesn't read back as what was signed")
+    # After this channel's feed, which apps on it read for the release before. A run that stops before this leaves the
+    # older channel on the release before, until the next one.
+    if older is not None:
+        assert OLDER_FEED is not None
+        put_pair(store, OLDER_FEED, work / "bridge", OLDER_FEED)
+        if (store.get(OLDER_FEED), store.get(OLDER_FEED + ".sig")) != older:
+            raise Refused(f"{OLDER_FEED} doesn't read back as what was signed")
     for name in before.keys() - {asset["FileName"] for asset in after}:
         store.delete(name)
+
+
+def wait_until_served(url: str, name: str, pair: tuple[bytes, bytes], attempts: int, wait: float, what: str) -> None:
+    for attempt in range(attempts):
+        feed, signature = fetch(f"{url}/{name}"), fetch(f"{url}/{name}.sig")
+        if feed and signature and (feed[0], signature[0]) == pair:
+            return
+        if attempt + 1 == attempts:
+            raise Refused(f"{url} doesn't serve the {what} this run published")
+        time.sleep(wait)
 
 
 def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait: float = 10) -> list[str]:
@@ -358,17 +420,15 @@ def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait:
     pair = read_pair(work / "feed")
     if pair is None:
         raise Refused(f"{work / 'feed'} has no feed, so this run published nothing to check")
-    for attempt in range(attempts):
-        feed, signature = fetch(f"{url}/{FEED}"), fetch(f"{url}/{FEED}.sig")
-        if feed and signature and (feed[0], signature[0]) == pair:
-            break
-        if attempt + 1 == attempts:
-            raise Refused(f"{url} doesn't serve the feed this run published")
-        time.sleep(wait)
+    wait_until_served(url, FEED, pair, attempts, wait, "feed")
     if not signed(*pair, key):
         raise Refused("the published feed doesn't match the app's key")
+    # Only once this run uploaded it. One that found its version published already has none to check.
+    older = read_pair(work / "bridge", OLDER_FEED) if OLDER_FEED else None
+    if older is not None:
+        wait_until_served(url, OLDER_FEED, older, attempts, wait, OLDER_FEED)
     assets = assets_of(pair[0])
-    fulls = [asset for asset in assets if asset["Version"] == version and asset["Type"] == "Full"]
+    fulls = full_of(pair[0], version)
     if not fulls:
         raise Refused(f"the published feed doesn't list {version}")
     package = fetch(f"{url}/{fulls[0]['FileName']}", method="HEAD")
@@ -385,6 +445,7 @@ def main() -> int:
     for name, options in {
         "prepare": ("--store", "--key", "--version", "--work"),
         "merge": ("--version", "--keep", "--work"),
+        "bridge": ("--version", "--work"),
         "upload": ("--store", "--key", "--version", "--work"),
         "check": ("--url", "--key", "--version", "--work"),
     }.items():
@@ -398,6 +459,10 @@ def main() -> int:
             print(prepare(open_store(args.store), args.key, args.version, args.work))
         elif args.step == "merge":
             print(merge(args.version, args.keep, args.work))
+        elif args.step == "bridge":
+            older = bridge(args.version, args.work)
+            if older is not None:
+                print(older)
         elif args.step == "upload":
             upload(open_store(args.store), args.key, args.version, args.work)
         else:

@@ -6,8 +6,17 @@ use std::time::Duration;
 
 use gpui_kit::test::TestQueryExt as _;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
+use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Stack, Ui, order, sidebar_row, three_workspaces, top, worked_in};
+use crate::support::{Held, Stack, Ui, order, sidebar_row, three_workspaces, top, worked_in};
+
+/// The workspace the hub is making, once the app has heard of it and the last frame drew its note in the sidebar, and
+/// the note.
+fn on_its_way(ui: &mut Ui) -> Option<(WorkspaceId, ElementId)> {
+    let id = ui.view().workspaces.iter().find(|w| w.status == WorkspaceStatus::Creating).map(|w| w.id.clone())?;
+    let note = ElementId::Name(format!("creating-{id}").into());
+    ui.has(note.clone()).then_some((id, note))
+}
 
 /// Whether the last frame drew a menu with this item in it.
 fn menu_shows(ui: &mut Ui, label: &str) -> bool {
@@ -169,4 +178,54 @@ fn the_order_holds_still_while_a_rows_menu_is_open_wherever_the_pointer_goes(cx:
     assert!(menu_shows(&mut ui, "Archive"), "the menu is still there");
     ui.press("escape");
     assert_eq!(order(&mut ui, sidebar_row, &made), [second, third, first]);
+}
+
+/// Made with `Cmd-N`, so the pointer isn't on the list when Create is pressed, and the note starts where the workspace
+/// will go.
+#[gpui_kit::test]
+fn a_new_workspaces_note_keeps_its_place_once_the_order_holds_and_the_workspace_takes_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, [first, second, third], _) = three_workspaces(cx, &stack);
+    let making = Held::checkout(&stack);
+    ui.press("cmd-n");
+    ui.wait("the new-workspace dialog", Ui::has_dialog);
+    ui.press("enter");
+    ui.wait("the note", |ui| on_its_way(ui).is_some());
+    let (coming, note) = on_its_way(&mut ui).unwrap();
+    let at = top(&mut ui, note.clone());
+    assert!(at < top(&mut ui, sidebar_row(&third)), "it's at the top, where the new one will go");
+
+    ui.hover(sidebar_row(&first));
+
+    assert_eq!(top(&mut ui, note), at, "the pointer coming onto the list moves nothing");
+    making.release();
+    let made = ui.wait_for_a_new_workspace(3);
+    assert_eq!(made, coming, "the workspace the note was for");
+    assert_eq!(top(&mut ui, sidebar_row(&made)), at, "takes its place");
+    let shown = order(&mut ui, sidebar_row, &[first.clone(), second.clone(), third.clone(), made.clone()]);
+    assert_eq!(shown, [made, third, second, first]);
+}
+
+/// Asked for by another client, such as the command line, so only the hub can say it's on its way.
+#[gpui_kit::test]
+fn a_workspace_another_client_is_making_shows_on_its_way_where_it_will_go(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, [first, second, third], _) = three_workspaces(cx, &stack);
+    let making = Held::checkout(&stack);
+    let (client, repo) = (stack.client(), ui.first_repo_id());
+
+    let asking = std::thread::spawn(move || client.workspace_create(&repo, None, None, None).unwrap().id);
+
+    ui.wait("the note", |ui| on_its_way(ui).is_some());
+    let (coming, note) = on_its_way(&mut ui).unwrap();
+    assert!(top(&mut ui, note) < top(&mut ui, sidebar_row(&third)), "at the top, where it will go");
+    ui.press("cmd-[");
+    assert_eq!(ui.view().selected.as_ref(), Some(&first), "the keys go past it, round to the bottom");
+    making.release();
+    let made = asking.join().unwrap();
+    assert_eq!(made, coming);
+    ui.wait("its row", |ui| ui.has(sidebar_row(&made)));
+    let shown = order(&mut ui, sidebar_row, &[first.clone(), second.clone(), third.clone(), made.clone()]);
+    assert_eq!(shown, [made, third, second, first.clone()]);
+    assert_eq!(ui.view().selected.as_ref(), Some(&first), "and it doesn't take the window over");
 }

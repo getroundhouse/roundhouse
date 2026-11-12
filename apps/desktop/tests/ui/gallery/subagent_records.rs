@@ -1,12 +1,14 @@
 //! Each subagent's record, made from its chat's events as the hub keeps it as it records them, so a screen's records
-//! and events always agree.
+//! and events always agree. Its model is the one its newest reply came from.
 
 #![cfg(test)]
 
 use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, CallResult, RecentCall, RecentWork, Rev, Said, Subagent, SubagentStatus, ToolUseId};
+use protocol::model::{
+    Call, CallResult, ModelName, RecentCall, RecentWork, Rev, Said, Subagent, SubagentStatus, ToolUseId,
+};
 
 /// The records of the subagents in `log`, by the call that started each.
 pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
@@ -22,6 +24,7 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     description: description.clone(),
                     prompt: prompt.clone(),
                     in_background: *in_background,
+                    model: None,
                     status: SubagentStatus::Working,
                     started_at_ms: event.ts_ms,
                     ended_at_ms: None,
@@ -44,6 +47,11 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
             EventBody::Assistant { blocks, parent_tool_use_id: Some(parent), .. }
             | EventBody::AgentUser { blocks, parent_tool_use_id: Some(parent), .. } => {
                 let Some(subagent) = held.get_mut(parent) else { continue };
+                if let EventBody::Assistant { model: Some(model), .. } = &event.body
+                    && let Ok(model) = ModelName::try_from(model.clone())
+                {
+                    subagent.model = Some(model);
+                }
                 for block in blocks {
                     note(subagent, block);
                 }

@@ -4,16 +4,15 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Pixels, Render, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _,
-    Window, div, px,
+    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
+    Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::Hand as _;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, corner, hub_source};
-use crate::sides::{self, Side};
-use crate::workspace_pane::{HEADER_HEIGHT, WorkspacePane};
+use super::{AppView, Connection, corner, hub_source, title_bar, window_buttons};
+use crate::sides::{self, AtTheTop, Side};
+use crate::workspace_pane::WorkspacePane;
 use crate::{CloseSettings, OpenSettings};
 
 impl Render for AppView {
@@ -38,11 +37,13 @@ impl Render for AppView {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
             let (hub, width) = (self.settings_of_hub(), Side::Left.width(cx));
-            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, width, back, hub));
+            return self
+                .root(div(), cx)
+                .child(crate::settings::page(&self.settings_focus, width, back, hub))
+                .children(window_buttons::of_windows(window, cx));
         }
-        let inset = sides::corner_inset(cx);
         let danger = cx.theme().danger;
-        let main = self.beside_the_sidebar(home, sides::header_inset(cx), cx);
+        let main = self.beside_the_sidebar(home, cx);
         // Built only while some of it shows.
         let sidebar = Side::Left.shown(cx).map(|shown| {
             let sidebar = crate::sidebar::render(self, arranged, cx).into_any_element();
@@ -56,20 +57,20 @@ impl Render for AppView {
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, inset, danger, cx)))
+                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
                     .child(div().flex_1().min_h_0().child(main)),
             )
-            .child(sides::corner(corner::sidebar_toggle(cx), window))
+            .child(corner::corner(cx))
+            .children(window_buttons::of_windows(window, cx))
     }
 }
 
 impl AppView {
     /// What shows beside the sidebar: the selected workspace, Home, with its `home` rows while it's drawn, or what
-    /// there is to say with neither. `inset` is how far what's in the strip along the top starts from its left end, to
-    /// clear the window's buttons while the sidebar is hidden.
-    fn beside_the_sidebar(&self, home: Option<crate::home::Rows>, inset: Pixels, cx: &mut Context<Self>) -> AnyElement {
+    /// there is to say with neither.
+    fn beside_the_sidebar(&self, home: Option<crate::home::Rows>, cx: &mut Context<Self>) -> AnyElement {
         if let Some(rows) = home {
-            return crate::home::page(self, rows, inset, cx).into_any_element();
+            return crate::home::page(self, rows, cx).into_any_element();
         }
         let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
         match &self.connection {
@@ -120,7 +121,8 @@ impl AppView {
         let (background, foreground) = (theme.background, theme.foreground);
         // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
         // sizes and its spacing come out as the web's do.
-        moves_window(root.id("app"), cx)
+        let root = root
+            .id("app")
             .track_focus(&self.focus)
             .size_full()
             .bg(background)
@@ -128,45 +130,19 @@ impl AppView {
             .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
+            .child(self.unreleased.hears());
+        title_bar::stands_in(root, cx)
     }
 }
 
-/// The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
-/// dragging it moves the window, and double-clicking it does what the system's setting says. A press there that
-/// a control took, such as a button in the header, is the control's. Every one of the kit's buttons, and anything
-/// that takes focus, marks its press as taken before it gets here, since this is the outermost element. A press on
-/// a sidebar's edge never gets here at all, because the kit's resize handle hides what's under it from the pointer.
-fn moves_window(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
-    root.on_mouse_down(
-        MouseButton::Left,
-        cx.listener(|t, event: &MouseDownEvent, window, _| {
-            t.moving_window = event.position.y < HEADER_HEIGHT && !window.default_prevented();
-            if !t.moving_window {
-                return;
-            }
-            // Pressing a title bar leaves focus where it was.
-            window.prevent_default();
-            if event.click_count == 2 {
-                t.moving_window = false;
-                window.titlebar_double_click();
-            }
-        }),
-    )
-    .on_mouse_move(cx.listener(|t, event: &MouseMoveEvent, window, _| {
-        if std::mem::take(&mut t.moving_window) && event.pressed_button == Some(MouseButton::Left) {
-            window.start_window_move();
-        }
-    }))
-    .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.moving_window = false))
-}
-
-/// `inset` is how far its words start from its left end, to clear the window's buttons while the sidebar is hidden.
-fn error_bar(error: String, inset: Pixels, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+/// Above the header, in the strip along the window's top, and clear of the window's buttons at both ends.
+fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+    let clear = sides::clearance(AtTheTop::AboveTheHeader, cx);
     h_flex()
         .id("error-bar")
         .flex_none()
-        .pl(px(12.) + inset)
-        .pr_3()
+        .pl(px(12.) + clear.start)
+        .pr(px(12.) + clear.end)
         .py_2()
         .gap_2()
         .bg(danger.opacity(0.15))

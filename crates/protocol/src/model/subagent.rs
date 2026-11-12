@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{Rev, SessionId, ToolUseId};
+use super::{ModelName, Rev, SessionId, ToolUseId};
 use crate::attachment::Attachment;
 use crate::event::SubagentOutcome;
 
@@ -25,6 +25,10 @@ pub struct Subagent {
     /// It works on while the agent carries on, rather than its call waiting for it.
     #[serde(default)]
     pub in_background: bool,
+    /// The model its replies come from, as its newest reply named it. `None` until it's replied, and from a hub from
+    /// before this was kept.
+    #[serde(default)]
+    pub model: Option<ModelName>,
     pub status: SubagentStatus,
     pub started_at_ms: i64,
     #[serde(default)]

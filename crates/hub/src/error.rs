@@ -1,6 +1,6 @@
 use std::io;
 
-use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::client::{ApiError, ErrorCode};
 use providers::ProviderError;
 use tracing::error;
 
@@ -33,7 +33,11 @@ pub(crate) fn internal(message: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Internal, message)
 }
 
-/// Not a `From` impl, because `providers` doesn't depend on `protocol`, and neither type is the hub's.
+/// What a client gets for a provider's failure, whatever code the provider gave: `Unavailable` for what it can't do
+/// or has no room for, and `Worker` for the rest. A client would read the provider protocol's `NotFound` as a file that
+/// has gone, and its `Unsupported` as a hub older than the client.
 pub(crate) fn provider_failed(error: &ProviderError) -> ApiError {
-    ApiError::new(ErrorCode::Worker, error_chain(error))
+    let ApiError { code, message } = error.to_api_error();
+    let unavailable = matches!(code, ErrorCode::Unsupported | ErrorCode::Unavailable);
+    ApiError::new(if unavailable { ErrorCode::Unavailable } else { ErrorCode::Worker }, message)
 }

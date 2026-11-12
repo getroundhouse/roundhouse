@@ -32,6 +32,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
             claude_bin: Some(cli.clone()),
             scratch_dir: dir.path().to_path_buf(),
             deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+            refused: None,
         };
         let running = tokio::spawn(serve(worker_read, worker_write, config));
         tokio::spawn(async move {
@@ -84,6 +85,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
         claude_bin: None,
         scratch_dir: dir.path().to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+        refused: None,
     };
     tokio::spawn(serve(worker_read, worker_write, config));
     let path = dir.path().to_string_lossy().into_owned();

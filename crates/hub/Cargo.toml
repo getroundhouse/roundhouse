@@ -5,8 +5,14 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# What tests of the hub from outside it need, such as the names it picks from.
+testing = []
+
 [dependencies]
+async-trait.workspace = true
 parking_lot.workspace = true
+process.workspace = true
 protocol.workspace = true
 providers.workspace = true
 thiserror.workspace = true
@@ -21,6 +27,8 @@ uuid.workspace = true
 process = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 tempfile.workspace = true
+# For tests that pause time, so a timeout passes without being waited for.
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true
 
 [lints]

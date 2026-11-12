@@ -6,13 +6,13 @@ use std::rc::Rc;
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::find::Needle;
-use protocol::model::{Place, RecentWork, Rev, Seq, Subagent, SubagentStatus};
+use protocol::model::{Place, Rev, Seq, Subagent, SubagentStatus};
 use serde_json::json;
 
 use super::count::{At, Counts};
 use super::stretch::{Records, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
-use crate::fixtures::{calls_to, event, log, within};
+use crate::fixtures::{calls_to, event, log, record, within};
 use crate::transcript::Model;
 
 fn needle(query: &str) -> Needle {
@@ -60,20 +60,11 @@ fn own(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
 /// The record of the subagent the call `call` started, done, with `report`.
 fn reported(call: &str, report: &str) -> Records {
     let record = Subagent {
-        session_id: "s".into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: true,
-        status: SubagentStatus::Finished,
-        started_at_ms: 0,
         ended_at_ms: Some(1),
         calls: 1,
-        latest_call: None,
-        recent: RecentWork::default(),
         report: Some(report.into()),
         rev: Rev::default(),
+        ..record(call, SubagentStatus::Finished)
     };
     HashMap::from([(call.into(), record)])
 }

@@ -104,8 +104,8 @@ impl ArchiveFilter {
         }
     }
 
-    /// A workspace still being made isn't listed, as the sidebar leaves it out, since there's nothing to show of it
-    /// yet. Neither is one in a state this app doesn't know.
+    /// A workspace still being made isn't listed, since there's nothing to open yet, and the sidebar says it's on its
+    /// way. Neither is one in a state this app doesn't know.
     fn lists(self, status: WorkspaceStatus) -> bool {
         use ArchiveFilter::{Hide, Only, Show};
         use WorkspaceStatus::{Archived, Creating, Ready, Unknown};
@@ -174,7 +174,7 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
     Rows { listed: listed.into(), offsets }
 }
 
-pub(crate) fn page(app: &AppView, rows: Rows, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
+pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl IntoElement {
     let Rows { listed, offsets } = rows;
     let empty = listed.is_empty();
     let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); listed.len()]);
@@ -193,7 +193,7 @@ pub(crate) fn page(app: &AppView, rows: Rows, inset: Pixels, cx: &mut Context<Ap
     v_flex()
         .region(Region::Home)
         .size_full()
-        .child(bar::bar(app, inset, cx))
+        .child(bar::bar(app, cx))
         .when(empty, |d| d.child(nothing_listed(cx)))
         .when(!empty, |d| d.child(list))
 }

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 mod account;
 mod cache;
+mod compaction_line;
 mod context;
 mod draft;
 mod effort;
@@ -22,6 +23,7 @@ mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
+pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use draft::{Draft, NewDraft};
 pub use effort::Effort;
@@ -87,6 +89,11 @@ ids!(
     ApprovalId,
     /// Where a workspace's worker runs, in its provider's terms.
     InstanceId,
+    /// A hub's own ID, made once and kept, so a provider adapter serving several hubs on one host works only with
+    /// the instances it made for the one that's asking.
+    HubId,
+    /// The Rust target a worker binary is built for, such as `x86_64-unknown-linux-gnu`.
+    WorkerTarget,
     /// The agent's own ID for a conversation, which is what resumes it.
     AgentSessionId,
     /// Chosen by a client, so that retrying a prompt can't record it twice.
@@ -231,7 +238,8 @@ pub struct Workspace {
     pub id: WorkspaceId,
     pub repo_id: RepoId,
     /// Its worktree's directory, the branch it started on, and `CONDUCTOR_WORKSPACE_NAME`. Unique in its
-    /// repository, and never changes, because renaming a worktree under a running agent would break it.
+    /// repository, and never changes once it's ready, because renaming a worktree under a running agent would break
+    /// it. While it's being made it can take another, if git already has a branch or directory by the one it has.
     pub name: String,
     pub branch: String,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.

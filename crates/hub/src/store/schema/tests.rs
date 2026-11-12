@@ -6,6 +6,7 @@ use super::*;
 use crate::store::backup::files_in;
 use crate::store::older::store_from_before;
 use crate::store::tests::store_with_session;
+use crate::store::{InstanceStage, RecordedInstance};
 
 /// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
 /// this returns open, and what it wrote stays in the WAL, as it does when a hub is killed.
@@ -209,4 +210,27 @@ fn what_the_person_did_in_a_workspace_before_the_migration_is_when_they_were_las
     assert_eq!((worked_in.user_active_at_ms, never.user_active_at_ms), (Some(1800), Some(300)));
     let chat = store.get_session(&"t".into()).unwrap().session;
     assert!(worked_in.rev > chat.rev && never.rev > chat.rev, "{worked_in:?}, {never:?}, {chat:?}");
+}
+
+/// Each workspace from before gets its instance recorded, as made, or as being made if the workspace is, so the next
+/// start destroys the instance of one left half-made, as it did before.
+#[test]
+fn each_workspaces_instance_from_before_instances_were_recorded_is_recorded() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = "
+        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
+            VALUES ('x', 'r', 'birch', 'birch', 'creating', 'incus', 'x-vm', 300);
+    ";
+
+    let store = store_from_before(dir.path(), BEFORE_INSTANCES, rows);
+
+    let recorded = |id: &str, provider: &str, stage, created_at_ms| RecordedInstance {
+        id: id.into(),
+        provider: provider.into(),
+        stage,
+        created_at_ms,
+    };
+    let expected =
+        [recorded("w", "local", InstanceStage::Ready, 0), recorded("x-vm", "incus", InstanceStage::Creating, 300)];
+    assert_eq!(store.recorded_instances().unwrap(), expected);
 }

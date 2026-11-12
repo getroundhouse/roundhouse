@@ -15,6 +15,12 @@ pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
+
+/// What a worker locks in its instance's state directory while it serves the instance, so the instance has one
+/// worker at a time.
+pub const WORKER_LOCK_FILE: &str = "worker.lock";
+/// Where a worker records itself in its instance's state directory, so its provider can tell whether one runs there.
+pub const WORKER_RECORD_FILE: &str = "worker.pid";
 /// The daemon's file, which on Windows has the extension a program there needs.
 pub fn daemon_file() -> String {
     format!("{DAEMON_NAME}{}", std::env::consts::EXE_SUFFIX)
@@ -44,6 +50,10 @@ pub struct Paths {
     pub attachments_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
+    /// What each workspace's worker writes to stderr, a file per instance, whichever provider runs it.
+    pub worker_logs_dir: PathBuf,
+    /// The providers this hub runs workspaces on, besides the local one. *Not built:* naming them in the hub's settings.
+    pub providers: PathBuf,
     /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
     pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
@@ -99,6 +109,8 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         attachments_dir: data_dir.join("attachments"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
+        worker_logs_dir: data_dir.join("worker-logs"),
+        providers: data_dir.join("providers.json"),
         daemons_dir: data_dir.join("daemons"),
         workspaces_root,
         data_dir,

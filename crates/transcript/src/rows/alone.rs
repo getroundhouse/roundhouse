@@ -18,9 +18,10 @@ use crate::calls::count;
 use crate::find::FindLook;
 use crate::item_key::ItemKey;
 use crate::long_texts::LongTexts;
+use crate::model_names::model_name;
 use crate::transcript::Model;
 
-/// Where a subagent stands, for the top of its tab, such as `Finished · 3 calls · 12s`.
+/// Where a subagent stands, for the top of its tab, such as `Finished · Haiku 5.5 · 3 calls · 12s`.
 pub fn subagent_standing(subagent: &Subagent) -> String {
     // One this build doesn't know isn't given a word, as the call's line gives it none.
     let status = match subagent.status {
@@ -34,7 +35,8 @@ pub fn subagent_standing(subagent: &Subagent) -> String {
     let took = subagent.ended_at_ms.map(|ended| {
         turn_times::took(Duration::from_millis(u64::try_from(ended - subagent.started_at_ms).unwrap_or(0)))
     });
-    [status.map(str::to_string), Some(calls), took].into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    let model = subagent.model.as_ref().map(model_name);
+    [status.map(str::to_string), model, Some(calls), took].into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
 /// The subagent the tab shows, once its record has come.
@@ -121,28 +123,22 @@ mod tests {
     use std::rc::Rc;
 
     use protocol::event::{ContentBlock, EventBody, SessionEvent};
-    use protocol::model::{RecentWork, Rev, Seq, Subagent, SubagentStatus};
+    use protocol::model::{ModelName, Seq, Subagent, SubagentStatus};
 
     use super::{rows_repeating_report, subagent_standing};
-    use crate::fixtures::{calls, event, log, within};
+    use crate::fixtures::{calls, event, log, record, within};
     use crate::transcript::Model;
 
     fn subagent(status: SubagentStatus, report: Option<&str>) -> Subagent {
         Subagent {
-            session_id: "s".into(),
-            call: "agent".into(),
             kind: Some("Explore".into()),
             description: Some("Find checks".into()),
             prompt: Some("Look".into()),
-            in_background: true,
-            status,
             started_at_ms: 1_000,
             ended_at_ms: (status != SubagentStatus::Working).then_some(13_000),
             calls: 3,
-            latest_call: None,
-            recent: RecentWork::default(),
             report: report.map(str::to_string),
-            rev: Rev::new(1),
+            ..record("agent", status)
         }
     }
 
@@ -196,11 +192,13 @@ mod tests {
     }
 
     #[test]
-    fn where_a_subagent_stands_says_how_it_ended_its_calls_and_how_long_it_took() {
+    fn where_a_subagent_stands_says_how_it_ended_its_model_its_calls_and_how_long_it_took() {
         let finished = subagent(SubagentStatus::Finished, Some("Done."));
         let working = Subagent { calls: 1, ..subagent(SubagentStatus::Working, None) };
+        let on_haiku = Subagent { model: Some(ModelName::named("claude-haiku-5-5")), ..finished.clone() };
 
-        assert_eq!(subagent_standing(&finished), "Finished · 3 calls · 12s");
+        assert_eq!(subagent_standing(&on_haiku), "Finished · Haiku 5.5 · 3 calls · 12s");
+        assert_eq!(subagent_standing(&finished), "Finished · 3 calls · 12s", "before it's replied");
         assert_eq!(subagent_standing(&working), "Working · 1 call", "how long it took is for once it's done");
         assert_eq!(subagent_standing(&subagent(SubagentStatus::Stopped, None)), "Stopped · 3 calls · 12s");
         assert_eq!(subagent_standing(&subagent(SubagentStatus::Unknown, None)), "3 calls · 12s", "one it doesn't know");

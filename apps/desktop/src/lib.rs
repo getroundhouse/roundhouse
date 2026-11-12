@@ -21,6 +21,7 @@ pub mod file_view;
 mod haptics;
 mod home;
 pub mod image_diff;
+pub mod lost_release;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
@@ -142,9 +143,9 @@ pub fn open_main_window(
     let options = WindowOptions {
         window_bounds: Some(window_bounds),
         display_id,
-        // No title bar of its own: the sidebar and the workspace header run to the top edge, and the window's
-        // buttons sit in the sidebar's empty corner, level with the header. The title still names the
-        // window in the Window menu and Mission Control.
+        // No title bar of its own: the sidebar and the workspace header run to the top edge, and on a Mac the
+        // window's buttons sit in the sidebar's empty corner, level with the header. On Windows the app draws
+        // them, in `app::window_buttons`. The title still names the window in the Window menu and Mission Control.
         titlebar: Some(TitlebarOptions {
             title: Some(checkout.as_ref().map_or_else(|| "Roundhouse".to_string(), Checkout::window_title).into()),
             appears_transparent: true,
@@ -167,9 +168,8 @@ pub fn open_main_window(
     })
 }
 
-/// `appimage` is where the app runs from, if it's an `AppImage`, which `appimage::leave_behind` says.
-pub fn run(checkout: Option<Checkout>, appimage: Option<appimage::AppImage>) {
-    gpui_kit::application().with_assets(Assets).run(move |cx| {
+pub fn run(checkout: Option<Checkout>) {
+    gpui_kit::application().with_assets(Assets).run(|cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
@@ -179,7 +179,7 @@ pub fn run(checkout: Option<Checkout>, appimage: Option<appimage::AppImage>) {
             open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
         });
         match opened {
-            Ok(data_dir) => updates::start(&data_dir, appimage.as_ref(), cx),
+            Ok(data_dir) => updates::start(&data_dir, cx),
             Err(e) => {
                 eprintln!("couldn't open a window: {e:#}");
                 // Not by quitting, which exits with 0, as an app that someone quit does. Nothing is open to wait for.

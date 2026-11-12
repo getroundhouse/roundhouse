@@ -7,10 +7,10 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
     Styled as _, TestSupportExt as _, WeakEntity, div, pattern_slash, px,
 };
-use look::Hand as _;
+use look::{Hand as _, pixels};
 
 use super::{ImageDiff, Outcome, Shown, changed_colour};
-use crate::file_image::{FileImage, Placed, edged, fitted, on_checkerboard, pixels};
+use crate::file_image::{FileImage, Placed, edged, fitted, on_checkerboard};
 use crate::file_view::placeholder;
 
 /// How far the outline around a place that changed stands off it on the screen, so it doesn't hide the change.

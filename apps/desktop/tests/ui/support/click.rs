@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
-use gpui_kit::{App, AppContext as _, ElementId, MouseButton, Window, point, px};
+use gpui_kit::{App, AppContext as _, ElementId, MouseButton, Pixels, Point, Window, point, px};
 
 use super::Ui;
 
@@ -17,7 +17,12 @@ pub(crate) fn click(window: &mut Window, id: impl Into<ElementId>, cx: &mut App)
     window.render_frame(cx);
     let target = window.find(id.clone());
     assert!(target.visible(), "{id:?} can't be seen, so it can't be clicked");
-    let at = target.bounds().center();
+    click_at(window, target.bounds().center(), cx);
+}
+
+/// Clicks at `at` as a hand does, as [`click`] says, for a place with nothing of its own to find it by, such as the
+/// backdrop around a dialog.
+pub(crate) fn click_at(window: &mut Window, at: Point<Pixels>, cx: &mut App) {
     window.pointer_move(at, None, cx);
     window.pointer_down(at, MouseButton::Left, cx);
     let at = at + point(px(1.), px(0.));
@@ -31,6 +36,13 @@ impl Ui<'_> {
         let id = id.into();
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| click(window, id, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Clicks at `at` as a hand does, with [`click_at`].
+    pub(crate) fn click_at(&mut self, at: Point<Pixels>) {
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| click_at(window, at, cx)).unwrap();
         self.frame();
     }
 }

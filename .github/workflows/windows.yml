@@ -59,7 +59,8 @@ jobs:
       # Not --all-targets: most tests and the programs that stand in for others still only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
       # The crates whose tests build here, which hold what Windows does differently below the hub: ending a process
-      # and what it started, a process's start time, and where a hub's files and pipe are.
+      # and what it started, a process's start time, what a process passes on to what it starts, and where a hub's
+      # files and pipe are.
       - run: cargo test --locked -p process -p protocol
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, because a hub left running by a step that failed could hold the step open.
