@@ -6,7 +6,7 @@
 
 use agents::claude::{Normalizer, Parsed};
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, FileChange, TurnOutcome};
-use protocol::model::{ApprovalId, PermissionMode};
+use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
@@ -284,4 +284,44 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
     }
     assert!(compared.0 >= 2 && compared.1 >= 2 && compared.2 >= 3, "text, thinking and tool blocks: {compared:?}");
     assert!(tail.is_empty(), "nothing should stay open at the end: {tail:?}");
+}
+
+/// What each of the agent's own requests said of the cache, in order.
+fn requests() -> Vec<CacheRequest> {
+    parsed()
+        .into_iter()
+        .filter_map(|p| match p {
+            Parsed::Request(request) => Some(request),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn each_of_the_agents_requests_says_how_it_met_the_cache_and_how_long_before_the_line_it_was_sent() {
+    let requests = requests();
+
+    assert!(requests.len() > 2, "{requests:?}");
+    for request in &requests {
+        assert_eq!(request.ttl, Some(CacheTtl::OneHour), "the agent's own write at 1h: {request:?}");
+        assert!(request.sent_ms_ago > 0 && request.read_tokens > 0, "{request:?}");
+        assert!(request.model.as_ref().is_some_and(|model| model.as_str().starts_with("claude-")), "{request:?}");
+        assert!(!request.first_for_prompt, "which only the process knows: {request:?}");
+    }
+}
+
+/// What the hub tells a cache that had expired by, in `crates/hub/src/session/cache.rs`: a warm one is read as far as
+/// the request before to the same model left it, however much was written since, by requests to another model too.
+#[test]
+fn a_warm_cache_is_read_as_far_as_the_request_before_to_the_same_model_left_it() {
+    let requests = requests();
+    let mut followed = 0;
+    for (i, request) in requests.iter().enumerate() {
+        if let Some(before) = requests[..i].iter().rfind(|before| before.model == request.model) {
+            assert!(request.read_tokens >= before.read_tokens + before.written_tokens, "{before:?} then {request:?}");
+            followed += 1;
+        }
+    }
+    let models: std::collections::HashSet<_> = requests.iter().map(|request| &request.model).collect();
+    assert!(models.len() > 1 && followed > models.len(), "two models, each asked more than once: {requests:?}");
 }

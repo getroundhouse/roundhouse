@@ -45,6 +45,7 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         user_active_at_ms: None,
         background_tasks: Vec::new(),
         context: None,
+        prompt_cache: None,
         queued: Vec::new(),
         queue_held: false,
         rev: Rev::new(rev),

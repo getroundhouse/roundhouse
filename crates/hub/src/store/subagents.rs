@@ -105,6 +105,7 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => Ok(Vec::new()),
     }
 }

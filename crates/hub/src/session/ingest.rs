@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{EventBody, ExitReason, SessionEvent};
+use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
 use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
 use protocol::tail::StreamDelta;
 use tokio::sync::mpsc;
@@ -18,6 +18,8 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Event { run, body, raw, attachments } => ingest_event(&session, run, body, raw, attachments).await,
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::Context { run, context } => session.note_context(run, context).await,
+            // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
+            Item::Cache { run, request } => session.note_cache(run, request, crate::store::now_ms()).await,
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
             Item::Limits { run, limits } => session.heard_limits(run, limits, crate::store::now_ms()),
             Item::WorkerLost(link) => session.agent_lost(link, ExitReason::WorkerLost).await,
@@ -74,6 +76,10 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
             mark_opened(session).await;
         }
         EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
+        // What the cache held is no longer the conversation, and the next request writes the summary.
+        EventBody::AgentCompacted { outcome: CompactionOutcome::Compacted { .. }, .. } if current => {
+            session.announce_cache(None).await;
+        }
         EventBody::AgentExited { .. } => {
             if current {
                 session.state.lock().agent = None;
@@ -101,6 +107,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => {}
     }
 }

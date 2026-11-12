@@ -254,6 +254,20 @@ pub enum EventBody {
         #[serde(default)]
         outcome: CompactionOutcome,
     },
+    /// The first request for a prompt found the API's cache of the conversation expired, and wrote it again. The hub
+    /// records it from what the agent's adapter says of each request, since only the hub knows when the request before
+    /// it was sent, whichever process sent it. A request to another model writes it again too, which isn't this.
+    CacheExpired {
+        /// How long it was since the request before it was sent.
+        #[serde(default)]
+        idle_ms: u64,
+        /// How much it read, which is what every chat shares, such as the tools.
+        #[serde(default)]
+        read_tokens: u64,
+        /// How much it wrote again.
+        #[serde(default)]
+        written_tokens: u64,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -285,6 +299,7 @@ impl EventBody {
             EventBody::CompactionAsked { .. } => "compaction_asked",
             EventBody::AgentCompacting { .. } => "agent_compacting",
             EventBody::AgentCompacted { .. } => "agent_compacted",
+            EventBody::CacheExpired { .. } => "cache_expired",
             EventBody::Unknown => "unknown",
         }
     }
@@ -316,6 +331,7 @@ impl EventBody {
             | EventBody::AgentMode { .. }
             | EventBody::AgentCompacting { .. }
             | EventBody::AgentCompacted { .. }
+            | EventBody::CacheExpired { .. }
             | EventBody::Unknown => None,
         }
     }

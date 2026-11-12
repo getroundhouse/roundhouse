@@ -305,6 +305,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => empty(),
     }
 }

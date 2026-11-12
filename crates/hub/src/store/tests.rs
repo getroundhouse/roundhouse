@@ -43,6 +43,7 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             user_active_at_ms: None,
             background_tasks: Vec::new(),
             context: None,
+            prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
             rev: Rev::default(),

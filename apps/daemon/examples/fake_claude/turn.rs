@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{advisor, background, read, subagent};
+use crate::{advisor, background, cache, read, subagent};
 
 mod prose;
 
@@ -78,7 +78,7 @@ impl Turn<'_> {
         eof: &mut bool,
     ) -> bool {
         let id = message_id();
-        self.stream_event(&id, json!({"type":"message_start","message":{"id":id,"role":"assistant"}}));
+        cache::message_start(self, &id);
         let name = block.name();
         self.stream_event(&id, json!({"type":"content_block_start","index":0,"content_block":{"type":name,(name):""}}));
         let mut text = String::new();
@@ -241,6 +241,10 @@ fn answer(turn: &Turn, command: &str) -> Option<String> {
     }
     if command == "effort" {
         return Some(format!("effort={}", crate::current_effort()));
+    }
+    if command == "cold" {
+        cache::expire();
+        return Some("the cache had expired".to_string());
     }
     if command == "keep-effort" {
         *crate::KEEPS_EFFORT.lock() = true;

@@ -210,6 +210,7 @@ impl Tail {
             | EventBody::AgentMode { .. }
             | EventBody::SubagentStarted { in_background: false, .. }
             | EventBody::AgentOther { .. }
+            | EventBody::CacheExpired { .. }
             | EventBody::Unknown => {}
         }
     }
