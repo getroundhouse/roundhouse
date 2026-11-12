@@ -2,7 +2,7 @@
 //! worker's socket, and starts the worker first if none is serving it. So the hub's end is a command's stdin and
 //! stdout, as for any worker, and when the hub goes, only the command goes with it.
 
-use std::io::{self, Write as _};
+use std::io::{self, Read, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -28,12 +28,29 @@ pub fn attach(socket: &Path, start: impl FnOnce() -> io::Result<()>) -> io::Resu
     let mut to_worker = stream.try_clone()?;
     // On a thread of its own, since reading stdin blocks. It's left behind once the worker has closed the connection.
     std::thread::spawn(move || {
-        let _ = io::copy(&mut io::stdin().lock(), &mut to_worker);
+        let _ = relay(&mut io::stdin().lock(), &mut to_worker);
         let _ = to_worker.shutdown(Shutdown::Write);
     });
-    let mut stdout = io::stdout().lock();
-    io::copy(&mut &stream, &mut stdout)?;
-    stdout.flush()
+    relay(&mut &stream, &mut io::stdout().lock())
+}
+
+/// Copies `from` to `to` until `from` ends, passing on each read as it comes. Not `io::copy`, which on Linux splices
+/// when either end is a pipe, as the hub's ends are, and a splice from a socket into a pipe holds the pipe's lock while
+/// it waits for more from the socket. The hub couldn't read the worker's reply already in the pipe until the worker
+/// sent something else, and the worker sends nothing until the hub's next call.
+fn relay(from: &mut impl Read, to: &mut impl Write) -> io::Result<()> {
+    let mut buffer = vec![0; 64 * 1024];
+    loop {
+        match from.read(&mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(read) => {
+                to.write_all(&buffer[..read])?;
+                to.flush()?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// What connecting to a socket that nobody serves fails with: there's none, or one that a worker left behind.
