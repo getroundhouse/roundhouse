@@ -47,7 +47,7 @@ async fn an_agent_is_refused_the_part_of_githubs_limit_kept_for_everything_else(
         Some(Ok(if matches!(request, WorkerRequest::GithubRateLimit { .. }) {
             WorkerResponse::GithubRateLimit(limit)
         } else {
-            WorkerResponse::PullRequest { pull_request: Some(open()) }
+            WorkerResponse::PullRequest { pull_request: Some(open()), branch: None }
         }))
     });
     hub.workers.lock().insert("w".into(), link.clone());

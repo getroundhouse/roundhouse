@@ -6,10 +6,11 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{CommitId, GitDiff, GitFile, GitStatus};
+use protocol::model::{Branches, CommitId, GitDiff, GitFile, GitStatus};
 use tokio::process::Command;
 
 pub(crate) mod blob;
+pub(crate) mod branches;
 pub(crate) mod files;
 mod pull_request;
 mod removal;
@@ -30,6 +31,9 @@ pub struct Prepared {
     pub branch: String,
     pub base_ref: String,
     pub warnings: Vec<String>,
+    /// As the worktree was made, so its workspace is ready with them. `None` when they couldn't be read, which the
+    /// watch then reads again.
+    pub branches: Option<Branches>,
 }
 
 fn git_error(message: impl Into<String>) -> ApiError {
@@ -172,7 +176,8 @@ pub async fn prepare_workspace(
     // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or
     // `git pull` from the workspace would act on main.
     git_ok(&repo, &["worktree", "add", "--no-track", "-b", branch, &path_str, &base]).await?;
-    Ok(Prepared { path: path_str, branch: branch.to_string(), base_ref: base, warnings })
+    let branches = branches::read_now(&path).await.ok();
+    Ok(Prepared { path: path_str, branch: branch.to_string(), base_ref: base, warnings, branches })
 }
 
 pub async fn restore_workspace(repo_path: &str, path: &str, branch: &str) -> Result<(), ApiError> {

@@ -107,7 +107,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
     let dir = tempfile::tempdir().unwrap();
     let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest };
     let no_limit = WorkerOutcome::Error(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
-    let none = WorkerResponse::PullRequest { pull_request: None };
+    let none = WorkerResponse::PullRequest { pull_request: None, branch: None };
     frames_in(
         dir.path(),
         &[

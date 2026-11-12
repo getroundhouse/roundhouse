@@ -166,7 +166,7 @@ impl Hub {
         let read_at = Instant::now();
         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
         let read = match link.call(WorkerRequest::PullRequest { path }).await {
-            Ok(WorkerResponse::PullRequest { pull_request }) => Ok(PullRequestFound { pull_request }),
+            Ok(WorkerResponse::PullRequest { pull_request, .. }) => Ok(PullRequestFound { pull_request }),
             Ok(reply) => Err(unexpected(&reply)),
             Err(e) => Err(e),
         };

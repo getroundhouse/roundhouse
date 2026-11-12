@@ -195,7 +195,7 @@ impl Hub {
                 asked => break asked?,
             }
         };
-        let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings } = reply else {
+        let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings, .. } = reply else {
             return Err(unexpected(&reply));
         };
         for warning in &warnings {
