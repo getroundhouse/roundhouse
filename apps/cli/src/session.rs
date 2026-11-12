@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Agents, Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -24,7 +24,7 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
         SessionCmd::List { workspace } => {
             let workspace = find_workspace(client, &workspace)?;
             for session in client.session_list(&workspace.id)? {
-                let closed = if session.closed_at_ms.is_some() { "  closed" } else { "" };
+                let closed = if session.is_open() { "" } else { "  closed" };
                 let unread = if session.unread() { "  unread" } else { "" };
                 println!(
                     "{}  {:?}{closed}{unread}  {} events  {}  {}",
@@ -103,7 +103,7 @@ pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Sessi
     for workspace in &workspaces {
         let sessions = client.session_list(&workspace.id)?;
         if workspace.name == query {
-            if let Some(newest) = sessions.iter().rfind(|s| s.closed_at_ms.is_none()) {
+            if let Some(newest) = sessions.iter().rfind(|s| s.is_open()) {
                 return Ok(newest.clone());
             }
             bail!("workspace {query} has no open sessions. Start one with `roundhouse session new {query}`");
@@ -128,10 +128,11 @@ pub(crate) fn follow(
 ) -> anyhow::Result<()> {
     let mut printer = render::Printer::default();
     let mut last_seq = from.saturating_sub(1);
-    // Nothing is left to wait for if the agent has stopped and everything recorded has been seen.
+    // Nothing is left to wait for if the agent is done and everything recorded has been seen. A status from a newer
+    // hub doesn't say it's done, so following goes on.
     let finished = |seen: Seq| -> anyhow::Result<bool> {
         let session = client.session_get(session_id)?;
-        Ok(session.last_seq <= seen && matches!(session.status, SessionStatus::Idle | SessionStatus::Interrupted))
+        Ok(session.last_seq <= seen && session.status.is_done())
     };
     loop {
         let subscription = client.session_subscribe(session_id, last_seq + 1)?;

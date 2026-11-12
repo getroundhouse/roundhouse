@@ -25,6 +25,10 @@ impl AgentKind {
     }
 }
 
+/// Where a session's agent has got to. Its methods group the statuses by what they say of the agent, and each grouping
+/// that more than one place needs is one of them. `Unknown`, a status from a newer peer, is in none: each grouping
+/// claims something of what the agent is doing, and this build can't tell what a status it doesn't know claims, so
+/// whatever reads one shows nothing in particular.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -76,6 +80,45 @@ impl SessionStatus {
     /// request goes on being read.
     pub fn counts_as_running(self, background: &[AgentTask]) -> bool {
         self.is_active() && !self.only_waits(background)
+    }
+
+    /// Whether the agent is working on a turn, rather than waiting on someone to answer or approve, or between turns.
+    /// The chat ends with the working line only then, and only then do the agent's requests keep the cache warm.
+    pub fn is_working(self) -> bool {
+        match self {
+            SessionStatus::Running => true,
+            SessionStatus::Idle
+            | SessionStatus::WaitingApproval
+            | SessionStatus::Interrupted
+            | SessionStatus::Background
+            | SessionStatus::Unknown => false,
+        }
+    }
+
+    /// Whether the agent has ended its turn and is still there for the next one: idle, or with work going in the
+    /// background. A turn ends by coming to one of these, and a prompt the agent takes from one starts the next. An
+    /// agent that went away mid-turn isn't between turns, since its turn never ended.
+    pub fn between_turns(self) -> bool {
+        match self {
+            SessionStatus::Idle | SessionStatus::Background => true,
+            SessionStatus::Running
+            | SessionStatus::WaitingApproval
+            | SessionStatus::Interrupted
+            | SessionStatus::Unknown => false,
+        }
+    }
+
+    /// Whether the agent has nothing left to do, so nothing happens until someone sends it something: it's idle, or
+    /// went away mid-turn. Work in the background isn't done, since the agent picks up again by itself when that
+    /// finishes, so a queued prompt waits for it.
+    pub fn is_done(self) -> bool {
+        match self {
+            SessionStatus::Idle | SessionStatus::Interrupted => true,
+            SessionStatus::Running
+            | SessionStatus::WaitingApproval
+            | SessionStatus::Background
+            | SessionStatus::Unknown => false,
+        }
     }
 }
 
@@ -176,25 +219,31 @@ impl Session {
         self.reply_seq > self.read_seq
     }
 
+    /// Whether the chat is open, in its workspace's tabs, rather than closed, which stopped its agent. Nothing can be
+    /// sent to a closed one until it's reopened.
+    pub fn is_open(&self) -> bool {
+        self.closed_at_ms.is_none()
+    }
+
     /// What the cache holds of the conversation while it can expire: the agent isn't working, which keeps it warm,
-    /// though it can be waiting on the person. A status this build doesn't know might be working, so it says nothing.
-    /// The newest turn's card says how long it has left from this.
+    /// though it can be waiting on the person. A status this build doesn't know might be working, and claims nothing,
+    /// as [`SessionStatus`] says, so this says nothing. The newest turn's card says how long it has left from this.
     pub fn idle_cache(&self) -> Option<&PromptCache> {
-        let working = match self.status {
-            SessionStatus::Running | SessionStatus::Unknown => true,
+        let can_expire = match self.status {
             SessionStatus::Idle
             | SessionStatus::WaitingApproval
             | SessionStatus::Interrupted
-            | SessionStatus::Background => false,
+            | SessionStatus::Background => true,
+            SessionStatus::Running | SessionStatus::Unknown => false,
         };
-        self.prompt_cache.as_ref().filter(|_| !working)
+        self.prompt_cache.as_ref().filter(|_| can_expire)
     }
 
     /// The same, when it's worth telling the person anywhere else: the chat is open, and its context is big enough
     /// that writing it again costs something. [`PromptCache::state`] says how warm it is at a moment.
     pub fn cache_worth_telling(&self) -> Option<&PromptCache> {
         let big = self.context.as_ref().is_some_and(|context| context.used_tokens >= CACHE_WORTH_TELLING_TOKENS);
-        self.idle_cache().filter(|_| big && self.closed_at_ms.is_none())
+        self.idle_cache().filter(|_| big && self.is_open())
     }
 
     /// When the person last worked in this chat, by the hub's clock: when they made it, or last sent its agent
@@ -275,6 +324,23 @@ mod tests {
         assert!(session("running", 313_500).cache_worth_telling().is_none(), "each request keeps it warm");
         let closed = Session { closed_at_ms: Some(1), ..session("idle", 313_500) };
         assert!(closed.cache_worth_telling().is_none(), "nobody will send a closed chat anything");
+    }
+
+    /// Each grouping, for every status. One from a newer peer is in none of them.
+    #[test]
+    fn each_status_is_in_the_groups_that_say_what_its_agent_is_doing() {
+        use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
+        let groups = |status: SessionStatus| {
+            [status.in_turn(), status.is_active(), status.is_working(), status.between_turns(), status.is_done()]
+        };
+
+        // In a turn, active, working, between turns, done.
+        assert_eq!(groups(Idle), [false, false, false, true, true]);
+        assert_eq!(groups(Running), [true, true, true, false, false]);
+        assert_eq!(groups(WaitingApproval), [true, true, false, false, false]);
+        assert_eq!(groups(Interrupted), [false, false, false, false, true]);
+        assert_eq!(groups(Background), [false, true, false, true, false]);
+        assert_eq!(groups(Unknown), [false; 5]);
     }
 
     #[test]

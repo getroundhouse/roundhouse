@@ -15,7 +15,7 @@ pub(crate) fn workspace(chats: &[Session]) -> Signal {
         Signal::Background => 1,
         Signal::Idle => 0,
     };
-    let open = chats.iter().filter(|chat| chat.closed_at_ms.is_none());
+    let open = chats.iter().filter(|chat| chat.is_open());
     open.map(chat).max_by_key(urgency).unwrap_or(Signal::Idle)
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn chat(session: &Session) -> Signal {
 /// Whether an open chat is waiting on the person, for an answer or an approval. It needs a look as a reply nobody has
 /// read does, so a name stands out for either.
 pub(crate) fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -> bool {
-    chats.into_iter().any(|chat| chat.closed_at_ms.is_none() && chat.status == SessionStatus::WaitingApproval)
+    chats.into_iter().any(|chat| chat.is_open() && chat.status == SessionStatus::WaitingApproval)
 }
 
 #[cfg(test)]

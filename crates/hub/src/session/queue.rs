@@ -50,10 +50,7 @@ impl QueueWatch {
     /// Whether the agent can take a queued prompt as a turn of its own, in a session with this status. One that went
     /// away mid-turn can, once the person lets the queue go on, since sending a prompt resumes the conversation.
     pub(super) fn ready(&self, status: SessionStatus, closed: bool) -> bool {
-        matches!(status, SessionStatus::Idle | SessionStatus::Interrupted)
-            && self.untaken.is_empty()
-            && !self.held
-            && !closed
+        status.is_done() && self.untaken.is_empty() && !self.held && !closed
     }
 
     /// Whether the queue is held after an event for the session that takes its status `from` one `to` another, if

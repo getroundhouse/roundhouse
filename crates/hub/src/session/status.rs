@@ -54,14 +54,12 @@ pub(crate) struct Open {
 /// again, so taking a prompt says it. An `idle` that's `stale` comes from before a prompt the agent has yet to take,
 /// which it will, so it changes nothing.
 pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, stale: bool) -> SessionStatus {
-    let at_rest = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
+    let between = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
     match body {
         EventBody::AgentState { state: AgentRunState::Idle } if stale => current,
         // Either starts a turn, whose end says the agent is done.
         EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. } => SessionStatus::Running,
-        EventBody::PromptTaken { .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
-            SessionStatus::Running
-        }
+        EventBody::PromptTaken { .. } if current.between_turns() => SessionStatus::Running,
         EventBody::AgentState { state: AgentRunState::Running } | EventBody::AgentInit { .. } => {
             if open.approvals > 0 {
                 SessionStatus::WaitingApproval
@@ -72,11 +70,15 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         EventBody::AgentState { state: AgentRunState::RequiresAction } | EventBody::ApprovalRequested { .. } => {
             SessionStatus::WaitingApproval
         }
-        EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => at_rest,
+        EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => between,
         // Between turns. During one, its end decides. With no agent running, as when the hub takes a wait off the list
         // for one that's gone, nothing will pick up.
-        EventBody::AgentTasks { .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
-            if open.tasks > 0 || !open.agent { at_rest } else { current }
+        EventBody::AgentTasks { .. } if current.between_turns() => {
+            if open.tasks > 0 || !open.agent {
+                between
+            } else {
+                current
+            }
         }
         EventBody::ApprovalResolved { .. } if current == SessionStatus::WaitingApproval && open.approvals == 0 => {
             SessionStatus::Running
@@ -117,7 +119,8 @@ pub(crate) fn after_background(from: SessionStatus, to: SessionStatus, had: usiz
 
 /// Whether an agent in this status, with this much running in the background, is doing something that goes on without
 /// a person, so the machine it's on has to stay awake for it. Waiting on an answer or an approval isn't, since it could
-/// wait all night, but what the agent left running before it asked still is.
+/// wait all night, but what the agent left running before it asked still is. So it isn't whether the agent finishes by
+/// itself, which one waiting on someone never does, whatever it left running.
 pub(crate) fn works_unattended(status: SessionStatus, background_tasks: usize) -> bool {
     match status {
         SessionStatus::Running | SessionStatus::Background => true,
@@ -127,13 +130,13 @@ pub(crate) fn works_unattended(status: SessionStatus, background_tasks: usize) -
 }
 
 /// What going from `current` to `next` does to the session's turns. A turn starts when the agent starts working from
-/// anything else, including picking up again by itself after work in the background. It ends when the agent comes to
-/// rest, idle or with that work still going, which makes what it said its newest reply. A turn the agent was cut off
-/// from doesn't end, since the session shows it as interrupted instead.
+/// anything else, including picking up again by itself after work in the background. It ends when the agent is
+/// between turns, idle or with that work still going, which makes what it said its newest reply. A turn the agent was
+/// cut off from doesn't end, since the session shows it as interrupted instead.
 pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus) -> TurnEdge {
     match (current.in_turn(), next.in_turn()) {
         (false, true) => TurnEdge::Starts,
-        (true, false) if matches!(next, SessionStatus::Idle | SessionStatus::Background) => TurnEdge::Ends,
+        (true, false) if next.between_turns() => TurnEdge::Ends,
         _ => TurnEdge::Neither,
     }
 }

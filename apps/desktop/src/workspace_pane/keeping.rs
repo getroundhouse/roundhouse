@@ -19,7 +19,7 @@ use crate::attached::{Attachments, ReadBack, came_back, read_back};
 /// What the hub kept of each open chat's composer, for a pane to start with: its text, and the files to read back,
 /// which come once they're read.
 pub(super) fn kept_in(sessions: &[Session]) -> HashMap<SessionId, Chat> {
-    let kept = sessions.iter().filter(|s| s.closed_at_ms.is_none() && !s.draft.is_empty());
+    let kept = sessions.iter().filter(|s| s.is_open() && !s.draft.is_empty());
     let chat = |s: &Session| Chat {
         draft: Some(Composed { text: s.draft.text.clone(), files: Attachments::default() }),
         restoring: Some(s.draft.files.clone()).filter(|files| !files.is_empty()),
@@ -30,7 +30,7 @@ pub(super) fn kept_in(sessions: &[Session]) -> HashMap<SessionId, Chat> {
 
 /// Whether the hub keeps something typed or attached in one of these chats, for a workspace that has no pane yet.
 pub(crate) fn drafted(sessions: &[Session]) -> bool {
-    sessions.iter().any(|s| s.closed_at_ms.is_none() && says_or_carries(&s.draft.text, s.draft.files.len()))
+    sessions.iter().any(|s| s.is_open() && says_or_carries(&s.draft.text, s.draft.files.len()))
 }
 
 /// Whether something's typed in one place, which the hub keeps once it has it, and whether it hasn't had all of it yet.

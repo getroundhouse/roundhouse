@@ -292,7 +292,7 @@ impl WorkspacePane {
 
     /// The workspace's sessions have changed since `earlier`, which the pane showed before.
     pub(super) fn set_sessions(&mut self, earlier: &InWorkspace, cx: &mut Context<Self>) {
-        let was_open = earlier.sessions().iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone());
+        let was_open = earlier.sessions().iter().filter(|s| s.is_open()).map(|s| s.id.clone());
         let was_open: Vec<SessionId> = was_open.collect();
         for session in self.shown.sessions() {
             if let Some((transcript, _)) = self.chats.get(&session.id).and_then(|chat| chat.transcript.as_ref()) {

@@ -230,7 +230,7 @@ impl WorkspacePane {
     }
 
     fn open_sessions(&self) -> impl Iterator<Item = &Session> {
-        self.sessions().iter().filter(|s| s.closed_at_ms.is_none())
+        self.sessions().iter().filter(|s| s.is_open())
     }
 
     pub fn session(&self) -> Option<&Session> {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
-use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionStatus, SetupStatus};
+use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
@@ -93,7 +93,7 @@ impl LiveSession {
         let Ok(hub) = self.hub() else { return };
         let waiting_on_nothing = {
             let state = self.state.lock();
-            matches!(state.status, SessionStatus::Idle | SessionStatus::Background) && !state.queue.is_held()
+            state.status.between_turns() && !state.queue.is_held()
         };
         if self.agent_running() {
             return;

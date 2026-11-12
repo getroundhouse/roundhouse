@@ -39,7 +39,8 @@ pub enum BuildLine {
 pub struct Agents {
     /// Working, or with work left in the background, so they finish by themselves.
     pub working: usize,
-    /// Waiting for an answer or an approval, so they only finish after someone gives it.
+    /// Waiting for an answer or an approval, so they only finish after someone gives it, whatever they left running
+    /// meanwhile.
     pub waiting_on_you: usize,
 }
 
