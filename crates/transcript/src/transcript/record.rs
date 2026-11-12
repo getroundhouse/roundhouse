@@ -1,13 +1,14 @@
 //! Following the session's record: whether the agent is working on a turn and since when, and what it's running in
-//! the background, which the transcript's last row draws. Also its subagents' records, which their calls are drawn
-//! from, and in the subagent tab, the one it shows, which says whether that one is at work.
+//! the background, which the transcript's last row draws, and what the cache holds of the conversation, which the
+//! newest turn's line and card say. Also its subagents' records, which their calls are drawn from, and in the subagent
+//! tab, the one it shows, which says whether that one is at work.
 
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::{Context, Task};
 use protocol::event::AgentTask;
-use protocol::model::{Session, SessionStatus, Subagent, SubagentStatus};
+use protocol::model::{PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus};
 
 use super::Transcript;
 
@@ -24,6 +25,19 @@ pub(crate) struct AtWork {
     pub(crate) turn_started_at_ms: Option<i64>,
     /// What it's running in the background.
     pub(crate) background: Vec<AgentTask>,
+    /// The event that ended the newest turn, whose line and card say how long the cache has left. 0 until one has.
+    pub(crate) reply_seq: Seq,
+    /// What the cache holds of the conversation while it can expire, once the newest turn has ended. While the agent
+    /// waits on the person mid-turn, the newest turn's line is an earlier turn's, and says nothing of it.
+    pub(crate) cache: Option<IdleCache>,
+}
+
+/// What the cache holds of the conversation while it can expire, as [`Session::idle_cache`] says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct IdleCache {
+    pub(crate) cache: PromptCache,
+    /// Whether it's worth telling the person of beyond the turn's card, as [`Session::cache_worth_telling`] says.
+    pub(crate) worth_telling: bool,
 }
 
 impl AtWork {
@@ -32,6 +46,11 @@ impl AtWork {
             working: session.status == SessionStatus::Running,
             turn_started_at_ms: session.turn_started_at_ms,
             background: session.background_tasks.clone(),
+            reply_seq: session.reply_seq,
+            cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
+                cache: cache.clone(),
+                worth_telling: session.cache_worth_telling().is_some(),
+            }),
         }
     }
 
@@ -41,6 +60,8 @@ impl AtWork {
             working: subagent.status == SubagentStatus::Working,
             turn_started_at_ms: Some(subagent.started_at_ms),
             background: Vec::new(),
+            reply_seq: 0,
+            cache: None,
         }
     }
 }
@@ -49,20 +70,33 @@ impl Transcript {
     /// Follows the session's record.
     pub fn set_session(&mut self, session: &Session, cx: &mut Context<Self>) {
         let at_work = AtWork::of(session);
-        {
+        let replies = {
             let mut m = self.model.borrow_mut();
             if m.at_work == at_work {
                 return;
             }
-            if m.at_work.working != at_work.working {
-                self.ticking = at_work.working.then(|| tick(cx));
+            if m.at_work.working != at_work.working || m.at_work.cache != at_work.cache {
+                self.ticking = tick(&at_work, cx);
             }
+            // The newest turn's line and card say what the cache holds, and an older one's say nothing of it.
+            let replies = [m.at_work.reply_seq, at_work.reply_seq];
             m.at_work = at_work;
+            replies
+        };
+        for reply in replies {
+            self.redraw_reply(reply);
         }
-        // It's all drawn in the last row, with the streaming tail.
+        // The rest is drawn in the last row, with the streaming tail.
         let rows = self.list.row_count();
         self.list.out_of_date(rows.saturating_sub(1)..rows);
         cx.notify();
+    }
+
+    /// Draws the end of the turn `reply` again, for what it says of the cache. Not loaded, so not drawn either.
+    fn redraw_reply(&self, reply: Seq) {
+        if let Some(row) = self.session.read(|log| log.row_of(reply)) {
+            self.list.out_of_date(row..row + 1);
+        }
     }
 
     /// Follows the records of the session's subagents, and measures again each row that draws one that changed.
@@ -83,7 +117,7 @@ impl Transcript {
             if let Some(subagent) = shown {
                 let at_work = AtWork::of_subagent(subagent);
                 if m.at_work.working != at_work.working {
-                    self.ticking = at_work.working.then(|| tick(cx));
+                    self.ticking = tick(&at_work, cx);
                 }
                 m.at_work = at_work;
             }
@@ -113,15 +147,34 @@ impl Transcript {
     }
 }
 
-/// Draws the transcript again every [`TICK`]. A moving mark draws it on every frame anyway, and this keeps the time
-/// going when Reduce Motion holds the mark still.
-pub(super) fn tick(cx: &mut Context<Transcript>) -> Task<()> {
-    cx.spawn(async move |this, cx| {
+/// Draws again what says how long something has taken or has left, as that changes. While the agent works, that's the
+/// time so far, every [`TICK`]. A moving mark draws it on every frame anyway, and this keeps the time going when Reduce
+/// Motion holds the mark still. Otherwise it's how long the cache has left, as each minute goes, until it has expired.
+pub(super) fn tick(at_work: &AtWork, cx: &mut Context<Transcript>) -> Option<Task<()>> {
+    if at_work.working {
+        return Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(TICK).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    return;
+                }
+            }
+        }));
+    }
+    let (cache, reply) = (at_work.cache.as_ref()?.cache.clone(), at_work.reply_seq);
+    let expires_at_ms = cache.expires_at_ms()?;
+    Some(cx.spawn(async move |this, cx| {
         loop {
-            cx.background_executor().timer(TICK).await;
-            if this.update(cx, |_, cx| cx.notify()).is_err() {
+            let Ok(now_ms) = this.update(cx, |_, cx| look::now_ms(cx)) else { return };
+            let Some(wait_ms) = look::next_minute_in_ms(expires_at_ms - now_ms) else { return };
+            cx.background_executor().timer(Duration::from_millis(wait_ms.unsigned_abs())).await;
+            let redrawn = this.update(cx, |transcript, cx| {
+                transcript.redraw_reply(reply);
+                cx.notify();
+            });
+            if redrawn.is_err() {
                 return;
             }
         }
-    })
+    }))
 }

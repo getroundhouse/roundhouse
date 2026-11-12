@@ -1,5 +1,7 @@
 //! Which chats a workspace has, which one is showing, and what each is called.
 
+use std::time::Duration;
+
 use client_core::ClientError;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::client::ErrorCode;
@@ -8,6 +10,7 @@ use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
 use super::{PaneEvent, Showing, WorkspacePane};
+use crate::prompt_cache;
 use crate::rename::{self, Renaming};
 use client_core::records::Record;
 
@@ -96,6 +99,7 @@ impl WorkspacePane {
             self.make_transcript(session, cx);
         }
         self.active = Some(id);
+        self.wind_cache_clock(cx);
         self.show_draft(cx);
         self.show_chat(cx);
     }
@@ -296,7 +300,24 @@ impl WorkspacePane {
         self.keep_edit_valid(cx);
         self.show_next(cx);
         self.read_showing(cx);
+        self.wind_cache_clock(cx);
         cx.notify();
+    }
+
+    /// Draws the pane again when the line above the composer next says something else of the shown chat's cache, as
+    /// [`prompt_cache::composer_line_changes_in_ms`] says, then winds itself for the change after.
+    fn wind_cache_clock(&mut self, cx: &mut Context<Self>) {
+        let now_ms = look::now_ms(cx);
+        let wait_ms = self.session().and_then(|session| prompt_cache::composer_line_changes_in_ms(session, now_ms));
+        self.cache_clock = wait_ms.map(|wait_ms| {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(Duration::from_millis(wait_ms.unsigned_abs())).await;
+                let _ = this.update(cx, |t, cx| {
+                    t.wind_cache_clock(cx);
+                    cx.notify();
+                });
+            })
+        });
     }
 
     /// Shows the chat waiting to be shown, once client-core's copy has it open.

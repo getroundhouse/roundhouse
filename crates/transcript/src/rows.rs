@@ -6,11 +6,11 @@ use std::rc::Rc;
 use client_core::OpenSession;
 use client_core::session_log::{By, PendingPrompt, Row};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, Pixels, SharedString, Styled, WeakEntity, div,
-    px,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
+    Stateful, Styled, WeakEntity, div, px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -29,6 +29,7 @@ mod alone;
 mod approval;
 mod around;
 mod asked;
+mod cache_rule;
 mod compaction;
 mod line;
 mod mode;
@@ -207,6 +208,18 @@ fn empty() -> AnyElement {
     div().into_any_element()
 }
 
+/// A rule across the chat with `middle` in its middle, as a compaction and a cache that had expired are drawn.
+fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
+    let border = cx.theme().border;
+    let rule = || div().flex_1().h(px(1.)).bg(border);
+    h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule())
+}
+
+/// What's said in the middle of a rule across the chat, small and faint.
+fn rule_middle(id: impl Into<ElementId>) -> Stateful<Div> {
+    h_flex().id(id).flex_none().gap_1p5().px_2().py_0p5().text_xs().text_color(look::faint())
+}
+
 fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
@@ -261,6 +274,9 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
         // The compaction says all there is of what asked for it, and of a turn that was only it.
         EventBody::CompactionAsked { .. } | EventBody::TurnEnded { only_compacted: true, .. } => empty(),
         EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
+        EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
+            cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
+        }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
@@ -281,7 +297,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
             let only_lines = blocks.iter().all(is_a_line);
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, find, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, around.cache.as_ref(), find, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, shared, cx)
         }
@@ -306,7 +322,6 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
-        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => empty(),
     }
 }

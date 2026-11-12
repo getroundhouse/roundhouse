@@ -48,6 +48,10 @@
 
 ![The other chat's tab, with a reply you haven't read](screens/unread-tab.png)
 
+## A chat's cache
+
+- **A clock at a workspace's row's right end says one of its chats' caches is about to expire,** and pointing at it says how soon, for the soonest, as `chats.md` says. It's just left of the button that archives the workspace under the pointer, after the pencil if there is one, and the button's place is kept beside it, as it is for the pencil, so it stays put as the pointer comes and goes. It doesn't show while the row says what the workspace is waiting on the hub for, since that's the workspace going or coming back. *Unconfirmed:* its place, and that it doesn't show then.
+
 ## Archiving
 
 - **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it but beside a pencil, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*

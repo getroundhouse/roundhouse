@@ -15,7 +15,7 @@ use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Seq;
 
 use super::around::Around;
-use super::{Shared, colored_line, row, turn_times};
+use super::{Shared, colored_line, row, rule_across, rule_middle, turn_times};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::scroll_area::ScrollArea;
@@ -58,22 +58,15 @@ impl Compacted<'_> {
 fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let key = ItemKey::Event(compacted.seq, 0);
-    let (open, seq, rule) = (compacted.open, compacted.seq, || div().flex_1().h(px(1.)).bg(theme.border));
+    let (open, seq) = (compacted.open, compacted.seq);
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     // Only a summary makes it something to open.
     let opens = compacted.summary.is_some();
-    let middle = h_flex()
-        .id(key.element("compaction"))
+    let middle = rule_middle(key.element("compaction"))
         .role(if opens { Role::Button } else { Role::Label })
         // In words, since a screen reader would read the arrow out as one.
         .aria_label(compacted.said("to", ", "))
-        .flex_none()
-        .gap_1p5()
-        .px_2()
-        .py_0p5()
         .rounded(px(6.))
-        .text_xs()
-        .text_color(look::faint())
         .child(Icon::new(IconName::FoldVertical).size(px(ICON)))
         .child(compacted.said("→", " · "))
         .when(opens, |d| {
@@ -85,7 +78,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
             })
         })
         .test_support();
-    let across = h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule());
+    let across = rule_across(middle, cx);
     // In the words of whoever asked, in quotes, since they needn't start with "keep".
     let keeping = compacted.keeping.map(|keeping| {
         let said = div().max_w(relative(0.8)).text_center().text_sm().text_color(theme.muted_foreground);

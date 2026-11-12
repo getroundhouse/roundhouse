@@ -134,6 +134,8 @@ pub struct WorkspacePane {
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
     setup_log_refresh: Option<Task<()>>,
+    /// Draws the pane again when the line above the composer next says something else of the chat's cache.
+    cache_clock: Option<Task<()>>,
     /// Set on a new connection, until [`Self::catch_up`] reads again what it may have changed.
     behind: bool,
     /// Away while the app connects to a hub again, with this still on screen. `composer.rs` has what that holds up.
@@ -205,6 +207,7 @@ impl WorkspacePane {
             pull_request_asks: 0,
             setup_log: None,
             setup_log_refresh: None,
+            cache_clock: None,
             behind: false,
             hub: composer::Hub::Here,
             window: window.window_handle(),

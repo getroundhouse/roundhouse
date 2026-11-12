@@ -16,7 +16,7 @@ use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSetti
 use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
 use crate::model_picker::{Picked, model_picker};
-use crate::{StopAgent, attached};
+use crate::{StopAgent, attached, prompt_cache};
 
 /// Its corners, which plan mode's texture stays inside.
 const CORNER: Rems = rems(0.5);
@@ -174,7 +174,9 @@ impl WorkspacePane {
 
     /// The model and its effort of the chat showing.
     fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let model_and_effort = self.session().map(|s| (s.model.clone(), s.effort));
+        let now_ms = look::now_ms(cx);
+        let model_and_effort =
+            self.session().map(|s| (s.model.clone(), s.effort, prompt_cache::switching_note(s, now_ms)));
         let this = cx.weak_entity();
         let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
             let _ = this.update(cx, |t, cx| match picked {
@@ -187,8 +189,8 @@ impl WorkspacePane {
             .min_w_0()
             .gap_0p5()
             // Only a chat has a model, so there's none to show while the workspace's first is being made.
-            .when_some(model_and_effort, |row, (model, effort)| {
-                row.child(model_picker("model-picker", &model, effort, models))
+            .when_some(model_and_effort, |row, (model, effort, switching)| {
+                row.child(model_picker("model-picker", &model, effort, switching, models))
             })
     }
 

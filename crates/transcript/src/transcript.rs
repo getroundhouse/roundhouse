@@ -31,8 +31,8 @@ mod outline;
 mod record;
 mod sending;
 
-pub(crate) use record::AtWork;
 use record::tick;
+pub(crate) use record::{AtWork, IdleCache};
 
 /// Things the owner of a transcript has to deal with.
 #[derive(Clone, Debug)]
@@ -122,7 +122,7 @@ pub struct Transcript {
     texts: LongTexts,
     list: TranscriptList,
     _changes: Task<()>,
-    /// Draws the time so far again while the agent works.
+    /// Draws the time so far again while the agent works, and how long the cache has left while it doesn't.
     ticking: Option<Task<()>>,
     prompts: outline::Prompts,
     /// The oldest question waiting on an answer, to be asked in the composer's place.
@@ -160,7 +160,7 @@ impl Transcript {
         let list = TranscriptList::new(cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
-        let ticking = at_work.working.then(|| tick(cx));
+        let ticking = tick(&at_work, cx);
         let model = Rc::new(RefCell::new(Model::with(session.agent, at_work)));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {

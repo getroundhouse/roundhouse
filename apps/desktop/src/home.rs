@@ -20,6 +20,7 @@ use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::AppView;
+use crate::prompt_cache;
 use crate::reorder::{self, Hold, Places};
 use crate::sidebar::{Standing, doing, standing};
 use crate::workspace_order::Sort;
@@ -197,14 +198,18 @@ pub(crate) fn page(app: &AppView, rows: Rows, inset: Pixels, cx: &mut Context<Ap
         .when(!empty, |d| d.child(list))
 }
 
-/// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back, which says so
-/// while it does. Clicking the rest of the row shows the workspace, as its row in the sidebar does, or brings an
-/// archived one back. The repository and what the row says are smaller, on the name's baseline.
+/// A workspace's row: its mark and name, when one of its chats' caches is about to expire, its repository, and a
+/// button to archive it or bring it back, which says so while it does. Clicking the rest of the row shows the
+/// workspace, as its row in the sidebar does, or brings an archived one back. The repository and what the row says are
+/// smaller, on the name's baseline.
 fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
     let theme = cx.theme();
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
+    let its_chats = app.sessions.get(&workspace.id).into_iter().flatten().filter(|_| prompt_cache::told_of(workspace));
+    let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
+        .map(|left_ms| line_text.small.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
     let id = workspace.id.clone();
     h_flex()
         .id(ElementId::Name(format!("home-{}", workspace.id).into()))
@@ -227,6 +232,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(workspace.label().to_string()),
         )
+        .children(expiring)
         .child(line_text.small.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
         .child(row_button(app, workspace, &line_text.small, cx))
         .test_support()
