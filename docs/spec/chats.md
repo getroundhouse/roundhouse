@@ -65,6 +65,26 @@
 
 ![The outline's list](screens/outline-list.png)
 
+## Finding text
+
+- **⌘F opens a bar at the top right of the chat, over it,** with what's looked for, which match is shown of how many, such as `2 of 41`, and buttons for the match before, the one after, and closing. It works wherever focus is while a chat shows, the message box too, and Find… in the Edit menu does the same. Pressed again, it puts focus back in the bar with what's in it selected. The file tab isn't searched.
+- **Nor is the subagent tab,** so Find isn't there while it shows. *Unconfirmed.*
+- **What's typed is looked for as plain text, ignoring case,** once typing pauses, with no patterns or whole words. A phrase is found across a line break in a paragraph, since the paragraph shows it as a space.
+- **It finds what the chat shows: the prompts, and the agent's words and thinking, as their Markdown renders,** so `**parser** is` holds `parser is` and a link's address holds nothing, **and what calls were given and sent back,** such as a command and what it printed, a file's path and lines, and a search's pattern, **and what went wrong,** such as a failed turn's error, a notice, and what the agent last printed before it stopped unexpectedly. What the app writes itself isn't found, such as `Read 10 lines`, `Exit 1` and line numbers. A closed call's command on its line is marked but not counted, since it's counted where the call shows it open. Cards that ask something aren't found, and nor is a reply until it's recorded.
+- **Nor is a question the agent asked, once it's answered and drawn as a line,** what was asked or what was answered. *Unconfirmed.*
+- **Nor is a compaction,** what its rule says or the summary it opens to. *Unconfirmed.*
+- **A subagent's call is found in as it shows it open:** what it was asked, and its report, but not what it's done lately, which changes as it works. *Unconfirmed.*
+- **The count is of the whole chat, however long,** including what the app hasn't loaded, since the hub says which events hold the text, and the app reads those parts of the chat to count what each shows, then lets them go. Until it has, the count ends in `…`, and the first match waits until nothing above it can hold another. The hub looks past what Markdown marks text with, such as bold, and how much whitespace there is, but not past a link, so a phrase that runs across a link is found only where the chat is loaded.
+- **One character is found only in what's loaded,** since it's in nearly every part of a chat, and so is anything when the hub is too old to say or fails to. Then the count ends in `+`, such as `3 of 12+`, or says `No matches loaded`, unless the whole chat is loaded.
+- **The first match shown is the first at or below the top of the chat,** or the first of all with none below. Enter or ⌘G goes to the next, and ⇧Enter or ⇧⌘G to the one before, round from the last to the first. The one shown is marked more strongly than the rest.
+- **Going to a match loads its part of the chat if it isn't, opens the call or thinking it's in, and scrolls it into view below the bar,** a block that scrolls in a call too. What it opened stays open.
+- **A match in a command shows the command whole, and one in a line too long for its block scrolls the block sideways to it.** *Unconfirmed.*
+- **Escape closes the bar,** the marks go, and focus goes back to the message box.
+
+**Finding `fmt`: the first of four matches, in a command opened to show it, then one in each closed command below, whose line marks it, and one in the reply.** *Unconfirmed.*
+
+![Finding text in a chat](screens/finding.png)
+
 ## Titles
 
 - **A chat's title can be changed by hand,** as a workspace's can, in `workspaces.md`.

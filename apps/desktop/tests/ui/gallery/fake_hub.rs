@@ -13,6 +13,8 @@ use protocol::attachment::AttachmentBytes;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
+use protocol::event::SessionEvent;
+use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
     GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
@@ -119,6 +121,14 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             world.session(&id)?;
             let prompts = world.events_from(&id, 1).filter_map(PromptLine::of);
             reply(C::Prompts { prompts: prompts.collect() })
+        }
+        R::SessionFind { id, subagent, query } => {
+            world.session(&id)?;
+            let needle = Needle::new(&query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+            let theirs: Vec<&SessionEvent> = world.placed_from(&id, subagent.as_ref(), Place::new(1)).collect();
+            let places = theirs.iter().filter(|event| needle.is_in_event(&event.body)).map(|event| event.place);
+            let through = theirs.last().map_or(Place::new(0), |event| event.place);
+            reply(C::Found(Found { places: places.collect(), through }))
         }
         R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),
         R::SessionReadPlaces { id, subagent, from_place, limit, .. } => {

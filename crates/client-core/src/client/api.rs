@@ -4,10 +4,11 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ClientRequest, ClientResponse, HubStatus};
 use protocol::event::{ApprovalDecision, SessionEvent};
+use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
     GitStatus, HubSettings, HubSettingsChange, PromptLine, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
-    SessionId, Subagent, Workspace, WorkspaceId,
+    SessionId, Subagent, ToolUseId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -223,6 +224,18 @@ impl Client {
             return unexpected(&reply);
         };
         Ok(prompts)
+    }
+
+    /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says. A hub older than
+    /// this refuses it as unsupported.
+    pub fn session_find(&self, id: &SessionId, subagent: Option<&ToolUseId>, query: &str) -> Result<Found> {
+        let request =
+            ClientRequest::SessionFind { id: id.clone(), subagent: subagent.cloned(), query: query.to_string() };
+        let reply = self.call(request)?;
+        let ClientResponse::Found(found) = reply else {
+            return unexpected(&reply);
+        };
+        Ok(found)
     }
 
     /// Returns the events and the session's newest `seq`.

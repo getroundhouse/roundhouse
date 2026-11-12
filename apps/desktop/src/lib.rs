@@ -73,7 +73,10 @@ actions!(
         CloseChat,
         NextChat,
         PreviousChat,
-        TogglePlanMode
+        TogglePlanMode,
+        FindInChat,
+        FindNext,
+        FindPrevious
     ]
 );
 
@@ -113,6 +116,9 @@ pub fn open_main_window(
         KeyBinding::new("ctrl-shift-tab", PreviousChat, None),
         // Bound after the text field's own Shift-Tab, which outdents, so this one wins where a prompt is written.
         KeyBinding::new("shift-tab", TogglePlanMode, Some(format!("{} > Input", composing::KEY_CONTEXT).as_str())),
+        KeyBinding::new("cmd-f", FindInChat, None),
+        KeyBinding::new("cmd-g", FindNext, None),
+        KeyBinding::new("cmd-shift-g", FindPrevious, None),
     ]);
     menus::set(cx);
     std::thread::spawn(look::preload_highlighting);

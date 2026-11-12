@@ -18,6 +18,7 @@ mod diff_screens;
 mod events;
 mod fake_hub;
 mod file_chats;
+mod finding;
 mod frame;
 mod headless;
 mod icon;

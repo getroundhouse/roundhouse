@@ -1,7 +1,8 @@
 //! Lines of plain text with a little space between them, which select and copy as one text. The kit's
 //! `SelectableText` is one text, laid out together, and texts split across several of them copy in no fixed order. So
 //! each line is laid out on its own, and they're all reported to the window's selection as one participant's runs,
-//! in order. A copy puts what's selected of each a line apart, as the text was.
+//! in order. A copy puts what's selected of each a line apart, as the text was. Each line draws its matches of what's
+//! being found.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,9 +10,12 @@ use std::rc::Rc;
 use gpui_kit::base::{TextSelectionHandle, TextSelectionRegistration, TextSelectionRun, Theme};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, Bounds, ElementId, HitboxBehavior, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point,
-    RenderOnce, SharedString, Styled, StyledText, TestSupportExt as _, TextLayout, Window, canvas, div, fill,
+    AnyElement, App, Bounds, ElementId, HitboxBehavior, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    Point, RenderOnce, SharedString, Styled, StyledText, TestSupportExt as _, TextLayout, Window, canvas, div, fill,
 };
+
+use crate::find::Marks;
+use crate::find::reveal::{self, Reveal};
 
 /// Lines of text, `gap` apart, selectable as one.
 #[derive(IntoElement)]
@@ -19,12 +23,21 @@ pub(crate) struct SelectableLines {
     id: ElementId,
     lines: Vec<SharedString>,
     gap: Pixels,
+    /// The matches in the lines, a line apart, and the area they scroll in, which the match being shown says it was
+    /// drawn in.
+    marks: Option<(Marks, ElementId)>,
 }
 
 impl SelectableLines {
     /// `id` keeps what's selected from one frame to the next, so it's these lines' alone.
     pub(crate) fn new(id: impl Into<ElementId>, lines: Vec<SharedString>, gap: Pixels) -> Self {
-        Self { id: id.into(), lines, gap }
+        Self { id: id.into(), lines, gap, marks: None }
+    }
+
+    /// Draws `marks`, which are of the lines a line apart, scrolling in `area`.
+    pub(crate) fn marked(mut self, marks: Marks, area: ElementId) -> Self {
+        self.marks = (!marks.is_empty()).then_some((marks, area));
+        self
     }
 }
 
@@ -51,8 +64,21 @@ impl RenderOnce for SelectableLines {
             let kept = kept.read(cx);
             (kept.handle.clone(), kept.selected.clone())
         };
-        let texts: Vec<StyledText> = self.lines.iter().cloned().map(StyledText::new).collect();
+        let (texts, here) = with_marks(&self.lines, self.marks.as_ref().map(|(marks, _)| marks));
         let runs: Runs = self.lines.into_iter().zip(texts.iter().map(|text| text.layout().clone())).collect();
+        let here = here.zip(self.marks.map(|(_, area)| area));
+        let texts: Vec<AnyElement> = texts
+            .into_iter()
+            .enumerate()
+            .map(|(ix, text)| match &here {
+                Some(((line, start, mark), area)) if *line == ix => {
+                    let layout = text.layout().clone();
+                    let mark = reveal::here(layout, *start, Some(area.clone()), mark.clone());
+                    div().relative().child(text).child(mark).into_any_element()
+                }
+                Some(_) | None => text.into_any_element(),
+            })
+            .collect();
         let gap = self.gap;
         // First, so the selection is painted under the text. Painting comes after everything is laid out and placed,
         // so the lines are where they're drawn by then.
@@ -70,6 +96,30 @@ impl RenderOnce for SelectableLines {
             .child(v_flex().gap(gap).children(texts))
             .test_support()
     }
+}
+
+/// Where the match being shown starts: the line it's in, how far into it, and what it says where it was drawn.
+type Here = (usize, usize, Reveal);
+
+/// Each line laid out with its matches, and where the match being shown starts, if it's in one.
+fn with_marks(lines: &[SharedString], marks: Option<&Marks>) -> (Vec<StyledText>, Option<Here>) {
+    let Some(marks) = marks else { return (lines.iter().cloned().map(StyledText::new).collect(), None) };
+    let (mut at, mut here) = (0, None);
+    let texts = lines
+        .iter()
+        .enumerate()
+        .map(|(ix, line)| {
+            let own = marks.within(at, at + line.len());
+            at += line.len() + 1;
+            if here.is_none()
+                && let Some((range, mark)) = own.here().zip(own.reveal())
+            {
+                here = Some((ix, range.start, mark.clone()));
+            }
+            StyledText::new(line.clone()).with_highlights(own.over(&[], line.len()))
+        })
+        .collect();
+    (texts, here)
 }
 
 /// Tells the window's selection where the lines are, so a drag that starts anywhere over them selects them, as one

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
+use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, GitDiff, GitStatus, HubSettings, Place, PromptLine, PullRequest, RecordKey,
     Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace, WorktreeFiles,
@@ -76,6 +77,7 @@ pub enum ClientResponse {
     Prompts {
         prompts: Vec<PromptLine>,
     },
+    Found(Found),
     PromptRecorded {
         seq: Seq,
         duplicate: bool,

@@ -13,9 +13,13 @@ use gpui_kit::{
 };
 use look::{Hand as _, LineText};
 
+use super::shown::Gather;
 use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
 use crate::calls::{Failure, failure, first_line};
+use crate::find::{self, Marks, Part as Text};
+use crate::folds::Fold;
+use crate::item_key::ItemKey;
 use crate::rows::around::Answer;
 
 const ICON: f32 = 15.0;
@@ -29,6 +33,8 @@ const START_CHARS: usize = 160;
 pub(super) struct Line {
     icon: IconName,
     title: SharedString,
+    /// Where the matches are in the title, when it's the agent's words.
+    title_marks: Marks,
     parts: Vec<Part>,
     preview: Option<Preview>,
     /// Whether what the call opens to shows what came back, so a failure's whole text isn't added under its line.
@@ -43,8 +49,8 @@ pub(super) type Preview = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 /// A detail after the title.
 pub(super) enum Part {
-    /// Code, such as a command, on a raised pill.
-    Pill(SharedString),
+    /// Code, such as a command, on a raised pill, with the matches in it, if it's found in.
+    Pill(SharedString, Marks),
     /// What it acted on, such as an MCP server, in an outlined chip.
     Chip(SharedString),
     /// An input, in faint monospace.
@@ -60,7 +66,21 @@ pub(super) enum Part {
 
 impl Line {
     pub(super) fn new(icon: IconName, title: impl Into<SharedString>) -> Self {
-        Self { icon, title: title.into(), parts: Vec::new(), preview: None, shows_output: false, action: None }
+        Self {
+            icon,
+            title: title.into(),
+            title_marks: Marks::default(),
+            parts: Vec::new(),
+            preview: None,
+            shows_output: false,
+            action: None,
+        }
+    }
+
+    /// A line whose title is the agent's words, such as what it said a call is for, which can be found in.
+    pub(super) fn found(mut self, toggle: &Toggle) -> Self {
+        self.title_marks = toggle.marks(Text::Title, &self.title);
+        self
     }
 
     /// Says whether what the call opens to shows what came back, failures included.
@@ -122,7 +142,7 @@ impl Line {
                         .text_ellipsis()
                         // A button always shows at the end, so the title gives way to it rather than pushing it off.
                         .when(self.action.is_some(), |d| d.flex_shrink(1.).min_w_0())
-                        .child(self.title),
+                        .child(find::marked(self.title, &self.title_marks, &[], None)),
                 ),
             )
             .children(parts)
@@ -142,7 +162,7 @@ impl Part {
     fn render(self, line_text: &LineText, cx: &App) -> AnyElement {
         let theme = cx.theme();
         match self {
-            Part::Pill(text) => pill(text, theme.muted_foreground, theme.secondary, cx),
+            Part::Pill(text, marks) => pill(text, &marks, theme.muted_foreground, theme.secondary, cx),
             Part::Chip(text) => div()
                 .flex_none()
                 .px_2()
@@ -204,8 +224,8 @@ fn glyph(kind: IconName) -> Icon {
     Icon::new(kind).size(px(ICON)).text_color(look::faint())
 }
 
-/// Code on a pill, cut off with an ellipsis when it doesn't fit.
-fn pill(text: SharedString, color: Hsla, background: Hsla, cx: &App) -> AnyElement {
+/// Code on a pill, cut off with an ellipsis when it doesn't fit, with its matches.
+fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla, cx: &App) -> AnyElement {
     let theme = cx.theme();
     div()
         .min_w_0()
@@ -218,7 +238,7 @@ fn pill(text: SharedString, color: Hsla, background: Hsla, cx: &App) -> AnyEleme
         .font_family(theme.mono_font_family.clone())
         .text_size(theme.mono_font_size)
         .text_color(color)
-        .child(text)
+        .child(find::marked(text, marks, &[], None))
         .into_any_element()
 }
 
@@ -237,11 +257,20 @@ pub(super) fn drawn(
         .child(line.render(toggle, cx))
         .when_some(failed, |d, text| d.child(failure(&Failure::read(text), cx)))
         .when_some(whole, |d, text| {
-            let output = block::output(toggle.key.element("error"), text, cx.theme().muted_foreground, cx);
+            let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
             d.child(block::frame(cx).child(output))
         })
         .children(opened)
         .into_any_element()
+}
+
+/// What [`drawn`] shows open of what went wrong, for finding: all of it, under the line, when what the call opens
+/// to doesn't show it already.
+pub(super) fn shown_failure(answer: Option<&Answer>, shows_output: bool, key: &ItemKey, gather: &mut Gather) {
+    let failed = answer.and_then(Answer::failure).map(failure::output).filter(|text| !text.trim().is_empty());
+    if let Some(text) = failed.filter(|_| !shows_output) {
+        gather.inside(key, Fold::Output, |gather| gather.plain(key, Text::Error, &block::output_text(text)));
+    }
 }
 
 /// The line under a call whose result says it failed, so it shows while the call is closed.
@@ -255,7 +284,7 @@ fn failure(failure: &Failure, cx: &App) -> AnyElement {
         .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(danger))
         .child(div().flex_none().text_color(danger).child(failure.label()))
         .when(!failure.message.is_empty(), |d| {
-            d.child(pill(failure.message.to_string().into(), danger, danger.opacity(0.09), cx))
+            d.child(pill(failure.message.to_string().into(), &Marks::default(), danger, danger.opacity(0.09), cx))
         })
         .into_any_element()
 }

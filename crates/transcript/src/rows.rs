@@ -17,6 +17,7 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments::{self, Carried};
+use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
@@ -31,6 +32,7 @@ mod compaction;
 mod line;
 mod mode;
 mod prompt;
+mod shown;
 mod tail;
 mod thinking;
 mod tools;
@@ -39,11 +41,13 @@ mod turn_times;
 
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
+pub(crate) use around::{NEAR, REACH};
+pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, drawn_in_its_call};
-use prompt::{Progress, prompt_bubble};
+use prompt::{Progress, Prompt, prompt_bubble};
 use tail::render_tail;
 use tools::Toggle;
 
@@ -125,6 +129,8 @@ fn render_row_inner(
     cx: &mut App,
 ) -> Option<AnyElement> {
     let Item { ix, tail } = item;
+    let find = model.borrow().find.clone();
+    mark_found(model, ix, &find, &shared.texts, cx);
     let shown = {
         let m = model.borrow();
         session.read(|log| {
@@ -148,15 +154,28 @@ fn render_row_inner(
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
-            render_event(&event, &around, shared, cx)
+            render_event(&event, &around, shared, &find, cx)
         }
         Shown::Pending(prompt, carried) => {
             let key = ItemKey::Prompt(prompt.client_msg_id);
-            prompt_bubble(&key, &prompt.text, &carried, Progress::Sending, shared, cx)
+            let text = Prompt { text: &prompt.text, find: &find };
+            prompt_bubble(&key, text, &carried, Progress::Sending, shared, cx)
         }
         Shown::InCall => empty(),
         Shown::Unloaded => return None,
     })
+}
+
+/// Has the views of the Markdown with matches in the row at `ix`, as counting found it, draw them. Each is kept from
+/// the end of the row's drawing, rather than every row's when they're counted.
+fn mark_found(model: &Rc<RefCell<Model>>, ix: usize, find: &FindLook, texts: &LongTexts, cx: &mut App) {
+    if find.needle().is_none() {
+        return;
+    }
+    let Some(found) = model.borrow().found_markdown.get(&ix).cloned() else { return };
+    for id in found.iter() {
+        texts.mark(id, find, cx);
+    }
 }
 
 /// Text the agent wrote, under the same ID while it streams and once it's recorded.
@@ -181,20 +200,44 @@ fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
-fn agent_exited(reason: ExitReason, stderr_tail: &[String], cx: &App) -> AnyElement {
+/// What the app says when the agent stopped, and why, with what it last printed, if it stopped unexpectedly.
+fn agent_exited(seq: Seq, reason: ExitReason, stderr_tail: &[String], find: &FindLook, cx: &App) -> AnyElement {
     match reason {
         ExitReason::Requested => empty(),
         ExitReason::HubRestart => {
             muted_line("The app restarted while the agent was working. Send a message to continue.")
         }
         ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
-            let detail = stderr_tail.last().cloned().unwrap_or_default();
-            colored_line(format!("The agent stopped unexpectedly. {detail}"), cx.theme().danger)
+            const STOPPED: &str = "The agent stopped unexpectedly. ";
+            let printed = exit_output(reason, stderr_tail).unwrap_or_default();
+            let marks = find.marks(&(ItemKey::Event(seq, 0), Part::Exit), printed).moved(STOPPED.len());
+            marked_line(format!("{STOPPED}{printed}"), &marks, cx.theme().danger)
         }
     }
 }
 
-fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App) -> AnyElement {
+/// What the agent last printed, which the app says when it stopped unexpectedly.
+pub(crate) fn exit_output(reason: ExitReason, stderr_tail: &[String]) -> Option<&str> {
+    match reason {
+        ExitReason::Requested | ExitReason::HubRestart => None,
+        ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
+            stderr_tail.last().map(String::as_str)
+        }
+    }
+}
+
+/// Something the hub or the agent's CLI wanted said, in the colour of how much it matters, with its matches.
+fn notice(seq: Seq, level: NoticeLevel, message: &str, find: &FindLook, cx: &App) -> AnyElement {
+    let color = match level {
+        NoticeLevel::Error => cx.theme().danger,
+        NoticeLevel::Warning => cx.theme().warning,
+        NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
+    };
+    let marks = find.marks(&(ItemKey::Event(seq, 0), Part::Notice), message);
+    marked_line(message.to_string(), &marks, color)
+}
+
+fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &FindLook, cx: &App) -> AnyElement {
     let (seq, body) = (event.seq, &event.body);
     match body {
         // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
@@ -210,6 +253,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
+            let text = Prompt { text, find };
             prompt_bubble(&key, text, &around.carried, progress, shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
@@ -217,7 +261,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, shared, cx))
+                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, shared, find, cx))
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -226,7 +270,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
             let only_lines = blocks.iter().all(is_a_line);
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, find, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, shared, cx)
         }
@@ -235,8 +279,8 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
-        EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(*reason, stderr_tail, cx),
-        EventBody::Notice { level, message } => notice(*level, message, cx),
+        EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
+        EventBody::Notice { level, message } => notice(seq, *level, message, find, cx),
         // These tell the hub things, and there's nothing here for a person.
         EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
@@ -255,23 +299,19 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, cx: &App
     }
 }
 
-/// Something the hub says, in the colour of how much it matters.
-fn notice(level: NoticeLevel, message: &str, cx: &App) -> AnyElement {
-    let color = match level {
-        NoticeLevel::Error => cx.theme().danger,
-        NoticeLevel::Warning => cx.theme().warning,
-        NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
-    };
-    colored_line(message.to_string(), color)
-}
-
 /// A call, its result or thinking, which read as lines of one list.
 fn is_a_line(block: &ContentBlock) -> bool {
     matches!(block, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. })
 }
 
+/// A line of `text` in `color`, where nothing's found.
 fn colored_line(text: String, color: Hsla) -> AnyElement {
     row().child(div().text_sm().text_color(color).child(text)).into_any_element()
+}
+
+/// A line of `text` in `color`, with its matches.
+fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
+    row().child(div().text_sm().text_color(color).child(find::marked(text.into(), marks, &[], None))).into_any_element()
 }
 
 fn render_block(
@@ -279,13 +319,16 @@ fn render_block(
     block: &ContentBlock,
     drawing: &BlockAround,
     shared: &Shared,
+    find: &FindLook,
     cx: &App,
 ) -> Option<AnyElement> {
     let key = &drawing.key;
-    let toggle = Toggle { seq, key, fold: drawing.fold, open: drawing.open, whole: drawing.whole, shared };
+    let (fold, open, whole) = (drawing.fold, drawing.open, drawing.whole);
+    let toggle = Toggle { seq, key, fold, open, whole, shared, find };
     Some(match block {
         ContentBlock::Text { text, images } => {
-            agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images)).into_any_element()
+            let view = agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images));
+            find::markdown_view(view, &(key.clone(), Part::Text), find, None)
         }
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),

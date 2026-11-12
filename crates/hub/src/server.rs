@@ -246,6 +246,7 @@ async fn handle(
             hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?
         }
         R::SessionPromptList { id } => C::Prompts { prompts: hub.session_prompt_list(id).await? },
+        R::SessionFind { id, subagent, query } => C::Found(hub.session_find(id, subagent, &query).await?),
         R::SessionSubscribe { id, from_seq, subscription_id } => {
             subscribe(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(1) }).await?
         }

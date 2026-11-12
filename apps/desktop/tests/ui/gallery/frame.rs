@@ -134,6 +134,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::SetupLog
         | Region::Transcript
         | Region::Outline
+        | Region::FindBar
         | Region::Home
         | Region::UpdateDetails => false,
     }

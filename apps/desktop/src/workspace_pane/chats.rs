@@ -165,6 +165,8 @@ impl WorkspacePane {
                 }
                 cx.notify();
             }
+            // Typing goes back to the message box, as it would have before the bar opened.
+            TranscriptEvent::FindClosed => this.with_window(cx, |t, window, cx| t.focus_showing(window, cx)),
         });
         self.transcripts.insert(session.id, (view, events));
     }

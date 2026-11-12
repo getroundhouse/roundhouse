@@ -56,6 +56,17 @@ pub(super) struct Follow<H> {
     wake: flume::Sender<()>,
 }
 
+/// Tells the readers of something followed that it changed, from outside it, such as a search through it, without
+/// keeping it followed.
+#[derive(Clone)]
+pub(super) struct Teller(flume::Sender<()>);
+
+impl Teller {
+    pub(super) fn tell(&self) {
+        let _ = self.0.try_send(());
+    }
+}
+
 impl<H> Clone for Follow<H> {
     fn clone(&self) -> Self {
         Self { shared: self.shared.clone(), changed: self.changed.clone(), wake: self.wake.clone() }
@@ -97,6 +108,10 @@ impl<H: Send + 'static> Follow<H> {
     /// such as taking what changed since it last looked.
     pub(super) fn quietly<T>(&self, change: impl FnOnce(&mut H) -> T) -> T {
         change(&mut self.shared.held.lock())
+    }
+
+    pub(super) fn teller(&self) -> Teller {
+        Teller(self.shared.signal.clone())
     }
 
     /// Has the thread look at what's been asked of it.

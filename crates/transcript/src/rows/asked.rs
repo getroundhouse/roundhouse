@@ -18,6 +18,7 @@ use super::line::{self, Line, Part};
 use super::tools::{Toggle, block};
 use super::{Shared, row};
 use crate::calls::first_line;
+use crate::find::FindLook;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::questions::{self, Question};
@@ -32,7 +33,10 @@ const ARROW_DROP: f32 = 3.0;
 
 pub(super) fn draw(seq: Seq, input: &Value, asked: &Asked, shared: &Shared, cx: &App) -> AnyElement {
     let questions = questions::parse(input);
-    let toggle = Toggle { seq, key: &asked.key, fold: Fold::Output, open: asked.open, whole: false, shared };
+    // Nothing's found in a question, so nothing it draws is marked.
+    let find = FindLook::default();
+    let (key, open) = (&asked.key, asked.open);
+    let toggle = Toggle { seq, key, fold: Fold::Output, open, whole: false, shared, find: &find };
     let title = if questions.len() > 1 { format!("Asked {} questions", questions.len()) } else { "Asked".to_string() };
     let mut line = Line::new(ICON, title);
     for header in questions.iter().filter_map(|question| question.header.clone()) {
@@ -84,7 +88,7 @@ fn answers(questions: &[Question], asked: &Asked, cx: &App) -> AnyElement {
                 .children(answered(key, i, answer, cx)),
         );
     }
-    block::frame(cx).child(block::scrolling(id, list.test_support())).into_any_element()
+    block::frame(cx).child(block::scrolling(&FindLook::default(), &id, list.test_support())).into_any_element()
 }
 
 /// What was answered to the question at `i`, after an arrow, or that nobody answered it, or nothing if that isn't

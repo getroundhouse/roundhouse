@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
+use protocol::find::{Found, Needle};
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, PermissionMode, Place, PromptLine,
     RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, TitleSource,
@@ -153,6 +154,22 @@ impl Hub {
         self.blocking(move |store| {
             store.get_session(&id)?;
             store.prompt_lines(&id)
+        })
+        .await
+    }
+
+    /// Which of the agent's own events, or the subagent `subagent`'s, hold `query`. A session that isn't there is
+    /// refused, as a read is, and so is a query with nothing to look for or too much.
+    pub(crate) async fn session_find(
+        &self,
+        id: SessionId,
+        subagent: Option<ToolUseId>,
+        query: &str,
+    ) -> Result<Found, ApiError> {
+        let needle = Needle::new(query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            store.find_events(&id, subagent.as_ref(), &needle)
         })
         .await
     }

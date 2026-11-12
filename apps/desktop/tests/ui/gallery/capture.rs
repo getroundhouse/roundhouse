@@ -2,12 +2,11 @@
 
 #![cfg(test)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use client_core::Daemon;
-use desktop::app::{AppView, Connection, HubSource};
+use desktop::app::AppView;
 use desktop::pull_request::Lookup;
 use desktop::sidebar_tabs::SidebarTab;
 use desktop::updates::{Kind, Problem};
@@ -16,17 +15,21 @@ use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
-    PlatformTextSystem, px, size,
+    PlatformTextSystem,
 };
 use image::RgbaImage;
 
+use super::frame;
 use super::steps::{Screen, Step, Target};
-use super::{fake_hub, frame, world};
 use crate::support::{first_labelled, menu_item};
 
 mod files;
+mod finding;
+mod opening;
 mod scrollbar;
 
+pub(crate) use finding::{FoundBothWays, found_both_ways};
+use opening::open;
 use scrollbar::ChatScroll;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
@@ -49,35 +52,7 @@ pub(crate) struct Picture {
 
 /// Its picture, cut to its frame, and what's wrong with the frame, each said as what's wrong with the screen.
 pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Vec<String>) {
-    // Under /tmp because of the socket path limit.
-    let dir = tempfile::Builder::new().prefix("gallery-").tempdir_in("/tmp").unwrap();
-    let hub = hub_source(dir.path());
-    if let Some(world) = screen.world {
-        std::fs::create_dir_all(&hub.paths.data_dir).unwrap();
-        fake_hub::serve(&hub.paths.socket, world());
-    }
-    let mut cx = HeadlessAppContext::with_platform(
-        text_system.clone(),
-        Arc::new(desktop::Assets),
-        gpui_kit::platform::current_headless_renderer,
-    );
-    // The hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
-    cx.allow_parking();
-    cx.update(gpui_kit::init);
-    // Nothing moves, so a mark holds still and anything else, such as a dialog's entrance, shows as it ends. The time
-    // holds still too, so how long something took or how long ago it was is the same on every run.
-    cx.update(|cx| look::hold_still(world::NOW_MS, cx));
-    // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
-    // a picture of the app once it's ready.
-    look::preload_highlighting();
-    // As people see it, so no checkout.
-    let (handle, view) =
-        cx.update(|cx| desktop::open_main_window(hub, None, desktop::Opens::InItsUsualPlace, cx)).unwrap();
-    let mut app = Driver { cx, handle, view, dir: dir.path().to_path_buf(), chat: ChatScroll::default() };
-    if screen.frame.in_the_column() {
-        app.widen();
-    }
-    app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
+    let (_dir, mut app) = open(screen.world, screen.frame.in_the_column(), text_system);
     for step in screen.steps {
         app.step(step);
     }
@@ -87,19 +62,6 @@ pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -
     let (image, problems) = cropped.unwrap();
     app.close();
     (Picture { image, ..picture }, problems)
-}
-
-/// Somewhere of its own, with a daemon that doesn't exist, so the app can't start a real hub in its place. The
-/// daemon's path is the same every run, because the app shows it when it can't start one.
-fn hub_source(dir: &Path) -> HubSource {
-    let paths = protocol::paths::resolve(|name| match name {
-        protocol::paths::ENV_HOME => Some(dir.join("home").to_string_lossy().into_owned()),
-        protocol::paths::ENV_WORKSPACES => Some(dir.join("workspaces").to_string_lossy().into_owned()),
-        _ => None,
-    })
-    .unwrap();
-    let daemon = Daemon::in_place("/nonexistent/roundhoused");
-    HubSource { paths, daemon, build_number: Some(fake_hub::BUILD_NUMBER), build_version: fake_hub::BUILD }
 }
 
 struct Driver {
@@ -180,6 +142,7 @@ impl Driver {
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
             }
             Step::Open(label) => self.open(label),
+            Step::Find(query) => self.find_in_chat(query),
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
@@ -346,17 +309,6 @@ impl Driver {
         self.cx.update_window(self.handle, |_, window, cx| window.render_frame(cx)).unwrap();
         self.cx.run_until_parked();
         self.note_where_the_chat_is();
-    }
-
-    /// Makes the window [`frame::WIDE`] wide, and as tall as it was. A headless window has no edge to drag, so it's
-    /// resized, and then told so, as the platform's resize callback would tell it.
-    fn widen(&mut self) {
-        self.cx
-            .update_window(self.handle, |_, window, cx| {
-                window.resize(size(px(frame::WIDE), window.viewport_size().height));
-                window.bounds_changed(cx);
-            })
-            .unwrap();
     }
 
     /// Before the hub goes, so the app doesn't see it go and try to reconnect.

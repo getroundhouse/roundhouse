@@ -40,10 +40,14 @@ fn action(ui: &Ui<'_>, menu_name: &str, name: &str) -> Box<dyn Action> {
 
 /// The key macOS shows beside an item, which is the first one bound to its action.
 fn key(ui: &Ui<'_>, menu_name: &str, name: &str) -> Option<String> {
-    let action = action(ui, menu_name, name);
+    key_for(ui, action(ui, menu_name, name).as_ref())
+}
+
+/// The key macOS shows beside an item that does `action`.
+fn key_for(ui: &Ui<'_>, action: &dyn Action) -> Option<String> {
     let keymap = ui.cx.update(|cx| cx.key_bindings());
     let keymap = keymap.borrow();
-    let binding = keymap.bindings_for_action(action.as_ref()).next()?;
+    let binding = keymap.bindings_for_action(action).next()?;
     let keystrokes = binding.keystrokes().iter().map(|keystroke| keystroke.unparse(OperatingSystem::Mac));
     Some(keystrokes.collect::<Vec<_>>().join(" "))
 }
@@ -157,7 +161,7 @@ fn the_edit_menu_has_the_text_box_keys(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    assert_eq!(items(&ui, "Edit"), ["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select All"]);
+    assert_eq!(items(&ui, "Edit"), ["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select All", "-", "Find"]);
     let kit: [(&str, &dyn Action, &str); 6] = [
         ("Undo", &Undo, "cmd-z"),
         ("Redo", &Redo, "cmd-shift-z"),
@@ -173,6 +177,49 @@ fn the_edit_menu_has_the_text_box_keys(cx: &mut TestAppContext) {
             assert_eq!(key(&ui, "Edit", name).as_deref(), Some(shown), "{name}");
         }
     }
+}
+
+/// Find has a menu of its own under the text box's items, as a Mac app has it, and finds in the chat showing. What it
+/// does is tested by pressing its keys, in `finding.rs`.
+#[gpui_kit::test]
+fn the_edit_menu_has_find_for_the_chat_showing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_repository(cx, &stack);
+    let Some(OwnedMenuItem::Submenu(find)) = menu(&ui, "Edit").items.into_iter().last() else {
+        panic!("Find isn't a menu at the end of Edit")
+    };
+    let shown: Vec<(String, Box<dyn Action>)> = find
+        .items
+        .into_iter()
+        .filter_map(|item| match item {
+            OwnedMenuItem::Action { name, action, .. } => Some((name, action)),
+            _ => None,
+        })
+        .collect();
+    let wanted: [(&str, &dyn Action, &str); 3] = [
+        ("Find…", &desktop::FindInChat, "cmd-f"),
+        ("Find Next", &desktop::FindNext, "cmd-g"),
+        ("Find Previous", &desktop::FindPrevious, "cmd-shift-g"),
+    ];
+    assert_eq!(shown.len(), wanted.len());
+    for ((name, action), (wanted_name, wanted_action, wanted_key)) in shown.iter().zip(wanted) {
+        assert_eq!(name, wanted_name);
+        assert!(action.partial_eq(wanted_action), "{name}");
+        assert_eq!(key_for(&ui, action.as_ref()).as_deref(), Some(wanted_key), "{name}");
+    }
+    let available = |ui: &mut Ui<'_>| {
+        ui.frame();
+        ui.cx.update(|cx| cx.is_action_available(&desktop::FindInChat))
+    };
+    assert!(!available(&mut ui), "with no chat to find in");
+
+    ui.new_workspace();
+
+    assert!(available(&mut ui));
+    let (pane, transcript) = (ui.pane().unwrap(), ui.transcript().unwrap());
+    let chat = ui.cx.read_entity(&transcript, |t, _| t.session_id().clone());
+    ui.cx.update(|cx| pane.update(cx, |p, cx| p.open_subagent_tab(chat, "call-1".into(), "Look around".into(), cx)));
+    assert!(!available(&mut ui), "with the subagent tab in front, which isn't searched");
 }
 
 /// Choosing the items, rather than pressing their keys, which the kit's own tests cover.

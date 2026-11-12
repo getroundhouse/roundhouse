@@ -15,6 +15,7 @@ use super::row;
 use super::tools::agent;
 use super::turn_times;
 use crate::calls::count;
+use crate::find::FindLook;
 use crate::item_key::ItemKey;
 use crate::long_texts::LongTexts;
 use crate::transcript::Model;
@@ -46,7 +47,8 @@ pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement>
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
-    Some(row().child(agent::prompt_block(texts, &key, prompt, cx)).into_any_element())
+    // Nothing's looked for in the subagent tab.
+    Some(row().child(agent::prompt_block(texts, &key, prompt, &FindLook::default(), cx)).into_any_element())
 }
 
 /// Its report, once it's done, in the tab's last row. That's the tail's, which no event is in, so an image it points
@@ -54,7 +56,7 @@ pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement>
 pub(super) fn foot(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
     let report = report(m)?;
     let key = ItemKey::Call(shown(m)?.call.clone());
-    Some(row().child(agent::report_block(texts, &key, report, None, cx)).into_any_element())
+    Some(row().child(agent::report_block(&key, super::agent_text(texts, &key, report), cx)).into_any_element())
 }
 
 fn report(m: &Model) -> Option<&str> {

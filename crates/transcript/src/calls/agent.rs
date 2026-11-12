@@ -35,6 +35,11 @@ impl<'a> Agent<'a> {
     pub(crate) fn title(&self) -> &'a str {
         self.description.unwrap_or("Agent")
     }
+
+    /// What the agent said the subagent is for, if it said, which is the title then.
+    pub(crate) fn described(&self) -> Option<&'a str> {
+        self.description
+    }
 }
 
 /// Claude's own kind of subagent, which can do anything the agent can, so naming it says nothing.

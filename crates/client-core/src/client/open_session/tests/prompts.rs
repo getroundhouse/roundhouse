@@ -2,108 +2,43 @@
 //! to do on cue.
 
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::frame;
-use protocol::model::PromptLine;
+use parking_lot::Mutex;
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::model::{PromptLine, Seq, Session};
 
-use super::super::*;
-use crate::ClientError;
+use super::super::{FollowError, OpenSession};
+use super::{answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until};
+use crate::{Client, ClientError};
 
-/// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
-const LAST_SEQ: Seq = 600;
 /// A session the hub has deleted, so it refuses to follow it.
 const GONE: &str = "gone";
 
-/// A hub that answers each ask for the list of prompts with the next of `lists`, a read with no events, following
-/// [`GONE`] with `NotFound`, and anything else with Ok, on each connection it's given. It reports every request it's
-/// sent.
+/// A hub that answers each ask for the list of prompts with the next of `lists`, following [`GONE`] with `NotFound`,
+/// and anything else as [`answered_simply`], on each connection it's given. It reports every request it's sent.
 fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientRequest> {
-    let listener = UnixListener::bind(socket).unwrap();
-    let lists = Arc::new(Mutex::new(VecDeque::from(lists)));
-    let (asked, heard) = flume::unbounded();
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let (stream, lists, asked) = (stream.unwrap(), lists.clone(), asked.clone());
-            std::thread::spawn(move || serve(stream, &lists, &asked));
-        }
-    });
-    heard
-}
-
-fn serve(mut stream: UnixStream, lists: &Mutex<VecDeque<ReplyOutcome>>, asked: &flume::Sender<ClientRequest>) {
-    for line in BufReader::new(stream.try_clone().unwrap()).lines() {
-        let Ok(line) = line else { return };
-        let ClientFrame { id, request } = frame::decode(line.as_bytes()).unwrap();
-        let response = |response| Some(ReplyOutcome::Response(response));
-        let outcome = if matches!(request, ClientRequest::Hello { .. }) {
-            response(ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "scripted".into() })
-        } else if matches!(request, ClientRequest::SessionPromptList { .. }) {
+    let lists = Mutex::new(VecDeque::from(lists));
+    start_hub_answering(socket, move |request| {
+        if matches!(request, ClientRequest::SessionPromptList { .. }) {
             Some(lists.lock().pop_front().unwrap_or_else(|| {
                 ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "asked for more lists than the test expects"))
             }))
-        } else if matches!(&request, ClientRequest::SessionSubscribe { id, .. } if id.as_str() == GONE) {
+        } else if matches!(request, ClientRequest::SessionSubscribe { id, .. } if id.as_str() == GONE) {
             Some(refused(ErrorCode::NotFound, "no such session"))
-        } else if matches!(request, ClientRequest::SessionRead { .. }) {
-            response(ClientResponse::Events { events: Vec::new(), last_seq: LAST_SEQ })
-        } else if matches!(request, ClientRequest::SessionUnsubscribe { .. }) {
-            // Sent without waiting for a reply.
-            None
         } else {
-            response(ClientResponse::Ok)
-        };
-        if let Some(outcome) = outcome {
-            stream.write_all(&frame::encode(&HubFrame::Reply { id, outcome }).unwrap()).unwrap();
+            answered_simply(request)
         }
-        let _ = asked.send(request);
-    }
-}
-
-fn session() -> Session {
-    let record = format!(
-        r#"{{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle",
-        "last_seq":{LAST_SEQ},"created_at_ms":0,"updated_at_ms":0}}"#
-    );
-    serde_json::from_str(&record).unwrap()
+    })
 }
 
 fn listed(lines: Vec<PromptLine>) -> ReplyOutcome {
     ReplyOutcome::Response(ClientResponse::Prompts { prompts: lines })
 }
 
-fn refused(code: ErrorCode, message: &str) -> ReplyOutcome {
-    ReplyOutcome::Error(ApiError::new(code, message))
-}
-
-fn until(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !done() {
-        assert!(Instant::now() < deadline, "never {what}");
-        std::thread::sleep(Duration::from_millis(5));
-    }
-}
-
 fn seqs(open: &OpenSession) -> Vec<Seq> {
     open.read(|log| log.prompt_lines().map(PromptLine::seq).collect())
-}
-
-/// Every request the hub is sent until the follower's last subscription is let go, which is the last thing the
-/// follower sends once every handle on it has gone.
-fn requests_until_unsubscribed(heard: &flume::Receiver<ClientRequest>, subscriptions: usize) -> Vec<ClientRequest> {
-    let mut requests = Vec::new();
-    while requests.iter().filter(|r| matches!(r, ClientRequest::SessionUnsubscribe { .. })).count() < subscriptions {
-        let Ok(request) = heard.recv_timeout(Duration::from_secs(10)) else {
-            panic!("the follower never let go: {requests:?}");
-        };
-        requests.push(request);
-    }
-    requests
 }
 
 fn lists_asked(requests: &[ClientRequest]) -> usize {

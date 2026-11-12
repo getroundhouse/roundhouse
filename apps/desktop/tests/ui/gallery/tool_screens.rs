@@ -42,6 +42,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open(tool_chats::SEARCH_LINE), Step::Open(tool_chats::SEARCH)],
     },
     Screen {
+        name: "finding",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),
+        frame: Frame::Transcript(&[Part::Region(Region::FindBar)]),
+        steps: &[Step::Select(FOCUS), Step::Find("fmt")],
+    },
+    Screen {
         name: "tool-any",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::any_tool())),

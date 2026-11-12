@@ -80,7 +80,13 @@ impl ListElement {
             (state.heights.rows(), state.lay_from(tall * WALKED))
         };
         let layout = lay_out(rows, start, tall, &mut Measuring { list: self, width: bounds.size.width, window, cx });
-        self.state.borrow_mut().laid_out(layout.top, layout.anchor, layout.end_in_sight);
+        let mut shown = layout.rows.iter().filter(|row| row.drawn.is_some()).map(|row| row.row);
+        let first = shown.next();
+        let shown = first.map_or(0..0, |first| first..shown.next_back().unwrap_or(first) + 1);
+        let mut state = self.state.borrow_mut();
+        state.laid_out(layout.top, layout.anchor, layout.end_in_sight);
+        state.shown = shown;
+        drop(state);
         // The lowest of them, which is the one nearest what's already loaded when scrolling back through a session,
         // and the last a list that asked for each row as it drew it would have asked for.
         if let Some(unfetched) = layout.rows.iter().rev().find(|row| !row.fetched) {

@@ -20,6 +20,7 @@ use gpui_kit::{
 };
 
 use self::wheel::{Owner, Wheel};
+use crate::find::reveal::{self, Reveal};
 
 mod wheel;
 
@@ -33,6 +34,8 @@ pub(crate) struct ScrollArea {
     max_height: Pixels,
     scrolls: Scrolls,
     content: AnyElement,
+    /// Where the transcript's match being shown was drawn, to scroll to when it's in here.
+    reveal: Option<Reveal>,
 }
 
 /// Which ways an area scrolls.
@@ -46,7 +49,13 @@ enum Scrolls {
 impl ScrollArea {
     /// `id` keeps the area's place from one frame to the next, so it's the area's alone.
     pub(crate) fn new(id: impl Into<ElementId>, max_height: Pixels, content: impl IntoElement) -> Self {
-        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content: content.into_any_element() }
+        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content: content.into_any_element(), reveal: None }
+    }
+
+    /// Scrolls to the match being shown when it's drawn in here.
+    pub(crate) fn follows(mut self, reveal: &Reveal) -> Self {
+        self.reveal = Some(reveal.clone());
+        self
     }
 
     pub(crate) fn max_height(mut self, max_height: Pixels) -> Self {
@@ -80,7 +89,10 @@ impl RenderOnce for ScrollArea {
         div()
             .relative()
             .child(area.test_support())
-            // After the area, so what it holds acts on the wheel first.
+            // After the area, so what it holds acts on the wheel first, and has said where a match it shows is.
+            .children(
+                self.reveal.map(|reveal| follows_the_match(self.id.clone(), self.scrolls, handle.clone(), reveal)),
+            )
             .child(takes_the_wheel(self.id, self.scrolls, handle))
             .child(div().absolute().inset_0().child(bar))
     }
@@ -93,6 +105,35 @@ impl RenderOnce for ScrollArea {
 /// the box at the top, since a row would stretch it to the area's height and leave nothing below to scroll to.
 pub(crate) fn holding_wide<E: ParentElement + Styled>(area: E, content: impl IntoElement) -> E {
     area.flex().items_start().child(div().flex_none().min_w_full().child(content))
+}
+
+/// Draws nothing, and scrolls the area `id` to the match being shown, if it's in the area and out of its view, down
+/// and, if it `scrolls` both ways, sideways. Until the match is drawn where it's scrolled to, the transcript leaves its
+/// list where it is.
+fn follows_the_match(id: ElementId, scrolls: Scrolls, handle: ScrollHandle, reveal: Reveal) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |_, (), window, _| {
+            let Some(drawn) = reveal.drawn().filter(|drawn| drawn.area.as_ref() == Some(&id)) else { return };
+            let (offset, max, visible) = (handle.offset(), handle.max_offset(), handle.bounds());
+            let mut to = offset;
+            if let Some(by) = reveal::scroll_by(visible, drawn.bounds) {
+                to.y = (offset.y - by).clamp(-max.y, px(0.));
+            }
+            if scrolls == Scrolls::BothWays
+                && let Some(by) = reveal::scroll_across(visible, drawn.bounds)
+            {
+                to.x = (offset.x - by).clamp(-max.x, px(0.));
+            }
+            if to != offset {
+                handle.set_offset(to);
+                reveal.moved();
+                window.refresh();
+            }
+        },
+    )
+    .absolute()
+    .size_0()
 }
 
 /// Lies over the area `id`, and acts on each wheel event over it as [`turn`] says: down or up, and sideways too if it

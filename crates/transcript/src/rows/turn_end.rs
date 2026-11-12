@@ -11,7 +11,8 @@ use look::Hand as _;
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
 use protocol::model::AgentKind;
 
-use super::{colored_line, empty, muted_line, row, turn_times};
+use super::{empty, marked_line, muted_line, row, turn_times};
+use crate::find::{FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use card::TurnCard;
 
@@ -20,17 +21,21 @@ mod words;
 
 /// How the turn `ended`, in a chat with `agent`. A finished one says how long it took and when it ended, with a button
 /// that copies what the agent said last, its `result`, and resting the pointer on what it says shows the turn's card.
-pub(super) fn line(ended: &SessionEvent, agent: AgentKind, cx: &App) -> AnyElement {
+/// A failed one says what went wrong, with its matches.
+pub(super) fn line(ended: &SessionEvent, agent: AgentKind, find: &FindLook, cx: &App) -> AnyElement {
     let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, models, tokens, .. } = &ended.body
     else {
         return empty();
     };
     match outcome {
         TurnOutcome::Cancelled => muted_line("Stopped"),
-        TurnOutcome::Error => {
-            let detail = errors.first().cloned().unwrap_or_else(|| "The turn failed".to_string());
-            colored_line(detail, cx.theme().danger)
-        }
+        TurnOutcome::Error => match errors.first() {
+            Some(error) => {
+                let marks = find.marks(&(ItemKey::Event(ended.seq, 0), Part::TurnError), error);
+                marked_line(error.clone(), &marks, cx.theme().danger)
+            }
+            None => marked_line("The turn failed".to_string(), &Marks::default(), cx.theme().danger),
+        },
         TurnOutcome::Success | TurnOutcome::Unknown => {
             let (started_at_ms, took_ms) = timed(ended.ts_ms, *started_at_ms, *duration_ms);
             let card = TurnCard {
