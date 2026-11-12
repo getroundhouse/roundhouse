@@ -1,6 +1,7 @@
 use std::fs::Permissions;
 use std::io::Write as _;
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
+use std::path::Component;
 
 use super::*;
 
@@ -130,6 +131,32 @@ fn any_other_build_starts_the_daemon_where_it_is() {
 
     assert_eq!(started_from(&paths), original.to_str().unwrap());
     assert!(!paths.daemons_dir.exists());
+}
+
+/// A hub outlives the client that starts it, so it runs in its data directory rather than the client's, which can be a
+/// workspace that gets archived, or on Linux the mount of an `AppImage` that an update has replaced. Each path it's
+/// handed is whole, so a relative one still names what it did where the client is.
+#[test]
+fn a_hub_runs_in_its_data_directory_and_is_handed_whole_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    // The same directory, named from the one this test runs in.
+    let up: PathBuf = std::env::current_dir().unwrap().components().skip(1).map(|_| Component::ParentDir).collect();
+    let relative = up.join(dir.path().strip_prefix("/").unwrap());
+    let paths = paths_in(&relative);
+    let says = "{ pwd -P; echo \"$0\"; echo \"$ROUNDHOUSE_HOME\"; echo \"$ROUNDHOUSE_WORKSPACES\"; } > \"$ROUNDHOUSE_HOME/ran\"";
+    install(dir.path(), "app", &daemon_script(VERSION, says));
+
+    start_hub(&paths, &Daemon::in_place(relative.join("app").join(DAEMON_NAME))).unwrap();
+
+    let file = paths.data_dir.join("ran");
+    let ran =
+        wait_for("the daemon to run", || std::fs::read_to_string(&file).ok().filter(|ran| ran.lines().count() == 4));
+    let [ran_in, program, home, workspaces] = ran.lines().map(Path::new).collect::<Vec<_>>()[..] else {
+        panic!("{ran}")
+    };
+    assert_eq!(ran_in, paths.data_dir.canonicalize().unwrap());
+    assert!([program, home, workspaces].iter().all(|path| path.is_absolute()), "{ran}");
+    assert_eq!(home.canonicalize().unwrap(), ran_in);
 }
 
 #[test]
