@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use protocol::model::{
-    BranchName, Branches, Checks, Head, Local, MergeState, PrState, PullRequest, PullRequestFound, Rev, Review,
-    SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, Checks, Head, Local, MergeState, PrState, PullRequest, PullRequestFound, Review, Workspace,
+    WorkspaceId, WorkspaceStatus,
 };
 
 use super::{Asked, LATEST, SOONEST, Schedule, Went, due};
@@ -27,29 +27,8 @@ fn pull_request(state: PrState) -> PullRequest {
 }
 
 fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Workspace {
-    Workspace {
-        id: id.into(),
-        repo_id: "r".into(),
-        name: id.to_string(),
-        branch: id.into(),
-        base_ref: None,
-        path: Some(format!("/w/{id}")),
-        status,
-        provider: "local".into(),
-        instance_id: id.into(),
-        created_at_ms: 1,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: SetupStatus::Succeeded,
-        port_base: 55_000,
-        rev: Rev::default(),
-        title: None,
-        title_source: TitleSource::FirstLine,
-        pull_request: Some(PullRequestFound { pull_request: state.map(pull_request) }),
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
+    let pull_request = Some(PullRequestFound { pull_request: state.map(pull_request) });
+    Workspace { status, pull_request, ..protocol::fixtures::workspace(id) }
 }
 
 /// Each workspace read at this long ago, waiting the soonest.

@@ -1,50 +1,26 @@
 //! The feed never tells of a copy of a record that's no newer than one it has told of, as two tasks that each announce
 //! a record after their own change can finish in either order.
 
-use std::sync::OnceLock;
-
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::client::HubNotice;
-use protocol::model::{RecentWork, RecordKey, Rev, Session, SessionId, Subagent, SubagentStatus, WorkspaceDraft};
+use protocol::model::{RecordKey, Rev, Session, Subagent, WorkspaceDraft};
 use tokio::sync::broadcast;
 
 use super::Feed;
-use crate::store::tests::store_with_session;
 
 /// The IDs of the sessions the law sends copies of.
 const IDS: [&str; 3] = ["s", "t", "u"];
 
 /// The session `id`'s record at `rev`.
 fn session(id: &str, rev: u64) -> Session {
-    static RECORDED: OnceLock<Session> = OnceLock::new();
-    let recorded = RECORDED.get_or_init(|| {
-        let dir = tempfile::tempdir().unwrap();
-        store_with_session(dir.path()).get_session(&SessionId::from("s")).unwrap().session
-    });
-    Session { id: id.into(), rev: Rev::new(rev), ..recorded.clone() }
+    Session { rev: Rev::new(rev), ..protocol::fixtures::session(id) }
 }
 
 /// The subagent `call` in the session `id`, at `rev`.
 fn subagent(id: &str, call: &str, rev: u64) -> Subagent {
-    Subagent {
-        session_id: id.into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: false,
-        model: None,
-        status: SubagentStatus::Working,
-        started_at_ms: 0,
-        ended_at_ms: None,
-        calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
-        report: None,
-        rev: Rev::new(rev),
-    }
+    Subagent { session_id: id.into(), rev: Rev::new(rev), ..protocol::fixtures::subagent(call) }
 }
 
 fn told(session: &Session) -> HubNotice {
