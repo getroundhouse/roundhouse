@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use client_core::Answered;
-use client_core::session_log::SessionLog;
+use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
-use protocol::model::{Call, CallResult, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus};
+use protocol::model::{
+    Call, CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus,
+};
 use serde_json::json;
 
 use super::{Around, Reply, Settled, block_key};
@@ -79,6 +81,18 @@ fn the_record_that_closes_a_question_says_so_and_another_approval_s_does_not() {
 
     assert!(Around::read(&log, &m, 2, &question).closes_a_question, "its line says it wasn't answered");
     assert!(!Around::read(&log, &m, 4, &command).closes_a_question, "so only a command's says it was denied");
+}
+
+/// What's loaded can't say whether an approval's answer is in a page that isn't, and the session's record can.
+#[test]
+fn an_approvals_card_is_open_as_the_record_says_whatever_is_loaded_after_it() {
+    let request = asked("a", "Bash");
+    let with_a_gap = log([event(1, request.clone()), event(3, asked("b", "Bash"))]);
+    let open = vec![OpenApproval { seq: 1, approval_id: "a".into() }, OpenApproval { seq: 3, approval_id: "b".into() }];
+    let recorded = Model { approvals: Some(RecordedApprovals { open, through: 3 }), ..Model::default() };
+
+    assert!(!Around::read(&with_a_gap, &Model::default(), 1, &request).approval_open, "from a hub that doesn't say");
+    assert!(Around::read(&with_a_gap, &recorded, 1, &request).approval_open);
 }
 
 #[test]

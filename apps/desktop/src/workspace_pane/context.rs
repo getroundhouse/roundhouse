@@ -69,10 +69,10 @@ impl WorkspacePane {
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
         let ring = middle().size(Slot::SIZE).child(div().size(RING).child(ring(used, cx)));
-        // There's no asking while the agent is on a turn, or with no hub to ask, nor an agent that doesn't compact when
-        // asked.
+        // There's no asking while the record says the hub would refuse, such as while the agent is on a turn, or with no
+        // hub to ask, nor an agent that doesn't compact when asked.
         let (pane, off, compacts) =
-            (cx.weak_entity(), session.status.in_turn() || self.hub == Hub::Away, self.compacts());
+            (cx.weak_entity(), session.compaction_waits() || self.hub == Hub::Away, self.compacts());
         // It holds a button, so it waits a moment for the pointer to cross the gap between the ring and the card.
         let hover = card_over("context-hover", ring)
             .close_delay(CROSSING)

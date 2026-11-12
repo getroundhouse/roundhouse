@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use client_core::session_log::SessionLog;
+use client_core::session_log::{RecordedApprovals, SessionLog};
 use client_core::{Client, OpenSession, View};
 use gpui_kit::{
     AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, SharedString, Task,
@@ -57,6 +57,9 @@ pub(crate) struct Model {
     /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
     /// known, and while there's none or nothing to say of it.
     pub pull_request: Option<PullRequestStanding>,
+    /// The approvals the session's record says its agent is waiting on, which the cards and the question asked follow.
+    /// None from a hub that doesn't say, whose are found among what's loaded.
+    pub approvals: Option<RecordedApprovals>,
     /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
     /// shared with client-core's snapshot, since every frame's rows take the records of the calls they draw, and one
     /// can hold a call's whole input, such as all of a file it wrote.
@@ -83,6 +86,7 @@ impl Model {
             subagent_calls: RefCell::default(),
             at_work,
             pull_request: None,
+            approvals: None,
             subagents: HashMap::new(),
             subagent_rows: RefCell::default(),
             alone: None,
@@ -162,7 +166,8 @@ impl Transcript {
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
-        let model = Rc::new(RefCell::new(Model::with(at_work)));
+        let approvals = RecordedApprovals::of(session);
+        let model = Rc::new(RefCell::new(Model { approvals, ..Model::with(at_work) }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {
@@ -211,7 +216,8 @@ impl Transcript {
 
     /// The approvals waiting on an answer, newest last.
     pub fn open_approvals(&self) -> Vec<SessionEvent> {
-        self.session.read(|log| log.open_approvals().into_iter().cloned().collect())
+        let m = self.model.borrow();
+        self.session.read(|log| log.open_approvals(m.approvals.as_ref()).into_iter().cloned().collect())
     }
 
     pub fn loaded_events(&self) -> usize {
