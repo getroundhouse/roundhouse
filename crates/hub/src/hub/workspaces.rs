@@ -208,6 +208,11 @@ impl Hub {
         }
     }
 
+    pub(crate) async fn repo_of(&self, workspace: &Workspace) -> Result<Repo, ApiError> {
+        let repo_id = workspace.repo_id.clone();
+        self.blocking(move |store| store.get_repo(&repo_id)).await
+    }
+
     /// Tells everyone following the feed what the workspace is now, read back from the store, after something with no
     /// notice of its own has changed it, such as the person sending one of its agents something. A failure is only
     /// logged, since what changed it has happened.

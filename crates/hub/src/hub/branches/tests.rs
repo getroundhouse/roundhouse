@@ -95,9 +95,10 @@ async fn only_the_worker_the_workspace_has_now_is_heard() {
     let current = reading(&hub, &says);
     let id = WorkspaceId::from("w");
 
-    hub.branches_read(&id, &replaced, on("aspen", &[])).await;
+    let frame = |branch: &str| WorkerFrame::Branches { branches: on(branch, &[]) };
+    hub.branches_frame(&id, &replaced, frame("aspen")).await;
     let from_replaced = hub.workspace(&id).await.unwrap().branches;
-    hub.branches_read(&id, &current, on("header", &[])).await;
+    hub.branches_frame(&id, &current, frame("header")).await;
     let from_current = hub.workspace(&id).await.unwrap().branches;
 
     assert_eq!(from_replaced, None);

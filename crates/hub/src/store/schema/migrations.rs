@@ -389,4 +389,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     subagents::CONTEXT_TOKENS,
     // The logins the hub holds for agents' accounts, on the accounts' rows, in `logins`.
     logins::HELD,
+    // Each workspace's other worktrees, made for its work, in `workspaces`.
+    workspaces::CHILD_WORKTREES,
 ];

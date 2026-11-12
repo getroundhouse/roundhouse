@@ -12,6 +12,7 @@ mod awake;
 mod branches;
 mod builds;
 mod carrying_on;
+mod children;
 mod comments;
 mod feed;
 mod hub_settings;
@@ -96,6 +97,10 @@ pub(crate) struct Hub {
     /// workspace, because a slow or stuck worker mustn't hold up the others. It guards whether nothing but this hub's
     /// own worker can be on the instance, which is false until the hub has stopped whatever an earlier one left there.
     worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<bool>>>>,
+    /// Held to read while one of a workspace's other worktrees is made, and to write while one is removed, their
+    /// records are settled or the workspace is archived, so nothing is removed or forgotten as it's made, which would
+    /// leave it there unrecorded.
+    child_gates: Mutex<HashMap<WorkspaceId, Arc<tokio::sync::RwLock<()>>>>,
     /// Held while finding or making a workspace's first session.
     ensuring_session: AsyncMutex<()>,
     sessions: Mutex<Sessions>,
@@ -154,6 +159,7 @@ impl Hub {
             agents,
             workers: Mutex::new(HashMap::new()),
             worker_gates: Mutex::new(HashMap::new()),
+            child_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),

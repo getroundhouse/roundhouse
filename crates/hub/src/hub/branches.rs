@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::model::{Branches, Head, Upstream, WorkspaceId};
-use protocol::worker::WatchBranches;
+use protocol::worker::{WatchBranches, WorkerFrame};
 use tracing::{debug, warn};
 
 use super::Hub;
@@ -35,16 +35,20 @@ enum Moved {
 impl Hub {
     /// Has a ready workspace's worker watch its worktree's branches. Not waited on: the worker
     /// answers only that it's watching, and what it sees comes in frames of its own.
-    pub(super) async fn watch_branches(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
+    ///
+    /// Its other worktrees' records are settled, and those there watched, on a task of their own.
+    pub(super) async fn watch_branches(self: &Arc<Self>, ready: &ReadyWorkspace, link: &Arc<WorkerLink>) {
         let path = ready.path().to_owned();
         if let Err(e) = link.send(WatchBranches { path }).await {
             debug!(id = %ready.id(), "asking the worker to watch the branches: {}", e.message);
         }
+        self.settle_children_later(ready.id(), link);
     }
 
     /// The same, waiting until the worker has sent what the branches are now, and the hub has recorded it, for a
     /// worktree that's just come back, so its record says which branch it's on before it's announced.
-    pub(super) async fn watch_branches_from_now(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
+    pub(super) async fn watch_branches_from_now(self: &Arc<Self>, ready: &ReadyWorkspace, link: &Arc<WorkerLink>) {
+        self.settle_children_later(ready.id(), link);
         let path = ready.path().to_owned();
         let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WatchBranches { path })).await;
         let id = ready.id();
@@ -55,12 +59,42 @@ impl Hub {
         }
     }
 
-    /// What the workspace's worker read of its branches. Only from the worker the workspace has now, since one that's
-    /// been replaced may still have frames on the way, which say less than the new one's.
-    pub(crate) async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>, branches: Branches) {
-        if !link.is_current(&self.workers.lock(), id) {
-            return;
+    /// What the workspace's worker read of the branches of one of its worktrees: its own, or another made for it.
+    /// Gives back a frame that isn't either. Only from the worker the workspace has now, since one that's been
+    /// replaced may still have frames on the way, which say less than the new one's.
+    pub(crate) async fn branches_frame(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        link: &Arc<WorkerLink>,
+        frame: WorkerFrame,
+    ) -> Option<WorkerFrame> {
+        let current = || link.is_current(&self.workers.lock(), id);
+        if let WorkerFrame::Branches { branches } = frame {
+            if current() {
+                self.branches_read(id, link, branches).await;
+            }
+            return None;
         }
+        if let WorkerFrame::ChildBranches { path, branches } = frame {
+            if current() {
+                self.child_branches_read(id, path, branches).await;
+            }
+            return None;
+        }
+        Some(frame)
+    }
+
+    /// What the workspace's worker read of the branches of another of its worktrees, which go on that worktree's
+    /// record.
+    async fn child_branches_read(&self, id: &WorkspaceId, path: String, branches: Branches) {
+        let owned = id.clone();
+        if let Err(e) = self.blocking(move |store| store.set_child_branches(&owned, &path, &branches)).await {
+            debug!(%id, "recording another worktree's branches: {}", e.message);
+        }
+    }
+
+    /// What the workspace's worker read of its own worktree's branches.
+    async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>, branches: Branches) {
         let (owned, after) = (id.clone(), branches.clone());
         let (before, workspace) = match self.blocking(move |store| store.set_workspace_branches(&owned, &after)).await {
             Ok(BranchesSet { before, workspace: Some(workspace) }) => (before, workspace),
