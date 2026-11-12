@@ -7,7 +7,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::client::HubNotice;
-use protocol::model::{RecentWork, RecordKey, Rev, Session, SessionId, Subagent, SubagentStatus};
+use protocol::model::{RecentWork, RecordKey, Rev, Session, SessionId, Subagent, SubagentStatus, WorkspaceDraft};
 use tokio::sync::broadcast;
 
 use super::Feed;
@@ -127,4 +127,19 @@ fn a_copy_without_a_revision_is_always_told_of() {
     feed.send(told(&session("s", 1)));
 
     assert_eq!(heard(&mut client), [told(&session("s", 2)), told(&session("s", 0)), told(&session("s", 0))]);
+}
+
+/// What's in the new-workspace dialog is one record, with no ID, and its copies are told of the same way.
+#[test]
+fn the_new_workspace_dialogs_copies_are_in_order() {
+    let feed = Feed::new();
+    let mut client = feed.subscribe();
+    let dialog = |rev| HubNotice::WorkspaceDraft(WorkspaceDraft { rev: Rev::new(rev), ..WorkspaceDraft::default() });
+
+    feed.send(dialog(2));
+    feed.send(dialog(1));
+    feed.send(dialog(2));
+    feed.send(dialog(3));
+
+    assert_eq!(heard(&mut client), [dialog(2), dialog(3)]);
 }

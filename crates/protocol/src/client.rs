@@ -8,7 +8,7 @@ use crate::find::Found;
 use crate::model::{
     Account, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, Place,
     PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError,
-    Workspace, WorktreeFiles,
+    Workspace, WorkspaceDraft, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -40,6 +40,7 @@ pub enum ClientResponse {
     Ok,
     HubStatus(HubStatus),
     HubSettings(HubSettings),
+    WorkspaceDraft(WorkspaceDraft),
     Repo(Repo),
     Repos {
         repos: Vec<Repo>,
@@ -243,6 +244,7 @@ pub enum HubNotice {
     Comment(DiffComment),
     HubSettings(HubSettings),
     Account(Account),
+    WorkspaceDraft(WorkspaceDraft),
     /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
     /// `SessionSubagents`.
     Subagent(Subagent),

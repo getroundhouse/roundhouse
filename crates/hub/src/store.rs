@@ -40,6 +40,7 @@ mod subagents;
 pub(crate) mod tests;
 mod titles;
 mod tools;
+mod workspace_draft;
 mod workspaces;
 
 use schema::{migrate, open_connection};

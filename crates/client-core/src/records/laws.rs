@@ -217,6 +217,24 @@ fn a_hub_from_before_it_kept_settings_has_none() {
     assert_eq!(held.hub_settings(), None);
 }
 
+fn dialog(text: &str, rev: u64) -> WorkspaceDraft {
+    WorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..WorkspaceDraft::default() }
+}
+
+#[test]
+fn whats_in_the_new_workspace_dialog_is_a_record_like_the_rest() {
+    let mut held = HubRecords::default();
+    assert_eq!(held.workspace_draft(), None, "from a hub from before it kept one, and until the list has arrived");
+
+    assert!(held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(2), ..Records::default() }));
+    assert!(held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix the login", 5))));
+    assert!(!held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix", 4))), "an older copy that arrives late");
+
+    assert_eq!(held.workspace_draft(), Some(dialog("fix the login", 5)));
+    held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(3), ..Records::default() });
+    assert_eq!(held.workspace_draft(), Some(dialog("fix the login", 5)), "a list from before the change");
+}
+
 fn account(id: &str, used_percent: u8, rev: u64) -> Account {
     let limit = UsageLimit { window: LimitWindow::SevenDays, used_percent, resets_at_ms: None, heard_at_ms: None };
     Account {

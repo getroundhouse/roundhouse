@@ -344,7 +344,7 @@ impl Client {
         self.expect_ok(ClientRequest::SessionCompact { id: id.clone(), keeping })
     }
 
-    fn expect_ok(&self, request: ClientRequest) -> Result<()> {
+    pub(super) fn expect_ok(&self, request: ClientRequest) -> Result<()> {
         let reply = self.call(request)?;
         let ClientResponse::Ok = reply else {
             return unexpected(&reply);

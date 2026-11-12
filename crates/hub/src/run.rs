@@ -119,6 +119,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         config.on_demand,
     ));
     hub.carry_out(&settings);
+    hub.tidy_draft_files().await;
     let awake = hub.keep_awake();
     hub.start_queues().await;
 
