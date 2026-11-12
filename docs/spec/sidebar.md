@@ -7,6 +7,11 @@
 - **An archived workspace isn't listed.** Home shows archived workspaces, and brings one back, as `home.md` says.
 - **A workspace's mark speaks for its open chat with the most going on:** one whose agent is working, then one that stopped short, then one that only left something running. *Unconfirmed.*
 - **A workspace's row shows how many lines it has added and removed,** in green and red at its right, with either left out when it's none. *Not built:* the hub doesn't send them.
+- **A workspace's row shows a pencil while something typed in it isn't sent,** in a chat's composer, attached there, or as an answer to a question, so a prompt left half-written in another workspace isn't forgotten. The workspace showing has none, since what's typed in it is in view, but has one while Home shows in its place. It's muted, at the row's right end, just left of the button that archives the workspace under the pointer, and a little further from it than the icons' own edges would put it, so the two don't run together. The button's place is kept beside it, so it stays put as the pointer comes and goes. *Unconfirmed.* What's typed and attached in a composer is the hub's, as `chats.md` says, so a row has a pencil for it from before the app opened, and in another client. *Not built:* an answer being typed is only in the app that has it, so no other client shows a pencil for it.
+
+**Something typed in two workspaces that aren't showing, with the pointer on one of them.** *Unconfirmed.*
+
+![Something typed in two workspaces](screens/drafts.png)
 
 ## Order
 
@@ -45,7 +50,7 @@
 
 ## Archiving
 
-- **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*
+- **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it but beside a pencil, so the end of a long name gives way to it only while it shows. Pressing it doesn't open the workspace. *Unconfirmed.*
 - **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers and Regenerate title, which `workspaces.md` describes. Both archive as `Cmd-Shift-A` does, asking first if there's work it would lose, as `workspaces.md` says. *Unconfirmed.*
 - **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it, a pencil with sparks for a new title, and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*

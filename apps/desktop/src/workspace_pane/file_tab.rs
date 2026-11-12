@@ -96,6 +96,7 @@ impl WorkspacePane {
                 c.set_value(joined, window, cx);
                 c.set_selected_range(end..end, cx);
             });
+            t.keep_typed(true, cx);
         });
     }
 

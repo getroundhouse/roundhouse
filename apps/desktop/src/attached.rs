@@ -1,7 +1,7 @@
 //! Files waiting to go with a prompt that hasn't been sent, in a chat's composer or the new-workspace dialog: the list
 //! of them, drawn as tiles above what's typed, and the file picker and drop target that add to it. Each file is read
 //! and checked as it comes, in `reading`, so nothing that would be refused gets as far as sending. A prompt that can't
-//! be sent comes back with its files.
+//! be sent comes back with its files. The hub keeps a chat's with its draft, so each says which chat it was given to.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, Attac
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
 use protocol::attachment::MAX_PER_PROMPT;
-use protocol::model::AttachmentId;
+use protocol::model::{AttachmentId, SessionId};
 use protocol::prompt::PromptProblem;
 
 mod reading;
@@ -23,6 +23,8 @@ pub(crate) struct Attached {
     file: FileToSend,
     /// What its tile shows, for an image.
     preview: Option<Arc<Image>>,
+    /// The chat the hub was given it for, to keep with its draft.
+    kept_in: Option<SessionId>,
 }
 
 impl Attached {
@@ -30,7 +32,7 @@ impl Attached {
     pub(crate) fn new(file: FileToSend) -> Self {
         let preview = transcript::image_format(file.attachment.media_type)
             .map(|format| Arc::new(Image::from_bytes(format, file.data.clone())));
-        Self { file, preview }
+        Self { file, preview, kept_in: None }
     }
 
     fn name(&self) -> &str {
@@ -56,9 +58,18 @@ impl Attachments {
     /// Puts back the files of a prompt that couldn't be sent, then any added since, and says why for each that
     /// didn't fit.
     pub(crate) fn put_back(&mut self, files: Vec<FileToSend>) -> Vec<String> {
+        self.put_first(files.into_iter().map(Attached::new).collect())
+    }
+
+    /// Puts back the files the hub kept with `chat`'s draft, as [`Attachments::put_back`] does.
+    pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, chat: &SessionId) -> Vec<String> {
+        let kept = |file| Attached { kept_in: Some(chat.clone()), ..Attached::new(file) };
+        self.put_first(files.into_iter().map(kept).collect())
+    }
+
+    fn put_first(&mut self, files: Vec<Attached>) -> Vec<String> {
         let since = std::mem::take(&mut self.0);
-        let back = files.into_iter().map(Attached::new).chain(since);
-        back.filter_map(|file| self.push(file).err()).collect()
+        files.into_iter().chain(since).filter_map(|file| self.push(file).err()).collect()
     }
 
     /// Adds another list's files after these, as [`Attachments::put_back`] does.
@@ -66,8 +77,31 @@ impl Attachments {
         other.0.into_iter().filter_map(|file| self.push(file).err()).collect()
     }
 
-    pub(crate) fn remove(&mut self, id: &AttachmentId) {
-        self.0.retain(|file| &file.file.attachment.id != id);
+    /// Takes a file out, and says which chat the hub was given it for, if any.
+    pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<SessionId> {
+        let at = self.0.iter().position(|file| &file.file.attachment.id == id)?;
+        self.0.remove(at).kept_in
+    }
+
+    /// The files the hub hasn't been given for `chat`, to give it, and which from now on it's taken to have.
+    pub(crate) fn not_yet_given(&mut self, chat: &SessionId) -> Vec<FileToSend> {
+        let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(chat));
+        new.map(|file| {
+            file.kept_in = Some(chat.clone());
+            file.file.clone()
+        })
+        .collect()
+    }
+
+    /// The IDs of the files the hub was given for `chat`.
+    pub(crate) fn given_for<'a>(&'a self, chat: &'a SessionId) -> impl Iterator<Item = AttachmentId> + 'a {
+        let given = self.0.iter().filter(move |file| file.kept_in.as_ref() == Some(chat));
+        given.map(|file| file.file.attachment.id.clone())
+    }
+
+    /// Each file's ID, in order, for the draft that names them.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = AttachmentId> + '_ {
+        self.0.iter().map(|file| file.file.attachment.id.clone())
     }
 
     /// Takes every file, to send.
@@ -137,9 +171,9 @@ pub(crate) fn read_paths_into<T: 'static>(
     paths: Vec<PathBuf>,
     cx: &mut Context<T>,
     files: impl FnOnce(&mut T) -> &mut Attachments + 'static,
-    refused: impl Fn(&mut T, String, &mut Context<T>) + 'static,
+    added: impl FnOnce(&mut T, Vec<String>, &mut Context<T>) + 'static,
 ) {
-    read_into(reading::from_paths(paths), cx, files, refused);
+    read_into(reading::from_paths(paths), cx, files, added);
 }
 
 /// A prompt handed back because it couldn't be sent, then anything typed since, so neither is lost.

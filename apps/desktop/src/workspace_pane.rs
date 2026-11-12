@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
-use client_core::{Client, RecordsFeed};
+use client_core::{Client, Drafts, RecordsFeed};
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::{AnyWindowHandle, App, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
+use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
+use protocol::attachment::Attachment;
 use protocol::model::{Account, AccountId, DiffComment, Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
@@ -17,10 +18,11 @@ use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
-use attaching::{Draft, Waiting};
+use attaching::{Composed, Waiting};
 pub(crate) use context::accounts_named;
 use file_tab::FileTab;
 pub use file_tab::Opened;
+pub(crate) use keeping::drafted;
 pub use reading::Mark;
 use reading::Reading;
 
@@ -33,6 +35,7 @@ mod context;
 mod file_tab;
 mod focus;
 mod front;
+mod keeping;
 mod pull_request;
 mod queue;
 mod reading;
@@ -98,7 +101,11 @@ pub struct WorkspacePane {
     /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
     transcripts: HashMap<SessionId, (Entity<Transcript>, Subscription)>,
     /// What's been typed and attached in the chats not showing.
-    drafts: HashMap<SessionId, Draft>,
+    drafts: HashMap<SessionId, Composed>,
+    /// Keeps what's typed and attached in each chat on the hub, as `keeping.rs` says.
+    keeper: Drafts,
+    /// The files the hub kept with each chat's draft that haven't been read back yet.
+    restoring: HashMap<SessionId, Vec<Attachment>>,
     /// What's attached in the chat showing, to go with what's typed.
     attached: Attachments,
     waiting: Option<Waiting>,
@@ -142,39 +149,22 @@ impl EventEmitter<PaneEvent> for WorkspacePane {}
 pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 impl WorkspacePane {
-    /// What's typed here and not sent, which goes when the app quits: how many chats have something in their
-    /// composer or typed as an answer to a question, and how many comments on the diff are being written.
-    pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
-        let typed = |text: &str| !text.trim().is_empty();
-        let answering = |id: &SessionId| {
-            let question = self.transcripts.get(id).and_then(|(transcript, _)| transcript.read(cx).question());
-            question.is_some_and(|question| question.read(cx).has_typed(cx))
-        };
-        let in_composer = typed(&self.composer.read(cx).text().to_string()) || !self.attached.is_empty();
-        let showing = usize::from(in_composer || self.active.as_ref().is_some_and(answering));
-        let drafted = |id: &SessionId| self.drafts.get(id).is_some_and(Draft::has_anything);
-        let ids = self.drafts.keys().chain(self.transcripts.keys().filter(|id| !self.drafts.contains_key(*id)));
-        let others = ids.filter(|id| self.active.as_ref() != Some(*id) && (drafted(id) || answering(id))).count();
-        let waiting = usize::from(self.waiting.as_ref().is_some_and(|waiting| waiting.draft.has_anything()));
-        let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
-        let comment = draft.is_some_and(|draft| typed(&draft.input.read(cx).text().to_string()));
-        (showing + others + waiting, usize::from(comment))
-    }
-
     /// Where the workspace's work stands, as its mark and the pull request's bar show it.
     pub(crate) fn work(&self) -> look::Work {
         self.pull_request.work()
     }
 
+    /// The pane for `workspace` and its `sessions`, with the comments on its diff from `records`.
     pub fn new(
         client: Client,
         records: RecordsFeed,
+        keeper: Drafts,
         workspace: Workspace,
         sessions: Vec<Session>,
-        comments: Vec<DiffComment>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let comments = records.read(|r| r.comments().remove(&workspace.id)).unwrap_or_default();
         let (composer, on_enter) = composer::new_input(window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
@@ -183,6 +173,8 @@ impl WorkspacePane {
         });
         let pull_request = Lookup::recorded(&workspace).unwrap_or(Lookup::Looking);
         let accounts = records.read(|held| accounts_named(held, &sessions));
+        // What the hub kept of each chat's composer, from when this app or another last had it.
+        let (drafts, restoring) = (keeping::drafts_kept_in(&sessions), keeping::files_kept_in(&sessions));
         let mut this = Self {
             client,
             records,
@@ -192,7 +184,9 @@ impl WorkspacePane {
             comments,
             active: None,
             transcripts: HashMap::new(),
-            drafts: HashMap::new(),
+            drafts,
+            keeper,
+            restoring,
             attached: Attachments::default(),
             waiting: None,
             creating_chat: false,
@@ -223,6 +217,7 @@ impl WorkspacePane {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
         }
+        this.bring_back_files(cx);
         this
     }
 
@@ -253,6 +248,7 @@ impl WorkspacePane {
             diff.viewer.update(cx, |v, _| v.reconnect(client));
         }
         self.behind = true;
+        self.bring_back_files(cx);
     }
 
     /// For when the pane is shown after a reconnect, to read again what it may have changed.

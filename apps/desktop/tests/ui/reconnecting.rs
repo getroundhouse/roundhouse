@@ -38,7 +38,8 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
     ui.wait_idle_with("the next turn", |text| text.contains("after"));
 }
 
-/// What's typed in a composer, or in a comment on the diff, is only in the app until it's sent.
+/// What's typed in a comment on the diff is only in the app until it's sent, and a composer's is in the app as well as
+/// the hub, which keeps it once it's had the change.
 #[gpui_kit::test]
 fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
     let stack = Stack::new();

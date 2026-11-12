@@ -6,7 +6,7 @@ use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, Effort, Session, SessionId, SessionSettingsChange};
 use transcript::{Transcript, TranscriptEvent};
 
-use super::attaching::Draft;
+use super::attaching::Composed;
 use super::{PaneEvent, Showing, WorkspacePane};
 use crate::rename::{self, Renaming};
 use client_core::records::Record;
@@ -83,7 +83,7 @@ impl WorkspacePane {
         }
         if let Some(current) = self.active.take() {
             let text = self.composer.read(cx).text().to_string();
-            let draft = Draft { text, files: std::mem::take(&mut self.attached) };
+            let draft = Composed { text, files: std::mem::take(&mut self.attached) };
             if draft.text.is_empty() && draft.files.is_empty() {
                 self.drafts.remove(&current);
             } else {
@@ -111,15 +111,19 @@ impl WorkspacePane {
     fn show_draft(&mut self, cx: &mut Context<Self>) {
         self.with_window(cx, |t, window, cx| {
             let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id));
+            let mut arrived = false;
             let draft = draft.or_else(|| {
                 let waiting = t.waiting.take()?;
                 if let Some(chat) = t.active.clone().filter(|_| waiting.to_plan) {
                     t.want_plan_mode(chat, true, cx);
                 }
+                arrived = true;
                 Some(waiting.draft)
             });
-            let Draft { text, mut files } = draft.unwrap_or_default();
-            for problem in files.append(std::mem::take(&mut t.attached)) {
+            let Composed { text, mut files } = draft.unwrap_or_default();
+            let came = std::mem::take(&mut t.attached);
+            arrived |= !came.is_empty();
+            for problem in files.append(came) {
                 cx.emit(PaneEvent::Error(problem));
             }
             t.attached = files;
@@ -128,6 +132,11 @@ impl WorkspacePane {
                 c.set_value(text, window, cx);
                 c.set_selected_range(end..end, cx);
             });
+            // Only for what came with it, since the hub has the rest, and another client may have changed it since this
+            // one read it.
+            if arrived {
+                t.keep_typed(true, cx);
+            }
         });
     }
 
@@ -315,9 +324,19 @@ impl WorkspacePane {
             self.transcripts.remove(id);
             self.records.unfollow_subagents(id);
         }
-        self.drafts.retain(|id, _| open.contains(id));
+        // What was typed and attached in a chat goes with it, as the hub's draft does as it closes, rather than to the
+        // chat that shows instead.
+        let closed: Vec<(SessionId, Composed)> = self.drafts.extract_if(|id, _| !open.contains(id)).collect();
+        for (id, draft) in closed {
+            self.let_go_of_files(&id, &draft.files);
+        }
+        self.restoring.retain(|id, _| open.contains(id));
         if self.active.as_ref().is_some_and(|id| open.contains(id)) {
             return;
+        }
+        if let Some(id) = self.active.clone() {
+            let files = std::mem::take(&mut self.attached);
+            self.let_go_of_files(&id, &files);
         }
         let next = match self.active.take() {
             Some(gone) => neighbor(was_open, &gone, &open),
