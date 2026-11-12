@@ -52,6 +52,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # The .NET SDK the jobs that package install, since the vpk dotnet-tools.json pins runs on 8, 9 or 10. Each installs
+  # it in a directory of its own, since next to the runner image's SDKs dotnet runs the newest, and 11 stopped vpk.sh.
+  DOTNET_SDK: 10.0.x
 
 jobs:
   # Compiles every dependency, so it runs where no key is.
@@ -82,6 +85,11 @@ jobs:
         run: |
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       # Signed ad hoc, so package.sh checks the signature, hardened runtime and entitlements.
       - name: Package, signed ad hoc
         run: tools/package/package.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package" --sign -
@@ -216,6 +224,12 @@ jobs:
           (umask 077 && printf '%s\n' "$key" > "$RUNNER_TEMP/notary.p8")
           xcrun notarytool store-credentials "$NOTARY_PROFILE" --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" \
             --issuer "$ISSUER" --keychain "$KEYCHAIN"
+      - if: steps.feed.outputs.state == 'new'
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       # vpk deltas from the newest full package, which prepare fetched. package.sh checks notarization and stapling.
       - name: Package, sign and notarize
         if: steps.feed.outputs.state == 'new'
@@ -344,6 +358,11 @@ jobs:
         with:
           name: windows-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}/binaries
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       - env:
           ARCH: ${{ matrix.arch }}
         run: |
@@ -430,6 +449,12 @@ jobs:
             --version "$VERSION" --work "$PACKAGE")"
           echo "$VERSION is $state"
           echo "state=$state" >> "$GITHUB_OUTPUT"
+      - if: steps.feed.outputs.state == 'new'
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       # vpk makes a delta from the newest full package, which prepare put in releases/.
       - name: Package
         if: steps.feed.outputs.state == 'new'
@@ -588,6 +613,11 @@ jobs:
           name: linux-binaries-${{ matrix.arch }}
           path: ${{ runner.temp }}
       - run: .github/install-linux-packages.sh
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       - env:
           ARCH: ${{ matrix.arch }}
         run: |
@@ -678,6 +708,12 @@ jobs:
             --version "$VERSION" --work "$PACKAGE")"
           echo "$VERSION is $state"
           echo "state=$state" >> "$GITHUB_OUTPUT"
+      - if: steps.feed.outputs.state == 'new'
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK }}
       # vpk makes a delta from the newest full package, which prepare put in releases/.
       - name: Package
         if: steps.feed.outputs.state == 'new'
