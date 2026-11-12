@@ -33,7 +33,8 @@ fn exited() -> EventBody {
 }
 
 fn tasks(count: usize) -> EventBody {
-    let task = |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command };
+    let task =
+        |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
     EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
 }
 

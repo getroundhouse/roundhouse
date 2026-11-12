@@ -45,6 +45,9 @@ pub struct Normalized {
     /// `ToolCallDropped` with no raw line, before what the line says.
     pub dropped: Vec<ToolUseId>,
     pub parsed: Parsed,
+    /// The list of background tasks again, once a subagent's start, which is what the line says, names the call that
+    /// started a listed task. It goes in the log after what the line says, with no raw line, since the line is that.
+    pub relisted: Option<EventBody>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,8 +76,8 @@ pub enum Parsed {
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
 /// sends a block's deltas, then the finished block, so the finished block can say where it sits in its
 /// message, as its deltas did. It keeps which calls are open, from each call to its result. It says what a
-/// background task is, and that it stopped one, apart from the list of them, so the list can say which are monitors,
-/// by the call that started each, and which left without finishing. It remembers which task each subagent runs as, so
+/// background task is, and that it stopped one, apart from the list of them, so the list can say which call started
+/// each, which are monitors, by that call, and which left without finishing. It remembers which task each subagent runs as, so
 /// the end of one can say which subagent it was. It never says a call was dropped, so what follows the call has to
 /// show it. And its `result` doesn't say which models the agent's own replies came from, so the replies have to. It
 /// holds what a compaction's boundary says until the summary after it, so the two are one event.
@@ -92,19 +95,25 @@ pub struct Normalizer {
 
 impl Normalizer {
     pub fn line(&mut self, line: &str) -> Normalized {
-        let Some(value) = value_of(line) else { return Normalized { dropped: Vec::new(), parsed: unparsed() } };
+        let Some(value) = value_of(line) else {
+            return Normalized { dropped: Vec::new(), parsed: unparsed(), relisted: None };
+        };
         self.calls.note(&value);
         let dropped = self.pending_calls.note(&value);
         let noted = self.tasks.note(&value, &self.calls);
         if let Some(body) = self.subagents.read(&value) {
-            return Normalized { dropped, parsed: Parsed::Event(body) };
+            let relisted = noted.map(|mut list| {
+                self.list(&mut list);
+                list
+            });
+            return Normalized { dropped, parsed: Parsed::Event(body), relisted };
         }
         if let Some(parsed) = self.compactions.read(&value) {
-            return Normalized { dropped, parsed };
+            return Normalized { dropped, parsed, relisted: None };
         }
-        let mut parsed = noted.unwrap_or_else(|| parse_value(&value));
-        if let Parsed::Event(EventBody::AgentTasks { tasks, stopped }) = &mut parsed {
-            *stopped = self.tasks.listed(tasks);
+        let mut parsed = noted.map_or_else(|| parse_value(&value), Parsed::Event);
+        if let Parsed::Event(body) = &mut parsed {
+            self.list(body);
         }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {
@@ -138,7 +147,14 @@ impl Normalizer {
             self.pending_calls.turn_ended();
             self.calls.turn_ended();
         }
-        Normalized { dropped, parsed }
+        Normalized { dropped, parsed, relisted: None }
+    }
+
+    /// Gives a list of background tasks what the lines before it said of them.
+    fn list(&mut self, body: &mut EventBody) {
+        if let EventBody::AgentTasks { tasks, stopped } = body {
+            *stopped = self.tasks.listed(tasks);
+        }
     }
 }
 

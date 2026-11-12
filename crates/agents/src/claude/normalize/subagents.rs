@@ -13,6 +13,8 @@ use super::{id_of, str_of, string_of};
 /// doesn't say whether the task was a subagent, and doesn't always name the call.
 #[derive(Debug, Default)]
 pub(super) struct Subagents {
+    /// The call each runs for, until it ends. [`super::tasks::Tasks`] keeps the same until the list leaves its task out,
+    /// which can be after it ends.
     by_task: HashMap<TaskId, ToolUseId>,
     /// By the call that started each, those in the background, which carry on after the turn ends.
     in_background: HashSet<ToolUseId>,

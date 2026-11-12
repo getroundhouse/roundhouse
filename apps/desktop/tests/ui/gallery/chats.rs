@@ -53,6 +53,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         id: TaskId::from("b1"),
         description: Some("Run the full test suite".to_string()),
         kind: TaskKind::Command,
+        call: Some("toolu-3".into()),
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
     events.push(tool_result("toolu-3", "Command running in background with ID: b1"));
@@ -63,6 +64,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         id: TaskId::from("b2"),
         description: Some("Watch the run for failures".to_string()),
         kind: TaskKind::Monitor,
+        call: Some("toolu-4".into()),
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
     events.push(tool_result("toolu-4", "Monitor started (task b2). You will be notified on each event."));

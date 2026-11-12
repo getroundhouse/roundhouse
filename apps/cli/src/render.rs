@@ -316,7 +316,7 @@ mod tests {
     use super::Printer;
 
     fn task(id: &str, kind: TaskKind) -> AgentTask {
-        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind }
+        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
     }
 
     #[test]

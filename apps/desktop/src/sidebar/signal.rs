@@ -84,7 +84,7 @@ mod tests {
 
     /// A chat whose turn ended with these still running.
     fn left_running(kinds: &[TaskKind]) -> Session {
-        let task = |kind: &TaskKind| AgentTask { id: "t".into(), description: None, kind: *kind };
+        let task = |kind: &TaskKind| AgentTask { id: "t".into(), description: None, kind: *kind, call: None };
         Session { background_tasks: kinds.iter().map(task).collect(), ..session(SessionStatus::Background) }
     }
 
