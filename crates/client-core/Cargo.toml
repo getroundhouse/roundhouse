@@ -20,11 +20,12 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+# Only Windows needs a client to keep its input and output from the hub it starts.
+process.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
-    "Win32_System_Console",
     "Win32_System_IO",
     "Win32_System_Threading",
 ] }

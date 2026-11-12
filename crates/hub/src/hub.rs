@@ -40,12 +40,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
+use tokio::task::JoinSet;
 use tracing::warn;
 
 /// Status changes are rare, so a client only overflows this if it has stopped reading.
 const FEED_CAPACITY: usize = 256;
-/// Agents get 3 s to stop and the worker flushes after that, so this is only reached if something
-/// is stuck.
+/// Agents get 3 s to stop, then up to 5 s for each of their two streams to end, which something an agent left
+/// running can hold open, and the worker exits within a second of flushing after that. So this is only reached if
+/// something is stuck.
 pub(super) const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
 
 /// What a worker is wanted for, which says whether it's stopped again after.
@@ -245,20 +247,25 @@ impl Hub {
     }
 
     /// Stops every worker and waits until what they said is recorded.
-    pub(crate) async fn stop_all_workers(&self) {
+    pub(crate) async fn stop_all_workers(self: &Arc<Self>) {
         // Refuse new workers first, so a client still connected can't start one behind this.
         self.shutting_down.store(true, Ordering::SeqCst);
-        let links: Vec<_> = self.workers.lock().values().cloned().collect();
-        for link in &links {
+        let links: Vec<_> = self.workers.lock().iter().map(|(id, link)| (id.clone(), link.clone())).collect();
+        for (_, link) in &links {
             link.close();
         }
         // One deadline for all of them, so several stuck workers don't add up.
         let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
-        for link in &links {
+        let mut stuck = JoinSet::new();
+        for (workspace_id, link) in links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
-                warn!("a worker didn't stop in time");
+                warn!(%workspace_id, "a worker didn't stop in time");
+                // The hub's exit would end the worker, but not its agents, which would run on unwatched.
+                let hub = self.clone();
+                stuck.spawn(async move { hub.end_stuck_worker_of(&workspace_id, &link).await });
             }
         }
+        stuck.join_all().await;
         let sessions: Vec<_> = self.sessions.lock().live.values().cloned().collect();
         for session in sessions {
             let (done, flushed) = oneshot::channel();

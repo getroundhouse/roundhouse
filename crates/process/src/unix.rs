@@ -27,6 +27,9 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
     unsafe { libc::kill(-group, number(signal)) };
 }
 
+/// Nothing to do, since what a child is given takes the place of this process's own.
+pub(crate) fn keep_stdio_from_children() {}
+
 /// As `ps` prints it.
 pub(crate) fn start_time(pid: u32) -> Option<String> {
     let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().ok()?;
