@@ -104,6 +104,8 @@ pub(crate) struct Hub {
     shutting_down: AtomicBool,
     /// Asked to restart, which leaves its workers running for the next hub, rather than to stop.
     restarting: AtomicBool,
+    /// Asked to stop, which stops its workers and their agents, even once it was asked to restart.
+    stopping: AtomicBool,
     name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
@@ -140,6 +142,7 @@ impl Hub {
             shutdown: Notify::new(),
             shutting_down: AtomicBool::new(false),
             restarting: AtomicBool::new(false),
+            stopping: AtomicBool::new(false),
             name_salt: AtomicU64::new(now_ms().cast_unsigned()),
             clients: AtomicU32::new(0),
             requests: AtomicU32::new(0),
@@ -228,6 +231,13 @@ impl Hub {
         self.shutdown.notify_one();
     }
 
+    /// Stops the hub and its workers, with their agents, even once it was asked to restart, since a stop says nothing
+    /// carries on with them.
+    pub(crate) fn request_stop(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
+        self.request_shutdown();
+    }
+
     /// Stops once no setup script is running, and no request but this is under way, leaving the workers running for
     /// the next hub, so their agents carry on.
     pub(crate) fn request_restart(self: &Arc<Self>) -> Result<(), ApiError> {
@@ -248,9 +258,9 @@ impl Hub {
         Ok(())
     }
 
-    /// Whether the hub is stopping to restart, which leaves its workers running.
+    /// Whether the hub is going to restart, which leaves its workers running: it was asked to, and not to stop since.
     pub(crate) fn restarting(&self) -> bool {
-        self.restarting.load(Ordering::SeqCst)
+        self.restarting.load(Ordering::SeqCst) && !self.stopping.load(Ordering::SeqCst)
     }
 
     /// Stops if nothing would notice, as the one asking sees it, and refuses otherwise. What that client sent before
@@ -260,7 +270,7 @@ impl Hub {
         if !self.status().is_idle() {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub is busy, so it wasn't stopped"));
         }
-        self.request_shutdown();
+        self.request_stop();
         Ok(())
     }
 

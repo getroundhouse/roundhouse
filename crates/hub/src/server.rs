@@ -197,7 +197,7 @@ async fn handle(
         R::Unknown => return Err(ApiError::unsupported_request("this hub", None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
-            hub.request_shutdown();
+            hub.request_stop();
             C::Ok
         }
         R::HubShutdownIfIdle => {
