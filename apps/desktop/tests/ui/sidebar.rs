@@ -17,7 +17,7 @@ fn archive_button(id: &WorkspaceId) -> ElementId {
 }
 
 fn archived(ui: &Ui, id: &WorkspaceId) -> bool {
-    let listed = ui.view().workspaces.iter().any(|w| &w.id == id && w.status == WorkspaceStatus::Archived);
+    let listed = ui.view().records().workspaces().iter().any(|w| &w.id == id && w.status == WorkspaceStatus::Archived);
     listed && ui.view().busy == Busy::Free
 }
 
@@ -163,13 +163,13 @@ fn a_rows_menu_archives_it(cx: &mut TestAppContext) {
 fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
-    assert!(ui.view().repos.is_empty());
+    assert!(ui.view().records().repos().is_empty());
 
     ui.click("add-project");
     let folder = stack.repo();
     ui.cx.simulate_path_prompt_response(move |_| Some(vec![folder]));
 
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     assert!(ui.has("add-project"), "it's still there to add another");
 }
 

@@ -64,7 +64,7 @@ impl AppView {
 
     /// Where a workspace can be made, in the sidebar's order, and whether one can be made now.
     fn offer(&self) -> Offer {
-        let repos = self.repos.iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
+        let repos = self.records.repos().iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
         Offer { repos, can_create: self.can_create() }
     }
 

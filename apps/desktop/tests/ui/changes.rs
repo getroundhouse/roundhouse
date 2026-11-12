@@ -13,7 +13,7 @@ use crate::support::{Diff, Stack, Ui};
 fn reviewing<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff) {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let worktree = ui.worktree(&workspace);
     std::fs::write(worktree.join("a.txt"), "one\ntwo\n").unwrap();

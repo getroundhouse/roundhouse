@@ -16,7 +16,7 @@ fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("slow:20:word");
     ui.press("enter");
@@ -102,7 +102,7 @@ fn the_stop_button_stops_the_turn(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:go; hang:60000");
     ui.press("enter");
@@ -126,7 +126,7 @@ fn empty_prompts_are_not_sent(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.press("enter");
     ui.input("   ");
@@ -142,7 +142,7 @@ fn a_sent_prompt_shows_once_and_becomes_the_recorded_event(cx: &mut TestAppConte
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:hello");
     ui.press("enter");
@@ -160,7 +160,7 @@ fn a_turn_says_how_long_its_taken_until_it_ends_and_then_copies_its_reply(cx: &m
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("slow:20:word");
     ui.press("enter");

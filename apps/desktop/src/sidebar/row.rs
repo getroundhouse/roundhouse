@@ -42,9 +42,9 @@ pub(super) fn workspace_row(
     let drafted = !selected
         && match app.panes.get(&workspace.id) {
             Some(pane) => pane.read(cx).has_unsent(cx),
-            None => app.sessions.get(&workspace.id).is_some_and(|chats| crate::workspace_pane::drafted(chats)),
+            None => crate::workspace_pane::drafted(app.records().sessions(&workspace.id)),
         };
-    let its_chats = app.sessions.get(&workspace.id).into_iter().flatten();
+    let its_chats = app.records().sessions(&workspace.id).iter();
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
     let end = right_end(app, workspace, End { drafted, expiring, pointing, waiting }, &line_text.small, cx);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))

@@ -41,7 +41,7 @@ fn open_with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
     ui.bring_to_front();
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let chat = ui.active_chat();
     (ui, workspace, chat)

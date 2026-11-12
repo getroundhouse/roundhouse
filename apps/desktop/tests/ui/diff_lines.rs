@@ -31,7 +31,7 @@ fn changing<'a>(
     git(&stack.repo(), &["commit", "-qm", "long"]);
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     std::fs::write(ui.worktree(&workspace).join(file), lines.replacen(change.0, change.1, 1)).unwrap();
     let diff = ui.open_changes();
@@ -178,7 +178,7 @@ fn a_long_line_scrolls_sideways_under_its_numbers(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     for file in ["wide.txt", "also-wide.txt"] {
         std::fs::write(ui.worktree(&workspace).join(file), format!("short\n{}\n", "long ".repeat(200))).unwrap();

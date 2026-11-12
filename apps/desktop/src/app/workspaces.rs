@@ -2,9 +2,10 @@
 //! one selected.
 
 use client_core::ClientError;
+use client_core::records::Snapshot;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{PermissionMode, Record, Repo, RepoId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{PermissionMode, Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::busy::Busy;
@@ -23,14 +24,13 @@ impl AppView {
     pub(super) fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.selected.clone() else { return };
         if !self.panes.contains_key(&id) {
-            let (Some(client), Some(workspace)) = (self.client(), self.workspaces.iter().find(|w| w.id == id).cloned())
-            else {
+            let (Some(client), Some(workspace)) = (self.client(), self.records.workspace(&id).cloned()) else {
                 return;
             };
             if workspace.status != WorkspaceStatus::Ready {
                 return;
             }
-            let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
+            let sessions = self.records.sessions(&id).to_vec();
             let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
             let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, workspace, sessions, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
@@ -59,9 +59,9 @@ impl AppView {
     /// or else the selected workspace's, or the first.
     pub fn current_repo(&self) -> Option<RepoId> {
         let home = self.home_repo().filter(|_| self.home_showing());
-        let selected = self.selected.as_ref().and_then(|id| self.workspaces.iter().find(|w| &w.id == id));
+        let selected = self.selected.as_ref().and_then(|id| self.records.workspace(id));
         let selected = selected.map(|w| &w.repo_id);
-        home.or(selected).or_else(|| self.repos.first().map(|r| &r.id)).cloned()
+        home.or(selected).or_else(|| self.records.repos().first().map(|r| &r.id)).cloned()
     }
 
     /// Opens the new-workspace dialog where nothing else says which repository, as `Cmd-N` and Home's and the
@@ -73,12 +73,12 @@ impl AppView {
     }
 
     pub(crate) fn repo(&self, id: &RepoId) -> Option<&Repo> {
-        self.repos.iter().find(|r| &r.id == id)
+        self.records.repo(id)
     }
 
     /// Shows the workspace, or brings it back first if it's archived, as clicking its row does.
     pub(crate) fn open_workspace(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let archived = self.workspaces.iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived);
+        let archived = self.records.workspace(&id).is_some_and(|w| w.status == WorkspaceStatus::Archived);
         if archived {
             self.restore(id, cx);
         } else {
@@ -191,7 +191,7 @@ impl AppView {
 
     /// Asks what to call the workspace, and renames it.
     pub fn start_renaming(&mut self, id: WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(current) = self.workspaces.iter().find(|w| w.id == id).map(|w| w.label().to_string()) else {
+        let Some(current) = self.records.workspace(&id).map(|w| w.label().to_string()) else {
             return;
         };
         let this = cx.weak_entity();
@@ -332,9 +332,9 @@ impl AppView {
 
     /// Lets go of the panes of workspaces that have gone or been archived. A pane's chats close with it, without
     /// closing one by one, so it lets go of their subagents' records itself.
-    pub(super) fn drop_hidden_panes(&mut self, workspaces: &[Workspace], cx: &App) {
+    pub(super) fn drop_hidden_panes(&mut self, records: &Snapshot, cx: &App) {
         self.panes.retain(|id, pane| {
-            let shown = workspaces.iter().any(|w| &w.id == id && w.status != WorkspaceStatus::Archived);
+            let shown = records.workspace(id).is_some_and(|w| w.status != WorkspaceStatus::Archived);
             if !shown {
                 pane.read(cx).let_go_of_subagents();
             }

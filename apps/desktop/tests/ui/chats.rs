@@ -15,7 +15,7 @@ fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     // The first workspace is selected as soon as it exists, which is before its chat does.
     let workspace = ui.new_workspace();
     for _ in 0..30 {
@@ -32,7 +32,7 @@ fn chats_keep_their_own_transcript_and_draft(cx: &mut TestAppContext) {
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let first = ui.active_chat();
     ui.input("say:from the first chat");
@@ -75,7 +75,7 @@ fn the_keyboard_opens_moves_between_and_closes_chats(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let first = ui.active_chat();
     ui.press("cmd-t");
@@ -109,7 +109,7 @@ fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppCo
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let workspace = ui.view().selected.clone().unwrap();
     let first = ui.active_chat();
@@ -141,7 +141,7 @@ fn closing_a_chat_nothing_was_sent_in_leaves_nothing_to_reopen(cx: &mut TestAppC
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let first = ui.active_chat();
     let second = ui.new_chat();
@@ -171,7 +171,7 @@ fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let first = ui.active_chat();
     let working = ui.new_chat();
@@ -198,7 +198,7 @@ fn a_chat_with_work_in_the_background_takes_a_prompt_and_asks_before_closing(cx:
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let first = ui.active_chat();
     let working = ui.new_chat();
@@ -219,7 +219,7 @@ fn whats_running_in_the_background_shows_until_it_finishes(cx: &mut TestAppConte
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     let done = stack.dir.path().join("done");
@@ -245,7 +245,7 @@ fn pointing_at_a_background_tasks_line_says_whether_its_running_or_watching(cx: 
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     let never = |name: &str| stack.dir.path().join(name).display().to_string();
@@ -273,7 +273,7 @@ fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mu
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     // Working, so closing it asks first, which holds it open long enough to see which chat is showing.
     let working = ui.active_chat();

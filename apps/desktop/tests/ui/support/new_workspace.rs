@@ -25,7 +25,7 @@ impl Ui<'_> {
 
     /// Clicks Create in the dialog that's open, and waits until the new workspace is on screen.
     pub(crate) fn create_workspace(&mut self) -> WorkspaceId {
-        let before = self.view().workspaces.len();
+        let before = self.view().records().workspaces().len();
         self.click("new-workspace-create");
         self.wait_for_a_new_workspace(before)
     }
@@ -33,7 +33,7 @@ impl Ui<'_> {
     /// Waits until there's one more workspace than `before`, with its chat on screen.
     pub(crate) fn wait_for_a_new_workspace(&mut self, before: usize) -> WorkspaceId {
         self.wait("the new workspace", |ui| {
-            ui.view().workspaces.len() > before && ui.transcript().is_some() && ui.view().busy == Busy::Free
+            ui.view().records().workspaces().len() > before && ui.transcript().is_some() && ui.view().busy == Busy::Free
         });
         self.view().selected.clone().unwrap()
     }

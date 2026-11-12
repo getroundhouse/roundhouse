@@ -86,7 +86,7 @@ fn file_and_view_items_are_greyed_out_until_they_can_act(cx: &mut TestAppContext
     }
 
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     assert!(enabled(&mut ui, "File", "New Workspace"));
     assert!(!enabled(&mut ui, "File", "New Chat"));
     ui.new_workspace();

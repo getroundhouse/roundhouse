@@ -29,8 +29,8 @@ pub(crate) fn worked_in(ui: &mut Ui, stack: &Stack, chat: &SessionId) {
     let replied = |c: &Session| c.user_active_at_ms.is_some() && c.reply_seq != Seq::default() && !c.status.in_turn();
     let caught_up = |ui: &mut Ui| {
         let view = ui.view();
-        let Some(c) = view.sessions.values().flatten().find(|c| &c.id == chat && replied(c)) else { return false };
-        view.workspaces.iter().any(|w| w.id == c.workspace_id && w.user_active_at_ms == c.user_active_at_ms)
+        let Some(c) = view.records().session(chat).filter(|c| replied(c)) else { return false };
+        view.records().workspace(&c.workspace_id).is_some_and(|w| w.user_active_at_ms == c.user_active_at_ms)
     };
     ui.wait("the reply", caught_up);
 }

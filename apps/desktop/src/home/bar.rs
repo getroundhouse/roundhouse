@@ -78,7 +78,7 @@ fn repos(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let current = app.home_repo().cloned();
     let name = current.as_ref().and_then(|id| app.repo(id)).map(|r| r.name.clone());
     let label = name.map_or_else(|| "All projects".to_string(), |name| format!("In {name}"));
-    let choices: Vec<_> = app.repos.iter().map(|r| (r.id.clone(), r.name.clone())).collect();
+    let choices: Vec<_> = app.records().repos().iter().map(|r| (r.id.clone(), r.name.clone())).collect();
     let this = cx.weak_entity();
     filter("home-repos", IconName::Folder, label, cx).dropdown_menu(move |menu: PopupMenu, _: &mut Window, _| {
         let all = menu_item(&this, "All projects", current.is_none(), |t, cx| t.filter_home(None, cx));

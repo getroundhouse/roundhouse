@@ -3,11 +3,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use client_core::records::Snapshot;
 use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Repo, Session, Workspace, WorkspaceId};
+use protocol::model::{Workspace, WorkspaceId};
 
 use crate::busy::Busy;
 use crate::checkout::Checkout;
@@ -63,7 +64,7 @@ pub struct AppView {
     /// The checkout this build is from, which the sidebar names, with why it's open.
     pub(crate) checkout: Option<Checkout>,
     pub connection: Connection,
-    /// Client-core's copy of the hub's records. The lists below are what's shown of it.
+    /// Client-core's copy of the hub's records, which `records` shows.
     feed: Option<RecordsFeed>,
     /// Keeps what's typed in each chat on the hub, for every pane, across connections.
     drafts: Option<Drafts>,
@@ -72,9 +73,8 @@ pub struct AppView {
     /// The pid of the hub this is connected to, when it's an older one a client started, which this app may restart.
     /// A hub's build can't change while it runs, so this is only found when connecting.
     restartable_hub: Option<u32>,
-    pub repos: Vec<Repo>,
-    pub workspaces: Vec<Workspace>,
-    pub sessions: HashMap<WorkspaceId, Vec<Session>>,
+    /// What's shown of the hub's records, as of client-core's last change to them.
+    records: Snapshot,
     pub selected: Option<WorkspaceId>,
     /// Whether the selected workspace shows, or Home in its place.
     main: home::Main,
@@ -147,9 +147,7 @@ impl AppView {
             drafts: None,
             joining: None,
             restartable_hub: None,
-            repos: Vec::new(),
-            workspaces: Vec::new(),
-            sessions: HashMap::new(),
+            records: Snapshot::default(),
             selected: None,
             main: home::Main::default(),
             home: crate::home::Home::new(window, cx),
@@ -290,8 +288,13 @@ impl AppView {
         self.refresh(feed, cx);
     }
 
+    /// What's shown of client-core's copy of the hub's records, as of its last change.
+    pub fn records(&self) -> &Snapshot {
+        &self.records
+    }
+
     pub fn visible_workspaces(&self) -> Vec<&Workspace> {
-        self.workspaces.iter().filter(|w| crate::sidebar::lists(w)).collect()
+        self.records.workspaces().iter().filter(|w| crate::sidebar::lists(w)).collect()
     }
 
     pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {

@@ -99,7 +99,8 @@ impl Driver {
                 let view = self.view.clone();
                 self.cx.update(|cx| {
                     view.update(cx, |v, cx| {
-                        let id = v.workspaces.iter().find(|w| &w.name == name).map(|w| w.id.clone()).unwrap();
+                        let id =
+                            v.records().workspaces().iter().find(|w| &w.name == name).map(|w| w.id.clone()).unwrap();
                         v.select(id, cx);
                     });
                 });

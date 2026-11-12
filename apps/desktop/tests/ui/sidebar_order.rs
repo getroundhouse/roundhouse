@@ -13,7 +13,13 @@ use crate::support::{Held, Stack, Ui, order, sidebar_row, three_workspaces, top,
 /// The workspace the hub is making, once the app has heard of it and the last frame drew its note in the sidebar, and
 /// the note.
 fn on_its_way(ui: &mut Ui) -> Option<(WorkspaceId, ElementId)> {
-    let id = ui.view().workspaces.iter().find(|w| w.status == WorkspaceStatus::Creating).map(|w| w.id.clone())?;
+    let id = ui
+        .view()
+        .records()
+        .workspaces()
+        .iter()
+        .find(|w| w.status == WorkspaceStatus::Creating)
+        .map(|w| w.id.clone())?;
     let note = ElementId::Name(format!("creating-{id}").into());
     ui.has(note.clone()).then_some((id, note))
 }

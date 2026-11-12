@@ -21,7 +21,7 @@ fn browsing<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 /// The app open on a workspace like [`browsing`]'s, in a repository that's already added.
 fn browse<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let worktree = ui.worktree(&workspace);
     std::fs::create_dir_all(worktree.join("src/app")).unwrap();

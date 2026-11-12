@@ -18,7 +18,7 @@ fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestA
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:before");
     ui.press("enter");
@@ -45,7 +45,7 @@ fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let id = ui.new_workspace();
     let first = ui.active_chat();
     let second = ui.new_chat();
@@ -91,7 +91,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let daemon = stack.without_a_daemon();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let archived = ui.new_workspace();
     let hidden = ui.new_workspace();
     ui.input("say:still here");
@@ -130,7 +130,7 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let daemon = stack.without_a_daemon();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let behind = ui.new_workspace();
     let diff = open_empty_diff(&mut ui);
     ui.new_workspace();
@@ -187,7 +187,7 @@ fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     // The repository disappears, so a new worktree can't be made from it.
     std::fs::remove_dir_all(stack.repo()).unwrap();
     ui.open_new_workspace();
@@ -241,7 +241,7 @@ fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
     ui.wait_for_new_hub(&stack, pid);
     // And it's really connected: something added elsewhere still shows up.
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
 }
 
 #[gpui_kit::test]
@@ -251,12 +251,12 @@ fn the_heading_stays_over_the_repositories_while_the_hub_is_gone_and_add_project
     // So the app can't start another hub.
     let _daemon = stack.without_a_daemon();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     assert!(!ui.disabled("add-project"));
 
     lose_the_hub(&mut ui, &stack);
 
-    assert_eq!(ui.view().repos.len(), 1, "the repository is still listed");
+    assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
     assert!(ui.has("add-project"), "so the heading stays over it");
     assert!(ui.disabled("add-project"), "with no hub to add one to");
 }
@@ -269,7 +269,7 @@ fn whats_typed_while_the_hub_restarts_is_kept_and_waits_to_be_sent(cx: &mut Test
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:be");
     let pid = stack.client().hub_status().unwrap().pid;

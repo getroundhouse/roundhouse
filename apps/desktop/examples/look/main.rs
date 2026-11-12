@@ -55,7 +55,8 @@ fn main() {
                         return false;
                     }
                     if let Some(name) = &wanted
-                        && let Some(id) = v.workspaces.iter().find(|w| &w.name == name).map(|w| w.id.clone())
+                        && let Some(id) =
+                            v.records().workspaces().iter().find(|w| &w.name == name).map(|w| w.id.clone())
                         && v.selected.as_ref() != Some(&id)
                     {
                         v.select(id, cx);

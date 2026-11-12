@@ -13,7 +13,7 @@ use crate::support::{Stack, Ui};
 fn resting_on_a_turn<'a>(cx: &'a mut TestAppContext, stack: &Stack, prompt: &str) -> (Ui<'a>, SharedString) {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input(prompt);
     ui.press("enter");

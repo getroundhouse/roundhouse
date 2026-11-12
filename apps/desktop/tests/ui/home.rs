@@ -8,7 +8,7 @@ use protocol::model::{WorkspaceId, WorkspaceStatus};
 use crate::support::{Held, Stack, Ui, home_row};
 
 fn has(ui: &Ui, id: &WorkspaceId, status: WorkspaceStatus) -> bool {
-    ui.view().workspaces.iter().any(|w| &w.id == id && w.status == status)
+    ui.view().records().workspaces().iter().any(|w| &w.id == id && w.status == status)
 }
 
 /// A window with a repository and two workspaces, the second showing, and Home opened over it. Returns them.
@@ -38,7 +38,7 @@ fn home_shows_in_place_of_the_workspace_until_one_is_picked(cx: &mut TestAppCont
 fn the_list_narrows_to_what_the_search_matches_as_its_typed(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, first, second) = open_home(cx, &stack);
-    let branch = ui.view().workspaces.iter().find(|w| w.id == first).unwrap().branch.clone();
+    let branch = ui.view().records().workspaces().iter().find(|w| w.id == first).unwrap().branch.clone();
 
     // Home's search has the keys, since the composer under it is hidden.
     ui.input(&branch);

@@ -60,7 +60,7 @@ fn a_merged_pull_request_offers_archive_in_its_bar_and_in_the_header_while_the_b
     ui.click("pull-request-action");
 
     ui.wait("it to be archived", |ui| {
-        ui.view().workspaces.iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived)
+        ui.view().records().workspaces().iter().any(|w| w.id == id && w.status == WorkspaceStatus::Archived)
     });
 }
 
@@ -77,7 +77,7 @@ fn a_row_shows_its_pull_request_without_its_workspace_being_opened(cx: &mut Test
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let elsewhere = stack.client().workspace_create(&ui.first_repo_id(), None, None, None).unwrap().id;
-    ui.wait("its row", |ui| ui.view().workspaces.iter().any(|w| w.id == elsewhere));
+    ui.wait("its row", |ui| ui.view().records().workspaces().iter().any(|w| w.id == elsewhere));
 
     gh.report(&pull_request("OPEN"));
     // Another client asking has the hub read it, as the hub does by itself every so often.

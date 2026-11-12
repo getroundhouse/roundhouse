@@ -40,7 +40,7 @@ fn an_image_pointed_to_again_after_it_changed_shows_as_it_is_then(cx: &mut TestA
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let shot = ui.worktree(&workspace).join("shot.png");
     write_png(&shot, 100);
@@ -65,7 +65,7 @@ fn images_one_after_another_are_each_drawn_as_tall_as_they_are(cx: &mut TestAppC
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     for name in ["before.png", "after.png"] {
         write_png(&ui.worktree(&workspace).join(name), 100);

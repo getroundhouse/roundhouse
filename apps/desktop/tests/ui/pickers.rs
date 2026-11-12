@@ -24,7 +24,7 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let chat = ui.active_chat();
     let path = ui.worktree(&workspace);
@@ -72,7 +72,7 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:ready");
     ui.press("enter");
@@ -109,7 +109,7 @@ fn the_add_menu_turns_plan_mode_on_and_off(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:ready");
     ui.press("enter");
@@ -139,7 +139,7 @@ fn an_effort_picked_reaches_the_running_agent_and_the_next_chat(cx: &mut TestApp
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     ui.input("effort");
@@ -164,7 +164,7 @@ fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppConte
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input("say:running");
     ui.press("enter");
@@ -181,7 +181,7 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.press("shift-tab");
     ui.wait("plan mode", |ui| ui.chat_mode() == Some(Plan));

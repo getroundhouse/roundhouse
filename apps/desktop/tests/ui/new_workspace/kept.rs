@@ -44,13 +44,13 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_until_the_workspace_is_
 
     ui.open_again(&stack);
 
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.open_new_workspace();
     ui.wait("the file it kept", |ui| ui.dialog_attached() == ["notes.txt"]);
     assert_eq!(ui.dialog_text(), "half a thought");
     assert!(ui.dialog_planning());
     assert_eq!(chosen(&ui).0, ModelName::named("sonnet"));
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
     ui.press("enter");
     ui.wait_for_a_new_workspace(before);
     ui.wait("the first prompt, with the file read back", |ui| {
@@ -111,7 +111,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     let pid = stack.client().hub_status().unwrap().pid;
     stack.client().workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the dialog hasn't seen it.
-    let records = ui.view().records().unwrap();
+    let records = ui.view().feed().unwrap();
     let in_records = || records.snapshot().workspace_draft().map(|draft| draft.text.clone()).unwrap_or_default();
     wait_until("client-core to hear of the change", || in_records() == "typed elsewhere");
 
@@ -142,7 +142,7 @@ fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppConte
     elsewhere
         .workspace_draft_keep(&WorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
         .unwrap();
-    let records = ui.view().records().unwrap();
+    let records = ui.view().feed().unwrap();
     let in_records = || records.snapshot().workspace_draft().filter(|draft| draft.text == "say:with notes").cloned();
     wait_until("client-core to hear of the change", || in_records().is_some());
     let (dialog, kept) = (ui.dialog(), in_records().unwrap());
@@ -155,7 +155,7 @@ fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppConte
     assert_eq!(ui.dialog_text(), "say:with notes", "nothing was taken to make");
     assert!(ui.has_dialog());
     ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
     ui.press("enter");
     ui.wait_for_a_new_workspace(before);
 }
