@@ -52,6 +52,8 @@ pub struct Paths {
     pub instances_dir: PathBuf,
     /// What each workspace's worker writes to stderr, a file per instance, whichever provider runs it.
     pub worker_logs_dir: PathBuf,
+    /// The providers this hub runs workspaces on, besides the local one. *Not built:* naming them in the hub's settings.
+    pub providers: PathBuf,
     /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
     pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
@@ -108,6 +110,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         worker_logs_dir: data_dir.join("worker-logs"),
+        providers: data_dir.join("providers.json"),
         daemons_dir: data_dir.join("daemons"),
         workspaces_root,
         data_dir,

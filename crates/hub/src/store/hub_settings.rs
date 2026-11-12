@@ -1,6 +1,6 @@
-//! The hub's own settings, which are one record.
+//! The hub's own settings, which are one record, and who the hub is.
 
-use protocol::model::{HubSettings, HubSettingsChange};
+use protocol::model::{HubId, HubSettings, HubSettingsChange};
 use rusqlite::{Connection, params};
 
 use super::{Store, StoreError, lock, rev_of};
@@ -15,6 +15,12 @@ pub(super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
 }
 
 impl Store {
+    /// This hub's ID, made when its database was.
+    pub fn hub_id(&self) -> Result<HubId, StoreError> {
+        let id: String = lock(&self.reader).query_row("SELECT hub_id FROM hub_identity", [], |row| row.get(0))?;
+        Ok(id.as_str().into())
+    }
+
     pub fn hub_settings(&self) -> Result<HubSettings, StoreError> {
         Ok(hub_settings(&lock(&self.reader))?)
     }

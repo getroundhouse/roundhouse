@@ -4,6 +4,7 @@
 mod activity;
 mod drafts;
 mod first;
+mod providers;
 mod subagents;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
@@ -389,4 +390,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // What's typed and attached in each session's composer and not sent, and which files a client added, in `drafts`.
     drafts::DRAFT,
     drafts::ADDED_BY_CLIENT,
+    // Who this hub is, in `providers`.
+    providers::HUB_IDENTITY,
 ];

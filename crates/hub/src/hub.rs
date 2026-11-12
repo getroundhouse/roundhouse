@@ -23,12 +23,13 @@ use sessions::Sessions;
 
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
+use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
+use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus, error_chain};
 use protocol::model::{ClientRequestId, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
@@ -40,7 +41,6 @@ use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
 use tracing::warn;
 
-const LOCAL_PROVIDER: &str = "local";
 /// Status changes are rare, so a client only overflows this if it has stopped reading.
 const FEED_CAPACITY: usize = 256;
 /// Agents get 3 s to stop and the worker flushes after that, so this is only reached if something
@@ -61,8 +61,7 @@ pub(crate) struct Hub {
     attachment_files: AttachmentFiles,
     /// What each worker's command writes to stderr, a file per instance. Apart from any provider's own files.
     worker_logs_dir: PathBuf,
-    providers: HashMap<String, Arc<dyn Provider>>,
-    default_provider: String,
+    providers: ProviderSet,
     workers: Mutex<HashMap<WorkspaceId, Arc<WorkerLink>>>,
     /// Held while a workspace's worker starts or is cleaned up, so an instance never has two. One per
     /// workspace, because a slow or stuck worker mustn't hold up the others. It guards whether nothing but this hub's
@@ -100,7 +99,7 @@ impl Hub {
         store: Arc<Store>,
         attachments_dir: PathBuf,
         worker_logs_dir: PathBuf,
-        provider: Arc<dyn Provider>,
+        providers: ProviderSet,
         on_demand: bool,
     ) -> Self {
         Self {
@@ -108,8 +107,7 @@ impl Hub {
             attachment_files: AttachmentFiles::new(attachments_dir),
             worker_logs_dir,
             on_demand,
-            providers: HashMap::from([(LOCAL_PROVIDER.to_string(), provider)]),
-            default_provider: LOCAL_PROVIDER.to_string(),
+            providers,
             workers: Mutex::new(HashMap::new()),
             worker_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),
@@ -128,8 +126,34 @@ impl Hub {
         }
     }
 
+    /// A workspace's provider. One the hub isn't set up with, such as one taken out of its settings, is unavailable
+    /// until it's back.
     fn provider(&self, name: &str) -> Result<Arc<dyn Provider>, ApiError> {
-        self.providers.get(name).cloned().ok_or_else(|| internal(format!("no provider {name}")))
+        self.providers
+            .get(name)
+            .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
+    }
+
+    /// For once the hub is serving, so a slow adapter can't keep clients waiting for it. Says hello to each provider's
+    /// adapter, so a problem with one is logged before anything needs it, then destroys the instances of the workspaces
+    /// `unfinished` names, which the last run left half-made.
+    pub(crate) async fn settle_providers(self: Arc<Self>, unfinished: Vec<Workspace>) {
+        self.providers.say_hello().await;
+        for workspace in unfinished {
+            warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
+            let destroyed = match self.provider(&workspace.provider) {
+                Ok(provider) => provider.destroy(&workspace.instance_id).await.map_err(|e| error_chain(&e)),
+                Err(e) => Err(e.message),
+            };
+            if let Err(e) = destroyed {
+                warn!(workspace = workspace.name, instance_id = %workspace.instance_id, "its instance is left: {e}");
+            }
+        }
+    }
+
+    /// Ends each provider's adapter, after the workers are stopped.
+    pub(crate) async fn shut_down_providers(&self) {
+        self.providers.shut_down().await;
     }
 
     pub(crate) async fn blocking<T, F>(&self, f: F) -> Result<T, ApiError>

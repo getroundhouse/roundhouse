@@ -87,7 +87,7 @@ impl Hub {
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace, ApiError> {
         let id = WorkspaceId::from(new_id());
-        let provider = self.provider(&self.default_provider)?;
+        let (provider_name, provider) = self.providers.default_provider()?;
         let now = now_ms();
         let workspace = Workspace {
             id: id.clone(),
@@ -97,7 +97,7 @@ impl Hub {
             base_ref: None,
             path: None,
             status: WorkspaceStatus::Creating,
-            provider: self.default_provider.clone(),
+            provider: provider_name.to_string(),
             instance_id: id.as_str().into(),
             created_at_ms: now,
             archived_at_ms: None,
