@@ -15,6 +15,7 @@ use super::{A_FRAME, press, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
 
 mod calls;
+mod end;
 mod kinds;
 mod tab;
 
@@ -198,12 +199,10 @@ fn a_shift_click_selects_from_where_a_press_was_to_it(cx: &mut TestAppContext) {
     let mut ui = open(cx, &stack);
     let window = settled(&mut ui, &stack, &session);
     let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
-    let (button, modifiers) = (MouseButton::Left, Modifiers { shift: true, ..Default::default() });
 
     click(&mut ui, from, 1);
     let pressed = copy(&mut ui);
-    press(&mut ui, MouseDownEvent { button, position: to, click_count: 1, modifiers, ..Default::default() });
-    press(&mut ui, MouseUpEvent { button, position: to, click_count: 1, modifiers });
+    shift_click(&mut ui, to);
     let extended = copy(&mut ui);
 
     assert_eq!(pressed, "", "a click selects nothing");
@@ -279,6 +278,24 @@ fn click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>, clicks: usize) {
     let button = MouseButton::Left;
     press(ui, MouseDownEvent { button, position: at, click_count: clicks, ..Default::default() });
     press(ui, MouseUpEvent { button, position: at, click_count: clicks, ..Default::default() });
+}
+
+/// Presses the button at `at` with shift held, and lets it go.
+fn shift_click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>) {
+    let (button, modifiers) = (MouseButton::Left, Modifiers { shift: true, ..Default::default() });
+    press(ui, MouseDownEvent { button, position: at, click_count: 1, modifiers, ..Default::default() });
+    press(ui, MouseUpEvent { button, position: at, click_count: 1, modifiers });
+}
+
+/// A point on the first line of what the end of the chat draws, which is in the window.
+fn on_the_end_of_the_chat(ui: &Ui<'_>, window: Bounds<Pixels>) -> gpui_kit::Point<Pixels> {
+    let transcript = ui.transcript().unwrap();
+    ui.cx.read_entity(&transcript, |t, _| {
+        let list = t.list();
+        let top = list.top();
+        let above: Pixels = (top.row..list.row_count() - 1).map(|row| list.row_height(row).unwrap_or_default()).sum();
+        point(window.left() + px(40.), window.top() - top.offset + above + px(12.))
+    })
 }
 
 /// A point on the first line of the reply that says `text`, which is in the window.

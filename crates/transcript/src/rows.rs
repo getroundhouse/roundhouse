@@ -12,7 +12,7 @@ use gpui_kit::{
     Styled, WeakEntity, div, px,
 };
 use look::LineText;
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 
@@ -22,7 +22,7 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
-use crate::prose::{Of, Prose};
+use crate::prose::{Of, Prose, TextAt};
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 
@@ -35,6 +35,7 @@ mod column;
 pub(crate) mod compaction;
 mod line;
 mod mode;
+mod notices;
 mod prompt;
 mod shown;
 mod tail;
@@ -45,8 +46,8 @@ mod turn_end;
 mod turn_times;
 mod update_rule;
 
+pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
-pub(crate) use alone::{row_of as tab_row_of, rows_repeating_report};
 pub(crate) use around::{NEAR, REACH};
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
@@ -56,9 +57,10 @@ use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, asks_questions, drawn_in_its_call, drawn_in_row};
 use column::column;
-use prompt::{Progress, Prompt, prompt_bubble};
+use notices::{agent_exited, exit_output, notice};
+use prompt::{Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
-use text::{recorded, written};
+use text::{from_blocks, written};
 use tools::Toggle;
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
@@ -95,10 +97,21 @@ pub(crate) fn render_row(
         return Some(column(drawn).into_any_element());
     }
     // The subagent tab starts with what it was asked and ends with its report.
-    let here = |of| alone::row_of(of, tail) == Some(ix);
+    let here = |of| list_row_of(of, tail) == Some(ix);
     let head = here(Of::Head).then(|| shared.prose.drawing(Of::Head, || alone::head(&m, shared, cx))).flatten();
     let foot = here(Of::Foot).then(|| shared.prose.drawing(Of::Foot, || alone::foot(&m, shared, cx))).flatten();
     Some(column(v_flex().w_full().children(head).child(drawn).children(foot)).into_any_element())
+}
+
+/// The list's row that draws what `of` says, but for an event's, which is where the log has it, when the list's tail,
+/// its last row, is `tail`. The tail is the end of the chat, and in the subagent tab, its first row draws the tab's
+/// head above what else it draws, and the tail its foot below.
+pub(crate) fn list_row_of(of: Of, tail: usize) -> Option<usize> {
+    match of {
+        Of::Head => Some(0),
+        Of::Tail | Of::Foot => Some(tail),
+        Of::Event(_) => None,
+    }
 }
 
 /// What a row shows, copied out so the log isn't held while it's drawn.
@@ -156,13 +169,14 @@ fn render_row_inner(
             let m = model.borrow();
             let pull_request = m.pull_request.as_ref();
             let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work, folds: &m.folds, pull_request };
-            render_tail(&end, shared, by, &find, cx)
+            shared.prose.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
         // them once it's drawn elsewhere.
         Shown::Event(row, event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
-            shared.prose.drawing(Of::Event(row), || render_event(&event, &around, Some(row), shared, &find, cx))
+            let prompt_at = TextAt::only(row, 0);
+            shared.prose.drawing(Of::Event(row), || render_event(&event, &around, prompt_at, shared, &find, cx))
         }
         Shown::InCall(seq) => shared.prose.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
@@ -214,49 +228,12 @@ fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
-/// What the app says when the agent stopped, and why, with what it last printed, if it stopped unexpectedly.
-fn agent_exited(seq: Seq, reason: ExitReason, stderr_tail: &[String], find: &FindLook, cx: &App) -> AnyElement {
-    match reason {
-        ExitReason::Requested => empty(),
-        ExitReason::HubRestart => {
-            muted_line("The app restarted while the agent was working. Send a message to continue.")
-        }
-        ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
-            const STOPPED: &str = "The agent stopped unexpectedly. ";
-            let printed = exit_output(reason, stderr_tail).unwrap_or_default();
-            let marks = find.marks(&(ItemKey::Event(seq, 0), Part::Exit), printed).moved(STOPPED.len());
-            marked_line(format!("{STOPPED}{printed}"), &marks, cx.theme().danger)
-        }
-    }
-}
-
-/// What the agent last printed, which the app says when it stopped unexpectedly.
-pub(crate) fn exit_output(reason: ExitReason, stderr_tail: &[String]) -> Option<&str> {
-    match reason {
-        ExitReason::Requested | ExitReason::HubRestart => None,
-        ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
-            stderr_tail.last().map(String::as_str)
-        }
-    }
-}
-
-/// Something the hub or the agent's CLI wanted said, in the colour of how much it matters, with its matches.
-fn notice(seq: Seq, level: NoticeLevel, message: &str, find: &FindLook, cx: &App) -> AnyElement {
-    let color = match level {
-        NoticeLevel::Error => cx.theme().danger,
-        NoticeLevel::Warning => cx.theme().warning,
-        NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
-    };
-    let marks = find.marks(&(ItemKey::Event(seq, 0), Part::Notice), message);
-    marked_line(message.to_string(), &marks, color)
-}
-
-/// `event`, drawn in the row of the event at `place` in the log, which is its own but for a prompt drawn where the
-/// agent took it, or at the end of the chat, in no event's row, for `None`.
+/// `event`, drawn in the row of an event, which is its own but for a prompt drawn where the agent took it, or at the
+/// end of the chat. A prompt's text goes at `prompt_at`, and the texts of any other event by its place in the log.
 fn render_event(
     event: &SessionEvent,
     around: &Around,
-    place: Option<Seq>,
+    prompt_at: TextAt,
     shared: &Shared,
     find: &FindLook,
     cx: &App,
@@ -278,10 +255,9 @@ fn render_event(
             update_rule::line(seq, from, build, cx)
         }
         EventBody::UserPrompt { client_msg_id, prompt, .. } => {
-            let (key, progress) =
-                (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::recorded(place, around.prompt));
-            let text = Prompt { text: &prompt.text, find };
-            prompt_bubble(&key, text, &around.carried, progress, shared, cx)
+            let key = ItemKey::prompt(seq, client_msg_id.as_ref());
+            let text = Prompt { text: &prompt.text, find, at: prompt_at };
+            prompt_bubble(&key, text, &around.carried, Some(around.prompt), shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             let rendered: Vec<AnyElement> = blocks

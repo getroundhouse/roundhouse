@@ -31,7 +31,10 @@ pub(super) fn leaf_text(leaves: &[String], leaf: u64) -> Option<&str> {
     leaves.get(usize::try_from(leaf).ok()?).map(String::as_str)
 }
 
-/// What's selected from `start` to `end` of the text at `at`, whose leaves are `leaves`, by leaf.
+/// What's selected from `start` to `end` of the text at `at`, whose leaves are `leaves`, by leaf. An end keeps its
+/// byte while its text is parsed again, and a leaf can say other than it did when the end was put there, so a byte
+/// past a leaf's end, or inside one of its characters, is taken as the nearest place before, as [`word_around`] takes
+/// it. So what's painted as selected is what a copy has.
 pub(super) fn selected(
     start: Spot,
     end: Spot,
@@ -52,7 +55,7 @@ pub(super) fn selected(
             Some((last, byte)) if leaf == last => byte,
             Some(_) | None => text.len(),
         };
-        Some((leaf, low.min(text.len())..high.min(text.len())))
+        Some((leaf, text.floor_char_boundary(low)..text.floor_char_boundary(high)))
     })
 }
 
@@ -96,9 +99,12 @@ pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<(Spot,
     nearest
 }
 
-/// The word `byte` is in or at the start of in `text`, or the character there if it isn't in one.
+/// The word `byte` is in or at the start of in `text`, or the character there if it isn't in one. `byte` is a place in
+/// the text as it was drawn in the last frame, and the text can say other than it did then, once a parse of it on
+/// another thread has landed since, so a byte past its end, or inside one of its characters, is taken as the nearest
+/// place before.
 pub(super) fn word_around(text: &str, byte: usize) -> Range<usize> {
-    let byte = byte.min(text.len());
+    let byte = text.floor_char_boundary(byte);
     let in_a_word = |c: char| c.is_alphanumeric() || c == '_';
     let (before, after) = text.split_at(byte);
     let Some(here) = after.chars().next().or_else(|| before.chars().next_back()) else { return byte..byte };
@@ -131,6 +137,20 @@ mod tests {
         assert_eq!(copied(start, end, &texts), "two");
     }
 
+    /// The leaf showed the backtick that opens its code span when the selection ended before the dash, and the one
+    /// that closes it has come since, so the leaf is a byte shorter there and the end's byte is inside the dash, which
+    /// is three bytes.
+    #[test]
+    fn a_copy_of_a_leaf_that_s_changed_under_an_end_ends_at_the_character_before() {
+        let at = TextAt::only(1, 0);
+        let texts = [(at, Arc::from(["Use foo — bar".to_string()]))];
+        let (start, end) = (Spot { at, leaf: 0, byte: 0 }, Spot { at, leaf: 0, byte: 9 });
+        let (inside, after) = (Spot { at, leaf: 0, byte: 10 }, Spot { at, leaf: 0, byte: 15 });
+
+        assert_eq!(copied(start, end, &texts), "Use foo ");
+        assert_eq!(copied(inside, after, &texts), "— bar", "and one that starts inside it starts with it");
+    }
+
     #[test]
     fn a_double_click_selects_the_word_its_in() {
         let text = "the quick_fox, jumps";
@@ -139,5 +159,13 @@ mod tests {
         assert_eq!(&text[word_around(text, 4)], "quick_fox");
         assert_eq!(&text[word_around(text, 13)], ",");
         assert_eq!(&text[word_around(text, text.len())], "jumps");
+    }
+
+    #[test]
+    fn a_double_click_at_a_place_the_text_no_longer_has_selects_the_word_before_it() {
+        let text = "naïve café";
+
+        assert_eq!(&text[word_around(text, 3)], "naïve", "inside the ï, which is two bytes");
+        assert_eq!(&text[word_around(text, text.len() + 4)], "café", "past its end");
     }
 }

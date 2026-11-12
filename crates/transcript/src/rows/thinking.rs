@@ -28,8 +28,9 @@ pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     line::drawn(line, None, opened, toggle, cx)
 }
 
-/// All of what the agent thought, `text_view`: its kit view, which is under its [`find::view_id`] while it streams and
-/// once it's recorded in a call's row, or once it's recorded in a row of its own, drawn from the kit's blocks.
-pub(super) fn text(key: &ItemKey, text_view: impl IntoElement, cx: &App) -> impl IntoElement {
-    div().id(key.element("thinking")).mb_1().text_color(cx.theme().muted_foreground).child(text_view).test_support()
+/// All of what the agent thought, `text`: drawn from the kit's blocks while it's written, and once it's recorded in a
+/// row of its own, and the kit's text view once it's recorded in a call's row. Either way it's known by its
+/// [`find::view_id`].
+pub(super) fn text(key: &ItemKey, text: impl IntoElement, cx: &App) -> impl IntoElement {
+    div().id(key.element("thinking")).mb_1().text_color(cx.theme().muted_foreground).child(text).test_support()
 }

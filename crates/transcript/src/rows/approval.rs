@@ -43,7 +43,6 @@ pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Sha
                 &shared.selection,
                 &Written::unfound(TextAt::only(seq, 0), ItemKey::Event(seq, 0).element("plan"), plan),
                 None,
-                || None,
             ),
             h_flex()
                 .gap_2()

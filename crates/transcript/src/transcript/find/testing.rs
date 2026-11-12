@@ -57,9 +57,7 @@ impl Transcript {
         let tail = self.list.row_count().saturating_sub(1);
         for ix in rows {
             // As the list draws a row, so the text views it makes are kept as they are then.
-            texts.draw_row(ix, ix == tail, &this, cx, |cx| {
-                render_row(&self.model, &self.session, &shared, Item { ix, tail }, cx)
-            });
+            texts.draw_row(ix, &this, cx, |cx| render_row(&self.model, &self.session, &shared, Item { ix, tail }, cx));
         }
         let drawn = self.model.borrow().find.drawn();
         let drawn =

@@ -8,8 +8,9 @@ use proptest::test_runner::{Config, RngSeed};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::Seq;
 
-use super::super::{AT_ONCE, Of, Prose, ProseId, Text, TextAt};
+use super::super::{AT_ONCE, Of, Prose, ProseId, Text, TextAt, Written};
 use crate::fixtures::{event, log};
+use crate::selection::Selection;
 
 fn at(seq: Seq) -> TextAt {
     TextAt::only(seq, 0)
@@ -21,6 +22,12 @@ fn parse_of(prose: &Prose, id: &ProseId) -> Option<Rc<super::super::Parsed>> {
         Text::Parsed { parsed } => Some(parsed.clone()),
         Text::Read { .. } | Text::Parsing { .. } => None,
     }
+}
+
+/// Draws the text known as `id`, saying `text`, at `at`, in a frame of its own, as what draws that place would.
+fn drawn(prose: &Prose, selection: &Selection, id: &ProseId, at: TextAt, text: &str) {
+    prose.new_frame();
+    prose.drawing(at.of, || prose.draw(selection, &Written::unfound(at, id.0.clone(), text), None));
 }
 
 /// A log with a reply at each of `seqs`, so their rows are loaded.
@@ -98,7 +105,7 @@ fn a_text_parsed_apart_is_parsed_wherever_it_s_moved_to_meanwhile(cx: &mut TestA
     let reply = ProseId::named("reply");
     let long = "The signal box keeps a ledger.\n\n".repeat(2 * AT_ONCE / 32);
     prose.0.borrow_mut().placed(&reply, at(1));
-    let (_, apart) = prose.parsed(&reply, &long);
+    let (_, apart) = prose.parsed(&reply, &long, at(1).of);
     cx.update(|cx| prose.parse_apart(reply.clone(), apart.expect("parsed apart"), cx));
     prose.new_frame();
 
@@ -140,6 +147,76 @@ fn a_text_that_s_let_go_of_has_no_place_and_is_not_kept() {
 
     assert_eq!((prose.place_of(&reply), prose.known_at(at(1))), (None, None));
     assert!(!prose.keeps(&reply));
+}
+
+/// Replies the agent was stopped from writing before they were recorded, each taking the place at the end of the chat
+/// of the one before, as the next it writes does.
+#[test]
+fn the_end_of_the_chat_keeps_only_the_few_texts_it_drew_last_and_doesn_t_draw_now() {
+    let prose = Prose::alone();
+    let (selected, held) = (ProseId::named("selected"), TextAt::at_the_end(5));
+    prose.drawn_as(&selected, held, "Selected");
+    prose.new_frame();
+    prose.drawn_as(&ProseId::named("after it"), held, "After it");
+    let stopped: Vec<ProseId> = (0..12).map(|n| ProseId::named(format!("stopped {n}"))).collect();
+    for reply in &stopped {
+        prose.new_frame();
+        prose.drawn_as(reply, TextAt::at_the_end(0), "Half a reply");
+    }
+    prose.new_frame();
+    prose.drawn_as(&stopped[0], TextAt::at_the_end(1), "Half a reply");
+
+    prose.let_go(&log([]), Some(&(held..=held)));
+
+    let kept: Vec<bool> = stopped.iter().map(|reply| prose.keeps(reply)).collect();
+    // The first and the last have a place there, and of the others, the last eight were drawn there most recently.
+    let expected: Vec<bool> = (0..12).map(|n| n == 0 || n >= 3).collect();
+    assert_eq!(kept, expected);
+    assert!(prose.keeps(&selected), "and one that's selected");
+    prose.let_go(&log([]), None);
+    assert!(!prose.keeps(&selected), "until it isn't");
+}
+
+/// A reply the agent was stopped from writing, with nothing written after it, is hidden once the end of the chat no
+/// longer draws it, and is one of those left there, which the end keeps only a few of.
+#[gpui_kit::test]
+fn a_reply_the_end_of_the_chat_no_longer_draws_is_left_there(cx: &mut TestAppContext) {
+    let prose = Prose::alone();
+    let selection = Selection::new(prose.clone(), cx.update(|cx| cx.focus_handle()));
+    let stopped: Vec<ProseId> = (0..9).map(|n| ProseId::named(format!("stopped {n}"))).collect();
+    for reply in &stopped {
+        drawn(&prose, &selection, reply, TextAt::at_the_end(0), "Half a reply");
+    }
+    prose.new_frame();
+    prose.drawing(Of::Tail, || ());
+
+    prose.let_go(&log([]), None);
+
+    assert!(!prose.keeps(&stopped[0]), "the one left there longest ago goes");
+    assert!(
+        stopped[1..].iter().all(|reply| prose.keeps(reply)),
+        "and the last, which is hidden, is kept with the others"
+    );
+}
+
+/// A reply is parsed from near its end as it's written, at the end of the chat, and whole once it's drawn in the row
+/// of its record, since `draw` goes by where a text is drawn. `parsing` has the rest.
+#[gpui_kit::test]
+fn a_reply_joined_as_it_was_written_is_parsed_whole_in_the_row_of_its_record(cx: &mut TestAppContext) {
+    let prose = Prose::alone();
+    let selection = Selection::new(prose.clone(), cx.update(|cx| cx.focus_handle()));
+    let reply = ProseId::named("reply");
+    let was = "The first paragraph of a reply.\n\nIts second";
+    let said = format!("{was}, which goes on.");
+    drawn(&prose, &selection, &reply, TextAt::at_the_end(0), was);
+
+    drawn(&prose, &selection, &reply, TextAt::at_the_end(0), &said);
+    let written = parse_of(&prose, &reply).map(|parsed| parsed.whole);
+    drawn(&prose, &selection, &reply, at(1), &said);
+    let recorded = parse_of(&prose, &reply).map(|parsed| parsed.whole);
+
+    assert_eq!(written, Some(false), "joined from near its end as it's written");
+    assert_eq!(recorded, Some(true), "and parsed whole in the row of its record");
 }
 
 /// Something done to the texts: one drawn somewhere, maybe in a new frame, or all let go of but those whose rows are

@@ -13,7 +13,7 @@ use protocol::model::{Subagent, SubagentStatus};
 use super::around::blocks_of;
 use super::tools::agent;
 use super::turn_times;
-use super::{Shared, recorded, row};
+use super::{Shared, from_blocks, row};
 use crate::calls::count;
 use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
@@ -39,17 +39,6 @@ pub fn subagent_standing(subagent: &Subagent) -> String {
     [status.map(str::to_string), model, Some(calls), took].into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
-/// The list's row that draws the subagent tab's head or foot, as `of` says, when the list's tail, its last row, is
-/// `tail`: its first row draws the head above what else it draws, and the tail the foot below. None for an event's row,
-/// which is where the log has it.
-pub(crate) fn row_of(of: Of, tail: usize) -> Option<usize> {
-    match of {
-        Of::Head => Some(0),
-        Of::Foot => Some(tail),
-        Of::Event(_) => None,
-    }
-}
-
 /// The subagent the tab shows, once its record has come.
 fn shown(m: &Model) -> Option<&Subagent> {
     m.subagents.get(m.alone.as_ref()?).map(Arc::as_ref)
@@ -64,7 +53,7 @@ pub(super) fn head(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let find = FindLook::default();
     let element = find::view_id(&(key.clone(), Part::Asked));
     let text =
-        |area| recorded(&Written::unfound(TextAt::first_of(Of::Head), element, prompt).in_area(area), None, shared);
+        |area| from_blocks(&Written::unfound(TextAt::first_of(Of::Head), element, prompt).in_area(area), None, shared);
     let asked = agent::prompt_block(&key, text, &find, Some(&shared.selection), cx);
     Some(row().child(asked).into_any_element())
 }
@@ -76,7 +65,7 @@ pub(super) fn foot(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let report = report(m)?;
     let key = ItemKey::Call(shown(m)?.call.clone());
     let element = find::view_id(&(key.clone(), Part::Report));
-    let report = recorded(&Written::unfound(TextAt::first_of(Of::Foot), element, report), None, shared);
+    let report = from_blocks(&Written::unfound(TextAt::first_of(Of::Foot), element, report), None, shared);
     Some(row().child(agent::report_block(&key, report, cx)).into_any_element())
 }
 
