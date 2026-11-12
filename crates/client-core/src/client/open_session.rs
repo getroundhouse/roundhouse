@@ -242,7 +242,8 @@ impl Source for SessionSource {
                 }
             }
         }
-        Ok(self.list_prompts(client, held)? || fetched)
+        let prompts = self.list_prompts(client, held)?;
+        Ok(self.list_compactions(client, held)? || prompts || fetched)
     }
 }
 
@@ -266,6 +267,30 @@ impl SessionSource {
             }
             Err(e) => {
                 held.lock().prompt_list_failed();
+                Err(e)
+            }
+        }
+    }
+}
+
+impl SessionSource {
+    /// Asks for the session's compactions, once, as [`SessionSource::list_prompts`] asks for its prompts, and for the
+    /// same reasons. A subagent's compactions aren't in the chat, so a view of them asks for none.
+    fn list_compactions(&self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
+        if matches!(self.view, View::Subagent(_)) || !held.lock().wants_compaction_list() {
+            return Ok(false);
+        }
+        match client.session_compaction_list(&self.session_id) {
+            Ok(lines) => {
+                held.lock().list_compactions(lines);
+                Ok(true)
+            }
+            Err(e) if e.is_unsupported() => {
+                held.lock().compactions_unlisted();
+                Ok(false)
+            }
+            Err(e) => {
+                held.lock().compaction_list_failed();
                 Err(e)
             }
         }

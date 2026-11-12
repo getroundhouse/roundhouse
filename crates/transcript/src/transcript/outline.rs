@@ -69,11 +69,11 @@ pub(super) struct Prompts {
 impl Prompts {
     fn read(&mut self, session: &OpenSession) -> Rc<[Prompt]> {
         let changed = session.read(|log| {
-            let changed = log.prompt_lines_changed() != self.changes;
+            let changed = log.outline_changes() != self.changes;
             if changed {
                 let prompt = |line: &PromptLine| Prompt { row: log.prompt_row(line), line: line.clone() };
                 self.lines = log.prompt_lines().map(prompt).collect();
-                self.changes = log.prompt_lines_changed();
+                self.changes = log.outline_changes();
             }
             changed
         });
