@@ -25,6 +25,7 @@ mod scroll_area;
 mod selectable_lines;
 mod selection;
 mod transcript;
+mod window_selection;
 
 pub use attachments::{file_card, image_format};
 pub use client_core::calls::agent::shown_kind;

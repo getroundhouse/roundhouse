@@ -3,7 +3,6 @@
 //! answered under it. While it waits it's asked in the composer's place instead, by `questions::QuestionPanel`.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::base::SelectableText;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -21,6 +20,7 @@ use crate::calls::first_line;
 use crate::find::FindLook;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
+use crate::window_selection::SelectableText;
 
 const ICON: IconName = IconName::MessageCircleQuestionMark;
 /// What's said for a question nobody answered.

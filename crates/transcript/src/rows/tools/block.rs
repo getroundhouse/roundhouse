@@ -3,7 +3,6 @@
 
 use std::borrow::Cow;
 
-use gpui_kit::base::SelectableText;
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
@@ -18,6 +17,7 @@ use crate::log_block::{self, LogBlock, LogText};
 use crate::rows::written;
 use crate::scroll_area::ScrollArea;
 use crate::selectable_lines::SelectableLines;
+use crate::window_selection::SelectableText;
 
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
 const LOG_BLOCK_ABOVE: usize = 16 * 1024;
