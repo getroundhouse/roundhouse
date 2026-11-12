@@ -289,6 +289,8 @@ impl WorkspacePane {
             if self.setup_log.is_some() {
                 self.load_setup_log(cx);
             }
+            // Such as the comment being written, changed elsewhere.
+            self.take_drafts_from_elsewhere(cx);
         }
         if sessions != self.sessions {
             self.set_sessions(sessions, cx);

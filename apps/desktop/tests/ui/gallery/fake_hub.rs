@@ -105,15 +105,15 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
         }),
         // A draft is taken as a hub that keeps it would, though it's left out of the screen's records, which don't
-        // change. So are an answer being typed and a comment being written.
+        // change. So is an answer being typed.
         R::SessionGet { id }
         | R::SessionDraft(drafts::SessionDraft { id, .. })
         | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
         }
-        R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, .. }) => {
-            let workspace = world.workspaces.iter().find(|w| w.id == id).cloned();
-            reply(C::Workspace(workspace.ok_or_else(|| read_only("keep a comment on a workspace it doesn't show"))?))
+        // As a hub too old to keep it, so a comment being written is what restarting would lose.
+        R::WorkspaceCommentDraft(_) => {
+            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't keep a comment being written"))
         }
         R::SessionEnsure { workspace_id, .. } => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());

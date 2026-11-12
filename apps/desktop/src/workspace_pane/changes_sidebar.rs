@@ -138,6 +138,7 @@ impl WorkspacePane {
         });
         let file_events = cx.subscribe(&file, |this, _, event: &FileDiffEvent, cx| match event {
             FileDiffEvent::AddToChat(text) => this.add_to_composer(text.clone(), cx),
+            FileDiffEvent::Writing { at_once } => this.keep_writing(*at_once, cx),
         });
         let changes_events = cx.subscribe(&changes, |this, _, event: &ChangesEvent, cx| match event {
             ChangesEvent::Open(path) => this.open_diff(path.clone(), cx),
@@ -150,6 +151,8 @@ impl WorkspacePane {
         self.subscriptions.extend([review_events, file_events, changes_events, all_files_events]);
         let (tab, files_behind, sidebar_tab) = (None, false, TabShown::default());
         self.diff = Some(Diff { review, file, viewer, changes, all_files, sidebar_tab, tab, files_behind });
+        // The comment being written, as the hub kept it.
+        self.take_writing(cx);
     }
 
     /// Whether there's a sidebar of changes to draw beside the chat, shown or hidden.

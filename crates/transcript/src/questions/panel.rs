@@ -12,11 +12,11 @@ use gpui_kit::{
 };
 use look::{Hand as _, InRegion as _, Off as _, Region};
 use protocol::event::ApprovalDecision;
-use protocol::model::ApprovalId;
+use protocol::model::{AnswerDraft, AnswerSoFar, ApprovalId};
 
 use super::choice::{Choice, answers, next_unanswered};
 use super::{Question, SKIPPED};
-use crate::transcript::Transcript;
+use crate::transcript::{Transcript, TranscriptEvent};
 
 mod options;
 mod pager;
@@ -83,7 +83,7 @@ impl QuestionPanel {
         }
     }
 
-    pub(crate) fn approval_id(&self) -> &ApprovalId {
+    pub fn approval_id(&self) -> &ApprovalId {
         &self.approval_id
     }
 
@@ -96,6 +96,51 @@ impl QuestionPanel {
     /// Something's typed in a row for another answer, which would be lost with the question.
     pub fn has_typed(&self, cx: &App) -> bool {
         self.asked.iter().any(|asked| !asked.typed(cx).trim().is_empty())
+    }
+
+    /// What's chosen and typed so far, as the hub keeps it, or `None` with nothing, or once it's answered.
+    pub fn so_far(&self, cx: &App) -> Option<AnswerDraft> {
+        if self.answered {
+            return None;
+        }
+        let answers: Vec<AnswerSoFar> = self
+            .asked
+            .iter()
+            .map(|asked| {
+                let (picked, other) = asked.choice.kept();
+                let picked = picked.iter().map(|&option| u32::try_from(option).unwrap_or(u32::MAX)).collect();
+                AnswerSoFar { picked, typed: asked.typed(cx), other }
+            })
+            .collect();
+        let draft = AnswerDraft { approval_id: self.approval_id.clone(), answers };
+        draft.says_anything().then_some(draft)
+    }
+
+    /// Takes what was chosen and typed as the hub kept it, from before the app last stopped or from another client, in
+    /// place of what's here, or clears it for `None`. The hub has it already, so it isn't kept again, and the focus
+    /// stays where it is.
+    pub fn take_so_far(&mut self, kept: Option<&AnswerDraft>, window: &mut Window, cx: &mut Context<Self>) {
+        for q in 0..self.asked.len() {
+            let so_far = kept.and_then(|kept| kept.answers.get(q)).cloned().unwrap_or_default();
+            let Some(asked) = self.asked.get_mut(q) else { continue };
+            let picked = so_far.picked.iter().filter_map(|&option| usize::try_from(option).ok());
+            asked.choice = Choice::from_kept(picked, so_far.other, asked.question.options.len());
+            if so_far.typed.is_empty() && asked.other.is_none() {
+                continue;
+            }
+            let input = self.other(q, window, cx);
+            let end = so_far.typed.len();
+            input.update(cx, |input, cx| {
+                input.set_value(so_far.typed, window, cx);
+                input.set_selected_range(end..end, cx);
+            });
+        }
+        cx.notify();
+    }
+
+    /// Asks for what's chosen and typed to be kept, as [`TranscriptEvent::Answering`] says.
+    fn answering(&self, at_once: bool, cx: &mut Context<Self>) {
+        let _ = self.transcript.update(cx, |_, cx| cx.emit(TranscriptEvent::Answering { at_once }));
     }
 
     /// Each question's answer, if it has one yet.
@@ -112,6 +157,7 @@ impl QuestionPanel {
         }
         let multiple = asked.question.multiple;
         asked.choice.pick(option, multiple);
+        self.answering(true, cx);
         let next = if multiple { None } else { next_unanswered(&self.answers_so_far(cx), self.showing) };
         self.show(next.unwrap_or(self.showing), window, cx);
     }
@@ -121,6 +167,7 @@ impl QuestionPanel {
         let Some(asked) = self.asked.get_mut(self.showing) else { return };
         let has_text = !asked.typed(cx).trim().is_empty();
         asked.choice.toggle_typed(has_text);
+        self.answering(true, cx);
         self.show(self.showing, window, cx);
     }
 
@@ -167,6 +214,7 @@ impl QuestionPanel {
         self.answered = true;
         let approval_id = self.approval_id.clone();
         let _ = self.transcript.update(cx, |t, cx| t.answer_approval(approval_id, decision, cx));
+        // The hub lets go of what it kept as the question is answered, so it's still there if the answer can't be sent.
         cx.notify();
     }
 
@@ -212,8 +260,14 @@ impl QuestionPanel {
             // Going back to what's typed chooses it again.
             InputEvent::Change | InputEvent::Focus => {
                 let has_text = !input.read(cx).text().to_string().trim().is_empty();
-                if let Some(asked) = this.asked.get_mut(q) {
+                let chosen = this.asked.get_mut(q).is_some_and(|asked| {
+                    let before = asked.choice.clone();
                     asked.choice.typed(has_text, asked.question.multiple);
+                    asked.choice != before
+                });
+                // Only what changes is kept, so going back to the row doesn't hold back a change made elsewhere.
+                if chosen || matches!(event, InputEvent::Change) {
+                    this.answering(false, cx);
                 }
                 cx.notify();
             }

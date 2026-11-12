@@ -20,6 +20,7 @@ mod gallery;
 mod home;
 mod home_order;
 mod images;
+mod kept_while_written;
 mod lost_release;
 #[cfg(target_os = "macos")]
 mod marks;
