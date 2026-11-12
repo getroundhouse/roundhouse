@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::{AgentTask, TaskKind};
-use protocol::model::{AgentDescription, PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus, Wait};
+use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
 
 use super::Transcript;
 use crate::prose::Of;
@@ -48,7 +48,7 @@ pub(crate) struct IdleCache {
 impl AtWork {
     pub(crate) fn of(session: &Session) -> Self {
         AtWork {
-            working: session.status == SessionStatus::Running,
+            working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
             background: session.background_tasks.iter().filter(|task| task.kind != TaskKind::Wait).cloned().collect(),
             wait: session.wait.clone(),

@@ -118,7 +118,7 @@ impl Hub {
     ) -> Result<Session, ApiError> {
         let _one_at_a_time = self.ensuring_session.lock().await;
         let sessions = self.session_list(workspace_id.clone()).await?;
-        match sessions.into_iter().rfind(|s| s.closed_at_ms.is_none()) {
+        match sessions.into_iter().rfind(Session::is_open) {
             Some(open) => Ok(open),
             None => self.session_create(workspace_id, agent, SessionSettingsChange::default(), None).await,
         }

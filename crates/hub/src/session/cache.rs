@@ -1,7 +1,7 @@
 //! Keeping what the API's cache holds of the conversation, from what the agent's adapter says of each of its requests.
 
 use protocol::event::EventBody;
-use protocol::model::{CacheRequest, PromptCache, RunId, SessionStatus};
+use protocol::model::{CacheRequest, PromptCache, RunId};
 use tracing::error;
 
 use super::{LiveSession, Origin};
@@ -34,7 +34,7 @@ impl LiveSession {
     /// Keeps `cache`, as [`LiveSession::keep_cache`] does, and announces it unless the agent is working, since it makes
     /// a request every few seconds as it works, and the end of the turn announces what the last one left.
     pub(super) async fn announce_cache(&self, cache: Option<PromptCache>) {
-        if !self.keep_cache(cache).await || self.status() == SessionStatus::Running {
+        if !self.keep_cache(cache).await || self.status().is_working() {
             return;
         }
         let Ok(hub) = self.hub() else { return };

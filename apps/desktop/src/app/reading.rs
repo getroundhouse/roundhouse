@@ -37,7 +37,7 @@ impl AppView {
         let pane = self.panes.get(id).map(|pane| pane.read(cx));
         let shows_unread = |s: &&Session| pane.map_or(s.unread(), |pane| pane.shows_unread(s));
         let sessions = self.records.sessions(id).iter();
-        sessions.filter(|s| s.closed_at_ms.is_none()).filter(shows_unread).collect()
+        sessions.filter(|s| s.is_open()).filter(shows_unread).collect()
     }
 
     /// What marking a workspace from the sidebar does now, and to which chats: reads every chat in it, or, when there's
@@ -54,7 +54,7 @@ impl AppView {
     /// The workspace's open chat last worked in that has a reply.
     fn last_replied(&self, id: &WorkspaceId) -> Option<&Session> {
         let sessions = self.records.sessions(id).iter();
-        let replied = sessions.filter(|s| s.closed_at_ms.is_none() && s.reply_seq > 0);
+        let replied = sessions.filter(|s| s.is_open() && s.reply_seq > 0);
         replied.max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms))
     }
 

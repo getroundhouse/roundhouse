@@ -49,6 +49,14 @@ fn the_queue_waits_until_the_agent_has_taken_every_prompt_it_was_sent() {
 }
 
 #[test]
+fn the_queue_waits_for_work_in_the_background_but_not_for_an_agent_that_went_away() {
+    let watch = QueueWatch::default();
+
+    assert!(!watch.ready(SessionStatus::Background, false), "the agent picks up again by itself once that finishes");
+    assert!(watch.ready(SessionStatus::Interrupted, false), "a prompt resumes the conversation");
+}
+
+#[test]
 fn an_idle_with_a_prompt_the_agent_has_yet_to_take_is_from_before_it() {
     let mut watch = QueueWatch::default();
     assert!(!watch.idle_is_stale());
