@@ -62,7 +62,8 @@ pub(super) fn usage_card(usage: &Usage, agent: AgentKind, cx: &App) -> AnyElemen
 }
 
 /// How full the context is, as a bar with the room the agent keeps back split off its end, then how much it can
-/// still take before the agent shrinks the conversation, then what's in it, in tokens, largest first.
+/// still take before the agent shrinks the conversation, and what made it smaller than its model's if anything did,
+/// then what's in it, in tokens, largest first.
 fn room(context: &ContextUsage, cx: &App) -> Div {
     let theme = cx.theme();
     let kept_back = context.tokens_of(ContextPartKind::Buffer);
@@ -82,6 +83,10 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
         .child(heading("Context", Some(used.into()), cx))
         .child(bar_with_room_kept_back(context.used_fraction(), context.fraction(kept_back), cx))
         .child(under)
+        .children(
+            words::capped(context)
+                .map(|said| div().id("context-capped").text_xs().text_color(look::faint()).child(said).test_support()),
+        )
         // Left out when the agent named no parts, so the card doesn't end in the room above them.
         .children((!parts.is_empty()).then(|| v_flex().mt_2().gap_1().children(parts)))
 }
