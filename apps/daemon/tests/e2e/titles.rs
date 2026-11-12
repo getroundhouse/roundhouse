@@ -10,6 +10,7 @@ use client_core::{Client, ClientError};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::client::ErrorCode;
 use protocol::model::{AgentKind, AttachmentId, Session, SessionSettingsChange, TitleSource};
+use protocol::prompt::Prompt;
 
 use crate::support::{Stack, is_alive, wait_for_turn_end, wait_until, workspace};
 
@@ -184,7 +185,7 @@ fn a_prompts_images_go_with_it_for_its_title() {
     let carried =
         vec![add(&client, &chat, "shot.png", MediaType::Png).id, add(&client, &chat, "build.log", MediaType::Text).id];
 
-    client.session_prompt_with(&chat.id, "say:how do we fix this?", None, carried).unwrap();
+    client.session_prompt_with(&chat.id, None, Prompt::carrying("say:how do we fix this?", carried)).unwrap();
 
     wait_until("the chat's generated title", || {
         client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
@@ -201,7 +202,7 @@ fn a_workspaces_images_go_with_its_prompts_for_a_new_title() {
     let (made, chat) = stack.workspace(&client);
     let state = ready_to_title(&stack);
     let shot = add(&client, &chat, "shot.png", MediaType::Png);
-    client.session_prompt_with(&chat.id, "say:how do we fix this?", None, vec![shot.id]).unwrap();
+    client.session_prompt_with(&chat.id, None, Prompt::carrying("say:how do we fix this?", vec![shot.id])).unwrap();
     wait_until("the chat's generated title", || {
         client.session_get(&chat.id).unwrap().title_source == TitleSource::Generated
     });
@@ -223,7 +224,7 @@ fn a_prompt_of_only_an_image_is_titled_once_its_generated_title_comes() {
     std::fs::write(state.join("title-held"), "").unwrap();
     let shot = add(&client, &chat, "shot.png", MediaType::Png);
 
-    client.session_prompt_with(&chat.id, "", None, vec![shot.id]).unwrap();
+    client.session_prompt_with(&chat.id, None, Prompt::carrying("", vec![shot.id])).unwrap();
     wait_until("the call for a title", || state.join("title-pids").exists());
     let meanwhile = (workspace(&client, &made.id).title, client.session_get(&chat.id).unwrap().title);
     release(&state);

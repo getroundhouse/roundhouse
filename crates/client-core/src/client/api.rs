@@ -10,7 +10,6 @@ use protocol::model::{
     GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
     Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
 };
-use protocol::prompt::Prompt;
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
 
@@ -279,33 +278,6 @@ impl Client {
             return Err(e);
         }
         Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
-    }
-
-    /// Returns the prompt's `seq`, and whether it had already been recorded.
-    pub fn session_prompt(
-        &self,
-        id: &SessionId,
-        text: &str,
-        client_msg_id: Option<ClientMessageId>,
-    ) -> Result<(Seq, bool)> {
-        self.session_prompt_with(id, text, client_msg_id, Vec::new())
-    }
-
-    /// A prompt that carries files, each added first with [`Client::attachment_add`]. With any, `text` can be empty.
-    pub fn session_prompt_with(
-        &self,
-        id: &SessionId,
-        text: &str,
-        client_msg_id: Option<ClientMessageId>,
-        attachments: Vec<AttachmentId>,
-    ) -> Result<(Seq, bool)> {
-        let request =
-            ClientRequest::SessionPrompt { id: id.clone(), client_msg_id, prompt: Prompt::carrying(text, attachments) };
-        let reply = self.call(request)?;
-        let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
-            return unexpected(&reply);
-        };
-        Ok((seq, duplicate))
     }
 
     pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {

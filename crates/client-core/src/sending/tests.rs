@@ -8,6 +8,7 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, queue};
 use protocol::frame;
+use protocol::prompt::Prompt;
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -30,16 +31,16 @@ fn a_prompt_the_hub_never_takes_comes_back_with_its_files() {
     let dir = tempfile::tempdir().unwrap();
     let client = connected_to_a_hub_that_goes_away(&dir.path().join("hub.sock"));
     let log = FileToSend::checked("build.log", MediaType::Text, b"error at line 42".to_vec()).unwrap();
-    let written = Written { client_msg_id: "m".into(), text: "why?".to_string(), files: vec![log.clone()] };
+    let written = Written::new(Prompt::carrying("why?", vec![log.clone()]));
 
-    let Err(NotTaken { error, text, files }) = client.start_queueing(&"s".into(), written).wait() else {
+    let Err(NotTaken { error, prompt }) = client.start_queueing(&"s".into(), written).wait() else {
         panic!("the hub took it")
     };
 
     assert!(matches!(error, ClientError::Disconnected | ClientError::Io(_)), "{error:?}");
-    assert_eq!(text, "why?");
+    assert_eq!(prompt.text, "why?");
     assert_eq!(
-        files.iter().map(|file| (&file.attachment, &file.data)).collect::<Vec<_>>(),
+        prompt.files.iter().map(|file| (&file.attachment, &file.data)).collect::<Vec<_>>(),
         [(&log.attachment, &log.data)]
     );
 }
@@ -77,6 +78,20 @@ fn log() -> FileToSend {
     FileToSend::checked("build.log", MediaType::Text, b"error at line 42".to_vec()).unwrap()
 }
 
+/// So what's shown while it's on its way is the prompt the hub records, under the same ID, which keeps it one item on
+/// screen from written to recorded.
+#[test]
+fn a_prompt_on_its_way_is_the_one_written_with_the_hub_s_record_of_each_file() {
+    let log = log();
+    let written = Written::new(Prompt::carrying("why?", vec![log.clone()]));
+
+    let shown = written.on_its_way();
+
+    assert_eq!(shown.client_msg_id, written.client_msg_id);
+    assert_eq!(shown.prompt, Prompt::carrying("why?", vec![log.attachment]));
+    assert_ne!(Written::new(Prompt::new("why?")).client_msg_id, written.client_msg_id, "each its own");
+}
+
 #[test]
 fn a_file_this_connection_gave_the_hub_isnt_sent_again_with_the_prompt() {
     let dir = tempfile::tempdir().unwrap();
@@ -87,7 +102,7 @@ fn a_file_this_connection_gave_the_hub_isnt_sent_again_with_the_prompt() {
         .attachment_add(&"s".into(), &attachment.id, &attachment.name, attachment.media_type, log.data.clone())
         .unwrap();
 
-    client.send_prompt_carrying(&"s".into(), "why?", None, std::slice::from_ref(&log)).unwrap();
+    client.send_prompt(&"s".into(), &Written::new(Prompt::carrying("why?", vec![log.clone()]))).unwrap();
 
     let id = &log.attachment.id;
     assert_eq!(heard.try_iter().collect::<Vec<_>>(), [format!("add {id}"), "prompt".to_string()]);
@@ -103,7 +118,7 @@ fn a_file_the_hub_turns_out_not_to_have_is_sent_again_and_the_prompt_with_it() {
         .attachment_add(&"s".into(), &attachment.id, &attachment.name, attachment.media_type, log.data.clone())
         .unwrap();
 
-    client.send_prompt_carrying(&"s".into(), "why?", None, std::slice::from_ref(&log)).unwrap();
+    client.send_prompt(&"s".into(), &Written::new(Prompt::carrying("why?", vec![log.clone()]))).unwrap();
 
     let added = format!("add {}", log.attachment.id);
     let said = [added.clone(), "prompt, not taken".to_string(), added, "prompt".to_string()];
@@ -120,7 +135,7 @@ fn a_queued_prompts_file_the_hub_turns_out_not_to_have_is_sent_again_and_the_pro
         .attachment_add(&"s".into(), &attachment.id, &attachment.name, attachment.media_type, log.data.clone())
         .unwrap();
 
-    client.queue_prompt_carrying(&"s".into(), "m".into(), "why?", std::slice::from_ref(&log)).unwrap();
+    client.start_queueing(&"s".into(), Written::new(Prompt::carrying("why?", vec![log.clone()]))).wait().unwrap();
 
     let added = format!("add {}", log.attachment.id);
     let said = [added.clone(), "queued, not taken".to_string(), added, "queued".to_string()];

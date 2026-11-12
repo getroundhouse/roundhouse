@@ -6,6 +6,7 @@ use proptest::test_runner::{Config, RngSeed};
 
 use super::tests::page;
 use super::*;
+use protocol::prompt::Prompt;
 
 /// A log as a view of an open session holds it once the subscription has delivered what it starts with.
 fn opened(last_seq: Seq) -> SessionLog {
@@ -134,7 +135,7 @@ proptest! {
             scroll_to(&mut log, focus % seq_index(last_seq));
         }
         for prompt in 0..sent {
-            log.add_pending(format!("m{prompt}").into(), "hello".into(), Vec::new());
+            log.add_pending(QueuedPrompt { client_msg_id: format!("m{prompt}").into(), prompt: Prompt::new("hello") });
         }
 
         let runs = log.loaded_rows();

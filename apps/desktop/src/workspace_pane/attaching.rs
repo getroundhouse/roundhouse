@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use client_core::{FileToSend, Where};
 use gpui_kit::{AnyElement, ClipboardItem, Context, IntoElement as _, Styled as _};
 use protocol::model::{AttachmentId, SessionId};
-use protocol::prompt::says_or_carries;
+use protocol::prompt::{Prompt, says_or_carries};
 
 use super::{PaneEvent, WorkspacePane};
 use crate::attached::{self, Attachments, joined};
@@ -108,13 +108,8 @@ impl WorkspacePane {
     /// Puts back a prompt that couldn't be sent, in `chat`, so nothing typed or attached is lost. It goes before
     /// anything typed or attached since. With no chat, it goes to the one showing, or if none is yet, such as while the
     /// hub makes a new workspace's first, to the first that shows.
-    pub(crate) fn give_back(
-        &mut self,
-        chat: Option<&SessionId>,
-        text: String,
-        files: Vec<FileToSend>,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn give_back(&mut self, chat: Option<&SessionId>, prompt: Prompt<FileToSend>, cx: &mut Context<Self>) {
+        let Prompt { text, files } = prompt;
         let Some(chat) = chat.or(self.active.as_ref()).cloned() else {
             let waiting = &mut self.waiting.get_or_insert_default().draft;
             let problems = waiting.files.put_back(files);

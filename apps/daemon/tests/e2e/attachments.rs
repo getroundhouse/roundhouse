@@ -45,7 +45,7 @@ fn every_file_goes_in_the_worktree_and_the_agent_is_given_what_it_can_take_in_th
 
     let carried = vec![shot.clone(), log.clone(), archive, long_log];
     let ids = carried.iter().map(|a| a.id.clone()).collect();
-    client.session_prompt_with(&session.id, "attached", None, ids).unwrap();
+    client.session_prompt_with(&session.id, None, Prompt::carrying("attached", ids)).unwrap();
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert_eq!(
@@ -74,13 +74,15 @@ fn the_hub_keeps_an_image_once_its_sent_and_lets_go_of_anything_else() {
     let log = add(&client, &session.id, "a2", "build.log", MediaType::Text, b"error at line 42");
     assert_eq!(client.attachment_read(&session.id, &log.id).unwrap(), b"error at line 42", "until it's sent");
 
-    client.session_prompt_with(&session.id, "attached", None, vec![shot.id.clone(), log.id.clone()]).unwrap();
+    client
+        .session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![shot.id.clone(), log.id.clone()]))
+        .unwrap();
     let first = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
 
     assert_eq!(client.attachment_read(&session.id, &shot.id).unwrap(), png(64));
     assert_eq!(refused_with(client.attachment_read(&session.id, &log.id)), ErrorCode::NotFound);
     // A later prompt can carry it again, from where it went.
-    client.session_prompt_with(&session.id, "attached", None, vec![log.id.clone()]).unwrap();
+    client.session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![log.id.clone()])).unwrap();
     let both = assistant_text(&wait_for_turn_end(&client, &session.id, 2));
     assert_eq!(both.strip_prefix(&first), Some("attached: build.log: error at line 42"));
 }
@@ -108,13 +110,13 @@ fn a_prompt_can_be_only_files() {
     let (_, session) = stack.workspace(&client);
     let shot = add(&client, &session.id, "a1", "shot.png", MediaType::Png, &png(64));
 
-    client.session_prompt_with(&session.id, "", None, vec![shot.id.clone()]).unwrap();
+    client.session_prompt_with(&session.id, None, Prompt::carrying("", vec![shot.id.clone()])).unwrap();
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert!(events.iter().any(
         |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } if attachments == std::slice::from_ref(&shot))
     ));
-    let refused = client.session_prompt_with(&session.id, " ", None, Vec::new());
+    let refused = client.session_prompt(&session.id, " ", None);
     assert_eq!(refused_with(refused), ErrorCode::InvalidRequest, "with no files, it still needs text");
 }
 
@@ -161,8 +163,8 @@ fn a_prompt_can_only_carry_what_was_added_to_its_own_chat() {
         client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     let shot = add(&client, &other.id, "a1", "shot.png", MediaType::Png, &png(64));
 
-    let elsewhere = client.session_prompt_with(&session.id, "attached", None, vec![shot.id.clone()]);
-    let too_many = client.session_prompt_with(&other.id, "attached", None, vec![shot.id.clone(); 11]);
+    let elsewhere = client.session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![shot.id.clone()]));
+    let too_many = client.session_prompt_with(&other.id, None, Prompt::carrying("attached", vec![shot.id.clone(); 11]));
 
     assert_eq!(refused_with(elsewhere), ErrorCode::NotFound);
     assert_eq!(refused_with(too_many), ErrorCode::InvalidRequest);
@@ -189,11 +191,11 @@ fn an_image_a_reply_points_to_is_kept_as_it_was_when_the_reply_came() {
     let (workspace, session) = stack.workspace(&client);
     let worktree = PathBuf::from(workspace.path.clone().unwrap());
     std::fs::write(worktree.join("shot.png"), png(64)).unwrap();
-    client.session_prompt_with(&session.id, "say:![The shot](shot.png)", None, Vec::new()).unwrap();
+    client.session_prompt(&session.id, "say:![The shot](shot.png)", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     std::fs::write(worktree.join("shot.png"), png(128)).unwrap();
 
-    client.session_prompt_with(&session.id, "say:![The shot](shot.png)", None, Vec::new()).unwrap();
+    client.session_prompt(&session.id, "say:![The shot](shot.png)", None).unwrap();
 
     let events = wait_for_turn_end(&client, &session.id, 2);
     let [first, second] = linked(&events).try_into().unwrap_or_else(|all| panic!("{all:?}"));
@@ -210,9 +212,7 @@ fn a_reply_names_no_image_that_isnt_one_inside_the_worktree() {
     let (workspace, session) = stack.workspace(&client);
     std::fs::write(PathBuf::from(workspace.path.unwrap()).join("notes.txt"), "not an image").unwrap();
 
-    client
-        .session_prompt_with(&session.id, "say:![a](notes.txt) ![b](../../x.png) ![c](missing.png)", None, Vec::new())
-        .unwrap();
+    client.session_prompt(&session.id, "say:![a](notes.txt) ![b](../../x.png) ![c](missing.png)", None).unwrap();
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert_eq!(linked(&events), [Vec::<LinkedImage>::new()]);
@@ -225,7 +225,7 @@ fn an_image_a_tool_sends_back_is_kept_as_a_prompt_s_is_and_left_out_of_the_log()
     let (workspace, session) = stack.workspace(&client);
     std::fs::write(PathBuf::from(workspace.path.unwrap()).join("shot.png"), png(300)).unwrap();
 
-    client.session_prompt_with(&session.id, "read:shot.png", None, Vec::new()).unwrap();
+    client.session_prompt(&session.id, "read:shot.png", None).unwrap();
 
     wait_for_turn_end(&client, &session.id, 1);
     let (events, _) = client.session_read(&session.id, 1, 100, true).unwrap();

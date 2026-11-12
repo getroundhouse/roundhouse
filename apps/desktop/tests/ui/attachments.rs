@@ -164,8 +164,10 @@ fn a_prompt_that_couldnt_be_sent_comes_back_to_its_own_chat(cx: &mut TestAppCont
     let second = ui.new_chat();
     let not_sent = |text: &str| TranscriptEvent::NotSent {
         message: "couldn't send that: the connection to the hub was lost".to_string(),
-        text: text.to_string(),
-        files: vec![FileToSend::checked("build.log", MediaType::Text, b"error at line 42\n".to_vec()).unwrap()],
+        prompt: Prompt::carrying(
+            text,
+            vec![FileToSend::checked("build.log", MediaType::Text, b"error at line 42\n".to_vec()).unwrap()],
+        ),
     };
 
     // The chat that didn't send isn't showing.

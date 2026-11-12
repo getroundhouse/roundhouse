@@ -6,6 +6,7 @@ use desktop::new_workspace::Request;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
 use protocol::model::{AgentKind, Effort, PermissionMode, WorkspaceStatus};
+use protocol::prompt::Prompt;
 
 use super::{open_with_a_repo, prompts};
 use crate::support::{CLAUDE_STARTS_WITH, Held, Stack, sidebar_row};
@@ -59,8 +60,7 @@ fn files_given_back_to_a_full_dialog_go_first_and_it_says_which_didnt_fit(cx: &m
     // As if Create had been pressed before these were attached, and making the workspace then failed.
     let request = Request {
         repo: ui.first_repo_id(),
-        prompt: "say:one more".to_string(),
-        files: vec![file("earlier.txt")],
+        prompt: Prompt::carrying("say:one more", vec![file("earlier.txt")]),
         agent: AgentKind::Claude,
         model: Some(CLAUDE_STARTS_WITH.0),
         effort: Some(CLAUDE_STARTS_WITH.1),
@@ -144,7 +144,7 @@ fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_t
     let files: Vec<_> = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
     let (agent, model, effort) = (AgentKind::Claude, Some(CLAUDE_STARTS_WITH.0), Some(CLAUDE_STARTS_WITH.1));
     let (repo, prompt, permission_mode) = (ui.first_repo_id(), "say:too many".to_string(), PermissionMode::FullAccess);
-    let request = Request { repo, prompt, files, agent, model, effort, permission_mode };
+    let request = Request { repo, prompt: Prompt::carrying(prompt, files), agent, model, effort, permission_mode };
 
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();

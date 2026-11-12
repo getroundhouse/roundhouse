@@ -15,7 +15,7 @@ mod open_session;
 mod options;
 mod outline;
 mod places;
-mod queue;
+mod prompts;
 mod start;
 mod stream;
 mod typed;

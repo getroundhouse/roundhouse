@@ -55,6 +55,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]
+client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }

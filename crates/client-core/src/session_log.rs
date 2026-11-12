@@ -10,9 +10,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 
-use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Seq, SettledAt, seq_index};
+use protocol::model::{ClientMessageId, QueuedPrompt, Seq, SettledAt, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
 mod approvals;
@@ -25,13 +24,6 @@ pub use prompts::{PromptAt, PromptState, Settled};
 pub(crate) const PAGE_EVENTS: u64 = 250;
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
 pub const MAX_LOADED_EVENTS: usize = 2000;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PendingPrompt {
-    pub client_msg_id: ClientMessageId,
-    pub text: String,
-    pub attachments: Vec<Attachment>,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Row<'a> {
@@ -79,8 +71,8 @@ pub struct SessionLog {
     /// The row a view last wanted, which decides what stays loaded. It starts at the last row, where a view opens a
     /// chat, so a log no view has asked of yet fetches nothing, since its end comes live.
     focus: usize,
-    /// Sent, and not yet recorded.
-    pending: Vec<PendingPrompt>,
+    /// Sent, and not yet recorded. Each is held as the hub holds a queued prompt, under the ID it'll be recorded under.
+    pending: Vec<QueuedPrompt>,
     tail: Tail,
     changes: Changes,
     /// How many times events have been put in, live or by the page.
@@ -170,7 +162,7 @@ impl SessionLog {
 
     /// The prompts sent and not yet recorded, in the order they were sent, which the tail draws after
     /// [`SessionLog::waiting_prompts`].
-    pub fn pending(&self) -> &[PendingPrompt] {
+    pub fn pending(&self) -> &[QueuedPrompt] {
         &self.pending
     }
 
@@ -288,8 +280,8 @@ impl SessionLog {
     }
 
     /// Adds a prompt that's on its way, so it shows straight away, in the tail. Recording it removes this.
-    pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
-        self.pending.push(PendingPrompt { client_msg_id, text, attachments });
+    pub(crate) fn add_pending(&mut self, prompt: QueuedPrompt) {
+        self.pending.push(prompt);
         self.touched(self.row_count()..self.row_count() + 1);
     }
 
@@ -306,7 +298,7 @@ impl SessionLog {
     }
 
     /// The prompt couldn't be sent, so it no longer belongs in the transcript.
-    pub(crate) fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
+    pub(crate) fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<QueuedPrompt> {
         let at = self.pending.iter().position(|prompt| prompt.client_msg_id == *client_msg_id)?;
         let removed = self.pending.remove(at);
         self.touched(self.row_count()..self.row_count() + 1);
