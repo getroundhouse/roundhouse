@@ -44,10 +44,9 @@ pub(in crate::rows) struct Subagent {
 
 impl Subagent {
     /// What the subagent started by the call `id`, in the event at `seq`, has done.
-    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &str, open: bool, opening: Opening) -> Self {
+    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &ToolUseId, open: bool, opening: Opening) -> Self {
         if log.by() == By::Place {
-            let id = ToolUseId::from(id);
-            let record = m.subagents.get(&id).cloned();
+            let record = m.subagents.get(id).cloned();
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
             m.subagent_rows.borrow_mut().insert(id.clone(), seq);
             let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
@@ -63,17 +62,17 @@ impl Subagent {
                     (block, around)
                 })
                 .collect();
-            return Self { call: id, calls, events: None, apart: true, record, lately };
+            return Self { call: id.clone(), calls, events: None, apart: true, record, lately };
         }
         let mut subagent = Self {
-            call: id.into(),
+            call: id.clone(),
             calls: 0,
             events: open.then(Vec::new),
             apart: false,
             record: None,
             lately: Vec::new(),
         };
-        let its_own = |event: &&SessionEvent| parent_of(&event.body).is_some_and(|parent| parent.as_str() == id);
+        let its_own = |event: &&SessionEvent| parent_of(&event.body) == Some(id);
         for event in nearby::events_after(log, seq, REACH).filter(its_own) {
             let blocks = blocks_of(&event.body);
             subagent.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
@@ -136,7 +135,7 @@ impl SubagentCalls {
         if self.missed.contains(&seq) {
             return None;
         }
-        let found = nearby::call_before(log, seq, id.as_str(), REACH);
+        let found = nearby::call_before(log, seq, id, REACH);
         let found = found.filter(|(_, name)| agent::hands_off(name)).map(|(call, _)| call);
         match found {
             Some(call) => {
@@ -179,7 +178,7 @@ mod tests {
         assert!(!drawn_in_its_call(&log, &m, &report(2002)), "too far for the call to gather");
         let orphan = event(3, within("a call that isn't here", calls(&["x"])));
         assert!(!drawn_in_its_call(&log, &m, &orphan), "with no call to draw it");
-        let gathered = Subagent::read(&log, &m, 1, "agent", true, Opening::AsChosen).events.unwrap();
+        let gathered = Subagent::read(&log, &m, 1, &"agent".into(), true, Opening::AsChosen).events.unwrap();
         let seqs: Vec<Seq> = gathered.iter().map(|(event, _)| event.seq).collect();
         assert_eq!(seqs, [2, 2001], "the call gathers exactly what's drawn in it");
     }
@@ -234,8 +233,8 @@ mod tests {
         let log = log((1..).zip(events).map(|(seq, body)| event(seq, body)));
         let m = Model::default();
 
-        let open = Subagent::read(&log, &m, 1, "agent", true, Opening::AsChosen);
-        let closed = Subagent::read(&log, &m, 1, "agent", false, Opening::AsChosen);
+        let open = Subagent::read(&log, &m, 1, &"agent".into(), true, Opening::AsChosen);
+        let closed = Subagent::read(&log, &m, 1, &"agent".into(), false, Opening::AsChosen);
 
         assert_eq!(open.calls, 2);
         let seqs: Vec<Seq> = open.events.unwrap().iter().map(|(event, _)| event.seq).collect();

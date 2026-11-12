@@ -41,7 +41,7 @@ fn wrote(said: &Said, key: ItemKey) -> Lately {
 /// such as a read's lines, so the start of a long one would say it read fewer than it did, and the call is drawn as
 /// one still waiting instead.
 fn called(call: &Call, result: Option<&CallResult>) -> Lately {
-    let block = ContentBlock::ToolUse { id: call.id.to_string(), name: call.name.clone(), input: call.input.clone() };
+    let block = ContentBlock::ToolUse { id: call.id.clone(), name: call.name.clone(), input: call.input.clone() };
     let result = result.filter(|result| !result.cut || result.is_error).map(|result| ContentBlock::ToolResult {
         tool_use_id: call.id.clone(),
         is_error: result.is_error,

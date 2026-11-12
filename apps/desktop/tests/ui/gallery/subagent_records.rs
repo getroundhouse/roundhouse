@@ -77,7 +77,7 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
 fn note(subagent: &mut Subagent, block: &ContentBlock) {
     if let ContentBlock::ToolUse { id, name, input } = block {
         subagent.calls += 1;
-        subagent.latest_call = Some(Call { id: id.as_str().into(), name: name.clone(), input: input.clone() });
+        subagent.latest_call = Some(Call { id: id.clone(), name: name.clone(), input: input.clone() });
     }
     if subagent.status != SubagentStatus::Working {
         return;
@@ -92,7 +92,7 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
             work.since = Some(Said { text, cut: false });
         }
         ContentBlock::ToolUse { id, name, input } => {
-            let call = Call { id: id.as_str().into(), name: name.clone(), input: input.clone() };
+            let call = Call { id: id.clone(), name: name.clone(), input: input.clone() };
             work.calls.push(RecentCall { before: work.since.take(), call, result: None });
             if work.calls.len() > 3 {
                 work.calls.remove(0);

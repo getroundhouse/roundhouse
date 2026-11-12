@@ -23,7 +23,7 @@ pub enum ContentBlock {
         text: String,
     },
     ToolUse {
-        id: String,
+        id: ToolUseId,
         name: String,
         input: Value,
     },

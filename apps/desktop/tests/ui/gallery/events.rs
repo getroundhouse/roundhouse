@@ -28,7 +28,7 @@ pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>)
 }
 
 pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    from_the_agent(message, ContentBlock::ToolUse { id: id.to_string(), name: name.to_string(), input })
+    from_the_agent(message, ContentBlock::ToolUse { id: id.into(), name: name.to_string(), input })
 }
 
 /// What the agent thought, as its own message.

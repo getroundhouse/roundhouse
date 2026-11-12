@@ -4,7 +4,7 @@
 use client_core::Approval;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
-use protocol::model::{AgentKind, PermissionMode, Seq};
+use protocol::model::{AgentKind, PermissionMode, Seq, ToolUseId};
 
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
@@ -172,7 +172,7 @@ impl BlockAround {
         let whole = matches!(block, ContentBlock::ToolUse { .. }) && (all || m.folds.is_open(&key, Fold::Command));
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
-            if nearby::call_before(log, seq, tool_use_id.as_str(), NEAR).is_some());
+            if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
         let (reply, subagent) = match block {
             ContentBlock::ToolUse { id, name, .. } => {
                 let subagent = agent::hands_off(name).then(|| Subagent::read(log, m, seq, id, open, opening));
@@ -201,7 +201,7 @@ pub(crate) fn drawn_in_row<'a>(log: &'a SessionLog, event: &'a SessionEvent) -> 
 
 /// Whether the result `tool_use_id`, in the event at `seq`, is drawn with its call, which is close enough before it to
 /// have found it, as [`BlockAround`] says.
-pub(crate) fn drawn_with_its_call(log: &SessionLog, seq: Seq, tool_use_id: &str) -> Option<Seq> {
+pub(crate) fn drawn_with_its_call(log: &SessionLog, seq: Seq, tool_use_id: &ToolUseId) -> Option<Seq> {
     nearby::call_before(log, seq, tool_use_id, NEAR).map(|(call, _)| call)
 }
 

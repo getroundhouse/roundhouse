@@ -1,6 +1,7 @@
 //! What the CLI's tools sent back, as the adapter records it, from the same captured output as `contract`.
 
 use protocol::event::ContentBlock;
+use protocol::model::ToolUseId;
 
 use super::contract::blocks;
 
@@ -36,7 +37,7 @@ fn a_tool_search_s_result_names_the_tools_it_loaded() {
 /// The result of each call to `tool` in the fixture.
 fn results_of(tool: &str) -> Vec<ContentBlock> {
     let blocks = blocks();
-    let calls: Vec<String> = blocks
+    let calls: Vec<ToolUseId> = blocks
         .iter()
         .filter_map(|block| match block {
             ContentBlock::ToolUse { id, name, .. } if name == tool => Some(id.clone()),
@@ -45,8 +46,6 @@ fn results_of(tool: &str) -> Vec<ContentBlock> {
         .collect();
     blocks
         .into_iter()
-        .filter(|block| {
-            matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if calls.iter().any(|id| id == tool_use_id.as_str()))
-        })
+        .filter(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if calls.contains(tool_use_id)))
         .collect()
 }

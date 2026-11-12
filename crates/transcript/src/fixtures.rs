@@ -57,7 +57,7 @@ pub(crate) fn calls(ids: &[&str]) -> EventBody {
 pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
     let blocks = ids
         .iter()
-        .map(|id| ContentBlock::ToolUse { id: (*id).to_string(), name: name.to_string(), input: json!({}) })
+        .map(|id| ContentBlock::ToolUse { id: (*id).into(), name: name.to_string(), input: json!({}) })
         .collect();
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
 }

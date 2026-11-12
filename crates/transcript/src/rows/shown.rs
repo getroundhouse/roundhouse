@@ -72,7 +72,7 @@ pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: u64) -> Vec<us
     let mut rows = vec![own];
     for block in blocks_of(&event.body) {
         if let ContentBlock::ToolResult { tool_use_id, .. } = block
-            && let Some(call) = drawn_with_its_call(log, event.seq, tool_use_id.as_str()).and_then(row_of)
+            && let Some(call) = drawn_with_its_call(log, event.seq, tool_use_id).and_then(row_of)
         {
             rows.push(call);
         }

@@ -306,7 +306,7 @@ fn block(value: &Value) -> ContentBlock {
         Some("thinking") => ContentBlock::Thinking { text: string_of(value, "thinking").unwrap_or_default() },
         // A tool the API runs itself, such as the advisor, is called the same way.
         Some("tool_use" | "server_tool_use") => ContentBlock::ToolUse {
-            id: string_of(value, "id").unwrap_or_default(),
+            id: string_of(value, "id").unwrap_or_default().into(),
             name: string_of(value, "name").unwrap_or_default(),
             input: value.get("input").cloned().unwrap_or(Value::Null),
         },
