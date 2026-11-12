@@ -14,7 +14,8 @@ use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentAccount, AgentKind, ApprovalId, CacheRequest, ContextUsage, Seq, SessionSettingsChange, Title, UsageLimit,
+    AgentAccount, AgentDescription, AgentKind, ApprovalId, CacheRequest, ContextUsage, Seq, SessionSettingsChange,
+    Title, UsageLimit,
 };
 use protocol::tail::StreamDelta;
 use protocol::worker::{AgentSpec, ToolsToken};
@@ -124,6 +125,12 @@ pub trait AgentProcess: Send + Sync {
     async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError>;
     /// Asks the process to stop, and forces it if it doesn't. Resolves once it has exited.
     async fn stop(&self);
+}
+
+/// What each kind of agent this build runs is called and offers, as its adapter describes it, for the hub to give each
+/// chat what its agent starts with and to tell clients what to offer.
+pub fn descriptions() -> Vec<AgentDescription> {
+    vec![claude::description()]
 }
 
 pub async fn spawn(

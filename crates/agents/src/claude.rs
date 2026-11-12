@@ -3,6 +3,7 @@
 
 mod account;
 mod context;
+mod description;
 mod effort;
 mod mode;
 mod normalize;
@@ -13,6 +14,7 @@ mod usage;
 
 pub use account::account;
 pub use context::context_usage;
+pub use description::description;
 pub use effort::applied_effort;
 pub use normalize::{Normalized, Normalizer, Parsed};
 pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
