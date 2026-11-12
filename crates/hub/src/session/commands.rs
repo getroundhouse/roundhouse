@@ -7,7 +7,9 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    AgentApproval, AgentCancel, AgentCompact, AgentPrompt, AgentSpec, AgentStarted, AgentStop, Delivery, Request,
+};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
@@ -151,17 +153,12 @@ impl LiveSession {
         };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
-        let reply = link.call(WorkerRequest::AgentStart(spec)).await;
-        let Ok(WorkerResponse::AgentStarted { pid, run, already_running }) = reply else {
+        let AgentStarted { pid, run, already_running } = link.call(spec).await.inspect_err(|_| {
             let mut state = self.state.lock();
             if state.agent == Some(starting) {
                 state.agent = None;
             }
-            return Err(match reply {
-                Err(e) => e,
-                Ok(reply) => ApiError::new(ErrorCode::Worker, format!("unexpected reply: {reply:?}")),
-            });
-        };
+        })?;
         let current = {
             let mut state = self.state.lock();
             // An agent that was already running keeps the run it started with. A new one can exit before
@@ -184,20 +181,24 @@ impl LiveSession {
 
     async fn forward(&self, seq: Seq, asking: Asking) -> Result<(), ApiError> {
         let session_id = self.id.clone();
-        let request = match asking {
+        match asking {
             Asking::Prompt(prompt) => {
                 // Only now, after waiting on setup, since the worktree has to be ready for them.
                 let placed = self.hub()?.place_attachments(&self.id, &self.workspace_id, &prompt.files).await?;
-                WorkerRequest::AgentPrompt { session_id, seq, prompt: prompt.with_files(placed) }
+                self.send_to_agent(AgentPrompt { session_id, seq, prompt: prompt.with_files(placed) }).await
             }
-            Asking::Compact { keeping } => WorkerRequest::AgentCompact { session_id, asked: seq, keeping },
-        };
+            Asking::Compact { keeping } => self.send_to_agent(AgentCompact { session_id, asked: seq, keeping }).await,
+        }
+    }
+
+    /// Sends what was recorded to the agent, starting one if it has to.
+    async fn send_to_agent<R: Request<Reply = Delivery> + Clone>(&self, request: R) -> Result<(), ApiError> {
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            let WorkerResponse::AgentNotRunning = link.call(request.clone()).await? else {
+            if link.call(request.clone()).await? == Delivery::Delivered {
                 return Ok(());
-            };
+            }
             let mut state = self.state.lock();
             if state.agent.is_some_and(|agent| agent.link == link.id) {
                 state.agent = None;
@@ -346,10 +347,10 @@ impl LiveSession {
         let link = hub
             .existing_worker(&self.workspace_id)
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
-        let request = WorkerRequest::AgentApproval { session_id: self.id.clone(), approval_id, decision };
-        let WorkerResponse::AgentNotRunning = link.call(request).await? else {
+        let request = AgentApproval { session_id: self.id.clone(), approval_id, decision };
+        if link.call(request).await? == Delivery::Delivered {
             return Ok(());
-        };
+        }
         self.record_or_log(
             Origin::Hub,
             EventBody::Notice {
@@ -367,7 +368,7 @@ impl LiveSession {
         let Some(link) = hub.existing_worker(&self.workspace_id) else {
             return Ok(());
         };
-        link.call(WorkerRequest::AgentCancel { session_id: self.id.clone() }).await.map(|_| ())
+        link.call(AgentCancel { session_id: self.id.clone() }).await.map(drop)
     }
 
     pub(crate) async fn handle_stop(&self) -> Result<(), ApiError> {
@@ -375,6 +376,6 @@ impl LiveSession {
         let Some(link) = hub.existing_worker(&self.workspace_id) else {
             return Ok(());
         };
-        link.call(WorkerRequest::AgentStop { session_id: self.id.clone() }).await.map(|_| ())
+        link.call(AgentStop { session_id: self.id.clone() }).await.map(drop)
     }
 }

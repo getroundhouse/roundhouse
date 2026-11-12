@@ -2,9 +2,11 @@
 
 use protocol::frame::{self, Call};
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};
+use protocol::worker::Request as _;
 use protocol::worker::{
-    AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
-    WorkerResponse,
+    AskAnswer, AskId, AskOutcome, AskReply, PrepareWorkspace, RestoreWorkspace, ServeTools, ToWorker, ToolsServing,
+    WorkerAsk, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere,
+    WorktreeThereReply,
 };
 
 #[test]
@@ -41,12 +43,15 @@ fn what_a_worker_asks_and_what_its_hub_answers_keep_their_form() {
     );
 
     let serving: WorkerCall = frame::decode(br#"{"id":5,"request":{"method":"serve_tools","port":50123}}"#).unwrap();
-    assert_eq!(serving.request, WorkerRequest::ServeTools { port: Some(50_123) });
+    assert_eq!(serving.request, WorkerRequest::ServeTools(ServeTools { port: Some(50_123) }));
     let reply: WorkerFrame =
         frame::decode(br#"{"frame":"reply","id":5,"response":{"result":"tools_serving","port":50123}}"#).unwrap();
     assert_eq!(
         reply,
-        WorkerFrame::Reply { id: 5, outcome: WorkerOutcome::Response(WorkerResponse::ToolsServing { port: 50_123 }) }
+        WorkerFrame::Reply {
+            id: 5,
+            outcome: WorkerOutcome::Response(WorkerResponse::ToolsServing(ToolsServing { port: 50_123 }))
+        }
     );
 }
 
@@ -88,30 +93,37 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
         assert_eq!(String::from_utf8(frame::encode(&call).unwrap()).unwrap(), format!("{line}\n"));
         assert_eq!(frame::decode::<WorkerCall>(line.as_bytes()).unwrap(), call);
     };
-    let prepare = WorkerRequest::PrepareWorkspace {
+    let prepare = WorkerRequest::PrepareWorkspace(PrepareWorkspace {
         repo_name: "r".into(),
         repo_path: "/r".into(),
         workspace_name: "aspen".into(),
         branch: "aspen".into(),
         base_ref: Some("origin/main".into()),
-    };
+    });
     keeps_its_form(
         WorkerCall { id: 1, request: prepare },
         r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
     );
-    let restore = WorkerRequest::RestoreWorkspace { repo_path: "/r".into(), path: "/w".into(), branch: "birch".into() };
+    let restore = WorkerRequest::RestoreWorkspace(RestoreWorkspace {
+        repo_path: "/r".into(),
+        path: "/w".into(),
+        branch: "birch".into(),
+    });
     keeps_its_form(
         WorkerCall { id: 2, request: restore },
         r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}}"#,
     );
 
     keeps_its_form(
-        WorkerCall { id: 4, request: WorkerRequest::WorktreeThere { path: "/w".into() } },
+        WorkerCall { id: 4, request: WorktreeThere { path: "/w".into() }.into_request() },
         r#"{"id":4,"request":{"method":"worktree_there","path":"/w"}}"#,
     );
     let there: WorkerFrame =
         frame::decode(br#"{"frame":"reply","id":4,"response":{"result":"worktree_there","there":true}}"#).unwrap();
-    let WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::WorktreeThere { there }), .. } = there
+    let WorkerFrame::Reply {
+        outcome: WorkerOutcome::Response(WorkerResponse::WorktreeThere(WorktreeThereReply { there })),
+        ..
+    } = there
     else {
         panic!("{there:?}");
     };
@@ -126,8 +138,10 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
     )
     .unwrap();
 
-    let WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::WorkspaceReady { branch, .. }), .. } =
-        ready
+    let WorkerFrame::Reply {
+        outcome: WorkerOutcome::Response(WorkerResponse::WorkspaceReady(WorkspaceReady { branch, .. })),
+        ..
+    } = ready
     else {
         panic!("{ready:?}");
     };

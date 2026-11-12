@@ -46,7 +46,6 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{AgentDescription, ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
-use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -114,10 +113,6 @@ pub(crate) struct Hub {
     name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
-}
-
-fn unexpected(reply: &WorkerResponse) -> ApiError {
-    ApiError::new(ErrorCode::Worker, format!("unexpected reply from the worker: {reply:?}"))
 }
 
 impl Hub {

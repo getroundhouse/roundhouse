@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
-use protocol::worker::{AskReply, ToolsToken, WorkerAsk, WorkerRequest, WorkerResponse};
+use protocol::worker::{AskReply, ServeTools, ToolsServing, ToolsToken, WorkerAsk};
 use tracing::warn;
 
-use super::{Hub, new_id, unexpected};
+use super::{Hub, new_id};
 use crate::worker_link::WorkerLink;
 
 #[cfg(test)]
@@ -52,12 +52,11 @@ impl Hub {
         }
         let id = workspace_id.clone();
         let recorded = self.blocking(move |store| store.tools_port(&id)).await?;
-        let serving = link.call(WorkerRequest::ServeTools { port: recorded });
-        let reply = tokio::time::timeout(SERVE_TIMEOUT, serving).await.map_err(|_| {
+        let serving = link.call(ServeTools { port: recorded });
+        let ToolsServing { port } = tokio::time::timeout(SERVE_TIMEOUT, serving).await.map_err(|_| {
             link.tools_unserved();
             unserved()
         })??;
-        let WorkerResponse::ToolsServing { port } = reply else { return Err(unexpected(&reply)) };
         if recorded != Some(port) {
             let id = workspace_id.clone();
             self.blocking(move |store| store.set_tools_port(&id, port)).await?;

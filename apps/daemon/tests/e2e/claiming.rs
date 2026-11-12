@@ -7,7 +7,7 @@ use std::process::{Child, Command, Stdio};
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::worker::WORKER_PROTOCOL_VERSION;
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
+use protocol::worker::{Hello, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
 
 fn worker(dir: &Path) -> Child {
     Command::new(env!("CARGO_BIN_EXE_roundhoused"))
@@ -24,11 +24,11 @@ fn worker(dir: &Path) -> Child {
 
 /// Says hello, and returns the answer. A worker sends nothing else until it's asked for more.
 fn hello(worker: &mut Child) -> WorkerOutcome {
-    let request = WorkerRequest::Hello {
+    let request = WorkerRequest::Hello(Hello {
         protocol_version: WORKER_PROTOCOL_VERSION,
         oldest_protocol_version: None,
         keep_running_without_hub: false,
-    };
+    });
     let call = WorkerCall { id: 1, request };
     worker.stdin.as_mut().unwrap().write_all(&frame::encode(&call).unwrap()).unwrap();
     let mut line = String::new();

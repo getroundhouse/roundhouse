@@ -10,11 +10,11 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId};
 use protocol::prompt::Prompt;
 use protocol::short_text::start_of;
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::TitleFor;
 use tracing::warn;
 
+use super::Hub;
 use super::ready::ReadyWorkspace;
-use super::{Hub, unexpected};
 use crate::attachment_files::FileFor;
 use crate::store::Retitle;
 
@@ -219,8 +219,7 @@ impl Hub {
         images: Vec<NewAttachment>,
     ) -> Result<Title, ApiError> {
         let link = self.ensure_worker(workspace).await?;
-        let reply = link.call(WorkerRequest::TitleFor { agent, prompt, images }).await?;
-        let WorkerResponse::Title { title } = reply else { return Err(unexpected(&reply)) };
+        let title = link.call(TitleFor { agent, prompt, images }).await?.title;
         Title::from_first_line(&title).ok_or_else(|| ApiError::new(ErrorCode::Worker, "the worker gave an empty title"))
     }
 

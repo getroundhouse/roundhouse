@@ -3,7 +3,9 @@
 use protocol::StampedBuild;
 use protocol::client::ErrorCode;
 use protocol::frame;
-use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerCall, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    Hello, HelloReply, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 use worker::Config;
 
 use super::{config, hello, replies_to};
@@ -25,7 +27,7 @@ async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
     for id in [1, 2] {
         assert!(matches!(&answered[&id], WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{answered:?}");
     }
-    assert!(matches!(answered[&3], WorkerOutcome::Response(WorkerResponse::Hello { .. })), "it carried on");
+    assert!(matches!(answered[&3], WorkerOutcome::Response(WorkerResponse::Hello(_))), "it carried on");
 }
 
 /// A worker refused its instance answers every request by saying so, one it can't read included, so the hub can tell
@@ -47,10 +49,8 @@ async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
 async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
     let dir = tempfile::tempdir().unwrap();
     let ours = WORKER_PROTOCOL_VERSION;
-    let hello = |protocol_version, oldest_protocol_version| WorkerRequest::Hello {
-        protocol_version,
-        oldest_protocol_version,
-        keep_running_without_hub: false,
+    let hello = |protocol_version, oldest_protocol_version| {
+        WorkerRequest::Hello(Hello { protocol_version, oldest_protocol_version, keep_running_without_hub: false })
     };
     let hellos = [hello(ours + 1, Some(ours)), hello(ours + 2, Some(ours + 1)), hello(ours, None)];
     let calls: Vec<_> = hellos
@@ -63,7 +63,7 @@ async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
     let answered = replies_to(config, &calls).await;
 
     let build = Some("given".to_string());
-    let chosen = WorkerOutcome::Response(WorkerResponse::Hello { protocol_version: ours, build });
+    let chosen = WorkerOutcome::Response(WorkerResponse::Hello(HelloReply { protocol_version: ours, build }));
     assert_eq!(answered[&0], chosen, "a newer hub that still speaks this worker's version");
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{answered:?}");
     assert_eq!(answered[&2], chosen, "a hub from before ranges");

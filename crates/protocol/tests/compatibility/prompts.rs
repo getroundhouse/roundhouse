@@ -8,7 +8,7 @@ use protocol::event::EventBody;
 use protocol::frame;
 use protocol::model::{AttachmentId, QueuedPrompt};
 use protocol::prompt::Prompt;
-use protocol::worker::{WorkerCall, WorkerRequest};
+use protocol::worker::{AgentPrompt, WorkerCall, WorkerRequest};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -92,11 +92,14 @@ fn a_prompt_for_the_agent_keeps_its_form() {
         "attachments": [{"attachment": log_form(), "path": "/w/.context/attachments/build.log"}],
     }});
     let file = AttachmentFile { attachment: log(), path: "/w/.context/attachments/build.log".into() };
-    let request =
-        WorkerRequest::AgentPrompt { session_id: "s".into(), seq: 3, prompt: Prompt::carrying("why?", vec![file]) };
+    let request = WorkerRequest::AgentPrompt(AgentPrompt {
+        session_id: "s".into(),
+        seq: 3,
+        prompt: Prompt::carrying("why?", vec![file]),
+    });
     keeps_its_form(&call, &WorkerCall { id: 4, request });
 
     let bare = json!({"id": 5, "request": {"method": "agent_prompt", "session_id": "s", "prompt": 3, "text": "go"}});
-    let request = WorkerRequest::AgentPrompt { session_id: "s".into(), seq: 3, prompt: Prompt::new("go") };
+    let request = WorkerRequest::AgentPrompt(AgentPrompt { session_id: "s".into(), seq: 3, prompt: Prompt::new("go") });
     keeps_its_form(&bare, &WorkerCall { id: 5, request });
 }

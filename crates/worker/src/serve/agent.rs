@@ -12,7 +12,7 @@ use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
-use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
+use protocol::worker::{AgentSpec, AgentStarted, TitleReply, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
@@ -30,7 +30,7 @@ pub(crate) async fn title_for(
     let options = one_off(state, "title");
     let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
     let title = until_stopping(state, title).await?;
-    Ok(WorkerResponse::Title { title: title?.to_string() })
+    Ok(WorkerResponse::Title(TitleReply { title: title?.to_string() }))
 }
 
 /// What a one-off call to an agent's CLI runs with: a record of its own, numbered, so the provider can stop the call
@@ -79,7 +79,11 @@ pub(crate) async fn start_agent(
     // The agent works in the worktree, which is where what its text points to is read from.
     let worktree = PathBuf::from(&spec.cwd);
     if let Some(agent) = state.agents.lock().get(&session_id).filter(|a| !a.process.is_gone()) {
-        return Ok(WorkerResponse::AgentStarted { pid: agent.process.pid(), run: agent.run, already_running: true });
+        return Ok(WorkerResponse::AgentStarted(AgentStarted {
+            pid: agent.process.pid(),
+            run: agent.run,
+            already_running: true,
+        }));
     }
     let (tx, rx) = mpsc::channel(1024);
     // Named by run, because a replaced agent removes its own files as it finishes, which can be after its replacement
@@ -100,7 +104,7 @@ pub(crate) async fn start_agent(
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
-    Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
+    Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false }))
 }
 
 /// Makes the folder the agent's instructions send it to for what it makes for its own use. An agent can work without

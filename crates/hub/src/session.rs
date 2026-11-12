@@ -15,7 +15,7 @@ use protocol::model::{
     SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{AgentConfigure, Delivery};
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
@@ -306,8 +306,8 @@ impl LiveSession {
         let _one_at_a_time = self.configuring.lock().await;
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
-            let request = WorkerRequest::AgentConfigure { session_id: self.id.clone(), options: options.clone() };
-            agent_took_it = !matches!(link.call(request).await?, WorkerResponse::AgentNotRunning);
+            let request = AgentConfigure { session_id: self.id.clone(), options: options.clone() };
+            agent_took_it = link.call(request).await? == Delivery::Delivered;
         }
         let was = self.state.lock().settings.clone();
         self.keep_options(&hub, options.clone()).await?;

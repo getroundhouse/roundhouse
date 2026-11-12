@@ -115,12 +115,12 @@ mod tests {
         let answer = br#"{"answer":4,"response":{"result":"pull_request","pull_request":null}}"#;
         let refused = br#"{"answer":5,"error":{"code":"unsupported","message":"no"}}"#;
 
-        let ToWorker::Call(Call { id: 4, request: Ok(WorkerRequest::GitStatus { path }) }) =
+        let ToWorker::Call(Call { id: 4, request: Ok(WorkerRequest::GitStatus(status)) }) =
             ToWorker::decode(call).unwrap()
         else {
             panic!("a call reads as a call");
         };
-        assert_eq!(path, "/w");
+        assert_eq!(status.path, "/w");
         let ToWorker::Answer(answered) = ToWorker::decode(answer).unwrap() else {
             panic!("an answer reads as an answer");
         };

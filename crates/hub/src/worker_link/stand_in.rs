@@ -3,6 +3,7 @@
 use std::sync::Weak;
 
 use protocol::frame;
+use protocol::worker::WorkerRequest;
 
 use super::*;
 use crate::frames::FrameReader;

@@ -1,7 +1,7 @@
 use super::*;
 use crate::client::ClientRequest;
 use crate::model::Session;
-use crate::worker::WorkerRequest;
+use crate::worker::{AgentConfigure, WorkerRequest};
 
 const OPUS: ModelName = ModelName::named("opus");
 
@@ -32,7 +32,9 @@ fn change_of(line: &str) -> SessionSettingsChange {
         };
         return options;
     }
-    let WorkerRequest::AgentConfigure { options, .. } = serde_json::from_str::<WorkerRequest>(line).unwrap() else {
+    let WorkerRequest::AgentConfigure(AgentConfigure { options, .. }) =
+        serde_json::from_str::<WorkerRequest>(line).unwrap()
+    else {
         panic!("not a request with options: {line}");
     };
     options

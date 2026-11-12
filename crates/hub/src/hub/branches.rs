@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::model::{Branches, Head, Upstream, WorkspaceId};
-use protocol::worker::WorkerRequest;
+use protocol::worker::WatchBranches;
 use tracing::{debug, warn};
 
 use super::Hub;
@@ -37,7 +37,7 @@ impl Hub {
     /// answers only that it's watching, and what it sees comes in frames of its own.
     pub(super) async fn watch_branches(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
         let path = ready.path().to_owned();
-        if let Err(e) = link.send(WorkerRequest::WatchBranches { path }).await {
+        if let Err(e) = link.send(WatchBranches { path }).await {
             debug!(id = %ready.id(), "asking the worker to watch the branches: {}", e.message);
         }
     }
@@ -46,10 +46,10 @@ impl Hub {
     /// worktree that's just come back, so its record says which branch it's on before it's announced.
     pub(super) async fn watch_branches_from_now(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
         let path = ready.path().to_owned();
-        let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WorkerRequest::WatchBranches { path })).await;
+        let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WatchBranches { path })).await;
         let id = ready.id();
         match first {
-            Ok(Ok(_)) => {}
+            Ok(Ok(())) => {}
             Ok(Err(e)) => debug!(%id, "asking the worker to watch the branches: {}", e.message),
             Err(_) => warn!(%id, "the worker didn't read the branches within {FIRST_READ_TIMEOUT:?}"),
         }

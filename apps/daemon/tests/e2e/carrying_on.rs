@@ -267,7 +267,7 @@ fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
     // What a worker kept comes straight after the hello's reply, so it would come before this one's.
     let running = next.call(2, WorkerRequest::RunningAgents);
     assert!(
-        matches!(&running, WorkerOutcome::Response(WorkerResponse::RunningAgents { agents }) if agents.len() == 1),
+        matches!(&running, WorkerOutcome::Response(WorkerResponse::RunningAgents(reply)) if reply.agents.len() == 1),
         "{running:?}"
     );
     assert_eq!(next.call(3, WorkerRequest::Stop), WorkerOutcome::Response(WorkerResponse::Ok));

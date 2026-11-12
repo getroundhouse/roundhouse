@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceId};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{CancelSetup, SetupDone, SetupLog, SetupWorkspace};
 use tokio::sync::watch;
 use tracing::warn;
 
+use super::Hub;
 use super::ready::ReadyWorkspace;
 use super::workspaces::workspace_env;
-use super::{Hub, unexpected};
 
 /// A workspace's setup, from when the hub records it as running until it records how it ended.
 pub(super) struct SetupGate {
@@ -85,25 +85,21 @@ impl Hub {
             }
         };
         let (repo_path, path, env) = (repo.path.clone(), ready.path().to_owned(), workspace_env(workspace, repo));
-        let request = WorkerRequest::SetupWorkspace { repo_path, path, env };
+        let request = SetupWorkspace { repo_path, path, env };
         let finished = async {
             let running = link.send(request).await?;
             tokio::pin!(running);
             tokio::select! {
                 reply = &mut running => reply,
                 Ok(()) = async { stopped.wait_for(|stop| *stop).await.map(drop) } => {
-                    let _ = link.call(WorkerRequest::CancelSetup).await;
+                    let _ = link.call(CancelSetup).await;
                     running.await
                 }
             }
         };
         match finished.await {
-            Ok(WorkerResponse::SetupDone { code: Some(0) }) => SetupStatus::Succeeded,
-            Ok(WorkerResponse::SetupDone { code }) => SetupStatus::Failed { code },
-            Ok(other) => {
-                warn!(workspace = workspace.name, "unexpected reply to setup: {other:?}");
-                SetupStatus::Failed { code: None }
-            }
+            Ok(SetupDone { code: Some(0) }) => SetupStatus::Succeeded,
+            Ok(SetupDone { code }) => SetupStatus::Failed { code },
             Err(e) => {
                 warn!(workspace = workspace.name, "setup failed: {}", e.message);
                 SetupStatus::Failed { code: None }
@@ -122,11 +118,7 @@ impl Hub {
     pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: WorkspaceId) -> Result<String, ApiError> {
         let worktree = self.ready_worktree(&id).await?;
         let path = worktree.path().to_owned();
-        let reply = worktree.link().call(WorkerRequest::SetupLog { path }).await?;
-        let WorkerResponse::SetupLog { text } = reply else {
-            return Err(unexpected(&reply));
-        };
-        Ok(text)
+        Ok(worktree.link().call(SetupLog { path }).await?.text)
     }
 
     pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {

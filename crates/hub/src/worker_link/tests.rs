@@ -6,7 +6,9 @@ use std::path::Path;
 use process::ProcessRecord;
 use protocol::frame;
 use protocol::paths::WORKER_RECORD_FILE;
-use protocol::worker::{AskId, AskOutcome, AskReply, WorkerAsk, WorkerOutcome};
+use protocol::worker::{
+    AskId, AskOutcome, AskReply, CancelSetup, GitStatus, PullRequestReply, WorkerAsk, WorkerOutcome,
+};
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
@@ -91,6 +93,19 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     assert!(asked.elapsed() < HELLO_TIMEOUT / 2, "it waited for the time limit");
 }
 
+/// A call reads its reply as what its request is answered with, so one of another kind fails it here, rather than in
+/// each caller.
+#[tokio::test]
+async fn a_reply_of_another_kind_than_its_request_is_answered_with_fails_its_call() {
+    let link = WorkerLink::answering(|_| Some(Ok(WorkerResponse::Ok)));
+
+    let status = link.call(GitStatus { path: "/w".into() }).await;
+    let cancelled = link.call(CancelSetup).await;
+
+    assert_eq!(status.map_err(|e| e.code), Err(ErrorCode::Worker));
+    assert_eq!(cancelled, Ok(()));
+}
+
 /// One that chose a version this hub doesn't speak, which no worker should, since a worker chooses one both speak.
 #[tokio::test]
 async fn a_worker_that_chose_another_version_is_not_used() {
@@ -112,9 +127,9 @@ async fn a_worker_that_chose_another_version_is_not_used() {
 #[tokio::test]
 async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_the_calls_that_takes() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest, build: None };
+    let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     let no_limit = WorkerOutcome::Error(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
-    let none = WorkerResponse::PullRequest { pull_request: None, branch: None };
+    let none = WorkerResponse::PullRequest(PullRequestReply { pull_request: None, branch: None });
     frames_in(
         dir.path(),
         &[
@@ -150,7 +165,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
 #[tokio::test]
 async fn an_ask_this_hub_cant_read_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello { protocol_version: versions::WORKERS.newest, build: None };
+    let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     frames_in(dir.path(), &[("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) })]);
     let ask = r#"{"frame":"ask","id":9,"session_id":{"newer":true},"ask":{"method":"pull_request"}}"#;
     let d = dir.path().display();

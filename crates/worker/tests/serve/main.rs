@@ -11,8 +11,9 @@ use protocol::Build;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
-    AgentSpec, AskAnswer, AskOutcome, AskReply, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall,
-    WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+    AgentSpec, AskAnswer, AskOutcome, AskReply, Hello, RunningAgentsReply, ServeTools, SetupDone, SetupWorkspace,
+    ToolsServing, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall, WorkerFrame, WorkerOutcome,
+    WorkerRequest, WorkerResponse,
 };
 use tokio::io::{
     AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf,
@@ -24,11 +25,11 @@ use worker::{Config, Deleter, serve};
 
 /// What a hub of this build says first.
 fn hello() -> WorkerRequest {
-    WorkerRequest::Hello {
+    WorkerRequest::Hello(Hello {
         protocol_version: WORKER_PROTOCOL_VERSION,
         oldest_protocol_version: Some(WORKER_PROTOCOL_VERSION),
         keep_running_without_hub: false,
-    }
+    })
 }
 
 /// Neither an agent's start nor serving its tools, under way as the hub goes, can leave anything behind that keeps the
@@ -48,7 +49,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
 
         let calls = [
             hello(),
-            WorkerRequest::ServeTools { port: None },
+            WorkerRequest::ServeTools(ServeTools { port: None }),
             WorkerRequest::AgentStart(agent_start(&format!("s{attempt}"), dir.path(), None)),
         ];
         send(&mut hub_write, calls).await;
@@ -74,7 +75,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
         hello(),
-        WorkerRequest::SetupWorkspace { repo_path: path.clone(), path, env: vec![] },
+        WorkerRequest::SetupWorkspace(SetupWorkspace { repo_path: path.clone(), path, env: vec![] }),
         WorkerRequest::CancelSetup,
     ];
     let mut lines = Vec::new();
@@ -96,7 +97,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     })
     .await
     .expect("the script should have been stopped");
-    assert_eq!(setup, WorkerOutcome::Response(WorkerResponse::SetupDone { code: None }));
+    assert_eq!(setup, WorkerOutcome::Response(WorkerResponse::SetupDone(SetupDone { code: None })));
 }
 
 /// A call to the worker's tools from an agent it started, with what its CLI was told of them, in a file of the run's own
@@ -111,11 +112,12 @@ async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_a
     let mut frames = BufReader::new(hub_read).lines();
     let calls = [
         hello(),
-        WorkerRequest::ServeTools { port: None },
+        WorkerRequest::ServeTools(ServeTools { port: None }),
         WorkerRequest::AgentStart(agent_start("s", dir.path(), Some(ToolsToken::new("token-s")))),
     ];
     send(&mut hub_write, calls).await;
-    let WorkerOutcome::Response(WorkerResponse::ToolsServing { port }) = reply(&mut frames, 1).await else {
+    let WorkerOutcome::Response(WorkerResponse::ToolsServing(ToolsServing { port })) = reply(&mut frames, 1).await
+    else {
         panic!("the tools aren't served");
     };
     reply(&mut frames, 2).await;
@@ -233,12 +235,12 @@ async fn told_at_start(dir: &Path, config: Config, serving: bool) -> String {
     let Worker { read: hub_read, write: mut hub_write, running } = start_worker(config);
     let mut frames = BufReader::new(hub_read).lines();
     let mut calls = vec![hello()];
-    calls.extend(serving.then_some(WorkerRequest::ServeTools { port: None }));
+    calls.extend(serving.then_some(WorkerRequest::ServeTools(ServeTools { port: None })));
     calls.push(WorkerRequest::AgentStart(agent_start("s", dir, Some(ToolsToken::new("token-s")))));
     let last = calls.len() as u64 - 1;
     send(&mut hub_write, calls).await;
     let started = reply(&mut frames, last).await;
-    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted { .. })), "{started:?}");
+    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
     let (path, _) = given(dir).await;
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
@@ -335,9 +337,12 @@ async fn a_worker_lists_the_agents_it_is_running() {
         answered.push(reply(&mut frames, id).await);
     }
 
-    assert!(matches!(answered[1], WorkerOutcome::Response(WorkerResponse::AgentStarted { .. })), "{answered:?}");
+    assert!(matches!(answered[1], WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{answered:?}");
     let agent = protocol::worker::RunningAgent { session_id: "s".into(), run: RunId::new(4) };
-    assert_eq!(answered[2], WorkerOutcome::Response(WorkerResponse::RunningAgents { agents: vec![agent] }));
+    assert_eq!(
+        answered[2],
+        WorkerOutcome::Response(WorkerResponse::RunningAgents(RunningAgentsReply { agents: vec![agent] }))
+    );
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker to stop its agent and exit").unwrap();
 }

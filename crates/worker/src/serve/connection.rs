@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
-use protocol::worker::{ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{Hello, ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -84,7 +84,7 @@ where
         // Answered here rather than on a task of their own, since what the hub asks in them has to hold for every
         // call after, and when the connection ends.
         match request {
-            Ok(WorkerRequest::Hello { protocol_version, oldest_protocol_version, keep_running_without_hub }) => {
+            Ok(WorkerRequest::Hello(Hello { protocol_version, oldest_protocol_version, keep_running_without_hub })) => {
                 let answer = hello(worker.state.config.build, protocol_version, oldest_protocol_version);
                 let greeted = answer.is_ok();
                 let _ = frames.send(reply(answer)).await;
@@ -102,7 +102,7 @@ where
             request => {
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
                 // setup it's for has begun.
-                if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
+                if matches!(request, Ok(WorkerRequest::SetupWorkspace(_))) {
                     setup_requested(&worker.state);
                 }
                 let (worker, frames) = (worker.clone(), frames.clone());

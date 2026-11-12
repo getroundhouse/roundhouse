@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{AccountId, AgentAccount, AgentKind, SessionAccount, SessionId, UsageLimit, WorkspaceId};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::AccountFor;
 use tracing::error;
 
-use super::{Hub, unexpected};
+use super::Hub;
 
 impl Hub {
     /// The account an agent of this kind runs under in the workspace, as the workspace's worker reads it, since the
@@ -22,9 +22,7 @@ impl Hub {
         agent: AgentKind,
     ) -> Result<AgentAccount, ApiError> {
         let worktree = self.ready_worktree(workspace_id).await?;
-        let reply = worktree.link().call(WorkerRequest::AccountFor { agent }).await?;
-        let WorkerResponse::Account(account) = reply else { return Err(unexpected(&reply)) };
-        Ok(account)
+        worktree.link().call(AccountFor { agent }).await
     }
 
     /// The account the session's agent runs under, and what's been heard of that account's limits, by any agent

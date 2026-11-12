@@ -11,7 +11,7 @@ use protocol::model::{
     PermissionMode, PrState, PullRequest, Review, RunId, SessionId, SessionSettings,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
-use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
+use protocol::worker::{PullRequestReply, RateLimit, WorkerRequest, WorkerResponse};
 use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
@@ -143,9 +143,11 @@ pub(super) fn reading(hub: &Hub, says: &Says) -> Arc<WorkerLink> {
 pub(super) fn reading_within(hub: &Hub, says: &Says, limit: Option<RateLimit>) -> Arc<WorkerLink> {
     let says = says.clone();
     let link = WorkerLink::answering(move |request| {
-        Some(if matches!(request, WorkerRequest::PullRequest { .. }) {
-            says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request, branch: None })
-        } else if let (WorkerRequest::GithubRateLimit { .. }, Some(limit)) = (&request, limit) {
+        Some(if matches!(request, WorkerRequest::PullRequest(_)) {
+            says.lock()
+                .clone()
+                .map(|pull_request| WorkerResponse::PullRequest(PullRequestReply { pull_request, branch: None }))
+        } else if let (WorkerRequest::GithubRateLimit(_), Some(limit)) = (&request, limit) {
             Ok(WorkerResponse::GithubRateLimit(limit))
         } else {
             Ok(WorkerResponse::Ok)

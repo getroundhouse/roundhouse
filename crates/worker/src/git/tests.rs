@@ -31,7 +31,7 @@ pub(crate) fn new_repo(dir: &Path) -> PathBuf {
     repo
 }
 
-async fn prepare(root: &Path, repo: &Path, name: &str, base: Option<&str>) -> Result<Prepared, ApiError> {
+async fn prepare(root: &Path, repo: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceReady, ApiError> {
     prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &name.into(), base).await
 }
 
