@@ -9,6 +9,7 @@ use super::*;
 use crate::stand_in_hub::{self, Does};
 
 mod answers_and_comments;
+mod kinds;
 mod new_workspace;
 
 const TIMEOUT: Duration = Duration::from_secs(10);

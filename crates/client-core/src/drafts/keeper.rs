@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::mem::Discriminant;
 use std::time::Instant;
 
-use protocol::attachment::MediaType;
 use protocol::model::AttachmentId;
 
 use super::{Agreed, Change, Counts, FilesFor, PAUSE, Request, Said, Where, agree};
@@ -240,23 +239,16 @@ impl Keeper {
 
     /// Gives the hub `file` for what's typed in `to` to name.
     fn add(&self, to: &FilesFor, file: &FileToSend) -> Result<(), ClientError> {
-        let attachment = &file.attachment;
-        let (id, name, kind) = (&attachment.id, &attachment.name, attachment.media_type);
-        match to {
+        let (id, name, data) = (&file.attachment.id, &file.attachment.name, &file.data);
+        let added = match to {
             // Such as a file of a prompt that came back because it couldn't be sent.
-            FilesFor::Chat(chat) if self.client.has_given(chat, id) => Ok(()),
-            FilesFor::Chat(chat) => self.client.attachment_add(chat, id, name, kind, file.data.clone()).map(drop),
+            FilesFor::Chat(chat) if self.client.has_given(chat, id) => return Ok(()),
+            FilesFor::Chat(chat) => file.give(|kind| self.client.attachment_add(chat, id, name, kind, data.clone())),
             FilesFor::NewWorkspace => {
-                let add = |kind| self.client.workspace_draft_file_add(id, name, kind, file.data.clone()).map(drop);
-                // A hub refuses a kind it doesn't know, such as one newer than it, as it refuses a request it doesn't
-                // know, so the file is tried again as one any hub that keeps the dialog takes. Refused again, it's
-                // the request that's refused.
-                match add(kind) {
-                    Err(e) if e.is_unsupported() && kind != MediaType::Other => add(MediaType::Other),
-                    added => added,
-                }
+                file.give(|kind| self.client.workspace_draft_file_add(id, name, kind, data.clone()))
             }
-        }
+        };
+        added.map(drop)
     }
 
     fn remove_files(&mut self) {
