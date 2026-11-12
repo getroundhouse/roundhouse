@@ -6,14 +6,14 @@
 
 use std::sync::Arc;
 
-use desktop::busy::Busy;
+use desktop::busy::{self, Busy};
 use desktop::pull_request::{self, Lookup};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
     Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
     Styled as _, Window, div, px, size,
 };
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing, WorkspaceId};
+use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing, WorkspaceStatus};
 
 use super::capture::Picture;
 use super::headless;
@@ -56,9 +56,9 @@ fn with(change: impl FnOnce(&mut PullRequest)) -> Lookup {
 }
 
 /// In the order the app looks for them, after the two with no pull request to show, and then the one it can't tell.
-/// Merged shows twice more: while another workspace is being archived, which greys out its Archive, and while this
-/// one is, when it says Archiving…. Every other state is drawn with nothing under way.
-fn states() -> Vec<(Lookup, Busy)> {
+/// Merged shows twice more: while the app archives another workspace, which greys out its Archive, and while this one
+/// is being archived, when it says Archiving…, from its record. Every other state is drawn with nothing under way.
+fn states() -> Vec<State> {
     let merged = || with(|pr| pr.state = PrState::Merged);
     let free = [
         Lookup::Looking,
@@ -83,9 +83,9 @@ fn states() -> Vec<(Lookup, Busy)> {
         with(|_| {}),
         with(|pr| pr.merge_state = MergeState::Unknown),
     ];
-    let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free)).collect();
-    states.insert(3, (merged(), Busy::Archiving(WorkspaceId::from("another"))));
-    states.insert(4, (merged(), Busy::Archiving(WorkspaceId::from(THIS))));
+    let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free, WorkspaceStatus::Ready)).collect();
+    states.insert(3, (merged(), Busy::Moving, WorkspaceStatus::Ready));
+    states.insert(4, (merged(), Busy::Moving, WorkspaceStatus::Archiving));
     states
 }
 
@@ -126,25 +126,26 @@ kinds![
 
 /// The kinds of standing the picture doesn't draw.
 pub(crate) fn missing() -> Vec<&'static str> {
-    let drawn: Vec<&str> = states().iter().filter_map(|(lookup, _)| lookup.standing()).map(kind).collect();
+    let drawn: Vec<&str> = states().iter().filter_map(|(lookup, ..)| lookup.standing()).map(kind).collect();
     KINDS.iter().copied().filter(|k| !drawn.contains(k)).collect()
 }
 
-/// The workspace every bar is for.
-const THIS: &str = "this";
+/// A pull request as the bar finds it, what the app is waiting on the hub for, and the status of the workspace the bar
+/// is for.
+type State = (Lookup, Busy, WorkspaceStatus);
 
 struct Sheet {
-    states: Vec<(Lookup, Busy)>,
+    states: Vec<State>,
 }
 
 impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (pane, sidebar) = (theme.background, theme.sidebar);
-        let workspace = WorkspaceId::from(THIS);
-        let rows = self.states.iter().enumerate().map(|(index, (lookup, busy))| {
-            let bar = pull_request::bar(lookup, busy, &workspace, |_, _, _| {}, cx);
-            let controls = pull_request::controls(lookup, busy, &workspace, |_, _, _| {}, cx);
+        let rows = self.states.iter().enumerate().map(|(index, (lookup, busy, status))| {
+            let doing = busy::doing(*status);
+            let bar = pull_request::bar(lookup, busy, doing, |_, _, _| {}, cx);
+            let controls = pull_request::controls(lookup, busy, doing, |_, _, _| {}, cx);
             h_flex()
                 .id(ElementId::NamedInteger("state".into(), index as u64))
                 .gap(px(MARGIN))

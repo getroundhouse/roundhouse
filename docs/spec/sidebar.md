@@ -59,8 +59,8 @@
 - **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it, a pencil with sparks for a new title, and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
 - **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*
-- **While a workspace is being made, archived or restored, none of those can start,** so a button or key pressed twice does it once, and the buttons that archive are greyed out. *Unconfirmed.*
-- **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu or `Cmd-Shift-A` started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. *Unconfirmed.*
+- **While the app is making, archiving or restoring a workspace, it starts none of those,** so a button or key pressed twice does it once, and its buttons that archive are greyed out. A workspace being archived or restored from elsewhere, such as the command line, can't be archived or restored again meanwhile, and the others can. *Unconfirmed.*
+- **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu or `Cmd-Shift-A` started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. Every window says it, wherever it was asked for, such as from the command line, since the workspace's record says it's being archived. *Unconfirmed.*
 
 **Pointing at a row that isn't showing.** *Unconfirmed.*
 

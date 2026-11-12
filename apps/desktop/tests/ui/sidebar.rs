@@ -79,6 +79,29 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
     assert!(!ui.has(row(&going)), "it leaves the list");
 }
 
+/// The hub's record says a workspace is being archived, so every client shows it, wherever it was asked for, here the
+/// command line, and this app goes on archiving others meanwhile.
+#[gpui_kit::test]
+fn a_workspace_archived_from_elsewhere_says_so_here_until_it_has_gone(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let held = Held::archive(&stack);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let (going, other) = (ui.new_workspace(), ui.new_workspace());
+    let (client, target) = (stack.client(), going.clone());
+
+    let archiving = std::thread::spawn(move || client.workspace_archive(&target, false));
+
+    ui.wait("it to start archiving", |_| held.runs() == 1);
+    ui.wait("its row to say so", |ui| ui.shows_label(&format!("doing-{going}"), "Archiving…"));
+    assert_eq!(ui.view().busy, Busy::Free, "this app asked for nothing");
+    ui.hover(row(&other));
+    assert!(!ui.disabled(archive_button(&other)), "so it can archive another");
+    held.release();
+    archiving.join().unwrap().unwrap();
+    ui.wait("it to be archived", |ui| archived(ui, &going));
+    assert!(!ui.has(row(&going)), "it leaves the list");
+}
+
 /// A quick press is made as the pointer comes to rest, so it moves while the button is down. Once pressed, the row says
 /// the pointer has left it at the first move, which would take the button away from under the press.
 #[gpui_kit::test]

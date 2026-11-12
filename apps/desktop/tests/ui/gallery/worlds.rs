@@ -65,6 +65,13 @@ pub(super) fn conversation() -> World {
     world
 }
 
+/// The conversation, with the first workspace being archived, as its record says, whichever app asked.
+pub(super) fn archiving() -> World {
+    let mut world = conversation();
+    world.workspace_mut(&WorkspaceId::from("ws-1")).status = WorkspaceStatus::Archiving;
+    world
+}
+
 /// The conversation, in a chat whose agent has said how full its context is, on an account with a five-hour limit
 /// that starts again in three hours and a week's limit that starts again in six days.
 pub(super) fn context() -> World {
