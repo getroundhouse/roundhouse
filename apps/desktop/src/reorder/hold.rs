@@ -56,6 +56,11 @@ impl<V: PartialEq> Hold<V> {
     pub(crate) fn showed(&mut self, showing: V, order: Vec<WorkspaceId>) {
         self.shown = Some((showing, order));
     }
+
+    /// What the list was showing when it was last shown, once it has been.
+    pub(crate) fn last_showing(&self) -> Option<&V> {
+        self.shown.as_ref().map(|(showing, _)| showing)
+    }
 }
 
 impl<V> Hold<V> {

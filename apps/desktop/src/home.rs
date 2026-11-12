@@ -150,7 +150,8 @@ pub(crate) struct Rows {
 
 /// Works out the workspaces the list shows, in its order, and sends each row to its place, so one that has moved slides
 /// there. While someone is using the list, the workspaces stay in the order they were in, and any that come meanwhile
-/// go after them, as in the sidebar.
+/// go after them, as in the sidebar. The rows a search keeps go straight to their places as it's typed, rather than
+/// sliding at every key.
 pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows {
     let home = &app.home;
     let showing = Showing {
@@ -164,6 +165,9 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
         reorder::keep_held(&mut listed, &app.workspaces, held);
     }
     let ids: Vec<WorkspaceId> = listed.iter().map(|&w| app.workspaces[w].id.clone()).collect();
+    if home.hold.last_showing().is_some_and(|shown| shown.search != showing.search) {
+        app.home.places.forget();
+    }
     let offsets = app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
     app.home.hold.showed(showing, ids);
     Rows { listed: listed.into(), offsets }
