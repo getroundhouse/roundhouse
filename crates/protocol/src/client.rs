@@ -6,13 +6,14 @@ use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, Place,
-    PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError,
-    Workspace, WorkspaceDraft, WorktreeFiles,
+    CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, Place,
+    PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace,
+    WorkspaceDraft, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
 pub mod drafts;
+mod feed;
 pub mod files;
 pub mod queue;
 mod request;
@@ -22,6 +23,7 @@ pub mod waits;
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 3;
 
+pub use feed::{HubNotice, RecordNotice};
 pub use request::ClientRequest;
 
 /// Replies to a [`ClientFrame`] carry its `id`, and can arrive in any order.
@@ -244,33 +246,6 @@ pub enum HubFrame {
         subscription_id: u64,
         notice: HubNotice,
     },
-}
-
-/// A record changed. Carries the whole record and its revision, so a client only ever replaces its
-/// copy with a newer one.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "notice", rename_all = "snake_case")]
-pub enum HubNotice {
-    Repo(Repo),
-    Workspace(Workspace),
-    Session(Session),
-    Comment(DiffComment),
-    HubSettings(HubSettings),
-    Account(Account),
-    WorkspaceDraft(WorkspaceDraft),
-    /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
-    /// `SessionSubagents`.
-    Subagent(Subagent),
-    /// The record is gone, as of `rev`.
-    Removed {
-        record: RecordKey,
-        rev: Rev,
-    },
-    /// This client fell behind and missed some. List everything again, and the subagents of each session it's
-    /// showing, which aren't among everything.
-    Resync,
-    #[serde(other)]
-    Unknown,
 }
 
 /// What a reply says: the answer, or why there's none. Every protocol's replies take this form, flattened into the

@@ -58,6 +58,20 @@ fn a_list_and_the_feed_keep_whichever_copy_is_newer_whatever_order_they_come_in(
 }
 
 #[test]
+fn a_copy_with_no_revision_replaces_the_one_held_as_any_records_does() {
+    let mut subagents = Subagents::default();
+    subagents.want("s".into());
+    subagents.apply(subagent("s", "a", 1, 5));
+    let mut finished = subagent("s", "a", 1, 0);
+    finished.status = SubagentStatus::Finished;
+
+    assert!(subagents.apply(finished.clone()));
+    assert!(!subagents.apply(finished.clone()), "the same copy again changes nothing");
+
+    assert_eq!(subagents.get(&"s".into(), &"a".into()), Some(&finished));
+}
+
+#[test]
 fn a_wanted_session_is_listed_once_a_connection_and_again_on_the_next() {
     let mut subagents = Subagents::default();
     subagents.want("s".into());

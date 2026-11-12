@@ -18,6 +18,7 @@ mod permission_mode;
 mod prompt_line;
 mod pull_request;
 mod queue;
+mod record;
 mod session;
 mod settings;
 mod subagent;
@@ -41,6 +42,7 @@ pub use pull_request::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
 pub use queue::QueuedPrompt;
+pub use record::{Record, RecordKey, Records};
 pub use session::{AgentKind, Session, SessionStatus};
 pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
@@ -188,54 +190,6 @@ impl Rev {
 )]
 pub const fn seq_index(seq: Seq) -> usize {
     seq as usize
-}
-
-/// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum RecordKey {
-    Repo {
-        id: RepoId,
-    },
-    Workspace {
-        id: WorkspaceId,
-    },
-    Session {
-        id: SessionId,
-    },
-    Comment {
-        id: CommentId,
-    },
-    /// A hub has one record of its settings.
-    HubSettings,
-    /// And one of what's in the new-workspace dialog, as [`WorkspaceDraft`] says.
-    WorkspaceDraft,
-    Account {
-        id: AccountId,
-    },
-    #[serde(other)]
-    Unknown,
-}
-
-/// Every record a hub holds, read at one moment.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
-pub struct Records {
-    pub repos: Vec<Repo>,
-    pub workspaces: Vec<Workspace>,
-    pub sessions: Vec<Session>,
-    pub comments: Vec<DiffComment>,
-    /// `None` from a hub from before it kept any.
-    #[serde(default)]
-    pub hub_settings: Option<HubSettings>,
-    /// Empty from a hub from before it kept them.
-    #[serde(default)]
-    pub accounts: Vec<Account>,
-    /// `None` from a hub from before it kept one.
-    #[serde(default)]
-    pub workspace_draft: Option<WorkspaceDraft>,
-    /// The hub's newest revision when this was read. A record missing from the list is gone, unless
-    /// a client holds a copy newer than this.
-    pub rev: Rev,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

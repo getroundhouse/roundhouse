@@ -5,9 +5,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use client_core::RecordsFeed;
-use client_core::records::Record;
 use gpui_kit::Context;
-use protocol::model::WorkspaceId;
+use protocol::model::{Record, WorkspaceId};
 
 use super::AppView;
 use crate::prompt_cache;
