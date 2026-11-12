@@ -58,7 +58,12 @@ fn after(from: SessionStatus, events: &[(EventBody, Open)]) -> SessionStatus {
 }
 
 fn resolved() -> EventBody {
-    EventBody::ApprovalResolved { approval_id: "a".into(), outcome: ApprovalOutcome::Allowed, answers: None }
+    EventBody::ApprovalResolved {
+        approval_id: "a".into(),
+        outcome: ApprovalOutcome::Allowed,
+        answers_by_text: None,
+        answers_by_position: None,
+    }
 }
 
 use SessionStatus::*;

@@ -132,7 +132,12 @@ fn clear_answer(conn: &Connection, session_id: &SessionId, body: &EventBody) -> 
 
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
-    EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, answers: None }
+    EventBody::ApprovalResolved {
+        approval_id,
+        outcome: ApprovalOutcome::Cancelled,
+        answers_by_text: None,
+        answers_by_position: None,
+    }
 }
 
 impl Store {

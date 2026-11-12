@@ -60,7 +60,7 @@ fn a_denied_tool_does_not_run_and_the_agent_hears_why() {
         .session_approve(
             &session.id,
             &approval_id,
-            ApprovalDecision::Deny { message: "not that".into(), interrupt: false },
+            ApprovalDecision::Deny { message: Some("not that".into()), interrupt: false },
         )
         .unwrap();
     let events = wait_for_turn_end(&client, &session.id, 1);

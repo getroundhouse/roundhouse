@@ -182,8 +182,10 @@ fn an_approval_closed_without_answers_has_none_and_keeps_its_form() {
 
     let event: SessionEvent = frame::decode(stored).unwrap();
 
-    let EventBody::ApprovalResolved { answers, .. } = &event.body else { panic!("{event:?}") };
-    assert_eq!(*answers, None);
+    let EventBody::ApprovalResolved { answers_by_text, answers_by_position, .. } = &event.body else {
+        panic!("{event:?}")
+    };
+    assert_eq!((answers_by_text, answers_by_position), (&None, &None));
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
 }
 
@@ -194,7 +196,7 @@ fn an_approval_closed_with_answers_keeps_their_form() {
 
     let event: SessionEvent = frame::decode(stored).unwrap();
 
-    let EventBody::ApprovalResolved { answers: Some(answers), .. } = &event.body else { panic!("{event:?}") };
+    let EventBody::ApprovalResolved { answers_by_text: Some(answers), .. } = &event.body else { panic!("{event:?}") };
     let answers: Vec<(&str, &str)> = answers.iter().map(|(q, a)| (q.as_str(), a.as_str())).collect();
     assert_eq!(answers, [("Red or blue?", "Blue"), ("Which days?", "Monday, Friday")]);
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");

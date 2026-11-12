@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use protocol::event::EventBody;
+use protocol::event::{Asking, EventBody};
 use protocol::model::CacheRequest;
 use serde_json::json;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
@@ -14,6 +14,7 @@ use tracing::warn;
 
 use super::{STDERR_TAIL_LINES, Shared, context, plan, usage, write_line};
 use crate::AgentOutput;
+use crate::claude::approvals::Waiting;
 use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
@@ -191,14 +192,15 @@ fn note(shared: &Shared, body: &mut EventBody) {
     track_approval(shared, body);
 }
 
-/// Keeps each open approval's input, which is what answering it sends back.
+/// Keeps each open approval's input, which is what answering it sends back, and what it asks, which answering it goes by.
 fn track_approval(shared: &Shared, body: &EventBody) {
     match body {
-        EventBody::ApprovalRequested { approval_id, input, .. } => {
-            shared.pending_inputs.lock().insert(approval_id.clone(), input.clone());
+        EventBody::ApprovalRequested { approval_id, input, asking, .. } => {
+            let asking = asking.as_deref().cloned().unwrap_or(Asking::Unknown);
+            shared.waiting.lock().insert(approval_id.clone(), Waiting { input: input.clone(), asking });
         }
         EventBody::ApprovalResolved { approval_id, .. } => {
-            shared.pending_inputs.lock().remove(approval_id);
+            shared.waiting.lock().remove(approval_id);
         }
         EventBody::UserPrompt { .. }
         | EventBody::CompactionAsked { .. }

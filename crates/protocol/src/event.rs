@@ -16,7 +16,7 @@ use crate::model::{
 };
 
 pub use approval::{ApprovalDecision, ApprovalOutcome};
-pub use asking::{Asking, Question, QuestionOption};
+pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, LinkedImage};
 pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
@@ -206,10 +206,13 @@ pub enum EventBody {
     ApprovalResolved {
         approval_id: ApprovalId,
         outcome: ApprovalOutcome,
-        /// What the person answered the agent's questions, as [`ApprovalDecision::Answer`] gave it, so the transcript
-        /// can say what was decided. `None` for any other decision, and in a record from before the hub kept answers.
+        /// What the person answered the agent's questions, by their text as [`ApprovalDecision::AnswerByText`] gave it,
+        /// or by position as [`ApprovalDecision::AnswerByPosition`] did, so the transcript can say what was decided.
+        /// Each is `None` for any other decision, and both are in a record from before the hub kept answers.
+        #[serde(rename = "answers", default, skip_serializing_if = "Option::is_none")]
+        answers_by_text: Option<BTreeMap<String, String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        answers: Option<BTreeMap<String, String>>,
+        answers_by_position: Option<Vec<QuestionAnswer>>,
     },
     AgentExited {
         reason: ExitReason,

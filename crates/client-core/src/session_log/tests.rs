@@ -167,7 +167,12 @@ fn open_approvals_are_those_not_yet_answered() {
     log.apply_event(event(2, requested("b")));
     log.apply_event(event(
         3,
-        EventBody::ApprovalResolved { approval_id: "a".into(), outcome: ApprovalOutcome::Allowed, answers: None },
+        EventBody::ApprovalResolved {
+            approval_id: "a".into(),
+            outcome: ApprovalOutcome::Allowed,
+            answers_by_text: None,
+            answers_by_position: None,
+        },
     ));
     let open = log.open_approvals();
     assert_eq!(open.len(), 1);

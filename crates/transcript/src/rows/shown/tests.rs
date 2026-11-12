@@ -191,7 +191,8 @@ fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
     let answered = EventBody::ApprovalResolved {
         approval_id: "q".into(),
         outcome: ApprovalOutcome::Allowed,
-        answers: Some([("Which parser?".to_string(), "The new parser".to_string())].into()),
+        answers_by_text: Some([("Which parser?".to_string(), "The new parser".to_string())].into()),
+        answers_by_position: None,
     };
     let log = log([event(1, call("ask", "AskUserQuestion", input)), event(2, question), event(3, answered)]);
 

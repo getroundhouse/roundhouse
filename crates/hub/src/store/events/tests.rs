@@ -40,7 +40,12 @@ fn a_turn_starts_when_the_event_that_starts_it_was_recorded() {
 fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothing_else_is() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let answer = |outcome| EventBody::ApprovalResolved { approval_id: "a".into(), outcome, answers: None };
+    let answer = |outcome| EventBody::ApprovalResolved {
+        approval_id: "a".into(),
+        outcome,
+        answers_by_text: None,
+        answers_by_position: None,
+    };
     let sent = [
         (None, prompt("go", 0), true),
         (None, answer(ApprovalOutcome::Allowed), true),
