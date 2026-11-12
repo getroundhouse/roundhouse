@@ -9,16 +9,15 @@ use std::sync::Arc;
 
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Div, IntoElement, ObjectFit, ParentElement as _, Pixels, RenderImage, Size,
-    Styled, StyledImage as _, canvas, checkerboard, div, img, px,
+    AnyElement, App, AvailableSpace, Div, IntoElement, ObjectFit, ParentElement as _, RenderImage, Styled,
+    StyledImage as _, canvas, checkerboard, div, img, px,
 };
 use image::{DynamicImage, Frame, ImageDecoder as _, ImageReader, RgbaImage};
+use look::{IMAGE_EDGE, fit, pixels};
 use protocol::attachment::{MediaType, describe_size};
 
 /// How big each square of the checkerboard behind an image is.
 const SQUARE: f32 = 8.;
-/// How wide the edge around an image is, on each side.
-const EDGE: f32 = 1.;
 
 #[derive(Clone)]
 pub(crate) struct FileImage {
@@ -111,7 +110,7 @@ impl FileImage {
     /// the edge around that, so each pixel of it is where the same pixel of the other is.
     pub(crate) fn within(&self, covers: (u32, u32), scale: f32, cx: &App) -> Div {
         let (width, height) = covers;
-        let edged = |side: u32| px(pixels(side) * scale + 2. * EDGE);
+        let edged = |side: u32| px(pixels(side) * scale + 2. * IMAGE_EDGE);
         div().flex_none().w(edged(width)).h(edged(height)).child(self.whole(scale, cx))
     }
 }
@@ -180,34 +179,4 @@ pub(crate) fn fitted(
         },
         |_, mut element, window, cx| element.paint(window, cx),
     )
-}
-
-/// The scale that fits something `width` by `height` pixels, inside its edge, into `room`, both ways, at most its own
-/// size, so images drawn at the same scale keep the sizes they have beside each other.
-fn fit((width, height): (u32, u32), room: Size<Pixels>) -> f32 {
-    let across = (f32::from(room.width) - 2. * EDGE) / pixels(width.max(1));
-    let down = (f32::from(room.height) - 2. * EDGE) / pixels(height.max(1));
-    across.min(down).clamp(0., 1.)
-}
-
-#[expect(clippy::cast_precision_loss, reason = "an image's side is far below where an f32 loses whole pixels")]
-pub(crate) fn pixels(side: u32) -> f32 {
-    side as f32
-}
-
-#[cfg(test)]
-mod tests {
-    use gpui_kit::{px, size};
-
-    use super::fit;
-
-    #[test]
-    fn an_image_is_fitted_both_ways_and_never_drawn_bigger_than_it_is() {
-        let room = size(px(802.), px(602.));
-
-        assert!((fit((1600, 900), room) - 0.5).abs() < 1e-6, "by its width");
-        assert!((fit((400, 1200), room) - 0.5).abs() < 1e-6, "by its height");
-        assert!((fit((200, 100), room) - 1.).abs() < 1e-6, "at its own size");
-        assert!(fit((200, 100), size(px(0.), px(0.))).abs() < 1e-6, "with no room");
-    }
 }

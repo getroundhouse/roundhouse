@@ -4,7 +4,6 @@ use client_core::session_log::PromptState;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, div, px, relative};
-use protocol::model::Seq;
 
 use super::{Shared, row};
 use crate::attachments::{self, Carried};
@@ -18,10 +17,10 @@ const WIDEST_SHARE: f32 = 0.8;
 /// Where a prompt is on its way to the agent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Progress {
-    /// Sent, and not yet recorded, so it has no place in the log, and its images can't be opened.
+    /// Sent, and not yet recorded, so it has no place in the log.
     Sending,
-    /// Recorded at this place in the log, with the agent, or waiting for it.
-    Recorded(Seq, PromptState),
+    /// Recorded, with the agent, or waiting for it.
+    Recorded(PromptState),
 }
 
 /// What a prompt says, and what's being found in it.
@@ -44,9 +43,9 @@ pub(super) fn prompt_bubble(
 ) -> AnyElement {
     let Prompt { text, find } = text;
     let typed = !text.trim().is_empty();
-    let (seq, state) = match progress {
-        Progress::Sending => (None, None),
-        Progress::Recorded(seq, state) => (Some(seq), Some(state)),
+    let state = match progress {
+        Progress::Sending => None,
+        Progress::Recorded(state) => Some(state),
     };
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
@@ -61,7 +60,7 @@ pub(super) fn prompt_bubble(
                 .rounded(px(6.))
                 .bg(look::prompt())
                 .when(faint, |d| d.opacity(0.6))
-                .children(attachments::view(seq, carried, &shared.this, cx))
+                .children(attachments::view(carried, cx))
                 .when(typed, |d| {
                     let id = (key.clone(), Part::Prompt);
                     let view = shared.texts.markdown(find::view_id(&id), text);
