@@ -38,6 +38,7 @@
 //!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
 //!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
 //!   agent-calls:N:TEXT  The same in the background, making N calls, so its work is long enough to scroll.
+//!   agent-until:FILE:TEXT  The same in the background, working until FILE exists, so a test can catch it at work.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.
 //!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.

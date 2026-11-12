@@ -39,12 +39,10 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
         if line.trim().is_empty() {
             continue;
         }
-        let Normalized { dropped, parsed } = normalizer.line(&line);
-        for tool_use_id in dropped {
-            let said = AgentOutput::event(EventBody::ToolCallDropped { tool_use_id }, None);
-            if !deliver(&shared, &output, said).await {
-                return;
-            }
+        let Normalized { dropped, parsed, relisted } = normalizer.line(&line);
+        let dropped = dropped.into_iter().map(|tool_use_id| EventBody::ToolCallDropped { tool_use_id });
+        if !deliver_shown(&shared, &output, dropped).await {
+            return;
         }
         let item = match parsed {
             Parsed::Drop => continue,
@@ -84,7 +82,7 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 item
             }
         };
-        if !deliver(&shared, &output, item).await {
+        if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, relisted).await {
             return;
         }
     }
@@ -116,6 +114,20 @@ impl Answering {
         request.first_for_prompt = std::mem::take(&mut self.0);
         request
     }
+}
+
+/// Sends on what a line showed without saying, which has no raw line of its own. False once nobody is reading.
+async fn deliver_shown(
+    shared: &Shared,
+    output: &mpsc::Sender<AgentOutput>,
+    bodies: impl IntoIterator<Item = EventBody>,
+) -> bool {
+    for body in bodies {
+        if !deliver(shared, output, AgentOutput::event(body, None)).await {
+            return false;
+        }
+    }
+    true
 }
 
 /// The CLI has opened the session, so what was held for it goes on. False once nobody is reading.

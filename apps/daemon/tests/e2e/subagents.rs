@@ -7,7 +7,7 @@ use std::time::Instant;
 use client_core::session_log::{By, Row, SessionLog};
 use client_core::{Client, OpenSession, RecordsFeed, Subscription, SubscriptionItem, View};
 use protocol::client::HubNotice;
-use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome};
+use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome, TaskKind};
 use protocol::model::{Place, SessionId, Subagent, SubagentStatus, ToolUseId};
 use protocol::tail::Tail;
 
@@ -137,6 +137,37 @@ fn a_subagent_in_the_foreground_cut_off_as_it_writes_leaves_its_follower_nothing
     wait_for_turn_end(&client, &session.id, 1);
     assert!(!reported(&work));
     assert_placed(&work.events, Some(&call));
+}
+
+/// The agent names the call a subagent's task runs for only a line after it first lists the task, so the session's
+/// record has to follow the list said again with the call, which is how a client opens the subagent's tab from its
+/// line among the work in the background.
+#[test]
+fn a_subagent_in_the_background_is_listed_with_the_call_that_started_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let done = stack.path("done");
+    client.session_prompt(&session.id, &format!("agent-until:{}:Look around", done.display()), None).unwrap();
+    let call = subagent_call(&client, &session.id);
+    let listed = || {
+        let tasks = client.session_get(&session.id).unwrap().background_tasks;
+        tasks.into_iter().map(|task| (task.kind, task.call)).collect::<Vec<_>>()
+    };
+
+    wait_until("its task to name its call", || listed() == [(TaskKind::Subagent, Some(call.clone()))]);
+
+    let events = read_all(&client, &session.id);
+    let started = events
+        .iter()
+        .position(|event| matches!(&event.body, EventBody::SubagentStarted { call: started, .. } if *started == call))
+        .expect("the subagent's start");
+    let next = &events[started + 1].body;
+    let names_it = matches!(next, EventBody::AgentTasks { tasks, .. } if tasks[0].call.as_ref() == Some(&call));
+    assert!(names_it, "the list again, straight after its start: {next:?}");
+    std::fs::write(&done, "").unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    assert!(listed().is_empty(), "it leaves the list as it ends");
 }
 
 #[test]
