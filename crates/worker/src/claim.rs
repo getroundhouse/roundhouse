@@ -141,7 +141,8 @@ mod tests {
             assert!(Instant::now() < deadline, "still claimed once let go");
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(claim_instance(dir.path()).is_ok(), "asking didn't keep it either");
+        // Asking holds the lock for a moment, which a process another test is starting can hold on to a moment longer.
+        assert!(claim_once_let_go(dir.path()).is_ok(), "asking didn't keep it either");
     }
 
     /// As one started at the same time as another, to serve the same hub, finds the other serving.
