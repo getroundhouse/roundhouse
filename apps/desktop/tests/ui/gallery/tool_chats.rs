@@ -32,7 +32,7 @@ Diff in /workspaces/aspen/crates/signals/src/signal_test.rs:4:
  }";
 
 /// A command too long for its line: two searches, one after the other, as an agent writes them.
-pub(crate) const SEARCH: &str = "\
+const SEARCH: &str = "\
     gh search issues --repo example/signals \"stuck at stop\" --sort created --order desc --limit 5 \
     --json number,title,createdAt,state --jq '.[] | \"\\(.number) \\(.state) \\(.createdAt) \\(.title)\"' \
     2>&1; gh search issues --repo example/signals \"may_pass\" --sort created --order desc --limit 5 \

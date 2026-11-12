@@ -1,11 +1,12 @@
-//! An opened command: cut off at the end of its line until it's clicked, and what it printed a line at a time, which
-//! still selects and copies as it was printed, and shows what's selected as it's dragged over.
+//! An opened command: whole, wrapping, and selectable, to copy and run elsewhere, with a button pinned at its top right
+//! that copies all of it, and a long one scrolling by itself. What it printed is drawn a line at a time, and still
+//! selects and copies as it was printed.
 
 use gpui_kit::base::TextSelection;
-use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
+use gpui_kit::test::{ClickOptions, TestWindowExt as _};
 use gpui_kit::{
     AppContext as _, ElementId, InputEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, Point, TestAppContext, point, px,
+    Pixels, Point, ScrollDelta, TestAppContext, point, px,
 };
 
 use protocol::event::EventBody;
@@ -18,53 +19,87 @@ const LONG: &str = "echo trains wait at a stop signal until it clears and the de
                     other trains so they may pass at caution or at clear as the signal shows them";
 
 #[gpui_kit::test]
-fn a_command_too_long_for_its_line_shows_whole_when_clicked_and_is_cut_off_again(cx: &mut TestAppContext) {
+fn a_command_too_long_for_its_line_shows_whole_and_copies_as_it_was_written(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let (command, _) = open_a_command(&mut ui, LONG);
-    let one_line = bounds(&mut ui, command.clone()).size.height;
-    assert_eq!(whole(&mut ui, LONG), Some(false), "a command starts cut off");
+    let shown = bounds(&mut ui, text(&command));
+    // From the start of its first line to past the end of its last.
+    let (from, to) = (shown.origin + point(px(1.), px(4.)), shown.bottom_right() - point(px(1.), px(4.)));
 
-    ui.click(command.clone());
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
+    ui.press("secondary-c");
 
-    assert_eq!(whole(&mut ui, LONG), Some(true));
-    assert!(bounds(&mut ui, command.clone()).size.height > one_line, "whole, it wraps onto more lines");
-
-    ui.click(command.clone());
-
-    assert_eq!(whole(&mut ui, LONG), Some(false));
-    assert_eq!(bounds(&mut ui, command.clone()).size.height, one_line);
+    assert_eq!(copied(&mut ui).as_deref(), Some(LONG), "every row it wraps onto");
 }
 
 #[gpui_kit::test]
-fn a_command_of_several_lines_shows_its_first_until_it_is_clicked(cx: &mut TestAppContext) {
+fn a_command_of_several_lines_shows_and_copies_every_line(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let script = "echo one\necho two";
     let (command, _) = open_a_command(&mut ui, script);
-    let first_line = bounds(&mut ui, command.clone()).size.height;
+    let shown = bounds(&mut ui, text(&command));
+    let (from, to) = (shown.origin + point(px(1.), px(4.)), shown.bottom_right() - point(px(1.), px(4.)));
 
-    ui.click(command.clone());
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
+    ui.press("secondary-c");
 
-    assert_eq!(whole(&mut ui, script), Some(true), "its first line fits, but there's more of it");
-    assert!(bounds(&mut ui, command.clone()).size.height > first_line);
-
-    ui.click(command.clone());
-
-    assert_eq!(whole(&mut ui, script), Some(false));
-    assert_eq!(bounds(&mut ui, command).size.height, first_line, "back to its first line");
+    assert_eq!(copied(&mut ui).as_deref(), Some(script), "its lines as they were written");
 }
 
 #[gpui_kit::test]
-fn a_command_that_fits_its_line_stays_as_it_is_when_clicked(cx: &mut TestAppContext) {
+fn clicking_a_command_leaves_it_as_it_is_and_a_double_click_selects_a_word(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, _) = open_a_command(&mut ui, "echo short");
+    let (command, _) = open_a_command(&mut ui, LONG);
+    let before = bounds(&mut ui, command.clone());
 
-    ui.click(command);
+    ui.click(text(&command));
 
-    assert_eq!(whole(&mut ui, "echo short"), Some(false), "there's nothing more of it to show");
-    assert!(ui.shown("no-output/").is_empty(), "and it printed something, so nothing says it didn't");
+    assert_eq!(bounds(&mut ui, command.clone()), before, "nothing about it changes");
+
+    // On its first row.
+    let twice = ClickOptions::new().with_offset(point(px(4.), px(6.))).with_count(2);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.click_with_options(text(&command), twice, cx)).unwrap();
+    ui.press("secondary-c");
+
+    assert_eq!(copied(&mut ui).as_deref(), Some("echo"), "the word under the pointer");
+}
+
+#[gpui_kit::test]
+fn a_command_s_copy_button_shows_while_it_s_hovered_and_copies_all_of_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let (command, output) = open_a_command(&mut ui, LONG);
+    ui.hover(output);
+    assert!(!ui.visible(copy(&command)), "hidden while what it printed is hovered");
+
+    ui.hover(text(&command));
+    assert!(ui.visible(copy(&command)), "shown while the command is");
+
+    ui.click(copy(&command));
+
+    assert_eq!(copied(&mut ui).as_deref(), Some(LONG));
+}
+
+#[gpui_kit::test]
+fn a_long_command_scrolls_by_itself_under_its_copy_button(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let script = (1..=30).map(|n| format!("echo signal {n}")).collect::<Vec<_>>().join("\n");
+    let (command, _) = open_a_command(&mut ui, &script);
+    let (held, shown) = (bounds(&mut ui, area(&command)), bounds(&mut ui, text(&command)));
+    assert_eq!(held.size.height, px(118.), "half as tall as what it printed can be");
+    ui.hover(area(&command));
+    let button = bounds(&mut ui, copy(&command));
+    assert!(button.top() < held.top() + px(20.), "at its top");
+    assert!(shown.right() <= button.left(), "and the text stops short of it");
+
+    ui.scroll(area(&command), ScrollDelta::Pixels(point(px(0.), px(-60.))));
+
+    assert!(bounds(&mut ui, text(&command)).top() < shown.top() - px(30.), "the command scrolled up");
+    assert_eq!(bounds(&mut ui, copy(&command)), button, "and the button stayed where it was");
 }
 
 #[gpui_kit::test]
@@ -80,8 +115,7 @@ fn what_a_command_printed_selects_across_its_lines_and_copies_as_it_was_printed(
     ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
     ui.press("secondary-c");
 
-    let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
-    assert_eq!(copied.as_deref(), Some("one\n\nthree\nfour"), "with its blank line");
+    assert_eq!(copied(&mut ui).as_deref(), Some("one\n\nthree\nfour"), "with its blank line");
 }
 
 #[gpui_kit::test]
@@ -110,9 +144,24 @@ fn a_command_that_printed_nothing_says_so_once_it_is_done(cx: &mut TestAppContex
     assert_eq!(ui.shown("no-output/").len(), 1, "so it says so");
 }
 
-/// Whether the command labelled `command` says it's shown whole, as it tells assistive apps.
-fn whole(ui: &mut Ui<'_>, command: &str) -> Option<bool> {
-    ui.labelled(command).first().and_then(ElementSnapshot::expanded)
+/// The command's text, which is for selecting.
+fn text(command: &ElementId) -> ElementId {
+    ElementId::from((command.clone(), "text"))
+}
+
+/// The button that copies the command.
+fn copy(command: &ElementId) -> ElementId {
+    ElementId::from((command.clone(), "copy"))
+}
+
+/// What the command scrolls in once it's too tall, with its copy button.
+fn area(command: &ElementId) -> ElementId {
+    ElementId::from((command.clone(), "area"))
+}
+
+/// What was last copied.
+fn copied(ui: &mut Ui<'_>) -> Option<String> {
+    ui.cx.read_from_clipboard().and_then(|item| item.text())
 }
 
 /// What's selected with the button still down, having pressed at `from` and dragged to `to`, as the app gets a drag:

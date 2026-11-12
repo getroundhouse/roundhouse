@@ -38,8 +38,6 @@ pub(super) struct Toggle<'a> {
     pub(super) key: &'a ItemKey,
     pub(super) fold: Fold,
     pub(super) open: bool,
-    /// For a command: whether it's shown whole, as [`crate::folds::Fold::Command`] says.
-    pub(super) whole: bool,
     pub(super) shared: &'a Shared,
     /// What's being found, which the call draws the matches of.
     pub(super) find: &'a FindLook,
