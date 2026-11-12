@@ -34,8 +34,6 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     jump_to(&mut ui, second);
 
     ui.wait("the second prompt to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(second).is_some()));
-    // What loaded with it is laid out over the frames after, as many as that takes.
-    ui.wait("the rows down to it to be laid out", |ui| laid_out_down_to(ui, second));
     assert_at_the_bottom(&mut ui, second, "the second prompt");
     assert!(selected(&mut ui, row_id("outline-tick", second)), "and its tick is lit");
     assert!(!ui.has("outline-list"), "the list closes, so it isn't over where it jumped to");
@@ -160,13 +158,11 @@ fn jump_to(ui: &mut Ui<'_>, row: usize) {
 }
 
 /// Asserts that the end of the row drawn in `row` is at the bottom of the chat, to within a pixel. It waits first for
-/// every row from the top of the chat down to it to have been measured, since a row jumped to can load before the rows
-/// above it, which can be in a page that comes after its own, and a row that hasn't come isn't measured.
+/// every row from the top of the chat down to it to have been laid out, over as many frames as that takes, since a row
+/// jumped to can load before the rows above it, which can be in a page that comes after its own, and a row that hasn't
+/// come isn't measured.
 fn assert_at_the_bottom(ui: &mut Ui<'_>, row: usize, what: &str) {
-    ui.wait("the rows down to it to be measured", |ui| {
-        let top = scrolled_to(ui);
-        (top..=row).all(|row| measured(ui, row).is_some())
-    });
+    ui.wait("the rows down to it to be laid out", |ui| laid_out_down_to(ui, row));
     let (end, tall) = (place_of(ui, row).1, bounds(ui, "transcript").size.height);
     assert!((end - tall).abs() < px(1.), "{what} ends {end:?} down a chat {tall:?} tall");
 }
@@ -194,8 +190,7 @@ fn place_of(ui: &Ui<'_>, row: usize) -> (Pixels, Pixels) {
 
 /// Whether the last frame measured every row from the top of the chat down to the one drawn in `row`.
 fn laid_out_down_to(ui: &Ui<'_>, row: usize) -> bool {
-    let top = scrolled_to_exactly(ui).0;
-    (top..=row).all(|row| ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().row_height(row)).is_some())
+    (scrolled_to(ui)..=row).all(|row| measured(ui, row).is_some())
 }
 
 fn row_height(ui: &Ui<'_>, row: usize) -> Pixels {
