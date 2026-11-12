@@ -481,6 +481,27 @@ h1 .tone.plain .rotate > span:first-child {
   color: var(--faint);
 }
 
+/* Each download, and what's said about it, is written once for each platform, and only the visitor's shows: the
+   Mac's unless the page's first script found Windows. Without scripts it's the Mac's. */
+html:not([data-os="win"]) .for-win,
+html:not([data-os="win-arm64"]) .for-win-arm64,
+html[data-os="win"] .for-mac,
+html[data-os="win-arm64"] .for-mac,
+html:not([data-os]) .unless-mac,
+html[data-os="win"] .unless-win,
+html[data-os="win-arm64"] .unless-win-arm64 {
+  display: none;
+}
+
+.soon .link {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.soon .link:hover {
+  color: var(--fg);
+}
+
 /* The app. Its pictures come from the app's own drawing, without the window's controls, so they're added here, where
    macOS puts them. */
 
@@ -1038,6 +1059,30 @@ kbd {
   color: var(--muted);
 }
 
+/* Every download, a card each, with the visitor's own in copper. */
+.home .platforms {
+  width: 100%;
+  max-width: 860px;
+  margin-top: 36px;
+  text-align: left;
+}
+
+.platforms li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.platforms .button {
+  margin-top: 20px;
+}
+
+.home p.preview {
+  margin-top: 22px;
+  font-size: 14px;
+  color: var(--faint);
+}
+
 /* Footer */
 
 .footer {
@@ -1114,6 +1159,26 @@ kbd {
 
   .facts {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One above the next, a download is a row: what it is, and its button at the end. */
+  .platforms li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 16px;
+    padding: 18px 20px;
+  }
+
+  .platforms li > strong,
+  .platforms li > span {
+    grid-column: 1;
+  }
+
+  .platforms .button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 0;
   }
 }
 
