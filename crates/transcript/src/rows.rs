@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use client_core::OpenSession;
 use client_core::session_log::{By, Row};
-use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -22,7 +21,7 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
-use crate::prose::{Prose, TextAt, Written};
+use crate::prose::{Prose, TextAt};
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
@@ -39,6 +38,7 @@ mod mode;
 mod prompt;
 mod shown;
 mod tail;
+mod text;
 mod thinking;
 mod tools;
 mod turn_end;
@@ -57,6 +57,7 @@ use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
 use column::column;
 use prompt::{Progress, Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
+use text::{agent_text, recorded};
 use tools::Toggle;
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
@@ -74,7 +75,7 @@ pub(crate) struct Shared {
     pub(crate) line_text: LineText,
     /// Where every text view the rows draw is made.
     pub(crate) texts: LongTexts,
-    /// The agent's words the rows draw from the kit's blocks, and what's selected of them.
+    /// The texts the rows draw from the kit's blocks, and what's selected of them.
     pub(crate) prose: Prose,
     pub(crate) selection: Selection,
 }
@@ -104,12 +105,13 @@ enum Shown {
     /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab, and the
     /// prompts the agent hasn't read yet.
     Tail(Tail, By, Vec<Waiting>),
-    /// An event, which for a prompt is the one the row's event settled.
-    Event(SessionEvent, Around),
+    /// The place in the log of the row's own event, which its texts are placed by, and the event it draws, which for a
+    /// prompt is the one the row's event settled.
+    Event(Seq, SessionEvent, Around),
     Unloaded,
     /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, in the subagent tab, its
     /// last words, which its report says, or a prompt, drawn where the agent took it or at the end.
-    InCall,
+    InCall(Seq),
 }
 
 fn render_row_inner(
@@ -130,11 +132,13 @@ fn render_row_inner(
             }
             match log.row(ix) {
                 Row::Event(event) if drawn_in_its_call(log, &m, event) || alone::repeats_report(log, &m, ix) => {
-                    Shown::InCall
+                    Shown::InCall(event.seq)
                 }
                 Row::Event(event) => match drawn_in_row(log, event) {
-                    Some(drawn) => Shown::Event(drawn.clone(), Around::read(log, &m, drawn.seq, &drawn.body)),
-                    None => Shown::InCall,
+                    Some(drawn) => {
+                        Shown::Event(event.seq, drawn.clone(), Around::read(log, &m, drawn.seq, &drawn.body))
+                    }
+                    None => Shown::InCall(event.seq),
                 },
                 Row::Unloaded => Shown::Unloaded,
             }
@@ -151,11 +155,13 @@ fn render_row_inner(
             let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work };
             render_tail(&end, shared, by, m.folds.thinking_open(), &find, cx)
         }
-        Shown::Event(event, around) => {
+        // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
+        // them once it's drawn elsewhere.
+        Shown::Event(row, event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
-            render_event(&event, &around, shared, &find, cx)
+            shared.prose.drawing_event(row, || render_event(&event, &around, Some(row), shared, &find, cx))
         }
-        Shown::InCall => empty(),
+        Shown::InCall(seq) => shared.prose.drawing_event(seq, empty),
         Shown::Unloaded => return None,
     })
 }
@@ -170,16 +176,6 @@ fn mark_found(model: &Rc<RefCell<Model>>, ix: usize, find: &FindLook, texts: &Lo
     for id in found.iter() {
         texts.mark(id, find, cx);
     }
-}
-
-/// Text the agent wrote, under the same ID while it streams and once it's recorded.
-fn agent_text(texts: &LongTexts, key: &ItemKey, text: &str) -> TextView {
-    texts.markdown(text_id(key), text)
-}
-
-/// What the text the agent wrote under `key` is drawn by.
-fn text_id(key: &ItemKey) -> ElementId {
-    key.element("text")
 }
 
 fn row() -> Div {
@@ -243,7 +239,16 @@ fn notice(seq: Seq, level: NoticeLevel, message: &str, find: &FindLook, cx: &App
     marked_line(message.to_string(), &marks, color)
 }
 
-fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &FindLook, cx: &App) -> AnyElement {
+/// `event`, drawn in the row of the event at `place` in the log, which is its own but for a prompt drawn where the
+/// agent took it, or at the end of the chat, in no event's row, for `None`.
+fn render_event(
+    event: &SessionEvent,
+    around: &Around,
+    place: Option<Seq>,
+    shared: &Shared,
+    find: &FindLook,
+    cx: &App,
+) -> AnyElement {
     let (seq, body) = (event.seq, &event.body);
     match body {
         // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
@@ -260,7 +265,8 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
-            let (key, progress) = (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(around.prompt));
+            let (key, progress) =
+                (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::recorded(place, around.prompt));
             let text = Prompt { text, find };
             prompt_bubble(&key, text, &around.carried, progress, shared, cx)
         }
@@ -348,13 +354,7 @@ fn render_block(
     Some(match block {
         // In a row of its own, the transcript draws it from the kit's blocks, and selects it itself.
         ContentBlock::Text { text, images } if let InRow::Own(block) = in_row => {
-            let written = Written { at: TextAt { seq, block }, id: (key.clone(), Part::Text), text };
-            // The view the agent wrote it into, until the record has a parse of its own.
-            let meanwhile = || {
-                let view = shared.texts.kept(text_id(key), text)?.image_source(shared.linked.resolver(seq, images));
-                Some(find::markdown_view(view, &written.id, find, None))
-            };
-            shared.prose.draw(&shared.selection, find, &written, shared.linked.resolver(seq, images), meanwhile)
+            recorded(TextAt { seq, block }, &(key.clone(), Part::Text), text, Some(images), find, shared)
         }
         // In a call's row, as a subagent's words are, it's the kit's text view.
         ContentBlock::Text { text, images } => {
@@ -362,7 +362,7 @@ fn render_block(
             find::markdown_view(view, &(key.clone(), Part::Text), find, None)
         }
         ContentBlock::Thinking { text } if text.is_empty() => return None,
-        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
+        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, in_row, cx),
         // These are drawn from their approvals, which have everything that was asked.
         ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => return None,
         ContentBlock::ToolUse { name, input, .. } => {

@@ -156,7 +156,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     let seq = event.seq;
     match &event.body {
         EventBody::UserPrompt { text, client_msg_id, .. } if !text.trim().is_empty() => {
-            gather.markdown(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
+            gather.prose(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             for (ix, (block, drawing)) in blocks.iter().zip(&around.blocks).enumerate() {
@@ -206,9 +206,10 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_
         ContentBlock::Text { text, .. } if matches!(in_row, InRow::Own(_)) => gather.prose(key, Part::Text, text),
         ContentBlock::Text { text, .. } => gather.markdown(key, Part::Text, text),
         ContentBlock::Thinking { text } if text.is_empty() => {}
-        ContentBlock::Thinking { text } => {
-            gather.inside(key, Fold::Thinking, |gather| gather.markdown(key, Part::Thinking, text));
-        }
+        ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| match in_row {
+            InRow::Own(_) => gather.prose(key, Part::Thinking, text),
+            InRow::Call => gather.markdown(key, Part::Thinking, text),
+        }),
         ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => {}
         ContentBlock::ToolUse { name, input, .. } => {
             tools::shown(key, name, input, &drawing.reply, drawing.subagent.as_ref(), gather);

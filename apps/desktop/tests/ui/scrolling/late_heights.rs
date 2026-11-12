@@ -34,6 +34,33 @@ fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mu
     each_went_as_far_as_the_wheel(&steps);
 }
 
+/// A long thought that's been closed has its height at once when it's opened again, rather than being read again on
+/// another thread, and drawn as a line with nothing under it meanwhile.
+#[gpui_kit::test]
+fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:a short reply first");
+    stack.run(&session, "ponder:40:1; say:the end");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    let thought = thought_row(&ui, &transcript);
+    let height = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().row_height(thought));
+    ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
+    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    let opened = height(&ui);
+    ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(false, cx));
+    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+
+    ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
+    // One frame, with nothing else let run, so a text read on another thread wouldn't be in yet.
+    ui.cx.update_window(ui.handle, |_, window, cx| window.render_frame(cx)).unwrap();
+
+    assert_eq!(height(&ui), opened, "it's as tall as it was");
+    assert!(ui.cx.read_entity(&transcript, Transcript::long_texts_read), "with nothing read again");
+}
+
 /// A long plan, approved, just above a long reply. A plan is drawn in an approval's card, a row unlike a reply's, so
 /// this shows that whatever long text a row draws is kept.
 #[gpui_kit::test]

@@ -1,7 +1,7 @@
-//! What's selected of the agent's words, which the transcript holds rather than the window, so it outlasts the rows
-//! it's in being drawn. The kit's selection is the window's, over the texts painted in a frame, and lets go of what's
-//! selected once a text holding either end of it isn't painted, which in a list that draws only what's in sight is as
-//! soon as that text's row leaves the window.
+//! What's selected of the chat's recorded texts, which the transcript holds rather than the window, so it outlasts
+//! the rows it's in being drawn. The kit's selection is the window's, over the texts painted in a frame, and lets go
+//! of what's selected once a text holding either end of it isn't painted, which in a list that draws only what's in
+//! sight is as soon as that text's row leaves the window.
 //!
 //! Each end is a place in a text: which text, which of its leaves, and a byte in that leaf. Each frame, every text
 //! that's drawn says where its leaves are, so a point in the window can be turned into a place. A press on a text
@@ -25,13 +25,16 @@ use gpui_kit::base::TextSelection;
 use gpui_kit::base::input::{Copy, SelectAll};
 use gpui_kit::base::text::editor_host::LeafGeometry;
 use gpui_kit::{
-    App, Bounds, ClickEvent, ClipboardItem, Div, FocusHandle, InteractiveElement as _, MouseButton, Pixels, Point,
-    SharedString, Window, point, px,
+    App, Bounds, ClickEvent, ClipboardItem, Div, ElementId, FocusHandle, InteractiveElement as _, MouseButton, Pixels,
+    Point, SharedString, Window, point, px,
 };
 
-use crate::prose::{ATOM, Prose, TextAt};
+use crate::prose::{Prose, TextAt};
 
+mod places;
 mod pointer;
+
+use places::{copied, leaf_text, selected, spot_at, word_around};
 
 /// Where the keys that copy what's selected and select everything are bound, which is the transcript once a press in it
 /// has focused it.
@@ -81,12 +84,18 @@ struct Drag {
     chosen: (Spot, Spot),
     /// When the list last moved under the pointer past its edge.
     moved: Option<Instant>,
+    /// The area that scrolls the text the press was on, if it's in one.
+    area: Option<ElementId>,
+    /// When that area last moved under the pointer past its edge.
+    area_moved: Option<Instant>,
 }
 
-/// A text drawn in this frame, and where each of its leaves is, by key.
+/// A text drawn in this frame, what shows of it, the area that scrolls it, if it's in one, and where each of its
+/// leaves is, by key.
 struct Drawn {
     at: TextAt,
     bounds: Bounds<Pixels>,
+    area: Option<ElementId>,
     leaves: Vec<(u64, LeafGeometry)>,
 }
 
@@ -119,11 +128,20 @@ impl Selection {
         self.prose.new_frame();
     }
 
-    /// Notes that the text at `at` was drawn in `bounds`, with its leaves where `leaves` says.
-    pub(crate) fn drawn(&self, at: TextAt, bounds: Bounds<Pixels>, leaves: HashMap<u64, LeafGeometry>) {
-        let mut leaves: Vec<(u64, LeafGeometry)> = leaves.into_iter().collect();
+    /// Notes that the text at `at` shows in `bounds`, in `area` if one scrolls it, with its leaves where `leaves`
+    /// says. A leaf that doesn't show, such as one an area that scrolls the text has moved out of sight, can't be
+    /// pressed on or dragged to.
+    pub(crate) fn drawn(
+        &self,
+        at: TextAt,
+        bounds: Bounds<Pixels>,
+        area: Option<ElementId>,
+        leaves: HashMap<u64, LeafGeometry>,
+    ) {
+        let showing = leaves.into_iter().filter(|(_, geometry)| geometry.bounds().intersects(&bounds));
+        let mut leaves: Vec<(u64, LeafGeometry)> = showing.collect();
         leaves.sort_by_key(|(key, _)| *key);
-        self.inner.borrow_mut().drawn.push(Drawn { at, bounds, leaves });
+        self.inner.borrow_mut().drawn.push(Drawn { at, bounds, area, leaves });
     }
 
     /// What's selected of the text at `at`, whose leaves are `leaves`, by leaf.
@@ -186,7 +204,8 @@ impl Selection {
     /// `extend`, moves the far end of the one there is to there, and says so. Anywhere else, nothing's selected.
     fn press(&self, position: Point<Pixels>, clicks: usize, extend: bool) -> bool {
         let mut selecting = self.inner.borrow_mut();
-        let on_text = selecting.drawn.iter().any(|drawn| drawn.bounds.contains(&position));
+        let on = selecting.drawn.iter().find(|drawn| drawn.bounds.contains(&position));
+        let (on_text, area) = (on.is_some(), on.and_then(|drawn| drawn.area.clone()));
         let Some(spot) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
             selecting.set(None);
             selecting.drag = None;
@@ -208,7 +227,7 @@ impl Selection {
                 chosen
             }
         };
-        selecting.drag = Some(Drag { pointer: position, unit, chosen, moved: None });
+        selecting.drag = Some(Drag { pointer: position, unit, chosen, moved: None, area, area_moved: None });
         true
     }
 
@@ -220,8 +239,9 @@ impl Selection {
         self.follow(bounds);
     }
 
-    /// Selects all of the agent's words the chat holds, from the start of the first text to the end of the last, and
-    /// lets go of what the kit has selected, so a copy is of this. With none, it's for whatever else would take it.
+    /// Selects all of the texts the chat holds that `crate::prose` draws, from the start of the first to the end of the
+    /// last, and lets go of what the kit has selected, so a copy is of this. With none, it's for whatever else would
+    /// take it.
     fn select_all(&self, window: &mut Window, cx: &mut App) {
         let Some((first, last)) = self.prose.ends() else {
             cx.propagate();
@@ -267,116 +287,5 @@ impl Selection {
             (Unit::Leaf, Some(text)) => 0..text.len(),
         };
         (Spot { byte: range.start, ..spot }, Spot { byte: range.end, ..spot })
-    }
-}
-
-/// What's selected from `start` to `end` of `texts`, as text: what's selected of each leaf a line apart, and of each
-/// text a blank line apart, leaving out a leaf, or a text, that has none of it selected.
-fn copied(start: Spot, end: Spot, texts: &[(TextAt, Arc<[String]>)]) -> String {
-    let mut copied = Vec::new();
-    for (at, leaves) in texts {
-        let leaves: Vec<String> = selected(start, end, *at, leaves)
-            .filter(|(_, range)| !range.is_empty())
-            .filter_map(|(leaf, range)| leaf_text(leaves, leaf)?.get(range))
-            .map(|text| text.replace(ATOM, ""))
-            .collect();
-        if !leaves.is_empty() {
-            copied.push(leaves.join("\n"));
-        }
-    }
-    copied.join("\n\n")
-}
-
-fn leaf_text(leaves: &[String], leaf: u64) -> Option<&str> {
-    leaves.get(usize::try_from(leaf).ok()?).map(String::as_str)
-}
-
-/// What's selected from `start` to `end` of the text at `at`, whose leaves are `leaves`, by leaf.
-fn selected(start: Spot, end: Spot, at: TextAt, leaves: &[String]) -> impl Iterator<Item = (u64, Range<usize>)> + '_ {
-    let within = start.at <= at && at <= end.at;
-    (0u64..).zip(leaves).filter(move |_| within).filter_map(move |(leaf, text)| {
-        let from = if at == start.at { Some((start.leaf, start.byte)) } else { None };
-        let to = if at == end.at { Some((end.leaf, end.byte)) } else { None };
-        let low = match from {
-            Some((first, _)) if leaf < first => return None,
-            Some((first, byte)) if leaf == first => byte,
-            Some(_) | None => 0,
-        };
-        let high = match to {
-            Some((last, _)) if leaf > last => return None,
-            Some((last, byte)) if leaf == last => byte,
-            Some(_) | None => text.len(),
-        };
-        Some((leaf, low.min(text.len())..high.min(text.len())))
-    })
-}
-
-/// The place in the texts drawn in this frame nearest `position`: in the leaf under it, or across from it, or at the
-/// end of the last leaf above it, or the start of the first if it's above them all.
-fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<Spot> {
-    let mut nearest = None;
-    for drawn in drawn {
-        for (leaf, geometry) in &drawn.leaves {
-            let (at, leaf) = (drawn.at, *leaf);
-            let bounds = geometry.bounds();
-            if position.y < bounds.top() {
-                return nearest.or(Some(Spot { at, leaf, byte: 0 }));
-            }
-            if position.y <= bounds.bottom() {
-                let spot = Spot { at, leaf, byte: geometry.index_for_position(position) };
-                // A table's cells sit side by side, so the one across from it is the one it's over, if it's over one.
-                if bounds.left() <= position.x && position.x <= bounds.right() {
-                    return Some(spot);
-                }
-                nearest = Some(spot);
-                continue;
-            }
-            nearest = Some(Spot { at, leaf, byte: geometry.len() });
-        }
-    }
-    nearest
-}
-
-/// The word `byte` is in or at the start of in `text`, or the character there if it isn't in one.
-fn word_around(text: &str, byte: usize) -> Range<usize> {
-    let byte = byte.min(text.len());
-    let in_a_word = |c: char| c.is_alphanumeric() || c == '_';
-    let (before, after) = text.split_at(byte);
-    let Some(here) = after.chars().next().or_else(|| before.chars().next_back()) else { return byte..byte };
-    if !in_a_word(here) {
-        return match after.chars().next() {
-            Some(c) => byte..byte + c.len_utf8(),
-            None => byte - here.len_utf8()..byte,
-        };
-    }
-    let start = byte - before.chars().rev().take_while(|c| in_a_word(*c)).map(char::len_utf8).sum::<usize>();
-    let end = byte + after.chars().take_while(|c| in_a_word(*c)).map(char::len_utf8).sum::<usize>();
-    start..end
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::{Spot, TextAt, copied, word_around};
-
-    #[test]
-    fn a_copy_leaves_out_a_text_with_nothing_of_it_selected() {
-        let (first, second) = (TextAt { seq: 1, block: 0 }, TextAt { seq: 2, block: 0 });
-        let texts = [(first, Arc::from(["one".to_string()])), (second, Arc::from(["two words".to_string()]))];
-        // From just past the end of the first text into the second.
-        let (start, end) = (Spot { at: first, leaf: 0, byte: 3 }, Spot { at: second, leaf: 0, byte: 3 });
-
-        assert_eq!(copied(start, end, &texts), "two");
-    }
-
-    #[test]
-    fn a_double_click_selects_the_word_its_in() {
-        let text = "the quick_fox, jumps";
-
-        assert_eq!(&text[word_around(text, 6)], "quick_fox");
-        assert_eq!(&text[word_around(text, 4)], "quick_fox");
-        assert_eq!(&text[word_around(text, 13)], ",");
-        assert_eq!(&text[word_around(text, text.len())], "jumps");
     }
 }

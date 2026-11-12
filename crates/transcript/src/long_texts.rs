@@ -7,9 +7,9 @@
 //! the row first showed at the top of the window, the text grew there by all of its length and took the window up to
 //! its start.
 //!
-//! A row makes each text view it draws with [`LongTexts::markdown`], which keeps any long text it's given. The agent's
-//! recorded words are drawn by `crate::prose` instead, and with a view from here only until they're parsed. The list
-//! draws each loaded row soon after it loads, to measure it, so a long text is read then, once, and its row is
+//! A row makes each text view it draws with [`LongTexts::markdown`], which keeps any long text it's given. A recorded
+//! text in a row of its own is drawn by `crate::prose` instead, and with a view from here only until it's parsed. The
+//! list draws each loaded row soon after it loads, to measure it, so a long text is read then, once, and its row is
 //! measured again whenever what's been read of it changes. Nothing lists ahead of time which texts a row shows, so a
 //! text view added to a row can't be left out, and `clippy.toml` disallows the kit's own ways to make one anywhere
 //! else.

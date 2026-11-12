@@ -21,6 +21,7 @@ use gpui_kit::{
 
 use self::wheel::{Owner, Wheel};
 use crate::find::reveal::{self, Reveal};
+use crate::selection::Selection;
 
 mod wheel;
 
@@ -36,6 +37,8 @@ pub(crate) struct ScrollArea {
     content: AnyElement,
     /// Where the transcript's match being shown was drawn, to scroll to when it's in here.
     reveal: Option<Reveal>,
+    /// The transcript's selection, to scroll on under a drag that started in here.
+    drags: Option<Selection>,
 }
 
 /// Which ways an area scrolls.
@@ -49,12 +52,20 @@ enum Scrolls {
 impl ScrollArea {
     /// `id` keeps the area's place from one frame to the next, so it's the area's alone.
     pub(crate) fn new(id: impl Into<ElementId>, max_height: Pixels, content: impl IntoElement) -> Self {
-        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content: content.into_any_element(), reveal: None }
+        let content = content.into_any_element();
+        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content, reveal: None, drags: None }
     }
 
     /// Scrolls to the match being shown when it's drawn in here.
     pub(crate) fn follows(mut self, reveal: &Reveal) -> Self {
         self.reveal = Some(reveal.clone());
+        self
+    }
+
+    /// Scrolls on under a drag of `selection` that started in a text in here, held past its top or bottom. The text
+    /// says it's in here with `crate::prose::Written::in_area`.
+    pub(crate) fn follows_drags(mut self, selection: &Selection) -> Self {
+        self.drags = Some(selection.clone());
         self
     }
 
@@ -93,6 +104,7 @@ impl RenderOnce for ScrollArea {
             .children(
                 self.reveal.map(|reveal| follows_the_match(self.id.clone(), self.scrolls, handle.clone(), reveal)),
             )
+            .children(self.drags.map(|selection| follows_the_drag(self.id.clone(), handle.clone(), selection)))
             .child(takes_the_wheel(self.id, self.scrolls, handle))
             .child(div().absolute().inset_0().child(bar))
     }
@@ -129,6 +141,29 @@ fn follows_the_match(id: ElementId, scrolls: Scrolls, handle: ScrollHandle, reve
                 handle.set_offset(to);
                 reveal.moved();
                 window.refresh();
+            }
+        },
+    )
+    .absolute()
+    .size_0()
+}
+
+/// Draws nothing, and scrolls the area `id` down or up under a drag of `selection` that started in a text in it, for as
+/// long as it's held past the area's bottom or top and the area has further to go.
+fn follows_the_drag(id: ElementId, handle: ScrollHandle, selection: Selection) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |_, (), window, cx| {
+            let now = cx.background_executor().now();
+            let Some(by) = selection.scroll_area_past_edge(&id, handle.bounds(), now) else { return };
+            let (offset, max) = (handle.offset(), handle.max_offset());
+            let to = (offset.y - by).clamp(-max.y, px(0.));
+            if to != offset.y {
+                handle.set_offset(point(offset.x, to));
+            }
+            // The first frame only starts the clock, and one at the end has nothing to wait for.
+            if to != offset.y || by == px(0.) {
+                window.request_animation_frame();
             }
         },
     )

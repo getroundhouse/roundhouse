@@ -1,21 +1,19 @@
-//! One of the agent's texts, drawn from its parsed blocks, with what's selected and what's found painted behind it.
-//! Once it's laid out, it tells the selection where its leaves are, and the match being shown where it is.
+//! One of the chat's recorded texts, drawn from its parsed blocks, with what's selected and what's found painted
+//! behind it. Once it's laid out, it tells the selection where its leaves are, and the match being shown where it is.
 
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use gpui_kit::base::TextViewDefaults;
 use gpui_kit::base::text::editor_host::{BlockNode, FlowPosition, LeafGeometry, RenderContext, collect_leaf_geometry};
 use gpui_kit::{
     AnyElement, App, Bounds, CursorStyle, Element, ElementId, GlobalElementId, Hitbox, HitboxBehavior, Hsla,
-    ImageSource, InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, SharedUri, Styled as _, Window,
-    div, px, size,
+    InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div, px, size,
 };
 
-use super::{Parsed, Prose, TextAt};
+use super::{Images, Parsed, Prose, TextAt};
 use crate::find::Marks;
 use crate::selection::Selection;
-
-pub(super) type Images = Box<dyn Fn(&SharedUri) -> ImageSource + Send + Sync>;
 
 /// What a text draws: its blocks, or until it's parsed on another thread, `meanwhile`, or nothing if that's `None`.
 pub(super) enum Drawing {
@@ -26,6 +24,8 @@ pub(super) enum Drawing {
 pub(super) struct ProseElement {
     pub(super) id: ElementId,
     pub(super) at: TextAt,
+    /// The area that scrolls it, if it's in one.
+    pub(super) area: Option<ElementId>,
     pub(super) text: Drawing,
     /// What's found in each leaf, by key.
     pub(super) marks: Vec<Marks>,
@@ -67,6 +67,20 @@ impl Element for ProseElement {
         if let Some(images) = self.images.take() {
             context = context.with_image_source(images);
         }
+        // In the colour of what it's in, such as a thought's muted one, as the kit's text view is, since the kit's
+        // defaults have it follow that. The kit draws its other colours otherwise on a surface whose text is far
+        // lighter or darker than its own, which none of the transcript's is, so only the colour is followed.
+        let color = window.text_style().color;
+        let follows = cx.try_global::<TextViewDefaults>().is_some_and(TextViewDefaults::inherit_text_color);
+        if follows && color != context.style().foreground() {
+            let style = context.style().clone().with_foreground(color);
+            context = context.with_style(style);
+        }
+        if let Drawing::Parsed(parsed) = &self.text {
+            for (identifier, link) in &parsed.links {
+                context = context.with_link_reference(identifier.clone(), link.clone());
+            }
+        }
         let style = context.style();
         let mut element = match &mut self.text {
             // As the kit's text view lays its blocks out, in its text's colour.
@@ -107,7 +121,9 @@ impl Element for ProseElement {
         }
         let (_, leaves) = collect_leaf_geometry(behind, || element.prepaint(window, cx));
         self.reveal(&leaves);
-        self.selection.drawn(self.at, bounds, leaves);
+        // What shows of it, which an area that scrolls it, or the list, can cut short.
+        let shows = bounds.intersect(&window.content_mask().bounds);
+        self.selection.drawn(self.at, shows, self.area.clone(), leaves);
         hitbox
     }
 
@@ -134,7 +150,7 @@ impl ProseElement {
         let Some((leaf, range, reveal)) = here else { return };
         let Some(geometry) = leaves.get(&leaf) else { return };
         let at = geometry.position_for_index(range.start);
-        reveal.drawn_at(Bounds::new(at, size(px(1.), geometry.line_height())), None);
+        reveal.drawn_at(Bounds::new(at, size(px(1.), geometry.line_height())), self.area.clone());
     }
 }
 

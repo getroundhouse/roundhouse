@@ -7,23 +7,38 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, px,
     relative,
 };
+use protocol::model::Seq;
 
-use super::{Shared, row};
+use super::{Shared, recorded, row};
 use crate::attachments::{self, Carried};
 use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
+use crate::prose::TextAt;
 
 /// The widest a prompt is, as a share of the column. What was asked sits at the right, as wide as it needs, so it
 /// stands apart from the agent's work, which starts at the left.
 const WIDEST_SHARE: f32 = 0.8;
 
-/// Where a prompt is on its way to the agent.
+/// Where a prompt is on its way to the agent, and where it's drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Progress {
     /// Sent, and not yet recorded, so it has no place in the log.
     Sending,
-    /// Recorded, with the agent, or waiting for it.
-    Recorded(PromptState),
+    /// Recorded, and drawn at the end of the chat, since the agent hasn't read it yet, so it's in no event's row.
+    Waiting(PromptState),
+    /// Recorded, and drawn in the row of the event at this place in the log: its own, or the one that settled it,
+    /// where the agent took it or dropped it.
+    InRow(Seq, PromptState),
+}
+
+impl Progress {
+    /// A recorded prompt's, drawn in the row of the event at `place` in the log, or at the end of the chat for `None`.
+    pub(crate) fn recorded(place: Option<Seq>, state: PromptState) -> Self {
+        match place {
+            Some(place) => Progress::InRow(place, state),
+            None => Progress::Waiting(state),
+        }
+    }
 }
 
 /// What a prompt says, and what's being found in it.
@@ -46,9 +61,11 @@ pub(super) fn prompt_bubble(
 ) -> AnyElement {
     let Prompt { text, find } = text;
     let typed = !text.trim().is_empty();
-    let state = match progress {
-        Progress::Sending => None,
-        Progress::Recorded(state) => Some(state),
+    // Sent, or waiting at the end of the chat, it's the kit's text view, with the kit's selection.
+    let (place, state) = match progress {
+        Progress::Sending => (None, None),
+        Progress::Waiting(state) => (None, Some(state)),
+        Progress::InRow(place, state) => (Some(place), Some(state)),
     };
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
@@ -67,8 +84,12 @@ pub(super) fn prompt_bubble(
                 .children(attachments::view(carried, cx))
                 .when(typed, |d| {
                     let id = (key.clone(), Part::Prompt);
-                    let view = shared.texts.markdown(find::view_id(&id), text);
-                    d.child(find::markdown_view(view, &id, find, None))
+                    d.child(match place {
+                        // In a row, the transcript draws it from the kit's blocks, and selects it itself, with the
+                        // view it was drawn by while it was sent until the record has a parse of its own.
+                        Some(place) => recorded(TextAt { seq: place, block: 0 }, &id, text, None, find, shared),
+                        None => find::markdown_view(shared.texts.markdown(find::view_id(&id), text), &id, find, None),
+                    })
                 })
                 .test_support(),
         )

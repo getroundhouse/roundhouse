@@ -1,20 +1,23 @@
-//! Selecting the agent's words: by dragging, past the window's edge too, which scrolls the transcript on for as long
-//! as the pointer is held out there, either way, and keeps what's selected, and over a link, which a drag doesn't
-//! open; a word or a paragraph at a time; or all of them.
+//! Selecting what's written in a chat: by dragging, past the window's edge too, which scrolls the transcript on for as
+//! long as the pointer is held out there, either way, and keeps what's selected, and over a link, which a drag doesn't
+//! open; a word or a paragraph at a time; or all of it.
 
 use gpui_kit::base::TextSelection;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, ClipboardItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta,
-    TestAppContext, point, px,
+    AppContext as _, Bounds, ClipboardItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    ScrollDelta, TestAppContext, point, px,
 };
-
 use protocol::event::EventBody;
-
-use protocol::model::seq_index;
+use protocol::model::{SessionId, seq_index};
 
 use super::{A_FRAME, press, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
+
+mod kinds;
+
+/// A reply the tests find by what it says.
+const LAST: &str = "Signal boxes keep ledgers, and the lever frame holds each route clear.";
 
 /// How many frames the pointer is held past the bottom edge, and then twice that past the top, to go back past where
 /// it started.
@@ -29,15 +32,13 @@ fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it
         let replies: Vec<String> = (0..25).map(|reply| format!("prose:3:{}", prompt * 25 + reply)).collect();
         stack.run(&session, &replies.join("; "));
     }
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
     // Some way up from the end, so there's room to scroll either way.
     for _ in 0..20 {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     }
     ui.settle(A_FRAME);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
     let start = a_reply(&ui, window);
     let held = Some(MouseButton::Left);
     press(&mut ui, MouseDownEvent { button: MouseButton::Left, position: start, click_count: 1, ..Default::default() });
@@ -82,16 +83,14 @@ fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
     let session = stack.chat_in_a_new_workspace();
     let replies: Vec<String> = (0..25).map(|reply| format!("prose:3:{reply}")).collect();
     stack.run(&session, &replies.join("; "));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let mut ui = open(cx, &stack);
     let other = ui.new_chat();
     ui.activate_chat(&session);
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
+    let window = settled(&mut ui, &stack, &session);
     for _ in 0..10 {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     }
     ui.settle(A_FRAME);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
     let start = a_reply(&ui, window);
     let held = Some(MouseButton::Left);
     press(&mut ui, MouseDownEvent { button: MouseButton::Left, position: start, click_count: 1, ..Default::default() });
@@ -109,25 +108,24 @@ fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
     assert!(moved(&back).abs() < px(1.), "and once it was back, it stayed where it was: {:?}", moved(&back));
 }
 
-/// A drag across the agent's words is the transcript's selection alone. The kit's starts from the nearest of its own
-/// texts to a press, such as the prompt above it, and would select what of its texts a drag goes across, such as the
-/// next prompt.
+/// A drag across the agent's words is the transcript's selection alone. The kit's, which still selects what a call
+/// shows, starts from the nearest of its own texts to a press, and would select what of its texts a drag goes across,
+/// such as an opened call's command and what it printed.
 #[gpui_kit::test]
 fn a_drag_across_the_agent_s_words_selects_nothing_of_the_kit_s(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     let (first, second) = ("Signal boxes keep ledgers of every train.", "The lever frame holds each route clear.");
-    stack.run(&session, &format!("say:{first}"));
-    stack.run(&session, &format!("say:{second}"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
+    stack.run(&session, &format!("say:{first}; tool:echo the-points-are-set; say:{second}"));
+    let mut ui = open(cx, &stack);
+    settled(&mut ui, &stack, &session);
+    ui.click_labelled("Run", 0);
+    let window = settled(&mut ui, &stack, &session);
     let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
 
     let (button, held) = (MouseButton::Left, Some(MouseButton::Left));
     press(&mut ui, MouseDownEvent { button, position: from, click_count: 1, ..Default::default() });
-    // Across all of the prompt between, wherever its words are drawn, and on into the next reply.
+    // Across all of the call between, wherever its words are drawn, and on into the next reply.
     let mut y = from.y;
     while y < to.y {
         for x in [window.left() + px(40.), window.center().x, window.right() - px(60.)] {
@@ -142,7 +140,7 @@ fn a_drag_across_the_agent_s_words_selects_nothing_of_the_kit_s(cx: &mut TestApp
     let copied = copy(&mut ui);
 
     assert!(copied.contains("ledgers") && copied.contains("lever"), "the drag selected from one reply into the next");
-    assert!(!kit_s, "and the kit selected nothing, of the prompt between them or anything else");
+    assert!(!kit_s, "and the kit selected nothing, of the call between them or anything else");
 }
 
 /// A press on the scrollbar scrolls, and leaves what's selected as it was, so the far end of it can be scrolled to.
@@ -150,13 +148,10 @@ fn a_drag_across_the_agent_s_words_selects_nothing_of_the_kit_s(cx: &mut TestApp
 fn a_press_on_the_scrollbar_keeps_what_s_selected(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
-    let last = "Signal boxes keep ledgers, and the lever frame holds each route clear.";
-    stack.run(&session, &format!("prose:12:1; prose:12:2; say:{last}"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
-    let on_it = on_the_reply_saying(&ui, window, last);
+    stack.run(&session, &format!("prose:12:1; prose:12:2; say:{LAST}"));
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
+    let on_it = on_the_reply_saying(&ui, window, LAST);
     click(&mut ui, on_it, 2);
     let word = copy(&mut ui);
 
@@ -167,30 +162,28 @@ fn a_press_on_the_scrollbar_keeps_what_s_selected(cx: &mut TestAppContext) {
 }
 
 /// A double click selects the word it's on, a triple click its paragraph, and Cmd-A, in a chat a press has given
-/// focus, all of the agent's words the chat has, in order.
+/// focus, all of the words the chat has, the person's and the agent's, in order.
 #[gpui_kit::test]
-fn a_word_a_paragraph_or_every_reply_can_be_selected(cx: &mut TestAppContext) {
+fn a_word_a_paragraph_or_everything_written_can_be_selected(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
-    let last = "Signal boxes keep ledgers, and the lever frame holds each route clear.";
-    stack.run(&session, &format!("say:The first reply; prose:3:1; say:{last}"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
-    let on_it = on_the_reply_saying(&ui, window, last);
+    let prompt = format!("say:The first reply; prose:3:1; say:{LAST}");
+    stack.run(&session, &prompt);
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
+    let on_it = on_the_reply_saying(&ui, window, LAST);
 
     click(&mut ui, on_it, 2);
     let word = copy(&mut ui);
     click(&mut ui, on_it, 3);
     let paragraph = copy(&mut ui);
-    ui.press("secondary-a");
-    let all = copy(&mut ui);
+    let all = everything(&mut ui, on_it);
 
-    assert!(!word.is_empty() && !word.contains(' ') && last.contains(&word), "a word of it: {word:?}");
-    assert_eq!(paragraph, last, "all of its paragraph");
-    assert!(all.starts_with("The first reply\n\n"), "every reply, from the first: {:?}", head(&all));
-    assert!(all.ends_with(last), "to the last");
+    assert!(!word.is_empty() && !word.contains(' ') && LAST.contains(&word), "a word of it: {word:?}");
+    assert_eq!(paragraph, LAST, "all of its paragraph");
+    let first = format!("{prompt}\n\nThe first reply\n\n");
+    assert!(all.starts_with(&first), "the prompt, then every reply, from the first: {:?}", head(&all));
+    assert!(all.ends_with(LAST), "to the last");
 }
 
 /// A click on a link opens it, but a drag that selects some of a reply and ends on a link doesn't.
@@ -200,10 +193,8 @@ fn a_drag_that_ends_on_a_link_selects_rather_than_opening_it(cx: &mut TestAppCon
     let session = stack.chat_in_a_new_workspace();
     let reply = "[Signal boxes](https://example.com/boxes) keep ledgers, and the lever frame holds each route clear.";
     stack.run(&session, &format!("say:{reply}"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, seq_index(stack.client().session_get(&session).unwrap().last_seq) - 1);
-    let window = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
     let on_the_link = on_the_reply_saying(&ui, window, reply);
     let along = point(on_the_link.x + px(200.), on_the_link.y);
 
@@ -221,6 +212,36 @@ fn a_drag_that_ends_on_a_link_selects_rather_than_opening_it(cx: &mut TestAppCon
     assert_eq!(clicked.as_deref(), Some("https://example.com/boxes"), "a click opens it");
 }
 
+/// A link that names a definition elsewhere in the text goes where the definition says, as in the kit's text view.
+#[gpui_kit::test]
+fn a_reference_link_opens_where_its_definition_says(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let reply = "[Signal boxes][boxes] keep ledgers.\n\n[boxes]: https://example.com/boxes";
+    stack.run(&session, &format!("say:{reply}"));
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
+
+    let on_the_link = on_the_reply_saying(&ui, window, reply);
+
+    click(&mut ui, on_the_link, 1);
+
+    assert_eq!(ui.cx.opened_url().as_deref(), Some("https://example.com/boxes"));
+}
+
+/// The app, open on the stack's chat.
+fn open<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+    let mut ui = Ui::open(cx, stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    ui
+}
+
+/// Where the transcript is, once its list has settled at the end of `session`.
+fn settled(ui: &mut Ui<'_>, stack: &Stack, session: &SessionId) -> Bounds<Pixels> {
+    wait_for_the_list_to_settle(ui, seq_index(stack.client().session_get(session).unwrap().last_seq) - 1);
+    ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap()
+}
+
 /// Presses the button at `at`, and lets it go, as the `clicks`th click in a row.
 fn click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>, clicks: usize) {
     let button = MouseButton::Left;
@@ -229,7 +250,7 @@ fn click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>, clicks: usize) {
 }
 
 /// A point on the first line of the reply that says `text`, which is in the window.
-fn on_the_reply_saying(ui: &Ui<'_>, window: gpui_kit::Bounds<Pixels>, text: &str) -> gpui_kit::Point<Pixels> {
+fn on_the_reply_saying(ui: &Ui<'_>, window: Bounds<Pixels>, text: &str) -> gpui_kit::Point<Pixels> {
     let transcript = ui.transcript().unwrap();
     ui.cx.read_entity(&transcript, |t, _| {
         let list = t.list();
@@ -259,13 +280,26 @@ fn copy(ui: &mut Ui<'_>) -> String {
     ui.cx.read_from_clipboard().and_then(|item| item.text()).unwrap_or_default()
 }
 
+/// Everything Cmd-A selects, as a copy has it, with the chat given the focus by a click at `at`, on one of its texts.
+fn everything(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>) -> String {
+    click(ui, at, 1);
+    ui.press("secondary-a");
+    copy(ui)
+}
+
 /// The start of `text`, to say what a copy held.
 fn head(text: &str) -> String {
     text.chars().take(80).collect()
 }
 
+/// The end of `text`, to say what a copy held.
+fn tail(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    chars[chars.len().saturating_sub(80)..].iter().collect()
+}
+
 /// A point on the text of a reply in the upper half of the window, by the heights of the rows above it.
-fn a_reply(ui: &Ui<'_>, window: gpui_kit::Bounds<Pixels>) -> gpui_kit::Point<Pixels> {
+fn a_reply(ui: &Ui<'_>, window: Bounds<Pixels>) -> gpui_kit::Point<Pixels> {
     let transcript = ui.transcript().unwrap();
     ui.cx.read_entity(&transcript, |t, _| {
         let list = t.list();
