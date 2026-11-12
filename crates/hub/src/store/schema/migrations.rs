@@ -393,4 +393,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // Who this hub is, and each instance it asks a provider for, in `providers`.
     providers::HUB_IDENTITY,
     providers::INSTANCES,
+    // The model each subagent runs on, which its record shows.
+    subagents::MODELS,
 ];

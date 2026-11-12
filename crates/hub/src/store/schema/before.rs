@@ -48,3 +48,6 @@ pub(crate) const BEFORE_WORKSPACE_ACTIVITY: usize = 26;
 
 /// How many migrations there were before the hub recorded each instance it asks a provider for.
 pub(crate) const BEFORE_INSTANCES: usize = 31;
+
+/// How many migrations there were before subagents' records kept the model each runs on.
+pub(crate) const BEFORE_SUBAGENT_MODELS: usize = 32;

@@ -22,6 +22,7 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     description: description.clone(),
                     prompt: prompt.clone(),
                     in_background: *in_background,
+                    model: None,
                     status: SubagentStatus::Working,
                     started_at_ms: event.ts_ms,
                     ended_at_ms: None,

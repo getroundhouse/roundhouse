@@ -122,3 +122,18 @@ pub(super) const RECORDS: &str = r"
 /// What each subagent has done lately, as JSON, which its record shows while it works and empties when it ends. One
 /// still working has none until its next event.
 pub(super) const RECENT_WORK: &str = "ALTER TABLE subagents ADD COLUMN recent TEXT;";
+
+/// The model each subagent's replies come from, as its newest reply named it, which its record shows. One from before
+/// this has it filled in from its replies in the log, and only one that has a model is changed, so the rest keep their
+/// revisions. A log from before the adapter left out the CLI's name for a message no model wrote, `<synthetic>`, has
+/// it, and it names no model.
+pub(super) const MODELS: &str = r"
+    ALTER TABLE subagents ADD COLUMN model TEXT;
+    UPDATE subagents SET model = found.model
+        FROM (SELECT s.session_id, s.call, (SELECT e.body ->> '$.model' FROM events e
+                WHERE e.session_id = s.session_id AND e.subagent = s.call AND e.kind = 'assistant'
+                    AND json_type(e.body, '$.model') = 'text' AND e.body ->> '$.model' NOT IN ('', '<synthetic>')
+                ORDER BY e.place DESC LIMIT 1) AS model
+            FROM subagents s) AS found
+        WHERE found.model IS NOT NULL AND found.session_id = subagents.session_id AND found.call = subagents.call;
+";

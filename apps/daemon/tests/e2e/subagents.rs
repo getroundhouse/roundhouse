@@ -8,7 +8,7 @@ use client_core::session_log::{By, Row, SessionLog};
 use client_core::{Client, OpenSession, RecordsFeed, Subscription, SubscriptionItem, View};
 use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome, TaskKind};
-use protocol::model::{Place, SessionId, Subagent, SubagentStatus, ToolUseId};
+use protocol::model::{ModelName, Place, SessionId, Subagent, SubagentStatus, ToolUseId};
 use protocol::tail::Tail;
 
 use crate::support::{Follower, Stack, TIMEOUT, read_all, wait_for_turn_end, wait_until};
@@ -196,6 +196,8 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     assert_eq!((subagent.prompt.as_deref(), subagent.in_background), (Some("Look around."), true));
     assert_eq!(subagent.latest_call.as_ref().map(|call| call.name.as_str()), Some("Bash"));
     assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
+    assert_eq!(subagent.model.as_ref().map(ModelName::as_str), Some("fake-model"), "as its replies named it");
+    assert_eq!(notices[0].model, None, "before it replied");
     assert!(subagent.rev <= rev);
     // Each notice's calls, whether its newest call had heard back, and whether it had said anything since.
     let heard: Vec<_> = notices

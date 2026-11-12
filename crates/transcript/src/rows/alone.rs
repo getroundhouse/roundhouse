@@ -135,6 +135,7 @@ mod tests {
             description: Some("Find checks".into()),
             prompt: Some("Look".into()),
             in_background: true,
+            model: None,
             status,
             started_at_ms: 1_000,
             ended_at_ms: (status != SubagentStatus::Working).then_some(13_000),

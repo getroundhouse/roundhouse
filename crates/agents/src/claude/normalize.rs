@@ -264,12 +264,16 @@ fn system(value: &Value) -> Parsed {
     }
 }
 
+/// The CLI's name for the model of a message it wrote itself, such as one saying the API failed. No model wrote it, so
+/// it's recorded as naming none, and a turn or a subagent isn't taken to have run on it.
+const NO_MODEL: &str = "<synthetic>";
+
 fn assistant(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
         message_id: id_of(message, "id"),
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
-        model: string_of(message, "model"),
+        model: str_of(message, "model").filter(|model| *model != NO_MODEL).map(str::to_string),
         blocks: blocks(message.get("content")),
         // A Normalizer knows it from the deltas before.
         first_index: None,
