@@ -81,6 +81,21 @@ fn reads_nobody_waits_on_leave_a_fifth_of_githubs_limit_alone_until_it_resets() 
     assert_eq!(once_reset, Ok(()));
 }
 
+/// An agent's read goes at once, as one someone waits on does, but it can't spend what's kept for everything else.
+#[test]
+fn an_agents_read_goes_ahead_but_leaves_a_fifth_of_githubs_limit_alone() {
+    let now = Instant::now();
+    let mut budget = Budget::new(now);
+    calls_in_a_row(&mut budget, now);
+
+    let ahead = budget.take(2, Asked::Agent, now);
+    github_says(&mut budget, 1000, HOUR, now);
+    let at_the_fifth = budget.allows(1, Asked::Agent, now);
+
+    assert_eq!(ahead, Ok(()), "past the steady rate");
+    assert_eq!(at_the_fifth, Err(now + HOUR));
+}
+
 #[test]
 fn nothing_goes_while_github_has_nothing_left() {
     let now = Instant::now();

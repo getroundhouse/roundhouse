@@ -52,6 +52,7 @@ How the system fits together, and why. This is the agreed design, so it includes
  │ Worker: roundhoused worker --stdio, one per workspace                      │
  │ git and the worktree, setup and archive scripts, files and diffs           │
  │ agent adapters, such as agents::claude                                     │
+ │ its agents' tools, over MCP on 127.0.0.1, answered by asking the hub       │
  └───────────────────────────────────┬────────────────────────────────────────┘
                                      │  stream-json over stdio,
                                      │  approvals as control requests
@@ -198,6 +199,7 @@ Each piece of state has one owner, and every other copy is a cache.
 | App settings | Always expand thinking | The client, in a file in its data directory, since a client can show several hubs. *Unconfirmed* |
 | Hub settings | Keeping the Mac awake | The hub that carries them out, as one record, so they hold with no client there and every client shows the same |
 | Where the window was left | Its place, size and display, and whether it was in full screen | The client, in a file of its own in its data directory, since nobody chooses it in Settings. *Unconfirmed* |
+| The worker's tools | The port each workspace's worker serves its agents' tools on, and each session's token for them | The hub, in tables of their own, since every launch of an agent needs the same, as "The worker's tools" below says. Neither is on a record, since no client is shown them. *Unconfirmed* |
 
 - A session has one writer, so events get a simple sequence number and no merge logic is needed.
 - A prompt or approval only becomes real once it's recorded. Until then, the UI shows it as pending.
@@ -304,6 +306,17 @@ Between them, these rules give each pairing this:
 
 - **Not everything works with everything.** Clients and workers don't carry old versions, and a rollback past a break stops agents. Doing better would put old code in more places, for cases that are rare or that updating fixes.
 - **The wire format stays as it is.** A schema format such as Protobuf has the same rules for additive changes that serde has with the ones above, and neither helps with a change of meaning, which is what a break is.
+
+## The worker's tools
+
+Agents call tools of Roundhouse's own, such as one that says where the workspace's pull request stands, and the hub answers them.
+
+- **The worker serves them over MCP, on 127.0.0.1,** as protocol `2026-07-28`'s Streamable HTTP, with each request answered as JSON. The CLI reconnects to an HTTP server by itself, and there's no process of its own to die, as `docs/claude-cli.md` says. A server on the CLI's stream ends with the agent's process, and a stdio server that the CLI starts strands what waits on it when it dies. *Unconfirmed.*
+- **Only the worker's own agents reach them.** Each request carries a token that the hub gave the agent, which says whose it is, and one without a token of the worker's is refused. So is one sent to another name than the worker's address, or from a web page, which says where it's from, since a page can reach 127.0.0.1 under a name of its own that leads there. *Unconfirmed.*
+- **The hub keeps the port each workspace's worker serves on, and each session's token,** so every launch of an agent gets the same, since a resumed CLI picks up a call it left waiting only from the same address with the same token. A worker the hub starts again listens on the port its workspace's was on, whose connections can still be closing, so it reuses the port unless something else answers there, and listens on another if it can't have it. Neither is on a record, since no client is shown them. *Unconfirmed.*
+- **A worker asks its hub, as well as answering it.** For a tool, it sends an ask, numbered apart from the hub's calls, naming the agent's session, and the hub answers it. The hub knows which workspace a worker is for, so it answers only for that workspace's sessions, and a tool reaches that workspace and nothing else unless it's given more. A hub refuses an ask it doesn't know as `Unsupported`, one it can't read as a whole included, as it does a request, and the worker gives up on one with no answer after a minute, which is all a hub from before asks gives it. *Unconfirmed.*
+- **What a tool says is written for the agent,** in full, and apart from what the app shows, since an agent reads it as words and gets wrong what a person wouldn't, such as reading a pull request in the merge queue as merged. *Unconfirmed.*
+- **An agent hears only what was read since it asked.** The hub reads the pull request for it at once, but no sooner than 10 s after the workspace's last read, and within the part of GitHub's limit that isn't kept for everything else. It fails rather than say what was known, which may be from before the agent pushed. So an agent asking in a loop reads at most six times a minute, and one asking again after it pushes waits 10 s at most. *Unconfirmed.*
 
 ## When a process dies
 

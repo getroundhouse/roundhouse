@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::attachment::{AttachmentBytes, AttachmentFile, NewAttachment};
-use crate::client::ApiError;
+use crate::client::Outcome;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
     AgentAccount, AgentKind, AgentSessionId, ApprovalId, CacheRequest, CommitId, ContextUsage, FileContents,
@@ -18,6 +18,12 @@ use crate::tail::StreamDelta;
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
 pub const WORKER_PROTOCOL_VERSION: u32 = 3;
+
+mod ask;
+mod tools;
+
+pub use ask::{AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk};
+pub use tools::ToolsToken;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkerCall {
@@ -184,6 +190,14 @@ pub enum WorkerRequest {
     AccountFor {
         agent: AgentKind,
     },
+    /// Serves the worker's tools to its agents, over MCP on 127.0.0.1, on `port` if it's free and on a port of the
+    /// system's choosing if not, or if there's none. Replies with the port it's on, and harmless once it's serving,
+    /// when it replies with the port it's already on. Each agent reaches it with the token its
+    /// [`AgentSpec::tools_token`] names.
+    ServeTools {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+    },
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]
@@ -207,6 +221,10 @@ pub struct AgentSpec {
     pub settings: SessionSettings,
     /// Set in the agent's environment, along with the worker's own.
     pub env: Vec<(String, String)>,
+    /// What the agent's calls to the worker's tools carry, which tells the worker whose they are. The hub keeps one for
+    /// each session, so every launch of its agent has the same. `None` when the worker isn't serving its tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools_token: Option<ToolsToken>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -257,6 +275,10 @@ pub enum WorkerResponse {
         title: String,
     },
     Account(AgentAccount),
+    /// The port the worker's tools are served on, on 127.0.0.1.
+    ToolsServing {
+        port: u16,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -306,14 +328,16 @@ pub enum WorkerFrame {
         run: RunId,
         limits: Vec<UsageLimit>,
     },
+    /// Something the agent in `session_id` called one of the worker's tools for, which only the hub can answer. The
+    /// hub answers with an [`AskAnswer`] naming `id`, which counts apart from the hub's calls.
+    Ask {
+        id: AskId,
+        session_id: SessionId,
+        ask: WorkerAsk,
+    },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkerOutcome {
-    Response(WorkerResponse),
-    Error(ApiError),
-}
+pub type WorkerOutcome = Outcome<WorkerResponse>;
 
 /// GitHub's hourly limit on the GraphQL calls `gh pr view` makes, as GitHub counted them when asked.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

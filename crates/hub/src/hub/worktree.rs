@@ -19,13 +19,19 @@ impl Hub {
         self: &Arc<Self>,
         id: &WorkspaceId,
     ) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
+        let (workspace, path) = self.ready_path(id).await?;
+        let link = self.ensure_worker(id).await?;
+        Ok((workspace, path, link))
+    }
+
+    /// The workspace and its worktree's path, if it's ready, without its worker.
+    pub(super) async fn ready_path(&self, id: &WorkspaceId) -> Result<(Workspace, String), ApiError> {
         let workspace = self.workspace(id).await?;
         if workspace.status != WorkspaceStatus::Ready {
             return Err(not_ready(&workspace));
         }
         let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
-        let link = self.ensure_worker(id).await?;
-        Ok((workspace, path, link))
+        Ok((workspace, path))
     }
 
     pub(crate) async fn workspace_status(self: &Arc<Self>, id: WorkspaceId) -> Result<GitStatus, ApiError> {

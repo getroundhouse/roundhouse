@@ -1,5 +1,6 @@
 //! The calls in flight on a stream that carries calls one way and their replies the other, matched by ID, as a
-//! worker's stream and a provider's adapter's both do.
+//! worker's stream and a provider's adapter's both do, and any other line sent the calls' way, such as the answer to
+//! something the other end asked.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,12 +12,12 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
-/// Why a call wasn't sent.
+/// Why a call, or another line, wasn't sent.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum NotSent {
     #[error("the stream has closed")]
     Closed,
-    #[error("the call didn't encode")]
+    #[error("the line didn't encode")]
     Encoding(#[from] serde_json::Error),
 }
 
@@ -55,6 +56,13 @@ impl<O> Calls<O> {
             return Err(NotSent::Closed);
         }
         Ok(replied)
+    }
+
+    /// Queues a line that isn't a call, such as the answer to something the other end asked, after what's queued.
+    pub(crate) async fn write(&self, line: &impl Serialize) -> Result<(), NotSent> {
+        let line = frame::encode(line)?;
+        let lines = self.lines.lock().clone().ok_or(NotSent::Closed)?;
+        lines.send(line).await.map_err(|_| NotSent::Closed)
     }
 
     /// Gives the reply to the call it's for, if that's still waiting.
@@ -130,6 +138,23 @@ mod tests {
         assert!(waiting.await.is_err());
         assert!(matches!(calls.send(|id| json!({"id": id})).await, Err(NotSent::Closed)));
         assert!(!calls.is_open());
+    }
+
+    #[tokio::test]
+    async fn a_line_that_isnt_a_call_goes_after_whats_queued_and_none_goes_once_its_closed() {
+        let (ours, theirs) = tokio::io::duplex(1024);
+        let calls = Calls::<()>::new(Box::new(ours));
+        let _waiting = calls.send(|id| json!({"id": id})).await.unwrap();
+
+        calls.write(&json!({"answer": 9})).await.unwrap();
+        calls.close();
+
+        let mut sent = FrameReader::new(theirs);
+        let call: Value = frame::decode(sent.next().await.unwrap().unwrap()).unwrap();
+        let answer: Value = frame::decode(sent.next().await.unwrap().unwrap()).unwrap();
+        assert!(call["id"].is_u64(), "{call}");
+        assert_eq!(answer, json!({"answer": 9}));
+        assert!(matches!(calls.write(&json!({"answer": 10})).await, Err(NotSent::Closed)));
     }
 
     #[tokio::test]

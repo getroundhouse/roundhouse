@@ -62,6 +62,7 @@ fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
             effort: Effort::High,
         },
         env: vec![],
+        tools_token: None,
     }
 }
 

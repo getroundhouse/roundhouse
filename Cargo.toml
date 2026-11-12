@@ -66,6 +66,12 @@ gpui-kit = { version = "=0.9.0", features = ["syntect"] }
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25", default-features = false }
+# Already under GPUI. Reads a request's body for the worker's tools, up to a limit.
+http-body-util = "0.1"
+# Already under GPUI. Serves the worker's tools to its agents, over HTTP on 127.0.0.1.
+hyper = { version = "1", features = ["http1", "server"] }
+# Already under GPUI. Runs hyper's connections on tokio.
+hyper-util = { version = "0.1", features = ["tokio"] }
 libc = "0.2"
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does.

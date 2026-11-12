@@ -35,6 +35,7 @@ fn spec(dir: &Path) -> AgentSpec {
         resume: false,
         settings: SessionSettings::default(),
         env: vec![],
+        tools_token: None,
     }
 }
 

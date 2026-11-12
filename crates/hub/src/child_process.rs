@@ -108,6 +108,12 @@ impl ChildProcess {
         }
     }
 
+    /// One that has exited already, for a stream with no child behind it.
+    #[cfg(test)]
+    pub(crate) fn already_exited() -> Self {
+        Self { program: "nothing".to_string(), kill: Arc::new(Notify::new()), exited: watch::channel(true).1 }
+    }
+
     /// Resolves once it has exited, however that came about.
     pub(crate) fn exited(&self) -> impl Future<Output = ()> + Send + 'static {
         let mut exited = self.exited.clone();

@@ -90,6 +90,7 @@ impl LiveSession {
             (state.agent_opened, state.settings.clone())
         };
         let asked = hub.blocking(Store::next_run).await?;
+        let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
         let spec = AgentSpec {
             session_id: self.id.clone(),
             run: asked,
@@ -99,6 +100,7 @@ impl LiveSession {
             resume,
             settings,
             env,
+            tools_token,
         };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);

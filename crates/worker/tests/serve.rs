@@ -2,14 +2,21 @@
 
 #![cfg(test)]
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId, SessionSettings};
-use protocol::worker::WORKER_PROTOCOL_VERSION;
-use protocol::worker::{AgentSpec, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use protocol::worker::{
+    AgentSpec, AskAnswer, AskOutcome, AskReply, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall,
+    WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf,
+};
+use tokio::net::TcpStream;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use worker::{Config, Deleter, serve};
 
@@ -21,20 +28,16 @@ fn hello() -> WorkerRequest {
     }
 }
 
+/// Neither an agent's start nor serving its tools, under way as the hub goes, can leave anything behind that keeps the
+/// worker running.
 #[tokio::test]
 async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
-    use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
-    let cli = dir.path().join("fake-cli");
-    std::fs::write(&cli, "#!/bin/sh\nexec sleep 100\n").unwrap();
-    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let cli = waiting_cli(dir.path());
 
     for attempt in 0..8 {
-        let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
-        let (worker_read, worker_write) = tokio::io::split(worker_end);
-        let (mut hub_read, mut hub_write) = tokio::io::split(hub_end);
-        let config = Config { claude_bin: Some(cli.clone()), ..config(dir.path()) };
-        let running = tokio::spawn(serve(worker_read, worker_write, config));
+        let Worker { read: mut hub_read, write: mut hub_write, running } =
+            start_worker(config(dir.path(), Some(cli.clone())));
         tokio::spawn(async move {
             let mut sink = Vec::new();
             let _ = hub_read.read_to_end(&mut sink).await;
@@ -42,20 +45,10 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
 
         let calls = [
             hello(),
-            WorkerRequest::AgentStart(AgentSpec {
-                session_id: format!("s{attempt}").into(),
-                run: RunId::new(1),
-                agent: AgentKind::Claude,
-                cwd: dir.path().to_string_lossy().into_owned(),
-                agent_session_id: "a".into(),
-                resume: false,
-                settings: SessionSettings::default(),
-                env: vec![],
-            }),
+            WorkerRequest::ServeTools { port: None },
+            WorkerRequest::AgentStart(agent_start(&format!("s{attempt}"), dir.path(), None)),
         ];
-        for (id, request) in calls.into_iter().enumerate() {
-            hub_write.write_all(&frame::encode(&WorkerCall { id: id as u64, request }).unwrap()).await.unwrap();
-        }
+        send(&mut hub_write, calls).await;
         // Goes away with the start still in flight.
         hub_write.shutdown().await.unwrap();
         drop(hub_write);
@@ -74,11 +67,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join(".conductor")).unwrap();
     std::fs::write(dir.path().join(".conductor/settings.toml"), "[scripts]\nsetup = \"sleep 60\"\n").unwrap();
-    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
-    let (worker_read, worker_write) = tokio::io::split(worker_end);
-    let (hub_read, mut hub_write) = tokio::io::split(hub_end);
-    let config = config(dir.path());
-    tokio::spawn(serve(worker_read, worker_write, config));
+    let Worker { read: hub_read, write: mut hub_write, .. } = start_worker(config(dir.path(), None));
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
         hello(),
@@ -119,7 +108,7 @@ async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
         frame::encode(&WorkerCall { id: 3, request: hello() }).unwrap(),
     ];
 
-    let answered = replies_to(config(dir.path()), &calls).await;
+    let answered = replies_to(config(dir.path(), None), &calls).await;
 
     for id in [1, 2] {
         assert!(matches!(&answered[&id], WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{answered:?}");
@@ -132,7 +121,7 @@ async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
 #[tokio::test]
 async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
     let dir = tempfile::tempdir().unwrap();
-    let config = Config { refused: Some("another worker is serving it".into()), ..config(dir.path()) };
+    let config = Config { refused: Some("another worker is serving it".into()), ..config(dir.path(), None) };
     let calls = [b"{\"id\":1,\"request\":{\"method\":\"account_for\",\"agent\":{\"newer\":true}}}\n".to_vec()];
 
     let answered = replies_to(config, &calls).await;
@@ -140,14 +129,68 @@ async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{answered:?}");
 }
 
-/// A worker that runs no agent.
-fn config(dir: &std::path::Path) -> Config {
+/// A call to the worker's tools from an agent it started is asked of the hub, for that agent's chat, and answered with
+/// what the hub says.
+#[tokio::test]
+async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    let Worker { read: hub_read, write: mut hub_write, running } =
+        start_worker(config(dir.path(), Some(waiting_cli(dir.path()))));
+    let mut frames = BufReader::new(hub_read).lines();
+    let calls = [
+        hello(),
+        WorkerRequest::ServeTools { port: None },
+        WorkerRequest::AgentStart(agent_start("s", dir.path(), Some(ToolsToken::new("token-s")))),
+    ];
+    send(&mut hub_write, calls).await;
+    let WorkerOutcome::Response(WorkerResponse::ToolsServing { port }) = reply(&mut frames, 1).await else {
+        panic!("the tools aren't served");
+    };
+    reply(&mut frames, 2).await;
+
+    let calling = tokio::spawn(call_tool(port, "token-s"));
+    let (id, session_id, ask) = timeout(Duration::from_secs(10), async {
+        loop {
+            if let WorkerFrame::Ask { id, session_id, ask } = next_frame(&mut frames).await {
+                return (id, session_id, ask);
+            }
+        }
+    })
+    .await
+    .expect("the hub was never asked");
+    let answer = AskAnswer { answer: id, outcome: AskOutcome::Response(AskReply::PullRequest { pull_request: None }) };
+    hub_write.write_all(&frame::encode(&answer).unwrap()).await.unwrap();
+    let response = timeout(Duration::from_secs(10), calling).await.expect("the call was never answered").unwrap();
+
+    assert_eq!((session_id.as_str(), ask), ("s", WorkerAsk::PullRequest));
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.contains("no pull request on GitHub"), "{response}");
+    hub_write.shutdown().await.unwrap();
+    timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
+}
+
+/// A worker serving over an in-memory stream, and the hub's ends of it.
+struct Worker {
+    read: ReadHalf<DuplexStream>,
+    write: WriteHalf<DuplexStream>,
+    running: JoinHandle<()>,
+}
+
+fn start_worker(config: Config) -> Worker {
+    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
+    let (worker_read, worker_write) = tokio::io::split(worker_end);
+    let (read, write) = tokio::io::split(hub_end);
+    Worker { read, write, running: tokio::spawn(serve(worker_read, worker_write, config)) }
+}
+
+/// A worker's config for workspaces in `dir`, whose Claude CLI is `claude_bin`.
+fn config(dir: &Path, claude_bin: Option<PathBuf>) -> Config {
     Config {
         workspaces_root: dir.to_path_buf(),
         state_dir: None,
         home: None,
         path: None,
-        claude_bin: None,
+        claude_bin,
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,
@@ -156,10 +199,7 @@ fn config(dir: &std::path::Path) -> Config {
 
 /// Serves a worker running with `config`, sends it `calls` in one go, and collects its reply to each, by ID.
 async fn replies_to(config: Config, calls: &[Vec<u8>]) -> std::collections::BTreeMap<u64, WorkerOutcome> {
-    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
-    let (worker_read, worker_write) = tokio::io::split(worker_end);
-    let (hub_read, mut hub_write) = tokio::io::split(hub_end);
-    tokio::spawn(serve(worker_read, worker_write, config));
+    let Worker { read: hub_read, write: mut hub_write, .. } = start_worker(config);
     for call in calls {
         hub_write.write_all(call).await.unwrap();
     }
@@ -191,10 +231,78 @@ async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
         .map(|(id, request)| frame::encode(&WorkerCall { id: id as u64, request }).unwrap())
         .collect();
 
-    let answered = replies_to(config(dir.path()), &calls).await;
+    let answered = replies_to(config(dir.path(), None), &calls).await;
 
     let chosen = WorkerOutcome::Response(WorkerResponse::Hello { protocol_version: ours });
     assert_eq!(answered[&0], chosen, "a newer hub that still speaks this worker's version");
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{answered:?}");
     assert_eq!(answered[&2], chosen, "a hub from before ranges");
+}
+
+/// A stand-in for the Claude CLI, in `dir`, that only waits.
+fn waiting_cli(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let cli = dir.join("fake-cli");
+    std::fs::write(&cli, "#!/bin/sh\nexec sleep 100\n").unwrap();
+    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    cli
+}
+
+fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) -> AgentSpec {
+    AgentSpec {
+        session_id: session_id.into(),
+        run: RunId::new(1),
+        agent: AgentKind::Claude,
+        cwd: cwd.to_string_lossy().into_owned(),
+        agent_session_id: "a".into(),
+        resume: false,
+        settings: SessionSettings::default(),
+        env: vec![],
+        tools_token,
+    }
+}
+
+/// Sends each request as a call, numbered from 0.
+async fn send(hub_write: &mut WriteHalf<DuplexStream>, calls: impl IntoIterator<Item = WorkerRequest>) {
+    for (id, request) in calls.into_iter().enumerate() {
+        hub_write.write_all(&frame::encode(&WorkerCall { id: id as u64, request }).unwrap()).await.unwrap();
+    }
+}
+
+async fn next_frame<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>) -> WorkerFrame {
+    let line = frames.next_line().await.unwrap().expect("the worker went on");
+    frame::decode(line.as_bytes()).unwrap()
+}
+
+async fn reply<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>, to: u64) -> WorkerOutcome {
+    timeout(Duration::from_secs(10), async {
+        loop {
+            if let WorkerFrame::Reply { id, outcome } = next_frame(frames).await
+                && id == to
+            {
+                return outcome;
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("call {to} was never answered"))
+}
+
+/// Calls `get_pull_request` as the Claude CLI does, over one connection, and returns the whole response.
+async fn call_tool(port: u16, token: &str) -> String {
+    let meta = r#"{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}"#;
+    let body = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"get_pull_request","arguments":{{}},"_meta":{meta}}}}}"#
+    );
+    let request = format!(
+        "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n\
+         Content-Type: application/json\r\nMCP-Protocol-Version: 2026-07-28\r\nMcp-Method: tools/call\r\n\
+         Mcp-Name: get_pull_request\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).await.unwrap();
+    response
 }

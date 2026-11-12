@@ -23,6 +23,8 @@ const LATEST: Duration = Duration::from_mins(30);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Schedule {
     pub(super) read_at: Instant,
+    /// Whether the read then found it.
+    pub(super) found: bool,
     every: Duration,
 }
 
@@ -30,7 +32,7 @@ impl Schedule {
     /// Read just now, or found nothing to read, as when a workspace is made from its base, so there's no pull request
     /// yet.
     pub(super) fn starting(now: Instant) -> Self {
-        Self { read_at: now, every: SOONEST }
+        Self { read_at: now, found: false, every: SOONEST }
     }
 
     /// After a read: back to the soonest when it changed, someone was waiting on it, or it's still moving on GitHub,
@@ -39,10 +41,10 @@ impl Schedule {
     pub(super) fn after(last: Option<Self>, read_at: Instant, asked: Asked, went: Went) -> Self {
         let every = match went {
             Went::Changed => SOONEST,
-            Went::Same(found) if asked == Asked::Waiting || found.is_some_and(moving) => SOONEST,
+            Went::Same(found) if asked != Asked::InTurn || found.is_some_and(moving) => SOONEST,
             Went::Same(_) | Went::Failed => last.map_or(SOONEST * 2, |last| (last.every * 2).min(LATEST)),
         };
-        Self { read_at, every }
+        Self { read_at, found: !matches!(went, Went::Failed), every }
     }
 
     fn due_at(self) -> Instant {

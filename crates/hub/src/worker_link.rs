@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
-use protocol::model::{InstanceId, WorkspaceId};
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::model::{InstanceId, SessionId, WorkspaceId};
+use protocol::worker::{AskAnswer, AskId, WorkerAsk, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse};
 use providers::Provider;
 use tokio::sync::watch;
 use tracing::{debug, warn};
@@ -38,6 +38,9 @@ pub(crate) struct WorkerLink {
     kept: AtomicBool,
     /// The command the hub runs to reach the worker.
     process: ChildProcess,
+    /// It didn't serve its tools when asked, as a worker that doesn't know how never answers, so its agents go without
+    /// them from then on rather than each waiting for it.
+    tools_unserved: AtomicBool,
 }
 
 fn lost() -> ApiError {
@@ -78,6 +81,7 @@ impl WorkerLink {
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
             process,
+            tools_unserved: AtomicBool::new(false),
         });
         tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
 
@@ -125,6 +129,30 @@ impl WorkerLink {
         Ok(async move { replied.await.map_err(|_| lost())? })
     }
 
+    /// Answers what the worker asked. Like a call, it's dropped if the connection has ended, since nobody is left to
+    /// wait for it.
+    async fn answer(&self, answer: AskAnswer) {
+        match self.calls.write(&answer).await {
+            Ok(()) | Err(NotSent::Closed) => {}
+            Err(NotSent::Encoding(e)) => warn!("could not encode an answer for a worker: {e}"),
+        }
+    }
+
+    /// A link to no worker, on which every call fails as if the worker had gone.
+    #[cfg(test)]
+    pub(crate) fn unconnected() -> Arc<WorkerLink> {
+        let calls = Calls::new(Box::new(tokio::io::sink()));
+        calls.end();
+        Arc::new(WorkerLink {
+            id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
+            calls,
+            closed: watch::channel(true).0,
+            kept: AtomicBool::new(false),
+            process: ChildProcess::already_exited(),
+            tools_unserved: AtomicBool::new(false),
+        })
+    }
+
     /// Marks it wanted by something other than a read nobody asked for, so it isn't stopped after that read. Only
     /// where no such read can be deciding to stop it: before it's in the hub's map of workers, or while that's locked,
     /// which is where it's checked before one is stopped.
@@ -135,6 +163,16 @@ impl WorkerLink {
     /// Whether anything but a read nobody asked for has wanted it.
     pub(crate) fn kept(&self) -> bool {
         self.kept.load(Ordering::Relaxed)
+    }
+
+    /// For a worker that didn't serve its tools when asked.
+    pub(crate) fn tools_unserved(&self) {
+        self.tools_unserved.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether it didn't serve its tools when asked.
+    pub(crate) fn serves_no_tools(&self) -> bool {
+        self.tools_unserved.load(Ordering::Relaxed)
     }
 
     pub(crate) fn is_open(&self) -> bool {
@@ -166,6 +204,30 @@ impl WorkerLink {
     }
 }
 
+/// Answers what the worker asked on a task of its own, since answering can take a call to the worker, whose reply
+/// comes the way the ask did.
+fn start_answering(
+    hub: &Arc<Hub>,
+    link: &Arc<WorkerLink>,
+    workspace_id: &WorkspaceId,
+    id: AskId,
+    session_id: SessionId,
+    ask: WorkerAsk,
+) {
+    let (hub, link, workspace_id) = (hub.clone(), link.clone(), workspace_id.clone());
+    tokio::spawn(async move {
+        let outcome = hub.answer_ask(&workspace_id, &link, session_id, ask).await.into();
+        link.answer(AskAnswer { answer: id, outcome }).await;
+    });
+}
+
+/// Refuses an ask, as a call this hub can't read is refused, so the agent that called the tool hears why at once.
+fn refuse_unreadable(link: &Arc<WorkerLink>, id: AskId, error: &serde_json::Error) {
+    let outcome = Outcome::Error(ApiError::unsupported_request("this hub", Some(error)));
+    let link = link.clone();
+    tokio::spawn(async move { link.answer(AskAnswer { answer: id, outcome }).await });
+}
+
 async fn read_frames(
     hub: Arc<Hub>,
     provider: Arc<dyn Provider>,
@@ -191,6 +253,8 @@ async fn read_frames(
                 // the connection closes.
                 if let Some(id) = frame::reply_id(bytes) {
                     link.calls.reply(id, Err(unreadable_reply(&e)));
+                } else if let Some(id) = AskId::of_unreadable(bytes) {
+                    refuse_unreadable(&link, id, &e);
                 } else {
                     warn!("ignoring a worker frame that didn't parse: {e}");
                 }
@@ -198,13 +262,7 @@ async fn read_frames(
             }
         };
         match parsed {
-            WorkerFrame::Reply { id, outcome } => link.calls.reply(
-                id,
-                match outcome {
-                    WorkerOutcome::Response(response) => Ok(response),
-                    WorkerOutcome::Error(error) => Err(error),
-                },
-            ),
+            WorkerFrame::Reply { id, outcome } => link.calls.reply(id, outcome.into_result()),
             WorkerFrame::AgentEvent { session_id, run, body, raw, attachments } => {
                 hub.route(&session_id, Item::Event { run, body, raw, attachments }).await;
             }
@@ -220,6 +278,9 @@ async fn read_frames(
             WorkerFrame::AgentLimits { session_id, run, limits } => {
                 hub.route(&session_id, Item::Limits { run, limits }).await;
             }
+            WorkerFrame::Ask { id, session_id, ask } => {
+                start_answering(&hub, &link, &workspace_id, id, session_id, ask);
+            }
         }
     }
     debug!(%instance_id, "worker connection ended");
@@ -231,6 +292,8 @@ async fn read_frames(
     link.closed.send_replace(true);
 }
 
+#[cfg(test)]
+mod stand_in;
 #[cfg(test)]
 #[cfg(unix)]
 mod tests;

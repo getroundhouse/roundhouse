@@ -16,7 +16,10 @@ mod queues;
 mod repos;
 mod sessions;
 mod setup;
+#[cfg(test)]
+mod tests;
 mod titles;
+mod tools;
 mod workers;
 mod workspaces;
 mod worktree;
