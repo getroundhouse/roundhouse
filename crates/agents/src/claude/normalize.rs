@@ -333,11 +333,14 @@ fn control_request(value: &Value) -> Parsed {
     if subtype != "can_use_tool" {
         return Parsed::UnsupportedControl { request_id, subtype: subtype.to_string() };
     }
+    let tool_name = string_of(request, "tool_name").unwrap_or_default();
+    let input = request.get("input").cloned().unwrap_or(Value::Null);
     Parsed::Event(EventBody::ApprovalRequested {
         approval_id: request_id.into(),
-        tool_name: string_of(request, "tool_name").unwrap_or_default(),
+        asking: Some(Box::new(super::approvals::asking(&tool_name, &input))),
+        tool_name,
         tool_use_id: id_of(request, "tool_use_id"),
-        input: request.get("input").cloned().unwrap_or(Value::Null),
+        input,
         description: string_of(request, "description"),
         suggestions: request.get("permission_suggestions").cloned().unwrap_or(Value::Null),
     })

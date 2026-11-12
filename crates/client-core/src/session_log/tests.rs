@@ -160,6 +160,7 @@ fn open_approvals_are_those_not_yet_answered() {
         input: Value::Null,
         description: None,
         suggestions: Value::Null,
+        asking: None,
     };
     let mut log = SessionLog::new(0);
     log.apply_event(event(1, requested("a")));
@@ -182,6 +183,7 @@ fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
         input: Value::Null,
         description: None,
         suggestions: Value::Null,
+        asking: None,
     };
     let mut log = SessionLog::new(0);
     log.apply_event(event(1, requested));

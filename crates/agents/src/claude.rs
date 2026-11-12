@@ -2,6 +2,7 @@
 //! protocol the Agent SDK uses, so there is no sidecar. See `docs/claude-cli.md`.
 
 mod account;
+mod approvals;
 mod context;
 mod effort;
 mod mode;

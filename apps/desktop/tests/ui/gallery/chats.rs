@@ -156,6 +156,7 @@ pub(crate) fn approval() -> Vec<EventBody> {
         input: json!({ "command": "cargo test -p desktop --test ui", "description": "Run the desktop UI tests" }),
         description: None,
         suggestions: serde_json::Value::Null,
+        asking: None,
     });
     events
 }
