@@ -9,6 +9,7 @@ use super::heights::Heights;
 use super::layout::{Anchor, Start};
 
 mod heading;
+mod scrollbar;
 
 /// A place in a transcript: a row, and how far into it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -36,6 +37,8 @@ pub(super) struct State {
     pub(super) viewport: Bounds<Pixels>,
     /// The rows any of which showed in the last frame.
     pub(super) shown: Range<usize>,
+    /// The last row in the window in the last frame, as [`Layout`](super::layout::Layout) says.
+    pub(super) last_in_sight: usize,
     /// The runs of rows that are loaded, in order, which are the ones there's anything to measure of.
     loaded: Vec<Range<usize>>,
     /// Which measuring each row's height is from, by [`State::measuring`], or 0 for one whose height has gone out of
@@ -132,7 +135,7 @@ impl State {
             Keeping::Latest if turned <= px(0.) => return,
             // From where keeping to the latest row had it.
             Keeping::Latest => self.go_to(self.furthest()),
-            Keeping::Place | Keeping::ToLatest(_) => {}
+            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) => {}
         }
         self.keeping = Keeping::Place;
         self.moved -= turned;
@@ -151,6 +154,32 @@ impl State {
         }
     }
 
+    /// Puts the end of `row` at the window's bottom, as [`Start::AtBottom`] says, and keeps it there until something
+    /// else moves the list. The rows above it that load or are measured meanwhile grow up, and leave it where it is.
+    pub(super) fn go_to_row_at_bottom(&mut self, row: usize) {
+        if row < self.heights.rows() {
+            // The top where the heights known and guessed put it, until a frame lays the rows out, for whatever
+            // reads it or moves the list from it before then. A row taller than the window is at its top.
+            let (start, end) = (self.heights.above(row), self.heights.above(row + 1));
+            self.go_to((end - self.tall()).min(start));
+            self.keeping = Keeping::AtBottom(row);
+        }
+    }
+
+    /// The row at the window's bottom: the one it's keeping there, from as soon as something sends it there, even near
+    /// the start of the session, where it shows higher up, and otherwise the last row in the window in the last frame.
+    pub(super) fn bottom_row(&self) -> usize {
+        self.kept_at_bottom().unwrap_or(self.last_in_sight)
+    }
+
+    /// The row it's keeping at the window's bottom, from as soon as something sends it there.
+    pub(super) fn kept_at_bottom(&self) -> Option<usize> {
+        match self.keeping {
+            Keeping::AtBottom(row) => Some(row),
+            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => None,
+        }
+    }
+
     /// Puts `top` at the window's top, from which the next frame lays the rows out and chooses which to keep where
     /// it is.
     fn send_to(&mut self, top: Place) {
@@ -163,14 +192,21 @@ impl State {
         let top = self.heights.above(row) - self.heights.above(self.top.row) - self.top.offset;
         if row >= self.top.row && top < self.tall() {
             self.anchor = Some(Anchor { row, top });
+            match self.keeping {
+                // Kept still rather than with a row's end at the bottom, so what was clicked stays under the pointer.
+                Keeping::AtBottom(_) => self.keeping = Keeping::Place,
+                Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => {}
+            }
         }
     }
 
     /// Where to lay the rows out from. A top that's moved more than `walked` is found from what the rows are guessed
     /// to come to instead, since finding it row by row would measure every row between.
     pub(super) fn lay_from(&self, walked: Pixels) -> Start {
-        if self.is_following() {
-            return Start::Latest;
+        match self.keeping {
+            Keeping::Latest => return Start::Latest,
+            Keeping::AtBottom(row) => return Start::AtBottom { row },
+            Keeping::Place | Keeping::ToLatest(_) => {}
         }
         if self.moved.abs() <= walked {
             return match self.anchor {
@@ -288,63 +324,6 @@ impl State {
         rows.truncate(most);
         (rows, more)
     }
-
-    /// A drag of the scrollbar's thumb begins, which stops the list on its way down to the latest row.
-    pub(super) fn start_drag(&mut self) {
-        self.dragging = Some(self.heights.clone());
-        if let Keeping::ToLatest(_) = self.keeping {
-            self.keeping = Keeping::Place;
-        }
-    }
-
-    pub(super) fn end_drag(&mut self) {
-        self.dragging = None;
-    }
-
-    /// The heights the scrollbar goes by.
-    fn for_the_bar(&self) -> &Heights {
-        self.dragging.as_ref().unwrap_or(&self.heights)
-    }
-
-    /// How tall the scrollbar takes the session to be.
-    pub(super) fn bar_tall(&self) -> Pixels {
-        self.for_the_bar().total().max(self.tall())
-    }
-
-    /// How far down the scrollbar takes the session to be scrolled.
-    pub(super) fn bar_scrolled(&self) -> Pixels {
-        match &self.dragging {
-            // Where the row at the top was when the drag began, so the thumb stays under the pointer.
-            Some(heights) => {
-                let furthest = (heights.total() - self.tall()).max(px(0.));
-                self.down(heights).clamp(px(0.), furthest)
-            }
-            None => self.scrolled(),
-        }
-    }
-
-    /// The scrollbar scrolls to `down`. A drag of the thumb goes to the row that was that far down when the drag
-    /// began. Anything else moves by the difference from where it is, as the wheel does, so it passes the rows
-    /// between at the heights they turn out to have. Either way, as far down as the scrollbar goes is the latest
-    /// row, which is kept to again.
-    pub(super) fn bar_scroll_to(&mut self, down: Pixels) {
-        let furthest = if let Some(heights) = &self.dragging {
-            let furthest = (heights.total() - self.tall()).max(px(0.));
-            let (row, offset) = heights.row_at(down.clamp(px(0.), furthest));
-            self.send_to(Place { row, offset });
-            self.keeping = Keeping::Place;
-            furthest
-        } else {
-            let turned = self.scrolled() - down;
-            if turned.abs() > NO_MOVE {
-                self.scroll_by(turned);
-            }
-            self.furthest()
-        };
-        if furthest > px(0.) && down >= furthest {
-            self.go_to_latest();
-        }
-    }
 }
 
 /// What the list keeps to between frames.
@@ -357,6 +336,8 @@ enum Keeping {
     Place,
     /// The latest row, which it's on its way down to by itself, as the button back to it sends it.
     ToLatest(Scrolling),
+    /// The end of a row at the window's bottom, as the outline sends it to a prompt, until something else moves it.
+    AtBottom(usize),
 }
 
 /// The runs in order with each that starts where the one before it ends made one with it, such as the streaming
@@ -379,9 +360,6 @@ fn same_pages(was: &[Range<usize>], now: &[Range<usize>]) -> bool {
     let ends_before_the_last = |runs: &[Range<usize>]| runs.iter().rev().skip(1).map(|run| run.end).collect::<Vec<_>>();
     starts(was) == starts(now) && ends_before_the_last(was) == ends_before_the_last(now)
 }
-
-/// Less than this isn't the scrollbar moving the list, only the same place read back and rounded.
-const NO_MOVE: Pixels = px(0.01);
 
 #[cfg(test)]
 mod tests;

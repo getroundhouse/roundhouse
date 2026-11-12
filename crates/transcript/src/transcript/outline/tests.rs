@@ -6,12 +6,12 @@ fn at_rows(rows: &[usize]) -> Vec<Prompt> {
 }
 
 #[test]
-fn the_prompt_being_read_is_the_last_at_or_above_the_top() {
+fn the_prompt_being_read_is_the_last_at_or_above_the_bottom() {
     let lines = at_rows(&[0, 10, 20]);
 
     assert_eq!(being_read(&lines, 0, false), 0);
     assert_eq!(being_read(&lines, 9, false), 0);
-    assert_eq!(being_read(&lines, 10, false), 1, "a prompt at the top is the one being read");
+    assert_eq!(being_read(&lines, 10, false), 1, "a prompt at the bottom is the one being read");
     assert_eq!(being_read(&lines, 25, false), 2);
 }
 
@@ -21,7 +21,7 @@ fn above_the_first_prompt_the_first_is_being_read() {
 }
 
 #[test]
-fn at_the_end_the_last_prompt_is_being_read_even_below_the_top() {
+fn at_the_end_the_last_prompt_is_being_read_whatever_the_bottom_row() {
     assert_eq!(being_read(&at_rows(&[0, 10, 20]), 12, true), 2);
 }
 

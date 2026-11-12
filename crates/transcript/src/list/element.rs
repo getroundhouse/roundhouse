@@ -85,7 +85,7 @@ impl ListElement {
         let shown = first.map_or(0..0, |first| first..shown.next_back().unwrap_or(first) + 1);
         let mut state = self.state.borrow_mut();
         state.laid_out(layout.top, layout.anchor, layout.end_in_sight);
-        state.shown = shown;
+        (state.shown, state.last_in_sight) = (shown, layout.last_in_sight);
         drop(state);
         // The lowest of them, which is the one nearest what's already loaded when scrolling back through a session,
         // and the last a list that asked for each row as it drew it would have asked for.
@@ -162,14 +162,14 @@ impl Element for ListElement {
         if !drawn_last_frame {
             self.state.borrow_mut().end_drag();
         }
-        // What the rest of the transcript was drawn from in this frame: its button back to the latest row, and
-        // which prompt its outline marks.
-        let read = |state: &State| (state.top().row, state.is_scrolled_up());
+        // What the rest of the transcript was drawn from in this frame: its button back to the latest row, which
+        // shows while the list is scrolled up, and the row its outline marks a prompt by, which it goes by only then.
+        let read = |state: &State| state.is_scrolled_up().then(|| state.bottom_row());
         let before = read(&self.state.borrow());
         let layout = self.lay_out(bounds, window, cx);
         self.measure_out_of_sight(bounds.size.width, window, cx);
         if read(&self.state.borrow()) != before {
-            // Laying the rows out found the top in another row, or the end in sight, so those are drawn again.
+            // Laying the rows out found another row at the bottom, or the end in sight, so those are drawn again.
             window.request_animation_frame();
         }
         let mut rows = Vec::new();
