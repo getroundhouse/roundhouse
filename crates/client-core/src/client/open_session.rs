@@ -212,7 +212,7 @@ impl Source for SessionSource {
         let mut log = held.lock();
         Ok(match item {
             SubscriptionItem::Event(event) => {
-                log.apply_event(event);
+                log.apply_event(*event);
                 true
             }
             SubscriptionItem::Tail(tail) => {

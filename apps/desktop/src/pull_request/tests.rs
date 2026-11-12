@@ -63,6 +63,8 @@ fn only_the_newest_answer_is_taken_and_a_failure_keeps_what_was_known() {
         review: Review::NotRequired,
         checks: Checks::default(),
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     };
     let mut lookup = Lookup::Looking;

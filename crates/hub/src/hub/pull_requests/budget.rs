@@ -28,13 +28,13 @@ const GITHUB_SAID_FOR: Duration = Duration::from_mins(1);
 /// The part of GitHub's limit that reads nobody is waiting on leave alone, for agents and the user.
 const KEPT_FOR_OTHERS_PERCENT: u32 = 20;
 
-/// The calls reading a pull request takes: one to view it, and one more for its place in the merge queue while it's
-/// open and not a draft. Going by what was found last time, since what it is now is what's being read, and taking one
-/// never read to need both.
+/// The calls reading a pull request takes: one to view it, and one more while it's open, for its place in the merge
+/// queue and what it has recorded of the queue and of reviews. Going by what was found last time, since what it is now
+/// is what's being read, and taking one never read to need both.
 pub(super) fn calls_to_read(found: Option<&PullRequestFound>) -> u32 {
     match found.map(|found| found.pull_request.as_ref()) {
         None => 2,
-        Some(Some(pr)) if pr.state == PrState::Open && !pr.is_draft => 2,
+        Some(Some(pr)) if pr.state == PrState::Open => 2,
         Some(_) => 1,
     }
 }

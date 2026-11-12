@@ -34,6 +34,7 @@ pub(super) fn definition() -> Value {
 pub(super) async fn call(asks: &Asks, session_id: &SessionId) -> Called {
     match asks.ask(session_id.clone(), WorkerAsk::PullRequest).await {
         Ok(AskReply::PullRequest { pull_request }) => Called::text(describe(pull_request.as_ref())),
+        Ok(AskReply::Wait { .. }) => Called::failed("Roundhouse answered with a wait, not the pull request.".into()),
         Err(e) => Called::failed(format!("Roundhouse couldn't say where the pull request stands: {}", e.message)),
     }
 }

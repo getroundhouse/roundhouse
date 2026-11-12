@@ -75,13 +75,19 @@ impl Hub {
         session_id: SessionId,
         ask: WorkerAsk,
     ) -> Result<AskReply, ApiError> {
-        if self.session_get(session_id).await?.workspace_id != *workspace_id {
+        if self.session_get(session_id.clone()).await?.workspace_id != *workspace_id {
             return Err(ApiError::new(ErrorCode::NotFound, "that chat isn't in this workspace"));
         }
+        let waited = |(wait, pull_request)| AskReply::Wait { wait, pull_request };
         match ask {
             WorkerAsk::PullRequest => {
                 Ok(AskReply::PullRequest { pull_request: self.pull_request_for_agent(workspace_id, link).await? })
             }
+            WorkerAsk::StartWait { until, call } => {
+                self.start_wait(workspace_id, link, session_id, until, call).await.map(waited)
+            }
+            WorkerAsk::Wait { wait } => self.wait_of(&session_id, wait).await.map(waited),
+            WorkerAsk::CancelWait { wait } => self.cancel_wait(&session_id, wait).await.map(waited),
             WorkerAsk::Unknown => Err(ApiError::unsupported_request("this hub", None)),
         }
     }

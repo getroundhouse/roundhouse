@@ -11,6 +11,7 @@ parking_lot.workspace = true
 protocol.workspace = true
 agents.workspace = true
 base64.workspace = true
+chrono.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true

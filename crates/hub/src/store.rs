@@ -40,6 +40,7 @@ mod subagents;
 pub(crate) mod tests;
 mod titles;
 mod tools;
+mod waits;
 mod workspace_draft;
 mod workspaces;
 
@@ -54,6 +55,7 @@ pub use made::{Made, MadeByRequest};
 pub use queue::{Changed, Queued};
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
+pub use waits::Seen;
 pub use workspaces::BranchesSet;
 
 pub struct Store {

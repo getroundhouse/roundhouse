@@ -86,13 +86,13 @@ impl Source for RecordsSource {
     fn apply(&mut self, client: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
         Ok(match item {
             // The hub found that some notices went missing. A new list makes up for them.
-            SubscriptionItem::Notice(HubNotice::Resync) => {
+            SubscriptionItem::Notice(notice) if matches!(*notice, HubNotice::Resync) => {
                 let list = list_records(client)?;
                 let changed = held.lock().apply_list(list);
                 held.lock().subagents_mut().relist();
                 list_subagents(client, held)? || changed
             }
-            SubscriptionItem::Notice(notice) => held.lock().apply_notice(notice),
+            SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
             SubscriptionItem::Event(_) | SubscriptionItem::Tail(_) | SubscriptionItem::Delta(_) => false,
         })
     }

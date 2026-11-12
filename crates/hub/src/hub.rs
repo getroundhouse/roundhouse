@@ -23,6 +23,7 @@ mod setup;
 mod tests;
 mod titles;
 mod tools;
+mod waits;
 mod workers;
 mod workspace_draft;
 mod workspaces;

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use protocol::model::{
@@ -20,6 +20,8 @@ fn pull_request(state: PrState) -> PullRequest {
         review: Review::default(),
         checks: Checks::default(),
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     }
 }
@@ -56,7 +58,38 @@ fn read(ago: &[(&str, Duration)], now: Instant) -> HashMap<WorkspaceId, Schedule
 }
 
 fn next(workspaces: &[Workspace], schedules: &HashMap<WorkspaceId, Schedule>, now: Instant) -> Option<String> {
-    due(workspaces, schedules, now).map(|w| w.id.to_string())
+    due(workspaces, schedules, &HashSet::new(), now).map(|w| w.id.to_string())
+}
+
+/// One an agent waits on is read at the soonest, however long it has come back the same, when others are due later.
+#[test]
+fn one_an_agent_waits_on_is_due_at_the_soonest_however_long_it_has_come_back_the_same() {
+    let now = Instant::now();
+    let workspaces = [workspace("waited", WorkspaceStatus::Ready, Some(PrState::Open))];
+    let read_at = now.checked_sub(SOONEST).unwrap();
+    let mut schedule = Schedule::starting(read_at);
+    for _ in 0..4 {
+        schedule = Schedule::after(Some(schedule), read_at, Asked::InTurn, Went::Same(None));
+    }
+    let schedules = HashMap::from([(WorkspaceId::from("waited"), schedule)]);
+
+    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).map(|w| w.id.as_str()), None, "not waited on");
+    let waited = HashSet::from([WorkspaceId::from("waited")]);
+    assert_eq!(due(&workspaces, &schedules, &waited, now).map(|w| w.id.as_str()), Some("waited"));
+}
+
+/// As when a read records it merged between a wait's start reading it and the wait being kept, so the read didn't end
+/// it.
+#[test]
+fn one_an_agent_waits_on_is_read_even_when_it_was_last_read_as_done() {
+    let now = Instant::now();
+    let workspaces = [workspace("merged", WorkspaceStatus::Ready, Some(PrState::Merged))];
+    let schedules =
+        HashMap::from([(WorkspaceId::from("merged"), Schedule::starting(now.checked_sub(SOONEST).unwrap()))]);
+    let waited = HashSet::from([WorkspaceId::from("merged")]);
+
+    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).map(|w| w.id.as_str()), None, "done");
+    assert_eq!(due(&workspaces, &schedules, &waited, now).map(|w| w.id.as_str()), Some("merged"));
 }
 
 /// After a restart, what's open on GitHub is the likeliest to have moved, then whatever has waited longest.

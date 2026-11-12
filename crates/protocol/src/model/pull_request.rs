@@ -39,6 +39,15 @@ pub struct PullRequest {
     /// Where it is in the merge queue, or `None` when it isn't in one.
     #[serde(default)]
     pub queue: Option<QueueState>,
+    /// The last time it left the merge queue without merging, as GitHub records it. `None` when it never has, or from
+    /// a hub that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_queue: Option<LeftQueue>,
+    /// When a review last asked for changes, as GitHub records it, unless it's been dismissed. Apart from `review`,
+    /// which GitHub keeps at `ChangesRequested` through every later review that asks again. `None` when none has, or
+    /// from a hub that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes_requested_at_ms: Option<i64>,
     #[serde(default)]
     pub local: Local,
 }
@@ -112,6 +121,14 @@ pub enum QueueState {
     Unmergeable,
     #[serde(other)]
     Unknown,
+}
+
+/// GitHub's record of a pull request leaving the merge queue without merging.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct LeftQueue {
+    pub at_ms: i64,
+    /// GitHub's word for why, such as `failed_checks`, `merge_conflict` or `manual`, which it doesn't keep to a list.
+    pub reason: String,
 }
 
 /// How the pull request's checks stand on its newest commit.

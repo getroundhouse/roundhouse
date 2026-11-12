@@ -1,7 +1,7 @@
-use protocol::model::{Checks, Local, MergeState, PrState, QueueState, Review};
+use protocol::model::{Checks, LeftQueue, Local, MergeState, PrState, PullRequest, QueueState, Review};
 
 use super::super::tests::{new_repo, run};
-use super::{Failing, failing, local, parse_pull_request, parse_queue, parse_rate_limit};
+use super::{ByUrl, Failing, failing, local, parse_by_url, parse_pull_request, parse_rate_limit};
 
 #[test]
 fn a_pull_request_parses_from_what_gh_prints() {
@@ -89,12 +89,66 @@ fn what_a_failing_gh_means() {
 
 #[test]
 fn the_queue_is_read_from_githubs_answer_and_none_without_an_entry() {
-    let queued = br#"{"data":{"resource":{"mergeQueueEntry":{"state":"AWAITING_CHECKS"}}}}"#;
+    let queued = br#"{"data":{"resource":{"state":"OPEN","mergeQueueEntry":{"state":"AWAITING_CHECKS"}}}}"#;
     let not_queued = br#"{"data":{"resource":{"mergeQueueEntry":null}}}"#;
+    let newer = br#"{"data":{"resource":{"mergeQueueEntry":{"state":"SIDEWAYS"}}}}"#;
 
-    assert_eq!(parse_queue(queued), Some(QueueState::AwaitingChecks));
-    assert_eq!(parse_queue(not_queued), None);
-    assert_eq!(parse_queue(b"not json"), None);
+    let queue = |json: &[u8]| parse_by_url(json).map(|said| said.queue);
+    assert_eq!(queue(queued), Some(Some(QueueState::AwaitingChecks)));
+    assert_eq!(queue(not_queued), Some(None));
+    assert_eq!(queue(newer), Some(Some(QueueState::Unknown)), "in the queue, somewhere this version doesn't know");
+}
+
+#[test]
+fn an_answer_that_isnt_the_pull_request_isnt_taken_as_being_in_no_queue() {
+    assert_eq!(parse_by_url(b"not json"), None);
+    assert_eq!(parse_by_url(br#"{"data":{"resource":null}}"#), None);
+    assert_eq!(parse_by_url(br#"{"data":{"resource":{}}}"#), None, "a resource that isn't a pull request");
+    assert_eq!(parse_by_url(br#"{"errors":[{"message":"rate limited"}]}"#), None);
+}
+
+/// In the form GitHub answers, out of the queue, with its newest removal from it and its latest review asking for
+/// changes.
+fn said(removal: &str, review: &str) -> ByUrl {
+    let json = format!(
+        r#"{{"data":{{"resource":{{"state":"OPEN","mergeQueueEntry":null,
+            "timelineItems":{{"nodes":[{removal}]}},"reviews":{{"nodes":[{review}]}}}}}}}}"#
+    );
+    parse_by_url(json.as_bytes()).unwrap()
+}
+
+#[test]
+fn what_github_records_of_the_queue_and_of_reviews_comes_with_its_time() {
+    let failed = said(r#"{"createdAt":"2026-01-02T03:04:05Z","reason":"failed_checks"}"#, "");
+    let asked = said("", r#"{"submittedAt":"2026-01-02T03:04:05Z"}"#);
+    let never = said("", "");
+
+    let left = LeftQueue { at_ms: 1_767_323_045_000, reason: "failed_checks".to_string() };
+    assert_eq!((failed.left_queue, failed.state), (Some(left), Some(PrState::Open)));
+    assert_eq!(asked.changes_requested_at_ms, Some(1_767_323_045_000));
+    assert_eq!((never.left_queue, never.changes_requested_at_ms), (None, None));
+}
+
+/// GitHub records the queue's removal as it merges one a moment before it calls it merged.
+#[test]
+fn a_pull_request_the_queue_has_merged_is_merged_and_hasnt_left_it() {
+    let merged = said(r#"{"createdAt":"2026-01-02T03:10:00Z","reason":"merged"}"#, "");
+
+    assert_eq!((merged.state, merged.left_queue), (Some(PrState::Merged), None));
+}
+
+#[test]
+fn the_second_calls_word_on_its_state_is_the_later_one() {
+    let (mut viewed, _) = parse_pull_request(br#"{"number":7,"url":"https://example.com/7","state":"OPEN"}"#).unwrap();
+    let said = |state| ByUrl { state, queue: None, left_queue: None, changes_requested_at_ms: Some(5) };
+    let (merged, unsaid) = (said(Some(PrState::Merged)), said(None));
+
+    merged.fill(&mut viewed);
+    let mut again = PullRequest { state: PrState::Open, ..viewed.clone() };
+    unsaid.fill(&mut again);
+
+    assert_eq!((viewed.state, viewed.changes_requested_at_ms), (PrState::Merged, Some(5)));
+    assert_eq!(again.state, PrState::Open, "when it doesn't say, gh pr view's word stands");
 }
 
 #[tokio::test]

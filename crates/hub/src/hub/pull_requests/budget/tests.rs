@@ -148,13 +148,15 @@ fn an_open_pull_request_or_one_never_read_takes_two_calls_and_anything_else_one(
         review: Review::default(),
         checks: Checks::default(),
         queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
         local: Local::default(),
     };
     let found = |pr: Option<PullRequest>| Some(PullRequestFound { pull_request: pr });
 
     assert_eq!(calls_to_read(found(Some(pr(PrState::Open, false))).as_ref()), 2);
     assert_eq!(calls_to_read(None), 2);
-    assert_eq!(calls_to_read(found(Some(pr(PrState::Open, true))).as_ref()), 1);
+    assert_eq!(calls_to_read(found(Some(pr(PrState::Open, true))).as_ref()), 2, "a draft too");
     assert_eq!(calls_to_read(found(Some(pr(PrState::Merged, false))).as_ref()), 1);
     assert_eq!(calls_to_read(found(None).as_ref()), 1);
 }

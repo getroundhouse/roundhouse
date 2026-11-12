@@ -10,6 +10,7 @@ mod hub_settings;
 mod providers;
 mod subagents;
 mod tools;
+mod waits;
 mod workers;
 mod workspaces;
 
@@ -371,4 +372,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     workspaces::BRANCHES,
     // What each session last recorded of what its worker numbered, in `workers`.
     workers::RECORDED_FROM_WORKER,
+    // Each agent's waits on its workspace's pull request, in `waits`.
+    waits::WAITS,
 ];
