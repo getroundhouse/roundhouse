@@ -5,7 +5,8 @@
 //!
 //! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
 //! session's history. [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its
-//! own, so a view only reads them.
+//! own, so a view only reads them. [`Approval`] says what an approval asks, and how to answer it,
+//! however old its request.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -13,6 +14,7 @@ pub mod file_text;
 pub mod records;
 pub mod session_log;
 
+mod approval;
 mod attachments;
 mod client;
 mod drafts;
@@ -20,6 +22,7 @@ mod sending;
 #[cfg(test)]
 mod stand_in_hub;
 
+pub use approval::{Answered, Approval};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{Drafts, Where};
 pub use sending::{NotTaken, Taking, Written};
