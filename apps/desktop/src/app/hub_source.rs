@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use client_core::{Client, ClientError, Daemon, IdleStop};
+use client_core::{Client, ClientError, Daemon, IdleStop, Restart};
 use gpui_kit::Result;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
@@ -35,6 +35,12 @@ pub(super) fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
     may_restart(hub, app_build) && hub.is_idle()
 }
 
+/// Whether to restart this hub at once, whatever is running on it: one the app may restart that keeps its workers
+/// running for the next hub, so a restart stops none of its agents. It goes once no setup script is running.
+pub(super) fn restarts_at_once(hub: &HubStatus, app_build: Option<u64>) -> bool {
+    may_restart(hub, app_build) && hub.keeps_workers
+}
+
 impl HubSource {
     /// The default hub for this user, with the daemon next to this binary.
     pub fn default_local() -> anyhow::Result<Self> {
@@ -44,13 +50,22 @@ impl HubSource {
         Ok(Self { paths, daemon, build_number: protocol::BUILD_NUMBER, build_version: protocol::BUILD_VERSION })
     }
 
-    /// Connects, starting a hub if there's none and replacing one that [`should_replace`] says to, which is only an
-    /// idle one, so nothing running is lost. The hub has the last word on whether it's idle, and one that's busy
-    /// after all is kept. The panes stay, with what's typed in them. Also returns the hub's status as it connected.
+    /// Connects, starting a hub if there's none, restarting one that [`restarts_at_once`] says to, and replacing one
+    /// that [`should_replace`] says to, which is only an idle one, so nothing running is lost. The hub has the last
+    /// word on whether it's idle, and one that's busy after all is kept. One restarting that's still finishing, as with
+    /// a setup script running, is used until it goes, and then the app connects again. The panes stay, with what's
+    /// typed in them. Also returns the hub's status as it connected.
     pub(super) fn connect(&self) -> Result<(Client, HubStatus), ClientError> {
         let mut client = self.connect_or_start()?;
         let mut status = client.hub_status()?;
-        if should_replace(&status, self.build_number) {
+        if restarts_at_once(&status, self.build_number) {
+            match client_core::restart_hub(&client)? {
+                Restart::Exited => client = self.connect_or_start()?,
+                // Not read again, since it can go at any moment.
+                Restart::Finishing => return Ok((client, status)),
+            }
+            status = client.hub_status()?;
+        } else if should_replace(&status, self.build_number) {
             match client_core::stop_hub_if_idle(&client, &self.paths.socket, status.pid)? {
                 IdleStop::Stopped => client = self.connect_or_start()?,
                 IdleStop::Busy => {}
@@ -115,6 +130,17 @@ mod tests {
     #[test]
     fn a_hub_started_by_hand_is_left_alone() {
         assert!(!should_replace(&HubStatus { on_demand: false, ..older_idle_hub() }, Some(2)));
+    }
+
+    /// Since a restart stops none of its agents, what's running on it doesn't matter.
+    #[test]
+    fn an_older_hub_that_keeps_its_workers_is_restarted_at_once_however_busy() {
+        let busy = HubStatus { running_sessions: 2, running_setups: 1, clients: 3, requests: 2, ..older_idle_hub() };
+        assert!(restarts_at_once(&HubStatus { keeps_workers: true, ..busy.clone() }, Some(2)));
+        assert!(!restarts_at_once(&busy, Some(2)), "one that stops its workers waits until it's idle");
+        let keeps = HubStatus { keeps_workers: true, ..older_idle_hub() };
+        assert!(!restarts_at_once(&keeps, Some(1)), "the same build");
+        assert!(!restarts_at_once(&HubStatus { on_demand: false, ..keeps }, Some(2)), "started by hand");
     }
 
     #[test]

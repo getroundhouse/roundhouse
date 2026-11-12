@@ -70,9 +70,7 @@ pub struct AppView {
     drafts: Option<Drafts>,
     /// A new connection, until client-core has caught up on it.
     joining: Option<Client>,
-    /// The pid of the hub this is connected to, when it's an older one a client started, which this app may restart.
-    /// A hub's build can't change while it runs, so this is only found when connecting.
-    restartable_hub: Option<u32>,
+    restartable_hub: Option<restarts::OlderHub>,
     /// What's shown of the hub's records, as of client-core's last change to them.
     records: Snapshot,
     pub selected: Option<WorkspaceId>,
@@ -248,7 +246,10 @@ impl AppView {
         }
         self.reconnect_dialog(&client, cx);
         self.joining = Some(client);
-        self.restartable_hub = hub_source::may_restart(status, self.hub.build_number).then_some(status.pid);
+        let build = self.hub.build_number;
+        let restarting = hub_source::restarts_at_once(status, build);
+        let older = restarts::OlderHub { pid: status.pid, restarting };
+        self.restartable_hub = hub_source::may_restart(status, build).then_some(older);
         self.finishing = self.restartable_hub.map(|_| Self::keep_finishing(cx));
     }
 

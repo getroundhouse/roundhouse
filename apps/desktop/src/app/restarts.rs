@@ -46,6 +46,16 @@ impl UpdateQuestion {
 /// leaving it.
 pub(super) const LOOK_AGAIN: Duration = Duration::from_secs(30);
 
+/// The hub the app is connected to, when it's an older one a client started, which this app may restart. A hub's build
+/// can't change while it runs, so this is only found when connecting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct OlderHub {
+    pub(super) pid: u32,
+    /// Whether it keeps its workers, so the app asked it to restart as it connected, which stops nothing, and it goes
+    /// by itself once no setup script is running. It's never idle before then.
+    pub(super) restarting: bool,
+}
+
 impl AppView {
     /// Finishes an update by itself, by restarting the older hub once nothing is running on it and nothing else is
     /// using it, as when the app connects. Whenever that is, even while someone is using the app: the restart stops
@@ -54,7 +64,10 @@ impl AppView {
     /// Only the hub knows about other clients and setup scripts, so this asks it, and the hub has the last word as
     /// it stops, since a prompt can be sent between this seeing it idle and stopping it.
     pub(super) fn finish_update_when_idle(&mut self, cx: &mut Context<Self>) {
-        let (Some(client), Some(pid), None) = (self.client(), self.restartable_hub, &self.looking) else { return };
+        let (Some(client), Some(OlderHub { pid, .. }), None) = (self.client(), self.restartable_hub, &self.looking)
+        else {
+            return;
+        };
         let build = self.hub.build_number;
         self.looking = Some(cx.spawn(async move |this, cx| {
             let status = cx.background_spawn(async move { client.hub_status() }).await;
@@ -73,7 +86,7 @@ impl AppView {
     /// Whether the app is still connected to the older hub with this `pid`: the connection may have gone, and another
     /// hub started, while it asked or looked.
     fn still_finishing(&self, pid: u32) -> bool {
-        self.client().is_some() && self.restartable_hub == Some(pid)
+        self.client().is_some() && self.restartable_hub.is_some_and(|older| older.pid == pid)
     }
 
     /// Looks every [`LOOK_AGAIN`] for whether the older hub has gone idle.
@@ -198,7 +211,10 @@ impl AppView {
         cx: &mut Context<Self>,
         then: impl FnOnce(&mut Self, HubStatus, &mut Context<Self>) + 'static,
     ) {
-        let (Some(client), Some(pid), None) = (self.client(), self.restartable_hub, &self.asking) else { return };
+        let (Some(client), Some(OlderHub { pid, .. }), None) = (self.client(), self.restartable_hub, &self.asking)
+        else {
+            return;
+        };
         self.asking = Some(cx.spawn(async move |this, cx| {
             let status = cx.background_spawn(async move { client.hub_status() }).await;
             let _ = this.update(cx, |t, cx| {

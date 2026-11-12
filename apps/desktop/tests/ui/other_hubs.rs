@@ -53,6 +53,38 @@ fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
     assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
 }
 
+/// A restart stops none of its agents, so the app doesn't wait for them.
+#[gpui_kit::test]
+fn an_older_hub_that_keeps_its_workers_is_restarted_at_once_with_agents_running(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let args = ["--speaks-this-protocol", "--build", "1", "--running", "2", "--keeps-workers"];
+    let mut older = stack.start_stand_in_hub(&args);
+
+    let mut ui = Ui::open(cx, &stack);
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+    assert!(older.restarted(), "asked to restart, rather than to stop");
+}
+
+/// It goes once the script is done, as a hub asked to restart does, and until then the app uses it.
+#[gpui_kit::test]
+fn an_older_hub_that_keeps_its_workers_restarts_once_its_setup_script_is_done(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let args = ["--speaks-this-protocol", "--build", "1", "--running", "2", "--keeps-workers", "--setups", "1"];
+    let mut older = stack.start_stand_in_hub(&args);
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait_out_a_look();
+    assert!(older.0.try_wait().unwrap().is_none());
+    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+
+    older.set_setups(0);
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+    assert!(older.restarted(), "asked to restart, rather than to stop");
+}
+
 /// An agent finishing is usually what lets an update finish, and the app hears of that at once. It takes the chance
 /// even with the window in front, since waiting for someone to leave had the update look stuck.
 #[gpui_kit::test]

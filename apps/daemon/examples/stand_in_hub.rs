@@ -5,7 +5,10 @@
 //! refuses anything else. It holds the same lock as a real hub. A test can change how many agents
 //! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory,
 //! and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes by what it
-//! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy.
+//! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy. With
+//! `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once no setup script is running, as a
+//! hub does, as many as it says are until a test writes another number to [`SETUPS`], and leaves [`RESTARTED`] to
+//! say it restarted rather than stopped.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -23,6 +26,7 @@ use protocol::model::{Records, Repo, RepoId, Rev};
 use protocol::paths::Paths;
 
 #[derive(Parser)]
+#[expect(clippy::struct_excessive_bools, reason = "each is a flag of its own, which a test passes or leaves out")]
 struct Args {
     /// How many agents it says are running, until a test writes another number to [`RUNNING`].
     #[arg(long, default_value_t = 0)]
@@ -45,6 +49,12 @@ struct Args {
     /// What it does when asked to stop only if it's idle.
     #[arg(long, value_enum, default_value_t = IfIdle::Decides)]
     asked_to_stop_if_idle: IfIdle,
+    /// Say it keeps its workers, so restarting it leaves its agents running, and take a restart.
+    #[arg(long)]
+    keeps_workers: bool,
+    /// How many setup scripts it says are running, until a test writes another number to [`SETUPS`].
+    #[arg(long, default_value_t = 0)]
+    setups: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -62,6 +72,10 @@ enum IfIdle {
 /// test has written them.
 const RUNNING: &str = "stand-in-running";
 const CLIENTS: &str = "stand-in-clients";
+const SETUPS: &str = "stand-in-setups";
+
+/// What it leaves in its data directory as it goes for a restart.
+const RESTARTED: &str = "stand-in-restarted";
 
 /// What a test has written to this file, or else `otherwise`.
 fn written(paths: &Paths, file: &str, otherwise: u32) -> u32 {
@@ -124,10 +138,10 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         clients: written(paths, CLIENTS, args.clients),
         on_demand: !args.not_on_demand,
         build_number: args.build,
-        running_setups: 0,
+        running_setups: written(paths, SETUPS, args.setups),
         requests: 1,
         keeping_awake: false,
-        keeps_workers: false,
+        keeps_workers: args.keeps_workers,
         oldest_protocol_version: None,
     }
 }
@@ -165,6 +179,11 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                 reply(&writer, request.id, ReplyOutcome::Response(status));
             }
             ClientRequest::HubShutdown => stop(&writer, request.id, paths),
+            ClientRequest::HubRestart if args.keeps_workers => {
+                reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
+                let (args, paths) = (args.clone(), paths.clone());
+                std::thread::spawn(move || restart(&args, &paths));
+            }
             ClientRequest::HubShutdownIfIdle if args.speaks_this_protocol => {
                 if args.asked_to_stop_if_idle == IfIdle::Unknown {
                     let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
@@ -187,6 +206,16 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
             }
         }
     }
+}
+
+/// Goes once no setup script is running, as a hub asked to restart does, leaving [`RESTARTED`] behind.
+fn restart(args: &Args, paths: &Paths) {
+    while written(paths, SETUPS, args.setups) > 0 {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    std::fs::write(paths.data_dir.join(RESTARTED), "").unwrap();
+    let _ = std::fs::remove_file(&paths.socket);
+    std::process::exit(0);
 }
 
 /// Says it's stopping, lets go of the socket, and exits.

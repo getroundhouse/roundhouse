@@ -23,6 +23,16 @@ impl StandInHub {
         self.write("stand-in-clients", clients);
     }
 
+    /// Has it say this many setup scripts are running from now on, as if some had started or finished.
+    pub(crate) fn set_setups(&self, setups: u32) {
+        self.write("stand-in-setups", setups);
+    }
+
+    /// Whether it went for a restart, rather than to stop.
+    pub(crate) fn restarted(&self) -> bool {
+        self.1.join("stand-in-restarted").exists()
+    }
+
     fn write(&self, file: &str, number: u32) {
         // Whole or not at all, since it may read it at any moment.
         let next = self.1.join(format!("{file}.next"));
