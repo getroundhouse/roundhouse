@@ -17,15 +17,32 @@ pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
     serde_json::from_slice(line)
 }
 
-/// The `id` a request names, when the request as a whole didn't decode, so it can still be refused. A request this
-/// build can't read is from a newer peer, such as one carrying a value it doesn't know, and refusing it lets that peer
-/// do without, where leaving it unanswered would hold the call until the connection closes.
-pub fn request_id(line: &[u8]) -> Option<u64> {
+/// A request as its reader reads it: the call it's for, and the request, unless this build can't read it.
+#[derive(Debug)]
+pub struct Call<R> {
+    pub id: u64,
+    pub request: Result<R, serde_json::Error>,
+}
+
+/// Reads a request frame, `{"id":…,"request":…}`, as a client, a hub and a provider adapter each send one. A request
+/// this build can't read as a whole, such as one with a value it doesn't know, is from a newer peer, so it still comes
+/// back with its call's `id`, for the reader to refuse once it has checked what it checks of any request. Leaving it
+/// unanswered would hold the call until the connection closes. Fails only for a frame that names no call.
+pub fn read_call<R: DeserializeOwned>(line: &[u8]) -> serde_json::Result<Call<R>> {
+    #[derive(Deserialize)]
+    #[serde(bound = "R: DeserializeOwned")]
+    struct Whole<R> {
+        id: u64,
+        request: R,
+    }
     #[derive(Deserialize)]
     struct Named {
-        id: Option<u64>,
+        id: u64,
     }
-    decode::<Named>(line).ok()?.id
+    match decode::<Whole<R>>(line) {
+        Ok(Whole { id, request }) => Ok(Call { id, request: Ok(request) }),
+        Err(error) => Ok(Call { id: decode::<Named>(line)?.id, request: Err(error) }),
+    }
 }
 
 /// The call a reply was for, when the reply as a whole didn't decode, so the call can still be ended. The frames that

@@ -89,6 +89,19 @@ fn a_hub_refuses_a_request_it_cannot_read_and_carries_on() {
     assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
 }
 
+/// One it can't read can't be a hello it answers, so it's refused as any first request but a hello is.
+#[test]
+fn a_first_request_the_hub_cannot_read_is_refused_as_one_that_isnt_a_hello() {
+    let stack = Stack::start();
+    let mut connection = RawConnection::open(&stack);
+
+    let refused = connection.ask(1, r#"{"method":"hello","client":"newer","protocol_version":"3"}"#);
+
+    assert!(matches!(&refused, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{refused:?}");
+    let mut line = String::new();
+    assert_eq!(connection.replies.read_line(&mut line).unwrap(), 0, "it kept the connection, and said {line}");
+}
+
 #[test]
 fn a_hub_closes_a_connection_that_sends_a_frame_naming_no_call() {
     let stack = Stack::start();

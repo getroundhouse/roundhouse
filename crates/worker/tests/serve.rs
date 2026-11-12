@@ -25,16 +25,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
         let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
         let (worker_read, worker_write) = tokio::io::split(worker_end);
         let (mut hub_read, mut hub_write) = tokio::io::split(hub_end);
-        let config = Config {
-            workspaces_root: dir.path().to_path_buf(),
-            state_dir: None,
-            home: None,
-            path: None,
-            claude_bin: Some(cli.clone()),
-            scratch_dir: dir.path().to_path_buf(),
-            deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
-            refused: None,
-        };
+        let config = Config { claude_bin: Some(cli.clone()), ..config(dir.path()) };
         let running = tokio::spawn(serve(worker_read, worker_write, config));
         tokio::spawn(async move {
             let mut sink = Vec::new();
@@ -78,16 +69,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
     let (worker_read, worker_write) = tokio::io::split(worker_end);
     let (hub_read, mut hub_write) = tokio::io::split(hub_end);
-    let config = Config {
-        workspaces_root: dir.path().to_path_buf(),
-        state_dir: None,
-        home: None,
-        path: None,
-        claude_bin: None,
-        scratch_dir: dir.path().to_path_buf(),
-        deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
-        refused: None,
-    };
+    let config = config(dir.path());
     tokio::spawn(serve(worker_read, worker_write, config));
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
@@ -122,47 +104,65 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
 #[tokio::test]
 async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
-    let (worker_read, worker_write) = tokio::io::split(worker_end);
-    let (hub_read, mut hub_write) = tokio::io::split(hub_end);
-    let config = Config {
-        workspaces_root: dir.path().to_path_buf(),
+    let hello = || WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION };
+    let calls = [
+        frame::encode(&WorkerCall { id: 0, request: hello() }).unwrap(),
+        b"{\"id\":1,\"request\":{\"method\":\"from_a_newer_hub\",\"path\":\"a\"}}\n".to_vec(),
+        b"{\"id\":2,\"request\":{\"method\":\"account_for\",\"agent\":{\"newer\":true}}}\n".to_vec(),
+        frame::encode(&WorkerCall { id: 3, request: hello() }).unwrap(),
+    ];
+
+    let answered = replies_to(config(dir.path()), &calls).await;
+
+    for id in [1, 2] {
+        assert!(matches!(&answered[&id], WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{answered:?}");
+    }
+    assert!(matches!(answered[&3], WorkerOutcome::Response(WorkerResponse::Hello { .. })), "it carried on");
+}
+
+/// A worker refused its instance answers every request by saying so, one it can't read included, so the hub can tell
+/// it from a worker that failed to start.
+#[tokio::test]
+async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config { refused: Some("another worker is serving it".into()), ..config(dir.path()) };
+    let calls = [b"{\"id\":1,\"request\":{\"method\":\"account_for\",\"agent\":{\"newer\":true}}}\n".to_vec()];
+
+    let answered = replies_to(config, &calls).await;
+
+    assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{answered:?}");
+}
+
+/// A worker that runs no agent.
+fn config(dir: &std::path::Path) -> Config {
+    Config {
+        workspaces_root: dir.to_path_buf(),
         state_dir: None,
         home: None,
         path: None,
         claude_bin: None,
-        scratch_dir: dir.path().to_path_buf(),
+        scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,
-    };
-    tokio::spawn(serve(worker_read, worker_write, config));
-    let hello =
-        frame::encode(&WorkerCall { id: 0, request: WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION } });
-    hub_write.write_all(&hello.unwrap()).await.unwrap();
-    hub_write.write_all(b"{\"id\":1,\"request\":{\"method\":\"from_a_newer_hub\",\"path\":\"a\"}}\n").await.unwrap();
-    hub_write
-        .write_all(b"{\"id\":2,\"request\":{\"method\":\"account_for\",\"agent\":{\"newer\":true}}}\n")
-        .await
-        .unwrap();
-    let again =
-        frame::encode(&WorkerCall { id: 3, request: WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION } });
-    hub_write.write_all(&again.unwrap()).await.unwrap();
+    }
+}
 
+/// Serves a worker running with `config`, sends it `calls` in one go, and collects its reply to each, by ID.
+async fn replies_to(config: Config, calls: &[Vec<u8>]) -> std::collections::BTreeMap<u64, WorkerOutcome> {
+    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
+    let (worker_read, worker_write) = tokio::io::split(worker_end);
+    let (hub_read, mut hub_write) = tokio::io::split(hub_end);
+    tokio::spawn(serve(worker_read, worker_write, config));
+    for call in calls {
+        hub_write.write_all(call).await.unwrap();
+    }
     let mut replies = BufReader::new(hub_read).lines();
     let mut answered = std::collections::BTreeMap::new();
-    while answered.len() < 4 {
+    while answered.len() < calls.len() {
         let line = timeout(Duration::from_secs(10), replies.next_line()).await.expect("a reply").unwrap().unwrap();
         if let WorkerFrame::Reply { id, outcome } = frame::decode(line.as_bytes()).unwrap() {
             answered.insert(id, outcome);
         }
     }
-
-    for (id, says) in [(1, "doesn't know that request"), (2, "can't read that request")] {
-        let refused = &answered[&id];
-        assert!(
-            matches!(refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported && e.message.contains(says)),
-            "{id}: {refused:?}"
-        );
-    }
-    assert!(matches!(answered[&3], WorkerOutcome::Response(WorkerResponse::Hello { .. })), "it carried on");
+    answered
 }

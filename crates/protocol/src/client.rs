@@ -158,8 +158,8 @@ pub enum ErrorCode {
     /// hourly limit, so asking again won't help until that changes.
     Unavailable,
     Internal,
-    /// This hub doesn't know the request, usually because it's older than the client. The client
-    /// hides or disables whatever needed it.
+    /// The hub, worker or provider adapter doesn't know the request, or can't read it, because it's older than
+    /// whoever asked. The caller hides, disables or does without whatever needed it.
     Unsupported,
     #[serde(other)]
     Unknown,
@@ -181,6 +181,17 @@ pub fn error_chain(error: &dyn std::error::Error) -> String {
 impl ApiError {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         Self { code, message: message.into() }
+    }
+
+    /// The refusal of a request from a newer peer, which `reader`, such as "this hub", doesn't know, or knows but
+    /// can't read, such as one carrying a value it doesn't know. Its caller does without either way.
+    pub fn unsupported_request(reader: &str, unreadable: Option<&serde_json::Error>) -> Self {
+        let build = crate::BUILD_VERSION;
+        let message = match unreadable {
+            None => format!("{reader}, version {build}, doesn't know that request"),
+            Some(error) => format!("{reader}, version {build}, can't read that request: {error}"),
+        };
+        Self::new(ErrorCode::Unsupported, message)
     }
 }
 

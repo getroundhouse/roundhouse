@@ -56,7 +56,7 @@ pub enum ClientError {
 }
 
 impl ClientError {
-    /// The hub is too old to know this request. Hide or disable whatever needed it.
+    /// The hub is too old to know this request, or to read it. Hide or disable whatever needed it.
     pub fn is_unsupported(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unsupported)
     }

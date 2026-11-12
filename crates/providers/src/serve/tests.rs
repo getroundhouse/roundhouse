@@ -108,6 +108,8 @@ async fn nothing_is_answered_before_hello() {
     let mut hub = serving(Arc::default());
     hub.send(json!({"id": 1, "request": {"method": "list"}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "version_mismatch");
+    hub.send(json!({"id": 2, "request": {"method": "stop", "instance_id": 3}})).await;
+    assert_eq!(hub.reply().await["error"]["code"], "version_mismatch", "nor is one it can't read");
 }
 
 #[tokio::test]

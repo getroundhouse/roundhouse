@@ -6,10 +6,8 @@ use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
-use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
-};
-use protocol::frame;
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
+use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
@@ -79,22 +77,18 @@ async fn serve_connection(
     let mut greeted = false;
     loop {
         let Ok(Some(line)) = incoming.next().await else { break };
-        let request: ClientFrame = match frame::decode(line) {
-            Ok(request) => request,
+        // A request this hub can't read is a newer client's, which is refused once it's past the hello, as one this
+        // hub doesn't know is.
+        let Call { id, request } = match frame::read_call::<ClientRequest>(line) {
+            Ok(call) => call,
             Err(e) => {
-                // One that names its call is a newer client's, and it hides whatever this hub refuses.
-                if let Some(id) = frame::request_id(line) {
-                    let outcome = ReplyOutcome::Error(unreadable(&e));
-                    let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
-                    continue;
-                }
                 debug!("closing a connection that sent a bad frame: {e}");
                 break;
             }
         };
-        if !greeted && !works_without_hello(&request.request) {
-            let (outcome, version_ok) = hello(&request.request);
-            let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+        if !greeted && !request.as_ref().is_ok_and(works_without_hello) {
+            let (outcome, version_ok) = hello(request.as_ref().ok());
+            let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
             if !version_ok {
                 break;
             }
@@ -107,25 +101,22 @@ async fn serve_connection(
         // connection sent before it, even one whose task hasn't started.
         hub.requests.fetch_add(1, Ordering::Relaxed);
         tokio::spawn(async move {
-            let outcome = match handle(&hub, &connection, request.request).await {
+            let answered = match request {
+                Ok(request) => handle(&hub, &connection, request).await,
+                Err(e) => Err(ApiError::unsupported_request("this hub", Some(&e))),
+            };
+            let outcome = match answered {
                 Ok(response) => ReplyOutcome::Response(response),
                 Err(error) => ReplyOutcome::Error(error),
             };
             hub.requests.fetch_sub(1, Ordering::Relaxed);
-            let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+            let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
         });
     }
     drop(connection);
     // Finish writing what's queued, such as the error for a version mismatch.
     let _ = writer.await;
     hub.clients.fetch_sub(1, Ordering::Relaxed);
-}
-
-/// A request this hub can't read, such as a known one with a value it doesn't know, which is refused as one it doesn't
-/// know at all is, since either comes from a newer client.
-fn unreadable(error: &serde_json::Error) -> ApiError {
-    let message = format!("this hub, version {}, can't read that request: {error}", protocol::BUILD_VERSION);
-    ApiError::new(ErrorCode::Unsupported, message)
 }
 
 /// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and
@@ -135,9 +126,10 @@ fn works_without_hello(request: &ClientRequest) -> bool {
     matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown)
 }
 
-fn hello(request: &ClientRequest) -> (ReplyOutcome, bool) {
+/// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
+fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    let ClientRequest::Hello { protocol_version, .. } = request else {
+    let Some(ClientRequest::Hello { protocol_version, .. }) = request else {
         return error("the first request on a connection must be hello".to_string());
     };
     if *protocol_version == PROTOCOL_VERSION {
@@ -197,10 +189,7 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => {
-            let message = format!("this hub, version {}, doesn't know that request", protocol::BUILD_VERSION);
-            return Err(ApiError::new(ErrorCode::Unsupported, message));
-        }
+        R::Unknown => return Err(ApiError::unsupported_request("this hub", None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_shutdown();
