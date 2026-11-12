@@ -1,26 +1,24 @@
-//! A subagent at work in the background: the robot its call's line has, with its eyes glowing and dimming as a
-//! task's ring has its light go round, so its line reads as the call it came from and still says it's at work.
+//! A subagent at work in the background: the robot its call's line has, with a white light sweeping across it as the
+//! agent's light sweeps its fan, since a subagent is the agent's own work. So its line reads as the call it came from,
+//! and says plainly that it's at work.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon};
 use gpui_kit::{
-    App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, ParentElement as _, Pixels, Point, Styled as _,
-    Window, canvas, div, point, px, quad, size, transparent_black,
+    App, Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, Pixels, Styled as _, TransformationMatrix, Window,
+    canvas, div, point, px, size,
 };
 
 use crate::clock;
-use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, phase};
+use crate::fan::as_f32;
+use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, light_on, phase};
 use crate::palette::faint;
 
 /// How big a call's icon is on its line in the chat, which the robot is too, since it's the icon a subagent's call has.
 pub const LINE_ICON: f32 = 15.0;
-/// The grid `bot.svg`, in the kit's assets, is drawn on, and where each eye's stroke is on it, as its `M9 13v2` and
-/// `M15 13v2` say: upright, two wide, and four tall with its round ends.
-const GRID: f32 = 24.0;
-const EYES: [(f32, f32); 2] = [(9.0, 14.0), (15.0, 14.0)];
-const EYE: (f32, f32) = (2.0, 4.0);
-/// How lit its eyes are at their dimmest, so they never look switched off.
-const DIMMEST: f32 = 0.25;
+/// How many strips across the robot the light is laid on in, each lit by how near the light is, so it fades at its
+/// edges rather than cutting off. At the line's size, each is a pixel wide.
+const STRIPS: usize = 15;
 
 /// The robot, as wide as a task's ring, so what follows it lines up with the other lines'.
 pub fn robot_at_work(cx: &App) -> impl IntoElement {
@@ -43,11 +41,9 @@ pub fn robot_at_work(cx: &App) -> impl IntoElement {
         .child(
             canvas(
                 |_, _, _| {},
-                move |bounds, (), window, _| {
-                    let lit = light.opacity(glow(phase(t, BACKGROUND_S)) * LIGHT);
-                    for (x, y) in EYES {
-                        eye(window, bounds, inset, (x, y), lit);
-                    }
+                move |bounds, (), window, cx| {
+                    let robot = Bounds::new(bounds.origin + point(inset, inset), size(px(LINE_ICON), px(LINE_ICON)));
+                    lit(window, robot, light, sweep(t), cx);
                     // Drawn again on the display's next frame, for as long as it's on screen and moving.
                     if moves {
                         window.request_animation_frame();
@@ -61,43 +57,67 @@ pub fn robot_at_work(cx: &App) -> impl IntoElement {
         )
 }
 
-/// How lit the eyes are when the light has `turned` that far round: fully at the moment pictures hold, and never less
-/// than [`DIMMEST`].
-fn glow(turned: f32) -> f32 {
-    let still = phase(STILL_S, BACKGROUND_S);
-    let wave = 0.5 + 0.5 * (std::f32::consts::TAU * (turned - still)).cos();
-    DIMMEST + (1.0 - DIMMEST) * wave
+/// Where the light is across the robot at `t` seconds, from its left edge at 0 to its right at 1. It starts and ends
+/// a little beyond each, so it comes on and goes off gradually, and it's over the robot's face in pictures.
+fn sweep(t: f64) -> f32 {
+    let from_still = (phase(t, BACKGROUND_S) - phase(STILL_S, BACKGROUND_S) + 0.5).rem_euclid(1.0);
+    from_still * 1.5 - 0.25
 }
 
-/// One eye, lit, over the icon's own stroke for it, at `(x, y)` on its grid.
-fn eye(window: &mut Window, bounds: Bounds<Pixels>, inset: Pixels, (x, y): (f32, f32), color: Hsla) {
-    let scale = LINE_ICON / GRID;
-    let center = Point::new(bounds.origin.x + inset + px(x * scale), bounds.origin.y + inset + px(y * scale));
-    let (w, h) = (px(EYE.0 * scale), px(EYE.1 * scale));
-    let stroke = Bounds::new(point(center.x - w * 0.5, center.y - h * 0.5), size(w, h));
-    window.paint_quad(quad(
-        stroke,
-        Corners::all(w * 0.5),
-        color,
-        Edges::all(px(0.)),
-        transparent_black(),
-        BorderStyle::default(),
-    ));
+/// How much of the light is on each strip across the robot, from 0 to 1, when it's at `sweep`, as a dot along the fan
+/// has it.
+fn strips(sweep: f32) -> impl Iterator<Item = f32> {
+    (0..STRIPS).map(move |strip| light_on((as_f32(strip) + 0.5) / as_f32(STRIPS), 0, sweep, 0.0))
+}
+
+/// The robot again, in the light, over the one beneath it, each strip as lit as [`strips`] says.
+fn lit(window: &mut Window, robot: Bounds<Pixels>, light: Hsla, sweep: f32, cx: &App) {
+    // Each strip's edges are the next's, worked out the same way, so no column of pixels is lit twice or missed.
+    let edge = |strip: usize| robot.origin.x + robot.size.width * (as_f32(strip) / as_f32(STRIPS));
+    for (strip, glow) in strips(sweep).enumerate().filter(|(_, glow)| *glow > 0.01) {
+        let bounds = Bounds::from_corners(point(edge(strip), robot.top()), point(edge(strip + 1), robot.bottom()));
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            // It only fails if the icon can't be read, and the robot beneath shows the same then.
+            let _ = window.paint_svg(
+                robot,
+                IconName::Bot.path(),
+                None,
+                TransformationMatrix::unit(),
+                light.opacity(glow * LIGHT),
+                cx,
+            );
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DIMMEST, glow};
-    use crate::fan::as_f32;
-    use crate::mark::{BACKGROUND_S, STILL_S, phase};
+    use super::{STRIPS, strips, sweep};
+    use crate::mark::{BACKGROUND_S, STILL_S};
+
+    /// The strip the light is brightest on at `t` seconds, if it's on the robot.
+    fn brightest(t: f64) -> Option<usize> {
+        let lit: Vec<f32> = strips(sweep(t)).collect();
+        let (strip, glow) = lit.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1))?;
+        (*glow > 0.5).then_some(strip)
+    }
 
     #[test]
-    fn the_eyes_are_fully_lit_in_pictures_and_never_go_dark() {
-        let around: Vec<f32> = (0..36).map(|step| glow(as_f32(step) / 36.0)).collect();
+    fn the_light_sweeps_across_the_robot_from_left_to_right() {
+        let start = STILL_S + BACKGROUND_S * 0.5;
+        let along: Vec<Option<usize>> =
+            (0..24).map(|step| brightest(start + BACKGROUND_S * f64::from(step) / 24.0)).collect();
+        let on: Vec<usize> = along.iter().flatten().copied().collect();
 
-        assert!((glow(phase(STILL_S, BACKGROUND_S)) - 1.0).abs() < 1e-5);
-        assert!(around.iter().all(|lit| *lit >= DIMMEST - 1e-5 && *lit <= 1.0 + 1e-5), "{around:?}");
-        let (dimmest, brightest) = around.iter().fold((1.0_f32, 0.0_f32), |(lo, hi), lit| (lo.min(*lit), hi.max(*lit)));
-        assert!(dimmest < 0.3 && brightest > 0.95, "they glow and dim: {dimmest} to {brightest}");
+        assert!(on.windows(2).all(|pair| pair[0] <= pair[1]), "left to right: {along:?}");
+        assert_eq!((on.first(), on.last()), (Some(&0), Some(&(STRIPS - 1))), "edge to edge: {along:?}");
+    }
+
+    #[test]
+    fn pictures_catch_the_light_across_its_face() {
+        let lit: Vec<f32> = strips(sweep(STILL_S)).collect();
+
+        assert_eq!(brightest(STILL_S), Some(STRIPS / 2), "{lit:?}");
+        assert!(lit[0] < 0.1 && lit[STRIPS - 1] < 0.1, "its sides are in the dark: {lit:?}");
     }
 }
