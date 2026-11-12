@@ -59,7 +59,7 @@ fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
     EventBody::Assistant {
         message_id: Some(MessageId::from(message)),
         parent_tool_use_id: None,
-        model: Some("claude-opus".to_string()),
+        model: Some("claude-opus-5-5".to_string()),
         blocks: vec![block],
         first_index: None,
     }
@@ -133,6 +133,14 @@ pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
         &mut event
     {
         *parent_tool_use_id = Some(ToolUseId::from(parent));
+    }
+    event
+}
+
+/// `event` as a reply from `model`, such as a subagent's from a model other than the agent's.
+pub(crate) fn on(model: &str, mut event: EventBody) -> EventBody {
+    if let EventBody::Assistant { model: from, .. } = &mut event {
+        *from = Some(model.to_string());
     }
     event
 }

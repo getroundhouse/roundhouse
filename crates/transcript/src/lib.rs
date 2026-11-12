@@ -16,6 +16,7 @@ mod linked_images;
 mod list;
 mod log_block;
 mod long_texts;
+mod model_names;
 mod questions;
 mod rows;
 mod scroll_area;

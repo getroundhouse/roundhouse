@@ -2,7 +2,7 @@
 
 use client_core::session_log::SessionLog;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Place, Seq};
+use protocol::model::{Place, RecentWork, Rev, Seq, Subagent, SubagentStatus};
 use serde_json::{Value, json};
 
 pub(crate) fn event(seq: Seq, body: EventBody) -> SessionEvent {
@@ -15,6 +15,28 @@ pub(crate) fn event(seq: Seq, body: EventBody) -> SessionEvent {
         place: Place::default(),
         body,
         raw: None,
+    }
+}
+
+/// The record of the subagent the call `call` started, at `status`, with nothing else known about it yet. A test sets
+/// what it's about.
+pub(crate) fn record(call: &str, status: SubagentStatus) -> Subagent {
+    Subagent {
+        session_id: "s".into(),
+        call: call.into(),
+        kind: None,
+        description: None,
+        prompt: None,
+        in_background: true,
+        model: None,
+        status,
+        started_at_ms: 0,
+        ended_at_ms: None,
+        calls: 0,
+        latest_call: None,
+        recent: RecentWork::default(),
+        report: None,
+        rev: Rev::new(1),
     }
 }
 

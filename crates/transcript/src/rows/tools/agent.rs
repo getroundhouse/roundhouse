@@ -1,5 +1,5 @@
-//! A call that handed work to a subagent: what it's for, what kind of agent unless it's the default, and how many
-//! calls it's made.
+//! A call that handed work to a subagent: what it's for, what kind of agent unless it's the default, the model it runs
+//! on, and how many calls it's made.
 //!
 //! When the hub keeps the subagent's work apart, it's drawn from the subagent's record. Opened, it shows the blocks
 //! the subagent tab starts and ends with: what it was asked, and its report once it's done, with its newest call
@@ -29,6 +29,7 @@ use crate::find::{self, FindLook, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::long_texts::LongTexts;
+use crate::model_names::model_name;
 use crate::rows::around::{Around, blocks_of};
 use crate::rows::shown::{self, Gather};
 use crate::rows::{agent_text, render_block};
@@ -93,16 +94,18 @@ pub(super) fn shown(
     });
 }
 
-/// How many calls it's made, and how it ended if that wasn't by finishing.
+/// How it ended if that wasn't by finishing, the model it runs on, and how many calls it's made.
 fn standing(subagent: Option<&Subagent>) -> Option<String> {
     let subagent = subagent?;
     let calls = (subagent.calls > 0).then(|| count(subagent.calls, "call", "calls"));
-    let ended = subagent.record.as_ref().and_then(|record| match record.status {
+    let record = subagent.record.as_deref();
+    let ended = record.and_then(|record| match record.status {
         SubagentStatus::Failed => Some("Failed"),
         SubagentStatus::Stopped => Some("Stopped"),
         SubagentStatus::Working | SubagentStatus::Finished | SubagentStatus::Unknown => None,
     });
-    let words: Vec<String> = ended.map(str::to_string).into_iter().chain(calls).collect();
+    let model = record.and_then(|record| record.model.as_ref()).map(model_name);
+    let words: Vec<String> = ended.map(str::to_string).into_iter().chain(model).chain(calls).collect();
     (!words.is_empty()).then(|| words.join(" · "))
 }
 
@@ -265,4 +268,43 @@ fn gathered(
         // A call's result names no images, so only one written into the report is drawn.
         .when_some(report, |d, report| d.child(report_text(report, toggle)))
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use protocol::model::{ModelName, Subagent as Record, SubagentStatus};
+
+    use super::{Subagent, standing};
+    use crate::fixtures::record;
+
+    /// A subagent as its call's line has it, from its record, from a hub that keeps its work apart.
+    fn kept(record: Record) -> Subagent {
+        let calls = usize::try_from(record.calls).unwrap();
+        Subagent {
+            call: record.call.clone(),
+            calls,
+            events: None,
+            apart: true,
+            record: Some(Rc::new(record)),
+            lately: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_subagent_s_line_says_how_it_ended_unless_it_finished_then_its_model_then_its_calls() {
+        let haiku = Some(ModelName::named("claude-haiku-5-5"));
+        let at = |status, model: &Option<ModelName>, calls| {
+            standing(Some(&kept(Record { model: model.clone(), calls, ..record("agent", status) })))
+        };
+
+        assert_eq!(at(SubagentStatus::Working, &haiku, 3).as_deref(), Some("Haiku 5.5 · 3 calls"));
+        assert_eq!(at(SubagentStatus::Finished, &haiku, 1).as_deref(), Some("Haiku 5.5 · 1 call"));
+        assert_eq!(at(SubagentStatus::Failed, &haiku, 3).as_deref(), Some("Failed · Haiku 5.5 · 3 calls"));
+        assert_eq!(at(SubagentStatus::Working, &haiku, 0).as_deref(), Some("Haiku 5.5"), "before its first call");
+        assert_eq!(at(SubagentStatus::Working, &None, 3).as_deref(), Some("3 calls"), "before it's replied");
+        assert_eq!(at(SubagentStatus::Working, &None, 0), None);
+        assert_eq!(standing(None), None, "no record");
+    }
 }
