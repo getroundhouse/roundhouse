@@ -21,21 +21,42 @@ pub struct PromptLine {
 }
 
 /// Where the event is that settled a prompt: the last `PromptTaken` or `PromptDropped` that names it, such as where the
-/// agent took it after it was dropped with a lost worker. A chat draws the prompt there, after what the agent did
-/// before then.
+/// agent took it after it was dropped with a lost worker, and which of them it is. A chat draws the prompt there, after
+/// what the agent did before then.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SettledAt {
     pub seq: Seq,
     /// Among the agent's own events, or 0 from a hub that doesn't record places.
     #[serde(default)]
     pub place: Place,
+    /// Whether the agent took it or it was dropped. `None` from a hub that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub how: Option<Settlement>,
+}
+
+/// Which way a prompt was settled.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Settlement {
+    /// The agent took it.
+    Taken,
+    /// The agent never got it, because it was stopped first, or went away.
+    Dropped,
+    #[serde(other)]
+    Unknown,
 }
 
 impl SettledAt {
     /// Where `event` is, if it settles a prompt, and the prompt it settles.
     pub fn of(event: &SessionEvent) -> Option<(Seq, Self)> {
-        let (EventBody::PromptTaken { prompt } | EventBody::PromptDropped { prompt }) = event.body else { return None };
-        Some((prompt, Self { seq: event.seq, place: event.place }))
+        let (prompt, how) = if let EventBody::PromptTaken { prompt } = event.body {
+            (prompt, Settlement::Taken)
+        } else if let EventBody::PromptDropped { prompt } = event.body {
+            (prompt, Settlement::Dropped)
+        } else {
+            return None;
+        };
+        Some((prompt, Self { seq: event.seq, place: event.place, how: Some(how) }))
     }
 }
 
@@ -201,7 +222,7 @@ mod tests {
 
     #[test]
     fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_has_nowhere() {
-        let at = SettledAt { seq: 9, place: Place::new(6) };
+        let at = SettledAt { seq: 9, place: Place::new(6), how: None };
         let line = PromptLine::new(7, "Fix it", 2).placed(Place::new(3)).settled_at(at);
 
         let sent = serde_json::to_value(&line).unwrap();

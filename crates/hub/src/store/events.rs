@@ -4,6 +4,7 @@ use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SessionStatus, ToolUseId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::approvals::note_approvals;
 use super::prompts::note_prompts;
 use super::sent::note_sent;
 use super::subagents::note_subagents;
@@ -106,7 +107,8 @@ fn change_session(
 impl Appended {
     /// The event recorded before under the same `client_msg_id`, which recording it again leaves as it was.
     fn already_recorded(event: SessionEvent) -> Self {
-        Appended { event, duplicate: true, dequeued: false, by_the_person: false, untaken: None, subagents: Vec::new() }
+        let (dequeued, by_the_person, untaken, approvals) = (false, false, None, None);
+        Appended { event, duplicate: true, dequeued, by_the_person, untaken, approvals, subagents: Vec::new() }
     }
 }
 
@@ -197,6 +199,7 @@ impl Store {
         change_session(&tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
         let (dequeued, by_the_person) = note_sent(&tx, session_id, ts_ms, run, body, client_msg_id)?;
         let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
+        let approvals = note_approvals(&tx, session_id, seq.cast_unsigned(), body)?;
         let event = SessionEvent {
             session_id: session_id.clone(),
             seq: seq.cast_unsigned(),
@@ -210,7 +213,7 @@ impl Store {
         let subagents = note_subagents(&tx, &event)?;
         clear_answer(&tx, session_id, body)?;
         tx.commit()?;
-        Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, subagents })
+        Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, approvals, subagents })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.
@@ -270,49 +273,6 @@ impl Store {
                 row.get(0)
             })?;
         Ok(RunId::new(value.cast_unsigned()))
-    }
-
-    /// Approvals requested and never resolved.
-    pub fn open_approvals(&self, session_id: &SessionId) -> Result<Vec<ApprovalId>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn
-            .prepare_cached(
-                "SELECT body FROM events WHERE session_id = ? AND kind IN ('approval_requested', 'approval_resolved') ORDER BY seq",
-            )
-            ?;
-        let rows = statement.query_map([session_id.as_str()], |row| row.get::<_, String>(0))?;
-        let mut open = Vec::new();
-        for body in rows {
-            let body: EventBody = serde_json::from_str(&body?)?;
-            match body {
-                EventBody::ApprovalRequested { approval_id, .. } => open.push(approval_id),
-                EventBody::ApprovalResolved { approval_id, .. } => open.retain(|id| *id != approval_id),
-                EventBody::UserPrompt { .. }
-                | EventBody::CompactionAsked { .. }
-                | EventBody::PromptTaken { .. }
-                | EventBody::PromptDropped { .. }
-                | EventBody::ToolCallDropped { .. }
-                | EventBody::AgentStarted { .. }
-                | EventBody::AgentInit { .. }
-                | EventBody::AgentState { .. }
-                | EventBody::AgentTasks { .. }
-                | EventBody::AgentLimits { .. }
-                | EventBody::Assistant { .. }
-                | EventBody::AgentUser { .. }
-                | EventBody::TurnEnded { .. }
-                | EventBody::AgentExited { .. }
-                | EventBody::Notice { .. }
-                | EventBody::AgentMode { .. }
-                | EventBody::SubagentStarted { .. }
-                | EventBody::SubagentEnded { .. }
-                | EventBody::AgentOther { .. }
-                | EventBody::AgentCompacting { .. }
-                | EventBody::AgentCompacted { .. }
-                | EventBody::CacheExpired { .. }
-                | EventBody::Unknown => {}
-            }
-        }
-        Ok(open)
     }
 }
 

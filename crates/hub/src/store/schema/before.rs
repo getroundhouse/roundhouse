@@ -51,3 +51,6 @@ pub(crate) const BEFORE_INSTANCES: usize = 31;
 
 /// How many migrations there were before subagents' records kept the model each runs on.
 pub(crate) const BEFORE_SUBAGENT_MODELS: usize = 32;
+
+/// How many migrations there were before sessions' records said what their agents wait on.
+pub(crate) const BEFORE_WAITING_ON: usize = 41;

@@ -14,7 +14,7 @@ use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft"
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals"
     };
 }
 
@@ -80,9 +80,14 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
                 .unwrap_or_default(),
             // The same.
             answer_draft: row.get::<_, Option<String>>(26)?.and_then(|json| serde_json::from_str(&json).ok()),
+            // Written only by this hub, as JSON. One it can't read says nothing, which leaves a client to look in the
+            // log, as one from an older hub does.
+            untaken: serde_json::from_str(&row.get::<_, String>(27)?).ok(),
+            open_approvals: serde_json::from_str(&row.get::<_, String>(28)?).ok(),
+            agent_opened: Some(row.get(10)?),
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
-            wait: row.get::<_, Option<String>>(27)?.map(|json| wait_from(&json)).transpose()?,
-            rev: rev_of(row, 28)?,
+            wait: row.get::<_, Option<String>>(29)?.map(|json| wait_from(&json)).transpose()?,
+            rev: rev_of(row, 30)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -108,7 +113,7 @@ impl Store {
                 "INSERT INTO sessions (",
                 session_row_columns!(),
                 ", client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -138,6 +143,8 @@ impl Store {
                 session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
                 draft_column(&session.draft)?,
                 session.answer_draft.as_ref().map(serde_json::to_string).transpose()?,
+                serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
+                serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

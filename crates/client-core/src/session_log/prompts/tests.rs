@@ -208,7 +208,11 @@ fn a_prompt_is_drawn_where_it_was_taken_after_the_log_starts_again_by_place() {
 #[test]
 fn a_prompt_the_hub_lists_as_taken_stays_at_the_end_until_the_event_that_took_it_arrives() {
     let mut log = log(vec![prompt(), taken(1), prompt()]);
-    let line = protocol::model::PromptLine::new(3, "steer", 0).settled_at(SettledAt { seq: 5, place: Place::new(5) });
+    let line = protocol::model::PromptLine::new(3, "steer", 0).settled_at(SettledAt {
+        seq: 5,
+        place: Place::new(5),
+        how: None,
+    });
     log.list_prompts(vec![line]);
 
     assert_eq!(log.prompt_at(3), PromptAt::End);

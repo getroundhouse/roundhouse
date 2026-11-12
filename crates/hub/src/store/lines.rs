@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use protocol::model::{CompactionLine, Place, PromptLine, Seq, SessionId, SettledAt, WorkspaceId};
+use protocol::model::{CompactionLine, Place, PromptLine, Seq, SessionId, SettledAt, Settlement, WorkspaceId};
 use rusqlite::Connection;
 use rusqlite::types::ValueRef;
 use serde_json::Value;
@@ -77,7 +77,7 @@ impl Store {
 /// is.
 fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<Seq, SettledAt>, StoreError> {
     let mut statement = conn.prepare_cached(
-        "SELECT json_extract(body, '$.prompt'), seq, place FROM events \
+        "SELECT json_extract(body, '$.prompt'), seq, place, kind FROM events \
          WHERE session_id = ? AND kind IN ('prompt_taken', 'prompt_dropped') ORDER BY seq",
     )?;
     let mut rows = statement.query([session_id.as_str()])?;
@@ -86,8 +86,9 @@ fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<
         let Some(prompt) = row.get::<_, Option<i64>>(0)? else { continue };
         let seq = row.get::<_, i64>(1)?.cast_unsigned();
         let place = Place::new(row.get::<_, i64>(2)?.cast_unsigned());
+        let how = if row.get::<_, String>(3)? == "prompt_taken" { Settlement::Taken } else { Settlement::Dropped };
         // In order, so the last to name it stays.
-        settled.insert(prompt.cast_unsigned(), SettledAt { seq, place });
+        settled.insert(prompt.cast_unsigned(), SettledAt { seq, place, how: Some(how) });
     }
     Ok(settled)
 }

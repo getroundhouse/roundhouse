@@ -10,6 +10,7 @@ mod hub_settings;
 mod providers;
 mod subagents;
 mod tools;
+mod waiting;
 mod waits;
 mod workers;
 mod workspaces;
@@ -376,4 +377,7 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // has open, in `waits`.
     waits::WAITS,
     waits::SESSIONS_SHOW_WAITS,
+    // The approvals each session's agent is waiting on, which its record shows with what it has yet to take and whether
+    // it has opened its conversation, in `waiting`.
+    waiting::WAITING_ON,
 ];
