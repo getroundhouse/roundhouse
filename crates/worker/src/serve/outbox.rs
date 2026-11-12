@@ -77,9 +77,11 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         | WorkerFrame::AgentContext { seq, .. }
         | WorkerFrame::AgentCache { seq, .. }
         | WorkerFrame::AgentLimits { seq, .. } => Some(seq),
-        // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, and the
-        // branches are read again for each hub that watches them.
+        // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
+        // are read again for each hub that watches them, and what an agent is writing is sent again to each hub that
+        // connects.
         WorkerFrame::AgentDelta { .. }
+        | WorkerFrame::AgentTail { .. }
         | WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. } => None,

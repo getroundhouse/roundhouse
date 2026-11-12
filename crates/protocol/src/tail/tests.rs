@@ -72,7 +72,7 @@ fn the_tail_of_the_agent_or_a_subagent_is_only_what_that_one_writes() {
     assert!(tail.of(Some(&"toolu_c".into())).is_empty());
 }
 
-fn turn_ended() -> EventBody {
+pub(super) fn turn_ended() -> EventBody {
     EventBody::TurnEnded {
         outcome: crate::event::TurnOutcome::Cancelled,
         result: None,
@@ -87,7 +87,7 @@ fn turn_ended() -> EventBody {
     }
 }
 
-fn started(call: &str, in_background: bool) -> EventBody {
+pub(super) fn started(call: &str, in_background: bool) -> EventBody {
     EventBody::SubagentStarted { call: call.into(), kind: None, description: None, prompt: None, in_background }
 }
 

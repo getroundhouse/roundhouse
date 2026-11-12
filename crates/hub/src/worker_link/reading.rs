@@ -1,6 +1,7 @@
 //! What a worker sends its hub, as the hub reads it: the reply to each call, what the worker asks, and what its agents
 //! say, which goes to their sessions, or is held until the hub says which agent each session has.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -112,8 +113,12 @@ pub(super) async fn read_frames(
 /// Passes one of the agents' frames on to its session, and notes what's numbered to acknowledge once it's recorded.
 pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame) {
     let (session_id, item, seq) = match frame {
-        // Taken where they're read.
-        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => return,
+        // Taken where they're read, but for what an agent is writing, which this hub doesn't take, as a hub from before
+        // the frame doesn't.
+        WorkerFrame::Reply { .. }
+        | WorkerFrame::Ask { .. }
+        | WorkerFrame::Branches { .. }
+        | WorkerFrame::AgentTail { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
@@ -134,13 +139,28 @@ pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame)
     }
 }
 
-pub(super) fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
+/// The newest run `frames` name for each session, since a later launch always has a higher ID, whatever order they
+/// came in. A worker sends what each agent is writing after what it kept, which can make a replaced run's come last.
+pub(super) fn newest_runs<'a>(frames: impl IntoIterator<Item = &'a WorkerFrame>) -> HashMap<SessionId, RunId> {
+    let mut runs = HashMap::new();
+    for (session_id, run) in frames.into_iter().filter_map(agent_of) {
+        let newest = runs.entry(session_id).or_insert(run);
+        *newest = (*newest).max(run);
+    }
+    runs
+}
+
+fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
     match frame {
         WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }
         | WorkerFrame::AgentDelta { session_id, run, .. }
         | WorkerFrame::AgentContext { session_id, run, .. }
         | WorkerFrame::AgentCache { session_id, run, .. }
-        | WorkerFrame::AgentLimits { session_id, run, .. } => Some((session_id.clone(), *run)),
+        | WorkerFrame::AgentLimits { session_id, run, .. }
+        | WorkerFrame::AgentTail { session_id, run, .. } => Some((session_id.clone(), *run)),
     }
 }
+
+#[cfg(test)]
+mod tests;

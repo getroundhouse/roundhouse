@@ -263,9 +263,9 @@ impl WorkerLink {
         Ok(agents)
     }
 
-    /// Which run each session's agent is, by what the worker has sent of it while it's held, the last if several.
+    /// Which run each session's agent is, by what the worker has sent of it while it's held, the newest if several.
     pub(crate) async fn held_runs(&self) -> HashMap<SessionId, RunId> {
-        self.held.lock().await.iter().flatten().filter_map(reading::agent_of).collect()
+        reading::newest_runs(self.held.lock().await.iter().flatten())
     }
 
     /// Sends on what the worker sent while it was held, and from then on as it comes.

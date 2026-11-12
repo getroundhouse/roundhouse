@@ -8,6 +8,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
+use super::tests::{started, turn_ended};
 use super::*;
 
 fn kind() -> impl Strategy<Value = BlockKind> {
@@ -41,6 +42,40 @@ fn delta() -> impl Strategy<Value = StreamDelta> {
 /// Three runs, so one often ends while another is writing, earlier or later.
 fn run() -> impl Strategy<Value = RunId> {
     (1u64..4).prop_map(RunId::new)
+}
+
+/// What one run's agent says that changes the tail.
+#[derive(Clone, Debug)]
+enum Heard {
+    Delta(StreamDelta),
+    Event(EventBody),
+}
+
+/// A delta, or a message finishing, the turn ending, or a subagent starting in the background, on the same few
+/// messages and calls as [`delta`].
+fn heard() -> impl Strategy<Value = Heard> {
+    prop_oneof![
+        4 => delta().prop_map(Heard::Delta),
+        1 => "m[0-2]".prop_map(|message_id| Heard::Event(finished(&message_id.into()))),
+        1 => Just(Heard::Event(turn_ended())),
+        1 => "t[01]".prop_map(|call| Heard::Event(started(&call, true))),
+    ]
+}
+
+/// What a hub has of `run` once it has heard `heard`, each event recorded as it came.
+fn heard_by_hub(run: RunId, heard: &[Heard]) -> Tail {
+    let mut tail = Tail::default();
+    hear(&mut tail, run, heard);
+    tail
+}
+
+fn hear(hub: &mut Tail, run: RunId, heard: &[Heard]) {
+    for (seq, heard) in (1..).zip(heard) {
+        match heard {
+            Heard::Delta(delta) => hub.apply(&StreamDelta { run: Some(run), ..delta.clone() }),
+            Heard::Event(body) => hub.on_event(seq, Some(run), body),
+        }
+    }
 }
 
 fn applied(deltas: &[StreamDelta]) -> Tail {
@@ -81,6 +116,34 @@ proptest! {
         }
 
         prop_assert_eq!(client, applied(&deltas));
+    }
+
+    /// Why a worker keeps what its agent is writing: a hub that connects to it partway through a run, whatever it held
+    /// of the run already, takes the worker's tail of it, over the wire, then hears the rest, and ends up with what a
+    /// hub that heard it all has.
+    #[test]
+    fn taking_a_run_s_tail_at_any_point_ends_with_what_a_hub_that_heard_it_all_has(
+        run in run(),
+        heard in vec(heard(), 0..40),
+        at in any::<Index>(),
+        held in any::<Index>(),
+    ) {
+        let at = at.index(heard.len() + 1);
+        let held = held.index(at + 1);
+        let mut worker = Tail::default();
+        for heard in &heard[..at] {
+            match heard {
+                Heard::Delta(delta) => worker.apply(&StreamDelta { run: Some(run), ..delta.clone() }),
+                Heard::Event(body) => worker.on_agent_event(run, body),
+            }
+        }
+        let sent = serde_json::to_string(&worker.of_run(run)).unwrap();
+
+        let mut hub = heard_by_hub(run, &heard[..held]);
+        hub.replace_run(run, serde_json::from_str(&sent).unwrap());
+        hear(&mut hub, run, &heard[at..]);
+
+        prop_assert_eq!(hub, heard_by_hub(run, &heard));
     }
 
     /// A block's text is everything sent to it, in order, since its message last stopped.
@@ -154,20 +217,5 @@ proptest! {
 
         let later: Vec<_> = before.messages.iter().filter(|m| m.run.is_some_and(|run| run > ended)).cloned().collect();
         prop_assert_eq!(after.messages, later);
-    }
-}
-
-fn turn_ended() -> EventBody {
-    EventBody::TurnEnded {
-        outcome: crate::event::TurnOutcome::Cancelled,
-        result: None,
-        errors: Vec::new(),
-        duration_ms: None,
-        cost_usd: None,
-        num_turns: None,
-        started_at_ms: None,
-        models: Vec::new(),
-        tokens: None,
-        only_compacted: false,
     }
 }

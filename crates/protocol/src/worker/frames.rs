@@ -7,7 +7,7 @@ use super::{AskId, WorkerAsk, WorkerOutcome};
 use crate::attachment::NewAttachment;
 use crate::event::EventBody;
 use crate::model::{Branches, CacheRequest, ContextUsage, RunId, SessionId, UsageLimit};
-use crate::tail::StreamDelta;
+use crate::tail::{StreamDelta, Tail};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "frame", rename_all = "snake_case")]
@@ -36,6 +36,15 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         delta: StreamDelta,
+    },
+    /// What the agent of `run` is writing, as the deltas the worker has sent make it, with the subagents it runs in the
+    /// background and its compaction under way. Sent to a hub as it says hello, after what the worker kept for it and
+    /// before anything new, since the deltas that wrote it went to the hub before, or to none, so this hub's tail of
+    /// `run` is this from here on. Only for a run with something in it.
+    AgentTail {
+        session_id: SessionId,
+        run: RunId,
+        tail: Tail,
     },
     /// How full the agent's context is now. It isn't an event: it answers the worker's own question rather than
     /// being something the agent said, and only the newest matters, which the hub keeps on the session's record.
