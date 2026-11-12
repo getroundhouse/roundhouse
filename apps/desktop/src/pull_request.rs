@@ -9,14 +9,15 @@ use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as
 use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window,
-    div, px,
+    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
+    Window, div, px,
 };
 use look::Work;
 use look::{Hand as _, Off as _};
 use protocol::model::{PullRequest, Standing, Workspace, WorkspaceId};
 
 use crate::busy::Busy;
+use crate::sides::{self, AtTheTop};
 
 #[cfg(test)]
 mod tests;
@@ -102,7 +103,7 @@ pub fn bar(
         .w_full()
         .h(HEIGHT)
         .pl_3()
-        .pr(px(12.) + crate::sides::end_inset(crate::sides::AtTheTop::RightSidebar, cx))
+        .pr(px(12.) + sides::clearance(AtTheTop::RightSidebar, cx).end)
         .gap_2()
         .bg(work.tint(cx))
         .border_b_1()
@@ -115,21 +116,39 @@ pub fn bar(
     let pr = lookup.pull_request();
     let title = words::title(standing, pr.and_then(|pr| pr.base.as_deref()));
     let text = if pr.is_some() { work.text(cx) } else { theme.muted_foreground };
-    row.children(pr.map(|pr| number(pr, work, cx)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_sm()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(text)
-                .child(title),
-        )
+    let title = div()
+        .flex_1()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .text_sm()
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(text)
+        .child(title);
+    row.child(giving_way(pr.map(|pr| number(pr, work, cx)), title))
         .children(words::action(standing).map(|action| action_button(action, work, (busy, workspace), on_action, cx)))
         .into_any_element()
+}
+
+/// The number, then the title, filling what the action leaves of the bar. As the bar narrows, the title gives way
+/// first, as far as nothing, and then the number goes, rather than run past the bar's end, which on Windows is under
+/// the window's buttons. They're laid out from the right and wrap, so the number is the one to go: it wraps onto a
+/// second line, which the bar's height leaves out of sight, since each fills that height.
+fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
+    let filling = |child: AnyElement| div().h_full().flex().items_center().child(child);
+    let title = filling(title.into_any_element()).flex_1().min_w_0();
+    div()
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .flex()
+        .flex_row_reverse()
+        .flex_wrap()
+        .overflow_hidden()
+        .gap_2()
+        .child(title)
+        .children(number.map(filling))
 }
 
 /// The same, for the header while the sidebar is hidden: the number and the action, without the words, which the

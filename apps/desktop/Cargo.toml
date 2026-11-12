@@ -41,8 +41,10 @@ image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "we
 objc2.workspace = true
 objc2-app-kit.workspace = true
 
-# Whether the mouse's left button is down, which GPUI doesn't say of a move over the window's frame.
+# Whether the mouse's left button is down, which GPUI doesn't say of a move over the window's frame, and a window
+# button's command, for a screen reader, which presses it without the pointer.
 [target.'cfg(target_os = "windows")'.dependencies]
+raw-window-handle.workspace = true
 windows-sys = { workspace = true, features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 # Reads the file icons' manifest into tables, so the app never parses it.

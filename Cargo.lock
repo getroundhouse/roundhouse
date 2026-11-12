@@ -1555,6 +1555,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "parking_lot",
  "protocol",
+ "raw-window-handle",
  "ring",
  "serde",
  "serde_json",
