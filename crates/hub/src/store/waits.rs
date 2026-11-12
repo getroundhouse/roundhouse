@@ -64,15 +64,14 @@ impl Store {
     }
 
     /// Ends the workspace's open waits as cancelled, as it starts being archived. Returns those it ended.
-    pub fn call_off_workspace_waits(&self, workspace_id: &WorkspaceId, at_ms: i64) -> Result<Vec<WaitId>, StoreError> {
+    pub fn call_off_workspace_waits(&self, workspace_id: &WorkspaceId, at_ms: i64) -> Result<Vec<Wait>, StoreError> {
         let conn = lock(&self.writer);
-        let mut query = conn.prepare_cached(
-            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE workspace_id = ? AND ended_at_ms IS NULL RETURNING id",
-        )?;
-        let ids = query.query_map(params![at_ms, text_of(&WaitEnd::Cancelled), workspace_id.as_str()], |row| {
-            row.get::<_, String>(0)
-        })?;
-        Ok(ids.map(|id| id.map(WaitId::from)).collect::<rusqlite::Result<_>>()?)
+        let mut query = conn.prepare_cached(&format!(
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE workspace_id = ? AND ended_at_ms IS NULL RETURNING {COLUMNS}"
+        ))?;
+        let waits =
+            query.query_map(params![at_ms, text_of(&WaitEnd::Cancelled), workspace_id.as_str()], wait_from_row)?;
+        Ok(waits.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn wait(&self, id: &WaitId) -> Result<Wait, StoreError> {

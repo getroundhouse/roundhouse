@@ -11,6 +11,8 @@ use crate::hub::tests::{hub_in, hub_with_worktree, reading, reading_within, says
 use crate::store::tests::idle_session;
 use crate::store::{Seen, SessionChange, StatusChange};
 
+mod announced;
+
 /// A wait of session `s`'s, in workspace `w`, as [`hub_in`] makes them, on [`open`], that hasn't ended.
 pub(super) fn wait(until: WaitUntil) -> Wait {
     Wait {

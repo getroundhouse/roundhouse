@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AccountId, AnswerDraft, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode,
-    PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
+    PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, Wait, WorkspaceId,
 };
 use crate::event::{AgentTask, TaskKind};
 
@@ -122,6 +122,12 @@ pub struct Session {
     /// takes that work with it.
     #[serde(default)]
     pub background_tasks: Vec<AgentTask>,
+    /// The wait on the pull request the agent has open, as the hub keeps it, which a chat has one of at a time. It's
+    /// the hub's, so it says how a wait stands where the list of tasks only has the CLI's copy of it, which can lag
+    /// behind, and it lasts once the agent has gone. Starting or ending one moves the record, so the feed announces
+    /// it. `None` with none open, and from a hub that doesn't keep them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<Wait>,
     /// How full the agent's context is, as its newest report said. `None` until it has said, and from a hub that
     /// doesn't keep it. It stays once the agent has gone, since the conversation it resumes is as full.
     #[serde(default)]
@@ -205,7 +211,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::model::CacheTtl;
+    use crate::model::{CacheTtl, WaitUntil};
 
     /// Waits are the hub's, which the next hub keeps, starting the agent again once one ends, so an agent with only
     /// waits in the background isn't counted as running. One with anything else there, or on a turn, is.
@@ -236,6 +242,23 @@ mod tests {
         session.context = Some(ContextUsage { used_tokens, max_tokens: 1_000_000, parts: Vec::new() });
         session.prompt_cache = Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 });
         session
+    }
+
+    /// A hub that doesn't keep waits sends none. One that does sends the open one in this form, which its store's query
+    /// writes, with a `call` the CLI didn't say as null.
+    #[test]
+    fn a_session_from_a_hub_that_doesnt_keep_waits_has_none_and_one_that_does_has_its_open_wait() {
+        let mut said = serde_json::to_value(session("background", 0)).unwrap();
+        said["wait"] = json!({
+            "id": "a", "session_id": "s", "workspace_id": "w", "number": 7, "call": null, "until": "checks",
+            "started_at_ms": 1,
+        });
+
+        let waiting: Session = serde_json::from_value(said).unwrap();
+
+        assert_eq!(session("idle", 0).wait, None);
+        let wait = waiting.wait.unwrap();
+        assert_eq!((wait.number, wait.call, wait.until, wait.ended), (7, None, WaitUntil::Checks, None));
     }
 
     #[test]
