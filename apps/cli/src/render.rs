@@ -64,9 +64,8 @@ impl Printer {
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { prompt, .. } => self.prompt(event.seq, &prompt.text, &prompt.files),
-            EventBody::AgentStarted { pid, resumed, .. } => {
-                let how = if *resumed { "resumed" } else { "started" };
-                self.line(event.seq, &format!("agent {how}, pid {pid}"));
+            EventBody::AgentStarted { pid, resumed, build, previous_build } => {
+                self.line(event.seq, &started(*pid, *resumed, build.as_deref(), previous_build.as_deref()));
             }
             EventBody::AgentInit { model, permission_mode, cwd, .. } => {
                 self.ready(event.seq, model.as_deref(), *permission_mode, cwd.as_deref());
@@ -268,6 +267,16 @@ fn about(name: &str, summary: Option<String>) -> String {
     summary.map_or_else(|| name.to_string(), |summary| format!("{name}: {summary}"))
 }
 
+/// That the agent started, and the build its chat's agent was updated from when it's on another than it last ran on, as
+/// the desktop app's chat says.
+fn started(pid: u32, resumed: bool, build: Option<&str>, previous_build: Option<&str>) -> String {
+    let how = if resumed { "resumed" } else { "started" };
+    match build.zip(previous_build) {
+        Some((build, from)) => format!("agent {how}, pid {pid}, Roundhouse chat worker updated from {from} to {build}"),
+        None => format!("agent {how}, pid {pid}"),
+    }
+}
+
 /// That someone asked the agent to compact its conversation, and what to keep if they said.
 fn asked_to_compact(keeping: Option<&str>) -> String {
     keeping.map_or_else(|| "asked to compact".to_string(), |keeping| format!("asked to compact, keeping: {keeping}"))
@@ -302,7 +311,7 @@ mod tests {
     use protocol::event::{AgentTask, SubagentOutcome, TaskKind};
     use serde_json::json;
 
-    use super::{Printer, called};
+    use super::{Printer, called, started};
 
     fn task(id: &str, kind: TaskKind) -> AgentTask {
         AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
@@ -327,6 +336,14 @@ mod tests {
         assert_eq!(called("Read", &json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
         assert_eq!(called("mcp__github__list", &json!({ "labels": ["bug"] })), "mcp__github__list: labels: [\"bug\"]");
         assert_eq!(called("advisor", &json!({})), "advisor", "it takes no input");
+    }
+
+    #[test]
+    fn an_agent_started_on_another_build_than_its_chat_s_last_says_it_was_updated() {
+        let said = "agent resumed, pid 7, Roundhouse chat worker updated from 0.9.0 to 1.0.0";
+        assert_eq!(started(7, true, Some("1.0.0"), Some("0.9.0")), said);
+        assert_eq!(started(7, false, Some("1.0.0"), None), "agent started, pid 7");
+        assert_eq!(started(7, true, None, None), "agent resumed, pid 7", "from a hub from before builds were recorded");
     }
 
     #[test]

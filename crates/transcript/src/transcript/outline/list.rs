@@ -17,7 +17,7 @@ use gpui_kit::{
 use look::{Hand as _, LineText};
 use protocol::model::{CompactionLine, PromptLine};
 
-use crate::rows::compaction;
+use crate::rows::{RULE_ICON, compaction};
 
 use super::{Jumps, Kind, Line};
 
@@ -39,8 +39,6 @@ const GAP: Pixels = px(2.);
 const NUMBER_WIDTH: Pixels = px(28.);
 /// How far past the list's window rows are laid out, so one is ready before it scrolls in.
 const OVERDRAW: Pixels = px(200.);
-/// The compaction's icon, as its rule in the chat has it.
-const COMPACTION_ICON: f32 = 13.;
 /// How many prompts show above the one being read when the list opens, so it's seen among those before it.
 const LEAD: usize = 2;
 
@@ -200,7 +198,8 @@ fn compaction_row(
     };
     // In words, since a screen reader would read the arrow out as one.
     let (label, said) = (said("to", ", "), said("→", " · "));
-    let icon = Icon::new(IconName::FoldVertical).size(px(COMPACTION_ICON)).text_color(look::faint());
+    // The compaction's icon, as its rule in the chat has it.
+    let icon = Icon::new(IconName::FoldVertical).size(px(RULE_ICON)).text_color(look::faint());
     let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
     let text = div().flex_1().min_w_0().truncate().text_color(look::faint()).child(said);
     let text = line_text.small.set(text);
