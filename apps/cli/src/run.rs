@@ -105,7 +105,7 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
         HubCmd::Status => {
             let status = hub.status()?;
             println!(
-                "pid {}  version {}  protocol {}  {} worker(s)  {} session(s) running  {} client(s)  {}",
+                "pid {}  version {}  protocol {}  {} worker(s)  {} session(s) running, waits aside  {} client(s)  {}",
                 status.pid,
                 status.hub_version,
                 status.protocol_version,

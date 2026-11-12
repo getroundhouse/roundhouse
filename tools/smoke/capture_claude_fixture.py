@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerates crates/agents/tests/fixtures/claude.jsonl and claude_controls.jsonl from the real `claude` CLI.
+"""Regenerates crates/agents/tests/fixtures/claude.jsonl, claude_controls.jsonl, claude_mcp_task.jsonl and
+claude_mcp_task_resumed.jsonl from the real `claude` CLI.
 
 Run this after upgrading the CLI, then run `cargo test -p agents`. A failure there means the CLI's
 output changed in a way the adapter depends on.
@@ -9,13 +10,19 @@ fraction of a cent. Machine details and personal configuration are removed befor
 written, because the output goes in the repo.
 
 With --controls, it only regenerates claude_controls.jsonl: control requests and the CLI's replies, with no
-prompt, so nothing is spent.
+prompt, so nothing is spent. With --mcp-task, it only regenerates the two claude_mcp_task files: a call to a tool
+that's answered with an MCP task, as `wait_for_pull_request` is, from a stand-in for the worker's tools, the task
+ending and the CLI picking up by itself, then another, and the CLI stopped with SIGTERM as a worker stops it. Then, in
+the second file, the same conversation resumed, which lists the task again, until it ends. It prints what the CLI
+asked of the stand-in, so a CLI that calls off its task as it stops shows.
 """
+import http.server
 import json
 import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -25,6 +32,8 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "crates/agents/tests/fixtures/claude.jsonl"
 CONTROLS = ROOT / "crates/agents/tests/fixtures/claude_controls.jsonl"
+MCP_TASK = ROOT / "crates/agents/tests/fixtures/claude_mcp_task.jsonl"
+MCP_TASK_RESUMED = ROOT / "crates/agents/tests/fixtures/claude_mcp_task_resumed.jsonl"
 FLAGS = """-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages
 --thinking-display summarized --permission-prompt-tool stdio --allow-dangerously-skip-permissions --permission-mode manual --model haiku --effort high""".split()
 # Keeps the fixture small. Order is preserved, so the protocol's sequencing is still real.
@@ -37,16 +46,18 @@ def user(text):
 
 
 class Cli:
-    def __init__(self, cwd):
+    def __init__(self, cwd, args=(), env_set=None):
         scrub = ("CLAUDECODE", "CLAUDE_AGENT_SDK_VERSION", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_ENTRYPOINT",
                  "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
                  "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT", "CLAUDE_PID")
         env = {k: v for k, v in os.environ.items() if k not in scrub}
         env["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS"] = "1"
-        self.proc = subprocess.Popen(["claude", *FLAGS], cwd=cwd, env=env, text=True,
+        env.update(env_set or {})
+        self.proc = subprocess.Popen(["claude", *FLAGS, *args], cwd=cwd, env=env, text=True,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self.lines, self.seen = [], []
-        threading.Thread(target=self._read, daemon=True).start()
+        self.reader = threading.Thread(target=self._read, daemon=True)
+        self.reader.start()
 
     def _read(self):
         for line in self.proc.stdout:
@@ -57,6 +68,12 @@ class Cli:
     def send(self, value):
         self.proc.stdin.write(json.dumps(value) + "\n")
         self.proc.stdin.flush()
+
+    def stop(self, sig):
+        """Signals the CLI, and returns once it has exited and everything it wrote on its way out has been read."""
+        self.proc.send_signal(sig)
+        self.proc.wait(timeout=30)
+        self.reader.join(timeout=10)
 
     def wait_for(self, predicate, timeout=90):
         deadline = time.time() + timeout
@@ -153,6 +170,141 @@ def capture_controls(cwd):
     return exchanged
 
 
+class TaskServer:
+    """A stand-in for the worker's tools, on MCP's protocol 2026-07-28 over HTTP, as `crates/worker/src/tools/mcp.rs`
+    answers it: `wait_for_pull_request` answers each call with a task, which is working until `end` is called, then
+    completed. It writes down each method it's asked, with the task it names."""
+    VERSION = "2026-07-28"
+    TASKS = "io.modelcontextprotocol/tasks"
+    TOOL = "wait_for_pull_request"
+
+    def __init__(self):
+        self.asked, self.tasks, self.last_task, self.lock = [], {}, None, threading.Lock()
+        server = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                answer = server.answer(body)
+                if answer is None:
+                    self.send_response(202)
+                    self.end_headers()
+                    return
+                data = json.dumps(answer).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *_):
+                pass
+
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/mcp"
+
+    def task(self, task_id):
+        status = self.tasks[task_id]
+        task = {"resultType": "complete", "taskId": task_id, "status": status, "createdAt": "2100-01-01T00:00:00Z",
+                "lastUpdatedAt": "2100-01-01T00:00:00Z", "ttlMs": None, "pollIntervalMs": 500,
+                "statusMessage": "Waiting on pull request #7. Its checks are running."}
+        if status == "completed":
+            task["statusMessage"] = "The wait ended: it's merged."
+            task["result"] = {"resultType": "complete", "isError": False, "content": [
+                {"type": "text", "text": "The wait on pull request #7 has ended: it's merged."}]}
+        return task
+
+    def answer(self, body):
+        method, params = body.get("method"), body.get("params") or {}
+        with self.lock:
+            self.asked.append((method, params.get("taskId") or params.get("name")))
+            if "id" not in body:
+                return None
+            if method == "server/discover":
+                result = {"resultType": "complete", "supportedVersions": [self.VERSION],
+                          "capabilities": {"tools": {}, "extensions": {self.TASKS: {}}},
+                          "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "roundhouse", "version": "0"}},
+                          "ttlMs": 0, "cacheScope": "public"}
+            elif method == "tools/list":
+                result = {"resultType": "complete", "ttlMs": 0, "cacheScope": "public", "tools": [{
+                    "name": self.TOOL, "title": "Wait on the pull request",
+                    "description": "Waits in the background until the pull request is merged or closed.",
+                    "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                    "annotations": {"readOnlyHint": True, "openWorldHint": True}}]}
+            elif method == "tools/call":
+                task_id = self.last_task = f"wait-{len(self.tasks) + 1}"
+                self.tasks[task_id] = "working"
+                result = {**self.task(task_id), "resultType": "task"}
+            elif method in ("tasks/get", "tasks/cancel") and params.get("taskId") in self.tasks:
+                if method == "tasks/cancel" and self.tasks[params["taskId"]] == "working":
+                    self.tasks[params["taskId"]] = "cancelled"
+                result = self.task(params["taskId"])
+            elif method == "ping":
+                result = {"resultType": "complete"}
+            else:
+                return {"jsonrpc": "2.0", "id": body["id"], "error": {"code": -32601, "message": f"no {method}"}}
+        return {"jsonrpc": "2.0", "id": body["id"], "result": result}
+
+    def end(self, task_id):
+        with self.lock:
+            self.tasks[task_id] = "completed"
+
+
+def is_listing_a_task(value):
+    return value.get("type") == "system" and value.get("subtype") == "background_tasks_changed" and value.get("tasks")
+
+
+def call_the_tool(cli, server):
+    """Asks for one call to the tool, allows it if asked, and waits for the turn to end with its task listed."""
+    cli.send(user(f"Call the mcp__roundhouse__{TaskServer.TOOL} tool once, with no arguments. Then reply with the single "
+                  "word WAITING, and nothing else."))
+    if is_approval(asked := cli.wait_for(lambda v: is_approval(v) or is_listing_a_task(v))):
+        respond(cli, asked, {"behavior": "allow", "updatedInput": asked["request"]["input"]})
+        cli.wait_for(is_listing_a_task)
+    cli.wait_for(is_result)
+    return server.last_task
+
+
+def capture_mcp_task(cwd):
+    """A task that ends while the CLI runs, which it picks up after by itself. Then another, the CLI stopped with
+    SIGTERM while it's listed, as a worker stops its agents as its hub goes, and resumed, as the hub starts it again
+    once the wait ends, which lists it again and asks after it."""
+    server = TaskServer()
+    config = pathlib.Path(cwd) / ".mcp-config.json"
+    config.write_text(json.dumps({"mcpServers": {"roundhouse": {"type": "http", "url": server.url,
+                                                                "headers": {"Authorization": "Bearer stand-in"}}}}))
+    takes_tasks = {"CLAUDE_AUTO_BACKGROUND_TASKS": "1"}
+    # Only the stand-in, so none of this machine's own servers are reached or written down.
+    servers = ["--mcp-config", str(config), "--strict-mcp-config"]
+    cli = Cli(cwd, servers, takes_tasks)
+    first = call_the_tool(cli, server)
+    server.end(first)
+    cli.wait_for(is_result)
+    time.sleep(0.5)
+    second = call_the_tool(cli, server)
+    session_id = next(v["session_id"] for v in cli.lines if v.get("type") == "system" and v.get("subtype") == "init")
+    time.sleep(1)
+    before = len(cli.lines)
+    cli.stop(signal.SIGTERM)
+    stopped = list(cli.lines)
+    print("written on SIGTERM:", [(v.get("type"), v.get("subtype"), v.get("tasks")) for v in stopped[before:]])
+    print("asked of the stand-in before the CLI stopped:", server.asked)
+    if server.tasks[second] != "working":
+        print(f"the CLI left the task {server.tasks[second]} as it stopped")
+    server.asked = []
+
+    resumed = Cli(cwd, [*servers, "--resume", session_id], takes_tasks)
+    resumed.wait_for(is_listing_a_task, timeout=60)
+    time.sleep(1.5)
+    server.end(second)
+    resumed.wait_for(is_result)
+    time.sleep(0.3)
+    resumed.stop(signal.SIGKILL)
+    print("asked of the stand-in once resumed:", server.asked)
+    return stopped, resumed.lines
+
+
 def keep_only_whats_applied(value):
     """`get_settings` answers with the user's own settings too, which are personal and which the adapter doesn't read."""
     answer = value.get("response", {}).get("response")
@@ -208,6 +360,13 @@ def made_up_limits(info):
 
 
 def scrub(text, cwd):
+    # A task's output file is under a directory named for the conversation's, with a dash for anything but a letter
+    # or a digit.
+    for path in (os.path.realpath(cwd), str(cwd)):
+        text = text.replace(re.sub(r"[^A-Za-z0-9]", "-", path), "-tmp-fixture")
+    # Which user this is, by number, which names the CLI's directory of task output.
+    if hasattr(os, "getuid"):
+        text = text.replace(f"/claude-{os.getuid()}/", "/claude-uid/")
     text = text.replace(os.path.realpath(cwd), "/tmp/fixture").replace(str(cwd), "/tmp/fixture")
     return text.replace(str(pathlib.Path.home()), "/home/user")
 
@@ -269,31 +428,51 @@ def write(path, lines):
 
 def main():
     controls_only = sys.argv[1:] == ["--controls"]
+    mcp_task_only = sys.argv[1:] == ["--mcp-task"]
     with tempfile.TemporaryDirectory(dir="/tmp") as cwd:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=cwd, check=True)
-        kept = []
-        if not controls_only:
-            lines = capture(cwd)
-            scrub_streamed_text(lines, cwd)
-            counts = {}
-            for value in lines:
-                kind = kind_of(value)
-                counts[kind] = counts.get(kind, 0) + 1
-                if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
-                    continue
-                kept.append(sanitize(value, cwd))
+        if mcp_task_only:
+            captured = [(path, kept_of(lines, cwd)) for path, lines in zip((MCP_TASK, MCP_TASK_RESUMED),
+                                                                           capture_mcp_task(cwd))]
+            forget_the_conversations(cwd)
+            for path, kept in captured:
+                write(path, kept)
+                print(f"wrote {len(kept)} lines from claude {version()} to {path}")
+            return
+        kept = kept_of(capture(cwd), cwd) if not controls_only else []
         controls = [sanitize(made_up_usage(keep_only_what_the_context_holds(keep_only_whats_applied(value))), cwd)
                     for value in capture_controls(cwd)]
-        # The CLI keeps a conversation file per directory. The random name makes this exact.
-        projects = pathlib.Path.home() / ".claude/projects"
-        for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):
-            shutil.rmtree(leftover, ignore_errors=True)
-    version = subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.split()[0]
+        forget_the_conversations(cwd)
     if kept:
         write(FIXTURE, kept)
-        print(f"wrote {len(kept)} lines from claude {version} to {FIXTURE}")
+        print(f"wrote {len(kept)} lines from claude {version()} to {FIXTURE}")
     write(CONTROLS, controls)
-    print(f"wrote {len(controls)} lines from claude {version} to {CONTROLS}")
+    print(f"wrote {len(controls)} lines from claude {version()} to {CONTROLS}")
+
+
+def kept_of(lines, cwd):
+    """What goes in a fixture of the lines captured: streamed text scrubbed whole, at most `MAX_PER_KIND` of the
+    kinds it names, and each line sanitized."""
+    scrub_streamed_text(lines, cwd)
+    counts, kept = {}, []
+    for value in lines:
+        kind = kind_of(value)
+        counts[kind] = counts.get(kind, 0) + 1
+        if kind in MAX_PER_KIND and counts[kind] > MAX_PER_KIND[kind]:
+            continue
+        kept.append(sanitize(value, cwd))
+    return kept
+
+
+def forget_the_conversations(cwd):
+    """The CLI keeps a conversation file per directory. The random name makes this exact."""
+    projects = pathlib.Path.home() / ".claude/projects"
+    for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+
+
+def version():
+    return subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.split()[0]
 
 
 if __name__ == "__main__":

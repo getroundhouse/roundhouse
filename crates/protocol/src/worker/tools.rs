@@ -4,6 +4,10 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+/// The worker's tool that waits on the workspace's pull request, by which an adapter tells a wait from the agent's
+/// other work in the background.
+pub const WAIT_TOOL: &str = "wait_for_pull_request";
+
 /// What an agent's calls to the worker's tools carry, as a bearer token, which tells the worker whose they are. It's
 /// only as secret as the agent's own files, since the agent's config holds it, but it's kept out of logs all the same.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]

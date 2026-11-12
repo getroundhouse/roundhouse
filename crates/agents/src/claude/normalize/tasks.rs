@@ -5,10 +5,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::event::{AgentTask, EventBody, TaskKind};
 use protocol::model::{TaskId, ToolUseId};
+use protocol::worker::WAIT_TOOL;
 use serde_json::Value;
 
 use super::calls::OpenCalls;
 use super::{Parsed, id_of, other, str_of, string_of};
+use crate::claude::TOOLS_SERVER;
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +19,8 @@ mod tests;
 const MONITOR: &str = "Monitor";
 /// The `task_type` of a subagent's task.
 const SUBAGENT: &str = "local_agent";
+/// The `task_type` of a task that a call to an MCP server's tool left running, the server having answered it with one.
+const MCP_TASK: &str = "mcp_task";
 
 /// `background_tasks_changed`, which is the whole list each time. Which are monitors, and which left it stopped, come
 /// from what came before, which a [`super::Normalizer`] knows.
@@ -31,9 +35,20 @@ pub(super) fn listed(value: &Value) -> Parsed {
 }
 
 fn task(value: &Value) -> Option<AgentTask> {
-    // A monitor's is `local_bash` too, as a command's is.
-    let kind = if str_of(value, "task_type") == Some(SUBAGENT) { TaskKind::Subagent } else { TaskKind::Command };
+    let kind = match str_of(value, "task_type") {
+        Some(SUBAGENT) => TaskKind::Subagent,
+        Some(MCP_TASK) if is_a_wait(value) => TaskKind::Wait,
+        // A monitor's is `local_bash` too, as a command's is.
+        _ => TaskKind::Command,
+    };
     Some(AgentTask { id: id_of(value, "task_id")?, description: string_of(value, "description"), kind, call: None })
+}
+
+/// Whether an MCP task is a wait on the pull request, which the CLI says by describing it as the tool whose call
+/// started it, with its server, as `roundhouse/wait_for_pull_request`. The list says so itself, so a CLI started again
+/// with `--resume`, which lists the task again before any prompt, says so too, though the call was another process's.
+fn is_a_wait(value: &Value) -> bool {
+    str_of(value, "description").and_then(|description| description.split_once('/')) == Some((TOOLS_SERVER, WAIT_TOOL))
 }
 
 /// What the lines before a list say about the tasks in it, which the list itself doesn't.

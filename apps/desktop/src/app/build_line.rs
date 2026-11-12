@@ -2,6 +2,7 @@
 
 use client_core::Client;
 use gpui_kit::App;
+use protocol::event::AgentTask;
 use protocol::model::SessionStatus;
 
 use super::AppView;
@@ -11,7 +12,7 @@ impl AppView {
         let client = self.client();
         let hub = client.as_ref().map(Client::hub_version);
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = Agents::of(self.sessions.values().flatten().map(|s| s.status));
+        let agents = Agents::of(self.sessions.values().flatten().map(|s| (s.status, s.background_tasks.as_slice())));
         BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 }
@@ -41,10 +42,12 @@ pub struct Agents {
 }
 
 impl Agents {
-    /// Counts the same chats the hub does, which are those whose status [`SessionStatus::is_active`].
-    pub(super) fn of(statuses: impl IntoIterator<Item = SessionStatus>) -> Self {
+    /// Counts the same chats the hub does, from each one's status and what it has in the background, as
+    /// [`SessionStatus::counts_as_running`] says. One that only waits on its pull request isn't counted, since the next
+    /// hub keeps the wait.
+    pub(super) fn of<'a>(chats: impl IntoIterator<Item = (SessionStatus, &'a [AgentTask])>) -> Self {
         let mut agents = Self::default();
-        for status in statuses {
+        for (status, _) in chats.into_iter().filter(|(status, background)| status.counts_as_running(background)) {
             match status {
                 SessionStatus::Running | SessionStatus::Background => agents.working += 1,
                 SessionStatus::WaitingApproval => agents.waiting_on_you += 1,
@@ -74,6 +77,7 @@ impl BuildLine {
 #[cfg(test)]
 mod tests {
     use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
+    use protocol::event::TaskKind;
 
     use super::*;
 
@@ -110,19 +114,32 @@ mod tests {
         assert_eq!(line, BuildLine::UpdateReady { app: "abc".to_string(), next: "ghi".to_string() });
     }
 
+    fn task(kind: TaskKind) -> AgentTask {
+        AgentTask { id: "t".into(), description: None, kind, call: None }
+    }
+
     /// An agent that asked something holds an update up as much as one that's working, and only you can move it on.
     #[test]
     fn an_agent_waiting_on_you_is_counted_apart_from_those_working() {
-        let agents = Agents::of([Running, WaitingApproval, Background, Idle, WaitingApproval, Interrupted, Unknown]);
+        let command = [task(TaskKind::Command)];
+        let statuses = [Running, WaitingApproval, Background, Idle, WaitingApproval, Interrupted, Unknown];
+
+        let agents = Agents::of(statuses.into_iter().map(|status| (status, &command[..])));
 
         assert_eq!(agents, Agents { working: 2, waiting_on_you: 2 });
     }
 
-    /// The hub only goes idle, and the update only finishes, once none is active, so the card counts those.
+    /// The hub only goes idle, and the update only finishes, once none holds up its restart, so the card counts
+    /// those. One that only waits on its pull request doesn't, since the next hub keeps the wait.
     #[test]
     fn the_agents_counted_are_the_ones_the_hub_counts_as_running() {
+        let (command, wait) = ([task(TaskKind::Command)], [task(TaskKind::Wait)]);
         for status in [Running, WaitingApproval, Background, Idle, Interrupted, Unknown] {
-            assert_eq!(Agents::of([status]) != NONE, status.is_active(), "{status:?}");
+            for background in [&command[..], &wait[..]] {
+                let counted = Agents::of([(status, background)]) != NONE;
+                assert_eq!(counted, status.counts_as_running(background), "{status:?} {background:?}");
+            }
         }
+        assert_eq!(Agents::of([(Background, &wait[..])]), NONE);
     }
 }

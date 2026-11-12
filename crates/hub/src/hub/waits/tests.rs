@@ -1,7 +1,7 @@
 //! Waits through the hub, as a worker asks for them, with a stand-in for the workspace's worker that reads its pull
 //! request as each test says.
 
-use protocol::event::{EventBody, ExitReason, NoticeLevel};
+use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
 use protocol::model::{Checks, Local, MergeState, PrState, QueueState, SessionStatus, Workspace};
 use protocol::worker::{AskReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
 
@@ -9,7 +9,7 @@ use super::*;
 pub(super) use crate::hub::tests::open;
 use crate::hub::tests::{hub_in, hub_with_worktree, reading, reading_within, says};
 use crate::store::tests::idle_session;
-use crate::store::{Seen, SessionChange};
+use crate::store::{Seen, SessionChange, StatusChange};
 
 /// A wait of session `s`'s, in workspace `w`, as [`hub_in`] makes them, on [`open`], that hasn't ended.
 pub(super) fn wait(until: WaitUntil) -> Wait {
@@ -327,6 +327,25 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
             .iter()
             .any(|event| matches!(event.body, EventBody::AgentExited { reason: ExitReason::StartFailed, .. }));
         assert_eq!(told, woken, "{status:?}, held: {queue_held}");
+    }
+}
+
+/// As after a hub started again, before the agent has listed anything: what the chat has in the background is what
+/// its record lists, so one whose only work is a wait isn't counted as running, and one with a command still is.
+#[tokio::test]
+async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
+    for (kind, running) in [(TaskKind::Wait, 0), (TaskKind::Command, 1)] {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_with_worktree(dir.path());
+        let task = AgentTask { id: "t".into(), description: None, kind, call: None };
+        let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
+        let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
+        let change = SessionChange { status: Some(status), queue_held: None, recorded: None };
+        hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
+
+        hub.live_session(&"s".into()).await.unwrap();
+
+        assert_eq!(hub.status().running_sessions, running, "{kind:?}");
     }
 }
 

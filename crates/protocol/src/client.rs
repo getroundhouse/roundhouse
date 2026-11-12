@@ -113,6 +113,9 @@ pub struct HubStatus {
     pub protocol_version: u32,
     pub started_at_ms: i64,
     pub workers: u32,
+    /// Sessions whose agent is at work on what stopping the hub would cut short, as
+    /// [`crate::model::SessionStatus::counts_as_running`] says: on a turn, or in the background on anything but waits
+    /// on the pull request, which the next hub keeps. A hub from before waits counts every session at work.
     pub running_sessions: u32,
     /// Connected clients, including the one asking.
     pub clients: u32,

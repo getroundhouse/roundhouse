@@ -10,6 +10,7 @@ use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
+mod mcp_task;
 mod modes;
 
 const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");

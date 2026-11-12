@@ -3,8 +3,8 @@
 
 #![cfg(test)]
 
-use client_core::Client;
-use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent};
+use client_core::{Client, IdleStop, stop_hub_if_idle};
+use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent, TaskKind};
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::gh::{MERGED, OPEN, StandInGh};
@@ -131,8 +131,10 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     assert!(text.contains("moved to the background"), "it was answered with a task: {text}");
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let listed: Vec<_> =
-        client.session_get(&chat.id).unwrap().background_tasks.into_iter().map(|t| t.description).collect();
-    assert_eq!(listed, [Some("roundhouse/wait_for_pull_request".to_string())]);
+        client.session_get(&chat.id).unwrap().background_tasks.into_iter().map(|t| (t.description, t.kind)).collect();
+    assert_eq!(listed, [(Some("roundhouse/wait_for_pull_request".to_string()), TaskKind::Wait)]);
+    // The next hub keeps the wait, so it doesn't keep the hub from stopping to update it.
+    assert_eq!(client.hub_status().unwrap().running_sessions, 0);
     gh.say(MERGED);
     client.workspace_pull_request(&workspace.id).unwrap();
 
@@ -197,6 +199,18 @@ fn a_wait_lasts_across_the_hub_stopping_and_starting_again() {
         stack.client().hub_shutdown().unwrap();
         let mut hub = stack.hub.take().unwrap();
         wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
+    };
+    a_wait_lasts_across_a_restart(stop, false);
+}
+
+/// As the app stops an older hub to update it, only if nothing would notice, which a chat whose only work is a wait
+/// doesn't.
+#[test]
+fn a_wait_lasts_across_the_hub_stopping_for_an_update() {
+    let stop = |stack: &mut Stack| {
+        let stopped = stop_hub_if_idle(&stack.client(), &stack.socket(), stack.hub_pid()).unwrap();
+        assert_eq!(stopped, IdleStop::Stopped, "a wait holds up no update");
+        stack.hub.take().unwrap().wait().unwrap();
     };
     a_wait_lasts_across_a_restart(stop, false);
 }

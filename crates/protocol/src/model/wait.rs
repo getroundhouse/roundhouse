@@ -12,8 +12,8 @@ pub struct Wait {
     pub workspace_id: WorkspaceId,
     /// The number of the pull request it waits on, which was the branch's when it started.
     pub number: u64,
-    /// The agent's call that asked for it, as its CLI names it, so the agent's adapter can tell its task from others.
-    /// `None` when the CLI didn't say.
+    /// The agent's call that asked for it, as its CLI names it, so the same call asking again, as a CLI does when it
+    /// reconnects, gets the wait it started. `None` when the CLI didn't say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call: Option<ToolUseId>,
     pub until: WaitUntil,

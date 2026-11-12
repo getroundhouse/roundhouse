@@ -264,8 +264,8 @@ fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
 
     assert_eq!(kind("something_newer"), TaskKind::Command);
     assert_eq!(
-        (kind("subagent"), kind("monitor"), kind("command")),
-        (TaskKind::Subagent, TaskKind::Monitor, TaskKind::Command)
+        (kind("subagent"), kind("monitor"), kind("wait"), kind("command")),
+        (TaskKind::Subagent, TaskKind::Monitor, TaskKind::Wait, TaskKind::Command)
     );
     let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor, call: None };
     assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);

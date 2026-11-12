@@ -22,14 +22,15 @@ impl super::LiveSession {
         // counts as ended.
         let _in_order = self.recording.lock().await;
         let mut state = self.state.lock();
-        state.outlives_this_hub = only_waits(state.status, &state.background_tasks);
+        state.outlives_this_hub = state.status.only_waits(&state.background_tasks);
     }
-}
 
-/// Whether a session with a wait open has nothing else to do: its turn has ended, and what it has in the background
-/// can only be the wait, since an agent waits on one at a time. *Not built:* telling a wait's task from others.
-pub(crate) fn only_waits(status: SessionStatus, background: &[AgentTask]) -> bool {
-    status == SessionStatus::Background && background.len() == 1
+    /// Whether the hub counts this session's agent as running, so a hub asked to stop only if nothing would notice
+    /// carries on for it, as [`SessionStatus::counts_as_running`] says.
+    pub(crate) fn counts_as_running(&self) -> bool {
+        let state = self.state.lock();
+        state.status.counts_as_running(&state.background_tasks)
+    }
 }
 
 /// What the agent has left open once an event is applied.

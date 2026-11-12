@@ -24,7 +24,7 @@ mod tools;
 
 pub use ask::{AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk};
 pub use frames::WorkerFrame;
-pub use tools::ToolsToken;
+pub use tools::{ToolsToken, WAIT_TOOL};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkerCall {
