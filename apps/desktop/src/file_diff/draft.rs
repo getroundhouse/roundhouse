@@ -20,6 +20,13 @@ pub struct LineAt {
     pub line: u32,
 }
 
+/// Who puts the box away: whoever's here, saving or cancelling it, or another client, through the hub.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Away {
+    Here,
+    Taken,
+}
+
 pub struct Draft {
     /// The line it's on.
     pub position: LineAt,
@@ -60,20 +67,27 @@ impl FileDiff {
 
     /// Opens the box where a comment kept on the hub was left, with what was in it, in place of the one being written
     /// here, or takes the box away for `None`. It doesn't take the focus, since whoever's here may be typing elsewhere,
-    /// and the hub has it already, so nothing is kept again.
+    /// and an open box keeps it, as the same box moves. The hub has it already, so nothing is kept again.
     pub fn take_writing(&mut self, kept: Option<&CommentDraft>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(kept) = kept else {
-            let typing = self.draft.as_ref().is_some_and(|draft| draft.input.focus_handle(cx).is_focused(window));
-            if self.draft.take().is_some() {
-                if typing {
-                    window.focus(&self.focus, cx);
-                }
-                self.lay_out_again(cx);
-            }
+            self.put_away_draft(Away::Taken, window, cx);
             return;
         };
         let position = LineAt { path: kept.path.clone().into(), side: kept.side, line: kept.line };
-        self.write(position, kept.editing.clone(), kept.text.clone(), window, cx);
+        let Some(draft) = self.draft.as_mut() else {
+            self.write(position, kept.editing.clone(), kept.text.clone(), window, cx);
+            return;
+        };
+        (draft.position, draft.editing) = (position, kept.editing.clone());
+        let input = draft.input.clone();
+        if *input.read(cx).text() != kept.text {
+            let (text, end) = (kept.text.clone(), kept.text.len());
+            input.update(cx, |input, cx| {
+                input.set_value(text, window, cx);
+                input.set_selected_range(end..end, cx);
+            });
+        }
+        self.lay_out_again(cx);
     }
 
     fn draft_focus(&self, cx: &App) -> FocusHandle {
@@ -115,13 +129,13 @@ impl FileDiff {
     }
 
     pub fn cancel_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.put_away_draft(window, cx);
+        self.put_away_draft(Away::Here, window, cx);
     }
 
     pub fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let typed = self.draft.as_ref().map(|draft| draft.input.read(cx).text().to_string());
         let Some(text) = typed.filter(|text| !text.trim().is_empty()) else { return };
-        let Some(draft) = self.put_away_draft(window, cx) else { return };
+        let Some(draft) = self.put_away_draft(Away::Here, window, cx) else { return };
         let saving = match draft.editing {
             Some(id) => Saving::Edit(id),
             None => Saving::New { path: draft.position.path, side: draft.position.side, line: draft.position.line },
@@ -129,14 +143,19 @@ impl FileDiff {
         self.review.update(cx, |r, cx| r.save_comment(saving, text, cx));
     }
 
-    /// Takes the box away, and the focus it had with it, which comes back to the diff so the window's keys still
-    /// work.
-    fn put_away_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Draft> {
-        let draft = self.draft.take();
-        window.focus(&self.focus, cx);
-        cx.emit(FileDiffEvent::Writing { at_once: true });
+    /// Takes the box away. Put away here, it takes the focus it had with it, which comes back to the diff so the window's
+    /// keys still work, and the hub is told. Taken from the hub, which has it already, the focus moves only if the box
+    /// had it.
+    fn put_away_draft(&mut self, away: Away, window: &mut Window, cx: &mut Context<Self>) -> Option<Draft> {
+        let draft = self.draft.take()?;
+        if away == Away::Here || draft.input.focus_handle(cx).is_focused(window) {
+            window.focus(&self.focus, cx);
+        }
+        if away == Away::Here {
+            cx.emit(FileDiffEvent::Writing { at_once: true });
+        }
         self.lay_out_again(cx);
-        draft
+        Some(draft)
     }
 
     pub fn delete_comment(&self, id: CommentId, cx: &mut Context<Self>) {

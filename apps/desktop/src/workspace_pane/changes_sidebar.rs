@@ -152,7 +152,7 @@ impl WorkspacePane {
         let (tab, files_behind, sidebar_tab) = (None, false, TabShown::default());
         self.diff = Some(Diff { review, file, viewer, changes, all_files, sidebar_tab, tab, files_behind });
         // The comment being written, as the hub kept it.
-        self.take_drafts_from_elsewhere(cx);
+        self.take_writing(cx);
     }
 
     /// Whether there's a sidebar of changes to draw beside the chat, shown or hidden.

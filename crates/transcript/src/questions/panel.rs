@@ -112,8 +112,8 @@ impl QuestionPanel {
                 AnswerSoFar { picked, typed: asked.typed(cx), other }
             })
             .collect();
-        let anything = answers.iter().any(|so_far| *so_far != AnswerSoFar::default());
-        anything.then(|| AnswerDraft { approval_id: self.approval_id.clone(), answers })
+        let draft = AnswerDraft { approval_id: self.approval_id.clone(), answers };
+        draft.says_anything().then_some(draft)
     }
 
     /// Takes what was chosen and typed as the hub kept it, from before the app last stopped or from another client, in
@@ -214,8 +214,7 @@ impl QuestionPanel {
         self.answered = true;
         let approval_id = self.approval_id.clone();
         let _ = self.transcript.update(cx, |t, cx| t.answer_approval(approval_id, decision, cx));
-        // The hub needn't keep what's been sent.
-        self.answering(true, cx);
+        // The hub lets go of what it kept as the question is answered, so it's still there if the answer can't be sent.
         cx.notify();
     }
 
@@ -261,10 +260,15 @@ impl QuestionPanel {
             // Going back to what's typed chooses it again.
             InputEvent::Change | InputEvent::Focus => {
                 let has_text = !input.read(cx).text().to_string().trim().is_empty();
-                if let Some(asked) = this.asked.get_mut(q) {
+                let chosen = this.asked.get_mut(q).is_some_and(|asked| {
+                    let before = asked.choice.clone();
                     asked.choice.typed(has_text, asked.question.multiple);
+                    asked.choice != before
+                });
+                // Only what changes is kept, so going back to the row doesn't hold back a change made elsewhere.
+                if chosen || matches!(event, InputEvent::Change) {
+                    this.answering(false, cx);
                 }
-                this.answering(false, cx);
                 cx.notify();
             }
             InputEvent::PressEnter { shift: false, .. } => this.go_on(window, cx),

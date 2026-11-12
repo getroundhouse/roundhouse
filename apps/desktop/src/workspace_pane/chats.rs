@@ -177,7 +177,7 @@ impl WorkspacePane {
                     this.with_window(cx, move |t, window, cx| t.follow_question(left.as_ref(), window, cx));
                 }
                 // What was chosen and typed in answer to it, before the app last stopped or in another client.
-                this.take_drafts_from_elsewhere(cx);
+                this.take_answer(&chat, cx);
                 cx.notify();
             }
             TranscriptEvent::Answering { at_once } => this.keep_answer(&chat, *at_once, cx),

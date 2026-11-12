@@ -6,10 +6,11 @@
 use std::collections::{HashMap, HashSet};
 
 use client_core::{ClientError, FileToSend, Where};
-use gpui_kit::{App, AppContext as _, Context};
+use gpui_kit::{App, AppContext as _, Context, Entity};
 use protocol::attachment::Attachment;
-use protocol::model::{AnswerSoFar, AttachmentId, Draft, NewDraft, Session, SessionId};
+use protocol::model::{AttachmentId, Draft, NewDraft, Session, SessionId};
 use protocol::prompt::says_or_carries;
+use transcript::QuestionPanel;
 
 use super::attaching::Composed;
 use super::{PaneEvent, WorkspacePane};
@@ -130,39 +131,41 @@ impl WorkspacePane {
             self.keeper.took(&session);
             self.take_draft(&session.id, session.draft, cx);
         }
-        self.take_writing_from_elsewhere(cx);
-        self.take_answers_from_elsewhere(cx);
+        if self.keeper.comment_from_elsewhere(&self.workspace) {
+            self.take_writing(cx);
+        }
+        let asked = self.open_sessions().filter(|s| self.keeper.answer_from_elsewhere(s)).map(|s| s.id.clone());
+        for chat in asked.collect::<Vec<_>>() {
+            self.take_answer(&chat, cx);
+        }
     }
 
-    /// Opens the box for the comment being written as the hub has it, when it was written elsewhere, or before the app
-    /// last stopped, with nothing from here on its way.
-    fn take_writing_from_elsewhere(&self, cx: &mut Context<Self>) {
+    /// Opens the box for the comment being written as the hub has it, or takes it away for none, as the diff is made
+    /// or as it changes elsewhere, and says this client shows it. The diff is made once, so there's nothing to take
+    /// before it is.
+    pub(super) fn take_writing(&self, cx: &mut Context<Self>) {
         let Some(diff) = &self.diff else { return };
-        let kept = self.workspace.comment_draft.clone();
-        if !self.keeper.comment_from_elsewhere(&self.workspace) || diff.file.read(cx).writing(cx) == kept {
-            return;
-        }
-        let file = diff.file.clone();
+        self.keeper.took_comment(&self.workspace);
+        let (file, kept) = (diff.file.clone(), self.workspace.comment_draft.clone());
         self.with_window(cx, move |_, window, cx| file.update(cx, |f, cx| f.take_writing(kept.as_ref(), window, cx)));
     }
 
-    /// The same, for what's chosen and typed in answer to each chat's question that's being asked here. One kept for
-    /// a question that has gone means nothing.
-    fn take_answers_from_elsewhere(&self, cx: &mut Context<Self>) {
-        for session in self.open_sessions() {
-            let asking = self.transcripts.get(&session.id).and_then(|(transcript, _)| transcript.read(cx).question());
-            let Some(panel) = asking.cloned() else { continue };
-            let question = panel.read(cx).approval_id().clone();
-            let says = |so_far: &AnswerSoFar| *so_far != AnswerSoFar::default();
-            let kept = session.answer_draft.clone();
-            let kept = kept.filter(|kept| kept.approval_id == question && kept.answers.iter().any(says));
-            if !self.keeper.answer_from_elsewhere(session) || panel.read(cx).so_far(cx) == kept {
-                continue;
-            }
-            self.with_window(cx, move |_, window, cx| {
-                panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx));
-            });
-        }
+    /// The same, for what's chosen and typed in answer to the chat's question, as it's asked or as it changes
+    /// elsewhere. One kept for a question that has gone means nothing.
+    pub(super) fn take_answer(&self, chat: &SessionId, cx: &mut Context<Self>) {
+        let (Some(panel), Some(session)) = (self.question(chat, cx), self.sessions.iter().find(|s| &s.id == chat))
+        else {
+            return;
+        };
+        self.keeper.took_answer(session);
+        let question = panel.read(cx).approval_id().clone();
+        let kept = session.answer_draft.clone().filter(|kept| kept.approval_id == question && kept.says_anything());
+        self.with_window(cx, move |_, window, cx| panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx)));
+    }
+
+    /// The question the chat's agent is waiting on, as its transcript asks it.
+    fn question(&self, chat: &SessionId, cx: &App) -> Option<Entity<QuestionPanel>> {
+        self.transcripts.get(chat).and_then(|(transcript, _)| transcript.read(cx).question()).cloned()
     }
 
     /// Has the hub keep the comment being written on the diff, as the file tab asks.
@@ -178,8 +181,7 @@ impl WorkspacePane {
 
     /// Has the hub keep what's chosen and typed in answer to the chat's question, as its transcript asks.
     pub(super) fn keep_answer(&self, chat: &SessionId, at_once: bool, cx: &App) {
-        let asking = self.transcripts.get(chat).and_then(|(transcript, _)| transcript.read(cx).question());
-        let so_far = asking.and_then(|panel| panel.read(cx).so_far(cx));
+        let so_far = self.question(chat, cx).and_then(|panel| panel.read(cx).so_far(cx));
         if at_once {
             self.keeper.set_answer(chat, so_far);
         } else {
@@ -284,8 +286,8 @@ impl WorkspacePane {
     /// hasn't had.
     pub(crate) fn unsent(&self, cx: &App) -> (usize, usize) {
         let chats = self.unsent_chats(cx).filter(|unsent| unsent.lost()).count();
-        let draft = self.diff.as_ref().and_then(|diff| diff.file.read(cx).draft.as_ref());
-        let comment = draft.is_some_and(|draft| says_or_carries(&draft.input.read(cx).text().to_string(), 0));
+        let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
+        let comment = writing.is_some_and(|writing| says_or_carries(&writing.text, 0));
         let unkept = self.keeper.unkept_in(&Where::Comment(self.workspace.id.clone()));
         (chats, usize::from(comment && unkept))
     }
@@ -299,8 +301,7 @@ impl WorkspacePane {
     /// sent. Each is only worked out as it's asked for, since the sidebar asks on every frame and wants only the first.
     fn unsent_chats<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = Unsent> + 'a {
         let answering = move |id: &SessionId| {
-            let question = self.transcripts.get(id).and_then(|(transcript, _)| transcript.read(cx).question());
-            let any = question.is_some_and(|question| question.read(cx).has_typed(cx));
+            let any = self.question(id, cx).is_some_and(|question| question.read(cx).has_typed(cx));
             Typed { any, unkept: self.keeper.unkept_in(&Where::Answer(id.clone())) }
         };
         let only_here = move |id: &SessionId| self.client.is_sending(id);
