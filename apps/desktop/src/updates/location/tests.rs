@@ -34,3 +34,28 @@ fn an_app_in_a_folder_this_user_cant_change_says_so() {
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(problem.map(|problem| problem.kind), Some(Kind::ReadOnly));
 }
+
+/// Velopack replaces a Mac app's whole bundle.
+#[cfg(target_os = "macos")]
+#[test]
+fn an_app_this_user_cant_change_says_so_even_in_a_folder_it_can() {
+    let (_dir, bundle) = bundle_in_a_folder();
+    std::fs::set_permissions(&bundle, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    let problem = cant_install(&bundle);
+
+    std::fs::set_permissions(&bundle, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(problem.map(|problem| problem.kind), Some(Kind::ReadOnly));
+}
+
+/// Velopack moves a new image file over the old one on Linux, which only needs the folder.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_image_this_user_cant_change_in_a_folder_it_can_has_no_problem() {
+    let dir = tempfile::tempdir().unwrap();
+    let image = dir.path().join("Roundhouse-linux-amd64.AppImage");
+    std::fs::write(&image, b"").unwrap();
+    std::fs::set_permissions(&image, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    assert_eq!(cant_install(&image), None);
+}

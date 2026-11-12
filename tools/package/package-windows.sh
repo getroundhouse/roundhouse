@@ -23,7 +23,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # BINARIES, ROOT, version, stamp and target_dir.
 # shellcheck source=SCRIPTDIR/../build.sh
 source "$HERE/../build.sh"
-# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables and check_newer.
+# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer and full_package.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
 # The app's icon, a drawing for each size. `docs/spec/look.md` says which style it is.
@@ -63,9 +63,7 @@ check() {
   for file in "$PACK_ID-$CHANNEL-Setup.exe" "$PACK_ID-$CHANNEL-Portable.zip" "$FEED"; do
     [ -f "$releases/$file" ] || die "vpk didn't make $file. It made: $(cd "$releases" && echo *)"
   done
-  full="$(jq -r --arg version "$VERSION" \
-    '[.Assets[] | select(.Version == $version and .Type == "Full") | .FileName] | first // empty' "$releases/$FEED")"
-  [ -n "$full" ] && [ -f "$releases/$full" ] || die "$FEED doesn't list a full package for $VERSION that's there"
+  full="$(full_package "$releases" "$FEED")"
   # Read whole before grep, which stops reading at the first match, so pipefail would count unzip's SIGPIPE.
   held="$(unzip -Z1 "$releases/$full")"
   for bin in "${BINARIES[@]}"; do
