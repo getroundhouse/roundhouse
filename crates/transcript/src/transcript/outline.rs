@@ -29,16 +29,20 @@ mod tests;
 /// end that has more past it.
 const MOST_TICKS: usize = 16;
 /// From one tick to the next, which is also how tall each is to the pointer.
-const TICK_PITCH: Pixels = px(8.);
+const TICK_PITCH: Pixels = px(12.);
+/// The ticks are at least this many ticks tall to the pointer, so one or two are as easy to rest on as three. The
+/// room past the last tick is empty.
+const FEWEST_TICKS_TALL: f32 = 3.;
 /// Narrow enough to fit between the scrollbar and the rows, which are inset 28px from the pane's edge, so in a narrow
-/// pane the ticks stay clear of a prompt at the right of the column.
-const TICK_WIDTH: Pixels = px(10.);
-const TICK_HEIGHT: Pixels = px(2.);
+/// pane, as at the size the app opens at, a prompt at the right of the column has a gap beside its ticks, rather than
+/// seeming to touch them.
+const TICK_WIDTH: Pixels = px(12.);
+const TICK_HEIGHT: Pixels = px(3.);
 /// How faint a tick is with more past it.
 const FADED: f32 = 0.35;
-/// In from the pane's right edge, clear of the scrollbar's thumb, which reaches 12px in while it's dragged, and down
-/// from the tabs.
-const RIGHT: Pixels = px(14.);
+/// In from the pane's right edge, clear by a pixel of the scrollbar's thumb, which reaches 12px in while it's dragged,
+/// and down from the tabs.
+const RIGHT: Pixels = px(13.);
 const TOP: Pixels = px(20.);
 /// How far above the ticks the list's edge is, so its first row starts level with them.
 const LIST_ABOVE: Pixels = px(4.);
@@ -111,7 +115,8 @@ impl Jumps {
 }
 
 impl Transcript {
-    /// The chat, with the ticks over it, and the list while it's open, if it has more than one prompt to move between.
+    /// The chat, with the ticks over it, and the list while it's open, once it has a prompt. One prompt is enough,
+    /// since a long turn takes it far above the screen, and the list is the way back up to it.
     pub(super) fn with_outline(
         &mut self,
         chat: AnyElement,
@@ -121,7 +126,7 @@ impl Transcript {
     ) -> Div {
         let around = div().relative().size_full();
         let lines = self.prompts.read(&self.session);
-        if lines.len() < 2 {
+        if lines.is_empty() {
             return around.child(chat);
         }
         let at = being_read(&lines, self.list.top().row, !self.list.is_scrolled_up());
@@ -185,6 +190,7 @@ fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window
         .role(Role::ListBox)
         .aria_label("Prompts")
         .w(TICK_WIDTH)
+        .min_h(TICK_PITCH * FEWEST_TICKS_TALL)
         .block_mouse_except_scroll()
         .on_hover(window.listener_for(hover, |h: &mut Hover, hovered: &bool, _, cx| {
             h.hovered(Part::Ticks, *hovered, cx);
