@@ -211,6 +211,8 @@ fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace 
         title_source: crate::model::TitleSource::FirstLine,
         pull_request,
         comment_draft: None,
+        branches: None,
+        pull_request_branch: None,
     }
 }
 

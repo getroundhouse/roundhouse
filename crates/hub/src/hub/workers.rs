@@ -75,11 +75,13 @@ impl Hub {
         }
         // Whichever provider runs it, what its worker writes to stderr is kept here.
         let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
-        let link = WorkerLink::open(self.clone(), provider, workspace.id.clone(), workspace.instance_id, &log).await?;
+        let instance_id = workspace.instance_id.clone();
+        let link = WorkerLink::open(self.clone(), provider, workspace.id.clone(), instance_id, &log).await?;
         if wanted == Wanted::ForAnything {
             link.keep();
         }
-        self.workers.lock().insert(workspace.id, link.clone());
+        self.workers.lock().insert(workspace.id.clone(), link.clone());
+        self.watch_branches(&workspace, &link).await;
         Ok(link)
     }
 
@@ -91,8 +93,7 @@ impl Hub {
         let mut cleared = gate.lock().await;
         {
             let mut workers = self.workers.lock();
-            let only_read =
-                workers.get(&workspace.id).is_some_and(|current| Arc::ptr_eq(current, link) && !link.kept());
+            let only_read = link.is_current(&workers, &workspace.id) && !link.kept();
             if !only_read {
                 return;
             }
@@ -122,7 +123,7 @@ impl Hub {
         link.stop(STOP_GRACE).await;
         let current = {
             let mut workers = self.workers.lock();
-            let current = workers.get(workspace_id).is_some_and(|current| Arc::ptr_eq(current, link));
+            let current = link.is_current(&workers, workspace_id);
             if current {
                 workers.remove(workspace_id);
             }

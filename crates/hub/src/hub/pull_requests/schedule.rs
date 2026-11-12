@@ -73,7 +73,9 @@ fn moving(pr: &PullRequest) -> bool {
 
 /// The ready workspace to read next, once it's due. One not read since the hub started comes first, those with an
 /// open pull request first among them, since they're the likeliest to have moved. Then whichever has been due
-/// longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends.
+/// longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends,
+/// unless it was found on another branch than the one checked out, so it isn't the workspace's now, as when the read
+/// that should have followed the worktree checking out another failed.
 pub(super) fn due<'a>(
     workspaces: &'a [Workspace],
     schedules: &HashMap<WorkspaceId, Schedule>,
@@ -82,7 +84,10 @@ pub(super) fn due<'a>(
     let state = |w: &Workspace| w.known_pull_request().map(|pr| pr.state);
     workspaces
         .iter()
-        .filter(|w| w.status == WorkspaceStatus::Ready && !matches!(state(w), Some(PrState::Merged | PrState::Closed)))
+        .filter(|w| w.status == WorkspaceStatus::Ready)
+        .filter(|w| {
+            !matches!(state(w), Some(PrState::Merged | PrState::Closed)) || w.pull_request_found_on_another_branch()
+        })
         .map(|w| (w, schedules.get(&w.id).map(|schedule| schedule.due_at())))
         .filter(|(_, due_at)| due_at.is_none_or(|due_at| due_at <= now))
         .min_by_key(|(w, due_at)| (due_at.is_some(), state(w) != Some(PrState::Open), *due_at))

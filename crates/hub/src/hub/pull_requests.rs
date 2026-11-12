@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use budget::{Budget, calls_to_read};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{PullRequest, PullRequestFound, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use schedule::{Schedule, Went};
 use tokio::sync::Mutex as AsyncMutex;
@@ -39,8 +39,8 @@ const AGENT_SPACING: Duration = Duration::from_secs(10);
 /// Who a read is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Asked {
-    /// Someone is waiting on it, so it goes at once: a client that asked, or an agent whose turn has ended, which may
-    /// have committed, pushed or opened a pull request.
+    /// Someone is waiting on it, so it goes at once: a client that asked, an agent whose turn has ended, which may
+    /// have committed, pushed or opened a pull request, or a worktree that's checked out another branch or pushed.
     Waiting,
     /// An agent asked, through the worker's tools. It goes at once, as a read someone waits on does, but no sooner than
     /// [`AGENT_SPACING`] after the last, and leaves the part of GitHub's limit kept for everything else, as a read in
@@ -49,6 +49,15 @@ enum Asked {
     Agent,
     /// Nobody asked, and it's this workspace's turn, so it waits for the budget.
     InTurn,
+}
+
+/// Whether a read goes ahead whatever's known.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum When {
+    Always,
+    /// Only while what's known was found on another branch than the one checked out, as just after the worktree
+    /// checks out another, since a read that began meanwhile may have found the new one's already.
+    OnAnotherBranch,
 }
 
 /// What a read has to say.
@@ -117,7 +126,7 @@ impl Hub {
         id: WorkspaceId,
     ) -> Result<Option<PullRequest>, ApiError> {
         let (_, path, link) = self.ready_worktree(&id).await?;
-        self.read_pull_request(&id, path, &link, Asked::Waiting).await?.or_known()
+        self.read_pull_request(&id, path, &link, Asked::Waiting, When::Always).await?.or_known()
     }
 
     /// Reads it for an agent, through the worker of the agent that asked, as an [`Asked::Agent`] read, so it fails
@@ -128,7 +137,7 @@ impl Hub {
         link: &WorkerLink,
     ) -> Result<Option<PullRequest>, ApiError> {
         let (_, path) = self.ready_path(id).await?;
-        self.read_pull_request(id, path, link, Asked::Agent).await?.read()
+        self.read_pull_request(id, path, link, Asked::Agent, When::Always).await?.read()
     }
 
     /// Reads it through the workspace's worker and records what it finds, one read at a time for each workspace, so an
@@ -145,6 +154,7 @@ impl Hub {
         path: String,
         link: &WorkerLink,
         asked: Asked,
+        when: When,
     ) -> Result<Answer, ApiError> {
         let asked_at = Instant::now();
         if asked == Asked::Agent {
@@ -152,7 +162,8 @@ impl Hub {
         }
         let gate = self.pull_requests.gates.lock().entry(id.clone()).or_default().clone();
         let _one_at_a_time = gate.lock().await;
-        let known = self.workspace(id).await?.pull_request;
+        let workspace = self.workspace(id).await?;
+        let known = workspace.pull_request.clone();
         let last = self.pull_requests.schedules.lock().get(id).copied();
         if let Some(last) = last.filter(|last| last.read_at > asked_at) {
             return Ok(match known {
@@ -160,20 +171,20 @@ impl Hub {
                 known => Answer::Known(known, couldnt_read()),
             });
         }
+        // What's known is the branch's own, found since the worktree checked it out.
+        if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() {
+            return Ok(Answer::Read(known.and_then(|found| found.pull_request)));
+        }
         if asked != Asked::InTurn && self.spend(link, &path, calls_to_read(known.as_ref()), asked).await.is_err() {
             return Ok(Answer::Known(known, limit_used_up()));
         }
         let read_at = Instant::now();
         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
-        let read = match link.call(WorkerRequest::PullRequest { path }).await {
-            Ok(WorkerResponse::PullRequest { pull_request, .. }) => Ok(PullRequestFound { pull_request }),
-            Ok(reply) => Err(unexpected(&reply)),
-            Err(e) => Err(e),
-        };
-        let (recorded, changed) = self.record(id, &read, known.as_ref()).await?;
+        let read = ask(link, path).await;
+        let (recorded, changed) = self.record(&workspace, &read).await?;
         let went = match &read {
             Ok(_) if changed.is_some() => Went::Changed,
-            Ok(found) => Went::Same(found.pull_request.as_ref()),
+            Ok(Found { found, .. }) => Went::Same(found.pull_request.as_ref()),
             Err(e) => {
                 debug!(%id, code = ?e.code, "the pull request couldn't be read: {}", e.message);
                 Went::Failed
@@ -185,29 +196,31 @@ impl Hub {
             self.notify(HubNotice::Workspace(workspace));
         }
         Ok(match read {
-            Ok(found) => Answer::Read(found.pull_request),
+            Ok(Found { found, .. }) => Answer::Read(found.pull_request),
             Err(e) => Answer::Known(recorded.or(known), e),
         })
     }
 
-    /// Records what a read found, and where it can't be read at all, what's known, or none when nothing is. Returns what
-    /// it recorded, and the workspace if that changed it.
+    /// Records what a read found, with the branch it found it on, and where it can't be read at all, what's known, or
+    /// none when nothing is. Returns what it recorded, and the workspace if that changed it.
     async fn record(
         &self,
-        id: &WorkspaceId,
-        read: &Result<PullRequestFound, ApiError>,
-        known: Option<&PullRequestFound>,
+        workspace: &Workspace,
+        read: &Result<Found, ApiError>,
     ) -> Result<(Option<PullRequestFound>, Option<Workspace>), ApiError> {
-        let recording = match read {
+        let Found { found, on } = match read {
             Ok(found) => found.clone(),
-            Err(e) if e.code == ErrorCode::Unavailable => {
-                known.cloned().unwrap_or(PullRequestFound { pull_request: None })
-            }
+            // On the branch it was found on, which it still is, since nothing new was found.
+            Err(e) if e.code == ErrorCode::Unavailable => Found {
+                found: workspace.pull_request.clone().unwrap_or(PullRequestFound { pull_request: None }),
+                on: workspace.pull_request_branch.clone(),
+            },
             Err(_) => return Ok((None, None)),
         };
-        let (owned, found) = (id.clone(), recording.clone());
-        let changed = self.blocking(move |store| store.set_workspace_pull_request(&owned, &found)).await?;
-        Ok((Some(recording), changed))
+        let (id, recording) = (workspace.id.clone(), found.clone());
+        let changed =
+            self.blocking(move |store| store.set_workspace_pull_request(&id, &recording, on.as_ref())).await?;
+        Ok((Some(found), changed))
     }
 
     /// Spends the calls a read takes from the budget, asking GitHub how much of its limit is left first when what it
@@ -232,13 +245,21 @@ impl Hub {
 
     /// After an agent's turn. Only through the worker that's running, as the agent's is, so this never starts one.
     pub(crate) fn read_pull_request_after_turn(self: &Arc<Self>, id: &WorkspaceId) {
-        let Some(link) = self.existing_worker(id) else { return };
+        if let Some(link) = self.existing_worker(id) {
+            self.read_pull_request_through(id, link, When::Always);
+        }
+    }
+
+    /// For something that may have changed it, such as a turn that's ended, or the worktree checking out another
+    /// branch or pushing the one it's on, through the worker it happened in.
+    pub(super) fn read_pull_request_through(self: &Arc<Self>, id: &WorkspaceId, link: Arc<WorkerLink>, when: When) {
         let (hub, id) = (self.clone(), id.clone());
         tokio::spawn(async move {
             let Ok(workspace) = hub.workspace(&id).await else { return };
             let Some(path) = workspace.path.filter(|_| workspace.status == WorkspaceStatus::Ready) else { return };
-            if let Err(e) = hub.read_pull_request(&id, path, &link, Asked::Waiting).await.and_then(Answer::or_known) {
-                debug!(%id, "reading the pull request after a turn: {}", e.message);
+            let read = hub.read_pull_request(&id, path, &link, Asked::Waiting, when).await;
+            if let Err(e) = read.and_then(Answer::or_known) {
+                debug!(%id, "reading the pull request as it may have changed: {}", e.message);
             }
         });
     }
@@ -285,13 +306,27 @@ impl Hub {
         };
         let spent = self.spend(&link, &path, calls, Asked::InTurn).await;
         if spent.is_ok()
-            && let Err(e) = self.read_pull_request(id, path, &link, Asked::InTurn).await.and_then(Answer::or_known)
+            && let Err(e) =
+                self.read_pull_request(id, path, &link, Asked::InTurn, When::Always).await.and_then(Answer::or_known)
         {
             debug!(%id, "reading the pull request in turn: {}", e.message);
         }
         self.stop_worker_only_read(workspace, &link).await;
         spent
     }
+}
+
+/// What a read found, and the branch it found it on.
+#[derive(Clone)]
+struct Found {
+    found: PullRequestFound,
+    on: Option<BranchName>,
+}
+
+async fn ask(link: &WorkerLink, path: String) -> Result<Found, ApiError> {
+    let reply = link.call(WorkerRequest::PullRequest { path }).await?;
+    let WorkerResponse::PullRequest { pull_request, branch } = reply else { return Err(unexpected(&reply)) };
+    Ok(Found { found: PullRequestFound { pull_request }, on: branch })
 }
 
 fn limit_used_up() -> ApiError {

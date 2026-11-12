@@ -8,6 +8,9 @@ use super::{Stack, install_executable};
 /// What `gh pr view` prints for an open pull request.
 pub(crate) const OPEN: &str =
     r#"{"isDraft":false,"number":7,"state":"OPEN","title":"T","url":"https://example.com/7"}"#;
+/// What it prints once that one has merged.
+pub(crate) const MERGED: &str =
+    r#"{"isDraft":false,"number":7,"state":"MERGED","title":"T","url":"https://example.com/7"}"#;
 /// What it says for a branch with none, in its own words, as against failing.
 pub(crate) const NONE: &str = "none";
 /// What it says when it can't reach GitHub.

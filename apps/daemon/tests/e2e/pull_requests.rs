@@ -2,11 +2,13 @@
 
 #![cfg(test)]
 
+use std::path::Path;
+
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
-use protocol::model::{PrState, PullRequestFound, WorkspaceId};
+use protocol::model::{BranchName, Head, PrState, PullRequestFound, WorkspaceId};
 
-use crate::support::gh::{LOGGED_OUT, NONE, OFFLINE, OPEN, StandInGh};
+use crate::support::gh::{LOGGED_OUT, MERGED, NONE, OFFLINE, OPEN, StandInGh};
 use crate::support::{self, Stack, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request on the workspace's record, as every client gets it.
@@ -110,6 +112,30 @@ fn the_end_of_a_turn_reads_the_pull_request() {
     wait_for_turn_end(&client, &session.id, 1);
 
     wait_until("the pull request on its record", || recorded(&client, &workspace.id) == Some(7));
+}
+
+/// A pull request is its branch's, so a merged one is the workspace's only until the worktree checks out another
+/// branch, as an agent does to start on its next piece of work. The worker says so as it happens, and the hub reads it
+/// again then, rather than once the turn ends or someone shows the workspace, though a merged one isn't read otherwise.
+#[test]
+fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(MERGED);
+    client.workspace_pull_request(&workspace.id).unwrap();
+    let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
+    let started_on = Head::Branch { name: BranchName::from(workspace.branch.as_str()) };
+    assert_eq!(head(&client), Some(started_on), "known before it moves");
+    gh.say(NONE);
+
+    support::git(Path::new(&workspace.path.unwrap()), &["switch", "-q", "-c", "next-thing"]);
+
+    wait_until("the pull request to be read again", || recorded(&client, &workspace.id).is_none());
+    let found_on = support::workspace(&client, &workspace.id).pull_request_branch;
+    assert_eq!(head(&client), Some(Head::Branch { name: BranchName::from("next-thing") }));
+    assert_eq!(found_on, Some(BranchName::from("next-thing")), "found on the branch it's on now");
 }
 
 /// A workspace nobody has open has no worker once the hub starts again, and one started only to read its pull request

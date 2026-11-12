@@ -6,8 +6,8 @@ use client_core::records::HubRecords;
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{
-    AgentKind, DiffSide, PullRequestFound, RecordKey, Rev, Session, SessionSettingsChange, SessionStatus,
-    WorkspaceStatus,
+    AgentKind, BranchName, DiffSide, Head, PullRequestFound, RecordKey, Rev, Session, SessionSettingsChange,
+    SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{Stack, next_notice, wait_for_setup, wait_for_turn_end, wait_until};
@@ -70,6 +70,9 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let HubNotice::Workspace(ready) = next_notice(&feed, "the workspace") else { panic!() };
     assert_eq!((ready.id.as_str(), ready.status), (workspace.id.as_str(), WorkspaceStatus::Ready));
     assert!(ready.rev > making.rev);
+    // With the branch it's on, so nothing has to follow to say so.
+    let on = ready.branches.map(|branches| branches.head);
+    assert_eq!(on, Some(Head::Branch { name: BranchName::from(workspace.branch.as_str()) }));
     wait_for_setup(&client, &workspace.id);
     for _ in 0..2 {
         assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));

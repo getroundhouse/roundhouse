@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use protocol::model::{
-    Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, Rev, Review, SetupStatus, TitleSource,
-    Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, Checks, Head, Local, MergeState, PrState, PullRequest, PullRequestFound, Rev, Review,
+    SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 
 use super::{Asked, LATEST, SOONEST, Schedule, Went, due};
@@ -45,6 +45,8 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Works
         title_source: TitleSource::FirstLine,
         pull_request: Some(PullRequestFound { pull_request: state.map(pull_request) }),
         comment_draft: None,
+        branches: None,
+        pull_request_branch: None,
     }
 }
 
@@ -148,4 +150,26 @@ fn a_read_that_fails_waits_longer_each_time_however_it_was_asked_for() {
     assert_eq!(first.every, SOONEST * 2);
     assert_eq!(Schedule::after(Some(first), now, Asked::InTurn, Went::Failed).every, SOONEST * 4);
     assert_eq!(Schedule::after(Some(first), now, Asked::Waiting, Went::Failed).every, SOONEST * 4);
+}
+
+/// One found on another branch than the one checked out isn't the workspace's now, merged or not, as when the read
+/// that should have followed a switch failed, or the hub found it before it kept which branch it found it on.
+#[test]
+fn a_merged_pull_request_found_on_another_branch_is_read_again_in_turn() {
+    let now = Instant::now();
+    let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: Vec::new() };
+    let merged_on = |id: &str, found_on: Option<&str>, checked_out: &str| Workspace {
+        branches: Some(on(checked_out)),
+        pull_request_branch: found_on.map(BranchName::from),
+        ..workspace(id, WorkspaceStatus::Ready, Some(PrState::Merged))
+    };
+    let schedules = read(&[("moved", SOONEST), ("stayed", SOONEST), ("before", SOONEST)], now);
+
+    let moved = next(&[merged_on("moved", Some("aspen"), "header")], &schedules, now);
+    let stayed = next(&[merged_on("stayed", Some("aspen"), "aspen")], &schedules, now);
+    let before = next(&[merged_on("before", None, "aspen")], &schedules, now);
+
+    assert_eq!(moved.as_deref(), Some("moved"));
+    assert_eq!(stayed, None, "it's still the branch's, and done");
+    assert_eq!(before.as_deref(), Some("before"), "found before the hub kept where");
 }

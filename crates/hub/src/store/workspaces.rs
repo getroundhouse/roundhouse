@@ -1,7 +1,7 @@
 //! Workspaces.
 
+use protocol::model::{BranchName, Branches, PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
 use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
-use protocol::model::{PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::instances::{InstanceStage, record_instance};
@@ -13,9 +13,17 @@ mod tests;
 
 const FIRST_PORT_BASE: u16 = 55_000;
 
+/// What recording a workspace's branches did.
+pub struct BranchesSet {
+    /// As they were recorded before, if they were.
+    pub before: Option<Branches>,
+    /// The workspace, if they changed it.
+    pub workspace: Option<Workspace>,
+}
+
 const PORTS_PER_WORKSPACE: u16 = 10;
 
-pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft, branches, pull_request_branch";
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
 pub(super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Result<Workspace, StoreError> {
@@ -50,7 +58,10 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         // Written only by this hub, as JSON. One it can't read is as good as none.
         comment_draft: row.get::<_, Option<String>>(17)?.and_then(|json| serde_json::from_str(&json).ok()),
         user_active_at_ms: row.get(16)?,
-        rev: rev_of(row, 18)?,
+        // Read again by the next worker, so one that no longer reads is only missing until then.
+        branches: row.get::<_, Option<String>>(18)?.and_then(|branches| serde_json::from_str(&branches).ok()),
+        pull_request_branch: row.get::<_, Option<String>>(19)?.map(BranchName::from),
+        rev: rev_of(row, 20)?,
     })
 }
 
@@ -75,7 +86,7 @@ impl Store {
         let added = tx.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -97,6 +108,8 @@ impl Store {
                 found_text(workspace.pull_request.as_ref())?,
                 workspace.user_active_at_ms,
                 workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
+                workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
+                workspace.pull_request_branch.as_ref().map(BranchName::as_str),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -116,16 +129,25 @@ impl Store {
         self.delete("workspaces", id.as_str())
     }
 
+    /// With its branches as its worktree was made, so a ready workspace says which it's on from the start.
     pub fn workspace_ready(
         &self,
         id: &WorkspaceId,
         path: &str,
         branch: &str,
         base_ref: &str,
+        branches: Option<&Branches>,
     ) -> Result<Workspace, StoreError> {
         lock(&self.writer).execute(
-            "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ? WHERE id = ?",
-            params![path, branch, base_ref, text_of(&WorkspaceStatus::Ready), id.as_str()],
+            "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ?, branches = ? WHERE id = ?",
+            params![
+                path,
+                branch,
+                base_ref,
+                text_of(&WorkspaceStatus::Ready),
+                branches.map(serde_json::to_string).transpose()?,
+                id.as_str()
+            ],
         )?;
         self.get_workspace(id)
     }
@@ -155,22 +177,40 @@ impl Store {
         self.get_workspace(id)
     }
 
-    /// Records what the hub found of the workspace's pull request. Returns the workspace only when that changed it, so
-    /// finding the same again moves no revision and announces nothing.
+    /// Records what the hub found of the workspace's pull request, and on which branch it looked. Returns the workspace
+    /// only when that changed it, so finding the same again moves no revision and announces nothing.
     pub fn set_workspace_pull_request(
         &self,
         id: &WorkspaceId,
         found: &PullRequestFound,
+        branch: Option<&BranchName>,
     ) -> Result<Option<Workspace>, StoreError> {
         let found = found_text(Some(found))?;
         let changed = lock(&self.writer).execute(
-            "UPDATE workspaces SET pull_request = ?1 WHERE id = ?2 AND pull_request IS NOT ?1",
-            params![found, id.as_str()],
+            "UPDATE workspaces SET pull_request = ?1, pull_request_branch = ?2
+                 WHERE id = ?3 AND (pull_request IS NOT ?1 OR pull_request_branch IS NOT ?2)",
+            params![found, branch.map(BranchName::as_str), id.as_str()],
         )?;
         if changed == 0 {
             return Ok(None);
         }
         self.get_workspace(id).map(Some)
+    }
+
+    /// Records what the workspace's worker read of its branches. Says what they were before, and returns the workspace
+    /// only when that changed it, as [`Store::set_workspace_pull_request`] does.
+    pub fn set_workspace_branches(&self, id: &WorkspaceId, branches: &Branches) -> Result<BranchesSet, StoreError> {
+        let text = serde_json::to_string(branches)?;
+        // Both under the writer's lock, so nothing records others in between.
+        let (before, changed) = {
+            let conn = lock(&self.writer);
+            let select = "SELECT branches FROM workspaces WHERE id = ?";
+            let before: Option<String> = conn.query_row(select, [id.as_str()], |row| row.get(0))?;
+            let update = "UPDATE workspaces SET branches = ?1 WHERE id = ?2 AND branches IS NOT ?1";
+            (before, conn.execute(update, params![text, id.as_str()])? > 0)
+        };
+        let before = before.and_then(|before| serde_json::from_str(&before).ok());
+        Ok(BranchesSet { before, workspace: if changed { Some(self.get_workspace(id)?) } else { None } })
     }
 
     pub fn set_workspace_setup(&self, id: &WorkspaceId, setup: SetupStatus) -> Result<Workspace, StoreError> {

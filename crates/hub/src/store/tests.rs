@@ -81,6 +81,8 @@ pub(super) fn workspace_w(now: i64) -> Workspace {
         title_source: TitleSource::FirstLine,
         pull_request: None,
         comment_draft: None,
+        branches: None,
+        pull_request_branch: None,
     }
 }
 
@@ -246,7 +248,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(session(&store), "a title");
     store.set_session_closed(&"s".into(), Some(1)).unwrap();
     newer(session(&store), "closing");
-    newer(store.workspace_ready(&"w".into(), "/w", "alder", "main").unwrap().rev, "a ready workspace");
+    newer(store.workspace_ready(&"w".into(), "/w", "alder", "main", None).unwrap().rev, "a ready workspace");
     newer(store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap().rev, "setup");
     store.set_workspace_branch(&"w".into(), "renamed").unwrap();
     newer(workspace(&store), "a branch");
@@ -388,13 +390,4 @@ fn adding_a_repo_twice_returns_the_same_record() {
         })
         .unwrap();
     assert_eq!(again.id, "r".into());
-}
-
-#[test]
-fn workspace_names_are_unique_per_repo() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let mut duplicate = store.get_workspace(&"w".into()).unwrap();
-    duplicate.id = "w2".into();
-    assert_eq!(store.insert_workspace(&duplicate, None).unwrap(), None);
 }

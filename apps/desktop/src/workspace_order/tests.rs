@@ -24,6 +24,8 @@ fn workspace(name: &str, created_at_ms: i64) -> Workspace {
         title_source: TitleSource::default(),
         pull_request: None,
         comment_draft: None,
+        branches: None,
+        pull_request_branch: None,
     }
 }
 
