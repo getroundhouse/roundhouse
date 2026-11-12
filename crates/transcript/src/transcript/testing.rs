@@ -1,8 +1,34 @@
-//! What only tests read of a transcript: how much of it is loaded, and what its texts show.
+//! What only tests read of a transcript: how much of it is loaded, what's at a row, and what its texts show.
+
+use client_core::session_log::{PromptState, Row};
+use protocol::event::{EventBody, SessionEvent};
 
 use super::{Transcript, rows_and_loaded};
 
 impl Transcript {
+    /// The event at a row, if it's loaded.
+    pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
+        self.session.read(|log| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded => None,
+        })
+    }
+
+    /// Where the prompt recorded at a row stands with the agent, if that row is a recorded prompt that's loaded.
+    pub fn prompt_state_at(&self, row: usize) -> Option<PromptState> {
+        self.session.read(|log| match log.row(row) {
+            Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
+                Some(log.prompt_state(event.seq))
+            }
+            Row::Event(_) | Row::Unloaded => None,
+        })
+    }
+
+    /// What the agent is writing, as far as it's got.
+    pub fn streaming_text(&self) -> String {
+        self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
+    }
+
     /// How many rows are loaded as the session's log has them now. The list is told of them when the log says it has
     /// changed, which is after the last of the pages asked for together is in, so this can be ahead of the list.
     pub fn loaded_rows(&self) -> usize {

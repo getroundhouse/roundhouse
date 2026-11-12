@@ -4,13 +4,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use client_core::session_log::{PromptState, Row, SessionLog};
+use client_core::session_log::SessionLog;
 use client_core::{Client, OpenSession, View};
 use gpui_kit::{
     AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, Task, Window,
 };
 use protocol::attachment::Attachment;
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::SessionEvent;
 use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
@@ -209,31 +209,9 @@ impl Transcript {
         self.session.read(SessionLog::loaded_events)
     }
 
-    /// The event at a row, if it's loaded.
-    pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        self.session.read(|log| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded => None,
-        })
-    }
-
-    /// Where the prompt recorded at a row stands with the agent, if that row is a recorded prompt that's loaded.
-    pub fn prompt_state_at(&self, row: usize) -> Option<PromptState> {
-        self.session.read(|log| match log.row(row) {
-            Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
-                Some(log.prompt_state(event.seq))
-            }
-            Row::Event(_) | Row::Unloaded => None,
-        })
-    }
-
     /// Rows in the list, not counting the streaming tail.
     pub fn row_count(&self) -> usize {
         self.session.read(SessionLog::row_count)
-    }
-
-    pub fn streaming_text(&self) -> String {
-        self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
     }
 
     /// Shows what changed in the session since this last looked, however much that is.

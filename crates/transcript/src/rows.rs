@@ -9,8 +9,8 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
-    Stateful, Styled, WeakEntity, div, px,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
+    Styled, WeakEntity, div, px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -32,6 +32,7 @@ mod approval;
 mod around;
 mod asked;
 mod cache_rule;
+mod column;
 pub(crate) mod compaction;
 mod line;
 mod mode;
@@ -46,45 +47,17 @@ mod turn_times;
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
 pub(crate) use around::{NEAR, REACH};
+pub(crate) use column::room_under;
+pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
+use column::column;
 use prompt::{Progress, Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
 use tools::Toggle;
-
-/// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
-const COLUMN: f32 = 848.0;
-/// How far the composer reaches past the column on each side, so the transcript's text sits inside its edges.
-const COMPOSER_REACH: f32 = 24.0;
-/// The room the composer's row leaves between the chat's rows and the composer, or a question in its place.
-pub const ABOVE_THE_COMPOSER: Pixels = px(4.);
-
-/// What's left between the list and what's under it: the composer's room in a chat, and nothing in a subagent's tab,
-/// which has no composer, since a subagent can't be prompted.
-pub(crate) fn room_under(m: &Model) -> Pixels {
-    if m.alone.is_some() { Pixels::ZERO } else { ABOVE_THE_COMPOSER }
-}
-
-/// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
-/// width. It's inset as the list insets each row, and then as the row is.
-pub fn in_column(content: impl IntoElement) -> Div {
-    div().w_full().px_3().child(column(content))
-}
-
-/// As wide as the composer under the transcript, which is centred under the column and wider than it on each side, for
-/// the composer, and for the list's button back to its latest row, which sits on the composer's left edge. In a pane
-/// too narrow for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
-pub fn around_column(content: impl IntoElement) -> Div {
-    let width = px(COLUMN + 2. * COMPOSER_REACH);
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(width).child(content))
-}
-
-fn column(content: impl IntoElement) -> Div {
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(content))
-}
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
 #[derive(Clone, Copy)]

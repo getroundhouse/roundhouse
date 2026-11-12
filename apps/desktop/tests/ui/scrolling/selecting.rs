@@ -57,7 +57,7 @@ fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it
     let up = copy(&mut ui);
     press(&mut ui, MouseUpEvent { button: MouseButton::Left, position: above, click_count: 1, ..Default::default() });
     let released = copy(&mut ui);
-    ui.press("cmd-a");
+    ui.press("secondary-a");
     let all = copy(&mut ui);
 
     let moved = |steps: &[Pixels]| steps.last().copied().unwrap_or_default() - steps[0];
@@ -184,7 +184,7 @@ fn a_word_a_paragraph_or_every_reply_can_be_selected(cx: &mut TestAppContext) {
     let word = copy(&mut ui);
     click(&mut ui, on_it, 3);
     let paragraph = copy(&mut ui);
-    ui.press("cmd-a");
+    ui.press("secondary-a");
     let all = copy(&mut ui);
 
     assert!(!word.is_empty() && !word.contains(' ') && last.contains(&word), "a word of it: {word:?}");
@@ -251,10 +251,11 @@ fn on_the_reply_saying(ui: &Ui<'_>, window: gpui_kit::Bounds<Pixels>, text: &str
     })
 }
 
-/// What's selected, as a copy has it. The clipboard's emptied first, so a copy of nothing doesn't read as the last.
+/// What's selected, as a copy has it, with the keys the kit copies with where the tests run. The clipboard's emptied
+/// first, so a copy of nothing doesn't read as the last.
 fn copy(ui: &mut Ui<'_>) -> String {
     ui.cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
-    ui.press("cmd-c");
+    ui.press("secondary-c");
     ui.cx.read_from_clipboard().and_then(|item| item.text()).unwrap_or_default()
 }
 
