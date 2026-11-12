@@ -135,7 +135,9 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     ui.wait("its task to name its call", |_| named().is_some());
     let (task, call) = named().unwrap();
     let open = SharedString::from(format!("background-open/{call}"));
-    ui.wait("the button on its line", |ui| ui.has(open.clone()));
+    // And its call's line, since the line in the background follows the session's record, which can come before the
+    // call's row is taken in.
+    ui.wait("the button on its line, and its call's line", |ui| ui.has(open.clone()) && !ui.labelled(LONG).is_empty());
 
     let bounds = |ui: &mut Ui<'_>, id: SharedString| {
         ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
