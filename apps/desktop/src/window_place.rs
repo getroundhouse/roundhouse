@@ -63,12 +63,15 @@ pub(crate) fn follow<V: 'static>(window: &mut Window, cx: &mut Context<V>) {
     (kept.window, kept.opened_at) = (Some(window.window_handle()), opened_at.filter(|_| kept.in_usual_place));
     // GPUI says the bounds changed whenever the window comes to the front or leaves it, too.
     cx.observe_window_bounds(window, |_, window, cx| moved(window, cx)).detach();
-    // Closing the window quits the app, and by then the window is gone, so this is the last look at it. Without it, a
-    // window closed after leaving full screen would count as still in it, as it was when it last moved.
-    window.on_window_should_close(cx, |window, cx| {
+}
+
+/// Notes where the window is as the app quits, or the window closes, which quits it. By then the window is gone, so
+/// this is the last look at it. Without it, a window closed after leaving full screen would count as still in it, as it
+/// was when it last moved.
+pub(crate) fn last_look(window: &Window, cx: &mut App) {
+    if cx.has_global::<Kept>() {
         see(window, cx);
-        true
-    });
+    }
 }
 
 fn moved(window: &Window, cx: &mut App) {

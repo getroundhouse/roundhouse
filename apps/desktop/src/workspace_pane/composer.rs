@@ -30,7 +30,7 @@ pub(super) enum Hub {
 }
 
 /// The box a prompt is typed in, and what Enter does there: while the agent works, Enter steers it, and Cmd-Enter
-/// queues what's typed for after it finishes.
+/// queues what's typed for after it finishes. What's typed is kept as it changes.
 pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) -> (Entity<TextareaState>, Subscription) {
     let input = cx.new(|cx| {
         TextareaState::new(window, cx)
@@ -39,14 +39,16 @@ pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) ->
             .submit_on_enter(true)
             .placeholder("Ask the agent to do something")
     });
-    let on_enter = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
-        if let InputEvent::PressEnter { shift: false, secondary } = event {
+    let on_enter = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| match event {
+        InputEvent::PressEnter { shift: false, secondary } => {
             if *secondary && this.session().is_some_and(|s| s.status.is_active()) {
                 this.queue_typed(window, cx);
             } else {
                 this.submit(window, cx);
             }
         }
+        InputEvent::Change => this.keep_typed(false, cx),
+        InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
     });
     (input, on_enter)
 }
@@ -74,11 +76,14 @@ impl WorkspacePane {
             let keeping = (!rest.is_empty()).then(|| rest.to_string());
             transcript.update(cx, |t, cx| t.compact(keeping, Some(text.clone()), cx));
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            self.keep_typed(true, cx);
             return cx.notify();
         }
         let files = self.attached.take();
         if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            // At once, so what was sent can't come back as a draft. A prompt that fails comes back as one.
+            self.keep_typed(true, cx);
         }
         cx.notify();
     }

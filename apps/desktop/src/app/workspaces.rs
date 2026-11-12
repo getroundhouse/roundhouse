@@ -1,8 +1,9 @@
-//! Adding repositories, and making, renaming, retitling, archiving and restoring workspaces.
+//! Adding repositories, making, renaming, retitling, archiving and restoring workspaces, and making the pane of the
+//! one selected.
 
 use client_core::ClientError;
 use client_core::records::Record;
-use gpui_kit::{App, Context, PathPromptOptions, PromptLevel, Window};
+use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{PermissionMode, Repo, RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
@@ -10,11 +11,48 @@ use super::AppView;
 use crate::busy::Busy;
 use crate::new_workspace::Request;
 use crate::rename::{self, Renaming};
+use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod dialog;
 mod made;
 
 impl AppView {
+    /// Makes the selected workspace's pane if it has none, shows it, and focuses it.
+    pub(super) fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.selected.clone() else { return };
+        if !self.panes.contains_key(&id) {
+            let (Some(client), Some(workspace)) = (self.client(), self.workspaces.iter().find(|w| w.id == id).cloned())
+            else {
+                return;
+            };
+            if workspace.status != WorkspaceStatus::Ready {
+                return;
+            }
+            let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
+            let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
+            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, workspace, sessions, window, cx));
+            let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
+            pane.update(cx, |pane, cx| {
+                pane.set_busy(busy, cx);
+                pane.set_retitling(retitling, cx);
+            });
+            cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
+                PaneEvent::Error(message) => t.show_error(message, cx),
+                PaneEvent::Archive(id, force) => t.archive(id, force, cx),
+                PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
+            })
+            .detach();
+            self.panes.insert(id.clone(), pane);
+        }
+        // Only with a connection. Without one, `refresh` catches it up once there is one.
+        if let Some(pane) = self.selected_pane() {
+            pane.update(cx, WorkspacePane::shown);
+        }
+        self.focus_pane(id, window, cx);
+        self.read_on_screen(window.is_window_active(), cx);
+        cx.notify();
+    }
+
     /// The repository a new workspace goes in when nothing says which: the one Home's list shows, while Home shows,
     /// or else the selected workspace's, or the first.
     pub fn current_repo(&self) -> Option<RepoId> {

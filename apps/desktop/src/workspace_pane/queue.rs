@@ -41,6 +41,8 @@ impl WorkspacePane {
         }
         let files = self.attached.take();
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+        // At once, so what's queued can't come back as a draft.
+        self.keep_typed(true, cx);
         let client_msg_id = client_core::new_message_id();
         let attachments = files.iter().map(|file| file.attachment.clone()).collect();
         let prompt = QueuedPrompt { client_msg_id: client_msg_id.clone(), text: text.clone(), attachments };

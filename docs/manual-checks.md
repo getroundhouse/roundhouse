@@ -23,6 +23,7 @@ Start with trackpad feel, then IME, then selection and copy.
 - A long chat: resizing the window stays smooth, the scrollbar's thumb follows the pointer through the whole session and holds the page still while the pointer rests, and scrolling back down to the latest row takes its button away
 - Sidebars: each slides open and shut smoothly beside a long chat, its edge follows the pointer and takes its usual width when it's close, with one tap on a Force Touch trackpad as it does, the button beside the window's buttons lines up with them and sits in the corner in full screen, and Reduce Motion skips the slide
 - The menu bar's items and keys that macOS carries out: ⌘H and Hide Roundhouse, ⌥⌘H and Hide Others, Show All, ⌘M and Minimize, and Zoom
+- With a comment being written, ⌘Q, Quit Roundhouse and the window's close button each ask before quitting, `Keep working` leaves the app as it was, and `Quit` quits
 - The strip along the top moves and zooms the window, the header's buttons respond at once, and the window's buttons sit level with the header, in and out of full screen
 - The window opens where it was left: filling the screen, in full screen, out of full screen again, and on a second display, each after quitting, after closing the window, and after `Restart to update`
 - Settings: the strip along the top still moves the window, its switches respond at once, and going back leaves the workspace as it was, scrolled to the same place

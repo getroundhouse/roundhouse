@@ -304,6 +304,21 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1"), Step::Click("archive-ws-1"), Step::MoveAway],
     },
     Screen {
+        name: "drafts",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        // Each workspace is shown to type in its composer, then left for the screen's own.
+        frame: SIDEBAR,
+        steps: &[
+            Step::Select("alder"),
+            Step::Type("Keep the badge at its own width"),
+            Step::Select("birch"),
+            Step::Type("And in Home"),
+            Step::Select(FOCUS),
+            Step::Point("workspace-ws-1"),
+        ],
+    },
+    Screen {
         name: "rename",
         spec: "workspaces.md",
         world: Some(titled),

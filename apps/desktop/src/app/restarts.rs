@@ -36,7 +36,7 @@ impl UpdateQuestion {
     /// What going ahead loses.
     pub fn detail(&self) -> String {
         match self {
-            Self::Restart { chats, comments } => view::unsent_note(*chats, *comments).unwrap_or_default(),
+            Self::Restart { chats, comments } => view::unsent_note(*chats, *comments, "restarting").unwrap_or_default(),
             Self::Finish(status) => view::finish_question(status),
         }
     }
@@ -213,28 +213,28 @@ impl AppView {
         }));
     }
 
-    /// Restarts the app to install the update that's downloaded. When that would lose what's typed and not sent, the
-    /// card asks first.
+    /// Restarts the app to install the update that's downloaded, once what's on its way to the hub has reached it, as
+    /// quitting does. When that would still lose something, the card asks first.
     pub fn restart_to_update(&mut self, cx: &mut Context<Self>) {
-        match self.unsent(cx) {
+        self.once_kept(cx, |t, unsent, cx| match unsent {
             (0, 0) => crate::updates::restart_to_update(cx),
-            (chats, comments) => self.ask(UpdateQuestion::Restart { chats, comments }, cx),
-        }
+            (chats, comments) => t.ask(UpdateQuestion::Restart { chats, comments }, cx),
+        });
     }
 
-    /// Restarts to update, as the card asked, unless more is typed and not sent than it said, which it asks about
-    /// instead.
+    /// Restarts to update, as the card asked, unless more would be lost than it said, which it asks about instead.
     pub fn restart_to_update_anyway(&mut self, cx: &mut Context<Self>) {
         let Some(UpdateQuestion::Restart { chats: said_chats, comments: said_comments }) = self.update_question else {
             return;
         };
-        let (chats, comments) = self.unsent(cx);
-        if chats > said_chats || comments > said_comments {
-            return self.ask(UpdateQuestion::Restart { chats, comments }, cx);
-        }
-        self.update_question = None;
-        cx.notify();
-        crate::updates::restart_to_update(cx);
+        self.once_kept(cx, move |t, (chats, comments), cx| {
+            if chats > said_chats || comments > said_comments {
+                return t.ask(UpdateQuestion::Restart { chats, comments }, cx);
+            }
+            t.update_question = None;
+            cx.notify();
+            crate::updates::restart_to_update(cx);
+        });
     }
 
     /// Leaves things as they are, as `Not now` and `Keep working` do.
@@ -248,9 +248,10 @@ impl AppView {
         cx.notify();
     }
 
-    /// How many chats and comments have something typed in them that isn't sent. What's left in the new-workspace
-    /// dialog counts as a chat's, since it's for a workspace's first chat.
-    fn unsent(&self, cx: &App) -> (usize, usize) {
+    /// How many chats and comments have something in them that isn't sent, and that quitting or restarting would lose.
+    /// What's typed and attached in a composer isn't, once the hub has it. What's left in the new-workspace dialog
+    /// counts as a chat's, since it's for a workspace's first chat.
+    pub(super) fn unsent(&self, cx: &App) -> (usize, usize) {
         let dialog = self.new_workspace.as_ref().is_some_and(|dialog| dialog.read(cx).has_anything(cx));
         let panes = self.panes.values().map(|pane| pane.read(cx).unsent(cx));
         panes.fold((usize::from(dialog), 0), |(a, b), (c, d)| (a + c, b + d))

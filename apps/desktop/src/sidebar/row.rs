@@ -1,5 +1,5 @@
-//! A workspace's row in the sidebar: its mark and name, the button that archives it under the pointer, what it's
-//! waiting on the hub for, and what a right-click on it offers.
+//! A workspace's row in the sidebar: its mark and name, a pencil while something typed in it isn't sent, the button
+//! that archives it under the pointer, what it's waiting on the hub for, and what a right-click on it offers.
 
 use std::rc::Rc;
 
@@ -15,7 +15,7 @@ use gpui_kit::{
 use look::{Hand as _, LineText, Off as _, Placed};
 use protocol::model::Workspace;
 
-use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, standing};
+use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
 use crate::app::AppView;
 use crate::right_click;
 use crate::{ArchiveWorkspace, MarkWorkspace};
@@ -36,6 +36,14 @@ pub(super) fn workspace_row(
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
     let retitling = app.retitling.contains(&workspace.id).then_some("Renaming…");
     let waiting = app.busy.doing(&workspace.id).or(retitling);
+    // Not on the workspace showing, whose composer is in view, but while Home shows in its place. A workspace not shown
+    // since the app opened has only what the hub keeps.
+    let drafted = !selected
+        && match app.panes.get(&workspace.id) {
+            Some(pane) => pane.read(cx).has_unsent(cx),
+            None => app.sessions.get(&workspace.id).is_some_and(|chats| crate::workspace_pane::drafted(chats)),
+        };
+    let end = right_end(app, workspace, End { drafted, pointing, waiting }, &line_text.small, cx);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
         .hand()
         .accessibility_label(label.clone())
@@ -74,12 +82,56 @@ pub(super) fn workspace_row(
                         .set(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis())
                         .child(label),
                 )
-                .when_some(waiting, |d, waiting| {
-                    d.child(doing(format!("doing-{}", workspace.id), waiting, &line_text.small))
-                })
-                .when(waiting.is_none() && pointing, |d| d.child(archive_button(app, workspace, cx))),
+                .children(end),
         );
     row.context_menu(menu).into_any_element()
+}
+
+/// What a row has at its right end.
+#[derive(Clone, Copy)]
+struct End {
+    /// Something typed or attached in one of its chats isn't sent.
+    drafted: bool,
+    /// The pointer is over the row.
+    pointing: bool,
+    /// What it's waiting on the hub for, if anything.
+    waiting: Option<&'static str>,
+}
+
+/// A pencil while something typed in the workspace isn't sent, and after it what the workspace is waiting on the hub
+/// for, or else under the pointer the button that archives it. While there's a pencil, the button's place is kept
+/// beside it, so the pencil stays put as the pointer comes and goes. None when there's nothing, so the name has the
+/// row's width.
+fn right_end(
+    app: &AppView,
+    workspace: &Workspace,
+    end: End,
+    small: &Placed,
+    cx: &mut Context<AppView>,
+) -> Option<AnyElement> {
+    let End { drafted, pointing, waiting } = end;
+    if !drafted && !pointing && waiting.is_none() {
+        return None;
+    }
+    let pencil = icon_box(Lucide::Pencil, cx.theme().muted_foreground)
+        .id(ElementId::Name(format!("draft-{}", workspace.id).into()))
+        .role(Role::Image)
+        .aria_label("Draft")
+        .test_support();
+    // Against the button's box, whose padding is the room between the two icons: a little more than if they were set
+    // edge to edge, so they don't run together.
+    let end = h_flex().flex_none().when(drafted, |d| d.child(pencil));
+    let end = match waiting {
+        // Text has no padding of its own to keep it off the pencil, as the button has.
+        Some(waiting) => {
+            let doing = doing(format!("doing-{}", workspace.id), waiting, small);
+            end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
+        }
+        None if pointing => end.child(archive_button(app, workspace, cx)),
+        // As wide as the kit's small icon button.
+        None => end.child(div().flex_none().w_6()),
+    };
+    Some(end.into_any_element())
 }
 
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows

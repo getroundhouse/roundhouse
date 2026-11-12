@@ -188,20 +188,20 @@ impl NewWorkspaceDialog {
     /// Takes a paste that holds images or copied files, and leaves text to the prompt. Returns whether it took it.
     fn paste(item: &ClipboardItem, cx: &mut Context<Self>) -> bool {
         let Some(reading) = attached::pasted(item) else { return false };
-        attached::read_into(reading, cx, |t| &mut t.attached, |_, problem, cx| cx.emit(DialogEvent::Error(problem)));
+        attached::read_into(reading, cx, |t| &mut t.attached, |_, problems, cx| Self::refused(problems, cx));
         true
     }
 
     /// Files dropped on the dialog, or chosen from its `+` menu.
     fn attach_paths(paths: Vec<PathBuf>, cx: &mut Context<Self>) {
-        attached::read_paths_into(
-            paths,
-            cx,
-            |t| &mut t.attached,
-            |_, problem, cx| {
-                cx.emit(DialogEvent::Error(problem));
-            },
-        );
+        attached::read_paths_into(paths, cx, |t| &mut t.attached, |_, problems, cx| Self::refused(problems, cx));
+    }
+
+    /// Says why each file that couldn't be attached wasn't.
+    fn refused(problems: Vec<String>, cx: &mut Context<Self>) {
+        for problem in problems {
+            cx.emit(DialogEvent::Error(problem));
+        }
     }
 
     fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {

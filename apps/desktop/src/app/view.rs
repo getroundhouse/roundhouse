@@ -192,14 +192,16 @@ fn counted(n: usize, what: &str) -> Option<String> {
     }
 }
 
-/// What restarting the app would lose, or `None` for nothing: what's typed in `chats` and in `comments` on the diff.
-pub(super) fn unsent_note(chats: usize, comments: usize) -> Option<String> {
-    let typed = match (counted(chats, "chat"), counted(comments, "comment")) {
+/// What `going`, such as restarting the app, would lose, or `None` for nothing: what only the app has of `chats`, such
+/// as an answer being typed, or what the hub hasn't had yet, and what's typed in `comments` on the diff. It doesn't say
+/// which, since there can be several kinds.
+pub(super) fn unsent_note(chats: usize, comments: usize, going: &str) -> Option<String> {
+    let unsent = match (counted(chats, "chat"), counted(comments, "comment")) {
         (None, None) => return None,
         (Some(both), None) | (None, Some(both)) => both,
         (Some(chats), Some(comments)) => format!("{chats} and {comments}"),
     };
-    Some(format!("What's typed in {typed} hasn't been sent, and restarting loses it."))
+    Some(format!("Something in {unsent} hasn't been sent, and {going} loses it."))
 }
 
 /// What's running on a hub, as "the 2 agents and 1 setup script", or `None` for nothing.
@@ -335,13 +337,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn restarting_says_what_typing_it_would_lose() {
-        assert_eq!(unsent_note(0, 0), None);
-        assert_eq!(unsent_note(1, 0).unwrap(), "What's typed in 1 chat hasn't been sent, and restarting loses it.");
-        assert_eq!(unsent_note(0, 1).unwrap(), "What's typed in 1 comment hasn't been sent, and restarting loses it.");
+    fn restarting_says_how_much_it_would_lose() {
+        assert_eq!(unsent_note(0, 0, "restarting"), None);
         assert_eq!(
-            unsent_note(2, 1).unwrap(),
-            "What's typed in 2 chats and 1 comment hasn't been sent, and restarting loses it."
+            unsent_note(1, 0, "restarting").unwrap(),
+            "Something in 1 chat hasn't been sent, and restarting loses it."
+        );
+        assert_eq!(
+            unsent_note(0, 1, "restarting").unwrap(),
+            "Something in 1 comment hasn't been sent, and restarting loses it."
+        );
+        assert_eq!(
+            unsent_note(2, 1, "restarting").unwrap(),
+            "Something in 2 chats and 1 comment hasn't been sent, and restarting loses it."
         );
     }
 

@@ -4,16 +4,16 @@
 use std::collections::{HashMap, HashSet};
 
 use client_core::records::Record;
-use client_core::{Client, HubAdmin, RecordsFeed};
+use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, Session, Workspace, WorkspaceId};
 
 use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
-use crate::workspace_pane::{PaneEvent, WorkspacePane, accounts_named};
+use crate::workspace_pane::{WorkspacePane, accounts_named};
 
 mod build_line;
 mod corner;
@@ -30,6 +30,8 @@ mod workspaces;
 
 pub use build_line::{Agents, BuildLine};
 pub use hub_source::HubSource;
+pub use quitting::Quitting;
+pub(crate) use quitting::quit;
 pub use restarts::UpdateQuestion;
 
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
@@ -57,6 +59,8 @@ pub struct AppView {
     pub connection: Connection,
     /// Client-core's copy of the hub's records. The lists below are what's shown of it.
     feed: Option<RecordsFeed>,
+    /// Keeps what's typed in each chat on the hub, for every pane, across connections.
+    drafts: Option<Drafts>,
     /// A new connection, until client-core has caught up on it.
     joining: Option<Client>,
     /// The pid of the hub this is connected to, when it's an older one a client started, which this app may restart.
@@ -98,6 +102,7 @@ pub struct AppView {
     following: Option<Task<()>>,
     /// What the update's card, or the dialog before restarting the hub now, asks before going ahead, while it asks.
     pub update_question: Option<UpdateQuestion>,
+    pub quitting: Quitting,
     /// Reading what's running on the older hub, to ask about finishing the update or to go ahead with it, so pressing
     /// again doesn't read it twice.
     asking: Option<Task<()>>,
@@ -123,11 +128,13 @@ impl AppView {
             t.read_on_screen(window.is_window_active(), cx);
         })
         .detach();
+        quitting::ask_first(window, cx);
         let mut this = Self {
             hub,
             checkout,
             connection: Connection::Connecting,
             feed: None,
+            drafts: None,
             joining: None,
             restartable_hub: None,
             repos: Vec::new(),
@@ -153,6 +160,7 @@ impl AppView {
             connecting: None,
             following: None,
             update_question: None,
+            quitting: Quitting::No,
             asking: None,
             finishing: None,
             looking: None,
@@ -216,7 +224,7 @@ impl AppView {
 
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
     fn connected(&mut self, client: Client, status: &HubStatus, cx: &mut Context<Self>) {
-        quitting::wait_for(&client, cx);
+        self.keep_drafts_on(&client, cx);
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);
         } else {
@@ -348,42 +356,6 @@ impl AppView {
                 let _ = this.update(cx, |t, cx| t.make_selected_pane(window, cx));
             });
         });
-    }
-
-    fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.selected.clone() else { return };
-        if !self.panes.contains_key(&id) {
-            let (Some(client), Some(workspace)) = (self.client(), self.workspaces.iter().find(|w| w.id == id).cloned())
-            else {
-                return;
-            };
-            if workspace.status != WorkspaceStatus::Ready {
-                return;
-            }
-            let sessions = self.sessions.get(&id).cloned().unwrap_or_default();
-            let Some(records) = self.feed.clone() else { return };
-            let comments = records.read(|r| r.comments().remove(&id)).unwrap_or_default();
-            let pane = cx.new(|cx| WorkspacePane::new(client, records, workspace, sessions, comments, window, cx));
-            let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
-            pane.update(cx, |pane, cx| {
-                pane.set_busy(busy, cx);
-                pane.set_retitling(retitling, cx);
-            });
-            cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
-                PaneEvent::Error(message) => t.show_error(message, cx),
-                PaneEvent::Archive(id, force) => t.archive(id, force, cx),
-                PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
-            })
-            .detach();
-            self.panes.insert(id.clone(), pane);
-        }
-        // Only with a connection. Without one, `refresh` catches it up once there is one.
-        if let Some(pane) = self.selected_pane() {
-            pane.update(cx, WorkspacePane::shown);
-        }
-        self.focus_pane(id, window, cx);
-        self.read_on_screen(window.is_window_active(), cx);
-        cx.notify();
     }
 
     /// None without a connection, when panes are kept but neither shown nor used.
