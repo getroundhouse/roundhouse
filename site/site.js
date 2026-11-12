@@ -21,7 +21,7 @@ const reveal = new IntersectionObserver(
 
 document.querySelectorAll(".reveal").forEach((el) => reveal.observe(el));
 
-// The page's first script offers someone on Windows the x64 download, which every Windows runs. Only some browsers
+// The page's first script offers someone on Windows the amd64 download, which every Windows runs. Only some browsers
 // say what the processor is, and only when asked, so Windows on ARM gets its own download once they answer.
 
 const root = document.documentElement;
