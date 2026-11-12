@@ -1,5 +1,5 @@
 //! The calls that give a session's agent prompts, sent now or queued for when it's finished, and change its queue.
-//! Clients send and queue prompts with [`Client::start_sending`], [`Client::start_queueing`] and
+//! Clients send and queue prompts with [`crate::OpenSession::start_sending`], [`Client::start_queueing`] and
 //! [`Client::send_prompt`], which add their files first, in their place in their chat's line. The calls here that
 //! send one whose files are added already are for tests.
 

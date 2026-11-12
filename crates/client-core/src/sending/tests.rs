@@ -8,6 +8,7 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, queue};
 use protocol::frame;
+use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
 
 use super::*;
@@ -71,6 +72,58 @@ fn a_prompt_being_queued_shows_until_the_hub_answers_and_not_again_once_it_s_on_
     answer.send(()).unwrap();
     queueing.wait().unwrap();
     assert!(client.queueing(&session).is_empty(), "the hub has answered for it");
+}
+
+fn on_its_way_in(open: &OpenSession) -> Vec<QueuedPrompt> {
+    open.read(|log| log.pending().to_vec())
+}
+
+/// So a chat shows a prompt from the moment it's sent, and goes on showing it once the hub has answered, until the
+/// event that records it takes its place, rather than leaving a moment with neither.
+#[test]
+fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (answer, answered) = flume::bounded::<()>(0);
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
+        if !matches!(request, ClientRequest::SessionPrompt { .. }) {
+            return Does::Nothing;
+        }
+        let _ = answered.recv();
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::PromptRecorded { seq: 1, duplicate: false })))
+    });
+    let open = OpenSession::start(&client, &protocol::fixtures::session("s"));
+    let written = Written::new(Prompt::new("next"));
+    let shown = written.on_its_way();
+
+    let sending = open.start_sending(&client, written);
+
+    assert_eq!(on_its_way_in(&open), std::slice::from_ref(&shown));
+    answer.send(()).unwrap();
+    assert_eq!(sending.wait().unwrap(), (1, false));
+    assert_eq!(on_its_way_in(&open), [shown], "its event takes it out, which this hub never sends");
+}
+
+/// So a prompt that isn't taken never stays in the chat as on its way, even when what sent it has gone, as a view
+/// closed meanwhile has.
+#[test]
+fn a_prompt_the_hub_refuses_stops_showing_though_nothing_waits_to_hear() {
+    let dir = tempfile::tempdir().unwrap();
+    let (answer, answered) = flume::bounded::<()>(0);
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
+        if !matches!(request, ClientRequest::SessionPrompt { .. }) {
+            return Does::Nothing;
+        }
+        let _ = answered.recv();
+        Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Conflict, "the workspace is archived"))))
+    });
+    let open = OpenSession::start(&client, &protocol::fixtures::session("s"));
+
+    drop(open.start_sending(&client, Written::new(Prompt::new("next"))));
+
+    assert_eq!(on_its_way_in(&open).len(), 1);
+    answer.send(()).unwrap();
+    client.commands().finished().recv().unwrap();
+    assert!(on_its_way_in(&open).is_empty());
 }
 
 /// A hub that takes every file and prompt, sent or queued, after saying what it was, except that it says it hasn't got

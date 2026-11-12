@@ -96,13 +96,17 @@ impl OpenSession {
     }
 
     /// Shows a prompt on its way, with what it carries, as [`crate::Written::on_its_way`] says.
-    pub fn add_pending(&self, prompt: QueuedPrompt) {
+    pub(crate) fn add_pending(&self, prompt: QueuedPrompt) {
         self.follow.update(|log| log.add_pending(prompt));
     }
 
     /// Takes back a prompt that couldn't be sent.
-    pub fn remove_pending(&self, client_msg_id: &ClientMessageId) -> Option<QueuedPrompt> {
+    pub(crate) fn remove_pending(&self, client_msg_id: &ClientMessageId) -> Option<QueuedPrompt> {
         self.follow.update(|log| log.remove_pending(client_msg_id))
+    }
+
+    pub(crate) fn session_id(&self) -> &SessionId {
+        &self.session_id
     }
 
     /// Carries on on a new connection, from the last event it received.

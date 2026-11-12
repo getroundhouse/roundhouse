@@ -6,7 +6,7 @@ use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session,
 use protocol::prompt::Prompt;
 
 use crate::attachments::FileToSend;
-use crate::client::{Client, ClientError, Place, Reply, Result, Shown, new_message_id};
+use crate::client::{Client, ClientError, OpenSession, Place, Reply, Result, Shown, new_message_id};
 
 /// A prompt as its person wrote it, with the bytes of what it carries, under the ID it keeps until it's recorded and
 /// after.
@@ -35,7 +35,7 @@ pub struct NotTaken {
     pub prompt: Prompt<FileToSend>,
 }
 
-/// The reply to a prompt started with [`Client::start_sending`] or [`Client::start_queueing`].
+/// The reply to a prompt started with [`OpenSession::start_sending`] or [`Client::start_queueing`].
 pub struct Taking<T> {
     reply: Reply<std::result::Result<T, NotTaken>>,
     /// What it said, for when the call never ran and took its files with it.
@@ -64,15 +64,49 @@ impl<T> Taking<T> {
     }
 }
 
-impl Client {
-    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in
-    /// its place in its chat's line from now.
-    pub fn start_sending(&self, id: &SessionId, written: Written) -> Taking<(Seq, bool)> {
-        self.start_in_line(id, written, Client::send_in_line)
-    }
+/// Takes a prompt on its way out of the chat it shows in when it goes, unless the hub recorded the prompt, since the
+/// event that records it takes it out then, in its place. So one that's refused, or whose call never ran, stops
+/// showing whether or not anything waits to hear.
+struct OnItsWay {
+    shown_in: OpenSession,
+    client_msg_id: ClientMessageId,
+    recorded: bool,
+}
 
-    /// Queues a prompt as [`Client::start_sending`] sends one, and [`Client::queueing`] shows it from now until its
-    /// reply is received, or the [`Taking`] let go of.
+impl OnItsWay {
+    /// Says how its call ended. Until then it's taken for not recorded, as a call that never ran is.
+    fn ended(&mut self, recorded: bool) {
+        self.recorded = recorded;
+    }
+}
+
+impl Drop for OnItsWay {
+    fn drop(&mut self) {
+        if !self.recorded {
+            self.shown_in.remove_pending(&self.client_msg_id);
+        }
+    }
+}
+
+impl OpenSession {
+    /// Sends a prompt on `client` as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts
+    /// a call, in its place in its chat's line from now. The chat shows it from now, on its way, as
+    /// [`crate::SessionLog::pending`] says, until the hub records it, or it's handed back.
+    pub fn start_sending(&self, client: &Client, written: Written) -> Taking<(Seq, bool)> {
+        self.add_pending(written.on_its_way());
+        let client_msg_id = written.client_msg_id.clone();
+        let mut on_its_way = OnItsWay { shown_in: self.clone(), client_msg_id, recorded: false };
+        client.start_in_line(self.session_id(), written, move |client, place, id, written| {
+            let sent = client.send_in_line(place, id, written);
+            on_its_way.ended(sent.is_ok());
+            sent
+        })
+    }
+}
+
+impl Client {
+    /// Queues a prompt as [`OpenSession::start_sending`] sends one, and [`Client::queueing`] shows it from now until
+    /// its reply is received, or the [`Taking`] let go of.
     pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
         let shown = self.show_queueing(id, written.on_its_way());
         Taking { _shown: Some(shown), ..self.start_in_line(id, written, Client::queue_in_line) }
@@ -90,7 +124,7 @@ impl Client {
         &self,
         id: &SessionId,
         written: Written,
-        call: fn(&Client, &Place, &SessionId, &Written) -> Result<T>,
+        call: impl FnOnce(&Client, &Place, &SessionId, &Written) -> Result<T> + Send + 'static,
     ) -> Taking<T> {
         let place = self.line_up(id);
         let (id, text) = (id.clone(), written.prompt.text.clone());
