@@ -15,14 +15,21 @@ use crate::store::cancelled_approval;
 pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Receiver<Item>) {
     while let Some(item) = items.recv().await {
         match item {
-            Item::Event { run, body, raw, attachments } => ingest_event(&session, run, body, raw, attachments).await,
+            Item::Event { run, seq, .. }
+            | Item::Context { run, seq, .. }
+            | Item::Cache { run, seq, .. }
+            | Item::Limits { run, seq, .. }
+                if session.recorded_already(run, seq) => {}
+            Item::Event { run, body, raw, attachments, seq } => {
+                ingest_event(&session, run, *body, raw, attachments, seq).await;
+            }
             Item::Delta { run, delta } => session.apply_delta(run, delta),
-            Item::Context { run, context } => session.note_context(run, context).await,
+            Item::Context { run, context, .. } => session.note_context(run, context).await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
-            Item::Cache { run, request } => session.note_cache(run, request, crate::store::now_ms()).await,
+            Item::Cache { run, request, .. } => session.note_cache(run, request, crate::store::now_ms()).await,
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
-            Item::Limits { run, limits } => session.heard_limits(run, limits, crate::store::now_ms()),
-            Item::WorkerLost(link) => session.agent_lost(link, ExitReason::WorkerLost).await,
+            Item::Limits { run, limits, .. } => session.heard_limits(run, limits, crate::store::now_ms()),
+            Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
             Item::Flush(done) => {
                 let _ = done.send(());
             }
@@ -37,6 +44,7 @@ async fn ingest_event(
     body: EventBody,
     raw: Option<String>,
     attachments: Vec<NewAttachment>,
+    numbered: Option<u64>,
 ) {
     if !attachments.is_empty()
         && let Ok(hub) = session.hub()
@@ -52,7 +60,7 @@ async fn ingest_event(
     } else {
         None
     };
-    match session.record(Origin::Run { run, current }, body, raw, None).await {
+    match session.record(Origin::Run { run, current, numbered }, body, raw, None).await {
         // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
         Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
             session.heard_limits(run, limits, ts_ms);
@@ -202,6 +210,11 @@ impl LiveSession {
         }
     }
 
+    /// Whether the session has recorded this already, as [`heard_before`] says.
+    fn recorded_already(&self, run: RunId, seq: Option<u64>) -> bool {
+        seq.is_some_and(|seq| heard_before(&mut self.state.lock().recorded, run, seq))
+    }
+
     /// Reports that the agent is gone, unless a newer one has already replaced it.
     pub(crate) async fn agent_lost(&self, link: u64, reason: ExitReason) {
         let lost = {
@@ -220,7 +233,19 @@ impl LiveSession {
                 self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt }).await;
             }
             let body = EventBody::AgentExited { reason, code: None, signal: None, stderr_tail: vec![] };
-            self.record_or_log(Origin::Run { run: lost.run, current: true }, body).await;
+            self.record_or_log(Origin::Run { run: lost.run, current: true, numbered: None }, body).await;
         }
     }
+}
+
+/// Whether what the worker numbered `seq`, from the agent `run`, is at or before `recorded`, the last the session took
+/// in, which a worker sends again to a hub that connects to it until a hub says it has recorded it. Otherwise it's the
+/// last from then on, since a worker numbers what it sends in order, and the session takes it in in that order. What
+/// another run sent is never the same.
+pub(super) fn heard_before(recorded: &mut Option<(RunId, u64)>, run: RunId, seq: u64) -> bool {
+    if recorded.is_some_and(|(recorded_run, through)| recorded_run == run && seq <= through) {
+        return true;
+    }
+    *recorded = Some((run, seq));
+    false
 }

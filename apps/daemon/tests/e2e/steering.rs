@@ -121,14 +121,62 @@ fn a_prompt_the_agent_hadnt_taken_when_its_worker_was_lost_is_dropped() {
 }
 
 #[test]
-fn a_prompt_the_agent_hadnt_taken_when_the_hub_went_away_is_dropped() {
+fn a_prompt_the_agent_hadnt_taken_when_it_went_with_its_hub_is_dropped() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let steered = waiting_prompt(&client, &session.id);
 
-    stack.kill_hub();
+    stack.kill_hub_and_workers();
     stack.start_hub();
 
     wait_for_drop(&stack.client(), &session.id, steered);
+}
+
+/// The next hub knows the agent it carries on with hadn't taken it, so it's dropped if the agent's worker is lost first,
+/// which leaves the agent no way to say so, as it would have been with the hub there.
+#[test]
+fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_dropped_if_its_worker_is_lost_first() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let steered = waiting_prompt(&client, &session.id);
+    let worker = parent_of(agent_pid(&client, &session.id));
+    drop(client);
+
+    stack.kill_hub();
+    stack.start_hub();
+    let client = stack.client();
+    signal(worker, libc::SIGKILL);
+
+    wait_for_drop(&client, &session.id, steered);
+}
+
+/// The agent the next hub carries on with takes it, once its tool has finished, as it would have with the hub there.
+#[test]
+fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_taken_once_the_next_hub_carries_on() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let (first, _) = client.session_prompt(&session.id, "hang:1500", None).unwrap();
+    wait_for_tool(&client, &session.id);
+    let (steered, _) = client.session_prompt(&session.id, "say:steered", None).unwrap();
+    wait_until("the agent to read the prompt", || {
+        read_all(&client, &session.id).iter().any(|e| {
+            e.seq > steered && matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "command_lifecycle")
+        })
+    });
+    drop(client);
+
+    stack.kill_hub();
+    stack.start_hub();
+
+    let client = stack.client();
+    let events = wait_for_turn_end(&client, &session.id, 1);
+    let taken = |prompt: Seq| {
+        events.iter().filter(|e| matches!(e.body, EventBody::PromptTaken { prompt: p } if p == prompt)).count()
+    };
+    assert_eq!((taken(first), taken(steered)), (1, 1), "{events:#?}");
+    assert!(!events.iter().any(|e| matches!(e.body, EventBody::PromptDropped { .. })), "{events:#?}");
+    assert_eq!(assistant_text(&events), "steered");
 }

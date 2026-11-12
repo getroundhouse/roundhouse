@@ -1,8 +1,8 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{AttachmentId, CacheTtl, ContextUsage, Effort, ModelName, PermissionMode, PromptCache};
 
-use super::super::AddedBy;
 use super::super::tests::{notice, store_with_session};
+use super::super::{AddedBy, SessionChange};
 use super::super::{older, schema};
 use super::*;
 
@@ -270,4 +270,26 @@ fn making_a_chat_is_when_the_person_last_did_something_in_its_workspace() {
     let after = store.get_workspace(&"w".into()).unwrap();
     assert_eq!(after.user_active_at_ms, Some(before.created_at_ms + 50));
     assert!(after.rev > before.rev, "a client only takes a newer copy");
+}
+
+/// Kept with what was recorded, so the next hub knows what a worker sends it again.
+#[test]
+fn what_was_last_recorded_from_a_worker_is_kept_with_the_event_and_left_by_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let id = "s".into();
+    assert_eq!(store.recorded_from_worker(&id).unwrap(), None);
+
+    let heard = |through| Some(SessionChange { recorded: Some((RunId::new(2), through)), ..SessionChange::default() });
+    store.append(&id, None, &notice("a"), None, None, heard(7)).unwrap();
+    assert_eq!(store.recorded_from_worker(&id).unwrap(), Some((RunId::new(2), 7)));
+    store.append(&id, None, &notice("b"), None, None, Some(SessionStatus::Running.into())).unwrap();
+    store.append(&id, None, &notice("c"), None, None, None).unwrap();
+    assert_eq!(
+        store.recorded_from_worker(&id).unwrap(),
+        Some((RunId::new(2), 7)),
+        "only what a worker numbered moves it"
+    );
+    store.append(&id, None, &notice("d"), None, None, heard(9)).unwrap();
+    assert_eq!(store.recorded_from_worker(&id).unwrap(), Some((RunId::new(2), 9)));
 }

@@ -1,6 +1,6 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
 
-use super::ingest::says_something_new;
+use super::ingest::{heard_before, says_something_new};
 use super::status::{Open, next_status, turn_edge, works_unattended};
 use super::*;
 use crate::store::TurnEdge;
@@ -233,4 +233,19 @@ fn only_what_goes_on_without_a_person_is_working_unattended() {
         assert!(!works_unattended(status, 0), "{status:?}");
     }
     assert!(works_unattended(WaitingApproval, 1), "what it left running before it asked goes on");
+}
+
+/// As a worker sends a hub that connects to it what it sent the last hub, which may have recorded some of it.
+#[test]
+fn what_a_worker_sends_again_is_taken_in_once() {
+    let (first, next) = (RunId::new(3), RunId::new(4));
+    let mut recorded = Some((first, 5));
+    let heard: Vec<_> = [4, 5, 6, 7].into_iter().map(|seq| heard_before(&mut recorded, first, seq)).collect();
+    assert_eq!(heard, [true, true, false, false], "only what came after the last recorded");
+    assert_eq!(recorded, Some((first, 7)));
+    assert!(heard_before(&mut recorded, first, 7), "and each only once");
+    assert!(!heard_before(&mut recorded, next, 2), "another run's is never the same, whatever its number");
+    assert_eq!(recorded, Some((next, 2)));
+    let mut never = None;
+    assert!(!heard_before(&mut never, first, 1), "nothing is before the first");
 }

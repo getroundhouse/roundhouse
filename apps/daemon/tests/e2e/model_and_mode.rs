@@ -69,7 +69,7 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
 
     // A new process starts with what was chosen, from the hub's own record.
     drop(client);
-    stack.kill_hub();
+    stack.stop_hub();
     stack.start_hub();
     let client = stack.client();
     assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
@@ -173,7 +173,7 @@ fn approving_a_plan_leaves_plan_mode_and_the_next_launch_agrees() {
     assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
 
     drop(client);
-    stack.kill_hub();
+    stack.stop_hub();
     stack.start_hub();
     let client = stack.client();
     client.session_prompt(&session.id, "say:back", None).unwrap();

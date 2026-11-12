@@ -21,9 +21,9 @@ mod worktree_file;
 pub use agents::ENV_CLAUDE_BIN;
 #[cfg(unix)]
 pub use attach::attach;
-#[cfg(unix)]
-pub use claim::claim_to_serve;
 pub use claim::{ClaimError, InstanceClaim, claim_instance};
+#[cfg(unix)]
+pub use claim::{claim_to_serve, instance_claimed};
 pub use deleting::{Deleter, delete_trees};
 #[cfg(unix)]
 pub use serve::listen;

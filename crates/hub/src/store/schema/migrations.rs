@@ -10,6 +10,7 @@ mod hub_settings;
 mod providers;
 mod subagents;
 mod tools;
+mod workers;
 mod workspaces;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
@@ -368,4 +369,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     drafts::WORKSPACE_DRAFT,
     // What each workspace's worker last read of its worktree's branches, in `workspaces`.
     workspaces::BRANCHES,
+    // What each session last recorded of what its worker numbered, in `workers`.
+    workers::RECORDED_FROM_WORKER,
 ];

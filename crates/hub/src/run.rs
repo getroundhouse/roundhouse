@@ -3,24 +3,22 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use protocol::event::{EventBody, ExitReason};
-use protocol::model::SessionStatus;
 use protocol::paths::Paths;
 use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use tracing::{info, warn};
 
 use crate::error::HubError;
-use crate::hub::Hub;
+use crate::hub::{Hub, LeftAtWork};
 use crate::listener::{self, Listener};
 use crate::private;
 use crate::provider_set::ProviderSet;
-use crate::store::{RecordedInstance, SessionChange, StatusChange, Store, StoreError, cancelled_approval};
+use crate::store::{RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
 
 pub struct HubConfig {
     pub paths: Paths,
-    /// The binary that runs `worker --stdio`.
+    /// The binary that runs a worker, which the local provider starts.
     pub worker_exe: PathBuf,
     /// The user's shell, for finding the real `PATH`.
     pub shell: Option<String>,
@@ -30,34 +28,11 @@ pub struct HubConfig {
     pub on_demand: bool,
 }
 
-/// Anything left at work or half-made by the last run. Its workers exited when it went away, and its agents too, so
-/// a prompt one of them hadn't taken never will be. A queue whose agent went away at work is held, as when the agent
-/// exits mid-turn with the hub still there. Returns the instances it left part way, to be destroyed once the hub is
-/// serving, taken before anything new is made.
+/// What the last run left half done: setups that were running, which its workers can't report on to this hub, and
+/// workspaces and instances half-made. Returns the instances it left part way, to be destroyed once the hub is
+/// serving, taken before anything new is made. What it left at work, the hub carries on with as it starts.
 fn recover(store: &Store) -> Result<Vec<RecordedInstance>, StoreError> {
     store.fail_interrupted_setups()?;
-    for (id, prompts) in store.untaken_prompts()? {
-        for prompt in prompts {
-            store.append(&id, None, &EventBody::PromptDropped { prompt }, None, None, None)?;
-        }
-    }
-    for id in store.active_session_ids()? {
-        for approval_id in store.open_approvals(&id)? {
-            store.append(&id, None, &cancelled_approval(approval_id), None, None, None)?;
-        }
-        store.append(
-            &id,
-            None,
-            &EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] },
-            None,
-            None,
-            // Its agent took what it was running in the background with it.
-            Some(SessionChange {
-                status: Some(StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }),
-                queue_held: Some(true),
-            }),
-        )?;
-    }
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
     }
@@ -108,6 +83,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         .map_err(|e| HubError::io(format!("creating {}", paths.database.display()), e))?;
     let store = Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?);
     let unfinished = recover(&store).map_err(HubError::Recover)?;
+    let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
     let providers = load_providers(&paths, config.worker_exe, config.shell, config.path, &store)?;
@@ -118,6 +94,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         providers,
         config.on_demand,
     ));
+    hub.carry_on(left_at_work).await;
     hub.carry_out(&settings);
     hub.tidy_draft_files().await;
     let awake = hub.keep_awake();
@@ -143,7 +120,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     accept.abort();
     watching_pull_requests.abort();
     listener::unbind(&paths.socket);
-    hub.stop_all_workers().await;
+    if hub.restarting() {
+        hub.leave_workers().await;
+    } else {
+        hub.stop_all_workers().await;
+    }
     hub.shut_down_providers().await;
     if let Some(awake) = awake {
         awake.abort();

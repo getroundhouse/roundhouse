@@ -14,18 +14,23 @@ use protocol::worker::{
 use crate::support::{is_alive, wait_until};
 
 /// What a hub runs to reach the worker, with the worker's stream on its stdin and stdout.
-struct Attached {
+pub(crate) struct Attached {
     command: Child,
     replies: BufReader<ChildStdout>,
 }
 
 impl Attached {
     fn start(dir: &Path) -> Self {
+        Self::start_in(&dir.join("workspaces"), &dir.join("instance"))
+    }
+
+    /// To the worker of the instance whose state is kept in `state_dir`, starting one if none is serving it.
+    pub(crate) fn start_in(workspaces_root: &Path, state_dir: &Path) -> Self {
         let mut command = Command::new(env!("CARGO_BIN_EXE_roundhoused"))
             .args(["worker", "--attach", "--workspaces-root"])
-            .arg(dir.join("workspaces"))
+            .arg(workspaces_root)
             .arg("--state-dir")
-            .arg(dir.join("instance"))
+            .arg(state_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -35,8 +40,8 @@ impl Attached {
         Self { command, replies }
     }
 
-    /// The worker's reply, which is the next thing it sends, since it has no agents.
-    fn call(&mut self, id: u64, request: WorkerRequest) -> WorkerOutcome {
+    /// The worker's reply, which has to be the next thing it sends.
+    pub(crate) fn call(&mut self, id: u64, request: WorkerRequest) -> WorkerOutcome {
         self.command.stdin.as_mut().unwrap().write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).unwrap();
         let mut line = String::new();
         self.replies.read_line(&mut line).unwrap();
@@ -46,7 +51,7 @@ impl Attached {
         }
     }
 
-    fn hello(&mut self, keep_running_without_hub: bool) {
+    pub(crate) fn hello(&mut self, keep_running_without_hub: bool) {
         let hello = WorkerRequest::Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
@@ -57,7 +62,7 @@ impl Attached {
     }
 
     /// As a hub that goes does, and returns once the command has exited.
-    fn close(mut self) {
+    pub(crate) fn close(mut self) {
         drop(self.command.stdin.take());
         assert!(self.command.wait().unwrap().success());
     }

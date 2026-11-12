@@ -3,20 +3,22 @@
 #![cfg(test)]
 
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError, SubscriptionItem};
 use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::SessionStatus;
+use protocol::paths::WORKER_SOCKET_FILE;
 
 use crate::support::{
     Follower, Stack, assert_gapless, assistant_text, is_alive, latest_started_pid, parent_of, pending_approval,
-    read_all, signal, started_pid, wait_for_approval, wait_for_status, wait_for_turn_end, wait_until,
+    read_all, signal, started_pid, terminate, wait_for_approval, wait_for_status, wait_for_turn_end, wait_until,
 };
 
+/// As when the machine goes down. A hub that only crashed leaves the agent running, as `carrying_on` tests.
 #[test]
-fn a_hub_crash_stops_the_agent_and_the_next_hub_resumes_the_conversation() {
+fn an_agent_gone_with_its_hub_is_interrupted_and_the_next_hub_resumes_the_conversation() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace_planning(&client);
@@ -32,8 +34,8 @@ fn a_hub_crash_stops_the_agent_and_the_next_hub_resumes_the_conversation() {
         .unwrap();
     drop(client);
 
-    stack.kill_hub();
-    wait_until("the agent to stop after the hub died", || !is_alive(agent_pid));
+    stack.kill_hub_and_workers();
+    wait_until("the agent to stop", || !is_alive(agent_pid));
 
     stack.start_hub();
     let client = stack.client();
@@ -191,11 +193,10 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
 
 #[test]
 fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
-    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub wants its
-    // instance, and the new worker would find the instance taken.
+    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts.
     let mut stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into())]);
     let client = stack.client();
-    let (_, session) = stack.workspace(&client);
+    let (workspace, session) = stack.workspace(&client);
     let go = stack.path("late-output");
     client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; hang:60000", go.display()), None).unwrap();
     let mut agent_pid = 0;
@@ -207,11 +208,19 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     let worker_pid = parent_of(agent_pid);
     drop(client);
 
+    // A hub stopping for good asks its worker to stop, and this one goes before it's done.
+    terminate(stack.hub_pid());
+    let socket = stack.paths().instances_dir.join(workspace.instance_id.to_string()).join(WORKER_SOCKET_FILE);
+    wait_until("the worker to start stopping", || !socket.exists());
     stack.kill_hub();
-    wait_until("the agent to stop after the hub died", || !is_alive(agent_pid));
+    wait_until("the agent to stop", || !is_alive(agent_pid));
     assert!(is_alive(worker_pid), "the worker should still be waiting for its agent's last output");
+    let starting = Instant::now();
     stack.start_hub();
+    // Rather than waiting for a worker that may be stuck.
+    assert!(starting.elapsed() < Duration::from_secs(5), "took {:?} to serve", starting.elapsed());
     let client = stack.client();
+    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
     client.session_prompt(&session.id, "say:second", None).unwrap();
 
     wait_until("the second turn to finish", || assistant_text(&read_all(&client, &session.id)).ends_with("second"));

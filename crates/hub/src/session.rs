@@ -9,17 +9,15 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use parking_lot::Mutex;
-use protocol::attachment::NewAttachment;
 use protocol::client::ApiError;
-use protocol::event::{AgentTask, ApprovalDecision, EventBody};
+use protocol::event::{AgentTask, EventBody};
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, PromptCache,
-    RunId, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, UsageLimit,
-    WorkspaceId,
+    AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
+    SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::{WorkerRequest, WorkerResponse};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
 use crate::error::internal;
@@ -30,6 +28,7 @@ mod cache;
 mod commands;
 mod ingest;
 mod limits;
+mod messages;
 mod queue;
 mod record;
 mod status;
@@ -38,81 +37,10 @@ mod tests;
 
 use commands::run_commands;
 use ingest::run_ingest;
+pub(crate) use messages::{Command, Item};
 use queue::QueueWatch;
 
 const LIVE_CAPACITY: usize = 4096;
-
-/// What arrives from a worker.
-pub(crate) enum Item {
-    Event {
-        run: RunId,
-        body: EventBody,
-        raw: Option<String>,
-        /// Images `body` names, which are kept before it's recorded.
-        attachments: Vec<NewAttachment>,
-    },
-    Delta {
-        run: RunId,
-        delta: StreamDelta,
-    },
-    /// How full the agent's context is now. It comes in the queue with the agent's events, so it's never taken for
-    /// a later run's, or kept after the run has gone.
-    Context {
-        run: RunId,
-        context: ContextUsage,
-    },
-    /// One of the agent's own requests to its model, as it began. It comes in the queue with the agent's events for
-    /// the same reason, and so that a request that found the cache expired is recorded before what the agent wrote.
-    Cache {
-        run: RunId,
-        request: CacheRequest,
-    },
-    /// What's used of the account's limits, as the agent answered when its worker asked. It comes in the queue with
-    /// the agent's events for the same reason.
-    Limits {
-        run: RunId,
-        limits: Vec<UsageLimit>,
-    },
-    /// The worker connection ended. Everything it sent has been queued ahead of this.
-    WorkerLost(u64),
-    /// Resolves once everything queued ahead of it has been recorded.
-    Flush(oneshot::Sender<()>),
-    /// The session is gone. What's queued ahead of this is dealt with, and then the task stops.
-    End,
-}
-
-pub(crate) enum Command {
-    Prompt {
-        text: String,
-        client_msg_id: Option<ClientMessageId>,
-        attachments: Vec<AttachmentId>,
-        reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
-    },
-    Approve {
-        approval_id: ApprovalId,
-        decision: ApprovalDecision,
-        reply: oneshot::Sender<Result<(), ApiError>>,
-    },
-    Cancel {
-        reply: oneshot::Sender<Result<(), ApiError>>,
-    },
-    Compact {
-        keeping: Option<String>,
-        reply: oneshot::Sender<Result<(), ApiError>>,
-    },
-    Stop {
-        reply: oneshot::Sender<Result<(), ApiError>>,
-    },
-    /// Sends the first queued prompt, if the agent is ready for it by the time this runs.
-    SendQueued,
-    /// Sends the queued prompt with this ID now, whether or not the agent is ready for it.
-    SendQueuedNow {
-        client_msg_id: ClientMessageId,
-        reply: oneshot::Sender<Result<Session, ApiError>>,
-    },
-    /// The session is gone. What's queued ahead of this is carried out, and then the task stops.
-    End,
-}
 
 #[derive(Clone, Debug)]
 pub(crate) enum LiveItem {
@@ -147,8 +75,10 @@ pub(crate) enum Origin {
     /// Something the hub knows itself.
     Hub,
     /// One launch of the agent, from it or about it. `current` is false for a leftover from one that's
-    /// been replaced, which mustn't change the status of the session its replacement is now running.
-    Run { run: RunId, current: bool },
+    /// been replaced, which mustn't change the status of the session its replacement is now running. `numbered` is its
+    /// number among what the agent's worker sent, which the session keeps with it, so a hub that connects to the
+    /// worker again drops what the worker sends it again.
+    Run { run: RunId, current: bool, numbered: Option<u64> },
 }
 
 impl Origin {
@@ -174,6 +104,18 @@ struct AgentRun {
     run: RunId,
 }
 
+/// What a session carries on with from an earlier hub, whose agent is still running on a worker this hub has
+/// connected to again.
+pub(crate) struct CarriedOver {
+    /// The connection this hub reached the agent's worker on.
+    pub link: u64,
+    pub run: RunId,
+    /// The last of what the agent's worker numbered that the session recorded, with the run it's from.
+    pub recorded: Option<(RunId, u64)>,
+    /// Prompts the agent hadn't taken when the earlier hub went, which it may take yet.
+    pub untaken: Vec<Seq>,
+}
+
 struct LiveState {
     last_seq: Seq,
     status: SessionStatus,
@@ -195,6 +137,8 @@ struct LiveState {
     /// been replaced: they go in the log, but don't speak for the session's current state, and its
     /// deltas are dropped.
     agent: Option<AgentRun>,
+    /// The last of what the agent's worker numbered that the session has recorded, with the run it's from.
+    recorded: Option<(RunId, u64)>,
     agent_opened: bool,
     /// What the next agent launches with.
     settings: SessionSettings,
@@ -241,8 +185,23 @@ fn publish(state: &mut LiveState, item: LiveItem) {
 }
 
 impl LiveSession {
-    pub(crate) fn start(hub: &Arc<Hub>, stored: StoredSession, open_approvals: Vec<ApprovalId>) -> Arc<Self> {
+    /// `carried` is what it carries on with from an earlier hub, if its agent is still running.
+    pub(crate) fn start(
+        hub: &Arc<Hub>,
+        stored: StoredSession,
+        open_approvals: Vec<ApprovalId>,
+        carried: Option<CarriedOver>,
+    ) -> Arc<Self> {
         let has_queue = !stored.session.queued.is_empty();
+        let (agent, recorded, untaken) = match carried {
+            Some(CarriedOver { link, run, recorded, untaken }) => (Some(AgentRun { link, run }), recorded, untaken),
+            None => (None, None, Vec::new()),
+        };
+        // The agent still running is the one that asked whatever is open, and runs on what it runs in the background.
+        let asked_by = agent.map(|agent| agent.run);
+        let background_tasks = if agent.is_some() { stored.session.background_tasks.clone() } else { Vec::new() };
+        let mut queue = QueueWatch::starting(stored.session.queue_held);
+        queue.set_untaken(untaken);
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {
@@ -259,17 +218,18 @@ impl LiveSession {
                 status: stored.session.status,
                 tail: Tail::default(),
                 version: 0,
-                pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
-                background_tasks: Vec::new(),
+                pending_approvals: open_approvals.into_iter().map(|id| (id, asked_by)).collect(),
+                background_tasks,
                 context: stored.session.context.clone(),
                 prompt_cache: stored.session.prompt_cache.clone(),
                 hearing: None,
                 turn_started_at_ms: stored.session.turn_started_at_ms,
-                agent: None,
+                agent,
+                recorded,
                 agent_opened: stored.agent_opened,
                 settings: stored.session.settings(),
                 closed_at_ms: stored.session.closed_at_ms,
-                queue: QueueWatch::starting(stored.session.queue_held),
+                queue,
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
@@ -278,6 +238,10 @@ impl LiveSession {
         });
         tokio::spawn(run_commands(session.clone(), commands_rx));
         tokio::spawn(run_ingest(session.clone(), ingest_rx));
+        // So what the agent hears of its account's limits is filed under the account, as for one this hub launched.
+        if let Some(agent) = agent {
+            session.launched(agent.run);
+        }
         // A queue the last hub left ready to send.
         if has_queue && session.ready_for_queue() {
             session.wake_queue();

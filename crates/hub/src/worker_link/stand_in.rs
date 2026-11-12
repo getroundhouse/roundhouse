@@ -19,6 +19,9 @@ impl WorkerLink {
             kept: AtomicBool::new(false),
             process: ChildProcess::already_exited(),
             tools_unserved: AtomicBool::new(false),
+            held: AsyncMutex::new(None),
+            acks: Acks::default(),
+            left: AtomicBool::new(false),
         });
         let gone = Gone(Arc::downgrade(&link));
         tokio::spawn(async move {

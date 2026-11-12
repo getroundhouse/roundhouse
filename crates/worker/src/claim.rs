@@ -57,6 +57,23 @@ pub fn claim_to_serve(state_dir: &Path, socket: &Path, wait: Duration) -> Result
     }
 }
 
+/// Whether a worker holds the instance whose state is kept in `state_dir`, as one that's stopping does once it has
+/// removed its socket.
+#[cfg(unix)]
+pub fn instance_claimed(state_dir: &Path) -> io::Result<bool> {
+    let lock = match File::open(state_dir.join(WORKER_LOCK_FILE)) {
+        Ok(lock) => lock,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    // Let go of at once, as the file closes.
+    match lock.try_lock() {
+        Ok(()) => Ok(false),
+        Err(TryLockError::WouldBlock) => Ok(true),
+        Err(TryLockError::Error(e)) => Err(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +125,23 @@ mod tests {
 
         letting_go.join().unwrap();
         assert!(matches!(claimed, Ok(Some(_))), "{claimed:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_instance_reads_as_claimed_only_while_a_worker_holds_it() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!instance_claimed(dir.path()).unwrap(), "never claimed");
+        let claim = claim_instance(dir.path()).unwrap();
+        assert!(instance_claimed(dir.path()).unwrap());
+        assert!(instance_claimed(dir.path()).unwrap(), "asking didn't let go of it");
+        drop(claim);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while instance_claimed(dir.path()).unwrap() {
+            assert!(Instant::now() < deadline, "still claimed once let go");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(claim_instance(dir.path()).is_ok(), "asking didn't keep it either");
     }
 
     /// As one started at the same time as another, to serve the same hub, finds the other serving.

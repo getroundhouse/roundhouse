@@ -41,9 +41,12 @@ pub struct SessionChange {
     pub status: Option<StatusChange>,
     /// Whether the queue is held from here on.
     pub queue_held: Option<bool>,
+    /// The run whose worker numbered what's recorded, and its number, which is the last recorded from that worker.
+    pub recorded: Option<(RunId, u64)>,
 }
 
 impl SessionChange {
+    /// Whether nothing on the session's record changes. Which number from its worker it has recorded isn't there.
     pub fn is_none(&self) -> bool {
         self.status.is_none() && self.queue_held.is_none()
     }
@@ -51,7 +54,7 @@ impl SessionChange {
 
 impl From<StatusChange> for SessionChange {
     fn from(status: StatusChange) -> Self {
-        Self { status: Some(status), queue_held: None }
+        Self { status: Some(status), ..Self::default() }
     }
 }
 
@@ -72,6 +75,12 @@ fn change_session(
     let id = session_id.as_str();
     if let Some(held) = change.queue_held {
         tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;
+    }
+    if let Some((run, through)) = change.recorded {
+        tx.execute(
+            "UPDATE sessions SET recorded_run = ?, recorded_through = ? WHERE id = ?",
+            params![run.get().cast_signed(), through.cast_signed(), id],
+        )?;
     }
     let Some(StatusChange { status, turn, background_tasks }) = change.status else { return Ok(()) };
     if let Some(tasks) = background_tasks {
