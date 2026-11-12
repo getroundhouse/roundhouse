@@ -1,6 +1,7 @@
 //! Archiving and restoring workspaces. The record says a workspace is being archived or restored from the moment it's
 //! asked, so every client shows it, and only one request can do it at once. It goes back as it was if that's refused
-//! or fails, and a hub that stops part way leaves it for the next to put back as it starts.
+//! or fails. A hub that stops part way leaves it for the next, which asks the workspace's worker whether the worktree
+//! is there and records what that says.
 
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, Repo, Workspace, WorkspaceId};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::oneshot;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use super::workspace_env;
 use crate::error::internal;
@@ -31,22 +32,25 @@ impl Hub {
             Ok(branch) => branch,
             Err(e) => return Err(self.put_back(&id, Move::Archive, e).await),
         };
+        match self.record_archived(&id, branch).await {
+            Ok(workspace) => Ok(workspace),
+            Err(e) => Err(self.put_back(&id, Move::Archive, e).await),
+        }
+    }
+
+    /// Records that the workspace is archived, on `branch` if its worktree said which it was on, and announces it.
+    async fn record_archived(&self, id: &WorkspaceId, branch: Option<BranchName>) -> Result<Workspace, ApiError> {
         let archived = id.clone();
-        let recorded = self
+        let workspace = self
             .blocking(move |store| {
                 if let Some(branch) = branch {
                     store.set_workspace_branch(&archived, &branch)?;
                 }
                 store.end_move(&archived, Move::Archive, Ended::Done)
             })
-            .await;
-        match recorded {
-            Ok(workspace) => {
-                self.notify(HubNotice::Workspace(workspace.clone()));
-                Ok(workspace)
-            }
-            Err(e) => Err(self.put_back(&id, Move::Archive, e).await),
-        }
+            .await?;
+        self.notify(HubNotice::Workspace(workspace.clone()));
+        Ok(workspace)
     }
 
     /// Everything archiving does but record it: refuses if work would be lost, unless forced, runs the archive script,
@@ -133,13 +137,25 @@ impl Hub {
             Ok(made) => made,
             Err(e) => return Err(self.put_back(&id, Move::Restore, e).await),
         };
+        match self.record_restored(&id, repo, &link).await {
+            Ok(restored) => Ok(restored),
+            Err(e) => Err(self.put_back(&id, Move::Restore, e).await),
+        }
+    }
+
+    /// Records that the workspace is ready again, now its worktree is back, announces it and starts its setup. Returns
+    /// it as recorded.
+    async fn record_restored(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        repo: Repo,
+        link: &WorkerLink,
+    ) -> Result<Workspace, ApiError> {
         let ready = id.clone();
-        let restored = match self.blocking(move |store| store.end_move(&ready, Move::Restore, Ended::Done)).await {
-            Ok(restored) => ReadyWorkspace::new(restored)?,
-            Err(e) => return Err(self.put_back(&id, Move::Restore, e).await),
-        };
+        let restored = self.blocking(move |store| store.end_move(&ready, Move::Restore, Ended::Done)).await?;
+        let restored = ReadyWorkspace::new(restored)?;
         // The worktree has only the branch it's restored on now, which its record says before it's announced.
-        self.watch_branches_from_now(&restored, &link).await;
+        self.watch_branches_from_now(&restored, link).await;
         let restored = self.ready_workspace(restored.id()).await?;
         self.notify(HubNotice::Workspace(restored.workspace().clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
@@ -191,5 +207,81 @@ impl Hub {
             Err(e) => error!(%id, ?moving, "putting back a workspace: {}", e.message),
         }
         why
+    }
+
+    /// Settles each workspace an earlier hub left part way through being archived or restored, once this one is
+    /// serving, so a worker that's slow to answer keeps no client waiting. Until then its record says it's being
+    /// archived or restored, as it did, and nothing else can be asked of it.
+    pub(crate) async fn settle_moves(self: Arc<Self>, left: Vec<(WorkspaceId, Move)>) {
+        for (id, moving) in left {
+            match self.settle_move(&id, moving).await {
+                Ok(workspace) => {
+                    let status = workspace.status;
+                    info!(workspace = workspace.name, ?status, "settled a workspace the last run was moving");
+                }
+                Err(e) => {
+                    warn!(%id, ?moving, "couldn't tell how far the last run got, so putting it back: {}", e.message);
+                    self.put_back(&id, moving, e).await;
+                }
+            }
+            self.worker_once_settled(&id).await;
+        }
+    }
+
+    /// What becomes of the worker the workspace was settled with, which the hub kept as it started, or started to
+    /// ask: an archived workspace has none, and a ready one's is as any the hub carries on with, its branches watched
+    /// from now, and replaced once it's idle if it's another build.
+    async fn worker_once_settled(self: &Arc<Self>, id: &WorkspaceId) {
+        let Some(link) = self.existing_worker(id) else { return };
+        let workspace = match self.workspace(id).await {
+            Ok(workspace) => workspace,
+            Err(e) => return warn!(%id, "reading a workspace that was settled: {}", e.message),
+        };
+        match ReadyWorkspace::new(workspace.clone()) {
+            Ok(ready) => {
+                self.watch_branches(&ready, &link).await;
+                // One with a session carried on is being replaced already.
+                let carried_on = self.sessions.lock().live.values().any(|session| session.workspace_id == *id);
+                if !carried_on && link.is_another_build(self.build) {
+                    self.replace_once_idle(id.clone(), link);
+                }
+            }
+            Err(_) => match self.provider(&workspace.provider) {
+                Ok(provider) => self.close_worker(&workspace, &link, provider.as_ref()).await,
+                Err(e) => warn!(%id, "stopping the worker of a workspace settled as archived: {}", e.message),
+            },
+        }
+    }
+
+    /// Records what the workspace's worker finds: a worktree that's there is a ready workspace's, and one that isn't
+    /// is an archived one's, whichever the earlier hub was doing. Fails if the worker can't say, such as one from a
+    /// build that doesn't know the question.
+    async fn settle_move(self: &Arc<Self>, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
+        let workspace = self.workspace(id).await?;
+        let path = workspace.path.clone().ok_or_else(|| internal("a workspace being moved has no path"))?;
+        let link = self.ensure_worker(id).await?;
+        let reply = link.call(WorkerRequest::WorktreeThere { path }).await?;
+        let WorkerResponse::WorktreeThere { there } = reply else {
+            return Err(unexpected(&reply));
+        };
+        match (moving, there) {
+            // It got no further than the worktree, so the workspace is as it was before.
+            (Move::Archive, true) | (Move::Restore, false) => {
+                let owned = id.clone();
+                let workspace = self.blocking(move |store| store.end_move(&owned, moving, Ended::PutBack)).await?;
+                self.notify(HubNotice::Workspace(workspace.clone()));
+                Ok(workspace)
+            }
+            (Move::Archive, false) => {
+                // The worktree can't say which branch it was on any more. What its worker last read of it can.
+                let branch = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
+                self.record_archived(id, branch.map(|branch| branch.name.clone())).await
+            }
+            (Move::Restore, true) => {
+                let repo_id = workspace.repo_id.clone();
+                let repo = self.blocking(move |store| store.get_repo(&repo_id)).await?;
+                self.record_restored(id, repo, &link).await
+            }
+        }
     }
 }

@@ -105,6 +105,18 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
         r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}}"#,
     );
 
+    keeps_its_form(
+        WorkerCall { id: 4, request: WorkerRequest::WorktreeThere { path: "/w".into() } },
+        r#"{"id":4,"request":{"method":"worktree_there","path":"/w"}}"#,
+    );
+    let there: WorkerFrame =
+        frame::decode(br#"{"frame":"reply","id":4,"response":{"result":"worktree_there","there":true}}"#).unwrap();
+    let WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::WorktreeThere { there }), .. } = there
+    else {
+        panic!("{there:?}");
+    };
+    assert!(there);
+
     let ready: WorkerFrame = frame::decode(
         br#"{"frame":"reply","id":1,"response":{"result":"workspace_ready","path":"/w","branch":"aspen","base_ref":"origin/main"}}"#,
     )

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, Workspace, WorkspaceId};
+use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::provider::InstanceState;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -54,9 +54,15 @@ impl Hub {
         let mut carrying = JoinSet::new();
         // A worker can be running with no session at work, its agents idle, and the hub stops it as it stops, as it
         // would one it started.
+        let being_moved: HashSet<WorkspaceId> = workspaces
+            .iter()
+            .filter(|workspace| matches!(workspace.status, WorkspaceStatus::Archiving | WorkspaceStatus::Restoring))
+            .map(|workspace| workspace.id.clone())
+            .collect();
         for workspace_id in self.with_instances_running(&workspaces).await {
             let at_work = sessions.remove(&workspace_id).unwrap_or_default();
-            carrying.spawn(self.clone().carry_on_in(workspace_id, at_work, untaken.clone()));
+            let being_moved = being_moved.contains(&workspace_id);
+            carrying.spawn(self.clone().carry_on_in(workspace_id, at_work, being_moved, untaken.clone()));
         }
         for id in sessions.into_values().flatten() {
             let prompts = untaken.lock().remove(&id).unwrap_or_default();
@@ -102,7 +108,14 @@ impl Hub {
         running
     }
 
-    async fn carry_on_in(self: Arc<Self>, workspace_id: WorkspaceId, at_work: Vec<SessionId>, untaken: Untaken) {
+    /// `being_moved` is whether the earlier hub was archiving or restoring the workspace.
+    async fn carry_on_in(
+        self: Arc<Self>,
+        workspace_id: WorkspaceId,
+        at_work: Vec<SessionId>,
+        being_moved: bool,
+        untaken: Untaken,
+    ) {
         let take = |id: &SessionId| untaken.lock().remove(id).unwrap_or_default();
         let (link, running) = match self.worker_left_running(&workspace_id).await {
             Ok(reached) => reached,
@@ -153,6 +166,10 @@ impl Hub {
             if link.is_another_build(self.build) {
                 self.replace_once_idle(workspace_id, link);
             }
+        } else if being_moved {
+            // Only this worker can say how far that got while it's still at it, so it's kept for the hub to ask once
+            // it's serving, as [`Hub::settle_moves`] says.
+            link.keep();
         } else {
             self.end_left_running(workspace_id, Some(link));
         }

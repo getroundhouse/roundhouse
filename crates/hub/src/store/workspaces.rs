@@ -245,28 +245,20 @@ impl Store {
         workspace_on(&conn, id)
     }
 
-    /// Puts back every workspace a hub was archiving or restoring when it stopped, as it was before, since it can't
-    /// tell how far that got. Returns them as they are now.
-    pub fn put_back_moves(&self) -> Result<Vec<Workspace>, StoreError> {
-        let mut conn = lock(&self.writer);
-        let tx = conn.transaction()?;
-        let mut put_back = Vec::new();
+    /// Every workspace a hub was archiving or restoring when it stopped, and which it was doing. Their records go on
+    /// saying so until the next hub has settled each.
+    pub fn moves_left(&self) -> Result<Vec<(WorkspaceId, Move)>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut left = Vec::new();
         for moving in [Move::Archive, Move::Restore] {
-            let ids: Vec<String> = {
-                let mut statement = tx.prepare_cached("SELECT id FROM workspaces WHERE status = ?")?;
-                let rows = statement.query_map([text_of(&moving.during())], |row| row.get(0))?;
-                rows.collect::<rusqlite::Result<_>>()?
-            };
-            tx.execute(
-                "UPDATE workspaces SET status = ? WHERE status = ?",
-                params![text_of(&moving.before()), text_of(&moving.during())],
-            )?;
+            let mut statement =
+                conn.prepare_cached("SELECT id FROM workspaces WHERE status = ? ORDER BY created_at_ms")?;
+            let ids = statement.query_map([text_of(&moving.during())], |row| row.get::<_, String>(0))?;
             for id in ids {
-                put_back.push(workspace_on(&tx, &WorkspaceId::from(id))?);
+                left.push((WorkspaceId::from(id?), moving));
             }
         }
-        tx.commit()?;
-        Ok(put_back)
+        Ok(left)
     }
 
     /// Records what the hub found of the workspace's pull request, and on which branch it looked. Returns the workspace

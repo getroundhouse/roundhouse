@@ -86,6 +86,9 @@ struct State {
     stopping: watch::Sender<bool>,
     /// How many one-off calls have started, which numbers their records.
     calls: AtomicU64,
+    /// Held while a worktree is removed or put back, which goes on when the hub that asked has gone. The next hub's
+    /// question of whether the worktree is there waits for it, so the answer is how that ended.
+    moving: tokio::sync::Mutex<()>,
     /// What's watching the worktree's branches, so a later watch can replace it.
     watching: Mutex<Option<AbortHandle>>,
     /// What agents say, what the worker asks, and the branches it watches, on its way to the hub.
@@ -127,6 +130,7 @@ impl Worker {
             setup: Arc::new(Mutex::new(Setup::Idle)),
             stopping: watch::Sender::new(false),
             calls: AtomicU64::new(0),
+            moving: tokio::sync::Mutex::new(()),
             watching: Mutex::new(None),
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build)),
@@ -236,12 +240,18 @@ async fn handle(
             })
         }
         WorkerRequest::RestoreWorkspace { repo_path, path, branch } => {
+            let _moving = state.moving.lock().await;
             git::restore_workspace(&repo_path, &path, &branch).await?;
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RemoveWorkspace { repo_path, path, force } => {
+            let _moving = state.moving.lock().await;
             git::remove_workspace(&repo_path, &path, force, &state.config.deleter).await?;
             Ok(WorkerResponse::Ok)
+        }
+        WorkerRequest::WorktreeThere { path } => {
+            let _moving = state.moving.lock().await;
+            Ok(WorkerResponse::WorktreeThere { there: git::worktree_there(&path).await })
         }
         WorkerRequest::GitStatus { path } => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
         WorkerRequest::GitDiff { path, base_ref } => {
