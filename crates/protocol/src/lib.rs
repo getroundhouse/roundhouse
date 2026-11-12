@@ -40,7 +40,6 @@ pub fn versions_named(newest: u32, oldest: Option<u32>) -> String {
     }
 }
 
-
 pub use build::{BUILD_NUMBER, BUILD_VERSION, STAMPED_BUILD, StampedBuild};
 
 #[cfg(test)]
