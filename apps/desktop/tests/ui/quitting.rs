@@ -63,11 +63,14 @@ fn whats_typed_just_before_quitting_is_kept(cx: &mut TestAppContext) {
     assert_eq!(kept(), "half a thought", "quitting didn't wait for what was typed to be kept");
 }
 
-/// Leaves something only the app has, which quitting would lose: what's typed in the new-workspace dialog.
-fn leave_something_in_the_dialog(ui: &mut Ui<'_>) {
+/// Leaves something only the app has, which quitting would lose: what's typed in the new-workspace dialog while the
+/// hub doesn't answer, so it can't keep it until this goes.
+fn leave_something_in_the_dialog(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     ui.open_new_workspace();
+    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input("half a thought");
     ui.press("escape");
+    frozen
 }
 
 fn quit_from_the_menu(ui: &mut Ui<'_>) {
@@ -78,7 +81,7 @@ fn quit_from_the_menu(ui: &mut Ui<'_>) {
 fn quitting_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
-    leave_something_in_the_dialog(&mut ui);
+    let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
 
     quit_from_the_menu(&mut ui);
 
@@ -144,7 +147,7 @@ fn closing_the_window_asks_first_only_when_something_would_be_lost(cx: &mut Test
     let close = |ui: &mut Ui<'_>| VisualTestContext::from_window(ui.handle, ui.cx).simulate_close();
     assert!(close(&mut ui), "with nothing to lose, it closes");
     assert!(!ui.cx.has_pending_prompt());
-    leave_something_in_the_dialog(&mut ui);
+    let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
 
     assert!(!close(&mut ui), "it stays open to ask");
 
@@ -213,7 +216,7 @@ fn quitting_asks_about_a_prompt_the_hub_hasnt_taken_in_time(cx: &mut TestAppCont
 fn quitting_again_while_it_waits_or_asks_doesnt_ask_twice(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
-    leave_something_in_the_dialog(&mut ui);
+    let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
 
     // Twice before anything runs, so the second comes as the first waits.
     ui.cx.update(|cx| {

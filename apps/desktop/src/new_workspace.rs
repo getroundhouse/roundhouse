@@ -1,12 +1,12 @@
 //! The new-workspace dialog: which repository, what to work on, the model and its effort, plan mode, and files to go
 //! with the first prompt. It asks the app to make the workspace with an event, and the app tells it where one can be
-//! made and whether one can be made now, so it never reaches into the app. What's left in it when it closes is there
-//! the next time it opens, but for plan mode.
+//! made and whether one can be made now, so it never reaches into the app. What's left in it is there the next time it
+//! opens, in this app or another, since the hub keeps it, as `keeping` says.
 
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use client_core::FileToSend;
+use client_core::{FileToSend, Where};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, WindowExt as _};
 use gpui_kit::{
@@ -20,7 +20,10 @@ use crate::attached::{self, Attachments, joined};
 use crate::composing;
 use crate::model_picker::Picked;
 
+mod keeping;
 mod view;
+
+pub(crate) use keeping::Keeping;
 
 /// Wide enough for a few lines of a task's description, and narrower than the transcript's column.
 const WIDTH: Pixels = px(720.);
@@ -77,6 +80,7 @@ pub struct NewWorkspaceDialog {
     /// belongs to the task at hand.
     mode: PermissionMode,
     attached: Attachments,
+    keeping: Keeping,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -109,21 +113,27 @@ pub(crate) fn open(
 }
 
 impl NewWorkspaceDialog {
-    pub(crate) fn new(repo: RepoId, offer: Offer, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        repo: RepoId,
+        offer: Offer,
+        keeping: Keeping,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let prompt = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(7, 16)
                 .submit_on_enter(true)
                 .placeholder("What do you want to work on?")
         });
-        let on_enter = cx.subscribe_in(&prompt, window, |this, _, event: &InputEvent, _, cx| {
-            if let InputEvent::PressEnter { shift: false, .. } = event {
-                this.create(cx);
-            }
+        let typed = cx.subscribe_in(&prompt, window, |this, _, event: &InputEvent, _, cx| match event {
+            InputEvent::PressEnter { shift: false, .. } => this.create(cx),
+            InputEvent::Change => this.keep(false, cx),
+            InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
         let (model, effort, attached) = (DEFAULT_MODEL, DEFAULT_EFFORT, Attachments::default());
         let mode = PermissionMode::FullAccess;
-        Self { repo, offer, prompt, model, effort, mode, attached, _subscriptions: vec![on_enter] }
+        Self { repo, offer, prompt, model, effort, mode, attached, keeping, _subscriptions: vec![typed] }
     }
 
     pub(crate) fn set_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
@@ -134,27 +144,39 @@ impl NewWorkspaceDialog {
     }
 
     pub(crate) fn set_repo(&mut self, repo: RepoId, cx: &mut Context<Self>) {
-        self.repo = repo;
-        cx.notify();
+        if repo != self.repo {
+            self.repo = repo;
+            self.keep(true, cx);
+            cx.notify();
+        }
     }
 
     /// Asks the app to make the workspace. Nothing happens while it can't, such as while it's making or archiving
-    /// another, which Create shows by being disabled.
+    /// another, or while files the hub kept are still coming back, which Create shows by being disabled.
     fn create(&mut self, cx: &mut Context<Self>) {
-        if self.offer.can_create {
+        if self.can_create() {
             cx.emit(DialogEvent::Create);
         }
     }
 
+    fn can_create(&self) -> bool {
+        self.offer.can_create && !self.bringing_back()
+    }
+
     /// Empties the dialog of what it was asked to make, and turns plan mode off, keeping the repository, model and
-    /// effort for the next.
+    /// effort for the next. The hub keeps it emptied at once, and lets go of the files it was given, which go with the
+    /// first prompt.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
         let prompt = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, model, effort) = (self.repo.clone(), self.model.clone(), self.effort);
         let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
+        let given: Vec<AttachmentId> = self.attached.given_for(&Where::NewWorkspace).collect();
+        let files = self.attached.take();
+        self.keep(true, cx);
+        self.let_go_of(&given);
         cx.notify();
-        Request { repo, prompt, files: self.attached.take(), model, effort, permission_mode }
+        Request { repo, prompt, files, model, effort, permission_mode }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
@@ -177,35 +199,37 @@ impl NewWorkspaceDialog {
             let text = joined(text, &self.prompt.read(cx).text().to_string());
             self.prompt.update(cx, |prompt, cx| prompt.set_value(text, window, cx));
         }
+        self.keep(true, cx);
         cx.notify();
-    }
-
-    /// Whether anything is typed or attached, which quitting or restarting would lose.
-    pub(crate) fn has_anything(&self, cx: &App) -> bool {
-        says_or_carries(&self.prompt.read(cx).text().to_string(), self.attached.len())
     }
 
     /// Takes a paste that holds images or copied files, and leaves text to the prompt. Returns whether it took it.
     fn paste(item: &ClipboardItem, cx: &mut Context<Self>) -> bool {
         let Some(reading) = attached::pasted(item) else { return false };
-        attached::read_into(reading, cx, |t| &mut t.attached, |_, problems, cx| Self::refused(problems, cx));
+        attached::read_into(reading, cx, |t| &mut t.attached, Self::attached);
         true
     }
 
     /// Files dropped on the dialog, or chosen from its `+` menu.
     fn attach_paths(paths: Vec<PathBuf>, cx: &mut Context<Self>) {
-        attached::read_paths_into(paths, cx, |t| &mut t.attached, |_, problems, cx| Self::refused(problems, cx));
+        attached::read_paths_into(paths, cx, |t| &mut t.attached, Self::attached);
     }
 
-    /// Says why each file that couldn't be attached wasn't.
-    fn refused(problems: Vec<String>, cx: &mut Context<Self>) {
+    /// Once files have come, has the hub keep them, and says why each that couldn't be attached wasn't.
+    fn attached(&mut self, problems: Vec<String>, cx: &mut Context<Self>) {
+        self.keep(true, cx);
         for problem in problems {
             cx.emit(DialogEvent::Error(problem));
         }
     }
 
+    /// Takes a file out, and has the hub let go of it once what's kept no longer names it.
     fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
-        self.attached.remove(id);
+        let kept_in = self.attached.remove(id);
+        self.keep(true, cx);
+        if kept_in == Some(Where::NewWorkspace) {
+            self.let_go_of(std::slice::from_ref(id));
+        }
         cx.notify();
     }
 
@@ -222,6 +246,7 @@ impl NewWorkspaceDialog {
     /// Plan mode on or off for the first chat, as `Shift-Tab` and the `+` menu do.
     fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
         self.mode = if self.planning() { PermissionMode::FullAccess } else { PermissionMode::Plan };
+        self.keep(true, cx);
         cx.notify();
     }
 
@@ -232,6 +257,7 @@ impl NewWorkspaceDialog {
             Picked::Model(model) => self.model = model,
             Picked::Effort(effort) => self.effort = effort,
         }
+        self.keep(true, cx);
         cx.notify();
     }
 }
@@ -265,6 +291,7 @@ impl NewWorkspaceDialog {
     /// Chooses a level, such as one a hub doesn't know, which no menu offers.
     pub fn choose_effort(&mut self, effort: Effort, cx: &mut Context<Self>) {
         self.effort = effort;
+        self.keep(true, cx);
         cx.notify();
     }
 }

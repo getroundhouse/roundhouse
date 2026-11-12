@@ -93,7 +93,7 @@ impl WorkspacePane {
             Some(draft) => (draft.text.clone(), &mut draft.files),
             None => (String::new(), &mut none),
         };
-        for file in files.not_yet_given(id) {
+        for file in files.not_yet_given(&Where::Composer(id.clone())) {
             self.keeper.attach(id, file);
         }
         let coming_back = self.restoring.get(id).into_iter().flatten().map(|file| file.id.clone());
@@ -108,7 +108,7 @@ impl WorkspacePane {
     /// Has the hub let go of the files it was given for a chat that has closed. Closing takes the draft and the files
     /// it named, and this catches one that reached the hub after, such as one still being added as the chat closed.
     pub(super) fn let_go_of_files(&self, id: &SessionId, files: &Attachments) {
-        for file in files.given_for(id) {
+        for file in files.given_for(&Where::Composer(id.clone())) {
             self.keeper.detach(id, &file);
         }
     }
@@ -275,7 +275,7 @@ impl WorkspacePane {
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't bring back {}: {e}", attachment.name))),
             }
         }
-        for problem in self.files_for(Some(chat)).bring_back(files, chat) {
+        for problem in self.files_for(Some(chat)).bring_back(files, &Where::Composer(chat.clone())) {
             cx.emit(PaneEvent::Error(problem));
         }
         cx.notify();

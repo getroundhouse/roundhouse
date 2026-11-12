@@ -51,6 +51,7 @@ impl AppView {
         if !still_there || !has_pane {
             self.show_selected(cx);
         }
+        self.show_kept_in_dialog(cx);
         // After a reconnect, the pane on screen catches up once the records have, and the rest when they're shown.
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::catch_up);

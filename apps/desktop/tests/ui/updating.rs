@@ -151,22 +151,43 @@ fn restarting_to_update_doesnt_ask_about_a_comment_the_hub_has(cx: &mut TestAppC
     assert_eq!(restart_question(&ui), None);
 }
 
-/// What's left in the new-workspace dialog is for a first chat, and restarting would lose it too.
-#[gpui_kit::test]
-fn restarting_to_update_counts_what_was_left_in_the_new_workspace_dialog(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+/// Opens the new-workspace dialog with an update downloaded.
+fn the_dialog_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+    let mut ui = Ui::open_with_a_repository(cx, stack);
+    ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
     ui.open_new_workspace();
+    ui
+}
+
+/// What's left in the new-workspace dialog is for a first chat, and restarting would lose what the hub hasn't had of
+/// it, as when the hub doesn't answer.
+#[gpui_kit::test]
+fn restarting_to_update_counts_what_the_hub_hasnt_had_of_the_new_workspace_dialog(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = the_dialog_with_an_update_ready(cx, &stack);
+    let _frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input("half a thought");
     ui.press("escape");
-    ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
 
     ui.click("restart-to-update");
 
     let (_, detail) = restart_question(&ui).unwrap();
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and restarting loses it.");
+}
+
+#[gpui_kit::test]
+fn restarting_to_update_doesnt_ask_about_whats_in_the_new_workspace_dialog_once_the_hub_has_it(
+    cx: &mut TestAppContext,
+) {
+    let stack = Stack::new();
+    let mut ui = the_dialog_with_an_update_ready(cx, &stack);
+    ui.input("half a thought");
+    ui.press("escape");
+
+    ui.click("restart-to-update");
+
+    ui.wait("it to go ahead", |ui| ui.has("update-problem"));
+    assert_eq!(restart_question(&ui), None);
 }
 
 /// The card doesn't hold anything else up, so more can be typed while it asks, and it says so before losing it.
