@@ -12,6 +12,7 @@ use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey
 use protocol::tail::{Compacting, StreamDelta, Tail};
 
 mod approvals;
+mod calls;
 mod hellos;
 mod refusals;
 mod restarts;

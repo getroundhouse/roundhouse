@@ -19,7 +19,7 @@ fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
     wait_until("the subagent's call", || {
         call = read_all(client, session_id).iter().find_map(|event| match &event.body {
             EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
-                ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(ToolUseId::from(id.clone())),
+                ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(id.clone()),
                 _ => None,
             }),
             _ => None,

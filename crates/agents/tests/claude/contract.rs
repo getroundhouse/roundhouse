@@ -227,7 +227,7 @@ fn thinking_tools_and_results_all_normalize() {
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text, .. } if text.contains("DONE"))));
     assert!(blocks.iter().any(|b| matches!(
         b,
-        ContentBlock::ToolUse { name, input, id } if name == "Bash" && input["command"].is_string() && id.starts_with("toolu_")
+        ContentBlock::ToolUse { name, input, id } if name == "Bash" && input["command"].is_string() && id.as_str().starts_with("toolu_")
     )));
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { is_error: false, .. })));
     // A denial reaches the agent as a tool error carrying our message.

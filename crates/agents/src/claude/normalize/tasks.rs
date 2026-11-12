@@ -96,7 +96,7 @@ impl Tasks {
     fn note_started(&mut self, value: &Value, calls: &OpenCalls) -> Option<EventBody> {
         let call: ToolUseId = id_of(value, "tool_use_id")?;
         let id: TaskId = id_of(value, "task_id")?;
-        let monitor = calls.tool(call.as_str()) == Some(MONITOR);
+        let monitor = calls.tool(&call) == Some(MONITOR);
         if monitor {
             self.monitors.insert(id.clone());
         }

@@ -3,7 +3,7 @@
 
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
-use protocol::model::Seq;
+use protocol::model::{Seq, ToolUseId};
 
 use super::{NEAR, blocks_of, nearby};
 use crate::attachments::{self, Carried};
@@ -23,13 +23,13 @@ pub(in crate::rows) enum Reply {
 impl Reply {
     /// What's come back for the call `id`, made in the event at `seq`, among the events near after it. A result
     /// stands even after the log says the call was dropped, since what said so only saw what came next.
-    pub(super) fn to(log: &SessionLog, m: &Model, seq: Seq, id: &str) -> Self {
+    pub(super) fn to(log: &SessionLog, m: &Model, seq: Seq, id: &ToolUseId) -> Self {
         let mut dropped = false;
         for event in nearby::events_after(log, seq, NEAR) {
             if let Some(answer) = answer_in(event, id, m) {
                 return Reply::Result(answer);
             }
-            dropped |= matches!(&event.body, EventBody::ToolCallDropped { tool_use_id } if tool_use_id.as_str() == id);
+            dropped |= matches!(&event.body, EventBody::ToolCallDropped { tool_use_id } if tool_use_id == id);
         }
         if dropped { Reply::Dropped } else { Reply::Nothing }
     }
@@ -93,9 +93,9 @@ impl Answer {
 
 /// The result of the call `id`, if it's in `event`. A tool's result comes on the user's side, except one the API ran
 /// itself, such as the advisor, whose comes from the agent.
-fn answer_in(event: &SessionEvent, id: &str, m: &Model) -> Option<Answer> {
+fn answer_in(event: &SessionEvent, id: &ToolUseId, m: &Model) -> Option<Answer> {
     let result = blocks_of(&event.body)
         .iter()
-        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id.as_str() == id))?;
+        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == id))?;
     Answer::of(result, m)
 }

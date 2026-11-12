@@ -3,7 +3,7 @@
 
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{PermissionMode, Seq};
+use protocol::model::{PermissionMode, Seq, ToolUseId};
 
 /// The events after the one at `seq`, in order, as far as `reach` rows on. A row that isn't loaded is skipped.
 pub(super) fn events_after(log: &SessionLog, seq: Seq, reach: usize) -> impl Iterator<Item = &SessionEvent> {
@@ -19,7 +19,7 @@ pub(super) fn events_before(log: &SessionLog, seq: Seq, reach: usize) -> impl It
 
 /// The call `id`, among the events as far as `reach` rows before the one at `seq`: the seq of the event it's in,
 /// and its tool's name.
-pub(super) fn call_before<'a>(log: &'a SessionLog, seq: Seq, id: &str, reach: usize) -> Option<(Seq, &'a str)> {
+pub(super) fn call_before<'a>(log: &'a SessionLog, seq: Seq, id: &ToolUseId, reach: usize) -> Option<(Seq, &'a str)> {
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
         blocks.iter().find_map(|block| {
@@ -97,9 +97,9 @@ mod tests {
     fn a_call_is_found_by_its_id_among_the_events_before() {
         let log = log([event(1, calls(&["a"])), event(2, calls(&["b", "c"])), event(3, result("c"))]);
 
-        assert_eq!(call_before(&log, 3, "c", 5), Some((2, "Bash")));
-        assert_eq!(call_before(&log, 3, "a", 1), None, "further back than it looks");
-        assert_eq!(call_before(&log, 3, "d", 5), None);
+        assert_eq!(call_before(&log, 3, &"c".into(), 5), Some((2, "Bash")));
+        assert_eq!(call_before(&log, 3, &"a".into(), 1), None, "further back than it looks");
+        assert_eq!(call_before(&log, 3, &"d".into(), 5), None);
     }
 
     #[test]

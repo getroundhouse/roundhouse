@@ -2,15 +2,16 @@
 
 use std::collections::HashMap;
 
+use protocol::model::ToolUseId;
 use serde_json::Value;
 
-use super::{str_of, string_of};
+use super::{id_of, str_of, string_of};
 
 /// Every call that hasn't had its result, by the call's ID. A result closes its call whatever it says, so one that
 /// fails or is refused doesn't stay open, and what a later line says of a call, such as the task it started, can be
 /// read against the tool the call was for.
 #[derive(Debug, Default)]
-pub(super) struct OpenCalls(HashMap<String, Call>);
+pub(super) struct OpenCalls(HashMap<ToolUseId, Call>);
 
 #[derive(Debug)]
 struct Call {
@@ -27,14 +28,14 @@ impl OpenCalls {
         for block in blocks.into_iter().flatten() {
             match str_of(block, "type") {
                 Some("tool_use" | "server_tool_use") => {
-                    if let (Some(id), Some(tool)) = (string_of(block, "id"), string_of(block, "name")) {
+                    if let (Some(id), Some(tool)) = (id_of(block, "id"), string_of(block, "name")) {
                         self.0.insert(id, Call { tool, by_a_subagent });
                     }
                 }
                 // A tool the API runs itself answers with a kind of result of its own, such as the advisor's.
                 Some(kind) if kind.ends_with("tool_result") => {
-                    if let Some(id) = str_of(block, "tool_use_id") {
-                        self.0.remove(id);
+                    if let Some(id) = id_of::<ToolUseId>(block, "tool_use_id") {
+                        self.0.remove(&id);
                     }
                 }
                 _ => {}
@@ -43,7 +44,7 @@ impl OpenCalls {
     }
 
     /// The tool an open call is for. `None` once it's answered, and for a call that was never made.
-    pub(super) fn tool(&self, call: &str) -> Option<&str> {
+    pub(super) fn tool(&self, call: &ToolUseId) -> Option<&str> {
         self.0.get(call).map(|call| call.tool.as_str())
     }
 
@@ -56,9 +57,14 @@ impl OpenCalls {
 
 #[cfg(test)]
 mod tests {
+    use protocol::model::ToolUseId;
     use serde_json::{Value, json};
 
     use super::OpenCalls;
+
+    fn id(call: &str) -> ToolUseId {
+        call.into()
+    }
 
     fn call(id: &str, tool: &str, parent: Option<&str>) -> Value {
         json!({"type":"assistant","parent_tool_use_id":parent,
@@ -72,16 +78,20 @@ mod tests {
     #[test]
     fn a_call_is_open_from_when_its_made_until_its_result_whatever_the_result_says() {
         let mut calls = OpenCalls::default();
-        assert_eq!(calls.tool("c1"), None, "not made yet");
+        assert_eq!(calls.tool(&id("c1")), None, "not made yet");
 
         calls.note(&call("c1", "Monitor", None));
         calls.note(&call("c2", "Bash", None));
-        assert_eq!((calls.tool("c1"), calls.tool("c2")), (Some("Monitor"), Some("Bash")));
+        assert_eq!((calls.tool(&id("c1")), calls.tool(&id("c2"))), (Some("Monitor"), Some("Bash")));
 
         calls.note(&result("c1", true));
-        assert_eq!((calls.tool("c1"), calls.tool("c2")), (None, Some("Bash")), "a refused call is closed too");
+        assert_eq!(
+            (calls.tool(&id("c1")), calls.tool(&id("c2"))),
+            (None, Some("Bash")),
+            "a refused call is closed too"
+        );
         calls.note(&result("c2", false));
-        assert_eq!(calls.tool("c2"), None);
+        assert_eq!(calls.tool(&id("c2")), None);
     }
 
     #[test]
@@ -93,9 +103,9 @@ mod tests {
             {"type":"advisor_tool_result","tool_use_id":"s1","content":{}}]}});
 
         calls.note(&asked);
-        assert_eq!(calls.tool("s1"), Some("advisor"));
+        assert_eq!(calls.tool(&id("s1")), Some("advisor"));
         calls.note(&answered);
-        assert_eq!(calls.tool("s1"), None);
+        assert_eq!(calls.tool(&id("s1")), None);
     }
 
     #[test]
@@ -106,6 +116,6 @@ mod tests {
 
         calls.turn_ended();
 
-        assert_eq!((calls.tool("own"), calls.tool("theirs")), (None, Some("Monitor")));
+        assert_eq!((calls.tool(&id("own")), calls.tool(&id("theirs"))), (None, Some("Monitor")));
     }
 }
