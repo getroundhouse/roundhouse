@@ -1,8 +1,5 @@
-# What only Windows catches: the hub, the CLI or the app no longer compiling for it, which code that only knows Unix
-# does, and a hub that a client can't start, reach or stop. Nobody develops on Windows, so this is the only place any
-# of it runs. It lints the product's code, which compiles the app without linking it, runs the tests of the crates
-# whose tests build on Windows, builds the hub and the CLI, and runs the CLI against a hub it starts. Nothing here can
-# block a merge, since the ruleset requires only ci.yml's `checks`.
+# What only Windows catches: code that no longer compiles there, and a hub a client can't start, reach or stop. It
+# doesn't block merges.
 name: Windows
 
 on:
@@ -36,13 +33,13 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
-  # The org's 8-core Windows runner, since the lint took 14 minutes cold on the standard one.
+  # The free runner, since nothing waits for it. The lint took 14 minutes cold.
   windows:
-    runs-on: windows-latest-amd64-8cores
+    runs-on: windows-2025-vs2026
     timeout-minutes: 60
     defaults:
       run:
-        # Git's, which the runner has, so the steps read like the other workflows'.
+        # Git's bash, as in the other workflows.
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,16 +51,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: windows-
-      # Not --all-targets: most tests and the programs that stand in for others still only build on Unix.
+          # Named for the runner, since a target/ fits only its image and checkout path.
+          key: windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: windows-2025-vs2026-
+      # Not --all-targets, since most tests only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
-      # The crates whose tests build here, which hold what Windows does differently below the hub: ending a process
-      # and what it started, a process's start time, what a process passes on to what it starts, and where a hub's
-      # files and pipe are.
+      # Tests of what Windows does differently below the hub.
       - run: cargo test --locked -p process -p protocol
       - run: cargo build --locked -p daemon -p cli --bins
-      # Short, because a hub left running by a step that failed could hold the step open.
+      # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts
         timeout-minutes: 5
         run: |
@@ -77,8 +73,7 @@ jobs:
           "$cli" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
           grep -q "started on demand" "$RUNNER_TEMP/smoke/status.txt"
           "$cli" hub stop
-          # The pipe goes with the hub, so a client finds nothing there. A hub can take a moment to go once it has
-          # let its client know, so this asks until it has.
+          # A hub can take a moment to exit after replying, so ask until it has.
           for _ in $(seq 50); do
             "$cli" hub status > "$RUNNER_TEMP/smoke/stopped.txt" 2>&1 || true
             if grep -q "no hub is running" "$RUNNER_TEMP/smoke/stopped.txt"; then break; fi

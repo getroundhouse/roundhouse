@@ -1,15 +1,11 @@
-# The full checks from AGENTS.md, with the tests run by nextest, and the tests of the scripts that publish releases, for
-# every PR and the merge queue. They run on Linux, where everything passes but the gallery: the window tests use GPUI's
-# test platform, which draws nothing, and the gallery, whose images are exact to the Mac that approved them, is compiled
-# only on macOS. mac.yml covers what only a Mac catches. A change to nothing but Markdown and the marketing site skips
-# them, since none of them reads either.
+# AGENTS.md's full checks and publish.py's tests, on Linux, for every PR and the queue. The gallery compiles only on
+# macOS, and mac.yml covers the Mac. Changes to only Markdown and the site skip them.
 name: CI
 
 on:
   pull_request:
   merge_group:
-  # Only main saves caches, so PRs start warm. The queue has already tested what lands, so main only runs when the
-  # cache key could change.
+  # Only main saves caches. The queue has tested what lands, so main runs only when the cache key could change.
   push:
     branches: [main]
     paths:
@@ -34,31 +30,25 @@ env:
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
 
-# The ruleset on main requires only `checks`, so jobs can be added, renamed or skipped without changing it. A paths
-# filter can't do the skipping: GitHub leaves a required check pending forever when its workflow doesn't run. The repo
-# also only runs actions pinned to a full commit, as these are.
+# The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
+# stays pending. Actions are pinned to full commits.
 jobs:
-  # Whether the checks run. They don't when nothing but Markdown and the marketing site, which is site/ and the script
-  # that puts it together, tools/site/, differs from the branch being merged into, which in the queue includes the PRs
-  # ahead, or when the queue would check a tree that a PR's run has already passed. site.yml publishes the site, and
-  # still counts, as any workflow does.
+  # Skips the checks when only Markdown and the site differ from the base, or when the queue would check a tree a PR's
+  # run already passed.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
-      # To find that PR's run, by the artifact `checks` keeps.
+      # To find that PR's run.
       actions: read
     outputs:
       run: ${{ steps.diff.outputs.run }}
       tree: ${{ steps.diff.outputs.tree }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # A push to main has no base, and an error runs the checks, so a push always does.
-      #
-      # A PR that enters the queue with nothing ahead of it, onto the main its own run merged onto, makes the very tree
-      # that run checked, so checking it again only holds up the merge. Only runs from this repo's branches count, since
-      # a fork's run could keep an artifact by any name.
+      # A push has no base, and an error runs the checks. A PR entering the queue first gets the tree its own run
+      # passed. Only this repo's runs count, since a fork's could fake the artifact.
       - id: diff
         env:
           BASE: ${{ github.base_ref || github.event.merge_group.base_ref }}
@@ -70,7 +60,7 @@ jobs:
           if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
             git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
             run=false
-          # On an error, gh prints the error's body and fails, so `passed` must be a run's ID too.
+          # gh prints an error's body, so check `passed` is a run ID.
           elif [ "$GITHUB_EVENT_NAME" = merge_group ] &&
             passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ci-passed-$tree" --jq \
               "[.artifacts[] | select(.workflow_run.head_repository_id == $REPO_ID and (.expired | not))][0].workflow_run.id // empty") &&
@@ -80,11 +70,11 @@ jobs:
           fi
           { echo "run=$run"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
-  # The org's 8-core arm64 runner, since a cold `cargo test --workspace` took over 20 minutes on 2 cores.
+  # The free arm64 runner, with the tests' image so the cache fits. It still finishes before them.
   lint:
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-latest-arm64-8cores
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,16 +88,13 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          # When the key changes, main builds from nothing, so a cache holds what one lockfile builds rather than
-          # what every lockfile before it built too. A PR starts from any cache, since most of it still fits.
+          # Main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs take any.
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      # The product's code alone, as it ships, since the `testing` features the tests turn on can hide an import or an
-      # item only the tests use.
+      # As shipped, since the tests' `testing` features can hide what only tests use.
       - run: cargo clippy --workspace --locked -- -D warnings
-      # Only the dependencies are worth keeping. A checkout leaves our own crates' sources newer than anything cached,
-      # so they build again on every run.
+      # Keep only the dependencies, since our crates rebuild after every checkout.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -120,6 +107,7 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+  # The billed 8-core runner, since PRs and the queue wait for the tests. A cold run took over 20 minutes on 2 cores.
   test:
     needs: changes
     if: needs.changes.outputs.run == 'true'
@@ -130,7 +118,7 @@ jobs:
       - run: .github/install-linux-packages.sh
       # The tests make commits.
       - run: git config --global user.name ci && git config --global user.email ci@example.com
-      # A pinned version, moved by hand like the toolchain.
+      # Pinned, and moved by hand like the toolchain.
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-nextest@0.9.151
@@ -142,11 +130,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # As in lint. Our own crates' test binaries each link all of GPUI, so they're over half of what's built.
+          # As in lint. Our test binaries each link GPUI, so they're over half the build.
           key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-test-deps-' || '' }}
-      # nextest runs every test binary's tests in one pool, where `cargo test` runs one binary after another. It skips
-      # doc tests, so they run after it. .config/nextest.toml says how.
+      # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -161,8 +148,7 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # release.yml publishes only after a merge, and nothing there can block one, so a PR that breaks publish.py or
-  # feed-signature.sh fails here instead. Ubuntu's Python and OpenSSL 3 are all they need.
+  # release.yml can't block a merge, so its scripts' tests run here.
   publish:
     needs: changes
     if: needs.changes.outputs.run == 'true'
@@ -172,8 +158,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 -m unittest discover -s tools/package -v
 
-  # The one check the ruleset requires. It fails if any job failed or was cancelled, `changes` included, and passes
-  # if the rest passed or were skipped. It runs even when they fail, since a skipped job would count as passing.
+  # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:
     needs: [changes, lint, test, publish]
     if: always()
@@ -182,13 +167,13 @@ jobs:
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
-      # What `changes` looks for in the queue: an artifact named for a tree that every check ran on and passed.
+      # What `changes` looks for: an artifact named for a tree that passed.
       - id: passed
         if: >-
           github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.test.result == 'success' &&
           needs.publish.result == 'success'
         run: echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$RUNNER_TEMP/passed"
-      # Without it the queue only checks the tree again, so failing to keep it doesn't fail the PR.
+      # Losing it only costs the queue a recheck.
       - if: steps.passed.outcome == 'success'
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -1,6 +1,6 @@
-# Runners set up in the org, which actionlint can't know about.
+# Labels actionlint doesn't know: the org's 8-core runner, and standard ones newer than its list.
 self-hosted-runner:
   labels:
     - ubuntu-latest-arm64-8cores
-    - windows-latest-amd64-8cores
-    - windows-latest-arm64-8cores
+    - ubuntu-26.04-arm
+    - windows-11-vs2026-arm
