@@ -2,6 +2,8 @@
 //! exists yet to add them to, so they're kept apart from every session's. What a file is never changes once it's added.
 //! Its bytes aren't here, but in a file of their own, which `attachment_files` keeps.
 
+use std::collections::HashSet;
+
 use protocol::attachment::{Attachment, MAX_PER_PROMPT};
 use protocol::model::{AttachmentId, Rev, WorkspaceDraft, WorkspaceDraftToKeep};
 use rusqlite::{Connection, OptionalExtension as _, params};
@@ -10,6 +12,11 @@ use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
 
 #[cfg(test)]
 mod tests;
+
+/// Which of the rows of `workspace_draft_files` the draft doesn't name.
+const UNNAMED: &str = "NOT EXISTS (
+    SELECT 1 FROM workspace_draft, json_each(workspace_draft.draft, '$.files') AS named
+    WHERE json_extract(named.value, '$.id') = workspace_draft_files.id)";
 
 pub(super) fn workspace_draft(conn: &Connection) -> rusqlite::Result<WorkspaceDraft> {
     let (draft, rev) = conn.query_row("SELECT draft, rev FROM workspace_draft", [], |row| {
@@ -64,13 +71,29 @@ impl Store {
 
     /// Lets go of a file the draft doesn't name. Says whether it did, so the caller lets go of its bytes too.
     pub fn let_go_of_workspace_draft_file(&self, id: &AttachmentId) -> Result<bool, StoreError> {
-        let removed = lock(&self.writer).execute(
-            "DELETE FROM workspace_draft_files WHERE id = ?1 AND NOT EXISTS (
-                 SELECT 1 FROM workspace_draft, json_each(workspace_draft.draft, '$.files') AS named
-                 WHERE json_extract(named.value, '$.id') = ?1)",
-            [id.as_str()],
-        )?;
+        let removed = lock(&self.writer)
+            .execute(&format!("DELETE FROM workspace_draft_files WHERE id = ?1 AND {UNNAMED}"), [id.as_str()])?;
         Ok(removed > 0)
+    }
+
+    /// Lets go of every file added before `before_ms` that the draft doesn't name, such as one a client took out of the
+    /// dialog without the hub hearing, and returns their IDs, so the caller lets go of their bytes too. One added since
+    /// may be named by a draft that's on its way.
+    pub fn let_go_of_unnamed_workspace_draft_files(&self, before_ms: i64) -> Result<Vec<AttachmentId>, StoreError> {
+        let conn = lock(&self.writer);
+        let mut statement = conn.prepare(&format!(
+            "DELETE FROM workspace_draft_files WHERE created_at_ms < ?1 AND {UNNAMED} RETURNING id"
+        ))?;
+        let ids = statement.query_map([before_ms], |row| row.get::<_, String>(0).map(AttachmentId::from))?;
+        Ok(ids.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Every file the hub has for the draft, named or not.
+    pub fn workspace_draft_file_ids(&self) -> Result<HashSet<AttachmentId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare("SELECT id FROM workspace_draft_files")?;
+        let ids = statement.query_map([], |row| row.get::<_, String>(0).map(AttachmentId::from))?;
+        Ok(ids.collect::<rusqlite::Result<_>>()?)
     }
 }
 

@@ -89,3 +89,20 @@ fn a_file_is_let_go_of_only_once_the_draft_no_longer_names_it() {
     assert!(!again, "nothing more to let go of");
     assert_eq!(store.workspace_draft_file(&"a1".into()).unwrap(), None);
 }
+
+#[test]
+fn a_file_nothing_names_is_let_go_of_once_its_waited_long_enough() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    for id in ["named", "unnamed"] {
+        store.add_workspace_draft_file(&log_file(id)).unwrap();
+    }
+    store.set_workspace_draft(&typed("", &["named"])).unwrap();
+
+    let too_soon = store.let_go_of_unnamed_workspace_draft_files(now_ms() - 60_000).unwrap();
+    let after = store.let_go_of_unnamed_workspace_draft_files(now_ms() + 1).unwrap();
+
+    assert_eq!(too_soon, [], "one added since may be named by a draft on its way");
+    assert_eq!(after, [AttachmentId::from("unnamed")]);
+    assert_eq!(store.workspace_draft_file_ids().unwrap(), [AttachmentId::from("named")].into());
+}

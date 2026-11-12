@@ -1,8 +1,9 @@
 //! Where the hub keeps the bytes of the files prompts carry, and of the images an agent's tools send: a file each, at
 //! `<session>/<attachment>` in the attachments directory, outside the database so copying it before a migration stays
-//! quick. The new-workspace dialog's files wait at `workspace-draft.files/<attachment>`, a name no session's can be. Each ID is checked as it's turned into a path, so nothing a client or worker sends can name a file anywhere
-//! else.
+//! quick. The new-workspace dialog's files wait at `workspace-draft.files/<attachment>`, a name no session's can be.
+//! Each ID is checked as it's turned into a path, so nothing a client or worker sends can name a file anywhere else.
 
+use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -85,6 +86,28 @@ impl AttachmentFiles {
     /// The same, for one of the new-workspace dialog's files.
     pub(crate) async fn remove_draft_file(&self, id: &AttachmentId) -> Result<(), ApiError> {
         remove_at(self.draft_path(id)?).await
+    }
+
+    /// Lets go of each of the new-workspace dialog's files on disk but those in `kept`, such as one a hub stopping
+    /// mid-write left half of, or one whose row went without it.
+    pub(crate) async fn remove_draft_files_except(&self, kept: HashSet<AttachmentId>) -> Result<(), ApiError> {
+        let dir = self.dir.join(WORKSPACE_DRAFT_DIR);
+        on_disk(move || {
+            let entries = match std::fs::read_dir(&dir) {
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+                entries => entries?,
+            };
+            for entry in entries {
+                let entry = entry?;
+                let name = entry.file_name();
+                if !name.to_str().is_some_and(|name| kept.contains(&AttachmentId::from(name))) {
+                    std::fs::remove_file(entry.path())?;
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| internal(format!("couldn't let go of the new-workspace dialog's files: {e}")))
     }
 
     /// Every file a session had, once it's been deleted.
