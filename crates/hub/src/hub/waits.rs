@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    PullRequest, PullRequestFound, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil, WorkspaceId,
+    PullRequest, PullRequestFound, Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil,
+    WorkspaceId,
 };
 use tracing::{error, info, warn};
 
@@ -25,7 +26,7 @@ const START_WITHIN: Duration = Duration::from_secs(40);
 impl Hub {
     /// Starts a wait for the agent in `session_id`, of `workspace_id`'s, on its pull request as it's read now, and
     /// ends the session's open one, since an agent waits on one at a time. One whose pull request is already done, or
-    /// needs the agent, ends at once. A branch without one is refused, and so is a worktree with commits not pushed,
+    /// needs the agent, ends at once, and leaves the open one going. A branch without one is refused, and so is a worktree with commits not pushed,
     /// and a read that fails, or doesn't finish within [`START_WITHIN`], rather than start from what was known before
     /// the agent pushed. A call that started one already, as when its CLI asks again, gets that one.
     pub(crate) async fn start_wait(
@@ -113,6 +114,16 @@ impl Hub {
             }
         }
         self.with_pull_request(wait).await
+    }
+
+    /// Calls off the chat's wait `wait`, for the person, as [`crate::session::LiveSession::call_off_wait`] says, and
+    /// answers with the chat.
+    pub(crate) async fn session_call_off_wait(
+        self: &Arc<Self>,
+        id: SessionId,
+        wait: WaitId,
+    ) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.call_off_wait(wait).await
     }
 
     /// Calls off the workspace's waits as it starts being archived, so none ending meanwhile starts an agent in a

@@ -1,7 +1,7 @@
 //! A call to a tool answered with an MCP task, as the worker's `wait_for_pull_request` is, in the real CLI's lines in
 //! `../../fixtures/claude_mcp_task.jsonl`, then the same conversation resumed after SIGTERM, as a hub starts an agent
-//! again once its wait ends, in `claude_mcp_task_resumed.jsonl`. Each is read as its own process's, as each launch
-//! has a normalizer of its own.
+//! again once its wait ends, in `claude_mcp_task_resumed.jsonl`, where a third task follows, which the server calls
+//! off, as the hub does for the person. Each is read as its own process's, as each launch has a normalizer of its own.
 
 use agents::claude::{Normalizer, Parsed};
 use protocol::event::{EventBody, TaskKind};
@@ -59,5 +59,17 @@ fn a_resumed_cli_lists_its_wait_again_first_and_takes_a_turn_once_it_ends() {
 
     assert!(matches!(&events[0], EventBody::AgentTasks { .. }), "first: {:?}", events[0]);
     let steps = steps(&events);
-    assert_eq!(steps, [Step::Listed(vec![TaskKind::Wait]), Step::Listed(vec![]), Step::Ended]);
+    assert_eq!(steps[..3], [Step::Listed(vec![TaskKind::Wait]), Step::Listed(vec![]), Step::Ended]);
+}
+
+/// A task the server calls off leaves the list as one that failed, not one that was stopped, as the agent's own are
+/// when it's being stopped, and the CLI takes a turn by itself, which tells the agent.
+#[test]
+fn a_wait_the_server_calls_off_leaves_the_list_and_starts_a_turn() {
+    let events = events(RESUMED);
+
+    let steps = steps(&events);
+    assert_eq!(steps[3..], [Step::Listed(vec![TaskKind::Wait]), Step::Ended, Step::Listed(vec![]), Step::Ended]);
+    let stopped = |event: &EventBody| matches!(event, EventBody::AgentTasks { stopped, .. } if !stopped.is_empty());
+    assert!(!events.iter().any(stopped), "none was stopped");
 }

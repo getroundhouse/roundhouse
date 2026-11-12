@@ -52,12 +52,19 @@ fn an_ended_wait_is_a_completed_task_whose_result_says_how_and_where_the_pull_re
     );
 }
 
+/// The agent hears what the task says in a turn of its own, so it says who called it off, and whether to wait again.
 #[test]
-fn a_wait_called_off_is_a_cancelled_task_with_no_result() {
-    let task = task(&ended(WaitEnd::Cancelled), Some(&open_pr()));
+fn a_wait_called_off_is_a_cancelled_task_with_no_result_that_says_who_called_it_off() {
+    let said = |how| {
+        let task = task(&ended(how), Some(&open_pr()));
+        assert_eq!(task["status"], "cancelled", "{how:?}");
+        assert!(task.get("result").is_none(), "{task}");
+        task["statusMessage"].as_str().unwrap().to_string()
+    };
 
-    assert_eq!(task["status"], "cancelled");
-    assert!(task.get("result").is_none(), "{task}");
+    assert_eq!(said(WaitEnd::Cancelled), "The wait was called off.");
+    assert!(said(WaitEnd::CalledOffByPerson).contains("Don't start another unless they ask."));
+    assert!(said(WaitEnd::Replaced).contains("replaced by the one started after it"));
 }
 
 #[test]

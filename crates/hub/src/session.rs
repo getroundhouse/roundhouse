@@ -34,6 +34,7 @@ mod record;
 mod status;
 #[cfg(test)]
 mod tests;
+mod waits;
 
 use commands::run_commands;
 use ingest::run_ingest;
@@ -126,7 +127,8 @@ struct LiveState {
     /// What the current agent is running in the background, from what the session's record lists, since a wait the
     /// hub keeps outlives the agent, though nothing else does.
     background_tasks: Vec<AgentTask>,
-    /// Whether the session's only work is a wait the hub keeps, as this hub stops, so its agent's exit cuts nothing off.
+    /// Whether the session's only work is a wait the hub keeps, as this hub stops, so its agent's exit cuts nothing
+    /// off.
     outlives_this_hub: bool,
     /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
     context: Option<ContextUsage>,
@@ -171,7 +173,7 @@ pub(crate) struct LiveSession {
     /// prompt and taking it out of the queue, and be lost.
     queue_lock: tokio::sync::Mutex<()>,
     /// Held while the model, mode or effort is being changed, and while an agent is being started with them,
-    /// so a change can't fall between the two and reach neither.
+    /// so a change can't fall between the two and reach neither, and to keep an agent from starting meanwhile.
     configuring: tokio::sync::Mutex<()>,
 }
 
@@ -332,10 +334,14 @@ impl LiveSession {
         let id = self.id.clone();
         {
             // An agent being started right now either finishes first, and is stopped below, or sees this.
-            let _no_start_meanwhile = self.configuring.lock().await;
+            let starts = self.configuring.lock().await;
             let let_go_of = hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
             self.state.lock().closed_at_ms = Some(closed_at);
             hub.let_go_of_bytes(&self.id, &let_go_of).await;
+            // Closing it ended its waits. It's closed whether or not they come off its list.
+            if let Err(e) = self.unlist_waits_holding(&starts).await {
+                warn!(session = %self.id, "couldn't take a closed chat's waits off its list: {e}");
+            }
         }
         // Past anything in the queue, so a prompt waiting on setup can't outlive this. It's closed whether
         // or not the agent stopped cleanly, so everyone hears that first.

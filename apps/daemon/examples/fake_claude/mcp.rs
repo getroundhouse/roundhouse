@@ -177,7 +177,8 @@ pub(crate) fn follow_again(args: &[String], config: &Config, out: &Out) {
 
 /// Asks after the task every `pollIntervalMs` the server last gave, asking again after an error. Once it has
 /// completed, the agent picks up again by itself and says the first line of what the tool said, as the CLI starts a
-/// turn with a `<task-notification>`.
+/// turn with a `<task-notification>`. Once the server has called it off, the CLI says it failed, and the agent picks up
+/// again the same way, saying what the server last said of it.
 fn follow(config: &Config, out: &Out, followed: Followed, mut poll: Duration) {
     let (config, out) = (config.clone(), out.clone());
     std::thread::spawn(move || {
@@ -189,16 +190,15 @@ fn follow(config: &Config, out: &Out, followed: Followed, mut poll: Duration) {
                 continue;
             };
             poll = poll_interval(&task);
-            let told = match task["status"].as_str() {
-                Some("completed") => {
-                    let said = task["result"]["content"][0]["text"].as_str().unwrap_or_default();
-                    Some(format!("say:{}", said.lines().next().unwrap_or_default().replace(';', ",")))
-                }
-                Some("cancelled" | "failed") => None,
+            let (status, said) = match task["status"].as_str() {
+                Some("completed") => ("completed", task["result"]["content"][0]["text"].as_str()),
+                // As the real CLI has it, which tells the agent what the server last said of the task.
+                Some("cancelled" | "failed") => ("failed", task["statusMessage"].as_str()),
                 _ => continue,
             };
+            let told = format!("say:{}", said.unwrap_or_default().lines().next().unwrap_or_default().replace(';', ","));
             change_kept(&config, |kept| kept.retain(|other| other.id != followed.id));
-            return background::finished(&config, &out, &followed.id, told);
+            return background::finished(&config, &out, &followed.id, status, told);
         }
     });
 }

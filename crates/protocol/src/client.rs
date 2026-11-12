@@ -16,6 +16,7 @@ pub mod drafts;
 pub mod files;
 pub mod queue;
 mod request;
+pub mod waits;
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.

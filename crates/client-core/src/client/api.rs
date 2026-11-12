@@ -2,13 +2,13 @@
 
 use std::sync::atomic::Ordering;
 
-use protocol::client::{ClientRequest, ClientResponse, HubStatus};
+use protocol::client::{ClientRequest, ClientResponse, HubStatus, waits};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
     GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    Subagent, ToolUseId, Workspace, WorkspaceId,
+    Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -313,6 +313,12 @@ impl Client {
 
     pub fn session_close(&self, id: &SessionId) -> Result<Session> {
         self.expect_session(ClientRequest::SessionClose { id: id.clone() })
+    }
+
+    /// See [`waits::SessionCallOffWait`].
+    pub fn session_call_off_wait(&self, id: &SessionId, wait: &WaitId) -> Result<Session> {
+        let request = waits::SessionCallOffWait { id: id.clone(), wait: wait.clone() };
+        self.expect_session(ClientRequest::SessionCallOffWait(request))
     }
 
     pub fn session_reopen(&self, id: &SessionId) -> Result<Session> {

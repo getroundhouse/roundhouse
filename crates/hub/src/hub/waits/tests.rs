@@ -12,6 +12,7 @@ use crate::store::tests::idle_session;
 use crate::store::{Seen, SessionChange, StatusChange};
 
 mod announced;
+mod call_off;
 
 /// A wait of session `s`'s, in workspace `w`, as [`hub_in`] makes them, on [`open`], that hasn't ended.
 pub(super) fn wait(until: WaitUntil) -> Wait {
@@ -151,7 +152,7 @@ async fn a_chats_next_wait_replaces_its_last_and_the_same_call_asking_again_gets
     let (second, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
 
     assert_eq!(again, first, "as when the agent's CLI asks again");
-    assert_eq!(how(&hub.store.wait(&first.id).unwrap()), Some(WaitEnd::Cancelled));
+    assert_eq!(how(&hub.store.wait(&first.id).unwrap()), Some(WaitEnd::Replaced));
     assert_eq!(how(&hub.store.wait(&second.id).unwrap()), None);
 }
 

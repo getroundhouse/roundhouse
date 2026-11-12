@@ -173,7 +173,8 @@ def capture_controls(cwd):
 class TaskServer:
     """A stand-in for the worker's tools, on MCP's protocol 2026-07-28 over HTTP, as `crates/worker/src/tools/mcp.rs`
     answers it: `wait_for_pull_request` answers each call with a task, which is working until `end` is called, then
-    completed. It writes down each method it's asked, with the task it names."""
+    completed, or until `call_off` is, then cancelled, as the hub calls a wait off for the person. It writes down each
+    method it's asked, with the task it names."""
     VERSION = "2026-07-28"
     TASKS = "io.modelcontextprotocol/tasks"
     TOOL = "wait_for_pull_request"
@@ -209,6 +210,8 @@ class TaskServer:
         task = {"resultType": "complete", "taskId": task_id, "status": status, "createdAt": "2100-01-01T00:00:00Z",
                 "lastUpdatedAt": "2100-01-01T00:00:00Z", "ttlMs": None, "pollIntervalMs": 500,
                 "statusMessage": "Waiting on pull request #7. Its checks are running."}
+        if status == "cancelled":
+            task["statusMessage"] = "The wait was called off."
         if status == "completed":
             task["statusMessage"] = "The wait ended: it's merged."
             task["result"] = {"resultType": "complete", "isError": False, "content": [
@@ -250,6 +253,10 @@ class TaskServer:
         with self.lock:
             self.tasks[task_id] = "completed"
 
+    def call_off(self, task_id):
+        with self.lock:
+            self.tasks[task_id] = "cancelled"
+
 
 def is_listing_a_task(value):
     return value.get("type") == "system" and value.get("subtype") == "background_tasks_changed" and value.get("tasks")
@@ -269,7 +276,8 @@ def call_the_tool(cli, server):
 def capture_mcp_task(cwd):
     """A task that ends while the CLI runs, which it picks up after by itself. Then another, the CLI stopped with
     SIGTERM while it's listed, as a worker stops its agents as its hub goes, and resumed, as the hub starts it again
-    once the wait ends, which lists it again and asks after it."""
+    once the wait ends, which lists it again and asks after it. Then a third, which the server calls off, as the hub
+    does for the person."""
     server = TaskServer()
     config = pathlib.Path(cwd) / ".mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {"roundhouse": {"type": "http", "url": server.url,
@@ -299,7 +307,15 @@ def capture_mcp_task(cwd):
     time.sleep(1.5)
     server.end(second)
     resumed.wait_for(is_result)
+    time.sleep(0.5)
+    third = call_the_tool(resumed, server)
+    before = len(resumed.lines)
+    server.call_off(third)
+    # The turn the CLI takes by itself once it hears, the first since the one that called the tool.
+    resumed.wait_for(is_result)
     time.sleep(0.3)
+    print("written once the server called its task off:",
+          [(v.get("type"), v.get("subtype"), v.get("status"), v.get("tasks")) for v in resumed.lines[before:]])
     resumed.stop(signal.SIGKILL)
     print("asked of the stand-in once resumed:", server.asked)
     return stopped, resumed.lines

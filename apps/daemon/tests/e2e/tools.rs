@@ -145,6 +145,32 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     assert_eq!(client.session_get(&chat.id).unwrap().wait, None, "and none once it has ended");
 }
 
+/// The person calls the wait off while the agent's CLI runs. It hears as it next asks after its task, takes the task
+/// off its list as one that failed, and picks up again by itself, saying what the hub last said of it.
+#[test]
+fn an_agent_whose_wait_the_person_calls_off_hears_and_the_chat_goes_idle() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    gh.say(OPEN);
+    let client = stack.client();
+    let (_, chat) = stack.workspace(&client);
+    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    wait_for_status(&client, &chat.id, SessionStatus::Background);
+    let wait = client.session_get(&chat.id).unwrap().wait.unwrap();
+
+    let called_off = client.session_call_off_wait(&chat.id, &wait.id).unwrap();
+    let events = wait_for_turn_end(&client, &chat.id, 2);
+
+    assert_eq!(
+        called_off.wait, None,
+        "the hub's is over at once, and the CLI takes its copy off the list once it hears"
+    );
+    let said = assistant_text(&events);
+    assert!(said.contains("The person stopped this wait."), "{said}");
+    wait_for_status(&client, &chat.id, SessionStatus::Idle);
+    assert!(client.session_get(&chat.id).unwrap().background_tasks.is_empty());
+}
+
 /// The wait is the hub's, so a hub started again has it, however the last one went, with the chat at work in the
 /// background and the wait listed. Once the new hub's own read finds the pull request merged, the agent's CLI hears as
 /// it next asks after its task, and says how it ended. A hub that dies leaves the agent running, so the next hub

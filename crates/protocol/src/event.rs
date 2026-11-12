@@ -91,7 +91,8 @@ pub enum EventBody {
     AgentState {
         state: AgentRunState,
     },
-    /// Everything the agent is running in the background, whenever that changes, and empty once it's all done.
+    /// Everything the agent is running in the background, whenever that changes, and empty once it's all done. The hub
+    /// records one too, to take waits on the pull request off the list once they're over with no agent running to.
     AgentTasks {
         tasks: Vec<AgentTask>,
         /// Those that left the list because they were stopped rather than finishing, as they are when the agent

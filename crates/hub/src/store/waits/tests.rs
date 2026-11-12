@@ -61,9 +61,12 @@ fn a_chat_waits_on_one_at_a_time_so_its_next_ends_its_last() {
         store.start_wait(&Wait { started_at_ms: 6, ended: Some(ended_at_once), ..wait("c") }, Seen::default()).unwrap();
 
     assert_eq!((first, second.as_ref().map(WaitId::as_str)), (None, Some("a")));
-    assert_eq!(how(&store, "a"), Some(WaitEnded { at_ms: 5, how: WaitEnd::Cancelled }));
-    assert_eq!(third.as_ref().map(WaitId::as_str), Some("b"), "even by one that ended as it started");
-    assert!(store.workspaces_waited_on().unwrap().is_empty());
+    assert_eq!(how(&store, "a"), Some(WaitEnded { at_ms: 5, how: WaitEnd::Replaced }));
+    assert_eq!(third, None, "one that ended as it started never waited, so it replaced nothing");
+    assert_eq!(
+        (how(&store, "b"), store.get_session(&"s".into()).unwrap().session.wait.map(|wait| wait.id)),
+        (None, Some("b".into()))
+    );
 }
 
 #[test]
@@ -120,6 +123,29 @@ fn a_workspaces_waits_are_called_off_together_and_no_others() {
     assert_eq!((how(&store, "a"), how(&store, "b")), (cancelled, cancelled));
 }
 
+/// Only the wait named, and only while the chat has it open: not one that has ended, nor another chat's, and sent again
+/// after the agent has started another, not that one.
+#[test]
+fn a_chats_open_wait_is_called_off_by_its_id_and_no_other() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_two_chats(dir.path());
+    store.start_wait(&wait("a"), Seen::default()).unwrap();
+    store.end_wait(&"a".into(), WaitEnded { at_ms: 2, how: WaitEnd::Merged }).unwrap();
+    store.start_wait(&Wait { call: Some("toolu_2".into()), ..wait("b") }, Seen::default()).unwrap();
+    store.start_wait(&Wait { session_id: "t".into(), ..wait("c") }, Seen::default()).unwrap();
+    let call_off = |wait: &str, at_ms| store.call_off_session_wait(&"s".into(), &wait.into(), at_ms).unwrap();
+
+    let (ended, elsewhere, called_off) = (call_off("a", 3), call_off("c", 3), call_off("b", 3));
+    store.start_wait(&Wait { call: Some("toolu_3".into()), ..wait("d") }, Seen::default()).unwrap();
+    let again = call_off("b", 4);
+
+    assert_eq!([ended, elsewhere, called_off, again], [None, None, Some(WaitId::from("b")), None]);
+    let ended = |at_ms, how| Some(WaitEnded { at_ms, how });
+    assert_eq!(how(&store, "a"), ended(2, WaitEnd::Merged), "an ended one stays as it ended");
+    assert_eq!(how(&store, "b"), ended(3, WaitEnd::CalledOffByPerson));
+    assert_eq!((how(&store, "c"), how(&store, "d")), (None, None), "another chat's, and the agent's next");
+}
+
 #[test]
 fn a_wait_doesnt_start_in_a_closed_chat_or_an_archived_workspace() {
     let dir = tempfile::tempdir().unwrap();
@@ -173,7 +199,7 @@ fn a_wait_is_found_by_the_call_that_started_it_whether_or_not_it_has_ended() {
 
     assert_eq!(
         first.map(|wait| (wait.id, wait.ended.map(|ended| ended.how))),
-        Some(("a".into(), Some(WaitEnd::Cancelled)))
+        Some(("a".into(), Some(WaitEnd::Replaced)))
     );
     assert_eq!(none, None);
 }

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{drafts, files, queue};
+use super::{drafts, files, queue, waits};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
@@ -357,6 +357,7 @@ pub enum ClientRequest {
     SessionMarkUnread {
         id: SessionId,
     },
+    SessionCallOffWait(waits::SessionCallOffWait),
     SessionDraft(drafts::SessionDraft),
     SessionAnswerDraft(drafts::SessionAnswerDraft),
     WorkspaceCommentDraft(drafts::WorkspaceCommentDraft),

@@ -68,7 +68,7 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        finished(&config, &out, &id, Some(format!("say:finished {}", file.display())));
+        finished(&config, &out, &id, "completed", format!("say:finished {}", file.display()));
     });
     false
 }
@@ -84,15 +84,13 @@ pub(crate) fn started(config: &Config, out: &Out, id: &str, kind: &'static str, 
     );
 }
 
-/// Ends a task, taking it out of the list. One that `completed`, when `told` is the prompt it gives, has the agent pick
-/// up again, as the real CLI tells the agent, which starts a turn of its own, or joins the one that's running. One
-/// that didn't is `stopped`, and starts nothing.
-pub(crate) fn finished(config: &Config, out: &Out, id: &str, told: Option<String>) {
-    notify(config, out, id, if told.is_some() { "completed" } else { "stopped" });
+/// Ends a task that `completed` or `failed` by itself, taking it out of the list, and has the agent pick up again with
+/// `told`, the prompt it gives, as the real CLI tells the agent either way, which starts a turn of its own, or joins
+/// the one that's running.
+pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str, told: String) {
+    notify(config, out, id, status);
     unlisted(config, out, id);
-    if let Some(text) = told {
-        let _ = config.input.send(Input::Resume(Prompt { text, uuid: None }));
-    }
+    let _ = config.input.send(Input::Resume(Prompt { text: told, uuid: None }));
 }
 
 /// Adds a task to the list, and lists them all.

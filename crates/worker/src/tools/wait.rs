@@ -137,9 +137,9 @@ fn task(wait: &Wait, pull_request: Option<&PullRequest>) -> Value {
             let standing = pull_request::standing(Standing::of(pull_request));
             ("working", format!("Waiting on pull request #{}. {standing}", wait.number))
         }
-        // Called off by the agent, by a wait it started after, or by closing its chat, none of which the agent needs a
-        // turn to hear.
-        Some(ended) if ended.how == WaitEnd::Cancelled => ("cancelled", "The wait was called off.".to_string()),
+        // The CLI says a task called off failed, and takes a turn to tell the agent what this says, but for one the
+        // agent stopped itself. So it says who called it off, which says whether to start another.
+        Some(ended) if ended.how.called_off() => ("cancelled", called_off(ended.how).to_string()),
         Some(ended) => {
             task["result"] = Called::text(ended_text(wait, ended.how, pull_request)).to_json();
             ("completed", format!("The wait ended: {}", how(ended.how)))
@@ -161,6 +161,26 @@ fn ended_text(wait: &Wait, how_it_ended: WaitEnd, pull_request: Option<&PullRequ
     )
 }
 
+/// What the agent hears of a wait that was called off, as its CLI tells it in a turn of its own.
+fn called_off(how: WaitEnd) -> &'static str {
+    match how {
+        WaitEnd::CalledOffByPerson => "The person stopped this wait. Don't start another unless they ask.",
+        WaitEnd::Replaced => "This wait was replaced by the one started after it, which goes on.",
+        // By the agent, or by closing its chat or archiving its workspace, and only those are called off.
+        WaitEnd::Cancelled
+        | WaitEnd::Merged
+        | WaitEnd::Closed
+        | WaitEnd::Conflicts
+        | WaitEnd::ChecksFailed
+        | WaitEnd::ChangesRequested
+        | WaitEnd::LeftQueue
+        | WaitEnd::Draft
+        | WaitEnd::ChecksPassed
+        | WaitEnd::NoPullRequest
+        | WaitEnd::Unknown => "The wait was called off.",
+    }
+}
+
 fn how(ended: WaitEnd) -> &'static str {
     match ended {
         WaitEnd::Merged => "it's merged.",
@@ -173,6 +193,8 @@ fn how(ended: WaitEnd) -> &'static str {
         WaitEnd::ChecksPassed => "its checks have run, and none failed.",
         WaitEnd::NoPullRequest => "the branch has no pull request any more, or has another one.",
         WaitEnd::Cancelled => "it was called off.",
+        WaitEnd::CalledOffByPerson => "the person stopped it.",
+        WaitEnd::Replaced => "the wait started after it replaced it.",
         WaitEnd::Unknown => "for a reason only a newer Roundhouse can name.",
     }
 }

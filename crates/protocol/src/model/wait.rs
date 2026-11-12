@@ -62,12 +62,35 @@ pub enum WaitEnd {
     ChecksPassed,
     /// The branch has no pull request any more, or has another one.
     NoPullRequest,
-    /// Called off: by its agent, by a wait the agent started after it, or by closing its chat or archiving its
-    /// workspace.
+    /// Called off by its agent, or by closing its chat or archiving its workspace.
     Cancelled,
+    /// Called off by the person, with Stop on its line.
+    CalledOffByPerson,
+    /// Called off by a wait its agent started after it, which goes on in its place, since an agent waits on one at a
+    /// time.
+    Replaced,
     /// One this version doesn't know, from a newer hub.
     #[serde(other)]
     Unknown,
+}
+
+impl WaitEnd {
+    /// Whether it ended because someone called it off, before what it waited for happened.
+    pub fn called_off(self) -> bool {
+        match self {
+            WaitEnd::Cancelled | WaitEnd::CalledOffByPerson | WaitEnd::Replaced => true,
+            WaitEnd::Merged
+            | WaitEnd::Closed
+            | WaitEnd::Conflicts
+            | WaitEnd::ChecksFailed
+            | WaitEnd::ChangesRequested
+            | WaitEnd::LeftQueue
+            | WaitEnd::Draft
+            | WaitEnd::ChecksPassed
+            | WaitEnd::NoPullRequest
+            | WaitEnd::Unknown => false,
+        }
+    }
 }
 
 #[cfg(test)]

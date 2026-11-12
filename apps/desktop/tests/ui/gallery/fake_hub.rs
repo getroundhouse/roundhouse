@@ -238,6 +238,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionConfigure { .. }
         | R::SessionClose { .. }
         | R::SessionReopen { .. }
+        | R::SessionCallOffWait(_)
         | R::SessionMarkRead { .. }
         | R::SessionMarkUnread { .. }
         | R::SessionRename { .. } => Err(read_only("change anything")),
