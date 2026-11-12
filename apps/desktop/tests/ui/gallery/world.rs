@@ -9,9 +9,9 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AgentKind, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId,
-    ModelName, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus,
-    SetupStatus, Subagent, Title, TitleSource, ToolUseId, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
+    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName, Place,
+    PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, Title,
+    ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -91,27 +91,16 @@ impl World {
         let created_at_ms = self.next_time();
         let port_base = 4000 + 10 * u16::try_from(self.workspaces.len()).unwrap();
         self.workspaces.push(Workspace {
-            id: id.clone(),
             repo_id: repo.clone(),
             name: name.to_string(),
             branch: name.into(),
             base_ref: Some("origin/main".to_string()),
             path: Some(format!("/workspaces/{name}")),
-            status: WorkspaceStatus::Ready,
-            provider: "local".into(),
             instance_id: InstanceId::from("local"),
             created_at_ms,
-            archived_at_ms: None,
             user_active_at_ms: Some(created_at_ms),
-            setup: SetupStatus::Succeeded,
             port_base,
-            rev: Rev::default(),
-            title: None,
-            title_source: TitleSource::FirstLine,
-            pull_request: None,
-            comment_draft: None,
-            branches: None,
-            pull_request_branch: None,
+            ..protocol::fixtures::workspace(id.as_str())
         });
         id
     }
@@ -165,38 +154,16 @@ impl World {
                 _ => None,
             })
             .unwrap_or_default();
+        // With the settings the hub gives a chat that names none.
         self.sessions.push(Session {
-            account: None,
-            id: id.clone(),
             workspace_id: workspace.clone(),
-            agent: AgentKind::Claude,
-            // As the hub gives a chat that names neither.
-            model: ModelName::named("opus"),
-            permission_mode: protocol::model::PermissionMode::FullAccess,
-            effort: protocol::model::Effort::Xhigh,
             status,
             last_seq,
             created_at_ms,
             updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq).unwrap(),
             title,
-            title_source: TitleSource::FirstLine,
-            closed_at_ms: None,
-            reply_seq: 0,
-            read_seq: 0,
-            turn_started_at_ms: None,
-            user_active_at_ms: None,
             background_tasks,
-            wait: None,
-            context: None,
-            prompt_cache: None,
-            queued: Vec::new(),
-            queue_held: false,
-            draft: protocol::model::Draft::default(),
-            answer_draft: None,
-            open_approvals: None,
-            untaken: None,
-            agent_opened: None,
-            rev: Rev::default(),
+            ..protocol::fixtures::session(id.as_str())
         });
         self.logs.insert(id.clone(), log);
         self.worked_in(&id, created_at_ms);
@@ -330,13 +297,10 @@ fn log_of(id: &SessionId, created_at_ms: i64, events: Vec<EventBody>) -> Vec<Ses
             *place += 1;
             SessionEvent {
                 session_id: id.clone(),
-                seq,
                 ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
-                run: None,
                 subagent,
                 place: Place::new(*place),
-                body,
-                raw: None,
+                ..protocol::fixtures::event(seq, body)
             }
         })
         .collect()

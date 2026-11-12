@@ -58,6 +58,7 @@ anyhow.workspace = true
 client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
+protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }

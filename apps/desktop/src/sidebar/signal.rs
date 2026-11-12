@@ -45,43 +45,12 @@ pub(crate) fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -
 mod tests {
     use look::Signal;
     use protocol::event::{AgentTask, TaskKind};
-    use protocol::model::{AgentKind, Session, SessionStatus};
+    use protocol::model::{Session, SessionStatus};
 
     use super::{chat, waiting_on_you, workspace};
 
     fn session(status: SessionStatus) -> Session {
-        Session {
-            account: None,
-            id: "s".into(),
-            workspace_id: "w".into(),
-            agent: AgentKind::Claude,
-            model: protocol::model::ModelName::named("opus"),
-            permission_mode: protocol::model::PermissionMode::FullAccess,
-            effort: protocol::model::Effort::Xhigh,
-            status,
-            last_seq: 0,
-            created_at_ms: 0,
-            updated_at_ms: 0,
-            title: None,
-            closed_at_ms: None,
-            reply_seq: 0,
-            read_seq: 0,
-            turn_started_at_ms: None,
-            user_active_at_ms: None,
-            background_tasks: Vec::new(),
-            wait: None,
-            context: None,
-            prompt_cache: None,
-            queued: Vec::new(),
-            queue_held: false,
-            draft: protocol::model::Draft::default(),
-            answer_draft: None,
-            open_approvals: None,
-            untaken: None,
-            agent_opened: None,
-            rev: protocol::model::Rev::default(),
-            title_source: protocol::model::TitleSource::FirstLine,
-        }
+        Session { status, ..protocol::fixtures::session("s") }
     }
 
     fn closed(status: SessionStatus) -> Session {

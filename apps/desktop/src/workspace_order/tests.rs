@@ -1,32 +1,9 @@
-use protocol::model::WorkspaceStatus;
-use protocol::model::{InstanceId, Rev, SetupStatus, TitleSource, Workspace};
+use protocol::model::Workspace;
 
 use super::Sort;
 
 fn workspace(name: &str, created_at_ms: i64) -> Workspace {
-    Workspace {
-        id: name.into(),
-        repo_id: "r".into(),
-        name: name.to_string(),
-        branch: name.into(),
-        base_ref: None,
-        path: None,
-        status: WorkspaceStatus::Ready,
-        provider: "local".into(),
-        instance_id: InstanceId::from("local"),
-        created_at_ms,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: SetupStatus::NotStarted,
-        port_base: 0,
-        rev: Rev::default(),
-        title: None,
-        title_source: TitleSource::default(),
-        pull_request: None,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
+    Workspace { created_at_ms, ..protocol::fixtures::workspace(name) }
 }
 
 #[test]

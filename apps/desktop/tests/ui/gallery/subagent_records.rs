@@ -19,20 +19,13 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
             EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
                 held.entry(call.clone()).or_insert(Subagent {
                     session_id: event.session_id.clone(),
-                    call: call.clone(),
                     kind: kind.clone(),
                     description: description.clone(),
                     prompt: prompt.clone(),
                     in_background: *in_background,
-                    model: None,
-                    status: SubagentStatus::Working,
                     started_at_ms: event.ts_ms,
-                    ended_at_ms: None,
-                    calls: 0,
-                    latest_call: None,
-                    recent: RecentWork::default(),
-                    report: None,
                     rev,
+                    ..protocol::fixtures::subagent(call.as_str())
                 });
             }
             EventBody::SubagentEnded { call, outcome, report } => {
