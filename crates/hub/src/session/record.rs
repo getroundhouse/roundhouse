@@ -25,7 +25,9 @@ struct After {
 /// the hub and the current agent speak for the session. A turn's end from the agent says when the hub recorded that
 /// turn's start, which the agent can't know, so anything it said is replaced.
 fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
-    if !origin.speaks_for_session() {
+    // As the hub stops, the agent of a session whose only work is a wait the next hub keeps cuts nothing off by going.
+    let outlived = state.outlives_this_hub && matches!(body, EventBody::AgentExited { .. });
+    if !origin.speaks_for_session() || outlived {
         let (status, tasks) = (state.status, state.background_tasks.clone());
         return After { body, status, change: SessionChange::default(), tasks };
     }

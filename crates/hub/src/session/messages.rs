@@ -90,6 +90,8 @@ pub(crate) enum Command {
         client_msg_id: ClientMessageId,
         reply: oneshot::Sender<Result<Session, ApiError>>,
     },
+    /// Starts the agent, if it's waiting on nothing but a wait, so it hears how the wait ended.
+    WakeAgent,
     /// The session is gone. What's queued ahead of this is carried out, and then the task stops.
     End,
 }

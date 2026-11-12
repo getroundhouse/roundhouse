@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use protocol::model::{SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId, WorkspaceStatus};
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{Store, StoreError, from_text, lock, text_of};
 
@@ -41,14 +41,7 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        let replaced = tx
-            .prepare_cached(
-                "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE session_id = ? AND ended_at_ms IS NULL RETURNING id",
-            )?
-            .query_row(params![wait.started_at_ms, text_of(&WaitEnd::Cancelled), wait.session_id.as_str()], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()?;
+        let replaced = call_off(&tx, &wait.session_id, wait.started_at_ms)?;
         tx.prepare_cached(&format!(
             "INSERT INTO waits ({COLUMNS}, seen_left_queue_at_ms, seen_changes_requested_at_ms)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -67,7 +60,19 @@ impl Store {
             seen.changes_requested_at_ms,
         ])?;
         tx.commit()?;
-        Ok(replaced.map(WaitId::from))
+        Ok(replaced)
+    }
+
+    /// Ends the workspace's open waits as cancelled, as it starts being archived. Returns those it ended.
+    pub fn call_off_workspace_waits(&self, workspace_id: &WorkspaceId, at_ms: i64) -> Result<Vec<WaitId>, StoreError> {
+        let conn = lock(&self.writer);
+        let mut query = conn.prepare_cached(
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE workspace_id = ? AND ended_at_ms IS NULL RETURNING id",
+        )?;
+        let ids = query.query_map(params![at_ms, text_of(&WaitEnd::Cancelled), workspace_id.as_str()], |row| {
+            row.get::<_, String>(0)
+        })?;
+        Ok(ids.map(|id| id.map(WaitId::from)).collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn wait(&self, id: &WaitId) -> Result<Wait, StoreError> {
@@ -131,6 +136,14 @@ impl Store {
         Ok(ended)
     }
 
+    /// Every session with a wait that hasn't ended.
+    pub fn sessions_waiting(&self) -> Result<HashSet<SessionId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut query = conn.prepare_cached("SELECT DISTINCT session_id FROM waits WHERE ended_at_ms IS NULL")?;
+        let ids = query.query_map([], |row| row.get::<_, String>(0))?;
+        Ok(ids.map(|id| id.map(SessionId::from)).collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Every workspace with a wait that hasn't ended, whose pull request is read at the soonest.
     pub fn workspaces_waited_on(&self) -> Result<HashSet<WorkspaceId>, StoreError> {
         let conn = lock(&self.reader);
@@ -138,6 +151,16 @@ impl Store {
         let ids = query.query_map([], |row| row.get::<_, String>(0))?;
         Ok(ids.map(|id| id.map(WorkspaceId::from)).collect::<rusqlite::Result<_>>()?)
     }
+}
+
+/// Ends the chat's open wait, if it has one, as cancelled.
+fn call_off(conn: &Connection, session_id: &SessionId, at_ms: i64) -> rusqlite::Result<Option<WaitId>> {
+    conn.prepare_cached(
+        "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE session_id = ? AND ended_at_ms IS NULL RETURNING id",
+    )?
+    .query_row(params![at_ms, text_of(&WaitEnd::Cancelled), session_id.as_str()], |row| row.get::<_, String>(0))
+    .optional()
+    .map(|id| id.map(WaitId::from))
 }
 
 fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {

@@ -113,6 +113,16 @@ impl Hub {
         self.with_pull_request(wait).await
     }
 
+    /// Calls off the workspace's waits as it starts being archived, so none ending meanwhile starts an agent in a
+    /// worktree that's about to go.
+    pub(crate) async fn call_off_waits_of(&self, workspace_id: &WorkspaceId) -> Result<(), ApiError> {
+        let (id, at_ms) = (workspace_id.clone(), now_ms());
+        for wait in self.blocking(move |store| store.call_off_workspace_waits(&id, at_ms)).await? {
+            info!(%wait, workspace = %workspace_id, "archiving its workspace called off a wait");
+        }
+        Ok(())
+    }
+
     async fn own_wait(&self, session_id: &SessionId, id: WaitId) -> Result<Wait, ApiError> {
         let wait = self.blocking(move |store| store.wait(&id)).await?;
         if wait.session_id != *session_id {
@@ -126,9 +136,21 @@ impl Hub {
         Ok((wait, pull_request))
     }
 
+    /// Has the session's agent started, if it isn't running, as after the hub started again, so its CLI asks after its
+    /// task and hears how the wait ended. The worker that read the pull request is kept for it, rather than stopped as
+    /// one started only for a read is, since the agent can only pick its task up again where its tools were.
+    /// *Unconfirmed:* without asking.
+    async fn wake_for(self: &Arc<Self>, wait: &Wait) {
+        let _kept = self.existing_worker(&wait.workspace_id);
+        match self.live_session(&wait.session_id).await {
+            Ok(session) => session.wake_agent(),
+            Err(e) => warn!(session = %wait.session_id, "couldn't wake the agent whose wait ended: {}", e.message),
+        }
+    }
+
     /// Ends the workspace's waits that a read of its pull request ends, from what it found. Only for a read that
     /// worked, since one that failed says nothing of the pull request.
-    pub(super) async fn end_waits(&self, id: &WorkspaceId, found: &PullRequestFound) {
+    pub(super) async fn end_waits(self: &Arc<Self>, id: &WorkspaceId, found: &PullRequestFound) {
         let (owned, now, at_ms) = (id.clone(), found.pull_request.clone(), now_ms());
         let judged = self
             .blocking(move |store| {
@@ -139,6 +161,7 @@ impl Hub {
             Ok(ended) => {
                 for wait in ended {
                     info!(wait = %wait.id, how = ?wait.ended.map(|ended| ended.how), "a wait ended");
+                    self.wake_for(&wait).await;
                 }
             }
             Err(e) => warn!(%id, "couldn't judge the workspace's waits after reading its pull request: {}", e.message),

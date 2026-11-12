@@ -132,7 +132,7 @@ extern "C" fn on_sigterm(_: libc::c_int) {
 }
 
 /// From the first task on, SIGTERM stops every task and reports it, then exits as the real CLI does.
-fn watch_for_sigterm(config: &Config, out: &Out) {
+pub(crate) fn watch_for_sigterm(config: &Config, out: &Out) {
     static WATCHING: AtomicBool = AtomicBool::new(false);
     if WATCHING.swap(true, Ordering::SeqCst) {
         return;
@@ -145,11 +145,14 @@ fn watch_for_sigterm(config: &Config, out: &Out) {
             std::thread::sleep(POLL);
         }
         let stopped: Vec<_> = TASKS.lock().drain(..).collect();
-        // A tool's task goes with no word of it, as with the real CLI.
-        for task in stopped.iter().filter(|task| task.kind != "mcp_task") {
+        // A tool's task goes with no word of it, and with only those listed, the real CLI writes nothing at all.
+        let others: Vec<_> = stopped.iter().filter(|task| task.kind != "mcp_task").collect();
+        for task in &others {
             notify(&config, &out, &task.id, "stopped");
         }
-        list(&config, &out);
+        if !others.is_empty() {
+            list(&config, &out);
+        }
         std::process::exit(143);
     });
 }

@@ -168,30 +168,12 @@ fn main() {
     }
     let out: Out = Arc::new(Mutex::new(std::io::stdout()));
 
-    let session_id = if let Some(id) = flag(&args, "--resume") {
-        if !state.join(&id).exists() {
-            eprintln!("No conversation found with session ID: {id}");
-            emit(
-                &out,
-                json!({"type":"result","subtype":"error_during_execution","is_error":true,
-                "errors":[format!("No conversation found with session ID: {id}")],"session_id":id}),
-            );
-            std::process::exit(1);
-        }
-        id
-    } else {
-        let id = flag(&args, "--session-id").expect("--session-id or --resume");
-        if state.join(&id).exists() {
-            eprintln!("Error: Session ID {id} is already in use.");
-            std::process::exit(1);
-        }
-        id
-    };
+    let session_id = conversation_for(&args, &state, &out);
     keep_launch(&args, &state);
     start_as_launched(&args);
     let (input_tx, input_rx) = mpsc::channel();
     let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
-
+    mcp::follow_again(&args, &config, &out);
     let (control_out, conversation) = (out.clone(), config.conversation.clone());
     std::thread::spawn(move || read_stdin(input_tx, control_out, &conversation));
 
@@ -213,6 +195,30 @@ fn main() {
             continue;
         }
         run_turn(&config, &out, prompt, by_itself, &input_rx, &mut queued, &mut eof);
+    }
+}
+
+/// The conversation this launch is for: the one `--resume` names, which has to be there, or the new one
+/// `--session-id` names, which mustn't be.
+fn conversation_for(args: &[String], state: &Path, out: &Out) -> String {
+    if let Some(id) = flag(args, "--resume") {
+        if !state.join(&id).exists() {
+            eprintln!("No conversation found with session ID: {id}");
+            emit(
+                out,
+                json!({"type":"result","subtype":"error_during_execution","is_error":true,
+                "errors":[format!("No conversation found with session ID: {id}")],"session_id":id}),
+            );
+            std::process::exit(1);
+        }
+        id
+    } else {
+        let id = flag(args, "--session-id").expect("--session-id or --resume");
+        if state.join(&id).exists() {
+            eprintln!("Error: Session ID {id} is already in use.");
+            std::process::exit(1);
+        }
+        id
     }
 }
 

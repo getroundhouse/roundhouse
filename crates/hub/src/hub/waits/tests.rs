@@ -1,15 +1,15 @@
 //! Waits through the hub, as a worker asks for them, with a stand-in for the workspace's worker that reads its pull
 //! request as each test says.
 
-use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{Checks, Local, MergeState, PrState, QueueState, Workspace};
+use protocol::event::{EventBody, ExitReason, NoticeLevel};
+use protocol::model::{Checks, Local, MergeState, PrState, QueueState, SessionStatus, Workspace};
 use protocol::worker::{AskReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
 
 use super::*;
 pub(super) use crate::hub::tests::open;
 use crate::hub::tests::{hub_in, hub_with_worktree, reading, reading_within, says};
-use crate::store::Seen;
 use crate::store::tests::idle_session;
+use crate::store::{Seen, SessionChange};
 
 /// A wait of session `s`'s, in workspace `w`, as [`hub_in`] makes them, on [`open`], that hasn't ended.
 pub(super) fn wait(until: WaitUntil) -> Wait {
@@ -250,6 +250,84 @@ async fn closing_its_chat_or_archiving_its_workspace_ends_a_wait() {
 
     assert_eq!(how(&once_closed), Some(WaitEnd::Cancelled));
     assert_eq!(how(&hub.store.wait(&in_workspace.id).unwrap()), Some(WaitEnd::Cancelled));
+}
+
+/// Before its archive script runs, so a wait that ends meanwhile doesn't start an agent in a worktree that's going.
+#[tokio::test(start_paused = true)]
+async fn archiving_a_workspace_calls_off_its_waits_before_its_archive_script_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let waiting_as_the_script_ran = Arc::new(parking_lot::Mutex::new(None));
+    let link = WorkerLink::answering({
+        let (hub, waiting) = (Arc::downgrade(&hub), waiting_as_the_script_ran.clone());
+        move |request| {
+            if matches!(request, WorkerRequest::ArchiveScript { .. }) {
+                let waited_on = hub.upgrade().map(|hub| hub.store.workspaces_waited_on().unwrap());
+                *waiting.lock() = waited_on.map(|workspaces| !workspaces.is_empty());
+            }
+            Some(Ok(if matches!(request, WorkerRequest::PullRequest { .. }) {
+                WorkerResponse::PullRequest { pull_request: Some(open()), branch: None }
+            } else {
+                WorkerResponse::Ok
+            }))
+        }
+    });
+    hub.workers.lock().insert("w".into(), link.clone());
+    ask(&hub, &link, start("toolu_1")).await.unwrap();
+
+    hub.workspace_archive("w".into(), true).await.unwrap();
+
+    assert_eq!(*waiting_as_the_script_ran.lock(), Some(false));
+}
+
+/// As after the hub started again: its agent is started for a chat waiting on nothing else, which says so when it
+/// can't be, and isn't for one that was cut off or is held for the person.
+#[tokio::test]
+async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
+    let cases = [
+        (SessionStatus::Background, false, true),
+        (SessionStatus::Idle, false, true),
+        (SessionStatus::Interrupted, true, false),
+        (SessionStatus::Interrupted, false, false),
+        (SessionStatus::Idle, true, false),
+    ];
+    for (status, queue_held, woken) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_with_worktree(dir.path());
+        let change = SessionChange { status: Some(status.into()), queue_held: Some(queue_held), recorded: None };
+        let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into() };
+        hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
+        let says = says(Some(open()));
+        let starts = Arc::new(parking_lot::Mutex::new(0));
+        let link = WorkerLink::answering({
+            let (says, starts) = (says.clone(), starts.clone());
+            move |request| {
+                if matches!(request, WorkerRequest::AgentStart(_)) {
+                    *starts.lock() += 1;
+                }
+                Some(if matches!(request, WorkerRequest::PullRequest { .. }) {
+                    says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request, branch: None })
+                } else {
+                    // Not that it started, so starting fails.
+                    Ok(WorkerResponse::Ok)
+                })
+            }
+        });
+        hub.workers.lock().insert("w".into(), link.clone());
+        ask(&hub, &link, start("toolu_1")).await.unwrap();
+
+        *says.lock() = Ok(Some(PullRequest { state: PrState::Merged, ..open() }));
+        hub.workspace_pull_request("w".into()).await.unwrap();
+        // Once the wake is done, since a chat carries out what it's asked in turn.
+        let _ = hub.session_cancel("s".into()).await;
+
+        assert_eq!(*starts.lock(), usize::from(woken), "{status:?}, held: {queue_held}");
+        let events = hub.store.read_events(&"s".into(), 1, 100, u64::MAX, false).unwrap();
+        let told = events
+            .iter()
+            .any(|event| matches!(event.body, EventBody::AgentExited { reason: ExitReason::StartFailed, .. }));
+        assert_eq!(told, woken, "{status:?}, held: {queue_held}");
+    }
 }
 
 #[tokio::test]
