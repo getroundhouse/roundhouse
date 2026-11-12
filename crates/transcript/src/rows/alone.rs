@@ -11,14 +11,14 @@ use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Subagent, SubagentStatus};
 
 use super::around::blocks_of;
-use super::row;
 use super::tools::agent;
 use super::turn_times;
+use super::{Shared, recorded, row};
 use crate::calls::count;
-use crate::find::{FindLook, Part};
+use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
-use crate::long_texts::LongTexts;
 use crate::model_names::model_name;
+use crate::prose::{Of, TextAt, Written};
 use crate::transcript::Model;
 
 /// Where a subagent stands, for the top of its tab, such as `Finished · Haiku 5.5 · 3 calls · 12s`.
@@ -39,29 +39,44 @@ pub fn subagent_standing(subagent: &Subagent) -> String {
     [status.map(str::to_string), model, Some(calls), took].into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
+/// The list's row that draws the subagent tab's head or foot, as `of` says, when the list's tail, its last row, is
+/// `tail`: its first row draws the head above what else it draws, and the tail the foot below. None for an event's row,
+/// which is where the log has it.
+pub(crate) fn row_of(of: Of, tail: usize) -> Option<usize> {
+    match of {
+        Of::Head => Some(0),
+        Of::Foot => Some(tail),
+        Of::Event(_) => None,
+    }
+}
+
 /// The subagent the tab shows, once its record has come.
 fn shown(m: &Model) -> Option<&Subagent> {
     m.subagents.get(m.alone.as_ref()?).map(Rc::as_ref)
 }
 
-/// What the subagent was asked, above the tab's first row.
-pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
+/// What the subagent was asked, above the tab's first row, drawn from the kit's blocks, and selected with the rest.
+pub(super) fn head(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
     // Nothing's looked for in the subagent tab, so the area that scrolls it has no match to bring into view.
     let find = FindLook::default();
-    let text = |_| texts.markdown(&(key.clone(), Part::Asked), prompt).into_any_element();
-    let asked = agent::prompt_block(&key, text, &find, None, cx);
+    let element = find::view_id(&(key.clone(), Part::Asked));
+    let text =
+        |area| recorded(&Written::unfound(TextAt::first_of(Of::Head), element, prompt).in_area(area), None, shared);
+    let asked = agent::prompt_block(&key, text, &find, Some(&shared.selection), cx);
     Some(row().child(asked).into_any_element())
 }
 
-/// Its report, once it's done, in the tab's last row. That's the tail's, which no event is in, so an image it points
-/// to doesn't load, as one in what the agent is still writing doesn't.
-pub(super) fn foot(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
+/// Its report, once it's done, in the tab's last row, drawn from the kit's blocks, and selected with the rest. That's
+/// the tail's, which no event is in, so an image it points to doesn't load, as one in what the agent is still writing
+/// doesn't.
+pub(super) fn foot(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let report = report(m)?;
     let key = ItemKey::Call(shown(m)?.call.clone());
-    let report = texts.markdown(&(key.clone(), Part::Report), report);
+    let element = find::view_id(&(key.clone(), Part::Report));
+    let report = recorded(&Written::unfound(TextAt::first_of(Of::Foot), element, report), None, shared);
     Some(row().child(agent::report_block(&key, report, cx)).into_any_element())
 }
 

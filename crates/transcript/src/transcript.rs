@@ -20,7 +20,7 @@ use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::long_texts::LongTexts;
-use crate::prose::Prose;
+use crate::prose::{Of, Prose};
 use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
 use crate::selection::Selection;
@@ -265,9 +265,15 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Measures the row of the event at `seq` again, since it draws what it drew another way, and draws it.
-    pub(crate) fn redrawn(&mut self, seq: Seq, cx: &mut Context<Self>) {
-        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+    /// Measures the row `of` is drawn in again, since it draws what it drew another way, and draws it.
+    pub(crate) fn redrawn(&mut self, of: Of, cx: &mut Context<Self>) {
+        let row = match of {
+            Of::Event(seq) => self.session.read(|log| log.row_of(seq)),
+            Of::Head | Of::Foot => {
+                self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::tab_row_of(of, tail))
+            }
+        };
+        if let Some(row) = row {
             self.remeasure_row(row, cx);
         }
     }
