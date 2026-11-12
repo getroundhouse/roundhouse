@@ -239,6 +239,36 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
 }
 
 #[test]
+fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
+    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub wants its
+    // instance, and the new worker would find the instance taken.
+    let mut stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into())]);
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let go = stack.path("late-output");
+    client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; hang:60000", go.display()), None).unwrap();
+    let mut agent_pid = 0;
+    wait_until("the tool to start", || {
+        let events = read_all(&client, &session.id);
+        agent_pid = started_pid(&events).unwrap_or(0);
+        agent_pid != 0 && assistant_text(&events).contains("first")
+    });
+    let worker_pid = parent_of(agent_pid);
+    drop(client);
+
+    stack.kill_hub();
+    wait_until("the agent to stop after the hub died", || !is_alive(agent_pid));
+    assert!(is_alive(worker_pid), "the worker should still be waiting for its agent's last output");
+    stack.start_hub();
+    let client = stack.client();
+    client.session_prompt(&session.id, "say:second", None).unwrap();
+
+    wait_until("the second turn to finish", || assistant_text(&read_all(&client, &session.id)).ends_with("second"));
+    assert!(!is_alive(worker_pid), "the worker the last hub left should have been ended");
+    std::fs::write(&go, "").unwrap();
+}
+
+#[test]
 fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     // The worker waits a minute for the old agent's last output, rather than a few seconds, so it's this
     // test that ends the wait, however slowly it gets there.

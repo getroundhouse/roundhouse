@@ -97,7 +97,13 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
         let _ = provider.destroy(&workspace.instance_id).await;
     }
-    let hub = Arc::new(Hub::new(store, paths.attachments_dir.clone(), provider, config.on_demand));
+    let hub = Arc::new(Hub::new(
+        store,
+        paths.attachments_dir.clone(),
+        paths.worker_logs_dir.clone(),
+        provider,
+        config.on_demand,
+    ));
     hub.carry_out(&settings);
     let awake = hub.keep_awake();
     hub.start_queues().await;

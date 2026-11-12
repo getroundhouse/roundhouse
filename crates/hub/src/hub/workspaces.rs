@@ -12,7 +12,7 @@ use providers::Provider;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use super::{Hub, close_worker, new_id, not_ready, unexpected};
+use super::{Hub, new_id, not_ready, unexpected};
 use crate::error::{internal, provider_failed};
 use crate::session::Command;
 use crate::store::{Made, Store, now_ms};
@@ -136,7 +136,8 @@ impl Hub {
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
-        provider.create(&workspace.instance_id).await.map_err(|e| provider_failed(&e))?;
+        let display_name = format!("roundhouse-{}", workspace.name);
+        provider.create(&workspace.instance_id, None, None, &display_name).await.map_err(|e| provider_failed(&e))?;
         let link = self.ensure_worker(&workspace.id).await?;
         let reply = link
             .call(WorkerRequest::PrepareWorkspace {
@@ -164,7 +165,7 @@ impl Hub {
         let id = &workspace.id;
         let link = self.workers.lock().get(id).cloned();
         if let Some(link) = link {
-            close_worker(&link, provider, &workspace.instance_id).await;
+            self.close_worker(workspace, &link, provider).await;
         }
         if let Err(e) = provider.destroy(&workspace.instance_id).await {
             warn!(%id, "cleaning up a failed workspace: {}", error_chain(&e));
@@ -236,7 +237,7 @@ impl Hub {
             return Err(unexpected(&reply));
         }
         let provider = self.provider(&workspace.provider)?;
-        close_worker(&link, provider.as_ref(), &workspace.instance_id).await;
+        self.close_worker(&workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
         let branch = match status {
             Ok(WorkerResponse::GitStatus(status)) => status.branch,

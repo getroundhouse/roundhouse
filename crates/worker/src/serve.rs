@@ -45,6 +45,10 @@ pub struct Config {
     pub scratch_dir: PathBuf,
     /// Deletes the worktrees archiving moves aside.
     pub deleter: Deleter,
+    /// Why this worker can't serve its instance, which is another worker serving it already. It answers every request
+    /// by saying so, rather than exiting, so the hub can tell it from a worker that failed to start. The hub cleans up
+    /// after one of those by ending the instance, which would end the worker serving it.
+    pub refused: Option<String>,
 }
 
 struct RunningAgent {
@@ -188,6 +192,9 @@ async fn handle(
     forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>,
     request: WorkerRequest,
 ) -> Result<WorkerResponse, ApiError> {
+    if let Some(reason) = &state.config.refused {
+        return Err(ApiError::new(ErrorCode::Conflict, reason.clone()));
+    }
     match request {
         WorkerRequest::Hello { protocol_version } => hello(protocol_version),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
