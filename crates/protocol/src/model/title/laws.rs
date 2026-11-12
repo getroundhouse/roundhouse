@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::*;
-use crate::model::one_line::laws::{reads_on_one_line, text};
+use crate::short_text::laws::{reads_on_one_line, text};
 
 /// What every title holds to, however it was made.
 fn holds(title: &Title) {

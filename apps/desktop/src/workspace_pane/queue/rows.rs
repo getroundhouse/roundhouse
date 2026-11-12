@@ -11,6 +11,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, InRegion as _, Region};
 use protocol::model::QueuedPrompt;
+use protocol::short_text::one_line;
 
 use super::Editing;
 use crate::workspace_pane::WorkspacePane;
@@ -156,7 +157,7 @@ fn editing_row(editing: &Editing, cx: &mut Context<WorkspacePane>) -> AnyElement
 
 /// The prompt on one line, which Edit shows all of, and after it what it carries. A prompt of only files has no line.
 fn queued_line(prompt: &QueuedPrompt, text: Hsla, muted: Hsla) -> impl IntoElement {
-    let line = prompt.text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let line = one_line(&prompt.text, usize::MAX);
     h_flex()
         .flex_1()
         .min_w_0()

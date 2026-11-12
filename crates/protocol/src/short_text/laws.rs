@@ -1,4 +1,4 @@
-//! What has to hold for a line made from any text, at any limit.
+//! What has to hold for a line or a start made from any text, at any limit.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
@@ -7,7 +7,7 @@ use super::*;
 
 /// Text that often has what a line must not: line breaks of every kind, controls, and characters that hide or reorder
 /// text, between ordinary words and emoji.
-pub(in crate::model) fn text() -> impl Strategy<Value = String> {
+pub(crate) fn text() -> impl Strategy<Value = String> {
     let piece = prop_oneof![
         "[a-zé ]{0,12}",
         Just("\n".to_string()),
@@ -29,7 +29,7 @@ pub(in crate::model) fn text() -> impl Strategy<Value = String> {
 
 /// What every line holds to, however it was made: single spaces between words, none at either end, and nothing that
 /// breaks the line, hides or reorders text.
-pub(in crate::model) fn reads_on_one_line(text: &str) {
+pub(crate) fn reads_on_one_line(text: &str) {
     assert_eq!(text, text.trim(), "{text:?}");
     assert!(!text.contains("  "), "{text:?}");
     assert!(!text.chars().any(|c| c.is_control() || hides(c) || (c != ' ' && c.is_whitespace())), "{text:?}");
@@ -65,5 +65,15 @@ proptest! {
         let line = one_line(&text, most);
 
         prop_assert_eq!(one_line(&line, most), line);
+    }
+
+    /// The start of a text is in whole characters, no more than `most` of them, and cut exactly when the text had more.
+    #[test]
+    fn the_start_of_a_text_says_whether_it_was_cut(text in "\\PC{0,40}", most in 0usize..30) {
+        let (start, cut) = start_of(&text, most);
+
+        prop_assert!(text.starts_with(start));
+        prop_assert_eq!(start.chars().count(), text.chars().count().min(most));
+        prop_assert_eq!(cut, text.chars().count() > most);
     }
 }

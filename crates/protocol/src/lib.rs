@@ -20,6 +20,7 @@ pub mod model;
 pub mod paths;
 pub mod prompt;
 pub mod provider;
+pub mod short_text;
 pub mod tail;
 pub mod versions;
 pub mod worker;

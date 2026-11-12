@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::one_line::one_line;
 use super::{Place, Seq};
 use crate::event::{EventBody, SessionEvent};
+use crate::short_text::one_line;
 
 /// A recorded prompt as one line: where it is in the log, where it was settled, and how it starts. Every way to make
 /// one tidies its text, including reading one from a hub, so a line from a hub that tidies differently still reads as
