@@ -16,7 +16,7 @@ The desktop app is native Rust on GPUI, Zed's UI framework, rather than a web vi
 
 - Its mobile backends are experimental.
 - It's pre-1.0, and the kit pins exact snapshots of it, so an upgrade can change the API.
-- There's more code to own than with a web view. Neither GPUI nor the kit has a terminal, so the app's terminal builds on `alacritty_terminal`.
+- There's more code to own than with a web view. Neither GPUI nor the kit has a terminal, so the app's terminal builds on Ghostty's terminal core, `libghostty-vt`.
 
 ## gpui-kit
 

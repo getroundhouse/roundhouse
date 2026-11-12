@@ -8,6 +8,8 @@ Start with `README.md`. `docs/documentation.md` lists every doc, and says what g
 
 ## Building and testing
 
+Building needs Zig 0.17 on the PATH, which builds Ghostty's terminal core: `brew install zig` on a Mac.
+
 ```sh
 cargo test                        # The backend, with a fake agent. Needs no GPUI, so it runs on Linux too
 cargo test --workspace            # Also the transcript and the desktop app's UI tests
@@ -23,7 +25,7 @@ python3 -m unittest discover -s tools/package   # The scripts that publish relea
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
 cargo xwin clippy --workspace --locked --target x86_64-pc-windows-msvc -- -D warnings   # Windows, from a Mac: lints the product's code as built for it, and runs nothing. Needs cargo-xwin, LLVM and the rustup target
-docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux
+docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.98.1 sh -c 'z=zig-$(uname -m)-linux-0.17.1; curl -sSfL https://ziglang.org/download/0.17.1/$z.tar.xz | tar -xJ -C /opt && export PATH=/opt/$z:$PATH; git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux, with the Zig that builds Ghostty's terminal core
 ```
 
 Whenever you open the app, say why with `--note`, even if nobody is meant to look at it, since copies from several checkouts can be open at once. As it quits, it says why on stderr. "Quit by whoever had it open" means they've finished with it, so don't look into why it exited, and don't open it again unless they ask.

@@ -44,6 +44,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Zig that builds Ghostty's terminal core, which its build script runs. Its own cache is off, since it would
+      # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.1
+          use-cache: false
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -57,8 +63,9 @@ jobs:
           restore-keys: windows-2025-vs2026-
       # Not --all-targets, since most tests only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
-      # Tests of what Windows does differently below the hub.
-      - run: cargo test --locked -p process -p protocol
+      # Tests of what Windows does differently below the hub, and of Ghostty's terminal core, built by Zig for MSVC,
+      # which only a Windows machine can build.
+      - run: cargo test --locked -p process -p protocol -p terminal-state
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts

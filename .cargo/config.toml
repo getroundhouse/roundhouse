@@ -3,3 +3,6 @@
 [env]
 ROUNDHOUSE_HOME = { value = ".context/dev", relative = true }
 ROUNDHOUSE_WORKSPACES = { value = ".context/dev/workspaces", relative = true }
+# Ghostty's build script builds it unoptimized whenever there's debug info, as in the dev profile, and unoptimized it
+# parses under 0.1 MB/s, so a burst of output would take minutes. Optimized, it parses hundreds of MB/s.
+LIBGHOSTTY_VT_SYS_OPTIMIZE = "ReleaseFast"
