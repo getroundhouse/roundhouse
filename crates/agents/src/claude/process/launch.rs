@@ -113,6 +113,9 @@ pub(super) fn launch(
         // prompt sent mid-turn folds into the running turn and produces no result of its own.
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")
         .envs(spec.env.iter().map(|(k, v)| (k, v)));
+    if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
+        command.args(tools);
+    }
     let mut child = start(&mut command, bin, cwd)?;
     let pid = child.id().unwrap_or_default();
     record(options.pid_file.as_deref(), pid);

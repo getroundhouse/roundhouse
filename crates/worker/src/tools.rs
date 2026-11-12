@@ -24,7 +24,7 @@ mod pull_request;
 mod tests;
 
 /// The path the server answers on, as MCP's own examples have it.
-pub(crate) const PATH: &str = "/mcp";
+const PATH: &str = "/mcp";
 
 /// Something listening on 127.0.0.1 answers at once, and nothing listening refuses at once, so this is only reached
 /// by something stuck, which isn't worth taking the port over.
@@ -64,6 +64,14 @@ impl Tools {
     /// Lets calls carrying `token` through, as the agent in `session_id`'s.
     pub(crate) fn admit(&self, token: ToolsToken, session_id: SessionId) {
         self.tokens.lock().insert(token, session_id);
+    }
+
+    /// Where they're served, once they are.
+    pub(crate) async fn url(&self) -> Option<String> {
+        match *self.serving.lock().await {
+            Serving::On { port, .. } => Some(format!("http://{}:{port}{PATH}", Ipv4Addr::LOCALHOST)),
+            Serving::NotYet | Serving::Stopped => None,
+        }
     }
 
     fn session_for(&self, token: &ToolsToken) -> Option<SessionId> {

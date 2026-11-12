@@ -72,6 +72,18 @@ async fn a_pid_now_used_by_something_else_is_left_alone() {
     child.wait().unwrap();
 }
 
+#[tokio::test]
+async fn a_runs_other_files_go_too() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("agents")).unwrap();
+    let tools = dir.path().join("agents/s-1.mcp.json");
+    std::fs::write(&tools, r#"{"mcpServers":{}}"#).unwrap();
+
+    stop_orphaned_agents(dir.path()).await;
+
+    assert!(!tools.exists(), "it holds the agent's token");
+}
+
 fn provider(dir: &Path) -> LocalProvider {
     LocalProvider::new(LocalConfig {
         worker_exe: "/bin/roundhoused".into(),

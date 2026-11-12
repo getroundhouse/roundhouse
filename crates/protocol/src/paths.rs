@@ -21,6 +21,10 @@ pub const DAEMON_NAME: &str = "roundhoused";
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
 /// Where a worker records itself in its instance's state directory, so its provider can tell whether one runs there.
 pub const WORKER_RECORD_FILE: &str = "worker.pid";
+/// The folder in a worker's state directory where it records each agent it runs, beside that run's other files, such
+/// as the one that tells the agent's CLI where the worker's tools are. Everything in it is a run's, so the provider
+/// removes all of it after a killed worker.
+pub const AGENTS_DIR: &str = "agents";
 /// The daemon's file, which on Windows has the extension a program there needs.
 pub fn daemon_file() -> String {
     format!("{DAEMON_NAME}{}", std::env::consts::EXE_SUFFIX)

@@ -22,6 +22,7 @@ pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
 mod examples;
 mod feed;
+pub(crate) mod gh;
 mod processes;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -127,6 +128,12 @@ impl Stack {
         let mut hub = self.hub.take().unwrap();
         hub.kill().unwrap();
         hub.wait().unwrap();
+    }
+
+    /// Kills the hub, as a crash would, and starts another on the same data.
+    pub(crate) fn restart_hub(&mut self) {
+        self.kill_hub();
+        self.start_hub();
     }
 
     pub(crate) fn workspace(&self, client: &Client) -> (Workspace, Session) {

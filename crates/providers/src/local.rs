@@ -9,7 +9,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use process::{ProcessRecord, Signal, signal_group};
 use protocol::model::InstanceId;
-use protocol::paths::WORKER_RECORD_FILE;
+use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use tokio::sync::OnceCell;
@@ -192,9 +192,10 @@ async fn still_running(agent: &ProcessRecord) -> bool {
 /// A worker records each agent it runs, and removes the record when that agent exits. Any record
 /// still here means the worker was killed without stopping it. An orphan runs on until its turn ends,
 /// with nobody reading its output, and a new agent would be working in the same worktree on the same
-/// conversation. So it goes first.
+/// conversation. So it goes first. Every other file here is a run's too, such as the one that tells an
+/// agent's CLI where the worker's tools are, which holds the agent's token, so everything here goes.
 async fn stop_orphaned_agents(instance_dir: &Path) {
-    let Ok(records) = std::fs::read_dir(instance_dir.join("agents")) else {
+    let Ok(records) = std::fs::read_dir(instance_dir.join(AGENTS_DIR)) else {
         return;
     };
     for record in records.flatten() {

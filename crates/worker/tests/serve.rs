@@ -129,13 +129,15 @@ async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{answered:?}");
 }
 
-/// A call to the worker's tools from an agent it started is asked of the hub, for that agent's chat, and answered with
-/// what the hub says.
+/// A call to the worker's tools from an agent it started, with what its CLI was told of them, in a file of the run's own
+/// in the worker's state directory, is asked of the hub, for that agent's chat, and answered with what the hub says.
 #[tokio::test]
 async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_answer() {
     let dir = tempfile::tempdir().unwrap();
+    let state = dir.path().join("state");
+    let cli = cli(dir.path(), KEEPS_ITS_MCP_CONFIG);
     let Worker { read: hub_read, write: mut hub_write, running } =
-        start_worker(config(dir.path(), Some(waiting_cli(dir.path()))));
+        start_worker(Config { state_dir: Some(state.clone()), ..config(dir.path(), Some(cli)) });
     let mut frames = BufReader::new(hub_read).lines();
     let calls = [
         hello(),
@@ -147,8 +149,14 @@ async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_a
         panic!("the tools aren't served");
     };
     reply(&mut frames, 2).await;
+    let (path, told) = given(dir.path()).await;
+    assert_eq!(Path::new(&path), state.join("agents/s-1.mcp.json"));
+    let told: serde_json::Value = serde_json::from_str(&told).unwrap();
+    let server = &told["mcpServers"]["roundhouse"];
+    assert_eq!(server["url"], format!("http://127.0.0.1:{port}/mcp"));
+    let token = server["headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap().to_string();
 
-    let calling = tokio::spawn(call_tool(port, "token-s"));
+    let calling = tokio::spawn(async move { call_tool(port, &token).await });
     let (id, session_id, ask) = timeout(Duration::from_secs(10), async {
         loop {
             if let WorkerFrame::Ask { id, session_id, ask } = next_frame(&mut frames).await {
@@ -239,13 +247,56 @@ async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
     assert_eq!(answered[&2], chosen, "a hub from before ranges");
 }
 
-/// A stand-in for the Claude CLI, in `dir`, that only waits.
-fn waiting_cli(dir: &Path) -> PathBuf {
+/// A stand-in for the Claude CLI, in `dir`, that runs `body`.
+fn cli(dir: &Path, body: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let cli = dir.join("fake-cli");
-    std::fs::write(&cli, "#!/bin/sh\nexec sleep 100\n").unwrap();
+    std::fs::write(&cli, format!("#!/bin/sh\n{body}\n")).unwrap();
     std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
     cli
+}
+
+/// A stand-in for the Claude CLI, in `dir`, that only waits.
+fn waiting_cli(dir: &Path) -> PathBuf {
+    cli(dir, "exec sleep 100")
+}
+
+/// Writes the path it's given as `--mcp-config` to `given`, in the directory it runs in, with what the file says after
+/// it, or an empty line if it's given none, then waits.
+const KEEPS_ITS_MCP_CONFIG: &str = r#"while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
+{ printf '%s\n' "$2"; [ $# -gt 0 ] && cat "$2"; } > given.tmp; mv given.tmp given; exec sleep 100"#;
+
+/// The path a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was given, and what the file said, once it has written them.
+async fn given(dir: &Path) -> (String, String) {
+    let given = dir.join("given");
+    timeout(Duration::from_secs(10), async {
+        while !given.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the CLI to start");
+    let given = std::fs::read_to_string(given).unwrap();
+    let (path, told) = given.split_once('\n').unwrap();
+    (path.to_string(), told.to_string())
+}
+
+/// What the agent's CLI is given as `--mcp-config`, as a worker with `config` starts it with a token, after being asked
+/// to serve its tools if `serving`.
+async fn told_at_start(dir: &Path, config: Config, serving: bool) -> String {
+    let Worker { read: hub_read, write: mut hub_write, running } = start_worker(config);
+    let mut frames = BufReader::new(hub_read).lines();
+    let mut calls = vec![hello()];
+    calls.extend(serving.then_some(WorkerRequest::ServeTools { port: None }));
+    calls.push(WorkerRequest::AgentStart(agent_start("s", dir, Some(ToolsToken::new("token-s")))));
+    let last = calls.len() as u64 - 1;
+    send(&mut hub_write, calls).await;
+    let started = reply(&mut frames, last).await;
+    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted { .. })), "{started:?}");
+    let (path, _) = given(dir).await;
+    hub_write.shutdown().await.unwrap();
+    timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
+    path
 }
 
 fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) -> AgentSpec {
@@ -288,7 +339,8 @@ async fn reply<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>, to: u64) 
     .unwrap_or_else(|_| panic!("call {to} was never answered"))
 }
 
-/// Calls `get_pull_request` as the Claude CLI does, over one connection, and returns the whole response.
+/// Calls `get_pull_request` as the Claude CLI does, over one connection, and returns the whole response. The fake agent,
+/// in `apps/daemon/examples/fake_claude/mcp.rs`, writes the same request, so a change to what the CLI sends goes in both.
 async fn call_tool(port: u16, token: &str) -> String {
     let meta = r#"{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}"#;
     let body = format!(
@@ -305,4 +357,17 @@ async fn call_tool(port: u16, token: &str) -> String {
     let mut response = String::new();
     stream.read_to_string(&mut response).await.unwrap();
     response
+}
+
+#[tokio::test]
+async fn an_agent_goes_without_the_tools_when_they_arent_served_or_there_is_nowhere_to_tell_its_cli() {
+    let (unserved, untold) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let with_state =
+        |dir: &Path| Config { state_dir: Some(dir.join("state")), ..config(dir, Some(cli(dir, KEEPS_ITS_MCP_CONFIG))) };
+
+    let unserved = told_at_start(unserved.path(), with_state(unserved.path()), false).await;
+    let untold =
+        told_at_start(untold.path(), config(untold.path(), Some(cli(untold.path(), KEEPS_ITS_MCP_CONFIG))), true).await;
+
+    assert_eq!((unserved.as_str(), untold.as_str()), ("", ""), "started without a --mcp-config");
 }
