@@ -89,48 +89,64 @@ impl Daemon {
 fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
     // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere. Windows has no
     // modes: what's created there gets its directory's permissions.
-    let mut data_dir = std::fs::DirBuilder::new();
-    data_dir.recursive(true);
+    let mut dir = std::fs::DirBuilder::new();
+    dir.recursive(true);
     let mut log = OpenOptions::new();
     log.create(true).append(true);
     #[cfg(unix)]
     {
-        std::os::unix::fs::DirBuilderExt::mode(&mut data_dir, 0o700);
+        std::os::unix::fs::DirBuilderExt::mode(&mut dir, 0o700);
         std::os::unix::fs::OpenOptionsExt::mode(&mut log, 0o600);
     }
-    data_dir.create(&paths.data_dir)?;
+    dir.create(&paths.data_dir)?;
     let log = log.open(&paths.log)?;
+    // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
     let exe = daemon.to_start(paths)?;
+    let exe = if exe.components().count() > 1 { whole(&exe)? } else { exe };
+    let data_dir = whole(&paths.data_dir)?;
     let mut command = Command::new(&exe);
     command
         .args(["hub", "--on-demand"])
         // The hub this client will look for, whatever this process's environment says.
-        .env(protocol::paths::ENV_HOME, &paths.data_dir)
-        .env(protocol::paths::ENV_WORKSPACES, &paths.workspaces_root)
+        .env(protocol::paths::ENV_HOME, &data_dir)
+        .env(protocol::paths::ENV_WORKSPACES, whole(&paths.workspaces_root)?)
+        // Not in this client's directory, which the hub would hold for as long as it runs. Windows won't let a
+        // directory be moved or deleted while a process runs in it, and the client's can be a workspace. On Linux, the
+        // app that an update opens again runs in the old AppImage's mount, which goes as the app quits, so a hub
+        // started there would be left in a directory that's gone.
+        .current_dir(&data_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
-    detach(&mut command, &paths.data_dir);
+    detach(&mut command);
     waiting_out_busy(|| command.spawn())
         .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
     Ok(())
 }
 
+/// `path` from the root down, as this process names it. One that's whole already is left as it's spelled, since a
+/// Windows hub's pipe is named for the spelling.
+fn whole(path: &Path) -> io::Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    std::path::absolute(path)
+        .map_err(|e| io::Error::new(e.kind(), format!("finding {} from here: {e}", path.display())))
+}
+
 /// Detaches the hub from this terminal and process group, so closing the client doesn't reach it.
 #[cfg(unix)]
-fn detach(command: &mut Command, _home: &Path) {
+fn detach(command: &mut Command) {
     process::own_session(command);
 }
 
 /// Gives the hub a console of its own with no window, so closing the client's doesn't reach it. It needs one, or
-/// everything it starts would open a console window each, where this way they share its hidden one. It also starts
-/// in `home`, because Windows won't let a directory be moved or deleted while a process is running in it, and the
-/// client's could be a workspace.
+/// everything it starts would open a console window each, where this way they share its hidden one.
 #[cfg(windows)]
-fn detach(command: &mut Command, home: &Path) {
+fn detach(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-    command.creation_flags(CREATE_NO_WINDOW).current_dir(home);
+    command.creation_flags(CREATE_NO_WINDOW);
     // Otherwise the hub would hold this client's own input and output for as long as it runs, so whatever reads this
     // client's output to its end, such as the next command in a pipeline, would wait that long. The hub has the log
     // for its own.

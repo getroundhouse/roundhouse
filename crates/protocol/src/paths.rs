@@ -103,8 +103,8 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         None => home.ok_or_else(no_home)?.join(DIR_NAME).join("workspaces"),
     };
     if cfg!(windows) {
-        // A hub that a client starts runs in its data directory there, not where the client is, so a relative path
-        // would name a different directory to each. The pipe is also named for the path as it's spelled.
+        // The pipe is named for the path as it's spelled, and a client hands the hub it starts a whole one, so from a
+        // relative one the two would make different pipes.
         absolute(&data_dir)?;
         absolute(&workspaces_root)?;
     }
@@ -205,7 +205,7 @@ mod tests {
         assert!(absolute(Path::new("../d")).is_err());
     }
 
-    /// On Windows, where a hub a client starts doesn't run where the client does.
+    /// On Windows, where the pipe is named for the directory as it's spelled.
     #[cfg(windows)]
     #[test]
     fn a_relative_data_directory_or_workspaces_folder_is_refused() {
