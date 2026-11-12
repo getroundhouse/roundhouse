@@ -4,15 +4,17 @@
 
 use std::time::{Duration, Instant};
 
-use protocol::event::{AgentTask, EventBody, TaskKind};
-use protocol::model::{AnswerSoFar, RunId, SessionStatus};
+use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
+use protocol::model::{AnswerSoFar, RunId, SessionId, SessionStatus};
+use protocol::prompt::Prompt;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::oneshot;
 
 use super::*;
 use crate::hub::tests::hub_in;
-use crate::session::{Item, Origin, PICKS_UP_WITHIN};
+use crate::session::{CarriedOver, Item, LiveSession, Origin, PICKS_UP_WITHIN};
 use crate::store::cancelled_approval;
+use crate::worker_link::WorkerLink;
 
 const FROM_AGENT: Origin = Origin::Run { run: RunId::new(1), current: true, numbered: None };
 
@@ -101,6 +103,26 @@ async fn background_over(live: &LiveSession) {
     live.record(FROM_AGENT, listed(0), None).await.unwrap();
 }
 
+/// The agent picking up again, as it does by itself once the last of its work in the background has gone.
+fn picked_up() -> EventBody {
+    EventBody::AgentInit { agent_session_id: None, model: None, cwd: None, permission_mode: None, agent_version: None }
+}
+
+fn turn_ended() -> EventBody {
+    EventBody::TurnEnded {
+        outcome: TurnOutcome::Success,
+        result: None,
+        errors: vec![],
+        duration_ms: None,
+        cost_usd: None,
+        num_turns: None,
+        started_at_ms: None,
+        models: Vec::new(),
+        tokens: None,
+        only_compacted: false,
+    }
+}
+
 /// What the hub recorded of its own accord that the agent's state is.
 fn states_from_the_hub(hub: &Hub) -> usize {
     let events = hub.store.read_events(&"s".into(), 0, 1000, u64::MAX, false).unwrap();
@@ -133,17 +155,84 @@ async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
     let live = hub.live_session(&"s".into()).await.unwrap();
 
     background_over(&live).await;
-    let init = EventBody::AgentInit {
-        agent_session_id: None,
-        model: None,
-        cwd: None,
-        permission_mode: None,
-        agent_version: None,
-    };
-    live.record(FROM_AGENT, init, None).await.unwrap();
+    live.record(FROM_AGENT, picked_up(), None).await.unwrap();
     tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
     flushed(&live).await;
 
     assert_eq!(live.status(), SessionStatus::Running);
     assert_eq!(states_from_the_hub(&hub), 0);
+}
+
+/// The agent picks up again, and its next turn leaves it waiting again just before the first wait's timer is due,
+/// which leaves the second wait to its own.
+#[tokio::test(start_paused = true)]
+async fn the_timer_of_an_earlier_wait_leaves_a_later_one_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let live = hub.live_session(&"s".into()).await.unwrap();
+    background_over(&live).await;
+    live.record(FROM_AGENT, picked_up(), None).await.unwrap();
+    tokio::time::sleep(PICKS_UP_WITHIN.checked_sub(Duration::from_secs(1)).unwrap()).await;
+    live.record(FROM_AGENT, listed(1), None).await.unwrap();
+    live.record(FROM_AGENT, EventBody::AgentState { state: AgentRunState::Idle }, None).await.unwrap();
+    live.record(FROM_AGENT, listed(0), None).await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    flushed(&live).await;
+    assert_eq!(live.status(), SessionStatus::Background, "the first wait's timer ended the second");
+    tokio::time::sleep(PICKS_UP_WITHIN).await;
+    flushed(&live).await;
+
+    assert_eq!(live.status(), SessionStatus::Idle, "the second wait's own timer didn't end it");
+    assert_eq!(states_from_the_hub(&hub), 1);
+}
+
+/// The last hub's timer went with it, so the next, carrying on with the agent, waits again.
+#[tokio::test(start_paused = true)]
+async fn an_agent_carried_on_with_while_it_was_to_pick_up_again_is_taken_to_be_idle_if_it_doesnt() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let id: SessionId = "s".into();
+    let last = hub.live_session(&id).await.unwrap();
+    background_over(&last).await;
+    // As the last hub goes, with its timer.
+    last.end().await;
+    hub.sessions.lock().live.remove(&id);
+    let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
+    hub.workers.lock().insert("w".into(), link.clone());
+    let stored = hub.store.get_session(&id).unwrap();
+    let carried = CarriedOver { link: link.id, run: RunId::new(1), recorded: None, untaken: Vec::new() };
+
+    let live = hub.sessions.lock().keep(&id, || LiveSession::start(&hub, stored, &[], Some(carried))).unwrap();
+
+    assert_eq!(live.status(), SessionStatus::Background);
+    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    flushed(&live).await;
+    assert_eq!(live.status(), SessionStatus::Idle);
+    assert_eq!(states_from_the_hub(&hub), 1);
+}
+
+/// A prompt the agent has yet to take holds the wait off, since taking it starts a turn, but the agent can drop it
+/// instead.
+#[tokio::test(start_paused = true)]
+async fn an_agent_that_drops_the_prompt_it_was_to_take_is_taken_to_be_idle_after_all() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let live = hub.live_session(&"s".into()).await.unwrap();
+    live.record(FROM_AGENT, picked_up(), None).await.unwrap();
+    live.record(FROM_AGENT, listed(1), None).await.unwrap();
+    let next = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next") };
+    let (prompt, _) = live.record(Origin::Hub, next, None).await.unwrap();
+    live.record(FROM_AGENT, turn_ended(), None).await.unwrap();
+    live.record(FROM_AGENT, listed(0), None).await.unwrap();
+    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    flushed(&live).await;
+    assert_eq!(live.status(), SessionStatus::Background, "taken to be idle with a prompt still to take");
+
+    live.record(FROM_AGENT, EventBody::PromptDropped { prompt: prompt.seq }, None).await.unwrap();
+
+    tokio::time::sleep(PICKS_UP_WITHIN).await;
+    flushed(&live).await;
+    assert_eq!(live.status(), SessionStatus::Idle);
+    assert_eq!(states_from_the_hub(&hub), 1);
 }

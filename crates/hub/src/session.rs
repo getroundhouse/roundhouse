@@ -139,6 +139,8 @@ struct LiveState {
     agent: Option<AgentRun>,
     /// The last of what the agent's worker numbered that the session has recorded, with the run it's from.
     recorded: Option<(RunId, u64)>,
+    /// How many waits for the agent to pick up again have begun, so a timer ends only its own.
+    pickup_waits: u64,
     agent_opened: bool,
     /// What the next agent launches with.
     settings: SessionSettings,
@@ -221,6 +223,7 @@ impl LiveSession {
                 hearing: None,
                 agent,
                 recorded,
+                pickup_waits: 0,
                 agent_opened: stored.agent_opened,
                 settings: stored.session.settings(),
                 closed_at_ms: stored.session.closed_at_ms,
@@ -235,6 +238,10 @@ impl LiveSession {
         // So what the agent hears of its account's limits is filed under the account, as for one this hub launched.
         if let Some(agent) = agent {
             session.launched(agent.run);
+            // The last hub's wait for the agent to pick up again went with it.
+            if session.state.lock().progress.waits_for_pickup() {
+                session.wait_for_pickup();
+            }
         }
         // A queue the last hub left ready to send.
         if has_queue && session.ready_for_queue() {

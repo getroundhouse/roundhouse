@@ -124,6 +124,12 @@ impl Progress {
         }
     }
 
+    /// Whether the session is at work in the background with nothing listed there, as when it waits for the agent to
+    /// pick up again, as [`after_background`] says.
+    pub(super) fn waits_for_pickup(&self) -> bool {
+        self.status == SessionStatus::Background && self.background_tasks.is_empty()
+    }
+
     /// As this hub stops, or as the next finds the agent gone, with a wait the hub keeps open if `waiting`: has the
     /// agent's exit cut nothing off if the session's only work is that wait, as [`Progress::step`] says.
     pub(crate) fn outlive_this_hub(&mut self, waiting: bool) {
