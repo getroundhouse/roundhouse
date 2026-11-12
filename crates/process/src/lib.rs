@@ -21,6 +21,8 @@ use unix as sys;
 #[cfg(windows)]
 use windows as sys;
 
+#[cfg(unix)]
+pub use group::own_session;
 pub use group::{Signal, own_group, signal_group};
 pub use record::{ProcessRecord, start_time};
 pub use stdio::keep_stdio_from_children;

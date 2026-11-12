@@ -24,3 +24,10 @@ pub fn own_group(command: &mut Command) {
 pub fn signal_group(leader: u32, signal: Signal) {
     sys::signal_group(leader, signal);
 }
+
+/// Makes `command` start in a session of its own, which it leads, so it outlives this process and its terminal, and
+/// nothing sent to their groups reaches it. It leads a process group of its own too, as [`own_group`] would make it.
+#[cfg(unix)]
+pub fn own_session(command: &mut Command) {
+    sys::own_session(command);
+}

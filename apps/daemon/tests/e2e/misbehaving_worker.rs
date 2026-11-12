@@ -30,12 +30,14 @@ fn replace_with_script(exe: &Path, body: &str) {
     install_executable(&source, exe);
 }
 
-/// Kills every worker of this hub, and waits until the hub has noticed.
+/// What the hub runs to reach each of its workers, which is a worker whose binary a test replaced.
 fn children_of(parent: u32) -> Vec<u32> {
     let out = Command::new("pgrep").args(["-P", &parent.to_string()]).output().unwrap();
     String::from_utf8_lossy(&out.stdout).split_whitespace().map(|pid| pid.parse().unwrap()).collect()
 }
 
+/// Kills what the hub runs to reach each of its workers, and waits until the hub has noticed. A worker it reached
+/// that way stops too, since this hub didn't ask it to keep running without one.
 fn kill_workers(stack: &Stack, client: &Client) {
     for pid in children_of(stack.hub_pid()) {
         signal(pid, libc::SIGKILL);

@@ -135,7 +135,8 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     assert_eq!(command.program, "/bin/roundhoused");
     let state_dir = text(dir.path().join("instances/i"));
     let workspaces = text(dir.path().join("workspaces"));
-    assert_eq!(command.args, ["worker", "--stdio", "--workspaces-root", &workspaces, "--state-dir", &state_dir]);
+    let transport = if cfg!(unix) { "--attach" } else { "--stdio" };
+    assert_eq!(command.args, ["worker", transport, "--workspaces-root", &workspaces, "--state-dir", &state_dir]);
     let path = command.env.iter().find(|(name, _)| name == "PATH").map(|(_, value)| value.as_str());
     assert!(path.is_some_and(|path| path.split(':').any(|entry| entry == "/opt/tools")), "{path:?}");
 }

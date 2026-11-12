@@ -2,6 +2,7 @@
 //! so on a Mac they're separate processes from day one.
 
 mod runtime;
+mod worker_role;
 
 use std::path::PathBuf;
 
@@ -9,6 +10,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use runtime::run_to_end;
 use tracing_subscriber::EnvFilter;
+use worker_role::Transport;
 
 #[derive(Parser)]
 #[command(name = protocol::paths::DAEMON_NAME, version = protocol::BUILD_VERSION, about = "Runs as a hub or a worker")]
@@ -33,10 +35,18 @@ enum Role {
         paths: Vec<PathBuf>,
     },
     /// Runs agents and git for a workspace. Started by a hub's provider.
+    #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
-        /// Speak the worker protocol on stdin and stdout.
-        #[arg(long)]
+        /// Speak the worker protocol on stdin and stdout, so the worker stops when its hub goes.
+        #[arg(long, group = "transport")]
         stdio: bool,
+        /// Connect stdin and stdout to the instance's worker, starting one if none is serving it, so it can outlive
+        /// its hub. Not on Windows.
+        #[arg(long, group = "transport", requires = "state_dir")]
+        attach: bool,
+        /// Serve the instance on a socket in its directory, as `--attach` starts it.
+        #[arg(long, group = "transport", requires = "state_dir", hide = true)]
+        listen: bool,
         /// Where worktrees go.
         #[arg(long)]
         workspaces_root: PathBuf,
@@ -84,7 +94,9 @@ fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
-    if matches!(args.role, Role::Worker { .. }) {
+    // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
+    // forgets them itself.
+    if matches!(args.role, Role::Worker { attach: false, .. }) {
         forget_hub_variables();
     }
     match args.role {
@@ -107,30 +119,13 @@ fn main() -> anyhow::Result<()> {
             anyhow::ensure!(failed.is_empty(), "{} of {} weren't deleted", failed.len(), paths.len());
             Ok(())
         }
-        Role::Worker { stdio, workspaces_root, state_dir } => {
-            anyhow::ensure!(stdio, "--stdio is the only worker transport so far");
-            // Held until this process exits, since a provider's `connect` can be asked more than once.
-            let (_claim, refused) = match state_dir.as_deref().map(worker::claim_instance).transpose() {
-                Ok(claim) => (claim, None),
-                Err(e @ worker::ClaimError::Taken(_)) => (None, Some(e.to_string())),
-                Err(e) => return Err(e.into()),
+        Role::Worker { stdio: _, attach, listen, workspaces_root, state_dir } => {
+            let transport = match (attach, listen) {
+                (true, _) => Transport::Attach,
+                (_, true) => Transport::Listen,
+                _ => Transport::Stdio,
             };
-            let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
-            run_to_end(worker::serve(
-                tokio::io::stdin(),
-                tokio::io::stdout(),
-                worker::Config {
-                    workspaces_root,
-                    state_dir,
-                    home: std::env::var_os(protocol::paths::HOME_VAR).map(PathBuf::from),
-                    path: std::env::var_os("PATH"),
-                    claude_bin,
-                    scratch_dir: std::env::temp_dir(),
-                    deleter: worker::Deleter::new(exe, ["delete", "--"]),
-                    refused,
-                },
-            ))?;
-            Ok(())
+            worker_role::run(transport, worker_role::Given { workspaces_root, state_dir, claude_bin })
         }
     }
 }

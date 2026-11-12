@@ -25,6 +25,10 @@ pub const WORKER_RECORD_FILE: &str = "worker.pid";
 /// as the one that tells the agent's CLI where the worker's tools are. Everything in it is a run's, so the provider
 /// removes all of it after a killed worker.
 pub const AGENTS_DIR: &str = "agents";
+/// Where a local worker that can outlive its hub listens for it, in its instance's state directory. The worker runs in
+/// that directory, and both it and what connects to it name the socket relative to it, since the whole path can be
+/// longer than a socket's may be.
+pub const WORKER_SOCKET_FILE: &str = "worker.sock";
 /// The daemon's file, which on Windows has the extension a program there needs.
 pub fn daemon_file() -> String {
     format!("{DAEMON_NAME}{}", std::env::consts::EXE_SUFFIX)

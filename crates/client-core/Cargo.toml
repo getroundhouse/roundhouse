@@ -13,15 +13,13 @@ testing = []
 parking_lot.workspace = true
 protocol.workspace = true
 flume.workspace = true
-libc.workspace = true
+process.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-# Only Windows needs a client to keep its input and output from the hub it starts.
-process.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
@@ -31,6 +29,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+libc.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
 

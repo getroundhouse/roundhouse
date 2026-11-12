@@ -34,19 +34,20 @@ fn a_session_runs_in_a_real_worktree_with_the_worker_as_a_separate_process() {
     });
     assert_eq!(reported.map(|c| PathBuf::from(c).canonicalize().unwrap()), Some(worktree.canonicalize().unwrap()));
 
-    // hub -> worker -> agent, each its own process.
+    // hub, worker and agent, each its own process, and the worker in a group of its own, apart from the hub's, so it
+    // can outlive the hub.
     let agent_pid = events.iter().find_map(|e| match &e.body {
         EventBody::AgentStarted { pid, .. } => Some(*pid),
         _ => None,
     });
     let agent_pid = agent_pid.expect("an AgentStarted event");
-    let parent_of = |pid: u32| -> u32 {
-        let out = Command::new("ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().unwrap();
+    let asked = |what: &str, pid: u32| -> u32 {
+        let out = Command::new("ps").args(["-o", &format!("{what}="), "-p", &pid.to_string()]).output().unwrap();
         String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
     };
-    let worker_pid = parent_of(agent_pid);
+    let worker_pid = asked("ppid", agent_pid);
     assert_ne!(worker_pid, stack.hub_pid());
-    assert_eq!(parent_of(worker_pid), stack.hub_pid());
+    assert_eq!(asked("pgid", worker_pid), worker_pid);
 }
 
 #[test]

@@ -5,6 +5,8 @@
 use std::fs::{File, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::time::{Duration, Instant};
 
 use process::ProcessRecord;
 use protocol::paths::{WORKER_LOCK_FILE, WORKER_RECORD_FILE};
@@ -40,10 +42,26 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     Ok(InstanceClaim { _lock: lock })
 }
 
+/// Claims the instance whose state is kept in `state_dir`, for a worker that serves it on `socket`. A worker that's
+/// stopping has removed its socket, and this waits up to `wait` for it to let go of the instance. `None` if a worker
+/// is serving the socket, which this leaves to it: another worker started at the same time, to serve the same hub.
+#[cfg(unix)]
+pub fn claim_to_serve(state_dir: &Path, socket: &Path, wait: Duration) -> Result<Option<InstanceClaim>, ClaimError> {
+    let deadline = Instant::now() + wait;
+    loop {
+        match claim_instance(state_dir) {
+            Err(ClaimError::Taken(_)) if std::os::unix::net::UnixStream::connect(socket).is_ok() => return Ok(None),
+            Err(ClaimError::Taken(_)) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            claimed => return claimed.map(Some),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(not(unix))]
     use std::time::{Duration, Instant};
 
     /// Claims the instance once its last claim has let go. A lock goes with the open file, and a process another
@@ -73,5 +91,35 @@ mod tests {
         let record = ProcessRecord::read(&dir.path().join(WORKER_RECORD_FILE)).unwrap();
         assert_eq!(record.pid, std::process::id());
         assert!(record.is_running());
+    }
+
+    /// As a worker started while one is stopping, which has removed its socket, finds the instance taken.
+    #[cfg(unix)]
+    #[test]
+    fn a_worker_started_while_another_stops_waits_for_it_to_let_go() {
+        let dir = tempfile::tempdir().unwrap();
+        let stopping = claim_instance(dir.path()).unwrap();
+        let letting_go = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            drop(stopping);
+        });
+
+        let claimed = claim_to_serve(dir.path(), &dir.path().join("worker.sock"), Duration::from_secs(10));
+
+        letting_go.join().unwrap();
+        assert!(matches!(claimed, Ok(Some(_))), "{claimed:?}");
+    }
+
+    /// As one started at the same time as another, to serve the same hub, finds the other serving.
+    #[cfg(unix)]
+    #[test]
+    fn a_worker_leaves_an_instance_to_the_one_serving_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("worker.sock");
+        let _serving = (claim_instance(dir.path()).unwrap(), std::os::unix::net::UnixListener::bind(&socket).unwrap());
+
+        let claimed = claim_to_serve(dir.path(), &socket, Duration::from_secs(10));
+
+        assert!(matches!(claimed, Ok(None)), "{claimed:?}");
     }
 }
