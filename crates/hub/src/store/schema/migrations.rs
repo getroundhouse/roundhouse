@@ -372,6 +372,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     workspaces::BRANCHES,
     // What each session last recorded of what its worker numbered, in `workers`.
     workers::RECORDED_FROM_WORKER,
-    // Each agent's waits on its workspace's pull request, in `waits`.
+    // Each agent's waits on its workspace's pull request, and the triggers that have a session's record show the one it
+    // has open, in `waits`.
     waits::WAITS,
+    waits::SESSIONS_SHOW_WAITS,
 ];

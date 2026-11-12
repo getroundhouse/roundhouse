@@ -311,6 +311,9 @@ impl Hub {
         }
 
         self.stop_workspace_agents(&id).await?;
+        // Again, now that none can start one, since an agent still running as the script ran could have, and marking the
+        // workspace archived would end that one with no client told.
+        self.call_off_waits_of(&id).await?;
         // Checks again unless forced, because the agent may have written files before it stopped.
         let reply = link.call(WorkerRequest::RemoveWorkspace { repo_path: repo.path, path, force }).await?;
         if !matches!(reply, WorkerResponse::Ok) {

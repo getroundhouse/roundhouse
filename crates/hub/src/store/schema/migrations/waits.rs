@@ -39,3 +39,19 @@ pub(super) const WAITS: &str = r"
             WHERE workspace_id = NEW.id AND ended_at_ms IS NULL;
     END;
 ";
+
+/// A session's record shows the wait it has open, which is in this table rather than the session's row, so starting or
+/// ending one moves the session's revision, and the feed announces it. One that ended as it started was never open, so
+/// it moves nothing. Ending one as its chat closes moves it again, which costs nothing.
+pub(super) const SESSIONS_SHOW_WAITS: &str = r"
+    CREATE TRIGGER waits_move_session_on_start AFTER INSERT ON waits WHEN NEW.ended_at_ms IS NULL BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.session_id;
+    END;
+    CREATE TRIGGER waits_move_session_on_end AFTER UPDATE OF ended_at_ms ON waits
+        WHEN OLD.ended_at_ms IS NULL AND NEW.ended_at_ms IS NOT NULL
+    BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.session_id;
+    END;
+";

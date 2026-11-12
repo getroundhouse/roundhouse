@@ -130,9 +130,10 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.contains("moved to the background"), "it was answered with a task: {text}");
     wait_for_status(&client, &chat.id, SessionStatus::Background);
-    let listed: Vec<_> =
-        client.session_get(&chat.id).unwrap().background_tasks.into_iter().map(|t| (t.description, t.kind)).collect();
+    let waiting = client.session_get(&chat.id).unwrap();
+    let listed: Vec<_> = waiting.background_tasks.into_iter().map(|t| (t.description, t.kind)).collect();
     assert_eq!(listed, [(Some("roundhouse/wait_for_pull_request".to_string()), TaskKind::Wait)]);
+    assert_eq!(waiting.wait.map(|wait| wait.number), Some(7), "the chat's record has the hub's wait");
     // The next hub keeps the wait, so it doesn't keep the hub from stopping to update it.
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
     gh.say(MERGED);
@@ -141,6 +142,7 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let events = wait_for_turn_end(&client, &chat.id, 2);
     let said = assistant_text(&events);
     assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
+    assert_eq!(client.session_get(&chat.id).unwrap().wait, None, "and none once it has ended");
 }
 
 /// The wait is the hub's, so a hub started again has it, however the last one went, with the chat at work in the

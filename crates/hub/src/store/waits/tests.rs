@@ -111,10 +111,11 @@ fn a_workspaces_waits_are_called_off_together_and_no_others() {
 
     let elsewhere = store.call_off_workspace_waits(&"v".into(), 2).unwrap();
     let mut called_off = store.call_off_workspace_waits(&"w".into(), 3).unwrap();
-    called_off.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    called_off.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 
     assert!(elsewhere.is_empty());
-    assert_eq!(called_off, [WaitId::from("a"), WaitId::from("b")]);
+    let ids: Vec<_> = called_off.into_iter().map(|wait| wait.id).collect();
+    assert_eq!(ids, [WaitId::from("a"), WaitId::from("b")]);
     let cancelled = Some(WaitEnded { at_ms: 3, how: WaitEnd::Cancelled });
     assert_eq!((how(&store, "a"), how(&store, "b")), (cancelled, cancelled));
 }
@@ -175,4 +176,39 @@ fn a_wait_is_found_by_the_call_that_started_it_whether_or_not_it_has_ended() {
         Some(("a".into(), Some(WaitEnd::Cancelled)))
     );
     assert_eq!(none, None);
+}
+
+/// The chat's record shows the wait it has open, and each start and end moves its revision, so the feed announces it,
+/// however the wait ends: by the agent, by a read, by the agent's next wait, or as its workspace is archived.
+#[test]
+fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let read = || store.get_session(&"s".into()).unwrap().session;
+    let mut revs = vec![read().rev];
+    let mut moved = |shown: Option<&str>| {
+        let session = read();
+        assert_eq!(session.wait.map(|wait| wait.id.to_string()).as_deref(), shown);
+        assert!(session.rev > *revs.last().unwrap(), "the revision moved, to show {shown:?}");
+        revs.push(session.rev);
+    };
+
+    store.start_wait(&wait("a"), Seen::default()).unwrap();
+    moved(Some("a"));
+    store.end_wait(&"a".into(), WaitEnded { at_ms: 2, how: WaitEnd::Cancelled }).unwrap();
+    moved(None);
+    store.start_wait(&wait("b"), Seen::default()).unwrap();
+    moved(Some("b"));
+    store.start_wait(&wait("c"), Seen::default()).unwrap();
+    moved(Some("c"));
+    store.judge_waits(&"w".into(), 3, |_, _| Some(WaitEnd::Merged)).unwrap();
+    moved(None);
+    store.start_wait(&wait("d"), Seen::default()).unwrap();
+    store.call_off_workspace_waits(&"w".into(), 4).unwrap();
+    moved(None);
+
+    assert_eq!(read().wait, None);
+    let shown = Wait { id: "e".into(), ..wait("a") };
+    store.start_wait(&shown, Seen::default()).unwrap();
+    assert_eq!(read().wait, Some(shown), "as it was asked for");
 }

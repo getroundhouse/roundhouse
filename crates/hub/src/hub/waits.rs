@@ -5,11 +5,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
     PullRequest, PullRequestFound, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil, WorkspaceId,
 };
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use super::{Hub, new_id, now_ms};
 use crate::worker_link::WorkerLink;
@@ -72,6 +72,7 @@ impl Hub {
             info!(wait = %replaced, "the agent's next wait replaced its last");
         }
         info!(wait = %wait.id, session = %wait.session_id, ended = ?wait.ended, "an agent started a wait");
+        self.announce_chat_of(&wait).await;
         Ok((wait, Some(pull_request)))
     }
 
@@ -104,6 +105,7 @@ impl Hub {
             match self.blocking(move |store| store.end_wait(&id, ended)).await? {
                 Some(cancelled) => {
                     info!(wait = %cancelled.id, "an agent cancelled its wait");
+                    self.announce_chat_of(&cancelled).await;
                     wait = cancelled;
                 }
                 // A read ended it meanwhile.
@@ -118,7 +120,8 @@ impl Hub {
     pub(crate) async fn call_off_waits_of(&self, workspace_id: &WorkspaceId) -> Result<(), ApiError> {
         let (id, at_ms) = (workspace_id.clone(), now_ms());
         for wait in self.blocking(move |store| store.call_off_workspace_waits(&id, at_ms)).await? {
-            info!(%wait, workspace = %workspace_id, "archiving its workspace called off a wait");
+            info!(wait = %wait.id, workspace = %workspace_id, "archiving its workspace called off a wait");
+            self.announce_chat_of(&wait).await;
         }
         Ok(())
     }
@@ -129,6 +132,16 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::NotFound, format!("this chat has no wait {}", wait.id)));
         }
         Ok(wait)
+    }
+
+    /// Tells everyone following the feed what the wait's chat is now, read back from the store, once the wait has
+    /// started or ended, which the chat's record shows. A failure is only logged, since the wait has started or ended.
+    async fn announce_chat_of(&self, wait: &Wait) {
+        let id = wait.session_id.clone();
+        match self.blocking(move |store| store.get_session(&id)).await {
+            Ok(stored) => self.notify(HubNotice::Session(stored.session)),
+            Err(e) => error!(session = %wait.session_id, "could not announce a change to a chat's wait: {e}"),
+        }
     }
 
     async fn with_pull_request(&self, wait: Wait) -> Result<(Wait, Option<PullRequest>), ApiError> {
@@ -161,6 +174,7 @@ impl Hub {
             Ok(ended) => {
                 for wait in ended {
                     info!(wait = %wait.id, how = ?wait.ended.map(|ended| ended.how), "a wait ended");
+                    self.announce_chat_of(&wait).await;
                     self.wake_for(&wait).await;
                 }
             }

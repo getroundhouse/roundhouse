@@ -2,7 +2,7 @@
 
 use protocol::model::{
     AgentKind, ClientRequestId, ContextUsage, Draft, ModelName, PromptCache, QueuedPrompt, Rev, Session,
-    SessionSettingsChange, SessionStatus, Title,
+    SessionSettingsChange, SessionStatus, Title, Wait,
 };
 use protocol::model::{AttachmentId, RunId, SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
@@ -11,12 +11,32 @@ use super::drafts::forget_drafts;
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft";
+/// What a session's row holds, as it's written.
+macro_rules! session_row_columns {
+    () => {
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft"
+    };
+}
+
+/// What a session is read with, apart from its revision: its row, then the wait it has open, as JSON, which is in the
+/// waits table, since a session's waits outlive each other. The waits' triggers move its revision.
+pub(super) const SESSION_COLUMNS: &str = concat!(
+    session_row_columns!(),
+    ", (SELECT json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id, 'number', number,
+        'call', call, 'until', until, 'started_at_ms', started_at_ms)
+        FROM waits WHERE waits.session_id = sessions.id AND ended_at_ms IS NULL)"
+);
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
     serde_json::from_str(json)
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(17, rusqlite::types::Type::Text, Box::new(e)))
+}
+
+/// The wait a session has open, from the JSON its query writes.
+fn wait_from(json: &str) -> rusqlite::Result<Wait> {
+    serde_json::from_str(json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(27, rusqlite::types::Type::Text, Box::new(e)))
 }
 
 /// A draft for its column: NULL when nothing is typed.
@@ -60,7 +80,9 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
                 .unwrap_or_default(),
             // The same.
             answer_draft: row.get::<_, Option<String>>(26)?.and_then(|json| serde_json::from_str(&json).ok()),
-            rev: rev_of(row, 27)?,
+            // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
+            wait: row.get::<_, Option<String>>(27)?.map(|json| wait_from(&json)).transpose()?,
+            rev: rev_of(row, 28)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -82,8 +104,10 @@ impl Store {
         }
         let session = &stored.session;
         tx.execute(
-            &format!(
-                "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
+            concat!(
+                "INSERT INTO sessions (",
+                session_row_columns!(),
+                ", client_request_id)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
