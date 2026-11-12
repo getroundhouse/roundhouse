@@ -100,6 +100,9 @@ jobs:
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The product's code alone, as it ships, since the `testing` features the tests turn on can hide an import or an
+      # item only the tests use.
+      - run: cargo clippy --workspace --locked -- -D warnings
       # Only the dependencies are worth keeping. A checkout leaves our own crates' sources newer than anything cached,
       # so they build again on every run.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
