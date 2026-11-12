@@ -78,3 +78,44 @@ fn only_the_newest_answer_is_taken_and_a_failure_keeps_what_was_known() {
     assert!(answered && !older, "an older answer arriving after the newest isn't taken");
     assert_eq!(lookup.standing(), Some(Standing::Merged));
 }
+
+/// A wait goes by what GitHub says, so its line says only that: not the worktree's uncommitted files, nor the bar's
+/// word to see it on GitHub, and nothing once it's done, which ends a wait. A wait until the checks goes on through a
+/// draft, so for one it says how they stand, while that says anything.
+#[test]
+fn a_waits_line_says_where_the_pull_request_stands_on_github_alone() {
+    let open = PullRequest {
+        number: 7,
+        url: "https://example.com/pull/7".to_string(),
+        title: "T".to_string(),
+        state: PrState::Open,
+        is_draft: false,
+        base: Some("main".to_string()),
+        merge_state: MergeState::Blocked,
+        review: Review::Required,
+        checks: Checks { passed: 3, failed: 0, pending: 2 },
+        queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
+        local: Local { uncommitted: 4, ahead: 0, behind: 0 },
+    };
+    let said = |pr: PullRequest| Lookup::Found(Some(pr)).for_a_wait().map(|standing| (standing.number, standing.words));
+
+    assert_eq!(said(open.clone()), Some((7, "2 checks running".to_string())), "the files aren't GitHub's");
+    assert_eq!(
+        said(PullRequest { queue: Some(QueueState::AwaitingChecks), ..open.clone() }).unwrap().1,
+        "Running checks in the queue"
+    );
+    let draft = PullRequest { is_draft: true, merge_state: MergeState::Draft, ..open.clone() };
+    assert_eq!(said(draft.clone()).unwrap().1, "2 checks running", "a draft's checks");
+    let failing = Checks { failed: 1, ..open.checks };
+    assert_eq!(said(PullRequest { checks: failing, ..draft.clone() }).unwrap().1, "1 check failed");
+    assert_eq!(said(PullRequest { checks: Checks::default(), ..draft }).unwrap().1, "Draft", "none running");
+    for nothing in [
+        PullRequest { state: PrState::Merged, ..open.clone() },
+        PullRequest { checks: Checks::default(), review: Review::Unknown, ..open.clone() },
+    ] {
+        assert_eq!(said(nothing.clone()), None, "{nothing:?}");
+    }
+    assert_eq!((Lookup::Looking.for_a_wait(), Lookup::Found(None).for_a_wait()), (None, None));
+}

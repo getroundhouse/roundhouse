@@ -2,6 +2,7 @@
 
 use client_core::{FileToSend, NotTaken, Written};
 use gpui_kit::Context;
+use protocol::model::WaitId;
 use protocol::prompt::says_or_carries;
 
 use super::{Transcript, TranscriptEvent};
@@ -57,15 +58,24 @@ impl Transcript {
         let asking = self.client.start(move |client| client.session_compact(&id, keeping.as_deref()));
         cx.spawn(async move |this, cx| {
             let Err(e) = asking.recv().await else { return };
-            let message = if e.is_unsupported() {
-                "couldn't compact: the hub is older than the app, and can't until it's updated".to_string()
-            } else {
-                format!("couldn't compact: {e}")
-            };
+            let message = couldnt("couldn't compact", &e);
             let _ = this.update(cx, |_, cx| match typed {
                 Some(text) => cx.emit(TranscriptEvent::NotSent { message, text, files: Vec::new() }),
                 None => cx.emit(TranscriptEvent::Error(message)),
             });
+        })
+        .detach();
+    }
+
+    /// Calls off the agent's wait `wait` on its pull request, as its line's Stop does.
+    pub fn call_off_wait(&mut self, wait: WaitId, cx: &mut Context<Self>) {
+        let id = self.session_id.clone();
+        let calling_off = self.client.start(move |client| client.session_call_off_wait(&id, &wait));
+        cx.spawn(async move |this, cx| {
+            if let Err(e) = calling_off.recv().await {
+                let message = couldnt("couldn't stop the wait", &e);
+                let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(message)));
+            }
         })
         .detach();
     }
@@ -80,6 +90,16 @@ impl Transcript {
             }
         })
         .detach();
+    }
+}
+
+/// What to tell someone that what they asked for didn't happen, as `what` says it. A hub older than the app refuses a
+/// request it doesn't know, which updating it fixes.
+fn couldnt(what: &str, error: &client_core::ClientError) -> String {
+    if error.is_unsupported() {
+        format!("{what}: the hub is older than the app, and can't until it's updated")
+    } else {
+        format!("{what}: {error}")
     }
 }
 

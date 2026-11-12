@@ -31,11 +31,13 @@ mod answers;
 mod events;
 mod find;
 mod outline;
+mod pull_request;
 mod record;
 mod sending;
 #[cfg(feature = "testing")]
 mod testing;
 
+pub use pull_request::PullRequestStanding;
 use record::tick;
 pub(crate) use record::{AtWork, IdleCache};
 
@@ -49,6 +51,9 @@ pub(crate) struct Model {
     pub subagent_calls: RefCell<SubagentCalls>,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
+    /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
+    /// known, and while there's none or nothing to say of it.
+    pub pull_request: Option<PullRequestStanding>,
     /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
     /// shared, since every frame's rows take the records of the calls they draw, and one can hold a call's whole input,
     /// such as all of a file it wrote.
@@ -74,6 +79,7 @@ impl Model {
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),
             at_work,
+            pull_request: None,
             subagents: HashMap::new(),
             subagent_rows: RefCell::default(),
             alone: None,

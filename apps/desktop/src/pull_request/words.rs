@@ -77,6 +77,36 @@ pub(crate) fn title(standing: Standing, base: Option<&str>) -> String {
     }
 }
 
+/// What a chat's line for a wait on the pull request says of where it stands on GitHub, which is what the wait goes by,
+/// as the bar says it. Nothing once it's merged or closed, which ends the wait, nor where the bar would only say to see
+/// it on GitHub. `standing` is GitHub's alone, not the worktree's, and `checks` are the pull request's.
+pub(crate) fn for_a_wait(standing: Standing, checks: Checks, base: Option<&str>) -> Option<String> {
+    match standing {
+        // Only a wait until the checks goes on through a draft, so it says how they stand, while that says anything.
+        Standing::Draft if checks.failed > 0 => Some(failed(checks)),
+        Standing::Draft if checks.pending > 0 => Some(title(Standing::ChecksRunning(checks), base)),
+        // The last four are only the worktree's, which aren't GitHub's.
+        Standing::NoPullRequest
+        | Standing::Merged
+        | Standing::Closed
+        | Standing::Unknown
+        | Standing::Uncommitted(_)
+        | Standing::Diverged
+        | Standing::Behind(_)
+        | Standing::Unpushed(_) => None,
+        Standing::Queued(_)
+        | Standing::Conflicts
+        | Standing::ChangesRequested
+        | Standing::Draft
+        | Standing::ChecksFailed(_)
+        | Standing::ChecksRunning(_)
+        | Standing::ReviewRequired
+        | Standing::Blocked
+        | Standing::Checking
+        | Standing::Ready => Some(title(standing, base)),
+    }
+}
+
 fn queued(queue: QueueState) -> &'static str {
     match queue {
         QueueState::AwaitingChecks => "Running checks in the queue",

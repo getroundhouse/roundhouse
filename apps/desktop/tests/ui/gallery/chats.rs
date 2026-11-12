@@ -71,6 +71,28 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
     events
 }
 
+/// A turn that's over with the agent waiting in the background on its pull request's checks, through the worker's tool,
+/// to queue it once they pass.
+pub(crate) fn waiting() -> Vec<EventBody> {
+    let reply = "I've opened #182. I'm waiting on its checks in the background, and I'll add it to the merge queue once \
+                 they pass.";
+    let wait = AgentTask {
+        id: TaskId::from("w1"),
+        description: Some("roundhouse/wait_for_pull_request".to_string()),
+        kind: TaskKind::Wait,
+        call: Some("toolu-1".into()),
+    };
+    vec![
+        user_prompt("Open a PR for this, and queue it once its checks pass."),
+        taken(1),
+        tool_use("msg-1", "toolu-1", "mcp__roundhouse__wait_for_pull_request", json!({ "until": "checks" })),
+        EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
+        tool_result("toolu-1", "The task w1 was moved to the background."),
+        text("msg-2", reply),
+        replied(reply, 41, 0.12),
+    ]
+}
+
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
     vec![user_prompt(prompt), taken(1), text("msg-1", reply), replied(reply, 9, 0.04)]

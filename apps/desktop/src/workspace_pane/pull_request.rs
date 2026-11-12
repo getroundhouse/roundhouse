@@ -48,11 +48,20 @@ impl WorkspacePane {
             let _ = this.update(cx, |t, cx| {
                 let unrecorded = t.workspace.pull_request.is_none();
                 if unrecorded && t.pull_request.answer(asked == t.pull_request_asks, found) {
+                    t.pass_on_pull_request(cx);
                     cx.notify();
                 }
             });
         })
         .detach();
+    }
+
+    /// To each chat, for its line for a wait on the pull request.
+    pub(super) fn pass_on_pull_request(&self, cx: &mut Context<Self>) {
+        let standing = self.pull_request.for_a_wait();
+        for (transcript, _) in self.transcripts.values() {
+            transcript.update(cx, |t, cx| t.set_pull_request(standing.clone(), cx));
+        }
     }
 
     /// Reads the pull request again, unless it's merged or closed. An open one's checks, reviews and place in the

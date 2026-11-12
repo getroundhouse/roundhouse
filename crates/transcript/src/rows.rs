@@ -153,7 +153,8 @@ fn render_row_inner(
                 }
             }
             let m = model.borrow();
-            let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work };
+            let pull_request = m.pull_request.as_ref();
+            let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work, pull_request };
             render_tail(&end, shared, by, m.folds.thinking_open(), &find, cx)
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of

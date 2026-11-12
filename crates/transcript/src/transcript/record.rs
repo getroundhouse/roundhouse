@@ -1,14 +1,14 @@
-//! Following the session's record: whether the agent is working on a turn and since when, and what it's running in
-//! the background, which the transcript's last row draws, and what the cache holds of the conversation, which the
-//! newest turn's line and card say. Also its subagents' records, which their calls are drawn from, and in the subagent
-//! tab, the one it shows, which says whether that one is at work.
+//! Following the session's record: whether the agent is working on a turn and since when, what it's running in the
+//! background, and the wait it has open on the pull request, which the transcript's last row draws, and what the cache
+//! holds of the conversation, which the newest turn's line and card say. Also its subagents' records, which their calls
+//! are drawn from, and in the subagent tab, the one it shows, which says whether that one is at work.
 
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::{Context, Task};
-use protocol::event::AgentTask;
-use protocol::model::{PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus};
+use protocol::event::{AgentTask, TaskKind};
+use protocol::model::{PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus, Wait};
 
 use super::Transcript;
 use crate::prose::Of;
@@ -24,8 +24,11 @@ pub(crate) struct AtWork {
     pub(crate) working: bool,
     /// When the newest turn started, by the hub's clock. `None` from a hub that doesn't say.
     pub(crate) turn_started_at_ms: Option<i64>,
-    /// What it's running in the background.
+    /// What it's running in the background, but for its waits on the pull request, which `wait` is the hub's own of.
     pub(crate) background: Vec<AgentTask>,
+    /// The wait it has open on the pull request, as the hub keeps it, which the CLI's list of tasks only has a copy of,
+    /// which can still list one that has ended.
+    pub(crate) wait: Option<Wait>,
     /// The event that ended the newest turn, whose line and card say how long the cache has left. 0 until one has.
     pub(crate) reply_seq: Seq,
     /// What the cache holds of the conversation while it can expire, once the newest turn has ended. While the agent
@@ -46,7 +49,8 @@ impl AtWork {
         AtWork {
             working: session.status == SessionStatus::Running,
             turn_started_at_ms: session.turn_started_at_ms,
-            background: session.background_tasks.clone(),
+            background: session.background_tasks.iter().filter(|task| task.kind != TaskKind::Wait).cloned().collect(),
+            wait: session.wait.clone(),
             reply_seq: session.reply_seq,
             cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
                 cache: cache.clone(),
@@ -61,6 +65,7 @@ impl AtWork {
             working: subagent.status == SubagentStatus::Working,
             turn_started_at_ms: Some(subagent.started_at_ms),
             background: Vec::new(),
+            wait: None,
             reply_seq: 0,
             cache: None,
         }

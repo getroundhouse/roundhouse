@@ -1,11 +1,11 @@
 //! The screen's chat at work: writing a reply, thinking, working in the background, steered, and with prompts queued.
 
 use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{QueuedPrompt, SessionStatus};
+use protocol::model::{Checks, PullRequest, PullRequestFound, QueuedPrompt, SessionStatus, Wait, WaitUntil};
 
 use super::{chat_world, sidebar};
-use crate::gallery::chats;
 use crate::gallery::world::World;
+use crate::gallery::{chats, pull_requests};
 
 pub(in crate::gallery) fn streaming() -> World {
     let mut world = World::default();
@@ -32,6 +32,35 @@ pub(in crate::gallery) fn working_background() -> World {
     let chat = world.chat(&focus, SessionStatus::Running, chats::started_in_background());
     world.tails.insert(chat.clone(), chats::calling_tail());
     world.working_for(&chat, 48_300);
+    world
+}
+
+/// A turn that's over, with the agent waiting on its pull request's checks in the background, two of them still
+/// running. The pull request is on the workspace's record, so the app knows it before it makes the chat, which starts
+/// out with where it stands.
+pub(in crate::gallery) fn waiting_on_checks() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(&focus, SessionStatus::Background, chats::waiting());
+    let wait = Wait {
+        id: "w1".into(),
+        session_id: chat.clone(),
+        workspace_id: focus.clone(),
+        number: 182,
+        call: Some("toolu-1".into()),
+        until: WaitUntil::Checks,
+        started_at_ms: 0,
+        ended: None,
+    };
+    world
+        .sessions
+        .iter_mut()
+        .filter(|session| session.id == chat)
+        .for_each(|session| session.wait = Some(wait.clone()));
+    let checks = Checks { passed: 7, failed: 0, pending: 2 };
+    let opened =
+        PullRequest { number: 182, title: "Show PR state in the sidebar".to_string(), checks, ..pull_requests::open() };
+    world.workspace_mut(&focus).pull_request = Some(PullRequestFound { pull_request: Some(opened) });
     world
 }
 

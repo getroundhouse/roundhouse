@@ -16,7 +16,7 @@ use super::{chats, file_chats, image_chats, patch, pictures, pull_requests, work
 mod working;
 
 pub(super) use working::{
-    queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, working_background,
+    queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, working_background,
 };
 
 /// The conversation, on an older hub that a client started, with chats still running on it.

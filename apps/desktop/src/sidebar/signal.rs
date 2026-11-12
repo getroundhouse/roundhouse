@@ -124,6 +124,8 @@ mod tests {
         assert_eq!(chat(&left_running(&[TaskKind::Command, TaskKind::Subagent])), Signal::Working);
         assert_eq!(chat(&left_running(&[TaskKind::Command])), Signal::Background);
         assert_eq!(chat(&left_running(&[TaskKind::Monitor])), Signal::Background);
+        // To the person, a wait on the pull request is work in the background like any other. Only the hub keeps it.
+        assert_eq!(chat(&left_running(&[TaskKind::Wait])), Signal::Background);
     }
 
     #[test]
