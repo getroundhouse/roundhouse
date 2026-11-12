@@ -8,7 +8,7 @@ use protocol::attachment::{MAX_PER_PROMPT, MediaType};
 use protocol::model::{AgentKind, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, PermissionMode, WorkspaceStatus};
 
 use super::{open_with_a_repo, prompts};
-use crate::support::Stack;
+use crate::support::{Held, Stack, sidebar_row};
 
 /// A text file named `name`, as the dialog would read it.
 fn file(name: &str) -> FileToSend {
@@ -108,6 +108,30 @@ fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_with_its_files_and
             .contains("couldn't give the chat the model, effort and mode chosen")
     );
     assert!(prompts(&ui).is_empty(), "nothing was sent without the effort chosen");
+}
+
+/// Its composer is where the prompt goes back to, so the new workspace shows even though another was chosen while it
+/// was made, which would otherwise stay showing.
+#[gpui_kit::test]
+fn a_new_workspace_whose_prompt_couldnt_be_sent_shows_even_after_another_was_chosen(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    let first = ui.new_workspace();
+    ui.new_workspace();
+    let making = Held::checkout(&stack);
+    ui.open_new_workspace();
+    // As in the test before, so giving the chat its effort fails, before the prompt is sent.
+    ui.cx.update_entity(&ui.dialog(), |d, cx| d.choose_effort(Effort::Unknown, cx));
+    ui.input("say:held back");
+    ui.press("enter");
+    ui.wait("it to start making it", |_| making.runs() == 1);
+
+    ui.click(sidebar_row(&first));
+    making.release();
+
+    let made = ui.wait_for_a_new_workspace(2);
+    assert_ne!(made, first, "the new one shows");
+    ui.wait("the prompt in the new chat's composer", |ui| ui.composer_text() == "say:held back");
 }
 
 /// More files than a prompt carries can't come from the dialog, but a request can hold them, and the hub refuses them.

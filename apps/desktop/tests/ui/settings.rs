@@ -112,6 +112,25 @@ fn cmd_w_goes_back_from_settings_and_leaves_the_chat_open(cx: &mut TestAppContex
     assert_eq!(ui.open_chats().len(), 1);
 }
 
+/// Archived from elsewhere while Settings shows, so the app selects another workspace behind it, whose composer isn't
+/// drawn until Settings goes.
+#[gpui_kit::test]
+fn a_workspace_selected_behind_settings_has_the_keys_once_settings_goes(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let other = ui.new_workspace();
+    let showing = ui.new_workspace();
+    open_settings(&mut ui);
+
+    stack.client().workspace_archive(&showing, false).unwrap();
+    ui.wait("the other one, behind Settings", |ui| ui.view().selected.as_ref() == Some(&other) && ui.pane().is_some());
+    ui.press("escape");
+
+    assert!(!settings_showing(&mut ui), "the keys still reach Settings");
+    ui.input("here");
+    assert_eq!(ui.composer_text(), "here", "and then the workspace showing");
+}
+
 #[gpui_kit::test]
 fn the_workspaces_keys_do_nothing_while_settings_shows(cx: &mut TestAppContext) {
     let stack = Stack::new();

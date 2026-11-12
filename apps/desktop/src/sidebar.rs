@@ -7,7 +7,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Size, Styled, Window, div, px, size,
+    Pixels, Size, Styled, TestSupportExt as _, Window, div, px, size,
 };
 use look::{Hand as _, LineText};
 use look::{Signal, Work};
@@ -55,18 +55,17 @@ enum Line {
     /// A repository's name, with the button for a new workspace in it.
     Repo(usize),
     Workspace(usize),
-    /// A new workspace on its way, where it will go among its repository's others.
-    Creating,
+    /// A workspace the hub is still making, wherever it was asked for, as a note in the place it will have.
+    Creating(usize),
 }
 
-/// What a line shows, which stays the same while its place in the list changes, so it slides there.
+/// What a line shows, which stays the same while its place in the list changes, so it slides there. A workspace on its
+/// way and the workspace once it's made are one line, so its row takes the note's place, even while the order holds.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum LineId {
     Heading,
     Repo(RepoId),
     Workspace(WorkspaceId),
-    /// The note in place of a new workspace on its way, of which there's only ever one.
-    Creating,
 }
 
 impl Line {
@@ -74,7 +73,7 @@ impl Line {
         match self {
             Line::Heading => HEADING_HEIGHT,
             Line::Repo(_) => REPO_HEIGHT,
-            Line::Workspace(_) | Line::Creating => ROW_HEIGHT,
+            Line::Workspace(_) | Line::Creating(_) => ROW_HEIGHT,
         }
     }
 
@@ -82,49 +81,47 @@ impl Line {
         match self {
             Line::Heading => LineId::Heading,
             Line::Repo(r) => LineId::Repo(app.repos[r].id.clone()),
-            Line::Workspace(w) => LineId::Workspace(app.workspaces[w].id.clone()),
-            Line::Creating => LineId::Creating,
+            Line::Workspace(w) | Line::Creating(w) => LineId::Workspace(app.workspaces[w].id.clone()),
         }
     }
 
     /// The space between this line and the one after it.
     fn gap_before(self, next: Line) -> Pixels {
         match (self, next) {
-            (Line::Heading, _) | (Line::Workspace(_) | Line::Creating, Line::Workspace(_) | Line::Creating) => LINE_GAP,
+            (Line::Heading, _) | (Line::Workspace(_) | Line::Creating(_), Line::Workspace(_) | Line::Creating(_)) => {
+                LINE_GAP
+            }
             (_, Line::Repo(_) | Line::Heading) => GROUP_GAP,
-            (Line::Repo(_), Line::Workspace(_) | Line::Creating) => UNDER_REPO,
+            (Line::Repo(_), Line::Workspace(_) | Line::Creating(_)) => UNDER_REPO,
         }
     }
 }
 
 /// Every line, repository by repository, each one's workspaces in `sort`'s order, under the heading. The heading shows
 /// before there's a repository too, since it has the button that adds one, but only once there's a hub to add it to.
-/// Repositories listed while the hub is away, such as while it restarts, keep it over them. While someone is using the
+/// Repositories listed while the hub is away, such as while it restarts, keep it over them. A workspace the hub is
+/// still making is a note in the place it will have, which its row takes once it's made. While someone is using the
 /// list, at `now`, the workspaces stay in the order they were in, as [`Hold::held`](crate::reorder::Hold::held) says,
-/// and any that come meanwhile go after them. A workspace on its way has a note in its place until it's listed: where
-/// `sort` will put it, or after the others while the order holds.
+/// and any that come meanwhile go after them.
 fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
     let heading = connected(app) || !app.repos.is_empty();
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
     let held = app.sidebar.hold.held(&sort, now);
     let workspaces = &app.workspaces;
+    let line = |w: usize| match workspaces[w].status {
+        WorkspaceStatus::Ready => Some(Line::Workspace(w)),
+        WorkspaceStatus::Creating => Some(Line::Creating(w)),
+        WorkspaceStatus::Archived | WorkspaceStatus::Unknown => None,
+    };
     for (r, repo) in app.repos.iter().enumerate() {
         lines.push(Line::Repo(r));
         let mut listed: Vec<usize> =
-            (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && lists(&workspaces[w])).collect();
+            (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && line(w).is_some()).collect();
         sort.sort(&mut listed, workspaces);
         if let Some(held) = held {
             crate::reorder::keep_held(&mut listed, workspaces, held);
         }
-        let creating = app.busy.creating_in() == Some(&repo.id) && !app.sidebar.made_is_listed(workspaces, &listed);
-        let note_first = held.is_none() && sort.puts_new_first();
-        if creating && note_first {
-            lines.push(Line::Creating);
-        }
-        lines.extend(listed.into_iter().map(Line::Workspace));
-        if creating && !note_first {
-            lines.push(Line::Creating);
-        }
+        lines.extend(listed.into_iter().filter_map(line));
     }
     lines
 }
@@ -145,24 +142,22 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arran
     let lines: Rc<[Line]> = lines(app, sort, cx.background_executor().now()).into();
     let sizes = sizes(&lines);
     let ids: Vec<LineId> = lines.iter().map(|line| line.id(app)).collect();
+    let drawn =
+        ids.iter().filter_map(|id| if let LineId::Workspace(id) = id { Some(id.clone()) } else { None }).collect();
     let offsets = app.sidebar.places.arrange(ids.into_iter().zip(sizes.iter().map(|s| s.height)), window, cx);
-    app.sidebar.hold.showed(sort, listed_in(app, &lines));
+    app.sidebar.hold.showed(sort, drawn);
     Arranged { lines, offsets, sizes: Rc::new(sizes) }
 }
 
 /// The workspaces the sidebar lists, in its order, which is the order the keys that move between them go in.
 pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
     let sort = crate::settings::get(cx).sidebar_sort;
-    listed_in(app, &lines(app, sort, cx.background_executor().now()))
+    let workspace = |line: Line| if let Line::Workspace(w) = line { Some(app.workspaces[w].id.clone()) } else { None };
+    lines(app, sort, cx.background_executor().now()).into_iter().filter_map(workspace).collect()
 }
 
-fn listed_in(app: &AppView, lines: &[Line]) -> Vec<WorkspaceId> {
-    let workspace =
-        |line: &Line| if let Line::Workspace(w) = line { Some(app.workspaces[*w].id.clone()) } else { None };
-    lines.iter().filter_map(workspace).collect()
-}
-
-/// Whether the sidebar lists this workspace. An archived one is only in Home, which can show it and bring it back.
+/// Whether the sidebar lists this workspace, to be opened. An archived one is only in Home, which can show it and bring
+/// it back, and one being made shows only as a note until it's ready.
 pub(crate) fn lists(workspace: &Workspace) -> bool {
     workspace.status == WorkspaceStatus::Ready
 }
@@ -184,7 +179,7 @@ fn line(app: &AppView, line: Line, offset: Pixels, line_text: &LineText, cx: &mu
         Line::Heading => heading::heading(app, connected(app), cx),
         Line::Repo(r) => repo_header(app, &app.repos[r], cx),
         Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], line_text, cx),
-        Line::Creating => creating(cx),
+        Line::Creating(w) => creating(&app.workspaces[w], cx),
     };
     crate::reorder::offset_by(drawn, offset)
 }
@@ -260,8 +255,9 @@ fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElem
 }
 
 /// Level with the names of the workspaces above it.
-fn creating(cx: &mut Context<AppView>) -> AnyElement {
+fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     div()
+        .id(ElementId::Name(format!("creating-{}", workspace.id).into()))
         .pl(ROW_INSET + look::Size::Row.width() + MARK_GAP)
         .h(ROW_HEIGHT)
         .flex()
@@ -269,6 +265,7 @@ fn creating(cx: &mut Context<AppView>) -> AnyElement {
         .text_sm()
         .text_color(cx.theme().muted_foreground)
         .child("Creating a workspace…")
+        .test_support()
         .into_any_element()
 }
 
@@ -315,10 +312,10 @@ mod tests {
             Line::Repo(0),
             Line::Workspace(0),
             Line::Workspace(1),
-            Line::Creating,
+            Line::Creating(2),
             Line::Repo(1),
             Line::Repo(2),
-            Line::Workspace(2),
+            Line::Workspace(3),
         ];
 
         let heights: Vec<_> = sizes(&lines).iter().map(|s| s.height).collect();

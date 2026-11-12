@@ -38,6 +38,13 @@ impl Ui<'_> {
         self.view().selected.clone().unwrap()
     }
 
+    /// Lets a dialog that has closed finish going, after which the kit gives the keys back to what had them before it
+    /// opened. A test's clock stands still, so until then they stay with the dialog, which isn't drawn.
+    pub(crate) fn wait_out_the_dialog_going(&mut self) {
+        self.cx.executor().advance_clock(*gpui_kit::component::dialog::ANIMATION_DURATION);
+        self.frame();
+    }
+
     /// The dialog, once it's been opened.
     pub(crate) fn dialog(&self) -> Entity<NewWorkspaceDialog> {
         self.view().new_workspace.clone().expect("the dialog has been opened")

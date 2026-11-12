@@ -87,8 +87,8 @@ pub struct AppView {
     pub(crate) retitling: HashSet<WorkspaceId>,
     /// The new-workspace dialog, made the first time it opens, then kept with whatever was left in it.
     pub new_workspace: Option<Entity<NewWorkspaceDialog>>,
-    /// The workspace selected while a dialog was open, whose pane is focused once the dialog closes.
-    focus_after_dialog: Option<WorkspaceId>,
+    /// The workspace selected while a dialog or Settings was open, whose pane is focused once that closes.
+    focus_once_closed: Option<WorkspaceId>,
     /// The mouse went down in the strip along the top, where no control took it, so moving it moves the window.
     moving_window: bool,
     focus: FocusHandle,
@@ -153,7 +153,7 @@ impl AppView {
             busy: Busy::Free,
             retitling: HashSet::new(),
             new_workspace: None,
-            focus_after_dialog: None,
+            focus_once_closed: None,
             moving_window: false,
             focus,
             settings: None,
