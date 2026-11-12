@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use client_core::FileToSend;
+use client_core::{FileToSend, FilesFor};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Context, TestAppContext, Window};
@@ -317,7 +317,7 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
 
     let frozen = Frozen::stop(pid);
     let file = FileToSend::checked("notes.txt", MediaType::Text, b"a line".to_vec()).unwrap();
-    drafts.attach(&chat, file);
+    drafts.attach(FilesFor::Chat(chat), file);
     let heard = |ui: &Ui<'_>| ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.session().unwrap().draft.text.clone());
     ui.wait("the pane to hear of it", |ui| heard(ui) == "typed elsewhere");
     assert_eq!(ui.composer_text(), "typed here", "held back while the file is on its way");

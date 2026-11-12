@@ -9,6 +9,7 @@ use super::*;
 use crate::stand_in_hub::{self, Does};
 
 mod answers_and_comments;
+mod elsewhere;
 mod kinds;
 mod new_workspace;
 
@@ -140,13 +141,13 @@ fn only_the_newest_of_each_chat_is_kept_once_the_hub_has_answered_the_first() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), DraftToKeep::new("h"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
     heard.recv_timeout(TIMEOUT).unwrap();
 
     for text in ["he", "hel", "hello"] {
-        drafts.typed(&chat("a"), DraftToKeep::new(text));
+        drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new(text)));
     }
-    drafts.typed(&chat("b"), DraftToKeep::new("other"));
+    drafts.typed(DraftChange::Composer(chat("b"), DraftToKeep::new("other")));
 
     let mut later = kept(&drafts, &heard);
     later.sort();
@@ -158,7 +159,7 @@ fn typing_that_goes_on_is_still_kept_every_so_often() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), DraftToKeep::new("h"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
     heard.recv_timeout(TIMEOUT).unwrap();
     let (stop, stopped) = flume::bounded::<()>(1);
     // A letter at a time, more often than the pause, until told to stop. Each change would put off a keeper that waits
@@ -169,7 +170,7 @@ fn typing_that_goes_on_is_still_kept_every_so_often() {
             let mut text = String::new();
             while stopped.recv_timeout(PAUSE / 10).is_err() {
                 text.push('a');
-                drafts.typed(&chat("a"), DraftToKeep::new(text.clone()));
+                drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new(text.clone())));
             }
         }
     });
@@ -186,11 +187,11 @@ fn a_change_kept_at_once_takes_the_place_of_one_still_waiting() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), DraftToKeep::new("sent"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("sent")));
     heard.recv_timeout(TIMEOUT).unwrap();
 
-    drafts.typed(&chat("a"), DraftToKeep::new("sent, and more"));
-    drafts.set(&chat("a"), DraftToKeep::default());
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("sent, and more")));
+    drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::default()));
 
     assert_eq!(heard.recv_timeout(TIMEOUT).unwrap(), ("a".to_string(), String::new()));
     assert_eq!(kept(&drafts, &heard), [], "what it replaced is never kept, so it can't outlive it");
@@ -202,14 +203,17 @@ fn what_a_hub_that_doesnt_keep_drafts_refuses_waits_for_the_next_connection() {
     let dir = tempfile::tempdir().unwrap();
     let (old, heard_by_old) = hub(&dir.path().join("old.sock"), Answer::Refused);
     let drafts = Drafts::start(&old);
-    drafts.typed(&chat("a"), DraftToKeep::new("h"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
     assert_eq!(kept(&drafts, &heard_by_old), pairs(&[("a", "h")]), "the first goes at once");
     let notes = file("f1");
-    drafts.attach(&chat("b"), notes.clone());
-    drafts.set(&chat("b"), DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
-    drafts.typed(&chat("a"), DraftToKeep::new("hi"));
+    drafts.attach(FilesFor::Chat(chat("b")), notes.clone());
+    drafts.set(DraftChange::Composer(
+        chat("b"),
+        DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] },
+    ));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("hi")));
     assert_eq!(kept(&drafts, &heard_by_old), [], "it's asked no more");
-    assert!(drafts.unkept(&chat("a")) && drafts.unkept(&chat("b")));
+    assert!(drafts.unkept(&DraftKey::Composer(chat("a"))) && drafts.unkept(&DraftKey::Composer(chat("b"))));
     let (new, heard) = hub(&dir.path().join("new.sock"), Answer::Answered);
 
     drafts.reconnect(&new);
@@ -217,7 +221,7 @@ fn what_a_hub_that_doesnt_keep_drafts_refuses_waits_for_the_next_connection() {
     let mut kept = kept(&drafts, &heard);
     kept.sort();
     assert_eq!(kept, pairs(&[("a", "hi"), ("b", "+f1"), ("b", "look f1")]));
-    assert!(!drafts.unkept(&chat("a")) && !drafts.unkept(&chat("b")));
+    assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))) && !drafts.unkept(&DraftKey::Composer(chat("b"))));
 }
 
 #[test]
@@ -226,16 +230,16 @@ fn what_hasnt_reached_the_hub_is_counted_until_it_has() {
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
 
-    drafts.typed(&chat("a"), DraftToKeep::new("typed as the hub went"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed as the hub went")));
 
-    assert!(drafts.unkept(&chat("a")), "from the moment it's handed over");
+    assert!(drafts.unkept(&DraftKey::Composer(chat("a"))), "from the moment it's handed over");
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
-    assert!(drafts.unkept(&chat("a")), "and while there's no hub to take it");
-    assert!(!drafts.unkept(&chat("b")));
+    assert!(drafts.unkept(&DraftKey::Composer(chat("a"))), "and while there's no hub to take it");
+    assert!(!drafts.unkept(&DraftKey::Composer(chat("b"))));
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     drafts.reconnect(&client);
     kept(&drafts, &heard);
-    assert!(!drafts.unkept(&chat("a")));
+    assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))));
 }
 
 #[test]
@@ -243,7 +247,7 @@ fn a_draft_the_connection_couldnt_take_is_kept_on_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), DraftToKeep::new("typed while the hub went"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed while the hub went")));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
 
@@ -267,12 +271,15 @@ fn a_file_reaches_the_hub_before_the_draft_that_names_it() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), DraftToKeep::new("first"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("first")));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
     // Given while the hub was gone, so the next connection has both to keep at once.
     let notes = file("f1");
-    drafts.set(&chat("a"), DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
-    drafts.attach(&chat("a"), notes);
+    drafts.set(DraftChange::Composer(
+        chat("a"),
+        DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] },
+    ));
+    drafts.attach(FilesFor::Chat(chat("a")), notes);
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
 
     drafts.reconnect(&client);
@@ -285,11 +292,11 @@ fn a_file_let_go_of_waits_for_the_draft_that_stopped_naming_it() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), DraftToKeep::new("h"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
     heard.recv_timeout(TIMEOUT).unwrap();
-    drafts.typed(&chat("a"), DraftToKeep::new("without it"));
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("without it")));
 
-    drafts.detach(&chat("a"), &"f1".into());
+    drafts.detach(FilesFor::Chat(chat("a")), &"f1".into());
 
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "without it"), ("a", "-f1")]), "the hub keeps any a draft names");
 }
@@ -299,14 +306,14 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.attach(&chat("a"), file("f1"));
+    drafts.attach(FilesFor::Chat(chat("a")), file("f1"));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
     // As a composer does with the files of a prompt that comes back because it couldn't be sent.
-    drafts.attach(&chat("a"), file("f1"));
+    drafts.attach(FilesFor::Chat(chat("a")), file("f1"));
 
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "+f1")]));
-    assert!(!drafts.unkept(&chat("a")), "it counts as having reached the hub");
+    assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))), "it counts as having reached the hub");
 }
 
 /// A hub that keeps every draft, answer and comment, and the new-workspace dialog's, and answers with the record it's
@@ -343,56 +350,4 @@ fn told(id: &str, rev: u64, typed: &str) -> Session {
 /// The workspace's record as the hub's feed might tell of it, at `rev`, with `comment` being written on its diff.
 fn writing(id: &str, rev: u64, comment: Option<CommentDraft>) -> Workspace {
     Workspace { rev: Rev::new(rev), comment_draft: comment, ..protocol::fixtures::workspace(id) }
-}
-
-#[test]
-fn a_newer_record_is_from_elsewhere_only_when_its_draft_isnt_the_one_kept_from_here() {
-    let dir = tempfile::tempdir().unwrap();
-    let drafts = Drafts::start(&keeping_hub(&dir.path().join("hub.sock"), 5));
-
-    drafts.set(&chat("a"), DraftToKeep::new("typed here"));
-    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
-
-    assert!(!drafts.from_elsewhere(&told("a", 5, "typed here")), "the record the hub kept it in is this client's");
-    assert!(!drafts.from_elsewhere(&told("a", 4, "typed before")), "and so is an older one that arrives late");
-    assert!(
-        !drafts.from_elsewhere(&told("a", 6, "typed here")),
-        "and one newer for something else, such as its status"
-    );
-    assert!(drafts.from_elsewhere(&told("a", 7, "typed elsewhere")));
-    assert!(drafts.from_elsewhere(&told("b", 1, "typed elsewhere")), "nothing was typed there here");
-    assert!(!drafts.from_elsewhere(&told("c", 1, "")), "nor anything elsewhere");
-}
-
-#[test]
-fn a_draft_taken_from_a_record_isnt_from_elsewhere_until_another_is_made_there() {
-    let dir = tempfile::tempdir().unwrap();
-    let (client, _) = hub(&dir.path().join("hub.sock"), Answer::Answered);
-    let drafts = Drafts::start(&client);
-    let elsewhere = told("a", 3, "typed elsewhere");
-    assert!(drafts.from_elsewhere(&elsewhere));
-
-    drafts.took(&elsewhere);
-
-    assert!(!drafts.from_elsewhere(&elsewhere));
-    assert!(!drafts.from_elsewhere(&told("a", 4, "typed elsewhere")), "a newer record that carries it");
-    assert!(drafts.from_elsewhere(&told("a", 5, "typed elsewhere again")));
-}
-
-#[test]
-fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
-    let dir = tempfile::tempdir().unwrap();
-    let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
-    let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), DraftToKeep::new("typed as the hub went"));
-    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
-
-    assert!(!drafts.from_elsewhere(&told("a", 100, "typed elsewhere")), "what's typed here goes on and replaces it");
-    assert!(drafts.caught_up().try_recv().is_err());
-    drafts.reconnect(&keeping_hub(&dir.path().join("hub.sock"), 5));
-
-    drafts.caught_up().recv_timeout(TIMEOUT).unwrap();
-    assert!(!drafts.unkept(&chat("a")));
-    assert!(drafts.from_elsewhere(&told("a", 100, "typed elsewhere")), "a newer record, once nothing is on its way");
-    assert!(!drafts.from_elsewhere(&told("a", 5, "typed as the hub went")));
 }

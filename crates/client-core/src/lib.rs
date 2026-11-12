@@ -27,7 +27,7 @@ pub mod stand_in_hub;
 pub use agents::Agents;
 pub use approval::{Answered, Approval};
 pub use attachments::{FileToSend, NotAttached};
-pub use drafts::{Drafts, Where};
+pub use drafts::{DraftChange, DraftKey, Drafts, FilesFor, KeptDraft};
 pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{

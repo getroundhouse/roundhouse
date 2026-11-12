@@ -8,10 +8,10 @@ fn a_file_of_a_kind_the_hub_doesnt_know_goes_to_a_chat_as_one_that_goes_as_it_is
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::KnowsNoKindOfFile);
     let drafts = Drafts::start(&client);
 
-    drafts.attach(&chat("a"), file("f1"));
-    drafts.set(&chat("a"), DraftToKeep { text: "look".to_string(), files: vec!["f1".into()] });
+    drafts.attach(FilesFor::Chat(chat("a")), file("f1"));
+    drafts.set(DraftChange::Composer(chat("a"), DraftToKeep { text: "look".to_string(), files: vec!["f1".into()] }));
 
     let said = pairs(&[("a", "refused +f1"), ("a", "+f1"), ("a", "look f1")]);
     assert_eq!(kept(&drafts, &heard), said, "the draft goes on");
-    assert!(!drafts.unkept(&chat("a")));
+    assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))));
 }

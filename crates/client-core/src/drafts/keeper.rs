@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use protocol::model::AttachmentId;
 
-use super::{Agreed, Change, Counts, FilesFor, PAUSE, Request, Said, Where, agree};
+use super::{Agreed, Counts, DraftChange, DraftKey, FilesFor, PAUSE, Request, Said, agree};
 use crate::{Client, ClientError, FileToSend};
 
 /// Starts the thread, which ends once every handle has gone.
@@ -34,18 +34,18 @@ pub(super) fn start(
 
 struct Keeper {
     client: Client,
-    /// The newest change in each place that isn't kept yet, and when to keep it.
-    pending: HashMap<Where, Pending>,
+    /// The newest change to each draft that isn't kept yet, and when to keep it.
+    pending: HashMap<DraftKey, Pending>,
     /// Files to give the hub for what's typed where they're attached, a chat's composer or the new-workspace dialog,
     /// before any draft is kept, in the order they came.
     adding: VecDeque<(FilesFor, FileToSend)>,
-    /// Files to let go of, each once its place has no draft waiting to be kept.
+    /// Files to let go of, each once the draft it was for has no change waiting to be kept.
     removing: Vec<(FilesFor, AttachmentId)>,
     /// The connection went, or the hub doesn't keep chats' drafts, so nothing more is tried until the next.
     stalled: bool,
-    /// The kinds of place this connection's hub doesn't keep, such as answers and comments on a hub that keeps only
+    /// The kinds of draft this connection's hub doesn't keep, such as answers and comments on a hub that keeps only
     /// chats' drafts. What's typed there waits for the next connection, and the rest goes on.
-    refused: HashSet<Discriminant<Where>>,
+    refused: HashSet<Discriminant<DraftKey>>,
     /// The hub has answered a change on this connection. Until it has, each is kept at once, so a hub that doesn't
     /// keep them is found out straight away.
     answered: bool,
@@ -57,7 +57,7 @@ struct Keeper {
 }
 
 struct Pending {
-    change: Change,
+    change: DraftChange,
     due: Instant,
 }
 
@@ -81,7 +81,7 @@ impl Keeper {
             self.keep(|pending| pending.due <= now);
             // Everything left waits for another connection.
             let mut files = self.adding.iter().map(|(to, _)| to).chain(self.removing.iter().map(|(from, _)| from));
-            let held = self.pending.keys().all(|at| self.refuses(at)) && files.all(|f| self.refuses(&f.at()));
+            let held = self.pending.keys().all(|at| self.refuses(at)) && files.all(|f| self.refuses(&f.key()));
             if self.stalled || held {
                 for done in self.flushing.drain(..) {
                     let _ = done.send(());
@@ -90,7 +90,7 @@ impl Keeper {
         }
     }
 
-    fn refuses(&self, at: &Where) -> bool {
+    fn refuses(&self, at: &DraftKey) -> bool {
         self.refused.contains(&std::mem::discriminant(at))
     }
 
@@ -98,7 +98,7 @@ impl Keeper {
         let now = Instant::now();
         match request {
             Request::Changed { change, now: at_once } => {
-                let at = change.at();
+                let at = change.key();
                 // A change while one waits keeps its time, so typing that goes on is still kept every so often.
                 let waiting = self.pending.get(&at).map_or(now + PAUSE, |p| p.due);
                 let due = if at_once || !self.answered { now } else { waiting };
@@ -114,7 +114,7 @@ impl Keeper {
                 // client was handed the connection, and goes again now, in case the last hub's answer came since.
                 (self.client, self.stalled, self.answered) = (client, false, false);
                 self.refused.clear();
-                self.counts.lock().agreed.remove(&Where::NewWorkspace);
+                self.counts.lock().agreed.remove(&DraftKey::NewWorkspace);
                 for pending in self.pending.values_mut() {
                     pending.due = now;
                 }
@@ -134,7 +134,7 @@ impl Keeper {
         let waiting = self.adding.iter().position(|(to, waiting)| *to == from && waiting.attachment.id == file);
         if let Some(i) = waiting {
             self.adding.remove(i);
-            self.reached(&from.at(), None);
+            self.reached(&from.key(), None);
             // Unless the hub has it anyway, such as a file of a prompt that came back because it couldn't be sent.
             if !matches!(&from, FilesFor::Chat(id) if self.client.has_given(id, &file)) {
                 return;
@@ -143,7 +143,7 @@ impl Keeper {
         self.removing.push((from, file));
     }
 
-    /// Adds every file waiting, then keeps each change `due` picks, then lets go of the files whose places have no
+    /// Adds every file waiting, then keeps each change `due` picks, then lets go of the files whose drafts have no
     /// draft left waiting, unless the connection goes.
     fn keep(&mut self, due: impl Fn(&Pending) -> bool) {
         self.add_files();
@@ -153,12 +153,12 @@ impl Keeper {
 
     fn keep_changes(&mut self, due: impl Fn(&Pending) -> bool) {
         let picked = self.pending.iter().filter(|(at, p)| due(p) && !self.refuses(at));
-        let picked: Vec<Where> = picked.map(|(at, _)| at.clone()).collect();
+        let picked: Vec<DraftKey> = picked.map(|(at, _)| at.clone()).collect();
         for at in picked {
             if self.stalled {
                 return;
             }
-            // Refused earlier in this pass, by a change in another place of the same kind.
+            // Refused earlier in this pass, by a change to another draft of the same kind.
             if self.refuses(&at) {
                 continue;
             }
@@ -169,7 +169,7 @@ impl Keeper {
             // For the next connection, which may be to a hub that keeps it, such as this one once it's restarted as
             // the build that does. A hub that doesn't keep chats' drafts can't keep their files either, so everything
             // waits, but one that only doesn't keep answers or comments keeps the rest meanwhile.
-            if gone || (unsupported && matches!(at, Where::Composer(_))) {
+            if gone || (unsupported && matches!(at, DraftKey::Composer(_))) {
                 self.pending.insert(at, pending);
                 self.stalled = true;
             } else if unsupported {
@@ -185,21 +185,21 @@ impl Keeper {
     }
 
     /// Has the hub keep `change`, and says what the record it kept it on says is there now.
-    fn send(&self, change: &Change) -> Result<Agreed, ClientError> {
+    fn send(&self, change: &DraftChange) -> Result<Agreed, ClientError> {
         match change {
-            Change::Composer(id, draft) => self
+            DraftChange::Composer(id, draft) => self
                 .client
                 .session_draft(id, draft)
                 .map(|session| Agreed { rev: session.rev, said: Said::Composer(session.draft) }),
-            Change::Answer(id, draft) => self
+            DraftChange::Answer(id, draft) => self
                 .client
                 .session_answer_draft(id, draft.as_ref())
                 .map(|session| Agreed { rev: session.rev, said: Said::Answer(session.answer_draft) }),
-            Change::Comment(id, draft) => self
+            DraftChange::Comment(id, draft) => self
                 .client
                 .workspace_comment_draft(id, draft.as_ref())
                 .map(|workspace| Agreed { rev: workspace.rev, said: Said::Comment(workspace.comment_draft) }),
-            Change::NewWorkspace(draft) => self
+            DraftChange::NewWorkspace(draft) => self
                 .client
                 .new_workspace_draft_keep(draft)
                 .map(|kept| Agreed { rev: kept.rev, said: Said::new_workspace(&kept) }),
@@ -207,12 +207,12 @@ impl Keeper {
     }
 
     fn add_files(&mut self) {
-        // Files for a place this hub doesn't keep, which wait for the next connection, in the order they came.
+        // Files for a draft this hub doesn't keep, which wait for the next connection, in the order they came.
         let mut held = VecDeque::new();
         while !self.stalled
             && let Some((to, file)) = self.adding.pop_front()
         {
-            let at = to.at();
+            let at = to.key();
             if self.refuses(&at) {
                 held.push_back((to, file));
                 continue;
@@ -254,7 +254,7 @@ impl Keeper {
     fn remove_files(&mut self) {
         let mut left = Vec::new();
         for (from, file) in std::mem::take(&mut self.removing) {
-            let at = from.at();
+            let at = from.key();
             if self.stalled || self.refuses(&at) || self.pending.contains_key(&at) {
                 left.push((from, file));
                 continue;
@@ -280,9 +280,9 @@ impl Keeper {
         self.removing = left;
     }
 
-    /// Counts down one of the changes or files in a place, which has reached the hub, or never needs to, along with
+    /// Counts down one of the changes or files for a draft, which has reached the hub, or never needs to, along with
     /// the copy the hub gave back if it kept a change.
-    fn reached(&self, at: &Where, kept: Option<Agreed>) {
+    fn reached(&self, at: &DraftKey, kept: Option<Agreed>) {
         let mut counts = self.counts.lock();
         if let Some(kept) = kept {
             agree(&mut counts, at.clone(), kept);
