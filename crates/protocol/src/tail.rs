@@ -5,6 +5,8 @@
 //! the partial text straight away. The hub and clients apply the same rules through this type, so
 //! they can't disagree about what the tail contains.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::event::EventBody;
@@ -225,6 +227,13 @@ impl Tail {
         self.messages.is_empty() && self.compacting.is_none()
     }
 
+    /// Whether it holds nothing of any run, not even a subagent in the background, which [`Tail::is_empty`] leaves out
+    /// since one writes nothing until it does.
+    pub fn holds_nothing(&self) -> bool {
+        let Tail { messages, in_background, compacting } = self;
+        messages.is_empty() && in_background.is_empty() && compacting.is_none()
+    }
+
     /// What the agent itself is writing, or the subagent `subagent` started. It holds no other's messages for the
     /// end of a turn to leave, so it doesn't say which subagents are in the background.
     #[must_use]
@@ -234,7 +243,55 @@ impl Tail {
         let compacting = self.compacting.clone().filter(|_| subagent.is_none());
         Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting }
     }
+
+    /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on. Only an event
+    /// the hub records itself, a compaction being asked for, needs its place in the log, and no agent sends one.
+    pub fn on_agent_event(&mut self, run: RunId, body: &EventBody) {
+        self.on_event(NOT_RECORDED, Some(run), body);
+    }
+
+    /// Every run it holds something of, oldest first.
+    #[must_use]
+    pub fn runs(&self) -> Vec<RunId> {
+        let messages = self.messages.iter().map(|message| message.run);
+        let in_background = self.in_background.iter().map(|background| background.run);
+        let compacting = self.compacting.iter().map(|compacting| compacting.run);
+        let runs: BTreeSet<RunId> = messages.chain(in_background).chain(compacting).flatten().collect();
+        runs.into_iter().collect()
+    }
+
+    /// What `run` is writing, the subagents it runs in the background, and its compaction, which a worker sends a hub
+    /// that connects to it.
+    #[must_use]
+    pub fn of_run(&self, run: RunId) -> Tail {
+        let of = |by: Option<RunId>| by == Some(run);
+        Tail {
+            messages: self.messages.iter().filter(|message| of(message.run)).cloned().collect(),
+            in_background: self.in_background.iter().filter(|background| of(background.run)).cloned().collect(),
+            compacting: self.compacting.clone().filter(|compacting| of(compacting.run)),
+        }
+    }
+
+    /// Takes what `run` is writing from `written`, its worker's tail of it, in place of what this holds of it, as a hub
+    /// does from a worker it connects to again, since the deltas that wrote it went to the hub before, or to none.
+    /// Everything in `written` is taken as `run`'s. A compaction only asked for so far is the hub's own, so it stays
+    /// unless `written` says `run` is compacting.
+    pub fn replace_run(&mut self, run: RunId, written: Tail) {
+        let of = |by: Option<RunId>| by == Some(run);
+        self.messages.retain(|message| !of(message.run));
+        self.messages.extend(written.messages.into_iter().map(|message| TailMessage { run: Some(run), ..message }));
+        self.in_background.retain(|background| !of(background.run));
+        let in_background = written.in_background.into_iter();
+        self.in_background.extend(in_background.map(|background| InBackground { run: Some(run), ..background }));
+        self.compacting = match written.compacting {
+            Some(compacting) => Some(Compacting { run: Some(run), ..compacting }),
+            None => self.compacting.take().filter(|compacting| !of(compacting.run)),
+        };
+    }
 }
+
+/// Where an event no hub has recorded yet is in the log, which is nowhere, since the first event is 1.
+const NOT_RECORDED: Seq = 0;
 
 /// Whether what `by` writes comes from a run after `ended`. Nothing comes after an event with no run.
 fn later(ended: Option<RunId>, by: Option<RunId>) -> bool {
@@ -249,6 +306,8 @@ fn block_mut(message: &mut TailMessage, index: u32, kind: BlockKind) -> &mut Tai
     &mut message.blocks[position]
 }
 
+#[cfg(test)]
+mod carrying_on;
 #[cfg(test)]
 mod compacting;
 #[cfg(test)]

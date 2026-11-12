@@ -38,6 +38,21 @@ fn what_a_worker_sends_keeps_its_form_numbered_and_not() {
     assert_eq!(seq, None);
 }
 
+/// What an agent is writing, as a worker sends it to a hub that connects.
+#[test]
+fn what_a_worker_says_an_agent_is_writing_keeps_its_form() {
+    let block = r#"{"index":0,"kind":"thinking","tool_name":null,"text":"Reading the"}"#;
+    let message = format!(r#"{{"run":4,"message_id":"m","parent_tool_use_id":null,"blocks":[{block}]}}"#);
+    let line = format!(r#"{{"frame":"agent_tail","session_id":"s","run":4,"tail":{{"messages":[{message}]}}}}"#);
+
+    let read: WorkerFrame = frame::decode(line.as_bytes()).unwrap();
+
+    let WorkerFrame::AgentTail { session_id, run, tail } = &read else { panic!("{read:?}") };
+    assert_eq!((session_id.as_str(), *run), ("s", RunId::new(4)));
+    assert_eq!(tail.messages[0].blocks[0].text, "Reading the");
+    assert_eq!(frame::encode(&read).unwrap(), [line.as_bytes(), b"\n"].concat());
+}
+
 /// A restart works without a hello, as a stop does, so a client can restart a hub it can't otherwise talk to, once its
 /// status says the hub knows how.
 #[test]

@@ -1,7 +1,8 @@
 //! When the tail says the agent is compacting, and when it stops saying so.
 
+use super::tests::turn_ended;
 use super::*;
-use crate::event::{CompactionOutcome, ExitReason, TurnOutcome};
+use crate::event::{CompactionOutcome, ExitReason};
 
 fn compacting(written_chars: Option<u64>) -> EventBody {
     EventBody::AgentCompacting { written_chars }
@@ -19,21 +20,6 @@ fn writes(call: Option<&str>) -> EventBody {
         model: None,
         blocks: vec![],
         first_index: None,
-    }
-}
-
-fn turn_ended() -> EventBody {
-    EventBody::TurnEnded {
-        outcome: TurnOutcome::Success,
-        result: None,
-        errors: vec![],
-        duration_ms: None,
-        cost_usd: None,
-        num_turns: None,
-        started_at_ms: None,
-        models: vec![],
-        tokens: None,
-        only_compacted: false,
     }
 }
 
