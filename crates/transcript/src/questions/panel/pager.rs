@@ -9,13 +9,14 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{Hand as _, Off as _};
+use protocol::event::QuestionAnswer;
 
 use super::QuestionPanel;
 
 /// Nothing when there's only one question, since there's nowhere to go.
 pub(super) fn pager(
     panel: &QuestionPanel,
-    answered: &[Option<String>],
+    answered: &[Option<QuestionAnswer>],
     cx: &mut Context<QuestionPanel>,
 ) -> Option<AnyElement> {
     let count = panel.asked.len();

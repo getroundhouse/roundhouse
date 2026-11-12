@@ -61,6 +61,8 @@ impl<'a> ToolCall<'a> {
     }
 }
 
+/// The tool that asks the person questions.
+const QUESTIONS: &str = "AskUserQuestion";
 /// The tool that asks to leave plan mode, with the plan.
 pub(crate) const PLAN: &str = "ExitPlanMode";
 /// The advisor, which the API runs rather than the agent.
@@ -71,7 +73,7 @@ const MAIN_INPUTS: &[&str] = &["command", "file_path", "path", "pattern", "url",
 /// Whether a call to `name` asks the person something, and so is drawn from its approval, which has everything that
 /// was asked, rather than from the call.
 pub(crate) fn drawn_from_its_approval(name: &str) -> bool {
-    name == crate::questions::TOOL_NAME || name == PLAN
+    name == QUESTIONS || name == PLAN
 }
 
 /// One line saying what a tool is doing, for a card that asks to run it: the input that matters most, or else what

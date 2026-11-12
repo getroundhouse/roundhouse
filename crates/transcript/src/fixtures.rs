@@ -1,7 +1,7 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, QuestionAnswer, SessionEvent};
 use protocol::model::{Place, RecentWork, Rev, Seq, Subagent, SubagentStatus};
 use serde_json::{Value, json};
 
@@ -90,7 +90,8 @@ pub(crate) fn result(id: &str) -> EventBody {
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }
 
-/// The agent asking to use the tool `tool`, under the approval `id`.
+/// The agent asking to use the tool `tool`, under the approval `id`, as a request recorded before adapters said what
+/// each asks, which is read from its tool.
 pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
     EventBody::ApprovalRequested {
         approval_id: id.into(),
@@ -103,8 +104,32 @@ pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
     }
 }
 
+/// The agent asking `asking` under the approval `id`, as its adapter says, with a tool no client knows.
+pub(crate) fn asking(id: &str, asking: Asking) -> EventBody {
+    EventBody::ApprovalRequested {
+        approval_id: id.into(),
+        tool_name: "Ask".into(),
+        tool_use_id: None,
+        input: Value::Null,
+        description: None,
+        suggestions: Value::Null,
+        asking: Some(Box::new(asking)),
+    }
+}
+
 /// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.
 pub(crate) fn closed(id: &str, outcome: ApprovalOutcome, answers: Option<&[(&str, &str)]>) -> EventBody {
     let answers = answers.map(|pairs| pairs.iter().map(|(q, a)| ((*q).to_string(), (*a).to_string())).collect());
     EventBody::ApprovalResolved { approval_id: id.into(), outcome, answers_by_text: answers, answers_by_position: None }
+}
+
+/// The approval `id` allowed with `answers` by position.
+pub(crate) fn closed_by_position(id: &str, answers: Vec<QuestionAnswer>) -> EventBody {
+    let outcome = ApprovalOutcome::Allowed;
+    EventBody::ApprovalResolved {
+        approval_id: id.into(),
+        outcome,
+        answers_by_text: None,
+        answers_by_position: Some(answers),
+    }
 }

@@ -1,15 +1,15 @@
 //! What drawing one event needs from the rest of the log and the model, read while they're held, so nothing is held
 //! while it's drawn.
 
+use client_core::Approval;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
 use protocol::model::{AgentKind, PermissionMode, Seq};
 
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::questions;
 use crate::transcript::{IdleCache, Model};
 
 mod nearby;
@@ -53,6 +53,8 @@ pub(super) struct Around {
 
 /// What drawing a question that's no longer waiting needs.
 pub(super) struct Asked {
+    /// The questions it asked, in order.
+    pub(super) questions: Vec<Question>,
     /// What it is, as its event's only item.
     pub(super) key: ItemKey,
     pub(super) open: bool,
@@ -118,21 +120,22 @@ impl Around {
             around.carried = attachments::carried(m, attachments);
             around.prompt = log.prompt_state(seq);
         }
-        if let EventBody::ApprovalRequested { approval_id, tool_name, .. } = body {
+        if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log
                 .open_approvals()
                 .iter()
                 .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
-            if tool_name == questions::TOOL_NAME && !around.approval_open {
+            let questions = Approval::of(body).and_then(|approval| approval.questions().map(<[Question]>::to_vec));
+            if let Some(questions) = questions.filter(|_| !around.approval_open) {
                 let key = ItemKey::Event(seq, 0);
                 let open = m.folds.is_open(&key, Fold::Output);
-                around.asked = Some(Asked { key, open, settled: Settled::read(log, seq, approval_id) });
+                around.asked = Some(Asked { questions, key, open, settled: Settled::read(log, seq, approval_id) });
             }
         }
         if let EventBody::ApprovalResolved { approval_id, .. } = body {
             around.closes_a_question = nearby::events_before(log, seq, NEAR).any(|event| {
-                matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, tool_name, .. }
-                    if id == approval_id && tool_name == questions::TOOL_NAME)
+                matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id)
+                    && asks_questions(&event.body)
             });
         }
         around
@@ -200,6 +203,12 @@ pub(crate) fn drawn_in_row<'a>(log: &'a SessionLog, event: &'a SessionEvent) -> 
 /// have found it, as [`BlockAround`] says.
 pub(crate) fn drawn_with_its_call(log: &SessionLog, seq: Seq, tool_use_id: &str) -> Option<Seq> {
     nearby::call_before(log, seq, tool_use_id, NEAR).map(|(call, _)| call)
+}
+
+/// Whether `body` is a request for approval that asks the person questions, which is drawn as a call's line once it's
+/// no longer waiting, rather than as a card.
+pub(super) fn asks_questions(body: &EventBody) -> bool {
+    Approval::of(body).is_some_and(|approval| approval.questions().is_some())
 }
 
 /// The blocks an event holds, if it's one that holds any.
