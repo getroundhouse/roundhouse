@@ -2,7 +2,8 @@ use protocol::model::{Local, MergeState, PrState};
 
 use super::*;
 
-fn open_pr() -> PullRequest {
+/// An open pull request that's ready to merge, for the tests of the tools that describe one.
+pub(in crate::tools) fn open_pr() -> PullRequest {
     PullRequest {
         number: 605,
         url: "https://github.com/o/r/pull/605".into(),

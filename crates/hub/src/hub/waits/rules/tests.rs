@@ -155,3 +155,17 @@ fn a_wait_until_its_checks_ends_once_they_have_run_and_none_failed() {
     assert_eq!(checks(&not_started), None, "not started yet, as just after a push");
     assert_eq!(done(&passed), None, "a wait until it's done waits on");
 }
+
+#[test]
+fn commits_not_pushed_hold_a_wait_back_unless_the_queue_has_it() {
+    let unpushed = |ahead, behind| PullRequest { local: Local { uncommitted: 0, ahead, behind }, ..open() };
+
+    assert_eq!(not_yet(&unpushed(0, 3)), None, "commits to pull change nothing GitHub says");
+    assert_eq!(
+        not_yet(&unpushed(1, 0)).as_deref(),
+        Some("1 commit here isn't on the pull request yet, so it would wait on an older commit. Push, then wait.")
+    );
+    assert!(not_yet(&unpushed(2, 1)).unwrap().contains("It has 1 commit that isn't here, so bring them together"));
+    let queued = PullRequest { queue: Some(QueueState::Queued), ..unpushed(2, 0) };
+    assert_eq!(not_yet(&queued), None, "the queue merges what's on GitHub");
+}

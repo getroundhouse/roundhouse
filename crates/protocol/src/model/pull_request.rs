@@ -145,7 +145,8 @@ pub struct Checks {
 pub struct Local {
     /// Files changed and not committed.
     pub uncommitted: u32,
-    /// Commits here that the pull request doesn't have.
+    /// Commits here that the pull request doesn't have, and that haven't been pushed, since GitHub's word on the
+    /// pull request's head can lag a push by a moment.
     pub ahead: u32,
     /// Commits on the pull request that aren't here.
     pub behind: u32,

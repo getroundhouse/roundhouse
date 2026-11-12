@@ -342,10 +342,10 @@ async fn reply<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>, to: u64) 
     .unwrap_or_else(|_| panic!("call {to} was never answered"))
 }
 
-/// Calls `get_pull_request` as the Claude CLI does, over one connection, and returns the whole response. The fake agent,
-/// in `apps/daemon/examples/fake_claude/mcp.rs`, writes the same request, so a change to what the CLI sends goes in both.
+/// Calls `get_pull_request` as the Claude CLI does, offering tasks, over one connection, and returns the response.
+/// The fake agent, in `apps/daemon/examples/fake_claude/mcp.rs`, writes the same, so a change to it goes in both.
 async fn call_tool(port: u16, token: &str) -> String {
-    let meta = r#"{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}"#;
+    let meta = r#"{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}},"claudecode/toolUseId":"toolu_1"}"#;
     let body = format!(
         r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"get_pull_request","arguments":{{}},"_meta":{meta}}}}}"#
     );

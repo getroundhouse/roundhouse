@@ -123,7 +123,7 @@ fn with_tools(config: &Path) -> AgentOptions {
 const KEEPS_ITS_MCP_CONFIG: &str = r#"while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
 [ $# -gt 0 ] && cp "$2" given.tmp && mv given.tmp given; exec sleep 100"#;
 
-/// What the CLI was given as `--mcp-config`, once it has copied it.
+/// What the CLI wrote to `given`, such as the file it was given as `--mcp-config`, once it has written it.
 async fn given(dir: &Path) -> Vec<u8> {
     let given = dir.join("given");
     timeout(Duration::from_secs(10), async {
@@ -168,6 +168,23 @@ async fn a_launch_started_again_is_told_of_the_tools_too() {
 
     assert_eq!(given(dir.path()).await, std::fs::read(&config).unwrap());
     agent.stop().await;
+}
+
+/// So a call to one is offered MCP's tasks, which a wait is answered with. One that isn't is left as it was.
+#[tokio::test]
+async fn a_cli_told_of_the_tools_takes_tasks_from_them() {
+    for (with, told) in [(true, "1"), (false, "unset")] {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, _rx) = mpsc::channel(16);
+        let options = if with { with_tools(&dir.path().join("agents/s-1.mcp.json")) } else { AgentOptions::default() };
+        let says =
+            r#"printf '%s' "${CLAUDE_AUTO_BACKGROUND_TASKS-unset}" > given.tmp; mv given.tmp given; exec sleep 100"#;
+
+        let agent = spawn_at(script(dir.path(), says), spec(dir.path()), tx, options).await.unwrap();
+
+        assert_eq!(given(dir.path()).await, told.as_bytes(), "with the tools: {with}");
+        agent.stop().await;
+    }
 }
 
 #[tokio::test]

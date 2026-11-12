@@ -10,7 +10,7 @@ use super::mcp::Called;
 use crate::asks::Asks;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 pub(super) const NAME: &str = "get_pull_request";
 
@@ -40,7 +40,7 @@ pub(super) async fn call(asks: &Asks, session_id: &SessionId) -> Called {
 }
 
 /// The pull request in words: what it is, where it stands, then what GitHub says of it and what's here that isn't.
-fn describe(pull_request: Option<&PullRequest>) -> String {
+pub(super) fn describe(pull_request: Option<&PullRequest>) -> String {
     let Some(pr) = pull_request else {
         return "This workspace's branch has no pull request on GitHub.".to_string();
     };
@@ -65,7 +65,7 @@ fn describe(pull_request: Option<&PullRequest>) -> String {
 }
 
 /// The one thing most in the way of merging it, or that nothing is.
-fn standing(standing: Standing) -> String {
+pub(super) fn standing(standing: Standing) -> String {
     match standing {
         Standing::NoPullRequest => "This workspace's branch has no pull request on GitHub.".to_string(),
         Standing::Merged => "It's merged.".to_string(),

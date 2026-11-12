@@ -171,3 +171,20 @@ async fn the_worktree_is_counted_against_the_pull_requests_head() {
     assert_eq!(elsewhere, Local { uncommitted: 1, ahead: 0, behind: 1 });
     assert_eq!(unknown, Local { uncommitted: 1, ahead: 0, behind: 0 });
 }
+
+/// Just after a push, GitHub can still say the pull request's head is the commit before.
+#[tokio::test]
+async fn a_commit_pushed_before_github_says_so_isnt_counted_as_not_pushed() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let before = run(&repo, &["rev-parse", "HEAD"]);
+    std::fs::write(repo.join("b.txt"), "two\n").unwrap();
+    run(&repo, &["add", "."]);
+    run(&repo, &["commit", "-qm", "second"]);
+    // As `git push` leaves it.
+    run(&repo, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+
+    let lagging = local(repo.to_str().unwrap(), Some(&before)).await;
+
+    assert_eq!(lagging, Local { uncommitted: 0, ahead: 0, behind: 0 });
+}

@@ -122,7 +122,7 @@ pub(super) fn launch(
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")
         .envs(spec.env.iter().map(|(k, v)| (k, v)));
     if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
-        command.args(tools);
+        command.args(tools).env(super::tools::TAKES_TASKS, "1");
     }
     let mut child = start(&mut command, bin, cwd)?;
     let pid = child.id().unwrap_or_default();

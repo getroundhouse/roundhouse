@@ -22,6 +22,7 @@ mod mcp;
 mod pull_request;
 #[cfg(test)]
 mod tests;
+mod wait;
 
 /// The path the server answers on, as MCP's own examples have it.
 const PATH: &str = "/mcp";

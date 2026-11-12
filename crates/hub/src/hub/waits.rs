@@ -25,9 +25,9 @@ const START_WITHIN: Duration = Duration::from_secs(40);
 impl Hub {
     /// Starts a wait for the agent in `session_id`, of `workspace_id`'s, on its pull request as it's read now, and
     /// ends the session's open one, since an agent waits on one at a time. One whose pull request is already done, or
-    /// needs the agent, ends at once. A branch without one is refused, and so is a read that fails, or doesn't finish
-    /// within [`START_WITHIN`], rather than start from what was known before the agent pushed. A call that started one
-    /// already, as when its CLI asks again, gets that one.
+    /// needs the agent, ends at once. A branch without one is refused, and so is a worktree with commits not pushed,
+    /// and a read that fails, or doesn't finish within [`START_WITHIN`], rather than start from what was known before
+    /// the agent pushed. A call that started one already, as when its CLI asks again, gets that one.
     pub(crate) async fn start_wait(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
@@ -59,6 +59,11 @@ impl Hub {
         };
         let seen = rules::seen_in(&pull_request);
         wait.ended = rules::ended(&wait, seen, Some(&pull_request)).map(|how| WaitEnded { at_ms: started_at_ms, how });
+        if wait.ended.is_none()
+            && let Some(why) = rules::not_yet(&pull_request)
+        {
+            return Err(ApiError::new(ErrorCode::Conflict, why));
+        }
         let stored = wait.clone();
         let replaced = self.blocking(move |store| store.start_wait(&stored, seen)).await?;
         // Only once it's recorded, so the next read judges it.

@@ -278,10 +278,23 @@ async fn local(path: &str, head: Option<&str>) -> Local {
         // A head that isn't here is at least one commit that isn't, such as one GitHub's Update branch or someone else
         // pushed. How many can't be told without fetching, so the upstream says, if it's been fetched since.
         Some(head) if !ref_exists(worktree, head).await.unwrap_or(true) => (upstream.0, upstream.1.max(1)),
-        Some(head) => apart(worktree, head).await.unwrap_or(upstream),
+        Some(head) => match apart(worktree, head).await.unwrap_or(upstream) {
+            (0, behind) => (0, behind),
+            (ahead, behind) => (not_pushed(worktree, head).await.unwrap_or(ahead), behind),
+        },
         None => upstream,
     };
     Local { uncommitted: u32::try_from(status.files.len()).unwrap_or(u32::MAX), ahead, behind }
+}
+
+/// How many commits `HEAD` has that neither `head` nor any remote branch does. A push moves the remote branch here at
+/// once, and GitHub's pull request a moment later.
+async fn not_pushed(worktree: &Path, head: &str) -> Option<u32> {
+    let output = git(worktree, &["rev-list", "--count", "HEAD", "--not", head, "--remotes"]).await.ok()?;
+    if !output.success {
+        return None;
+    }
+    output.stdout.trim().parse().ok()
 }
 
 /// How many commits `HEAD` has that `head` doesn't, and the other way.

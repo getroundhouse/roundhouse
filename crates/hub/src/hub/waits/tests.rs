@@ -2,7 +2,7 @@
 //! request as each test says.
 
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{Checks, MergeState, PrState, QueueState, Workspace};
+use protocol::model::{Checks, Local, MergeState, PrState, QueueState, Workspace};
 use protocol::worker::{AskReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
 
 use super::*;
@@ -104,6 +104,38 @@ async fn a_branch_without_a_pull_request_has_none_to_wait_on() {
     let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
 
     assert_eq!(refused.code, ErrorCode::NotFound, "{refused:?}");
+}
+
+/// Uncommitted files are left alone, since they change nothing GitHub says, and so is a pull request that ends the
+/// wait as it starts, or that the queue merges whatever the worktree holds.
+#[tokio::test(start_paused = true)]
+async fn a_worktree_with_commits_not_pushed_has_nothing_to_wait_on_yet() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let unpushed = |pr: PullRequest| PullRequest { local: Local { uncommitted: 0, ahead: 2, behind: 0 }, ..pr };
+    let says = says(Some(unpushed(open())));
+    let link = reading(&hub, &says);
+
+    let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Conflict, "{refused:?}");
+    assert!(refused.message.starts_with("2 commits here aren't on the pull request yet"), "{}", refused.message);
+    assert!(hub.store.workspaces_waited_on().unwrap().is_empty());
+
+    let merged = PullRequest { state: PrState::Merged, ..open() };
+    let queued = PullRequest { queue: Some(QueueState::AwaitingChecks), ..open() };
+    let draft = PullRequest { is_draft: true, ..open() };
+    let uncommitted = PullRequest { local: Local { uncommitted: 3, ahead: 0, behind: 1 }, ..open() };
+    let cases = [
+        (unpushed(merged), Some(WaitEnd::Merged)),
+        (unpushed(draft), Some(WaitEnd::Draft)),
+        (unpushed(queued), None),
+        (uncommitted, None),
+    ];
+    for (n, (pr, ends)) in cases.into_iter().enumerate() {
+        *says.lock() = Ok(Some(pr.clone()));
+        let started = ask(&hub, &link, start(&format!("toolu_{}", n + 2))).await;
+        assert_eq!(started.map(|(wait, _)| how(&wait)), Ok(ends), "{pr:?}");
+    }
 }
 
 #[tokio::test(start_paused = true)]

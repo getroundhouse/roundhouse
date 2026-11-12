@@ -154,7 +154,7 @@ fn status_of(code: Code) -> StatusCode {
     match code {
         Code::Parse | Code::InvalidRequest | Code::HeaderMismatch | Code::UnsupportedVersion => StatusCode::BAD_REQUEST,
         Code::MethodNotFound => StatusCode::NOT_FOUND,
-        Code::InvalidParams => StatusCode::OK,
+        Code::InvalidParams | Code::Internal | Code::MissingCapability => StatusCode::OK,
     }
 }
 

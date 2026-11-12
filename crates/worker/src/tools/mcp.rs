@@ -1,10 +1,11 @@
 //! MCP's messages for the worker's tools, on protocol `2026-07-28`: what each request asks, and its answer. Only that
-//! version, which has no handshake, so each request is answered alone, from what it says.
+//! version, which has no handshake, so each request is answered alone, from what it says. A wait is an MCP task, of
+//! the tasks extension, for a client that offers to take one.
 
 use protocol::model::SessionId;
 use serde_json::{Map, Value, json};
 
-use super::pull_request;
+use super::{pull_request, wait};
 use crate::asks::Asks;
 
 #[cfg(test)]
@@ -15,6 +16,12 @@ pub(super) const VERSION: &str = "2026-07-28";
 
 /// Where a request's `_meta` names its version.
 const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+
+/// Where a request's `_meta` says what its client can do.
+const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
+
+/// MCP's tasks extension, which a client offers in each request it can take a task for.
+const TASKS: &str = "io.modelcontextprotocol/tasks";
 
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
@@ -68,7 +75,9 @@ pub(super) enum Code {
     InvalidRequest,
     MethodNotFound,
     InvalidParams,
+    Internal,
     HeaderMismatch,
+    MissingCapability,
     UnsupportedVersion,
 }
 
@@ -79,7 +88,9 @@ impl Code {
             Code::InvalidRequest => -32600,
             Code::MethodNotFound => -32601,
             Code::InvalidParams => -32602,
+            Code::Internal => -32603,
             Code::HeaderMismatch => -32020,
+            Code::MissingCapability => -32021,
             Code::UnsupportedVersion => -32022,
         }
     }
@@ -93,8 +104,17 @@ pub(super) struct RpcError {
 }
 
 impl RpcError {
-    fn new(code: Code, message: impl Into<String>) -> Self {
+    pub(super) fn new(code: Code, message: impl Into<String>) -> Self {
         Self { code, message: message.into(), data: None }
+    }
+
+    /// For a client that didn't offer to take a task, where only a task will do.
+    fn needs_tasks() -> Self {
+        Self {
+            code: Code::MissingCapability,
+            message: "Missing required client capability: this needs MCP's tasks extension".into(),
+            data: Some(json!({ "requiredCapabilities": { "extensions": { TASKS: {} } } })),
+        }
     }
 }
 
@@ -105,6 +125,9 @@ enum Method<'a> {
     Ping,
     ListTools,
     CallTool,
+    GetTask,
+    UpdateTask,
+    CancelTask,
     Initialize,
     Other(&'a str),
 }
@@ -116,6 +139,9 @@ impl<'a> Method<'a> {
             "ping" => Method::Ping,
             "tools/list" => Method::ListTools,
             "tools/call" => Method::CallTool,
+            "tasks/get" => Method::GetTask,
+            "tasks/update" => Method::UpdateTask,
+            "tasks/cancel" => Method::CancelTask,
             "initialize" => Method::Initialize,
             other => Method::Other(other),
         }
@@ -165,8 +191,13 @@ async fn request(
     }
     agrees("MCP-Protocol-Version", &headers.version, version(params))?;
     agrees("Mcp-Method", &headers.method, Some(name))?;
+    let names_a_task = matches!(method, Method::GetTask | Method::UpdateTask | Method::CancelTask);
     if method == Method::CallTool {
         agrees("Mcp-Name", &headers.name, params.get("name").and_then(Value::as_str))?;
+    } else if names_a_task && headers.name != Said::Nothing {
+        // Only when it's sent: the Claude CLI cancels the task of a call interrupted as it was answered without one,
+        // which refusing would leave the wait running.
+        agrees("Mcp-Name", &headers.name, task(params))?;
     }
     match version(params) {
         Some(VERSION) => {}
@@ -177,11 +208,17 @@ async fn request(
         Method::Ping => Ok(json!({ "resultType": "complete" })),
         Method::ListTools => Ok(json!({
             "resultType": "complete",
-            "tools": [pull_request::definition()],
+            "tools": [pull_request::definition(), wait::definition()],
             "ttlMs": 0,
             "cacheScope": "public",
         })),
         Method::CallTool => call(asks, session_id, params).await,
+        Method::GetTask => wait::get(asks, session_id, task_in(params, name)?).await,
+        // A wait never asks for input, so there's nothing to update, but the task has to be the chat's.
+        Method::UpdateTask => {
+            wait::get(asks, session_id, task_in(params, name)?).await.map(|_| json!({ "resultType": "complete" }))
+        }
+        Method::CancelTask => wait::cancel(asks, session_id, task_in(params, name)?).await,
         Method::Initialize | Method::Other(_) => {
             Err(RpcError::new(Code::MethodNotFound, format!("there's no method {name} here")))
         }
@@ -190,6 +227,25 @@ async fn request(
 
 fn version(params: &Map<String, Value>) -> Option<&str> {
     params.get("_meta")?.get(VERSION_KEY)?.as_str()
+}
+
+/// The task a request for one names.
+fn task(params: &Map<String, Value>) -> Option<&str> {
+    params.get("taskId")?.as_str()
+}
+
+/// The task a request about one names, from a client that offered to take tasks, as the tasks extension requires.
+fn task_in<'a>(params: &'a Map<String, Value>, method: &str) -> Result<&'a str, RpcError> {
+    if !takes_tasks(params) {
+        return Err(RpcError::needs_tasks());
+    }
+    task(params).ok_or_else(|| RpcError::new(Code::InvalidParams, format!("{method} names its task")))
+}
+
+/// Whether the client offered to take a task for this request, which it says in each one.
+fn takes_tasks(params: &Map<String, Value>) -> bool {
+    let offered = params.get("_meta").and_then(|meta| meta.get(CAPABILITIES_KEY)?.get("extensions")?.get(TASKS));
+    offered.is_some_and(Value::is_object)
 }
 
 /// Whether a header says what the body does, as Streamable HTTP has every request say it twice.
@@ -217,10 +273,11 @@ fn discover() -> Value {
     json!({
         "resultType": "complete",
         "supportedVersions": [VERSION],
-        "capabilities": { "tools": {} },
+        "capabilities": { "tools": {}, "extensions": { TASKS: {} } },
         "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "roundhouse", "version": protocol::BUILD_VERSION } },
         "instructions": "Roundhouse's tools, for this workspace. get_pull_request says where the workspace's pull \
-            request stands, as Roundhouse reads it from GitHub.",
+            request stands, as Roundhouse reads it from GitHub, and wait_for_pull_request waits in the background \
+            until it's merged or closed, or needs you.",
         "ttlMs": 0,
         "cacheScope": "public",
     })
@@ -232,6 +289,9 @@ async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) 
     };
     match Tool::named(name) {
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
+        // A wait is answered with a task, which a client that didn't offer to take one can't be given.
+        Some(Tool::Wait) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
+        Some(Tool::Wait) => Ok(wait::call(asks, session_id, params).await),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
 }
@@ -240,12 +300,14 @@ async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tool {
     PullRequest,
+    Wait,
 }
 
 impl Tool {
     fn named(name: &str) -> Option<Self> {
         match name {
             pull_request::NAME => Some(Tool::PullRequest),
+            wait::NAME => Some(Tool::Wait),
             _ => None,
         }
     }
@@ -267,7 +329,7 @@ impl Called {
         Self { text, is_error: true }
     }
 
-    fn to_json(&self) -> Value {
+    pub(super) fn to_json(&self) -> Value {
         json!({
             "resultType": "complete",
             "content": [{ "type": "text", "text": self.text }],
