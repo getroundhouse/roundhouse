@@ -8,15 +8,16 @@
 
 use std::io::{Read as _, Write as _};
 use std::net::{SocketAddr, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde_json::{Value, json};
 
-use crate::background;
 use crate::settings::flag;
 use crate::turn::Turn;
+use crate::{Config, Out, background};
 
 /// The server the hub's worker serves, as the agent adapter names it.
 const SERVER: &str = "roundhouse";
@@ -39,6 +40,10 @@ const PATIENCE: Duration = Duration::from_secs(15);
 
 /// The server, once it has answered, or why it failed.
 static CONNECTED: OnceLock<Result<Server, String>> = OnceLock::new();
+
+/// Held while the tasks kept beside the conversation are read and written again, since each is followed on a thread
+/// of its own.
+static KEEPING: Mutex<()> = Mutex::new(());
 
 struct Server {
     address: String,
@@ -116,35 +121,125 @@ fn ask(tool: &str, tool_use_id: &str) -> Result<Answered, String> {
     Ok(Answered::Result(text.to_string(), result["isError"].as_bool().unwrap_or(false)))
 }
 
-/// Lists the task in the background, as the real CLI does, with the call's result saying so, and asks after it every
-/// `pollIntervalMs` the server last gave, asking again after an error. Once it's completed, the agent picks up again by
-/// itself and says the first line of what the tool said, as the CLI starts a turn with a `<task-notification>`.
+/// A task the agent follows, kept beside its conversation until it ends, as the real CLI keeps one, so a launch with
+/// `--resume` follows it again.
+#[derive(Clone)]
+struct Followed {
+    /// The CLI's own ID for it.
+    id: String,
+    /// The server's.
+    task_id: String,
+    tool_use_id: String,
+    description: String,
+    /// Where the server was, and the token it was reached with. A launch follows the task again only at the same, as
+    /// is all that's been seen of the real CLI, which the hub gives it.
+    url: String,
+    authorization: String,
+}
+
+/// Lists the task in the background, as the real CLI does, with the call's result saying so, and follows it.
 fn in_the_background(turn: &mut Turn, tool: &str, tool_use_id: &str, task: &Value) {
-    let id = format!("task_{tool_use_id}");
-    let server_id = task["taskId"].as_str().unwrap().to_string();
-    background::started(turn.config, turn.out, &id, "mcp_task", tool_use_id, &format!("{SERVER}/{tool}"));
-    turn.tool_result(tool_use_id, &format!("The task {server_id} was moved to the background."), false);
-    let (config, out, mut poll) = (turn.config.clone(), turn.out.clone(), poll_interval(task));
+    let server = server().unwrap();
+    let followed = Followed {
+        id: format!("task_{tool_use_id}"),
+        task_id: task["taskId"].as_str().unwrap().to_string(),
+        tool_use_id: tool_use_id.to_string(),
+        description: format!("{SERVER}/{tool}"),
+        url: server.url(),
+        authorization: server.authorization.clone(),
+    };
+    background::started(turn.config, turn.out, &followed.id, "mcp_task", tool_use_id, &followed.description);
+    background::watch_for_sigterm(turn.config, turn.out);
+    turn.tool_result(tool_use_id, &format!("The task {} was moved to the background.", followed.task_id), false);
+    change_kept(turn.config, |kept| kept.push(followed.clone()));
+    follow(turn.config, turn.out, followed, poll_interval(task));
+}
+
+/// On `--resume`, lists again the tasks a launch before this one left, before any prompt, with the `task_started` of
+/// each, and follows them, as the real CLI does.
+pub(crate) fn follow_again(args: &[String], config: &Config, out: &Out) {
+    let Ok(server) = server() else { return };
+    if flag(args, "--resume").is_none() {
+        return;
+    }
+    let kept = {
+        let _keeping = KEEPING.lock();
+        kept(config)
+    };
+    let at_the_same =
+        |followed: &Followed| followed.url == server.url() && followed.authorization == server.authorization;
+    for followed in kept.into_iter().filter(at_the_same) {
+        background::started(config, out, &followed.id, "mcp_task", &followed.tool_use_id, &followed.description);
+        background::watch_for_sigterm(config, out);
+        follow(config, out, followed, Duration::from_millis(POLL_DEFAULT_MS));
+    }
+}
+
+/// Asks after the task every `pollIntervalMs` the server last gave, asking again after an error. Once it has
+/// completed, the agent picks up again by itself and says the first line of what the tool said, as the CLI starts a
+/// turn with a `<task-notification>`.
+fn follow(config: &Config, out: &Out, followed: Followed, mut poll: Duration) {
+    let (config, out) = (config.clone(), out.clone());
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(poll);
-            let Ok(task) = server()
-                .and_then(|server| server.request("tasks/get", Some(&server_id), json!({ "taskId": server_id })))
+            let asked = json!({ "taskId": followed.task_id });
+            let Ok(task) = server().and_then(|server| server.request("tasks/get", Some(&followed.task_id), asked))
             else {
                 continue;
             };
             poll = poll_interval(&task);
-            match task["status"].as_str() {
+            let told = match task["status"].as_str() {
                 Some("completed") => {
                     let said = task["result"]["content"][0]["text"].as_str().unwrap_or_default();
-                    let said = said.lines().next().unwrap_or_default().replace(';', ",");
-                    return background::finished(&config, &out, &id, Some(format!("say:{said}")));
+                    Some(format!("say:{}", said.lines().next().unwrap_or_default().replace(';', ",")))
                 }
-                Some("cancelled" | "failed") => return background::finished(&config, &out, &id, None),
-                _ => {}
-            }
+                Some("cancelled" | "failed") => None,
+                _ => continue,
+            };
+            change_kept(&config, |kept| kept.retain(|other| other.id != followed.id));
+            return background::finished(&config, &out, &followed.id, told);
         }
     });
+}
+
+fn kept_at(config: &Config) -> PathBuf {
+    config.conversation.with_extension("mcp-tasks")
+}
+
+/// Changes the tasks kept, read and written again whole.
+fn change_kept(config: &Config, change: impl FnOnce(&mut Vec<Followed>)) {
+    let _keeping = KEEPING.lock();
+    let mut kept = kept(config);
+    change(&mut kept);
+    keep(config, &kept);
+}
+
+fn kept(config: &Config) -> Vec<Followed> {
+    let kept: Vec<Value> =
+        std::fs::read(kept_at(config)).ok().and_then(|kept| serde_json::from_slice(&kept).ok()).unwrap_or_default();
+    let field = |followed: &Value, name: &str| followed[name].as_str().unwrap_or_default().to_string();
+    kept.iter()
+        .map(|followed| Followed {
+            id: field(followed, "id"),
+            task_id: field(followed, "task_id"),
+            tool_use_id: field(followed, "tool_use_id"),
+            description: field(followed, "description"),
+            url: field(followed, "url"),
+            authorization: field(followed, "authorization"),
+        })
+        .collect()
+}
+
+fn keep(config: &Config, kept: &[Followed]) {
+    let kept: Vec<_> = kept
+        .iter()
+        .map(|followed| {
+            json!({ "id": followed.id, "task_id": followed.task_id, "tool_use_id": followed.tool_use_id,
+                "description": followed.description, "url": followed.url, "authorization": followed.authorization })
+        })
+        .collect();
+    std::fs::write(kept_at(config), serde_json::to_vec(&kept).unwrap()).unwrap();
 }
 
 fn poll_interval(task: &Value) -> Duration {
@@ -153,6 +248,10 @@ fn poll_interval(task: &Value) -> Duration {
 }
 
 impl Server {
+    fn url(&self) -> String {
+        format!("http://{}{}", self.address, self.path)
+    }
+
     /// Sends one request and returns its result, or why there wasn't one. `name` goes in `Mcp-Name`, which the real
     /// CLI sends with a call and with a request about a task.
     fn request(&self, method: &str, name: Option<&str>, mut params: Value) -> Result<Value, String> {

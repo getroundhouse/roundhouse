@@ -7,6 +7,31 @@ use protocol::model::{ApprovalId, RunId, SessionStatus};
 
 use crate::store::TurnEdge;
 
+impl super::LiveSession {
+    /// Whether the agent is doing something that goes on without a person.
+    pub(crate) fn works_unattended(&self) -> bool {
+        let state = self.state.lock();
+        works_unattended(state.status, state.background_tasks.len())
+    }
+
+    /// As this hub stops, for a session with a wait open: has its agent's exit leave it as the next hub's `recover`
+    /// would, if its only work is the wait, still at work in the background, with the wait listed and its queue not
+    /// held. Its agent goes with this hub's workers, and the next hub starts it again once the wait ends.
+    pub(crate) async fn outlive_this_hub(&self) {
+        // After what's being recorded, which the store has before this state does, so a turn that has just ended
+        // counts as ended.
+        let _in_order = self.recording.lock().await;
+        let mut state = self.state.lock();
+        state.outlives_this_hub = only_waits(state.status, &state.background_tasks);
+    }
+}
+
+/// Whether a session with a wait open has nothing else to do: its turn has ended, and what it has in the background
+/// can only be the wait, since an agent waits on one at a time. *Not built:* telling a wait's task from others.
+pub(crate) fn only_waits(status: SessionStatus, background: &[AgentTask]) -> bool {
+    status == SessionStatus::Background && background.len() == 1
+}
+
 /// What the agent has left open once an event is applied.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Open {

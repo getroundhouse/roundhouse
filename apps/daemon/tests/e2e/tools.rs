@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use client_core::Client;
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent};
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::gh::{MERGED, OPEN, StandInGh};
@@ -139,4 +139,64 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let events = wait_for_turn_end(&client, &chat.id, 2);
     let said = assistant_text(&events);
     assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
+}
+
+/// The wait is the hub's, so a hub started again has it, however the last one went, with the chat at work in the
+/// background and the wait listed. Once the new hub's own read finds the pull request merged, the agent's CLI hears as
+/// it next asks after its task, and says how it ended. A hub that dies leaves the agent running, so the next hub
+/// carries on with it. One that stops, or goes with the machine, takes the agent with it, so the next hub starts it
+/// again, whose CLI asks after its task as it starts.
+fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool) {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    gh.say(OPEN);
+    let client = stack.client();
+    let (_, chat) = stack.workspace(&client);
+    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    wait_for_status(&client, &chat.id, SessionStatus::Background);
+    let agent = started_pid(&read_all(&client, &chat.id)).unwrap();
+    drop(client);
+
+    // Held, so no hub reads it until the new one is up, and merged only once the last one has gone, since a read that
+    // one began before the hold, as the turn ended, would find it merged and end the wait. The new hub reads it merged
+    // by itself, as the first it reads, once it's been looked at.
+    gh.hold();
+    stop(&mut stack);
+    gh.say(MERGED);
+    stack.start_hub();
+    let client = stack.client();
+    let waiting = client.session_get(&chat.id).unwrap();
+    let still = (waiting.status, waiting.background_tasks.len(), waiting.queue_held);
+    assert_eq!(still, (SessionStatus::Background, 1, false), "nothing it was doing was cut off");
+    gh.release();
+
+    let events = wait_for_turn_end(&client, &chat.id, 2);
+    let said = assistant_text(&events);
+    assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
+    let went =
+        events.iter().any(|event| matches!(event.body, EventBody::AgentExited { reason: ExitReason::HubRestart, .. }));
+    let same = latest_started_pid(&events) == Some(agent);
+    assert_eq!((went, same), (!carried_on, carried_on), "whether the agent went with the hub");
+}
+
+#[test]
+fn a_wait_lasts_across_the_hub_dying_and_starting_again() {
+    a_wait_lasts_across_a_restart(Stack::kill_hub, true);
+}
+
+/// As the machine going down takes the hub, and its workers with it, so the next hub finds the agent gone.
+#[test]
+fn a_wait_lasts_across_the_hub_going_with_its_workers() {
+    a_wait_lasts_across_a_restart(Stack::kill_hub_and_workers, false);
+}
+
+/// As `roundhouse hub stop` stops it, with its workers and their agents, which records what they say as they go.
+#[test]
+fn a_wait_lasts_across_the_hub_stopping_and_starting_again() {
+    let stop = |stack: &mut Stack| {
+        stack.client().hub_shutdown().unwrap();
+        let mut hub = stack.hub.take().unwrap();
+        wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
+    };
+    a_wait_lasts_across_a_restart(stop, false);
 }

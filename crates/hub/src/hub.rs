@@ -296,6 +296,13 @@ impl Hub {
     pub(crate) async fn stop_all_workers(self: &Arc<Self>) {
         // Refuse new workers first, so a client still connected can't start one behind this.
         self.shutting_down.store(true, Ordering::SeqCst);
+        // Before their agents go, so the exit of one whose only work is a wait the next hub keeps cuts nothing off.
+        let waiting = self.blocking(Store::sessions_waiting).await.unwrap_or_default();
+        let sessions: Vec<_> =
+            self.sessions.lock().live.values().filter(|session| waiting.contains(&session.id)).cloned().collect();
+        for session in sessions {
+            session.outlive_this_hub().await;
+        }
         let links: Vec<_> = self.workers.lock().iter().map(|(id, link)| (id.clone(), link.clone())).collect();
         for (_, link) in &links {
             link.close().await;

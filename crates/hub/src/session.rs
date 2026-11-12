@@ -39,6 +39,7 @@ use commands::run_commands;
 use ingest::run_ingest;
 pub(crate) use messages::{Command, Item};
 use queue::QueueWatch;
+pub(crate) use status::only_waits;
 
 const LIVE_CAPACITY: usize = 4096;
 
@@ -123,8 +124,11 @@ struct LiveState {
     version: u64,
     /// Open approvals, by the run that asked. `None` means an earlier hub's, which can't be answered.
     pending_approvals: HashMap<ApprovalId, Option<RunId>>,
-    /// What the current agent is running in the background. None of it outlives the agent, so it starts empty.
+    /// What the current agent is running in the background, from what the session's record lists, since a wait the
+    /// hub keeps outlives the agent, though nothing else does.
     background_tasks: Vec<AgentTask>,
+    /// Whether the session's only work is a wait the hub keeps, as this hub stops, so its agent's exit cuts nothing off.
+    outlives_this_hub: bool,
     /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
     context: Option<ContextUsage>,
     /// What the API's cache holds of the conversation, as the session's record says.
@@ -199,7 +203,8 @@ impl LiveSession {
         };
         // The agent still running is the one that asked whatever is open, and runs on what it runs in the background.
         let asked_by = agent.map(|agent| agent.run);
-        let background_tasks = if agent.is_some() { stored.session.background_tasks.clone() } else { Vec::new() };
+        // As the record lists them: the agent's, if it carries on with one, or else only a wait, which outlives it.
+        let background_tasks = stored.session.background_tasks.clone();
         let mut queue = QueueWatch::starting(stored.session.queue_held);
         queue.set_untaken(untaken);
         let (commands_tx, commands_rx) = mpsc::channel(64);
@@ -220,6 +225,7 @@ impl LiveSession {
                 version: 0,
                 pending_approvals: open_approvals.into_iter().map(|id| (id, asked_by)).collect(),
                 background_tasks,
+                outlives_this_hub: false,
                 context: stored.session.context.clone(),
                 prompt_cache: stored.session.prompt_cache.clone(),
                 hearing: None,
@@ -283,12 +289,6 @@ impl LiveSession {
 
     pub(crate) fn status(&self) -> SessionStatus {
         self.state.lock().status
-    }
-
-    /// Whether the agent is doing something that goes on without a person.
-    pub(crate) fn works_unattended(&self) -> bool {
-        let state = self.state.lock();
-        status::works_unattended(state.status, state.background_tasks.len())
     }
 
     pub(crate) fn agent_running(&self) -> bool {

@@ -16,8 +16,11 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
 use super::{BEFORE_SERVING, Hub};
+
+#[cfg(test)]
+mod tests;
 use crate::error::provider_failed;
-use crate::session::{CarriedOver, Item, LiveSession};
+use crate::session::{CarriedOver, Item, LiveSession, only_waits};
 use crate::store::{SessionChange, StatusChange, Store, StoreError, cancelled_approval};
 
 /// What an earlier hub left at work: its sessions at work, by workspace, every workspace that isn't archived, for
@@ -177,7 +180,9 @@ impl Hub {
 
 /// A session an earlier hub left at work whose agent has gone. A prompt it hadn't taken never will be, its open
 /// approvals can't be answered, and it took what it was running in the background with it. Its queue is held, as when
-/// the agent exits mid-turn with the hub still there.
+/// the agent exits mid-turn with the hub still there. But a session whose only work was a wait, which the hub keeps,
+/// had nothing cut off, so it's still at work in the background, with the wait listed and its queue free, and its
+/// agent is started again once the wait ends.
 fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), StoreError> {
     drop_untaken(store, id, untaken)?;
     for approval_id in store.open_approvals(id)? {
@@ -185,8 +190,16 @@ fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), Sto
     }
     let exited =
         EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
-    let interrupted = StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() };
-    let change = SessionChange { status: Some(interrupted), queue_held: Some(true), recorded: None };
+    let only_waiting = store.sessions_waiting()?.contains(id) && {
+        let session = store.get_session(id)?.session;
+        only_waits(session.status, &session.background_tasks)
+    };
+    let status = if only_waiting {
+        SessionStatus::Background.into()
+    } else {
+        StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }
+    };
+    let change = SessionChange { status: Some(status), queue_held: Some(!only_waiting), recorded: None };
     store.append(id, None, &exited, None, None, Some(change))?;
     Ok(())
 }

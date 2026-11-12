@@ -298,6 +298,7 @@ impl Hub {
 
         // Interrupt setup first, so the script isn't running in a worktree that's about to go.
         let _ = link.call(WorkerRequest::CancelSetup).await;
+        self.call_off_waits_of(&id).await?;
         let script = WorkerRequest::ArchiveScript {
             repo_path: repo.path.clone(),
             path: path.clone(),

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
-use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus, WorkspaceStatus};
+use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionStatus, SetupStatus, WorkspaceStatus};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -41,6 +41,7 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             }
             Command::SendQueued => session.send_queued().await,
             Command::SendQueuedNow { client_msg_id, reply } => session.send_queued_now(client_msg_id, reply).await,
+            Command::WakeAgent => session.handle_wake_agent().await,
             Command::End => break,
         }
     }
@@ -74,6 +75,46 @@ impl LiveSession {
         }
         self.start_agent(&hub, &link, cwd, env).await?;
         Ok(link)
+    }
+
+    /// Has the agent started, if it's waiting on nothing but a wait, once what's asked of the session before this is
+    /// done.
+    pub(crate) fn wake_agent(&self) {
+        if let Err(e) = self.commands.try_send(Command::WakeAgent) {
+            warn!(session = %self.id, "couldn't ask for the agent to be started: {e}");
+        }
+    }
+
+    /// Starts the agent for a chat that's idle or at work only in the background, with its queue not held. It needs no
+    /// prompt: a CLI started again lists its tasks again and asks after them, and starts a turn by itself once one has
+    /// ended, as `docs/claude-cli.md` says. One that was cut off, or held for the person, is left for them, and hears
+    /// how its wait ended with their next prompt, since its CLI lists its tasks again then too.
+    async fn handle_wake_agent(&self) {
+        let Ok(hub) = self.hub() else { return };
+        let waiting_on_nothing = {
+            let state = self.state.lock();
+            matches!(state.status, SessionStatus::Idle | SessionStatus::Background) && !state.queue.is_held()
+        };
+        if self.agent_running() || !waiting_on_nothing || self.can_be_asked(&hub).await.is_err() {
+            return;
+        }
+        if let Err(e) = self.ensure_agent().await {
+            warn!(session = %self.id, "couldn't start the agent to hear how its wait ended: {e}");
+            self.record_start_failed(&e).await;
+        }
+    }
+
+    /// Tells every client the agent couldn't be started, or reached, for what was asked of it, and ends what it had
+    /// asked approval for, since it won't hear the answer.
+    async fn record_start_failed(&self, e: &ApiError) {
+        self.cancel_approvals(None).await;
+        let failed = EventBody::AgentExited {
+            reason: ExitReason::StartFailed,
+            code: None,
+            signal: None,
+            stderr_tail: vec![e.message.clone()],
+        };
+        self.record_or_log(Origin::Hub, failed).await;
     }
 
     /// Picks the run before the launch and marks it current, so the new agent's first deltas aren't
@@ -254,17 +295,7 @@ impl LiveSession {
                 return;
             }
             warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
-            self.cancel_approvals(None).await;
-            self.record_or_log(
-                Origin::Hub,
-                EventBody::AgentExited {
-                    reason: ExitReason::StartFailed,
-                    code: None,
-                    signal: None,
-                    stderr_tail: vec![e.message.clone()],
-                },
-            )
-            .await;
+            self.record_start_failed(&e).await;
         }
     }
 

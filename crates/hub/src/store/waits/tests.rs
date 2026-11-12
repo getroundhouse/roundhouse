@@ -101,6 +101,24 @@ fn closing_a_chat_or_archiving_its_workspace_ends_its_waits() {
     assert!(store.workspaces_waited_on().unwrap().is_empty());
 }
 
+/// As its workspace starts being archived, before the archive script runs.
+#[test]
+fn a_workspaces_waits_are_called_off_together_and_no_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_two_chats(dir.path());
+    store.start_wait(&wait("a"), Seen::default()).unwrap();
+    store.start_wait(&Wait { session_id: "t".into(), ..wait("b") }, Seen::default()).unwrap();
+
+    let elsewhere = store.call_off_workspace_waits(&"v".into(), 2).unwrap();
+    let mut called_off = store.call_off_workspace_waits(&"w".into(), 3).unwrap();
+    called_off.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+
+    assert!(elsewhere.is_empty());
+    assert_eq!(called_off, [WaitId::from("a"), WaitId::from("b")]);
+    let cancelled = Some(WaitEnded { at_ms: 3, how: WaitEnd::Cancelled });
+    assert_eq!((how(&store, "a"), how(&store, "b")), (cancelled, cancelled));
+}
+
 #[test]
 fn a_wait_doesnt_start_in_a_closed_chat_or_an_archived_workspace() {
     let dir = tempfile::tempdir().unwrap();

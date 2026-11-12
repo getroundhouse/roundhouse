@@ -42,6 +42,11 @@ impl QueueWatch {
         Self { held, ..Self::default() }
     }
 
+    /// Whether the queue waits for the person.
+    pub(super) fn is_held(&self) -> bool {
+        self.held
+    }
+
     /// Whether the agent can take a queued prompt as a turn of its own, in a session with this status. One that went
     /// away mid-turn can, once the person lets the queue go on, since sending a prompt resumes the conversation.
     pub(super) fn ready(&self, status: SessionStatus, closed: bool) -> bool {
