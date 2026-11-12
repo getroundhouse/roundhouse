@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use protocol::client::{ApiError, ErrorCode};
+use protocol::provider::PROVIDER_PROTOCOL_VERSION;
 use providers::Feature;
 use providers::local::{LocalConfig, LocalProvider};
 use serde_json::Value;
@@ -162,6 +163,24 @@ async fn a_hello_that_the_adapter_refuses_fails_whatever_needed_it_as_io() {
 
     let Err(ProviderError::Io { source, .. }) = &stopped else { panic!("{stopped:?}") };
     assert_eq!(source.to_string(), "serving hub g");
+}
+
+/// One that chose a version this hub doesn't speak, which no adapter should, since an adapter chooses one both speak.
+#[tokio::test]
+async fn an_adapter_that_chose_another_version_is_not_used() {
+    let chose_another = ProviderOutcome::Response(ProviderResponse::Hello {
+        protocol_version: PROVIDER_PROTOCOL_VERSION + 1,
+        adapter: "scripted".into(),
+        build: "test".into(),
+        capabilities: Capabilities::default(),
+    });
+    let open =
+        opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(chose_another.clone())], Arc::default()));
+    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), open);
+
+    let said = provider.say_hello().await;
+
+    assert!(matches!(&said, Err(ProviderError::Io { .. })), "{said:?}");
 }
 
 #[tokio::test(start_paused = true)]

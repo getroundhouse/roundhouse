@@ -5,11 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
-use protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
-};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
+use protocol::versions::Versions;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
@@ -19,6 +18,7 @@ use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::listener::Listener;
 use crate::store::AddedBy;
+use crate::versions;
 use pump::{Following, pump};
 
 mod pump;
@@ -120,10 +120,6 @@ async fn serve_connection(
     hub.clients.fetch_sub(1, Ordering::Relaxed);
 }
 
-/// The versions of the client protocol this hub speaks: only the current one, until a break brings the one before it,
-/// as "Changing the protocol" in `docs/architecture.md` says.
-const SPEAKS: std::ops::RangeInclusive<u32> = CLIENT_PROTOCOL_VERSION..=CLIENT_PROTOCOL_VERSION;
-
 /// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and
 /// stopped. Anyone who can reach this socket is this user, as `bind_socket` makes sure. A connection from
 /// elsewhere, once there are any, shouldn't get this, because stopping a shared hub is for its admins.
@@ -137,7 +133,8 @@ fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let Some(ClientRequest::Hello { protocol_version, oldest_protocol_version, .. }) = request else {
         return error("the first request on a connection must be hello".to_string());
     };
-    match protocol::newest_shared(SPEAKS, *protocol_version, *oldest_protocol_version) {
+    let theirs = Versions::from_hello(*protocol_version, *oldest_protocol_version);
+    match versions::CLIENTS.newest_shared(theirs) {
         Some(chosen) => (
             ReplyOutcome::Response(ClientResponse::Hello {
                 protocol_version: chosen,
@@ -146,9 +143,9 @@ fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
             true,
         ),
         None => error(format!(
-            "this hub is version {} on protocol {CLIENT_PROTOCOL_VERSION}, and this client speaks {}. Stopping the hub, which also stops its agents, lets one that matches start",
+            "this hub is version {} on {}, and this client speaks {theirs}. Stopping the hub, which also stops its agents, lets one that matches start",
             protocol::BUILD_VERSION,
-            protocol::versions_named(*protocol_version, *oldest_protocol_version),
+            versions::CLIENTS,
         )),
     }
 }

@@ -11,6 +11,7 @@ use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
 use protocol::model::{RunId, SessionId};
+use protocol::versions::Versions;
 use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
@@ -309,10 +310,9 @@ async fn handle(
 /// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
 /// own too once a protocol breaks, as "Changing the protocol" in `docs/architecture.md` says.
 fn hello(newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
-    let only = WORKER_PROTOCOL_VERSION..=WORKER_PROTOCOL_VERSION;
-    let Some(chosen) = protocol::newest_shared(only, newest, oldest) else {
-        let hub = protocol::versions_named(newest, oldest);
-        let message = format!("the hub speaks {hub}, and this worker speaks protocol {WORKER_PROTOCOL_VERSION}");
+    let (ours, hub) = (Versions::only(WORKER_PROTOCOL_VERSION), Versions::from_hello(newest, oldest));
+    let Some(chosen) = ours.newest_shared(hub) else {
+        let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
     Ok(WorkerResponse::Hello { protocol_version: chosen })

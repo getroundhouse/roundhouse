@@ -12,8 +12,7 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
-    PROVIDER_PROTOCOL_VERSION, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest,
-    ProviderResponse,
+    ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
 };
 use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -23,6 +22,7 @@ use tracing::{info, warn};
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{self, ChildProcess, Spawned, Stderr};
 use crate::frames::FrameReader;
+use crate::versions;
 
 /// An adapter answers hello at once, since it needn't reach its provider to do so.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
@@ -103,8 +103,8 @@ impl AdapterProvider {
             (self.open)().map_err(|e| ProviderError::io(format!("starting provider {}'s adapter", self.name), e))?;
         let connection = Connection::start(opened);
         let hello = ProviderRequest::Hello {
-            protocol_version: PROVIDER_PROTOCOL_VERSION,
-            oldest_protocol_version: PROVIDER_PROTOCOL_VERSION,
+            protocol_version: versions::PROVIDERS.newest,
+            oldest_protocol_version: versions::PROVIDERS.oldest,
             hub_id: self.hub_id.clone(),
             build: protocol::BUILD_VERSION.to_string(),
         };
@@ -114,9 +114,16 @@ impl AdapterProvider {
             _ = shut.wait_for(|shut| *shut) => return Err(shutting_down()),
         };
         match answer?.ok_or_else(|| failed(exited()))? {
-            ProviderOutcome::Response(ProviderResponse::Hello { adapter, build, capabilities, .. }) => {
+            ProviderOutcome::Response(ProviderResponse::Hello { protocol_version, adapter, build, capabilities })
+                if versions::PROVIDERS.speaks(protocol_version) =>
+            {
                 info!(provider = self.name, adapter, build, "a provider's adapter said hello");
                 *self.capabilities.lock() = capabilities;
+            }
+            ProviderOutcome::Response(ProviderResponse::Hello { protocol_version, .. }) => {
+                let speaks = versions::PROVIDERS;
+                let chose = format!("the adapter chose protocol {protocol_version}, and this hub speaks {speaks}");
+                return Err(failed(io::Error::other(chose)));
             }
             ProviderOutcome::Response(other) => return Err(unexpected(&other)),
             // Not with the adapter's own code, which would read as the answer to whatever needed the hello.

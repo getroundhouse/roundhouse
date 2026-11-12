@@ -19,6 +19,7 @@ mod server;
 mod session;
 pub mod store;
 mod terminate;
+mod versions;
 mod worker_link;
 
 pub use crate::error::HubError;

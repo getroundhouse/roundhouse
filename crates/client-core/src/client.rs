@@ -186,9 +186,15 @@ impl Client {
             // A client speaks only its own version, and a hub the one before its own as well after a break.
             oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
         })?;
-        let ClientResponse::Hello { hub_version, .. } = reply else {
+        let ClientResponse::Hello { protocol_version, hub_version } = reply else {
             return unexpected(&reply);
         };
+        // A client speaks only its own version, so it can't follow a hub that chose another.
+        if protocol_version != CLIENT_PROTOCOL_VERSION {
+            let message =
+                format!("the hub chose protocol {protocol_version}, and this client speaks {CLIENT_PROTOCOL_VERSION}");
+            return Err(ApiError::new(ErrorCode::VersionMismatch, message).into());
+        }
         let _ = client.inner.hub_version.set(hub_version);
         Ok(client)
     }

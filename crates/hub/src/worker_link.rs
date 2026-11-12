@@ -7,7 +7,6 @@ use std::time::Duration;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{InstanceId, WorkspaceId};
-use protocol::worker::WORKER_PROTOCOL_VERSION;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use providers::Provider;
 use tokio::sync::watch;
@@ -19,6 +18,7 @@ use crate::error::{internal, provider_failed};
 use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
+use crate::versions;
 
 static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -81,14 +81,18 @@ impl WorkerLink {
         });
         tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
 
-        // Only its own version, until a break brings the one before it, as "Changing the protocol" in
-        // `docs/architecture.md` says.
         let hello = link.call(WorkerRequest::Hello {
-            protocol_version: WORKER_PROTOCOL_VERSION,
-            oldest_protocol_version: Some(WORKER_PROTOCOL_VERSION),
+            protocol_version: versions::WORKERS.newest,
+            oldest_protocol_version: Some(versions::WORKERS.oldest),
         });
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
-            Ok(Ok(WorkerResponse::Hello { .. })) => return Ok(link),
+            Ok(Ok(WorkerResponse::Hello { protocol_version })) if versions::WORKERS.speaks(protocol_version) => {
+                return Ok(link);
+            }
+            Ok(Ok(WorkerResponse::Hello { protocol_version })) => ApiError::new(
+                ErrorCode::VersionMismatch,
+                format!("the worker chose protocol {protocol_version}, and this hub speaks {}", versions::WORKERS),
+            ),
             Ok(Ok(other)) => ApiError::new(ErrorCode::Worker, format!("unexpected hello reply: {other:?}")),
             Ok(Err(e)) => e,
             Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {HELLO_TIMEOUT:?}")),
