@@ -28,6 +28,10 @@ pub enum TaskKind {
     Subagent,
     /// A command that watches for something, and wakes the agent each time it happens. It does nothing meanwhile.
     Monitor,
+    /// A wait on the workspace's pull request, which the hub keeps, so it goes on across the hub's restart, and the
+    /// agent hears how it ended. It does nothing meanwhile but ask the hub how it stands. A client that doesn't know
+    /// it reads it as a command.
+    Wait,
     /// A command the agent left running. It might end by itself, as a test run does, or be held open, as an app is,
     /// and the agent doesn't say which. It's also what a list from before kinds were kept holds, and what a kind
     /// this build doesn't know reads as.

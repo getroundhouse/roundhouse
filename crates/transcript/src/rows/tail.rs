@@ -155,6 +155,8 @@ fn going(task: &AgentTask, by: By, shared: &Shared, cx: &App) -> impl IntoElemen
         TaskKind::Command => (ring(TaskRing::Running, cx), "A command", "Running in the background"),
         TaskKind::Subagent => (look::robot_at_work(cx).into_any_element(), "A subagent", "Running in the background"),
         TaskKind::Monitor => (ring(TaskRing::Watching, cx), "A monitor", "Watching in the background"),
+        // Watching too, until how a wait shows is designed, with the app's showing it.
+        TaskKind::Wait => (ring(TaskRing::Watching, cx), "A wait", "Waiting in the background"),
     };
     let text = task.description.clone().unwrap_or_else(|| what.to_string());
     let open = task.call.as_ref().filter(|_| by == By::Place && task.kind == TaskKind::Subagent).map(|call| {

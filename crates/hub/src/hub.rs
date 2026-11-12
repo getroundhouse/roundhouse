@@ -267,8 +267,7 @@ impl Hub {
     }
 
     pub(crate) fn status(&self) -> HubStatus {
-        let running_sessions =
-            self.sessions.lock().live.values().filter(|session| session.status().is_active()).count();
+        let running_sessions = self.sessions.lock().live.values().filter(|session| session.counts_as_running()).count();
         HubStatus {
             pid: std::process::id(),
             hub_version: protocol::BUILD_VERSION.to_string(),

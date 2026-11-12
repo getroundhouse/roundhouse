@@ -39,7 +39,6 @@ use commands::run_commands;
 use ingest::run_ingest;
 pub(crate) use messages::{Command, Item};
 use queue::QueueWatch;
-pub(crate) use status::only_waits;
 
 const LIVE_CAPACITY: usize = 4096;
 

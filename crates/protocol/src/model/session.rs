@@ -6,7 +6,7 @@ use super::{
     AccountId, AnswerDraft, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode,
     PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
 };
-use crate::event::AgentTask;
+use crate::event::{AgentTask, TaskKind};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -59,6 +59,23 @@ impl SessionStatus {
             SessionStatus::Running | SessionStatus::WaitingApproval | SessionStatus::Background => true,
             SessionStatus::Idle | SessionStatus::Interrupted | SessionStatus::Unknown => false,
         }
+    }
+
+    /// Whether the agent's only work, with `background` running there, is waiting in the background on its waits on
+    /// the pull request, which the hub keeps.
+    pub fn only_waits(self, background: &[AgentTask]) -> bool {
+        self == SessionStatus::Background
+            && !background.is_empty()
+            && background.iter().all(|task| task.kind == TaskKind::Wait)
+    }
+
+    /// Whether the hub counts the agent as running, with `background` running there, since stopping the hub now would
+    /// cut short what it's doing, so a hub asked to stop only if nothing would notice, as to update it, carries on for
+    /// it, and the app counts it as what the update waits on. Waits don't, since the next hub keeps them and starts the
+    /// agent again once one ends, though the agent is at work meanwhile, and keeps the machine awake, so its pull
+    /// request goes on being read.
+    pub fn counts_as_running(self, background: &[AgentTask]) -> bool {
+        self.is_active() && !self.only_waits(background)
     }
 }
 
@@ -189,6 +206,26 @@ mod tests {
 
     use super::*;
     use crate::model::CacheTtl;
+
+    /// Waits are the hub's, which the next hub keeps, starting the agent again once one ends, so an agent with only
+    /// waits in the background isn't counted as running. One with anything else there, or on a turn, is.
+    #[test]
+    fn an_agent_with_only_waits_in_the_background_isnt_counted_as_running() {
+        use SessionStatus::{Background, Idle, Running, WaitingApproval};
+        let task = |id: &str, kind| AgentTask { id: id.into(), description: None, kind, call: None };
+        let (wait, other_wait, command) =
+            (task("w", TaskKind::Wait), task("x", TaskKind::Wait), task("c", TaskKind::Command));
+
+        assert!(!Background.counts_as_running(std::slice::from_ref(&wait)));
+        assert!(!Background.counts_as_running(&[wait.clone(), other_wait]));
+        assert!(Background.counts_as_running(&[wait.clone(), command.clone()]));
+        assert!(Background.counts_as_running(&[command]));
+        assert!(Background.counts_as_running(&[]), "nothing says it only waits");
+        for in_a_turn in [Running, WaitingApproval] {
+            assert!(in_a_turn.counts_as_running(std::slice::from_ref(&wait)), "{in_a_turn:?}");
+        }
+        assert!(!Idle.counts_as_running(&[]));
+    }
 
     fn session(status: &str, used_tokens: u64) -> Session {
         let mut session: Session = serde_json::from_value(json!({

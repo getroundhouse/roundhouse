@@ -20,7 +20,7 @@ use super::{BEFORE_SERVING, Hub};
 #[cfg(test)]
 mod tests;
 use crate::error::provider_failed;
-use crate::session::{CarriedOver, Item, LiveSession, only_waits};
+use crate::session::{CarriedOver, Item, LiveSession};
 use crate::store::{SessionChange, StatusChange, Store, StoreError, cancelled_approval};
 
 /// What an earlier hub left at work: its sessions at work, by workspace, every workspace that isn't archived, for
@@ -192,7 +192,7 @@ fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), Sto
         EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
     let only_waiting = store.sessions_waiting()?.contains(id) && {
         let session = store.get_session(id)?.session;
-        only_waits(session.status, &session.background_tasks)
+        session.status.only_waits(&session.background_tasks)
     };
     let status = if only_waiting {
         SessionStatus::Background.into()

@@ -10,6 +10,7 @@ use serde_json::json;
 use tracing::warn;
 
 use crate::ToolServer;
+use crate::claude::TOOLS_SERVER;
 
 #[cfg(test)]
 mod tests;
@@ -17,10 +18,6 @@ mod tests;
 /// With it set, the CLI offers MCP's tasks with each call to a tool, so a tool that waits, such as on a pull request,
 /// can answer with a task, and the turn can end while it waits. Without it, a call is held until the tool answers.
 pub(super) const TAKES_TASKS: &str = "CLAUDE_AUTO_BACKGROUND_TASKS";
-
-/// What the CLI calls the server, which it puts in the name of each of its tools, such as
-/// `mcp__roundhouse__get_pull_request`.
-const SERVER_NAME: &str = "roundhouse";
 
 /// The CLI's arguments for the worker's tools, once the file that names them is written. `None` if it can't be, and
 /// the agent goes without them, as it does when the worker can't serve them.
@@ -41,7 +38,7 @@ pub(super) fn args(tools: &ToolServer) -> Option<[OsString; 2]> {
 fn write(tools: &ToolServer) -> io::Result<()> {
     let config = json!({
         "mcpServers": {
-            SERVER_NAME: {
+            TOOLS_SERVER: {
                 "type": "http",
                 "url": tools.url,
                 "headers": { "Authorization": format!("Bearer {}", tools.token.as_str()) },

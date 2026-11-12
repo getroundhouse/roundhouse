@@ -15,7 +15,7 @@ use crate::asks::Asks;
 #[cfg(test)]
 pub(super) mod tests;
 
-pub(super) const NAME: &str = "wait_for_pull_request";
+pub(super) const NAME: &str = protocol::worker::WAIT_TOOL;
 
 /// How often the agent's CLI is asked to check on a wait. The hub reads the pull request less often than this, so it's
 /// only how soon after the read that ends a wait the agent hears of it, at the cost of a question to the hub that never

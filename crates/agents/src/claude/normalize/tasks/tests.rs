@@ -18,6 +18,24 @@ fn background_tasks_are_listed_whole_each_time_they_change() {
     assert_eq!(parse_line(&done), Parsed::Event(EventBody::AgentTasks { tasks: vec![], stopped: vec![] }));
 }
 
+/// As the CLI describes an MCP task, by the server's tool whose call started it, in its list from the first. Only
+/// the worker's `wait_for_pull_request` is a wait. Another tool's task, the same tool of another server, and a task
+/// that isn't a tool's are what they always were.
+#[test]
+fn an_mcp_task_of_the_worker_tool_that_waits_is_a_wait() {
+    let kind = |task_type: &str, description: &str| {
+        let task = json!({"task_id":"k1","run_id":"r1","task_type":task_type,"description":description});
+        let line = json!({"type":"system","subtype":"background_tasks_changed","tasks":[task]}).to_string();
+        let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = parse_line(&line) else { panic!("a list") };
+        tasks[0].kind
+    };
+
+    assert_eq!(kind("mcp_task", "roundhouse/wait_for_pull_request"), TaskKind::Wait);
+    assert_eq!(kind("mcp_task", "roundhouse/get_pull_request"), TaskKind::Command);
+    assert_eq!(kind("mcp_task", "elsewhere/wait_for_pull_request"), TaskKind::Command);
+    assert_eq!(kind("local_bash", "roundhouse/wait_for_pull_request"), TaskKind::Command);
+}
+
 #[test]
 fn a_task_that_leaves_the_list_stopped_rather_than_finished_says_so() {
     let ended = |id: &str, status: &str| {
