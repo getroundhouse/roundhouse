@@ -17,6 +17,7 @@ mod hub_settings;
 mod instances;
 mod pull_requests;
 mod queues;
+mod ready;
 mod repos;
 mod sessions;
 mod setup;
@@ -106,10 +107,6 @@ pub(crate) struct Hub {
     name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
-}
-
-fn not_ready(workspace: &Workspace) -> ApiError {
-    ApiError::new(ErrorCode::Conflict, format!("workspace {} is {:?}", workspace.name, workspace.status))
 }
 
 fn unexpected(reply: &WorkerResponse) -> ApiError {

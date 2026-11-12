@@ -3,13 +3,11 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{
-    AccountId, AgentAccount, AgentKind, SessionAccount, SessionId, UsageLimit, WorkspaceId, WorkspaceStatus,
-};
+use protocol::model::{AccountId, AgentAccount, AgentKind, SessionAccount, SessionId, UsageLimit, WorkspaceId};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::error;
 
-use super::{Hub, not_ready, unexpected};
+use super::{Hub, unexpected};
 
 impl Hub {
     /// The account an agent of this kind runs under in the workspace, as the workspace's worker reads it, since the
@@ -23,12 +21,8 @@ impl Hub {
         workspace_id: &WorkspaceId,
         agent: AgentKind,
     ) -> Result<AgentAccount, ApiError> {
-        let workspace = self.workspace(workspace_id).await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
-        let link = self.ensure_worker(workspace_id).await?;
-        let reply = link.call(WorkerRequest::AccountFor { agent }).await?;
+        let worktree = self.ready_worktree(workspace_id).await?;
+        let reply = worktree.link().call(WorkerRequest::AccountFor { agent }).await?;
         let WorkerResponse::Account(account) = reply else { return Err(unexpected(&reply)) };
         Ok(account)
     }

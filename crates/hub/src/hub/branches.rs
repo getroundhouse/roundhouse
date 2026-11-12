@@ -7,12 +7,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::HubNotice;
-use protocol::model::{Branches, Head, Upstream, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Branches, Head, Upstream, WorkspaceId};
 use protocol::worker::WorkerRequest;
 use tracing::{debug, warn};
 
 use super::Hub;
 use super::pull_requests::When;
+use super::ready::ReadyWorkspace;
 use crate::store::BranchesSet;
 use crate::worker_link::WorkerLink;
 
@@ -32,24 +33,25 @@ enum Moved {
 }
 
 impl Hub {
-    /// Has the workspace's worker watch its branches, once it has a worktree to watch. Not waited on: the worker
+    /// Has a ready workspace's worker watch its worktree's branches. Not waited on: the worker
     /// answers only that it's watching, and what it sees comes in frames of its own.
-    pub(super) async fn watch_branches(&self, workspace: &Workspace, link: &WorkerLink) {
-        let Some(path) = workspace.path.clone().filter(|_| workspace.status == WorkspaceStatus::Ready) else { return };
+    pub(super) async fn watch_branches(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
+        let path = ready.path().to_owned();
         if let Err(e) = link.send(WorkerRequest::WatchBranches { path }).await {
-            debug!(id = %workspace.id, "asking the worker to watch the branches: {}", e.message);
+            debug!(id = %ready.id(), "asking the worker to watch the branches: {}", e.message);
         }
     }
 
     /// The same, waiting until the worker has sent what the branches are now, and the hub has recorded it, for a
     /// worktree that's just come back, so its record says which branch it's on before it's announced.
-    pub(super) async fn watch_branches_from_now(&self, workspace: &Workspace, link: &WorkerLink) {
-        let Some(path) = workspace.path.clone().filter(|_| workspace.status == WorkspaceStatus::Ready) else { return };
+    pub(super) async fn watch_branches_from_now(&self, ready: &ReadyWorkspace, link: &WorkerLink) {
+        let path = ready.path().to_owned();
         let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WorkerRequest::WatchBranches { path })).await;
+        let id = ready.id();
         match first {
             Ok(Ok(_)) => {}
-            Ok(Err(e)) => debug!(id = %workspace.id, "asking the worker to watch the branches: {}", e.message),
-            Err(_) => warn!(id = %workspace.id, "the worker didn't read the branches within {FIRST_READ_TIMEOUT:?}"),
+            Ok(Err(e)) => debug!(%id, "asking the worker to watch the branches: {}", e.message),
+            Err(_) => warn!(%id, "the worker didn't read the branches within {FIRST_READ_TIMEOUT:?}"),
         }
     }
 

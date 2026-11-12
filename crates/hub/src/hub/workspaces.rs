@@ -13,7 +13,8 @@ use providers::Provider;
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use super::{Hub, new_id, not_ready, unexpected};
+use super::ready::ReadyWorkspace;
+use super::{Hub, new_id, unexpected};
 use crate::error::{internal, provider_failed};
 use crate::session::Command;
 use crate::store::{Made, Store, now_ms};
@@ -208,8 +209,9 @@ impl Hub {
         let ready = self
             .blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref, branches.as_ref()))
             .await?;
-        self.nothing_to_read_yet(&ready.id);
-        self.notify(HubNotice::Workspace(ready.clone()));
+        let ready = ReadyWorkspace::new(ready)?;
+        self.nothing_to_read_yet(ready.id());
+        self.notify(HubNotice::Workspace(ready.workspace().clone()));
         // Once it's announced, so what the watch sees comes after.
         self.watch_branches(&ready, &link).await;
         self.start_setup(repo.clone(), ready).await
@@ -277,15 +279,11 @@ impl Hub {
         id: WorkspaceId,
         force: bool,
     ) -> Result<Workspace, ApiError> {
-        let workspace = self.workspace(&id).await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
+        let (workspace, path) = self.ready_workspace(&id).await?.into_parts();
         let repo = {
             let repo_id = workspace.repo_id.clone();
             self.blocking(move |store| store.get_repo(&repo_id)).await?
         };
-        let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
         let link = self.ensure_worker(&id).await?;
 
         // Before anything changes, so refusing leaves the workspace as it was.
@@ -377,10 +375,11 @@ impl Hub {
             return Err(unexpected(&reply));
         }
         let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
+        let restored = ReadyWorkspace::new(restored)?;
         // The worktree has only the branch it's restored on now, which its record says before it's announced.
         self.watch_branches_from_now(&restored, &link).await;
-        let restored = self.workspace(&restored.id).await?;
-        self.notify(HubNotice::Workspace(restored.clone()));
+        let restored = self.ready_workspace(restored.id()).await?;
+        self.notify(HubNotice::Workspace(restored.workspace().clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
         self.start_setup(setup_repo, restored).await
     }

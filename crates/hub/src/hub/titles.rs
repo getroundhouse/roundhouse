@@ -7,12 +7,13 @@ use std::sync::Arc;
 
 use protocol::attachment::{Attachment, AttachmentBytes, NewAttachment};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId};
 use protocol::short_text::start_of;
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
 
-use super::{Hub, not_ready, unexpected};
+use super::ready::ReadyWorkspace;
+use super::{Hub, unexpected};
 use crate::attachment_files::FileFor;
 use crate::store::Retitle;
 
@@ -65,9 +66,7 @@ impl Hub {
                 Ok((workspace, agent, store.workspace_prompt_lines(&read)?, store.workspace_prompt_images(&read)?))
             })
             .await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
+        let workspace = ReadyWorkspace::new(workspace)?.into_workspace();
         let images = self.read_images(chosen_images(carried)).await;
         // Prompts of only images have no words to list, so the model is told only what to make of the images.
         let asked = work_so_far(&prompts).or_else(|| (!images.is_empty()).then(|| WORK_SO_FAR.to_string()));

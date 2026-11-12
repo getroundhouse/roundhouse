@@ -11,6 +11,7 @@ use providers::Provider;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
+use super::ready::ReadyWorkspace;
 use super::{Hub, SHUTDOWN_GRACE, Wanted};
 use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
@@ -84,7 +85,10 @@ impl Hub {
             link.keep();
         }
         self.workers.lock().insert(workspace.id.clone(), link.clone());
-        self.watch_branches(&workspace, &link).await;
+        // One being made has no worktree to watch yet, so it's watched once it has.
+        if let Ok(ready) = ReadyWorkspace::new(workspace) {
+            self.watch_branches(&ready, &link).await;
+        }
         Ok(link)
     }
 

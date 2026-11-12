@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
-use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionStatus, SetupStatus, WorkspaceStatus};
+use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionStatus, SetupStatus};
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -60,15 +60,13 @@ impl LiveSession {
             // The worker was replaced before its loss reached this session.
             self.agent_lost(previous.link, ExitReason::WorkerLost).await;
         }
-        let workspace = hub.workspace(&self.workspace_id).await?;
+        let (workspace, cwd) = hub.ready_workspace(&self.workspace_id).await?.into_parts();
         let repo = {
             let repo_id = workspace.repo_id.clone();
             hub.blocking(move |store| store.get_repo(&repo_id)).await?
         };
         let mut env = crate::hub::workspace_env(&workspace, &repo);
         env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.to_string()));
-        let cwd =
-            workspace.path.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the workspace has no worktree yet"))?;
         let _nothing_changes_meanwhile = self.configuring.lock().await;
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
@@ -212,10 +210,7 @@ impl LiveSession {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
-        if hub.workspace(&self.workspace_id).await?.status != WorkspaceStatus::Ready {
-            return Err(ApiError::new(ErrorCode::Conflict, "the workspace isn't ready"));
-        }
-        Ok(())
+        hub.ready_workspace(&self.workspace_id).await.map(drop)
     }
 
     /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
