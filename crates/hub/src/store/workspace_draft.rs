@@ -4,11 +4,13 @@
 
 use std::collections::HashSet;
 
-use protocol::attachment::{Attachment, MAX_PER_PROMPT};
+use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, Rev, WorkspaceDraft, WorkspaceDraftToKeep};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
+use super::attachments::named_on;
 use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
+use crate::attachment_files::FileFor;
 
 #[cfg(test)]
 mod tests;
@@ -38,10 +40,7 @@ impl Store {
     /// changed.
     pub fn set_workspace_draft(&self, draft: &WorkspaceDraftToKeep) -> Result<(WorkspaceDraft, bool), StoreError> {
         let conn = lock(&self.writer);
-        let mut files = Vec::new();
-        for file in draft.files.iter().take(MAX_PER_PROMPT) {
-            files.extend(read_file(&conn, file)?);
-        }
+        let files = named_on(&conn, &FileFor::NewWorkspace, &draft.files)?;
         let WorkspaceDraftToKeep { repo_id, text, model, effort, plan, .. } = draft.clone();
         // Without its revision, which is the row's, so the same draft is always the same JSON.
         let kept = WorkspaceDraft { repo_id, text, files, model, effort, plan, rev: Rev::default() };
@@ -61,12 +60,12 @@ impl Store {
              VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
             params![file.id.as_str(), file.name, text_of(&file.media_type), file.size_bytes.cast_signed(), now_ms()],
         )?;
-        read_file(&conn, &file.id)?.ok_or_else(|| not_found(&file.id))
+        read_draft_file(&conn, &file.id)?.ok_or_else(|| not_found(&file.id))
     }
 
     /// What `id` is, if the hub has it for the draft.
     pub fn workspace_draft_file(&self, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
-        read_file(&lock(&self.reader), id)
+        read_draft_file(&lock(&self.reader), id)
     }
 
     /// Lets go of a file the draft doesn't name. Says whether it did, so the caller lets go of its bytes too.
@@ -97,7 +96,7 @@ impl Store {
     }
 }
 
-fn read_file(conn: &Connection, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
+pub(super) fn read_draft_file(conn: &Connection, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
     let file = conn
         .query_row(
             "SELECT name, media_type, size_bytes FROM workspace_draft_files WHERE id = ?",

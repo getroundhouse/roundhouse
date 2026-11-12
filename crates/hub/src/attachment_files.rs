@@ -19,6 +19,14 @@ const MAX_ID_CHARS: usize = 64;
 /// Where the new-workspace dialog's files wait, which has a `.`, so no session's directory can be it.
 const WORKSPACE_DRAFT_DIR: &str = "workspace-draft.files";
 
+/// What a file is kept for, which says where it's kept: a session, for its prompts to carry, or the new-workspace
+/// dialog, before any session exists to add it to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum FileFor {
+    Session(SessionId),
+    NewWorkspace,
+}
+
 pub(crate) struct AttachmentFiles {
     dir: PathBuf,
     /// Makes each write's partial file its own, so two writes of the same attachment can't mix.
@@ -30,39 +38,26 @@ impl AttachmentFiles {
         Self { dir, writes: AtomicU64::new(0) }
     }
 
-    fn path(&self, session_id: &SessionId, id: &AttachmentId) -> Result<PathBuf, ApiError> {
-        Ok(self.session_dir(session_id)?.join(safe(id.as_str())?))
+    fn path(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<PathBuf, ApiError> {
+        let dir = match kept_for {
+            FileFor::Session(session_id) => self.session_dir(session_id)?,
+            FileFor::NewWorkspace => self.dir.join(WORKSPACE_DRAFT_DIR),
+        };
+        Ok(dir.join(safe(id.as_str())?))
     }
 
     fn session_dir(&self, session_id: &SessionId) -> Result<PathBuf, ApiError> {
         Ok(self.dir.join(safe(session_id.as_str())?))
     }
 
-    fn draft_path(&self, id: &AttachmentId) -> Result<PathBuf, ApiError> {
-        Ok(self.dir.join(WORKSPACE_DRAFT_DIR).join(safe(id.as_str())?))
-    }
-
     /// Refuses an ID that couldn't be kept, before anything is written.
-    pub(crate) fn check(&self, session_id: &SessionId, id: &AttachmentId) -> Result<(), ApiError> {
-        self.path(session_id, id).map(drop)
-    }
-
-    /// The same, for one of the new-workspace dialog's files.
-    pub(crate) fn check_draft_file(&self, id: &AttachmentId) -> Result<(), ApiError> {
-        self.draft_path(id).map(drop)
+    pub(crate) fn check(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<(), ApiError> {
+        self.path(kept_for, id).map(drop)
     }
 
     /// Written under a name of its own and then moved into place, so a reader never finds half of it.
-    pub(crate) async fn write(&self, session_id: &SessionId, id: &AttachmentId, data: Vec<u8>) -> Result<(), ApiError> {
-        self.write_at(self.path(session_id, id)?, data).await
-    }
-
-    /// The same, for one of the new-workspace dialog's files.
-    pub(crate) async fn write_draft_file(&self, id: &AttachmentId, data: Vec<u8>) -> Result<(), ApiError> {
-        self.write_at(self.draft_path(id)?, data).await
-    }
-
-    async fn write_at(&self, path: PathBuf, data: Vec<u8>) -> Result<(), ApiError> {
+    pub(crate) async fn write(&self, kept_for: &FileFor, id: &AttachmentId, data: Vec<u8>) -> Result<(), ApiError> {
+        let path = self.path(kept_for, id)?;
         let partial = path.with_extension(format!("{}.partial", self.writes.fetch_add(1, Ordering::Relaxed)));
         on_disk(move || write_whole(&path, &partial, &data))
             .await
@@ -70,22 +65,23 @@ impl AttachmentFiles {
     }
 
     /// `None` if the hub doesn't have its bytes, either because it never did or because it let them go.
-    pub(crate) async fn read(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Option<Vec<u8>>, ApiError> {
-        read_at(self.path(session_id, id)?).await
+    pub(crate) async fn read(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<Option<Vec<u8>>, ApiError> {
+        let path = self.path(kept_for, id)?;
+        match on_disk(move || std::fs::read(path)).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(internal(format!("couldn't read an attachment: {e}"))),
+        }
     }
 
-    /// The same, for one of the new-workspace dialog's files.
-    pub(crate) async fn read_draft_file(&self, id: &AttachmentId) -> Result<Option<Vec<u8>>, ApiError> {
-        read_at(self.draft_path(id)?).await
-    }
-
-    pub(crate) async fn remove(&self, session_id: &SessionId, id: &AttachmentId) -> Result<(), ApiError> {
-        remove_at(self.path(session_id, id)?).await
-    }
-
-    /// The same, for one of the new-workspace dialog's files.
-    pub(crate) async fn remove_draft_file(&self, id: &AttachmentId) -> Result<(), ApiError> {
-        remove_at(self.draft_path(id)?).await
+    pub(crate) async fn remove(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<(), ApiError> {
+        let path = self.path(kept_for, id)?;
+        match on_disk(move || std::fs::remove_file(path)).await {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                Err(internal(format!("couldn't remove an attachment: {e}")))
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Lets go of each of the new-workspace dialog's files on disk but those in `kept`, such as one a hub stopping
@@ -119,21 +115,6 @@ impl AttachmentFiles {
             }
             _ => Ok(()),
         }
-    }
-}
-
-async fn read_at(path: PathBuf) -> Result<Option<Vec<u8>>, ApiError> {
-    match on_disk(move || std::fs::read(path)).await {
-        Ok(bytes) => Ok(Some(bytes)),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(internal(format!("couldn't read an attachment: {e}"))),
-    }
-}
-
-async fn remove_at(path: PathBuf) -> Result<(), ApiError> {
-    match on_disk(move || std::fs::remove_file(path)).await {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(internal(format!("couldn't remove an attachment: {e}"))),
-        _ => Ok(()),
     }
 }
 

@@ -1,15 +1,15 @@
 //! What's typed and attached in each session's composer and not sent, and letting go of a file nothing will send, and
 //! what's typed and not sent in answer to each session's question and in a comment on each workspace's diff.
 
-use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::{AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, SessionId, Workspace, WorkspaceId};
 use rusqlite::{Connection, params};
 
-use super::attachments::read_attachment;
+use super::attachments::named_on;
 use super::reading::session_on;
 use super::sessions::draft_column;
 use super::workspaces::workspace_on;
 use super::{Reading, Store, StoreError, lock};
+use crate::attachment_files::FileFor;
 
 #[cfg(test)]
 mod tests;
@@ -21,10 +21,7 @@ impl Store {
     /// revision only moves when the draft does.
     pub fn set_draft(&self, id: &SessionId, draft: &NewDraft) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
-        let mut files = Vec::new();
-        for file in draft.files.iter().take(MAX_PER_PROMPT) {
-            files.extend(read_attachment(&conn, id, file)?);
-        }
+        let files = named_on(&conn, &FileFor::Session(id.clone()), &draft.files)?;
         let kept = Draft { text: draft.text.clone(), files };
         let changed = conn.execute(
             "UPDATE sessions SET draft = ?1 WHERE id = ?2 AND closed_at_ms IS NULL AND draft IS NOT ?1",

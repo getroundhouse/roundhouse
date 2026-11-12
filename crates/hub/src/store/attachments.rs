@@ -1,12 +1,15 @@
 //! What the files a session's prompts carry are, and the images its agent's tools send, and where in the worktree each
-//! of a prompt's files was put. What a file is never changes once it's added. Its bytes aren't here, but in a file of
-//! their own, which `attachment_files` keeps.
+//! of a prompt's files was put, and the calls that take a file whatever it's for, a session or the new-workspace
+//! dialog. What a file is never changes once it's added. Its bytes aren't here, but in a file of their own, which
+//! `attachment_files` keeps.
 
-use protocol::attachment::Attachment;
+use protocol::attachment::{Attachment, MAX_PER_PROMPT};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, params};
 
+use super::workspace_draft::read_draft_file;
 use super::{Store, StoreError, from_text, lock, now_ms, text_of};
+use crate::attachment_files::FileFor;
 
 /// Who added a file to a session. Only a client's can be in a draft, so only those can a client have the hub let go of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,6 +115,55 @@ impl Store {
         let conn = lock(&self.reader);
         ids.iter().map(|id| read_attachment(&conn, session_id, id)?.ok_or_else(|| not_found(id))).collect()
     }
+
+    /// What `id` is, if the hub has it for what it's kept for.
+    pub(crate) fn file(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
+        file_on(&lock(&self.reader), kept_for, id)
+    }
+
+    /// Records `file` for what it's kept for, as a session's or the new-workspace dialog's, whose files only a client
+    /// adds, and returns the one recorded, so adding the same ID again returns the first.
+    pub(crate) fn add_file(
+        &self,
+        kept_for: &FileFor,
+        file: &Attachment,
+        by: AddedBy,
+    ) -> Result<Attachment, StoreError> {
+        match kept_for {
+            FileFor::Session(session_id) => self.add_attachment(session_id, file, by),
+            FileFor::NewWorkspace => self.add_workspace_draft_file(file),
+        }
+    }
+
+    /// Lets go of a file a client added that nothing will send, as a session's or the new-workspace dialog's. Says
+    /// whether it did, so the caller lets go of its bytes too.
+    pub(crate) fn let_go_of_file(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<bool, StoreError> {
+        match kept_for {
+            FileFor::Session(session_id) => self.let_go_of_attachment(session_id, id),
+            FileFor::NewWorkspace => self.let_go_of_workspace_draft_file(id),
+        }
+    }
+}
+
+fn file_on(conn: &Connection, kept_for: &FileFor, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
+    match kept_for {
+        FileFor::Session(session_id) => read_attachment(conn, session_id, id),
+        FileFor::NewWorkspace => read_draft_file(conn, id),
+    }
+}
+
+/// The files a draft names, as the hub has them for what they're kept for. One it hasn't been given is left out, as
+/// are any past what a prompt can carry.
+pub(super) fn named_on(
+    conn: &Connection,
+    kept_for: &FileFor,
+    ids: &[AttachmentId],
+) -> Result<Vec<Attachment>, StoreError> {
+    let mut files = Vec::new();
+    for id in ids.iter().take(MAX_PER_PROMPT) {
+        files.extend(file_on(conn, kept_for, id)?);
+    }
+    Ok(files)
 }
 
 pub(super) fn read_attachment(

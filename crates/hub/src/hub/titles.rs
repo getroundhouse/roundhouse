@@ -12,6 +12,7 @@ use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
 
 use super::{Hub, not_ready, unexpected};
+use crate::attachment_files::FileFor;
 use crate::store::Retitle;
 
 /// Enough of a prompt to say what it's about. Past this it's usually a pasted log, which only costs more to send and
@@ -228,7 +229,7 @@ impl Hub {
     async fn read_images(&self, chosen: Vec<(SessionId, Attachment)>) -> Vec<NewAttachment> {
         let mut images = Vec::with_capacity(chosen.len());
         for (session, attachment) in chosen {
-            match self.attachment_files.read(&session, &attachment.id).await {
+            match self.attachment_files.read(&FileFor::Session(session.clone()), &attachment.id).await {
                 Ok(Some(bytes)) => images.push(NewAttachment { attachment, data: AttachmentBytes::new(bytes) }),
                 Ok(None) => {}
                 Err(e) => warn!(%session, attachment = %attachment.id, "could not read an image to title from: {e}"),

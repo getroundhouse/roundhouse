@@ -1,6 +1,8 @@
-//! Files a person adds to a session, for its prompts to carry, and images a tool sends its agent. What each is goes in
-//! the database, and its bytes in `attachment_files`. Before a prompt reaches its agent, the worker puts each of its
-//! files in the worktree, and then the hub keeps the bytes only of an image, since that's all the transcript draws.
+//! Files a person adds to a session, for its prompts to carry, or to the new-workspace dialog, before any session
+//! exists, and images a tool sends its agent. Each is added, read and let go of the same way, whatever it's for. What
+//! each is goes in the database, and its bytes in `attachment_files`. Before a prompt reaches its agent, the worker
+//! puts each of its files in the worktree, and then the hub keeps the bytes only of an image, since that's all the
+//! transcript draws.
 
 use std::sync::Arc;
 
@@ -13,6 +15,7 @@ use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
 
 use super::Hub;
+use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::store::AddedBy;
 use crate::worker_link::WorkerLink;
@@ -31,23 +34,25 @@ pub(super) fn checked(media_type: MediaType, data: &AttachmentBytes) -> Result<(
 }
 
 impl Hub {
-    /// Sent again with the same ID, it returns what the first one added without looking at the rest, the way a prompt
-    /// is recorded once.
-    pub(crate) async fn attachment_add(
+    /// Keeps a file for what it's for. Sent again with the same ID, it returns what the first one added without looking
+    /// at the rest, the way a prompt is recorded once.
+    pub(crate) async fn file_add(
         &self,
-        session_id: SessionId,
+        kept_for: FileFor,
         id: AttachmentId,
         name: String,
         media_type: MediaType,
         data: AttachmentBytes,
         by: AddedBy,
     ) -> Result<Attachment, ApiError> {
-        self.attachment_files.check(&session_id, &id)?;
+        self.attachment_files.check(&kept_for, &id)?;
         let earlier = {
-            let (session_id, id) = (session_id.clone(), id.clone());
+            let (kept_for, id) = (kept_for.clone(), id.clone());
             self.blocking(move |store| {
-                store.get_session(&session_id)?;
-                store.attachment(&session_id, &id)
+                if let FileFor::Session(session_id) = &kept_for {
+                    store.get_session(session_id)?;
+                }
+                store.file(&kept_for, &id)
             })
             .await?
         };
@@ -56,13 +61,15 @@ impl Hub {
         }
         checked(media_type, &data)?;
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
-        let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
-        self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
-        let session = session_id.clone();
-        let added = self.blocking(move |store| store.add_attachment(&session, &attachment, by)).await;
+        let file = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
+        self.attachment_files.write(&kept_for, &id, data.into_vec()).await?;
+        let added = {
+            let kept_for = kept_for.clone();
+            self.blocking(move |store| store.add_file(&kept_for, &file, by)).await
+        };
         if added.is_err() {
             // Such as because its session was deleted meanwhile, which takes the session's files with it.
-            let _ = self.attachment_files.remove(&session_id, &id).await;
+            let _ = self.attachment_files.remove(&kept_for, &id).await;
         }
         added
     }
@@ -76,56 +83,54 @@ impl Hub {
                 warn!(session = %session_id, attachment = %id, "the agent sent {} as an image", media_type.mime());
                 continue;
             }
-            let added = self.attachment_add(session_id.clone(), id.clone(), name, media_type, data, AddedBy::Agent);
+            let kept_for = FileFor::Session(session_id.clone());
+            let added = self.file_add(kept_for, id.clone(), name, media_type, data, AddedBy::Agent);
             if let Err(e) = added.await {
                 warn!(session = %session_id, attachment = %id, "couldn't keep an image from the agent: {e}");
             }
         }
     }
 
-    /// An image's bytes, for drawing it. Any other file's are gone once a prompt has put it in the worktree.
-    pub(crate) async fn attachment_read(
-        &self,
-        session_id: SessionId,
-        id: AttachmentId,
-    ) -> Result<AttachmentBytes, ApiError> {
-        let attachment = {
-            let (session_id, id) = (session_id.clone(), id.clone());
-            self.blocking(move |store| store.attachment(&session_id, &id)).await?
+    /// A file's bytes, such as an image's, for drawing it, or one of the new-workspace dialog's, to send with the first
+    /// prompt. A session's other files' are gone once a prompt has put them in the worktree.
+    pub(crate) async fn file_read(&self, kept_for: FileFor, id: AttachmentId) -> Result<AttachmentBytes, ApiError> {
+        let file = {
+            let (kept_for, id) = (kept_for.clone(), id.clone());
+            self.blocking(move |store| store.file(&kept_for, &id)).await?
         };
-        let Some(attachment) = attachment else {
+        let Some(file) = file else {
             return Err(ApiError::new(ErrorCode::NotFound, format!("no attachment {id}")));
         };
-        if let Some(bytes) = self.attachment_files.read(&session_id, &id).await? {
+        if let Some(bytes) = self.attachment_files.read(&kept_for, &id).await? {
             return Ok(AttachmentBytes::new(bytes));
         }
-        let why = if attachment.media_type.is_image() {
+        let why = if file.media_type.is_image() || kept_for == FileFor::NewWorkspace {
             "the hub no longer has it"
         } else {
             "the hub keeps only images once they've been sent"
         };
-        Err(ApiError::new(ErrorCode::NotFound, format!("{} can't be read: {why}", attachment.name)))
+        Err(ApiError::new(ErrorCode::NotFound, format!("{} can't be read: {why}", file.name)))
     }
 
-    /// Lets go of a file a client added that nothing will send, as [`crate::store::Store::let_go_of_attachment`]
-    /// decides, and of its bytes.
-    pub(crate) async fn attachment_remove(&self, session_id: SessionId, id: AttachmentId) -> Result<(), ApiError> {
-        self.attachment_files.check(&session_id, &id)?;
+    /// Lets go of a file a client added that nothing will send, as [`crate::store::Store::let_go_of_file`] decides,
+    /// and of its bytes.
+    pub(crate) async fn file_remove(&self, kept_for: FileFor, id: AttachmentId) -> Result<(), ApiError> {
+        self.attachment_files.check(&kept_for, &id)?;
         let removed = {
-            let (session_id, id) = (session_id.clone(), id.clone());
-            self.blocking(move |store| store.let_go_of_attachment(&session_id, &id)).await?
+            let (kept_for, id) = (kept_for.clone(), id.clone());
+            self.blocking(move |store| store.let_go_of_file(&kept_for, &id)).await?
         };
         if removed {
-            self.let_go_of_bytes(&session_id, &[id]).await;
+            self.let_go_of_bytes(&kept_for, &[id]).await;
         }
         Ok(())
     }
 
     /// The bytes of files the store has let go of. One that can't be is only left on disk, so it's logged.
-    pub(crate) async fn let_go_of_bytes(&self, session_id: &SessionId, files: &[AttachmentId]) {
+    pub(crate) async fn let_go_of_bytes(&self, kept_for: &FileFor, files: &[AttachmentId]) {
         for id in files {
-            if let Err(e) = self.attachment_files.remove(session_id, id).await {
-                warn!(session = %session_id, attachment = %id, "couldn't let go of a file nothing will send: {e}");
+            if let Err(e) = self.attachment_files.remove(kept_for, id).await {
+                warn!(?kept_for, attachment = %id, "couldn't let go of a file nothing will send: {e}");
             }
         }
     }
@@ -166,7 +171,8 @@ impl Hub {
         worktree: &str,
         attachment: &Attachment,
     ) -> Result<String, ApiError> {
-        let Some(data) = self.attachment_files.read(session_id, &attachment.id).await? else {
+        let kept_for = FileFor::Session(session_id.clone());
+        let Some(data) = self.attachment_files.read(&kept_for, &attachment.id).await? else {
             return Err(internal(format!("the hub doesn't have {} to send", attachment.name)));
         };
         let (path, name, data) = (worktree.to_string(), attachment.name.clone(), AttachmentBytes::new(data));
@@ -177,7 +183,7 @@ impl Hub {
         let (session, id, kept) = (session_id.clone(), attachment.id.clone(), path.clone());
         self.blocking(move |store| store.set_attachment_placed_at(&session, &id, &kept)).await?;
         if !attachment.media_type.is_image()
-            && let Err(e) = self.attachment_files.remove(session_id, &attachment.id).await
+            && let Err(e) = self.attachment_files.remove(&kept_for, &attachment.id).await
         {
             warn!(attachment = %attachment.id, "couldn't let go of a sent attachment: {e}");
         }
