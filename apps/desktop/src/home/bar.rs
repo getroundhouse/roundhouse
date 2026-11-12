@@ -25,7 +25,7 @@ pub(super) fn bar(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> im
         .w_full()
         .h(HEADER_HEIGHT)
         .pl(px(16.) + inset)
-        .pr_2()
+        .pr(px(8.) + crate::sides::end_inset(crate::sides::AtTheTop::Header, cx))
         .gap_1()
         .border_b_1()
         .border_color(border)

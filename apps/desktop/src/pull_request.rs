@@ -10,7 +10,7 @@ use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window,
-    div,
+    div, px,
 };
 use look::Work;
 use look::{Hand as _, Off as _};
@@ -101,7 +101,8 @@ pub fn bar(
         .flex_none()
         .w_full()
         .h(HEIGHT)
-        .px_3()
+        .pl_3()
+        .pr(px(12.) + crate::sides::end_inset(crate::sides::AtTheTop::RightSidebar, cx))
         .gap_2()
         .bg(work.tint(cx))
         .border_b_1()

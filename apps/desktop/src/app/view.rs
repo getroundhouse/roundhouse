@@ -37,7 +37,10 @@ impl Render for AppView {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
             let (hub, width) = (self.settings_of_hub(), Side::Left.width(cx));
-            return self.root(div(), cx).child(crate::settings::page(&self.settings_focus, width, back, hub));
+            return self
+                .root(div(), cx)
+                .child(crate::settings::page(&self.settings_focus, width, back, hub))
+                .children(title_bar::window_buttons(window, cx));
         }
         let inset = sides::corner_inset(cx);
         let danger = cx.theme().danger;
@@ -59,6 +62,8 @@ impl Render for AppView {
                     .child(div().flex_1().min_h_0().child(main)),
             )
             .child(sides::corner(corner::sidebar_toggle(cx), window))
+            // Last, so they're over what's in the strip.
+            .children(title_bar::window_buttons(window, cx))
     }
 }
 
@@ -139,7 +144,7 @@ fn error_bar(error: String, inset: Pixels, danger: Hsla, cx: &mut Context<AppVie
         .id("error-bar")
         .flex_none()
         .pl(px(12.) + inset)
-        .pr_3()
+        .pr(px(12.) + sides::end_inset(sides::AtTheTop::AboveTheHeader, cx))
         .py_2()
         .gap_2()
         .bg(danger.opacity(0.15))

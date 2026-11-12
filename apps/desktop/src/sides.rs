@@ -19,23 +19,19 @@ use look::motion::Sliding;
 use look::{InRegion as _, Region};
 
 use crate::haptics;
-use crate::workspace_pane::HEADER_HEIGHT;
+
+mod window_buttons;
+
+use window_buttons::Clearance;
+pub(crate) use window_buttons::{
+    AtTheTop, WINDOW_BUTTONS_INSET, WINDOWS_BUTTON_WIDTH, corner, corner_inset, end_inset, end_room, header_inset,
+};
 
 /// How close to its usual width a dragged sidebar has to come to take it, so the usual width is easy to get back to.
 /// A Mac's trackpad taps as it takes it, so it can be felt as well as seen.
 const SNAP: Pixels = px(8.);
 /// The least room the sidebars leave between them while the window has it, so a chat can still be read beside them.
 const BETWEEN: Pixels = px(360.);
-/// How far the window's buttons are asked to sit from its top and its left.
-pub(crate) const WINDOW_BUTTONS_INSET: Pixels = px(12.);
-/// How wide the window's three buttons are together. macOS draws them, and on macOS 27 each is 14px wide and they're
-/// 9px apart.
-const WINDOW_BUTTONS_WIDTH: Pixels = px(60.);
-/// The space between the window's buttons and the button beside them, which leaves that button's icon about as far
-/// from them as they are from each other.
-const AFTER_WINDOW_BUTTONS: Pixels = px(6.);
-/// The button that hides and shows the sidebar on the left: the kit's small button.
-const TOGGLE_WIDTH: Pixels = px(24.);
 
 /// One of the two sidebars, by the edge of the window it's on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -83,8 +79,8 @@ struct Placed {
     widths: (Pixels, Pixels),
     /// How much of each shows, from the window's edge.
     shown: (Pixels, Pixels),
-    /// How far what's at the top of the window starts from its left, to clear the window's buttons.
-    corner_inset: Pixels,
+    /// How far what's at the top of the window keeps from each end, to clear the window's buttons.
+    clearance: Clearance,
 }
 
 /// What's chosen for both, which every workspace shares until the app quits.
@@ -154,10 +150,8 @@ pub(crate) fn place(beside: Beside, window: &mut Window, cx: &mut App) {
     // How far open each is, rather than how wide, so a drag moves its edge at once. In whole pixels, so what's beside
     // it stays on them as it moves.
     let shown = ((widths.0 * open.0).round(), (widths.1 * open.1).round());
-    // By as much of the window's buttons, and the button beside them, as the sidebar on the left doesn't cover,
-    // which is none while it's open, since even at its narrowest it covers them.
-    let corner_inset = (corner_starts(window) + TOGGLE_WIDTH - shown.0).max(px(0.));
-    sides.placed = Placed { beside, widths, shown, corner_inset };
+    let clearance = Clearance::with_shown(window, shown);
+    sides.placed = Placed { beside, widths, shown, clearance };
     cx.set_global(sides);
 }
 
@@ -335,36 +329,6 @@ pub(crate) fn frame(side: Side, shown: Pixels, content: impl IntoElement, cx: &A
             }
         })
         .into_any_element()
-}
-
-/// Where the button that hides and shows the sidebar on the left starts, from the window's left edge: to the right of
-/// the window's buttons, where the window has them in that corner, which is on a Mac. In full screen macOS puts
-/// them away, so it starts where they did.
-fn corner_starts(window: &Window) -> Pixels {
-    if cfg!(target_os = "macos") && !window.is_fullscreen() {
-        WINDOW_BUTTONS_INSET + WINDOW_BUTTONS_WIDTH + AFTER_WINDOW_BUTTONS
-    } else {
-        WINDOW_BUTTONS_INSET
-    }
-}
-
-/// How far what's at the top of the window starts from where it otherwise would, to clear the window's buttons and
-/// the button beside them while the sidebar on the left doesn't cover them.
-pub(crate) fn corner_inset(cx: &App) -> Pixels {
-    Sides::of(cx).placed.corner_inset
-}
-
-/// The same for the workspace's header and Home's bar, which are clear of the window's buttons already when
-/// something sits above them.
-pub(crate) fn header_inset(cx: &App) -> Pixels {
-    let placed = Sides::of(cx).placed;
-    if placed.beside.above_the_header { px(0.) } else { placed.corner_inset }
-}
-
-/// The strip in the window's top left corner that holds `toggle`, the button that hides and shows the sidebar on the
-/// left. It's over the sidebar while that shows and over the header while it doesn't, so it never moves.
-pub(crate) fn corner(toggle: impl IntoElement, window: &Window) -> impl IntoElement {
-    div().absolute().top_0().left(corner_starts(window)).h(HEADER_HEIGHT).flex().items_center().child(toggle)
 }
 
 #[cfg(test)]

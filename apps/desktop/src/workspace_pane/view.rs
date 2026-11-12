@@ -181,7 +181,7 @@ impl WorkspacePane {
             .w_full()
             .h(HEADER_HEIGHT)
             .pl(px(16.) + inset)
-            .pr_3()
+            .pr(px(12.) + sides::end_inset(sides::AtTheTop::Header, cx))
             .gap_2()
             .border_b_1()
             .border_color(border)

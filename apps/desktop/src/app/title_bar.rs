@@ -1,15 +1,28 @@
 //! The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
 //! dragging it moves the window, and double-clicking it does what double-clicking a title bar does, which on a Mac is
 //! what its setting says, and on Windows maximizes or restores the window. A press there that a control took, such as
-//! a button in the header, is the control's.
+//! a button in the header, is the control's. On Windows it also holds the window's buttons.
 
+use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::{
-    App, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement as _,
-    Stateful, Styled as _, Window, WindowControlArea, div,
+    App, Context, Div, FontFallbacks, Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement as _, Pixels, Role, Stateful, StatefulInteractiveElement as _, Styled as _, Window,
+    WindowControlArea, div, font, px, rgb, white,
 };
 
 use super::AppView;
+use crate::sides;
 use crate::workspace_pane::HEADER_HEIGHT;
+
+/// What Windows draws its window buttons with, in the font it draws them from: Segoe Fluent Icons on Windows 11, and
+/// Segoe MDL2 Assets, which has the same, on Windows 10.
+const MINIMIZE: &str = "\u{E921}";
+const MAXIMIZE: &str = "\u{E922}";
+const RESTORE: &str = "\u{E923}";
+const CLOSE: &str = "\u{E8BB}";
+const GLYPH_SIZE: Pixels = px(10.);
+/// Windows' red behind the close button under the pointer.
+const CLOSE_RED: u32 = 0x00C4_2B1C;
 
 /// Who moves the window from the strip, which goes by the system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,4 +115,57 @@ impl AppView {
             }
         }
     }
+}
+
+/// Windows' minimize, maximize or restore, and close, at the strip's right end and as tall as it, or `None` where
+/// `sides::end_room` leaves them no room. Windows works each itself, from what GPUI marks it as for Windows' hit test,
+/// which also gives maximize the layouts to snap to. Each hides the strip and the window under it from the pointer,
+/// so Windows takes a press on one as the button's rather than the strip's, and the app takes none of it.
+pub(super) fn window_buttons(window: &Window, cx: &App) -> Option<impl IntoElement> {
+    if sides::end_room(window) == px(0.) {
+        return None;
+    }
+    let theme = cx.theme();
+    // Dimmed while another window is active, as Windows dims its own.
+    let glyph = if window.is_window_active() { theme.foreground } else { theme.muted_foreground };
+    let (hover, pressed) = (theme.foreground.opacity(0.06), theme.foreground.opacity(0.04));
+    let red: Hsla = rgb(CLOSE_RED).into();
+    let (maximize, maximize_says) = if window.is_maximized() { (RESTORE, "Restore") } else { (MAXIMIZE, "Maximize") };
+    let minimize = window_button("window-minimize", WindowControlArea::Min, MINIMIZE, "Minimize", glyph)
+        .hover(move |style| style.bg(hover))
+        .active(move |style| style.bg(pressed));
+    let maximize = window_button("window-maximize", WindowControlArea::Max, maximize, maximize_says, glyph)
+        .hover(move |style| style.bg(hover))
+        .active(move |style| style.bg(pressed));
+    let close = window_button("window-close", WindowControlArea::Close, CLOSE, "Close", glyph)
+        .hover(move |style| style.bg(red).text_color(white()))
+        .active(move |style| style.bg(red.opacity(0.9)).text_color(white()));
+    Some(h_flex().absolute().top_0().right_0().h(HEADER_HEIGHT).child(minimize).child(maximize).child(close))
+}
+
+/// One of the window's buttons, drawn with `glyph` in `colour`, which says `says` to a screen reader.
+fn window_button(
+    id: &'static str,
+    area: WindowControlArea,
+    glyph: &'static str,
+    says: &'static str,
+    colour: Hsla,
+) -> Stateful<Div> {
+    let mut icons = font("Segoe Fluent Icons");
+    icons.fallbacks = Some(FontFallbacks::from_fonts(vec!["Segoe MDL2 Assets".to_string()]));
+    div()
+        .id(id)
+        .role(Role::Button)
+        .aria_label(says)
+        .w(sides::WINDOWS_BUTTON_WIDTH)
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .occlude()
+        .window_control_area(area)
+        .font(icons)
+        .text_size(GLYPH_SIZE)
+        .text_color(colour)
+        .child(glyph)
 }
