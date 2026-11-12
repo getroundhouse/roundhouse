@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use crate::git::tests::{new_repo, run};
-use crate::git::{prepare_workspace, restore_workspace};
+use crate::git::{prepare_workspace, restore_workspace, worktree_there};
 
 /// Long enough to delete a few files on a busy machine.
 const DELETE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -326,6 +326,27 @@ async fn restoring_brings_back_committed_work_once() {
 
     assert_eq!(std::fs::read_to_string(archived.path.join("kept.txt")).unwrap(), "kept\n");
     assert_eq!(archived.restore().await.err().unwrap().code, ErrorCode::Conflict);
+    archived.wait_until_deleted().await;
+}
+
+/// What a hub asks of a workspace an earlier one left part way through being archived or restored.
+#[tokio::test]
+async fn a_worktree_is_there_only_while_git_reads_one_at_its_path() {
+    let archived = Archived::ready().await;
+    let path = archived.path.to_str().unwrap();
+    assert!(worktree_there(path).await);
+    // A folder inside it is in a worktree, and isn't one.
+    assert!(!worktree_there(archived.path.join("ignored").to_str().unwrap()).await);
+
+    archived.remove(true).await.unwrap();
+    assert!(!worktree_there(path).await);
+    // Nor is a folder left where it was, which restoring refuses to write over.
+    std::fs::create_dir_all(archived.path.join("left")).unwrap();
+    assert!(!worktree_there(path).await);
+    std::fs::remove_dir_all(&archived.path).unwrap();
+
+    archived.restore().await.unwrap();
+    assert!(worktree_there(path).await);
     archived.wait_until_deleted().await;
 }
 

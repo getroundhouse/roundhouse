@@ -78,6 +78,12 @@ pub enum WorkerRequest {
         path: String,
         force: bool,
     },
+    /// Whether a worktree is at `path`, for a hub that finds a workspace an earlier one was archiving or restoring.
+    /// Answered once any [`WorkerRequest::RemoveWorkspace`] or [`WorkerRequest::RestoreWorkspace`] this worker is
+    /// still carrying out has ended, so it says where that left the worktree.
+    WorktreeThere {
+        path: String,
+    },
     GitStatus {
         path: String,
     },
@@ -276,6 +282,9 @@ pub enum WorkerResponse {
         /// The worktree's branches, as it was made, which a watch then starts from. `None` when they couldn't be read.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         branches: Option<Branches>,
+    },
+    WorktreeThere {
+        there: bool,
     },
     GitStatus(GitStatus),
     GitDiff(GitDiff),

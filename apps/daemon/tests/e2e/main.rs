@@ -25,6 +25,7 @@ mod instructions;
 mod launch_flags;
 mod misbehaving_worker;
 mod model_and_mode;
+mod moves_cut_short;
 mod other_builds;
 mod processes_going_away;
 mod prompt_cache;

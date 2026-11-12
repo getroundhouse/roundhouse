@@ -1,4 +1,4 @@
-use protocol::model::WorkspaceStatus;
+use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use super::*;
 use crate::store::tests::store_with_session;
@@ -17,15 +17,16 @@ fn a_half_made_workspace_is_discarded_and_its_instance_handed_over_to_be_destroy
 
     let unfinished = recover(&store).unwrap();
 
-    let handed_over: Vec<_> = unfinished.iter().map(|instance| (instance.id.to_string(), instance.stage)).collect();
+    let handed_over: Vec<_> =
+        unfinished.instances.iter().map(|instance| (instance.id.to_string(), instance.stage)).collect();
     assert_eq!(handed_over, [("birch-vm".to_string(), InstanceStage::Destroying)]);
     assert!(store.get_workspace(&"birch".into()).is_err(), "the workspace is discarded");
 }
 
-/// The last run can't say how far archiving or restoring got, so each workspace is as it was before, and can be
-/// archived or restored again.
+/// How far archiving or restoring got is the worker's to say, so each workspace's record goes on saying what the last
+/// run was doing, and the hub is handed them to settle once it's serving.
 #[test]
-fn a_workspace_left_being_archived_or_restored_is_put_back() {
+fn a_workspace_left_being_archived_or_restored_is_handed_over_as_it_was_left() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let mut restoring = store.get_workspace(&"w".into()).unwrap();
@@ -34,8 +35,10 @@ fn a_workspace_left_being_archived_or_restored_is_put_back() {
     store.insert_workspace(&restoring, None).unwrap();
     store.start_move(&"w".into(), Move::Archive).unwrap().unwrap();
 
-    recover(&store).unwrap();
+    let left = recover(&store).unwrap();
 
-    assert_eq!(store.get_workspace(&"w".into()).unwrap().status, WorkspaceStatus::Ready);
-    assert_eq!(store.get_workspace(&"birch".into()).unwrap().status, WorkspaceStatus::Archived);
+    let (ready, archived) = (WorkspaceId::from("w"), WorkspaceId::from("birch"));
+    assert_eq!(left.moves, [(ready, Move::Archive), (archived, Move::Restore)]);
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().status, WorkspaceStatus::Archiving);
+    assert_eq!(store.get_workspace(&"birch".into()).unwrap().status, WorkspaceStatus::Restoring);
 }

@@ -194,6 +194,18 @@ pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName)
     Ok(())
 }
 
+/// Whether a worktree is at `path`: a folder git reads as the top of a working tree. One left part made, or a folder
+/// that's something else, isn't.
+pub async fn worktree_there(path: &str) -> bool {
+    let worktree = PathBuf::from(path);
+    if !worktree.is_dir() {
+        return false;
+    }
+    let Ok(top) = git(&worktree, &["rev-parse", "--show-toplevel"]).await else { return false };
+    // Git names the top with every link followed, so the path is compared the same way.
+    top.success && std::fs::canonicalize(top.stdout.trim()).ok() == std::fs::canonicalize(&worktree).ok()
+}
+
 async fn any_ref_holds_head(worktree: &Path) -> Result<bool, ApiError> {
     let holders = git_ok(worktree, &["for-each-ref", "--contains", "HEAD", "--count=1"]).await?;
     Ok(!holders.trim().is_empty())

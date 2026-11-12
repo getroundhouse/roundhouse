@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use protocol::Build;
-use protocol::model::AgentDescription;
+use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
 use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
@@ -15,7 +15,7 @@ use crate::hub::{Hub, LeftAtWork};
 use crate::listener::{self, Listener};
 use crate::private;
 use crate::provider_set::ProviderSet;
-use crate::store::{RecordedInstance, Store, StoreError};
+use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
 
 pub struct HubConfig {
@@ -35,21 +35,24 @@ pub struct HubConfig {
     pub agents: Vec<AgentDescription>,
 }
 
-/// What the last run left half done: setups that were running, which its workers can't report on to this hub,
-/// workspaces it was archiving or restoring, and workspaces and instances half-made. Returns the instances it left part
-/// way, to be destroyed once the hub is serving, taken before anything new is made. What it left at work, the hub
+/// What the last run left half done, for this one to finish once it's serving.
+struct LeftHalfDone {
+    /// The instances it left part way, to be destroyed, taken before anything new is made.
+    instances: Vec<RecordedInstance>,
+    /// The workspaces it was archiving or restoring, which stay recorded as that until each is settled.
+    moves: Vec<(WorkspaceId, Move)>,
+}
+
+/// Clears up what the last run left half done: setups that were running, which its workers can't report on to this hub,
+/// and workspaces half-made. Returns what's left for the hub to finish once it's serving. What it left at work, the hub
 /// carries on with as it starts.
-fn recover(store: &Store) -> Result<Vec<RecordedInstance>, StoreError> {
+fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
-    // Before what it left at work is read, so the worker of one put back as ready is carried on with.
-    for workspace in store.put_back_moves()? {
-        let status = workspace.status;
-        warn!(workspace = workspace.name, ?status, "putting back a workspace the last run was archiving or restoring");
-    }
+    let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
     }
-    store.take_unfinished_instances()
+    Ok(LeftHalfDone { instances: store.take_unfinished_instances()?, moves })
 }
 
 /// One hub at a time per data directory. It holds what's returned for as long as it runs.
@@ -120,7 +123,8 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let listener =
         Listener::bind(&paths.socket).map_err(|e| HubError::io(format!("binding {}", paths.socket.display()), e))?;
     info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");
-    tokio::spawn(hub.clone().settle_providers(unfinished));
+    tokio::spawn(hub.clone().settle_providers(unfinished.instances));
+    tokio::spawn(hub.clone().settle_moves(unfinished.moves));
 
     let accept = {
         let hub = hub.clone();
