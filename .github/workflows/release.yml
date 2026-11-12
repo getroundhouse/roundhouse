@@ -26,10 +26,12 @@ name: Release
 on:
   push:
     branches: [main]
-    # Docs alone don't change the app, so they'd only publish an update with nothing in it.
+    # Docs and the marketing site don't change the app, so alone they'd only publish an update with nothing in it.
     paths-ignore:
       - "**.md"
       - docs/**
+      - site/**
+      - tools/site/**
   pull_request:
     paths:
       - tools/package/**

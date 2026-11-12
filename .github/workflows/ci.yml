@@ -1,7 +1,8 @@
 # The full checks from AGENTS.md, with the tests run by nextest, and the tests of the scripts that publish releases, for
 # every PR and the merge queue. They run on Linux, where everything passes but the gallery: the window tests use GPUI's
 # test platform, which draws nothing, and the gallery, whose images are exact to the Mac that approved them, is compiled
-# only on macOS. mac.yml covers what only a Mac catches. A change to nothing but Markdown skips them.
+# only on macOS. mac.yml covers what only a Mac catches. A change to nothing but Markdown and the marketing site skips
+# them, since none of them reads either.
 name: CI
 
 on:
@@ -37,8 +38,10 @@ env:
 # filter can't do the skipping: GitHub leaves a required check pending forever when its workflow doesn't run. The repo
 # also only runs actions pinned to a full commit, as these are.
 jobs:
-  # Whether the checks run. They don't when nothing but Markdown differs from the branch being merged into, which in the
-  # queue includes the PRs ahead, or when the queue would check a tree that a PR's run has already passed.
+  # Whether the checks run. They don't when nothing but Markdown and the marketing site, which is site/ and the script
+  # that puts it together, tools/site/, differs from the branch being merged into, which in the queue includes the PRs
+  # ahead, or when the queue would check a tree that a PR's run has already passed. site.yml publishes the site, and
+  # still counts, as any workflow does.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -65,7 +68,7 @@ jobs:
           run=true
           tree=$(git rev-parse 'HEAD^{tree}')
           if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
-            git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md'; then
+            git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
             run=false
           # On an error, gh prints the error's body and fails, so `passed` must be a run's ID too.
           elif [ "$GITHUB_EVENT_NAME" = merge_group ] &&
