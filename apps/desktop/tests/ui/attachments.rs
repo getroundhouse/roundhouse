@@ -1,11 +1,16 @@
-//! Attaching files in the composer, and sending them with a prompt.
+//! Attaching files in the composer, sending them with a prompt, and opening an image a prompt carried.
 
 #![cfg(test)]
 
 use std::io::Cursor;
 
 use client_core::FileToSend;
-use gpui_kit::{ClipboardEntry, ClipboardItem, ExternalPaths, Image, ImageFormat, SharedString, TestAppContext};
+use gpui_kit::component::TITLE_BAR_HEIGHT;
+use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::{
+    AppContext as _, Bounds, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, Pixels,
+    SharedString, TestAppContext, point, px, size,
+};
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
 use transcript::TranscriptEvent;
@@ -18,8 +23,12 @@ fn png() -> Vec<u8> {
 }
 
 fn encoded(format: image::ImageFormat) -> Vec<u8> {
+    sized(4, 3, format)
+}
+
+fn sized(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
     let mut bytes = Cursor::new(Vec::new());
-    image::RgbaImage::from_pixel(4, 3, image::Rgba([200, 30, 30, 255])).write_to(&mut bytes, format).unwrap();
+    image::RgbaImage::from_pixel(width, height, image::Rgba([200, 30, 30, 255])).write_to(&mut bytes, format).unwrap();
     bytes.into_inner()
 }
 
@@ -174,4 +183,57 @@ fn a_prompt_that_couldnt_be_sent_comes_back_to_its_own_chat(cx: &mut TestAppCont
     second_transcript.update(ui.cx, |_, cx| cx.emit(not_sent("look")));
     ui.wait("the prompt back", |ui| ui.composer_text() == "look\n\nand this");
     assert_eq!(ui.attached(), ["build.log"]);
+}
+
+/// Over the window rather than in the chat, so nothing in the chat moves, and it shows even when its prompt is at the
+/// bottom of the window, as one jumped to from the outline is.
+#[gpui_kit::test]
+fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_closes_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_a_chat(cx, &stack);
+    // Wider than any window, so it has to shrink to fit.
+    ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, sized(4000, 100, image::ImageFormat::Png))));
+    ui.wait("the image to be attached", |ui| ui.attached().len() == 1);
+    ui.input("attached");
+    ui.press("enter");
+    // So nothing drawn after this moves the chat.
+    ui.wait_idle_with("the agent to see the image", |text| text.starts_with("attached: image/png"));
+    let carried = ui.events().into_iter().find_map(|e| match e.body {
+        EventBody::UserPrompt { attachments, .. } => attachments.into_iter().next(),
+        _ => None,
+    });
+    let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.unwrap().id).into());
+    let before = bounds(&mut ui, thumbnail.clone());
+
+    ui.click(thumbnail.clone());
+
+    assert!(ui.has_dialog(), "it opens over the window");
+    let (opened, dialog) = (bounds(&mut ui, "opened-picture"), bounds(&mut ui, "surface"));
+    let window = ui.cx.update_window(ui.handle, |_, window, _| window.viewport_size()).unwrap();
+    let clear = TITLE_BAR_HEIGHT * 2.;
+    let room =
+        Bounds::new(point(TITLE_BAR_HEIGHT, TITLE_BAR_HEIGHT), size(window.width - clear, window.height - clear));
+    assert!(room.contains(&opened.origin) && room.contains(&opened.bottom_right()), "{opened:?} fits in {room:?}");
+    // To the pixel, which layout rounds to.
+    assert!((opened.size.height - opened.size.width / 40.).abs() < px(1.), "{opened:?} keeps its shape");
+    assert_eq!(dialog, opened.dilate(px(1.)), "the dialog is the image and its edge");
+    let off_middle = opened.center() - point(window.width / 2., window.height / 2.);
+    assert!(off_middle.x.abs() < px(1.) && off_middle.y.abs() < px(1.), "{opened:?} is in the middle of {window:?}");
+    assert_eq!(bounds(&mut ui, thumbnail.clone()), before, "nothing in the chat moves");
+    ui.press("escape");
+    assert!(!ui.has_dialog(), "Escape closes it");
+
+    ui.click(thumbnail.clone());
+    ui.click("opened-picture");
+    assert!(!ui.has_dialog(), "and so does a click on it");
+
+    ui.click(thumbnail);
+    ui.click_at(point(opened.center().x, opened.bottom() + px(20.)));
+    assert!(!ui.has_dialog(), "or around it");
+}
+
+fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
+    let id = id.into();
+    ui.frame();
+    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }

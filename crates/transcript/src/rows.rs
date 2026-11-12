@@ -278,8 +278,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
         }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
-            let (key, progress) =
-                (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
+            let (key, progress) = (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(around.prompt));
             let text = Prompt { text, find };
             prompt_bubble(&key, text, &around.carried, progress, shared, cx)
         }

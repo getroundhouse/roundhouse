@@ -331,8 +331,9 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Fetches an image a row is drawing, and measures the row again once it's here, since an opened image is as tall
-    /// as its shape makes it.
+    /// Fetches an image a row is drawing, and measures the row again once it's here, since its shape can change the
+    /// row's height: one a tool sent back is as tall as its shape makes it, and a prompt's is as wide as its shape
+    /// makes it, which can take the next one onto another line.
     pub(crate) fn load_picture(&mut self, seq: Option<Seq>, attachment: Attachment, cx: &mut Context<Self>) {
         let (client, session) = (self.client.clone(), self.session_id.clone());
         cx.spawn(async move |this, cx| {

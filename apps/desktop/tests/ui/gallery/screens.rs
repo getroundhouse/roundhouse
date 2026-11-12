@@ -113,7 +113,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "attachment-opened",
         spec: "chats.md",
         world: Some(attachments),
-        frame: CHAT,
+        frame: Frame::Dialog,
         steps: &[Step::Select(FOCUS), Step::Click("picture/attachment/shot-1")],
     },
     Screen { name: "approval", spec: "chats.md", world: Some(approval), frame: CHAT, steps: &[Step::Select(FOCUS)] },
