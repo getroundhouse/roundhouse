@@ -13,6 +13,7 @@ mod hub;
 mod labels;
 mod motion;
 mod new_workspace;
+mod order;
 mod stand_in;
 mod stand_in_gh;
 mod workspaces;
@@ -44,9 +45,10 @@ pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
 pub(crate) use labels::{MENU, first_labelled, menu_item};
+pub(crate) use order::{order, three_workspaces, top, worked_in};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
-pub(crate) use workspaces::home_row;
+pub(crate) use workspaces::{home_row, sidebar_row};
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 

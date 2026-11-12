@@ -30,6 +30,10 @@ impl Render for AppView {
         if self.settings_open() || Side::Left.shown(cx).is_none() {
             self.sidebar.not_drawn();
         }
+        let home = self.home_drawn().then(|| crate::home::arrange(self, window, cx));
+        if home.is_none() {
+            self.home.not_drawn();
+        }
         if self.settings_open() {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
@@ -38,7 +42,7 @@ impl Render for AppView {
         }
         let inset = sides::corner_inset(cx);
         let danger = cx.theme().danger;
-        let main = self.beside_the_sidebar(sides::header_inset(cx), cx);
+        let main = self.beside_the_sidebar(home, sides::header_inset(cx), cx);
         // Built only while some of it shows.
         let sidebar = Side::Left.shown(cx).map(|shown| {
             let sidebar = crate::sidebar::render(self, arranged, cx).into_any_element();
@@ -60,10 +64,13 @@ impl Render for AppView {
 }
 
 impl AppView {
-    /// What shows beside the sidebar: the selected workspace, Home, or what there is to say with neither. `inset` is
-    /// how far what's in the strip along the top starts from its left end, to clear the window's buttons while the
-    /// sidebar is hidden.
-    fn beside_the_sidebar(&self, inset: Pixels, cx: &mut Context<Self>) -> AnyElement {
+    /// What shows beside the sidebar: the selected workspace, Home, with its `home` rows while it's drawn, or what
+    /// there is to say with neither. `inset` is how far what's in the strip along the top starts from its left end, to
+    /// clear the window's buttons while the sidebar is hidden.
+    fn beside_the_sidebar(&self, home: Option<crate::home::Rows>, inset: Pixels, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(rows) = home {
+            return crate::home::page(self, rows, inset, cx).into_any_element();
+        }
         let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
         match &self.connection {
             Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
@@ -71,9 +78,6 @@ impl AppView {
             Connection::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
-            }
-            Connection::Ready(_) | Connection::Connecting if self.home_showing() => {
-                crate::home::page(self, inset, cx).into_any_element()
             }
             Connection::Ready(_) | Connection::Connecting => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),

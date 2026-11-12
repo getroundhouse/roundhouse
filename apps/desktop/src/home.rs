@@ -12,14 +12,15 @@ use gpui_kit::component::v_virtual_list;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, VirtualListScrollHandle, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
     size,
 };
 use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
-use protocol::model::{RepoId, Workspace, WorkspaceStatus};
+use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::AppView;
+use crate::reorder::{self, Hold, Places};
 use crate::sidebar::{Standing, doing, standing};
 use crate::workspace_order::Sort;
 
@@ -36,8 +37,23 @@ pub(crate) struct Home {
     pub(crate) sort: Sort,
     /// Where the list is scrolled to. The list is made again each frame, so it can't keep that itself.
     scroll: VirtualListScrollHandle,
+    /// Where each row is going, and has got to, so one that moves slides there, as in the sidebar.
+    places: Places<WorkspaceId>,
+    /// What holds the order still while someone is using the list, as in the sidebar, for as long as it shows the
+    /// same workspaces in the same order.
+    hold: Hold<Showing>,
     /// Lists again as the search is typed.
     _following: Subscription,
+}
+
+/// What the list is showing: everything that chooses which workspaces it lists, and in what order. Changing any of it
+/// lists them again at once, even while the order holds.
+#[derive(Clone, PartialEq, Debug)]
+struct Showing {
+    repo: Option<RepoId>,
+    archived: ArchiveFilter,
+    sort: Sort,
+    search: String,
 }
 
 impl Home {
@@ -54,8 +70,17 @@ impl Home {
             archived: ArchiveFilter::Hide,
             sort: Sort::LastActive,
             scroll: VirtualListScrollHandle::new(),
+            places: Places::default(),
+            hold: Hold::default(),
             _following: following,
         }
+    }
+
+    /// Home isn't drawn this frame, as while the workspace shows instead, so it hears nothing of the pointer, and the
+    /// rows are in their places at once when it's drawn again, rather than sliding from where they were last time.
+    pub(crate) fn not_drawn(&mut self) {
+        self.hold.not_drawn();
+        self.places.forget();
     }
 }
 
@@ -116,23 +141,56 @@ fn listed(
     listed
 }
 
-pub(crate) fn page(app: &AppView, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
+/// The workspaces listed in this frame, by where they are in the app's list, and how far each row is from its place on
+/// its way there.
+pub(crate) struct Rows {
+    listed: Rc<[usize]>,
+    offsets: Rc<[Pixels]>,
+}
+
+/// Works out the workspaces the list shows, in its order, and sends each row to its place, so one that has moved slides
+/// there. While someone is using the list, the workspaces stay in the order they were in, and any that come meanwhile
+/// go after them, as in the sidebar.
+pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows {
     let home = &app.home;
-    let search = home.search.read(cx).value().to_string();
-    let rows: Rc<[usize]> = listed(&app.workspaces, app.home_repo(), home.archived, home.sort, &search).into();
-    let empty = rows.is_empty();
-    let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); rows.len()]);
+    let showing = Showing {
+        repo: app.home_repo().cloned(),
+        archived: home.archived,
+        sort: home.sort,
+        search: home.search.read(cx).value().to_string(),
+    };
+    let mut listed = listed(&app.workspaces, showing.repo.as_ref(), home.archived, home.sort, &showing.search);
+    if let Some(held) = home.hold.held(&showing, cx.background_executor().now()) {
+        reorder::keep_held(&mut listed, &app.workspaces, held);
+    }
+    let ids: Vec<WorkspaceId> = listed.iter().map(|&w| app.workspaces[w].id.clone()).collect();
+    let offsets = app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
+    app.home.hold.showed(showing, ids);
+    Rows { listed: listed.into(), offsets }
+}
+
+pub(crate) fn page(app: &AppView, rows: Rows, inset: Pixels, cx: &mut Context<AppView>) -> impl IntoElement {
+    let Rows { listed, offsets } = rows;
+    let empty = listed.is_empty();
+    let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); listed.len()]);
     // A moving mark builds this view again on every frame, so only the rows on screen are built.
     let list = v_virtual_list(cx.entity(), "home-rows", sizes, move |app, range, window, cx| {
         let line_text = LineText::new(window, cx);
-        range.map(|ix| row(app, &app.workspaces[rows[ix]], &line_text, cx)).collect::<Vec<_>>()
+        let drawn = |ix: usize| reorder::offset_by(row(app, &app.workspaces[listed[ix]], &line_text, cx), offsets[ix]);
+        range.map(drawn).collect::<Vec<_>>()
     });
+    let list = reorder::hears_the_pointer(
+        div().id("home-list").flex_1().min_h_0().flex().flex_col(),
+        |t| &mut t.home.hold,
+        cx,
+    )
+    .child(list.track_scroll(&app.home.scroll).flex_1().min_h_0());
     v_flex()
         .region(Region::Home)
         .size_full()
         .child(bar::bar(app, inset, cx))
         .when(empty, |d| d.child(nothing_listed(cx)))
-        .when(!empty, |d| d.child(list.track_scroll(&home.scroll).flex_1().min_h_0()))
+        .when(!empty, |d| d.child(list))
 }
 
 /// A workspace's row: its mark and name, its repository, and a button to archive it or bring it back, which says so
