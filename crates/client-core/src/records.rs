@@ -8,10 +8,10 @@
 
 use std::collections::HashMap;
 
-use protocol::client::HubNotice;
+use protocol::client::{HubNotice, RecordNotice};
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, RecordKey, Records, Repo, Rev, Session, Workspace, WorkspaceDraft,
-    WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, Record, RecordKey, Records, Repo, Rev, Session, Workspace,
+    WorkspaceDraft, WorkspaceId,
 };
 
 #[cfg(test)]
@@ -19,44 +19,6 @@ mod laws;
 mod subagents;
 
 pub use subagents::Subagents;
-
-/// One record of any kind.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Record {
-    Repo(Repo),
-    Workspace(Workspace),
-    Session(Session),
-    Comment(DiffComment),
-    HubSettings(HubSettings),
-    Account(Account),
-    WorkspaceDraft(WorkspaceDraft),
-}
-
-impl Record {
-    pub fn key(&self) -> RecordKey {
-        match self {
-            Record::Repo(repo) => RecordKey::Repo { id: repo.id.clone() },
-            Record::Workspace(workspace) => RecordKey::Workspace { id: workspace.id.clone() },
-            Record::Session(session) => RecordKey::Session { id: session.id.clone() },
-            Record::Comment(comment) => RecordKey::Comment { id: comment.id.clone() },
-            Record::HubSettings(_) => RecordKey::HubSettings,
-            Record::Account(account) => RecordKey::Account { id: account.id.clone() },
-            Record::WorkspaceDraft(_) => RecordKey::WorkspaceDraft,
-        }
-    }
-
-    pub fn rev(&self) -> Rev {
-        match self {
-            Record::Repo(repo) => repo.rev,
-            Record::Workspace(workspace) => workspace.rev,
-            Record::Session(session) => session.rev,
-            Record::Comment(comment) => comment.rev,
-            Record::HubSettings(settings) => settings.rev,
-            Record::Account(account) => account.rev,
-            Record::WorkspaceDraft(draft) => draft.rev,
-        }
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct HubRecords {
@@ -78,15 +40,8 @@ impl HubRecords {
         if at != Rev::default() && at < self.listed {
             return false;
         }
-        let listed = list.repos.into_iter().map(Record::Repo);
-        let listed = listed.chain(list.workspaces.into_iter().map(Record::Workspace));
-        let listed = listed.chain(list.sessions.into_iter().map(Record::Session));
-        let listed = listed.chain(list.comments.into_iter().map(Record::Comment));
-        let listed = listed.chain(list.hub_settings.into_iter().map(Record::HubSettings));
-        let listed = listed.chain(list.accounts.into_iter().map(Record::Account));
-        let listed = listed.chain(list.workspace_draft.into_iter().map(Record::WorkspaceDraft));
         let mut next: HashMap<RecordKey, Record> = HashMap::new();
-        for record in listed {
+        for record in list.into_records() {
             let key = record.key();
             if self.removed.get(&key).is_some_and(|&gone| at != Rev::default() && gone > record.rev()) {
                 continue;
@@ -110,17 +65,10 @@ impl HubRecords {
     /// Takes in what the feed said. Returns whether anything changed. `Resync` changes nothing here:
     /// it asks for a new list.
     pub fn apply_notice(&mut self, notice: HubNotice) -> bool {
-        match notice {
-            HubNotice::Repo(repo) => self.apply_record(Record::Repo(repo)),
-            HubNotice::Workspace(workspace) => self.apply_record(Record::Workspace(workspace)),
-            HubNotice::Session(session) => self.apply_record(Record::Session(session)),
-            HubNotice::Comment(comment) => self.apply_record(Record::Comment(comment)),
-            HubNotice::HubSettings(settings) => self.apply_record(Record::HubSettings(settings)),
-            HubNotice::Account(account) => self.apply_record(Record::Account(account)),
-            HubNotice::WorkspaceDraft(draft) => self.apply_record(Record::WorkspaceDraft(draft)),
-            HubNotice::Removed { record, rev } => self.remove(&record, rev),
-            HubNotice::Subagent(subagent) => self.subagents.apply(subagent),
-            HubNotice::Resync | HubNotice::Unknown => false,
+        match RecordNotice::try_from(notice) {
+            Ok(RecordNotice::Copy(record)) => self.apply_record(record),
+            Ok(RecordNotice::Removed { record, rev }) => self.remove(&record, rev),
+            Err(_) => false,
         }
     }
 
@@ -130,6 +78,11 @@ impl HubRecords {
 
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
     pub fn apply_record(&mut self, record: Record) -> bool {
+        // Kept apart, since only the subagents of the sessions a view shows are kept, each session's listed on its
+        // own rather than with everything, so a list of everything says nothing of them.
+        if let Record::Subagent(subagent) = record {
+            return self.subagents.apply(subagent);
+        }
         let (key, rev) = (record.key(), record.rev());
         let removed_since = self.removed.get(&key).is_some_and(|&gone| !rev.supersedes(gone));
         let held_is_newer = self.held.get(&key).is_some_and(|held| !rev.supersedes(held.rev()));

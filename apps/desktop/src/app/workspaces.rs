@@ -2,10 +2,9 @@
 //! one selected.
 
 use client_core::ClientError;
-use client_core::records::Record;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, PromptLevel, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{PermissionMode, Repo, RepoId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{PermissionMode, Record, Repo, RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use super::AppView;
 use crate::busy::Busy;

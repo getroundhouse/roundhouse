@@ -2,11 +2,11 @@
 
 use parking_lot::Mutex;
 use protocol::client::HubNotice;
-use protocol::model::{Records, Rev, SessionId};
+use protocol::model::{Record, Records, SessionId};
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, ClientError, Result, Subscription, SubscriptionItem};
-use crate::records::{HubRecords, Record};
+use crate::records::HubRecords;
 
 /// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
 /// given to [`RecordsFeed::reconnect`].
@@ -115,16 +115,8 @@ fn list_records(client: &Client) -> Result<Records> {
                 comments.extend(client.comment_list(&workspace.id)?);
             }
             let repos = client.repo_list()?;
-            Ok(Records {
-                repos,
-                workspaces,
-                sessions,
-                comments,
-                hub_settings: None,
-                accounts: Vec::new(),
-                workspace_draft: None,
-                rev: Rev::default(),
-            })
+            // It kept nothing else.
+            Ok(Records { repos, workspaces, sessions, comments, ..Records::default() })
         }
         listed => listed,
     }

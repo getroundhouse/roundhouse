@@ -7,9 +7,7 @@ use gpui_kit::{
     div, px,
 };
 use look::{Hand as _, InRegion as _, Region};
-use protocol::model::SetupStatus;
-
-use client_core::records::Record;
+use protocol::model::{Record, SetupStatus};
 
 use super::{PaneEvent, WorkspacePane};
 

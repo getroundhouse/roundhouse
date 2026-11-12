@@ -5,14 +5,13 @@ use std::time::Duration;
 use client_core::ClientError;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Effort, Session, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, Effort, Record, Session, SessionId, SessionSettingsChange};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
 use super::{PaneEvent, Showing, WorkspacePane};
 use crate::prompt_cache;
 use crate::rename::{self, Renaming};
-use client_core::records::Record;
 
 /// What to show once `gone`, which was open, isn't: the first chat after it that's still open, or else the last open.
 /// It counts from the chats open before, since one closed before anything was sent in it is deleted, and so is in

@@ -97,7 +97,7 @@ fn a_copy_older_than_its_records_removal_isnt_told_of() {
     assert_eq!(heard(&mut client), [removed]);
 }
 
-/// A subagent has no key of its own, so it's told apart by its call and its session, and from the session itself.
+/// A subagent has no ID of its own, so it's told apart by its call and its session, and from the session itself.
 #[test]
 fn each_subagents_copies_are_in_order_apart_from_any_others() {
     let feed = Feed::new();

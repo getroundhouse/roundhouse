@@ -1,9 +1,8 @@
 //! Which workspaces have a reply nobody has read, which pane is on screen to be read, and marking a workspace from the
 //! sidebar.
 
-use client_core::records::Record;
 use gpui_kit::{App, Context};
-use protocol::model::{Session, WorkspaceId};
+use protocol::model::{Record, Session, WorkspaceId};
 
 use super::AppView;
 use crate::workspace_pane::Mark;

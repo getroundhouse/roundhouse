@@ -103,9 +103,9 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Checkout | A copy of this repository that the app is built from, such as one in a workspace. A build that isn't stamped names its checkout in the sidebar and the window's title, with the note it was opened with, so copies open at once can be told apart. As it quits it says on stderr whether someone quit it or it had done what it was opened for, since it exits with 0 either way | `desktop::checkout::Checkout`, `--note`, `desktop::why_quit` |
 | Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory | `Paths::hub_copy`, `Daemon` |
 | Subscription | A client following one session's log, from a given seq, or the agent's own events or one subagent's in it, from a given place | `subscription_id` |
-| Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice` |
+| Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice`, `RecordNotice` |
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
-| Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session, subagent or comment, or per-user state such as unread | `Repo`, `Workspace`, `Session`, `Subagent`, `DiffComment` |
+| Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session, subagent or comment, or per-user state such as unread. One of any kind is a `Record`, which its `RecordKey` names | `Record`, `RecordKey`, `Records`, `Repo`, `Workspace`, `Session`, `Subagent`, `DiffComment` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
 
 ## Easily confused

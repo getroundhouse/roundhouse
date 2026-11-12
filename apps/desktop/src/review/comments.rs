@@ -4,9 +4,7 @@
 use std::fmt::Write as _;
 
 use gpui_kit::{Context, SharedString};
-use protocol::model::{CommentId, DiffComment, DiffSide};
-
-use client_core::records::Record;
+use protocol::model::{CommentId, DiffComment, DiffSide, Record};
 
 use super::{Review, ReviewEvent};
 

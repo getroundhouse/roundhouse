@@ -3,8 +3,8 @@
 //! keeps them current from then on.
 //!
 //! No IO. As with every record, a list and the feed's notices can arrive in any order, and each subagent keeps
-//! whichever copy has the newer revision. The hub never removes a subagent's record, so one goes only when no view
-//! wants its session any more.
+//! whichever copy has the newer revision, as [`Rev::supersedes`] says. The hub never removes a subagent's record, so
+//! one goes only when no view wants its session any more.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -29,7 +29,10 @@ impl Subagents {
             return false;
         }
         let session = self.held.entry(subagent.session_id.clone()).or_default();
-        if session.get(&subagent.call).is_some_and(|held| held.rev >= subagent.rev) {
+        // As for every record. A hub that keeps subagents' records keeps revisions, so a copy without one only comes
+        // from a hub that doesn't, which has none to send.
+        let held = session.get(&subagent.call);
+        if held.is_some_and(|held| !subagent.rev.supersedes(held.rev) || *held == subagent) {
             return false;
         }
         session.insert(subagent.call.clone(), subagent);
