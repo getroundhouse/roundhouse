@@ -45,5 +45,8 @@ fn in_its_tab(ui: &mut Ui<'_>, what: &str) {
     let open = a_subagent_for(ui, what);
     ui.click(open);
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
-    ui.wait("its report", |ui| !ui.shown("report/call/").is_empty());
+    // What it was asked is the first row's and its report the last's, so a frame can draw one before the other.
+    ui.wait("what it was asked, and its report", |ui| {
+        !ui.shown("prompt/call/").is_empty() && !ui.shown("report/call/").is_empty()
+    });
 }
