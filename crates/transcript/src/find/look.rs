@@ -14,8 +14,10 @@ use protocol::find::Needle;
 use super::reveal::Reveal;
 use crate::item_key::ItemKey;
 
-/// Which of an item's texts one is, such as a call's output, or the third link a search found.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
+/// which orders the texts a call draws of its own in `crate::prose`, for a call that draws more than one, so those are
+/// declared in the order it draws them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Part {
     /// What the person wrote.
     Prompt,
@@ -165,12 +167,6 @@ impl FindLook {
     /// shown.
     pub(crate) fn marks(&self, id: &TextId, text: &str) -> Marks {
         self.marks_of(id, || Cow::Borrowed(text))
-    }
-
-    /// The text the match being shown is in, for a test.
-    #[cfg(feature = "testing")]
-    pub(crate) fn here_in(&self) -> Option<&TextId> {
-        self.here.as_ref().map(|here| &here.text)
     }
 
     /// How many matches each text drawn since this was made has, for a test.

@@ -4,7 +4,6 @@
 
 use std::time::Duration;
 
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AppContext as _, Bounds, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     ScrollDelta, ScrollEvent, SharedString, TestAppContext, point, px,
@@ -13,7 +12,7 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::SessionStatus;
 
 use super::super::{A_FRAME, press};
-use super::{LAST, click, copy, everything, head, on_the_reply_saying, open, settled, tail};
+use super::{LAST, bounds, click, copy, everything, head, on_the_reply_saying, open, settled, tail};
 use crate::support::{Stack, Ui};
 
 /// What a long summary's list is made of, over and over, in words the reply doesn't have.
@@ -195,11 +194,6 @@ fn turn_at(ui: &mut Ui<'_>, at: Point<Pixels>, y: Pixels) {
     press(ui, MouseMoveEvent { position: at, ..Default::default() });
     press(ui, ScrollEvent { position: at, delta: ScrollDelta::Pixels(point(px(0.), y)), ..Default::default() });
     ui.settle(A_FRAME);
-}
-
-/// Where the element `id` was drawn last.
-fn bounds(ui: &mut Ui<'_>, id: ElementId) -> Bounds<Pixels> {
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 /// A prompt sent while the agent thinks is recorded before the thought, but the agent takes it only after, so it's

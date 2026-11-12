@@ -10,27 +10,19 @@ use gpui_kit::{
 
 use super::line::{self, Line, Part};
 use super::tools::Toggle;
-use super::{InRow, recorded};
-use crate::find::{self, Part as Text};
+use super::written;
+use crate::find::Part as Text;
 use crate::item_key::ItemKey;
-use crate::prose::TextAt;
 
 /// What a thought's line starts with, recorded or still streaming.
 pub(super) const ICON: IconName = IconName::Brain;
 
-/// The thought, in the row `in_row` says. In a row of its own, opened, the transcript draws it from the kit's
-/// blocks, and selects it itself. In a call's row, as a subagent's is, it's the kit's text view.
-pub(super) fn draw(thought: &str, toggle: &Toggle, in_row: InRow, cx: &App) -> AnyElement {
+/// The thought, opened, as [`written`] draws it in the row it's in.
+pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::start_of(thought));
     let line = Line::new(ICON, "Thinking").part(summary);
     let opened = toggle.open.then(|| {
-        let (shared, id) = (toggle.shared, (toggle.key.clone(), Text::Thinking));
-        let drawn = match in_row {
-            InRow::Own(block) => recorded(TextAt { seq: toggle.seq, block }, &id, thought, None, toggle.find, shared),
-            InRow::Call => {
-                find::markdown_view(shared.texts.markdown(find::view_id(&id), thought), &id, toggle.find, None)
-            }
-        };
+        let drawn = written(toggle, Text::Thinking, thought, None, None);
         text(toggle.key, drawn, cx).into_any_element()
     });
     line::drawn(line, None, opened, toggle, cx)

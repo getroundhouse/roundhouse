@@ -67,7 +67,7 @@ mod tests {
     use super::{BLOCKS_KEPT, PARSES_A_LOOK};
 
     fn at(seq: u64) -> TextAt {
-        TextAt { seq, block: 0 }
+        TextAt::only(seq, 0)
     }
 
     /// Has `prose` draw `texts` texts of `words`, each in a frame of its own, and says which then have blocks. They're

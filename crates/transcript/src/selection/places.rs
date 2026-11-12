@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn a_copy_leaves_out_a_text_with_nothing_of_it_selected() {
-        let (first, second) = (TextAt { seq: 1, block: 0 }, TextAt { seq: 2, block: 0 });
+        let (first, second) = (TextAt::only(1, 0), TextAt::only(2, 0));
         let texts = [(first, Arc::from(["one".to_string()])), (second, Arc::from(["two words".to_string()]))];
         // From just past the end of the first text into the second.
         let (start, end) = (Spot { at: first, leaf: 0, byte: 3 }, Spot { at: second, leaf: 0, byte: 3 });

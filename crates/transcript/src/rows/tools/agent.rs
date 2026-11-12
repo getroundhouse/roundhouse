@@ -25,14 +25,14 @@ use super::{Answer, Subagent, Toggle, block, line};
 use crate::TranscriptEvent;
 use crate::calls::agent::{self, Agent};
 use crate::calls::count;
-use crate::find::{self, FindLook, Part as Text};
+use crate::find::{FindLook, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::long_texts::LongTexts;
 use crate::model_names::model_name;
 use crate::rows::around::{Around, blocks_of};
 use crate::rows::shown::{self, Gather};
-use crate::rows::{InRow, agent_text, render_block};
+use crate::rows::{InRow, render_block, written};
+use crate::selection::Selection;
 use crate::transcript::Transcript;
 
 pub(super) fn draw(
@@ -77,7 +77,7 @@ pub(super) fn shown(
     let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
     gather.inside(key, Fold::Output, |gather| {
         if let Some(prompt) = call.prompt {
-            gather.markdown(key, Text::Asked, prompt);
+            gather.written(key, Text::Asked, prompt);
         }
         for (event, around) in events {
             for (block, drawing) in blocks_of(&event.body).iter().zip(&around.blocks) {
@@ -89,7 +89,7 @@ pub(super) fn shown(
             Some(_) | None => gathered_report(answer, events),
         };
         if let Some(report) = report {
-            gather.markdown(key, Text::Report, report);
+            gather.written(key, Text::Report, report);
         }
     });
 }
@@ -136,24 +136,21 @@ pub(in crate::rows) fn open_tab(
         .into_any_element()
 }
 
-/// What it was asked, quieter than what it reported, which is the outcome: a quote, with a rule at its left and its
-/// text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a dozen lines or so, as
-/// a block's prose does. The call and the subagent tab both start with it, with the matches of what `find` looks for.
+/// What it was asked, as the item `key`'s, quieter than what it reported, which is the outcome: a quote, with a rule
+/// at its left and its text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a
+/// dozen lines or so, as a block's prose does, with the matches of what `find` looks for, and under a drag of `drags`,
+/// if it's one's to follow. `text` draws it, in the area that scrolls it. The call and the subagent tab both start with
+/// it.
 pub(in crate::rows) fn prompt_block(
-    texts: &LongTexts,
     key: &ItemKey,
-    prompt: &str,
+    text: impl FnOnce(ElementId) -> AnyElement,
     find: &FindLook,
+    drags: Option<&Selection>,
     cx: &App,
 ) -> AnyElement {
     let theme = cx.theme();
     let id = Text::Asked.element(key);
-    let text = div()
-        .id(id.clone())
-        .text_sm()
-        .text_color(theme.muted_foreground)
-        .child(block::markdown(texts, key, Text::Asked, prompt, find))
-        .test_support();
+    let text = div().id(id.clone()).text_sm().text_color(theme.muted_foreground).child(text(block::scroll_id(&id)));
     v_flex()
         .mt_1()
         .gap_1()
@@ -161,14 +158,15 @@ pub(in crate::rows) fn prompt_block(
         .border_l_2()
         .border_color(theme.border)
         .child(div().text_xs().text_color(look::faint()).child("Asked"))
-        .child(block::scrolling(find, &id, text))
+        .child(block::scrolling(find, &id, text.test_support()).follows_drags(drags))
         .into_any_element()
 }
 
-/// What the call was asked, with its matches.
+/// What the call was asked, with its matches, first of what the call draws.
 fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
     let prompt = call.prompt?;
-    Some(prompt_block(&toggle.shared.texts, toggle.key, prompt, toggle.find, cx))
+    let text = |area| written(toggle, Text::Asked, prompt, Some(area), None);
+    Some(prompt_block(toggle.key, text, toggle.find, toggle.drags(), cx))
 }
 
 /// What it reported, `text`, once it's done, as the subagent's answer, as the item `key`'s: the agent's own prose, in
@@ -221,11 +219,9 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .into_any_element()
 }
 
-/// The report, as Markdown, with its matches, in the view the transcript keeps of it.
+/// The report, as Markdown, with its matches, last of what the call draws.
 fn report_text(report: &str, toggle: &Toggle) -> AnyElement {
-    let texts = &toggle.shared.texts;
-    let view = agent_text(texts, toggle.key, report).image_source(toggle.shared.linked.resolver(toggle.seq, &[]));
-    find::markdown_view(view, &(toggle.key.clone(), Text::Report), toggle.find, None)
+    written(toggle, Text::Report, report, None, Some(&[]))
 }
 
 /// The report of a subagent whose work is gathered into its call, if it shows it: a subagent run in the foreground

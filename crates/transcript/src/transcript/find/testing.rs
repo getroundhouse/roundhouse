@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use gpui_kit::{App, Context, Window, px};
+use gpui_kit::{Context, Window};
 use protocol::find::Needle;
 
 use super::is_loaded;
@@ -16,13 +16,6 @@ impl Transcript {
     /// Whether the match being shown, which isn't in the kit's text view, was last drawn in view below the bar.
     pub fn match_in_view(&self) -> Option<bool> {
         self.finding.as_ref()?.reveal.shows_in_view()
-    }
-
-    /// Whether the match being shown, which is in Markdown, has been drawn in the view the transcript keeps of its text,
-    /// which is the view that draws its matches.
-    pub fn match_in_its_view(&self, cx: &App) -> Option<bool> {
-        let view = self.texts.view_of(self.model.borrow().find.here_in()?)?;
-        Some(view.read(cx).bounds().size.height > px(0.))
     }
 
     /// How many matches of `query` each text of the rows the log holds has, `(drawn, counted)`: as the rows draw them,

@@ -15,7 +15,7 @@ use super::row;
 use super::tools::agent;
 use super::turn_times;
 use crate::calls::count;
-use crate::find::FindLook;
+use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
 use crate::long_texts::LongTexts;
 use crate::model_names::model_name;
@@ -49,8 +49,11 @@ pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement>
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
-    // Nothing's looked for in the subagent tab.
-    Some(row().child(agent::prompt_block(texts, &key, prompt, &FindLook::default(), cx)).into_any_element())
+    // Nothing's looked for in the subagent tab, so the area that scrolls it has no match to bring into view.
+    let find = FindLook::default();
+    let text = |_| texts.markdown(&(key.clone(), Part::Asked), prompt).into_any_element();
+    let asked = agent::prompt_block(&key, text, &find, None, cx);
+    Some(row().child(asked).into_any_element())
 }
 
 /// Its report, once it's done, in the tab's last row. That's the tail's, which no event is in, so an image it points
@@ -58,7 +61,8 @@ pub(super) fn head(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement>
 pub(super) fn foot(m: &Model, texts: &LongTexts, cx: &App) -> Option<AnyElement> {
     let report = report(m)?;
     let key = ItemKey::Call(shown(m)?.call.clone());
-    Some(row().child(agent::report_block(&key, super::agent_text(texts, &key, report), cx)).into_any_element())
+    let report = texts.markdown(&(key.clone(), Part::Report), report);
+    Some(row().child(agent::report_block(&key, report, cx)).into_any_element())
 }
 
 fn report(m: &Model) -> Option<&str> {

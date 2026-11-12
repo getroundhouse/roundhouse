@@ -52,12 +52,9 @@ pub(super) fn approval_card(
         (
             "Plan".to_string(),
             // Nothing's found in what asks the person something.
-            shared.prose.draw(
-                &shared.selection,
-                &Written::unfound(TextAt { seq, block: 0 }, plan_id, &plan),
-                None,
-                || None,
-            ),
+            shared
+                .prose
+                .draw(&shared.selection, &Written::unfound(TextAt::only(seq, 0), plan_id, &plan), None, || None),
             h_flex()
                 .gap_2()
                 .child(answer_button("approve-plan", "Approve plan", allow).primary())

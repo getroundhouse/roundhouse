@@ -5,8 +5,8 @@
 use gpui_kit::base::TextSelection;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, ClipboardItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    ScrollDelta, TestAppContext, point, px,
+    AppContext as _, Bounds, ClipboardItem, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, ScrollDelta, TestAppContext, point, px,
 };
 use protocol::event::EventBody;
 use protocol::model::{SessionId, seq_index};
@@ -14,6 +14,7 @@ use protocol::model::{SessionId, seq_index};
 use super::{A_FRAME, press, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
 
+mod calls;
 mod kinds;
 
 /// A reply the tests find by what it says.
@@ -240,6 +241,11 @@ fn open<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 fn settled(ui: &mut Ui<'_>, stack: &Stack, session: &SessionId) -> Bounds<Pixels> {
     wait_for_the_list_to_settle(ui, seq_index(stack.client().session_get(session).unwrap().last_seq) - 1);
     ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap()
+}
+
+/// Where the element `id` was drawn last.
+fn bounds(ui: &mut Ui<'_>, id: ElementId) -> Bounds<Pixels> {
+    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 /// Presses the button at `at`, and lets it go, as the `clicks`th click in a row.

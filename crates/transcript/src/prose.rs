@@ -1,7 +1,7 @@
 //! The recorded texts that sit in a row of their own, drawn by the transcript from the kit's blocks rather than by the
 //! kit's text view, so what's selected of them, and what's found in them, is the transcript's to keep while their rows
-//! are out of sight. They're the agent's replies and thoughts, prompts, a plan to approve and a compaction's summary.
-//! `docs/ui.md` has why.
+//! are out of sight. They're the agent's replies and thoughts, prompts, a plan to approve, a compaction's summary,
+//! and the prose a call in a row of its own shows of its own, such as a subagent's report. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
@@ -30,7 +30,7 @@ use client_core::session_log::{Row, SessionLog};
 use gpui_kit::{AnyElement, App, ElementId, ImageSource, IntoElement, SharedUri, Task, WeakEntity};
 use protocol::model::Seq;
 
-use crate::find::{FindLook, TextId, view_id};
+use crate::find::{FindLook, Part, TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::selection::Selection;
 use crate::transcript::Transcript;
@@ -45,13 +45,38 @@ mod parse;
 /// takes under a millisecond, and a longer one is parsed on another thread.
 const AT_ONCE: usize = 4 * 1024;
 
-/// Where a text is in the chat: its event, and its place among the event's blocks. Ordered as the chat is, which
-/// takes each event to draw its texts in its own row, in the order of its blocks, as the agent's replies do. A text
-/// drawn elsewhere, such as in a call's row, or in another order, needs a place of its own to be ordered by.
+/// Where a text is in the chat: the event whose row draws it, which of the event's blocks it's drawn in, and where it
+/// is among the texts that block draws. Ordered as the chat is, since a row draws its blocks in order, and a block its
+/// texts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct TextAt {
     pub(crate) seq: Seq,
     pub(crate) block: usize,
+    pub(crate) among: Among,
+}
+
+impl TextAt {
+    /// The only text the `block`th block of the event at `seq` draws, such as a reply's.
+    pub(crate) fn only(seq: Seq, block: usize) -> Self {
+        Self { seq, block, among: Among::Only }
+    }
+
+    /// The first place in the row of the event at `seq`.
+    fn first_in(seq: Seq) -> Self {
+        Self::only(seq, 0)
+    }
+}
+
+/// Where a text is among those one block draws, in the order the block draws them. Each is known by what it is, rather
+/// than by how many texts the block drew before it, so it keeps its place while the block draws more or fewer, such as
+/// a call that's opened or closed, and no other text takes it. Ordered as declared, so `Only` is the first place in a
+/// block, which [`TextAt::first_in`] counts on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Among {
+    /// The only text the block draws, such as a reply's.
+    Only,
+    /// One of a call's own texts, such as what a subagent was asked, or its report, in the order of their parts.
+    Call(Part),
 }
 
 /// The texts drawn this way, parsed, by where they are in the chat. A copy reads the texts between a selection's ends
@@ -156,7 +181,8 @@ impl Prose {
         let mut texts = self.0.borrow_mut();
         let these = std::mem::replace(&mut texts.in_row, outer).unwrap_or_default();
         let Store { texts, hidden, .. } = &mut *texts;
-        for at in texts.range(TextAt { seq, block: 0 }..=TextAt { seq, block: usize::MAX }).map(|(at, _)| *at) {
+        let in_row = texts.range(TextAt::first_in(seq)..).take_while(|(at, _)| at.seq == seq);
+        for at in in_row.map(|(at, _)| *at) {
             if these.contains(&at) {
                 hidden.remove(&at);
             } else {
@@ -295,7 +321,7 @@ mod tests {
     use crate::fixtures::{event, log};
 
     fn at(seq: u64) -> TextAt {
-        TextAt { seq, block: 0 }
+        TextAt::only(seq, 0)
     }
 
     #[test]

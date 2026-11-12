@@ -44,7 +44,7 @@ pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
 pub(super) fn shown(reply: &Reply, key: &ItemKey, gather: &mut Gather) {
     line::shown_failure(reply.result(), false, key, gather);
     if let Some(advice) = advice(reply.result()) {
-        gather.inside(key, Fold::Output, |gather| gather.markdown(key, Text::Advice, advice));
+        gather.inside(key, Fold::Output, |gather| gather.written(key, Text::Advice, advice));
     }
 }
 

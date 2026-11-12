@@ -100,12 +100,6 @@ impl LongTexts {
         self.0.borrow().marked.get(&view_id(text)).is_some_and(|marked| marked.reveal == Reveal::Wanted)
     }
 
-    /// The view of `text`, if it's kept, for a test.
-    #[cfg(feature = "testing")]
-    pub(crate) fn view_of(&self, text: &TextId) -> Option<Entity<TextViewState>> {
-        self.state(&view_id(text))
-    }
-
     /// The view `id` has read more of what it was given, so it draws its matches once it's read all of it, and brings
     /// the one being shown into view if it's to.
     pub(super) fn newly_read(&self, id: &ElementId, cx: &mut App) {

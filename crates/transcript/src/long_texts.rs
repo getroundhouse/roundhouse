@@ -31,6 +31,7 @@ use client_core::session_log::{Row, SessionLog};
 use gpui_kit::component::text::{TextView, TextViewState};
 use gpui_kit::{App, AppContext as _, ElementId, Entity, SharedString, Subscription, WeakEntity};
 
+use crate::find::{TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::transcript::Transcript;
 use marks::Marked;
@@ -83,21 +84,22 @@ enum Keep {
 }
 
 impl LongTexts {
-    /// `text` as Markdown under `id`, which a row draws it by from one frame to the next. One over [`AT_ONCE`] is
-    /// kept, from the end of its row's drawing.
-    pub(crate) fn markdown(&self, id: ElementId, text: &str) -> TextView {
-        self.view(id, text, Keep::Long)
+    /// `text`, the text `id`, as Markdown, in the view a row draws it by from one frame to the next, known by
+    /// [`view_id`]. One over [`AT_ONCE`] is kept, from the end of its row's drawing.
+    pub(crate) fn markdown(&self, id: &TextId, text: &str) -> TextView {
+        self.view(view_id(id), text, Keep::Long)
     }
 
-    /// The text the agent is still writing, as Markdown under `id`, kept from its first word, so the text view it
-    /// grows in is the one it's drawn in once it's recorded under the same ID.
-    pub(crate) fn streaming(&self, id: ElementId, text: &str) -> TextView {
-        self.view(id, text, Keep::Written)
+    /// The text `id` the agent is still writing, as Markdown, kept from its first word, so the text view it grows in
+    /// is the one it's drawn in once it's recorded, by the same [`view_id`].
+    pub(crate) fn streaming(&self, id: &TextId, text: &str) -> TextView {
+        self.view(view_id(id), text, Keep::Written)
     }
 
-    /// The view kept under `id`, brought up to `text`, if one's kept: one the agent wrote `text` into, which its
+    /// The view kept of the text `id`, brought up to `text`, if one's kept: one the agent wrote `text` into, which its
     /// recorded row draws until it has a parse of its own.
-    pub(crate) fn kept(&self, id: ElementId, text: &str) -> Option<TextView> {
+    pub(crate) fn kept(&self, id: &TextId, text: &str) -> Option<TextView> {
+        let id = view_id(id);
         let kept = self.0.borrow().kept.contains_key(&id);
         kept.then(|| self.view(id, text, Keep::Written))
     }
