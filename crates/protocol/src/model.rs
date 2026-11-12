@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 mod account;
+mod agent;
 mod branches;
 mod cache;
 mod compaction_line;
@@ -24,6 +25,7 @@ mod subagent;
 mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use agent::{AgentDescription, AgentFeature, ModelChoice, NotOffered};
 pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
