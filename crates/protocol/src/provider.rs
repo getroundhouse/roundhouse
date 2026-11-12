@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::client::ApiError;
+use crate::client::Outcome;
 use crate::model::{HubId, InstanceId, WorkerTarget};
 
 /// The provider protocol's own version, apart from the client and worker protocols', so a break in one doesn't break
@@ -94,16 +94,11 @@ pub enum ProviderFrame {
     Event { event: ProviderEvent },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderOutcome {
-    Response(ProviderResponse),
-    /// `VersionMismatch` for a hello naming no version the adapter speaks, or a request before hello. `Conflict`
-    /// for another hub's hello, or a request the instance's state refuses.
-    /// `NotFound` for an instance that isn't there, `Unavailable` when the provider has no room, such as no spot
-    /// instances, `Unsupported` for what the adapter doesn't do or can't read, and `Worker` for the rest.
-    Error(ApiError),
-}
+/// An adapter's answer, in the form every protocol's replies take. An adapter refuses with `VersionMismatch` for a hello
+/// naming no version it speaks, or a request before hello, `Conflict` for another hub's hello, or a request the
+/// instance's state refuses, `NotFound` for an instance that isn't there, `Unavailable` when the provider has no room,
+/// such as no spot instances, `Unsupported` for what it doesn't do or can't read, and `Worker` for the rest.
+pub type ProviderOutcome = Outcome<ProviderResponse>;
 
 /// What an adapter tells its hub without being asked, so the hub needn't find out when a worker's stream breaks.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
