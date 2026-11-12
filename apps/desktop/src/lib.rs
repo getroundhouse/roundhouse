@@ -21,6 +21,7 @@ pub mod file_view;
 mod haptics;
 mod home;
 pub mod image_diff;
+pub mod lost_release;
 mod menus;
 mod model_picker;
 pub mod new_workspace;

@@ -128,6 +128,7 @@ impl AppView {
             .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
+            .child(self.unreleased.hears())
     }
 }
 
