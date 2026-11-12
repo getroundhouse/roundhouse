@@ -118,3 +118,25 @@ fn with_nothing_typed_the_workspace_and_its_chat_are_made_and_nothing_is_sent() 
     assert_eq!(prompts(&client, &made.session.id), []);
     assert!(!client.records_list().unwrap().new_workspace_draft.unwrap().plan, "the dialog is emptied, plan mode too");
 }
+
+/// So a chat that's to plan doesn't start on it with full access. Here the effort is one from a newer client, which
+/// this hub doesn't know.
+#[test]
+fn a_prompt_for_a_chat_that_couldnt_be_given_what_was_picked_goes_to_its_composer_with_its_file() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let made_of = NewWorkspaceDraftToKeep {
+        effort: Some(Effort::Unknown),
+        ..kept_in_the_dialog(&stack, &client, "fix the login")
+    };
+    client.new_workspace_draft_keep(&made_of).unwrap();
+
+    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
+
+    assert!(made.unsent.is_some(), "it says why it wasn't sent");
+    let draft = &made.session.draft;
+    assert_eq!(draft.text, "fix the login");
+    assert_eq!(draft.files.iter().map(|file| &file.id).collect::<Vec<_>>(), [&made_of.files[0]]);
+    assert_eq!(prompts(&client, &made.session.id), []);
+    assert_eq!(client.records_list().unwrap().new_workspace_draft.unwrap().text, "", "the chat has it now");
+}

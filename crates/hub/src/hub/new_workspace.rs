@@ -40,8 +40,8 @@ impl Hub {
         let again = self.made_earlier::<Workspace>(Some(&client_request_id)).await?.is_some();
         let files = self.dialog_files(&made_of, again).await?;
         let workspace = self.workspace_create(repo_id, None, None, Some(client_request_id.clone())).await?;
-        let session = self.first_chat(&workspace.id, &made_of).await?;
-        let (session, unsent, taken) = self.first_prompt(session, &made_of, &files, &client_request_id).await;
+        let (session, unchosen) = self.first_chat(&workspace.id, &made_of).await?;
+        let (session, unsent, taken) = self.first_prompt(session, unchosen, &made_of, &files, &client_request_id).await;
         if taken {
             self.done_with_dialog(&made_of).await;
         }
@@ -69,40 +69,54 @@ impl Hub {
     }
 
     /// The workspace's first chat, found or made as a client opening it finds or makes one, so two at once share it,
-    /// and given the model, effort and mode picked, unless it has them.
+    /// and given the model, effort and mode picked, unless it has them. Returns the chat, and why it couldn't be given
+    /// them, if it couldn't.
     async fn first_chat(
         self: &Arc<Self>,
         workspace: &WorkspaceId,
         made_of: &NewWorkspaceDraftToKeep,
-    ) -> Result<Session, ApiError> {
+    ) -> Result<(Session, Option<ApiError>), ApiError> {
         let session = self.session_ensure(workspace.clone(), self.new_chat_kind()).await?;
         let mode = if made_of.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
         let as_chosen = made_of.model.as_ref().is_none_or(|model| *model == session.model)
             && made_of.effort.is_none_or(|effort| effort == session.effort)
             && session.permission_mode == mode;
         if as_chosen {
-            return Ok(session);
+            return Ok((session, None));
         }
         let (model, effort) = (made_of.model.clone(), made_of.effort);
-        self.session_configure(session.id, SessionSettingsChange { model, permission_mode: Some(mode), effort }).await
+        let chosen = SessionSettingsChange { model, permission_mode: Some(mode), effort };
+        match self.session_configure(session.id.clone(), chosen).await {
+            Ok(configured) => Ok((configured, None)),
+            Err(unchosen) => Ok((session, Some(unchosen))),
+        }
     }
 
     /// Sends the chat the prompt, if there is one, with copies of the dialog's files, or puts it in the chat's composer
-    /// if it can't be sent, saying why. Returns the chat, why the prompt wasn't sent, and whether the chat has it now,
-    /// one way or the other, so the dialog can let it go.
+    /// if it can't be sent, saying why. It isn't sent to a chat that couldn't be given the model, effort and mode
+    /// picked, which `unchosen` says, so one that's to plan doesn't start on it with full access. Returns the chat, why
+    /// the prompt wasn't sent, and whether the chat has it now, one way or the other, so the dialog can let it go.
     async fn first_prompt(
         self: &Arc<Self>,
         session: Session,
+        unchosen: Option<ApiError>,
         made_of: &NewWorkspaceDraftToKeep,
         files: &[Attachment],
         client_request_id: &ClientRequestId,
     ) -> (Session, Option<ApiError>, bool) {
         if !says_or_carries(&made_of.text, made_of.files.len()) {
-            return (session, None, true);
+            return (session, unchosen, true);
         }
-        let Err(unsent) = self.send_first_prompt(&session, made_of, files, client_request_id).await else {
-            return (session, None, true);
+        let sent = match unchosen {
+            None => self.send_first_prompt(&session, made_of, files, client_request_id).await,
+            Some(unchosen) => {
+                if let Err(e) = self.copy_files(&session, files).await {
+                    warn!(session = %session.id, "couldn't copy the new-workspace dialog's files: {e}");
+                }
+                Err(unchosen)
+            }
         };
+        let Err(unsent) = sent else { return (session, None, true) };
         // The chat leaves out a file it wasn't given, such as one whose copy failed.
         let draft = DraftToKeep { text: made_of.text.clone(), files: made_of.files.clone() };
         match self.session_draft(session.id.clone(), draft).await {
@@ -114,8 +128,8 @@ impl Hub {
         }
     }
 
-    /// Copies each of the dialog's files to the chat, as a client adds one, unless the chat has it already, then sends
-    /// the prompt carrying every file named, with an ID from the request's, so sending the request again sends it once.
+    /// Copies the dialog's files to the chat, then sends the prompt carrying every file named, with an ID from the
+    /// request's, so sending the request again sends it once.
     async fn send_first_prompt(
         self: &Arc<Self>,
         session: &Session,
@@ -123,6 +137,13 @@ impl Hub {
         files: &[Attachment],
         client_request_id: &ClientRequestId,
     ) -> Result<(), ApiError> {
+        self.copy_files(session, files).await?;
+        let message = ClientMessageId::from(client_request_id.as_str());
+        self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of)).await.map(drop)
+    }
+
+    /// Copies each of the dialog's files to the chat, as a client adds one, unless the chat has it already.
+    async fn copy_files(&self, session: &Session, files: &[Attachment]) -> Result<(), ApiError> {
         for file in files {
             let (session_id, id) = (session.id.clone(), file.id.clone());
             if self.blocking(move |store| store.attachment(&session_id, &id)).await?.is_some() {
@@ -135,8 +156,7 @@ impl Hub {
             let kept_for = FileFor::Session(session.id.clone());
             self.file_add(kept_for, id, name, file.media_type, data, AddedBy::Client).await?;
         }
-        let message = ClientMessageId::from(client_request_id.as_str());
-        self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of)).await.map(drop)
+        Ok(())
     }
 
     /// Empties what's in the dialog, keeping where it makes a workspace and how its chat runs, as Create leaves it, if
