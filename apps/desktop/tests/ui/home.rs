@@ -93,3 +93,21 @@ fn an_archived_row_says_its_being_restored_until_it_is(cx: &mut TestAppContext) 
     held.release();
     ui.wait("it to be restored", |ui| has(ui, &first, WorkspaceStatus::Ready) && ui.view().busy.is_free());
 }
+
+/// Archived from elsewhere while Settings shows over Home, so another workspace is selected under Home, which hides its
+/// pane, and Home's search has the keys again once Settings goes.
+#[gpui_kit::test]
+fn going_back_from_settings_gives_homes_search_the_keys_after_the_selection_moved_under_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, first, second) = open_home(cx, &stack);
+    ui.press("cmd-,");
+    ui.wait("Settings", |ui| ui.has("settings-back"));
+
+    stack.client().workspace_archive(&second, false).unwrap();
+    ui.wait("the other one, under Home", |ui| ui.view().selected.as_ref() == Some(&first) && ui.pane().is_some());
+    ui.press("escape");
+
+    assert!(ui.has("home-page"));
+    ui.input("a name no workspace has");
+    ui.wait("the search to have the keys", |ui| ui.has("home-nothing"));
+}

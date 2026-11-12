@@ -1,4 +1,5 @@
-//! The new-workspace dialog: what it makes, what the first prompt carries, and what's kept when it closes.
+//! The new-workspace dialog: what it makes, what the first prompt carries, what's kept when it closes, and what shows
+//! once the workspace is made.
 
 #![cfg(test)]
 
@@ -6,7 +7,7 @@ use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, Sh
 use protocol::event::EventBody;
 use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode};
 
-use crate::support::{Stack, Ui, git};
+use crate::support::{Held, Stack, Ui, git, sidebar_row};
 
 mod given_back;
 
@@ -196,4 +197,72 @@ fn files_chosen_from_the_dialogs_menu_are_attached(cx: &mut TestAppContext) {
     ui.wait("the file picker", |ui| ui.cx.did_prompt_for_paths());
     ui.cx.simulate_path_prompt_response(|_| Some(vec![notes.clone()]));
     ui.wait("the file to be attached", |ui| ui.dialog_attached() == ["notes.txt"]);
+}
+
+/// Chosen from the sidebar while the new one waits on git, which is where making one takes its time.
+#[gpui_kit::test]
+fn a_workspace_chosen_while_another_is_made_stays_showing_once_it_is(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    let first = ui.new_workspace();
+    let second = ui.new_workspace();
+    let making = Held::checkout(&stack);
+    ui.open_new_workspace();
+    ui.input("say:on it");
+    ui.press("enter");
+    ui.wait("it to start making it", |_| making.runs() == 1);
+
+    ui.click(sidebar_row(&first));
+    making.release();
+
+    let made = |ui: &Ui| ui.view().workspaces.iter().map(|w| w.id.clone()).find(|id| ![&first, &second].contains(&id));
+    ui.wait("the new workspace", |ui| made(ui).is_some() && ui.view().busy.is_free());
+    assert_eq!(ui.view().selected.as_ref(), Some(&first), "the one chosen meanwhile stays showing");
+    let made = made(&ui).unwrap();
+    let prompted = |ui: &mut Ui| {
+        ui.view().sessions.get(&made).is_some_and(|chats| chats.iter().any(|c| c.user_active_at_ms.is_some()))
+    };
+    ui.wait("the new workspace's chat to have its prompt", prompted);
+}
+
+/// Opened while the new one waits on git, so that's where the person went, and the workspace under it stays.
+#[gpui_kit::test]
+fn settings_opened_while_a_workspace_is_made_keeps_the_one_under_it_showing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    let showing = ui.new_workspace();
+    let making = Held::checkout(&stack);
+    ui.open_new_workspace();
+    ui.press("enter");
+    ui.wait("it to start making it", |_| making.runs() == 1);
+    ui.wait_out_the_dialog_going();
+
+    ui.press("cmd-,");
+    ui.wait("Settings", |ui| ui.has("settings-back"));
+    making.release();
+
+    ui.wait("the new workspace", |ui| ui.view().workspaces.len() == 2 && ui.view().busy.is_free());
+    assert_eq!(ui.view().selected.as_ref(), Some(&showing));
+    ui.press("escape");
+    ui.input("here");
+    assert_eq!(ui.composer_text(), "here", "and has the keys once Settings goes");
+}
+
+#[gpui_kit::test]
+fn home_opened_while_a_workspace_is_made_stays_showing_once_it_is(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    ui.new_workspace();
+    let making = Held::checkout(&stack);
+    ui.open_new_workspace();
+    ui.press("enter");
+    ui.wait("it to start making it", |_| making.runs() == 1);
+
+    ui.click("home");
+    making.release();
+
+    ui.wait("the new workspace", |ui| ui.view().workspaces.len() == 2 && ui.view().busy.is_free());
+    assert!(ui.has("home-page"));
+    ui.input("a name no workspace has");
+    ui.wait("Home's search to have the keys", |ui| ui.has("home-nothing"));
 }

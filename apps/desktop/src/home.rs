@@ -104,8 +104,8 @@ impl ArchiveFilter {
         }
     }
 
-    /// A workspace still being made isn't listed, as the sidebar leaves it out, since there's nothing to show of it
-    /// yet. Neither is one in a state this app doesn't know.
+    /// A workspace still being made isn't listed, since there's nothing to open yet, and the sidebar says it's on its
+    /// way. Neither is one in a state this app doesn't know.
     fn lists(self, status: WorkspaceStatus) -> bool {
         use ArchiveFilter::{Hide, Only, Show};
         use WorkspaceStatus::{Archived, Creating, Ready, Unknown};

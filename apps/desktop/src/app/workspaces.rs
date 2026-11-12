@@ -14,7 +14,10 @@ use crate::rename::{self, Renaming};
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 
 mod dialog;
+mod in_view;
 mod made;
+
+use in_view::InView;
 
 impl AppView {
     /// Makes the selected workspace's pane if it has none, shows it, and focuses it.
@@ -90,13 +93,14 @@ impl AppView {
     }
 
     /// Makes a workspace from what the dialog held, and sends its first chat the prompt, if there is one, with the
-    /// model, effort and mode chosen. The sidebar says it's being made meanwhile. Nothing typed is lost: if the
-    /// workspace couldn't be made, the prompt goes back to the dialog, and if it was made and the prompt couldn't be
-    /// sent, it goes to the chat's composer, which is asked into plan mode if the prompt was to be planned. Returns the
-    /// request, untouched, when a workspace can't be made now.
+    /// model, effort and mode chosen. The hub says it's on its way meanwhile, which the sidebar shows, and it shows
+    /// once it's made, unless the person has gone elsewhere since. Nothing typed is lost: if the workspace couldn't
+    /// be made, the prompt goes back to the dialog, and if it was made and the prompt couldn't be sent, it goes to the
+    /// chat's composer, which is asked into plan mode if the prompt was to be planned. Returns the request, untouched,
+    /// when a workspace can't be made now.
     pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
         let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
-        self.sidebar.making_among(&self.workspaces);
+        let asked_from = self.in_view();
         self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it.
@@ -107,7 +111,7 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.set_busy(Busy::Free, cx);
                 match made {
-                    Ok(made) => t.made(made, cx),
+                    Ok(made) => t.made(made, &asked_from, cx),
                     // Making it stopped partway, so it may have been made.
                     Err(e) => {
                         t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
@@ -121,10 +125,18 @@ impl AppView {
         Ok(())
     }
 
-    /// Shows the workspace that was made, and puts back whatever couldn't be sent.
-    fn made(&mut self, made: made::Made, cx: &mut Context<Self>) {
+    /// What the window shows now, for [`InView::still`] to compare with what it showed when a workspace was asked for.
+    fn in_view(&self) -> InView {
+        InView { selected: self.selected.clone(), main: self.main, settings: self.settings_open() }
+    }
+
+    /// Shows the workspace that was made, if the person is still where they were when it was asked for, which was
+    /// `asked_from`, and puts back whatever couldn't be sent. Where they went meanwhile stays as it is, since that's
+    /// where they chose to be, unless the prompt couldn't be sent, which goes to the new chat's composer for them to
+    /// see.
+    fn made(&mut self, made: made::Made, asked_from: &InView, cx: &mut Context<Self>) {
         let made::Made { workspace, session, unsent } = made;
-        let shown = workspace.as_ref().map(|workspace| workspace.id.clone());
+        let made_id = workspace.as_ref().map(|workspace| workspace.id.clone());
         let chat = session.as_ref().map(|session| session.id.clone());
         if let Some(workspace) = workspace {
             self.take_reply(Record::Workspace(workspace), cx);
@@ -132,12 +144,13 @@ impl AppView {
         if let Some(session) = session {
             self.take_reply(Record::Session(session), cx);
         }
-        if let Some(id) = shown.clone() {
+        let stayed = |id: &WorkspaceId| asked_from.still(&self.in_view(), id);
+        if let Some(id) = made_id.clone().filter(|id| stayed(id) || unsent.is_some()) {
             self.select(id, cx);
         }
         let Some(unsent) = unsent else { return };
         self.show_error(unsent.failed.failed(&unsent.error), cx);
-        let Some(id) = shown else {
+        let Some(id) = made_id else {
             self.give_back_to_dialog(unsent.text, unsent.files, unsent.permission_mode, cx);
             return;
         };

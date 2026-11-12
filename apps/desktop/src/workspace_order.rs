@@ -34,16 +34,6 @@ impl Sort {
         }
     }
 
-    /// Whether a workspace being made goes first among its repository's once it's ready, rather than last, so the
-    /// note saying it's on its way can be where it will be. One that's just been made is the newest, and the last
-    /// worked in. By name, nobody can say where it goes until it has one, so the note stays at the end.
-    pub(crate) fn puts_new_first(self) -> bool {
-        match self {
-            Sort::Newest | Sort::LastActive => true,
-            Sort::Oldest | Sort::Name => false,
-        }
-    }
-
     /// Puts `listed`, which are places in `workspaces`, in this order. Those that come out the same keep the order
     /// they were in.
     pub(crate) fn sort(self, listed: &mut [usize], workspaces: &[Workspace]) {

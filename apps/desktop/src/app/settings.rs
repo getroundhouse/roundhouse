@@ -37,10 +37,14 @@ impl AppView {
         cx.notify();
     }
 
-    /// Back to where the person was, with focus where they left it, such as in the composer.
+    /// Back to where the person was, with focus where they left it, such as in the composer. A workspace selected
+    /// meanwhile, as when the one showing was archived elsewhere, has it instead, since what had it isn't drawn now.
     pub(crate) fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(shown) = self.settings.take() else { return };
-        window.focus(&shown.focus_before.unwrap_or_else(|| self.focus.clone()), cx);
+        match self.focus_once_closed.take().filter(|id| self.selected.as_ref() == Some(id)) {
+            Some(id) => self.focus_pane(id, window, cx),
+            None => window.focus(&shown.focus_before.unwrap_or_else(|| self.focus.clone()), cx),
+        }
         self.read_on_screen(window.is_window_active(), cx);
         cx.notify();
     }

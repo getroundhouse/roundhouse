@@ -206,7 +206,9 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     std::fs::remove_dir_all(stack.repo()).unwrap();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(nothing_typed(&repo), cx)).unwrap();
     assert_eq!(ui.view().busy.creating_in(), Some(&repo));
-    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
+    // The hub announced it on its way, and then removed it, so its note goes too.
+    let gone = |ui: &mut Ui| ui.view().workspaces.iter().all(|w| w.status != WorkspaceStatus::Creating);
+    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free() && gone(ui));
 }
 
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
