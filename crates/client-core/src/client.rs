@@ -16,6 +16,7 @@ mod options;
 mod outline;
 mod places;
 mod prompts;
+mod queueing;
 mod start;
 mod stream;
 mod typed;
@@ -45,6 +46,7 @@ pub use follow::FollowError;
 pub(crate) use lines::Place;
 pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
+pub(crate) use queueing::Shown;
 pub use start::Daemon;
 
 #[derive(Debug, thiserror::Error)]
@@ -154,6 +156,8 @@ struct Inner {
     /// The files this connection has added to a session, or read back from one, so a prompt that carries one doesn't
     /// send its bytes again.
     given: Mutex<HashSet<(SessionId, AttachmentId)>>,
+    /// Each chat's prompts being queued from here that the hub hasn't answered for yet.
+    queueing: Arc<queueing::Queueing>,
 }
 
 impl Inner {
@@ -221,6 +225,7 @@ impl Client {
             running: Arc::default(),
             lines: Arc::default(),
             given: Mutex::default(),
+            queueing: Arc::default(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()

@@ -13,13 +13,6 @@ use protocol::prompt::{Prompt, says_or_carries};
 use super::composer::Hub;
 use super::{PaneEvent, WorkspacePane};
 
-/// A prompt queued from here that the hub hasn't answered for yet, such as while its files are added. It shows faint at
-/// the end of its chat's queue, and can't be changed until the hub has it.
-pub(super) struct Pending {
-    session_id: SessionId,
-    prompt: QueuedPrompt,
-}
-
 /// A queued prompt being changed, in place of its text.
 pub(super) struct Editing {
     session_id: SessionId,
@@ -31,8 +24,8 @@ pub(super) struct Editing {
 
 impl WorkspacePane {
     /// Puts what's typed and attached at the end of the showing chat's queue, for the hub to send once the agent has
-    /// finished. It shows at once, faint, until the hub has it, and if the hub can't take it, it goes back to its
-    /// chat's composer, so nothing typed or attached is lost.
+    /// finished. It shows at once, faint, until the hub has it, as client-core says, and if the hub can't take it, it
+    /// goes back to its chat's composer, so nothing typed or attached is lost.
     pub fn queue_typed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.composer.read(cx).text().to_string();
         let Some(session_id) = self.active.clone().filter(|_| self.hub == Hub::Here) else { return };
@@ -43,14 +36,10 @@ impl WorkspacePane {
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         // At once, so what's queued can't come back as a draft.
         self.keep_typed(true, cx);
-        let written = Written::new(Prompt::carrying(text, files));
-        let client_msg_id = written.client_msg_id.clone();
-        self.queue_pending.push(Pending { session_id: session_id.clone(), prompt: written.on_its_way() });
-        let queueing = self.client.start_queueing(&session_id, written);
+        let queueing = self.client.start_queueing(&session_id, Written::new(Prompt::carrying(text, files)));
         cx.spawn(async move |this, cx| {
             let queued = queueing.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.queue_pending.retain(|pending| pending.prompt.client_msg_id != client_msg_id);
                 match queued {
                     Ok(session) => t.took_reply(session, cx),
                     Err(NotTaken { error, prompt }) => {

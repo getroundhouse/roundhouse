@@ -37,20 +37,13 @@ impl WorkspacePane {
     /// or nothing when that's none. A held queue says so.
     pub(in crate::workspace_pane) fn queue_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let session = self.session()?;
-        let on_record = |pending: &&super::Pending| {
-            !session.queued.iter().any(|queued| queued.client_msg_id == pending.prompt.client_msg_id)
-        };
-        let pending: Vec<&QueuedPrompt> = (self.queue_pending.iter())
-            .filter(|pending| pending.session_id == session.id)
-            .filter(on_record)
-            .map(|pending| &pending.prompt)
-            .collect();
+        let pending = self.client.queueing(session);
         if session.queued.is_empty() && pending.is_empty() {
             return None;
         }
         let queued = Row::Queued { working: session.status.in_turn() };
         let rows: Vec<AnyElement> = (session.queued.iter().map(|prompt| (prompt, queued)))
-            .chain(pending.into_iter().map(|prompt| (prompt, Row::Pending)))
+            .chain(pending.iter().map(|prompt| (prompt, Row::Pending)))
             .map(|(prompt, row)| self.queued_row(prompt, row, cx))
             .collect();
         let theme = cx.theme();

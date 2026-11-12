@@ -43,6 +43,32 @@ fn a_prompt_the_hub_never_takes_comes_back_with_its_files() {
         prompt.files.iter().map(|file| (&file.attachment, &file.data)).collect::<Vec<_>>(),
         [(&log.attachment, &log.data)]
     );
+    assert!(client.queueing(&stand_in_hub::session("s")).is_empty(), "it's handed back, not shown as queued");
+}
+
+/// So the queue shows a prompt from the moment it's queued, before the hub has it, and shows it once.
+#[test]
+fn a_prompt_being_queued_shows_until_the_hub_answers_and_not_again_once_it_s_on_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let (answer, answered) = flume::bounded::<()>(0);
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
+        let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = request else { return Does::Nothing };
+        let _ = answered.recv();
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Session(stand_in_hub::session(id.as_str())))))
+    });
+    let (session, written) = (stand_in_hub::session("s"), Written::new(Prompt::new("next")));
+    let shown = written.on_its_way();
+
+    let queueing = client.start_queueing(&session.id, written);
+
+    assert_eq!(client.queueing(&session), std::slice::from_ref(&shown));
+    assert!(client.queueing(&stand_in_hub::session("t")).is_empty(), "only in its own chat");
+    let mut on_record = session.clone();
+    on_record.queued.push(shown);
+    assert!(client.queueing(&on_record).is_empty(), "the record shows it");
+    answer.send(()).unwrap();
+    queueing.wait().unwrap();
+    assert!(client.queueing(&session).is_empty(), "the hub has answered for it");
 }
 
 /// A hub that takes every file and prompt, sent or queued, after saying what it was, except that it says it hasn't got

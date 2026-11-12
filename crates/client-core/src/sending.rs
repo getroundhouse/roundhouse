@@ -6,7 +6,7 @@ use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session,
 use protocol::prompt::Prompt;
 
 use crate::attachments::FileToSend;
-use crate::client::{Client, ClientError, Place, Reply, Result, new_message_id};
+use crate::client::{Client, ClientError, Place, Reply, Result, Shown, new_message_id};
 
 /// A prompt as its person wrote it, with the bytes of what it carries, under the ID it keeps until it's recorded and
 /// after.
@@ -40,6 +40,8 @@ pub struct Taking<T> {
     reply: Reply<std::result::Result<T, NotTaken>>,
     /// What it said, for when the call never ran and took its files with it.
     text: String,
+    /// A prompt being queued, which [`Client::queueing`] shows until this is received or let go of.
+    _shown: Option<Shown>,
 }
 
 impl<T> Taking<T> {
@@ -69,9 +71,11 @@ impl Client {
         self.start_in_line(id, written, Client::send_in_line)
     }
 
-    /// Queues a prompt as [`Client::start_sending`] sends one.
+    /// Queues a prompt as [`Client::start_sending`] sends one, and [`Client::queueing`] shows it from now until its
+    /// reply is received, or the [`Taking`] let go of.
     pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
-        self.start_in_line(id, written, Client::queue_in_line)
+        let shown = self.show_queueing(id, written.on_its_way());
+        Taking { _shown: Some(shown), ..self.start_in_line(id, written, Client::queue_in_line) }
     }
 
     /// Adds each file the hub hasn't been given to the session, then sends the prompt that carries them once it's this
@@ -94,7 +98,7 @@ impl Client {
             let taken = call(client, &place, &id, &written);
             Ok(taken.map_err(|error| NotTaken { error, prompt: written.prompt }))
         });
-        Taking { reply, text }
+        Taking { reply, text, _shown: None }
     }
 
     fn send_in_line(&self, place: &Place, id: &SessionId, written: &Written) -> Result<(Seq, bool)> {
