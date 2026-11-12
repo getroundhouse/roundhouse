@@ -161,6 +161,14 @@ counters!(
     Place,
 );
 
+impl Rev {
+    /// Whether a copy at this revision replaces one at `held`: it's newer, or it has none, and then copies replace each
+    /// other in the order they arrive.
+    pub fn supersedes(self, held: Rev) -> bool {
+        self == Rev::default() || self > held
+    }
+}
+
 /// A `seq` as a position in a list of events.
 #[expect(
     clippy::cast_possible_truncation,

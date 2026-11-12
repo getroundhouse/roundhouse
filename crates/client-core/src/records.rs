@@ -54,11 +54,6 @@ impl Record {
     }
 }
 
-/// Whether a copy at `incoming` replaces one at `held`. Without revisions, the later arrival does.
-fn supersedes(incoming: Rev, held: Rev) -> bool {
-    incoming == Rev::default() || incoming > held
-}
-
 #[derive(Debug, Default)]
 pub struct HubRecords {
     held: HashMap<RecordKey, Record>,
@@ -95,7 +90,7 @@ impl HubRecords {
         }
         for (key, held) in &self.held {
             let newer_than_list = at != Rev::default() && held.rev() > at;
-            let newer_than_listed = next.get(key).is_none_or(|listed| !supersedes(listed.rev(), held.rev()));
+            let newer_than_listed = next.get(key).is_none_or(|listed| !listed.rev().supersedes(held.rev()));
             if newer_than_list && newer_than_listed {
                 next.insert(key.clone(), held.clone());
             }
@@ -130,8 +125,8 @@ impl HubRecords {
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
     pub fn apply_record(&mut self, record: Record) -> bool {
         let (key, rev) = (record.key(), record.rev());
-        let removed_since = self.removed.get(&key).is_some_and(|&gone| !supersedes(rev, gone));
-        let held_is_newer = self.held.get(&key).is_some_and(|held| !supersedes(rev, held.rev()));
+        let removed_since = self.removed.get(&key).is_some_and(|&gone| !rev.supersedes(gone));
+        let held_is_newer = self.held.get(&key).is_some_and(|held| !rev.supersedes(held.rev()));
         if self.already_listed(rev) || removed_since || held_is_newer || self.held.get(&key) == Some(&record) {
             return false;
         }
@@ -145,7 +140,7 @@ impl HubRecords {
         }
         let gone = self.removed.entry(key.clone()).or_default();
         *gone = (*gone).max(rev);
-        if self.held.get(key).is_some_and(|held| supersedes(rev, held.rev())) {
+        if self.held.get(key).is_some_and(|held| rev.supersedes(held.rev())) {
             self.held.remove(key);
             return true;
         }
