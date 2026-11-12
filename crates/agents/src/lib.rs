@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentAccount, AgentKind, ApprovalId, ContextUsage, Seq, SessionSettingsChange, Title, UsageLimit,
+    AgentAccount, AgentKind, ApprovalId, CacheRequest, ContextUsage, Seq, SessionSettingsChange, Title, UsageLimit,
 };
 use protocol::tail::StreamDelta;
 use protocol::worker::AgentSpec;
@@ -34,6 +34,9 @@ pub enum AgentOutput {
     /// How full the agent's context is now. It answers the adapter's own question rather than being something the
     /// agent said, and only the newest matters, so it isn't an event.
     Context(ContextUsage),
+    /// One of the agent's own requests to its model, as the model started to answer it. It isn't an event, since a
+    /// turn makes many, but each matters, since the hub compares each with the one before.
+    Cache(CacheRequest),
     /// What's used of each of the account's limits now, shortest window first, when the adapter asked rather than
     /// the agent saying so by itself. It answers the adapter's own question, so it isn't an event, as `Context` isn't.
     Limits(Vec<UsageLimit>),

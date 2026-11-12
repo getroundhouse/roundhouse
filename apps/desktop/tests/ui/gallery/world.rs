@@ -181,6 +181,7 @@ impl World {
             user_active_at_ms: None,
             background_tasks,
             context: None,
+            prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
             rev: Rev::default(),

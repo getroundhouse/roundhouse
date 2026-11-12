@@ -50,6 +50,19 @@ chat = db.execute('SELECT title_source FROM sessions WHERE workspace_id = ? ORDE
 print(source, chat[0])" "$ROUNDHOUSE_HOME/hub.db" "$1"
 }
 
+# A Python expression over what the hub keeps on a session's record of what the API's cache holds, `cache`, a dict or
+# None, since the CLI doesn't print that.
+cache_of() { # session, python expression
+  python3 -I -c "
+import json, sqlite3, sys
+db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
+row = db.execute(\"SELECT prompt_cache FROM sessions WHERE id LIKE ? || '%'\", (sys.argv[2],)).fetchone()
+cache = json.loads(row[0]) if row and row[0] else None
+print($2)" "$ROUNDHOUSE_HOME/hub.db" "$1"
+}
+# How many prompts in a session's log found the cache expired.
+expired_in() { q "$1" "kinds.count('cache_expired')"; }
+
 wait_for() { # description, session, python expression that's truthy when done, timeout
   local deadline=$((SECONDS + ${4:-90}))
   while [ $SECONDS -lt $deadline ]; do
@@ -135,9 +148,15 @@ check "raw agent lines were kept" '[ "$(q "$SID" "any(\"raw\" in e and json.load
 check "the first prompt's title was generated, for the workspace and its chat" '[ "$(title_sources smoke)" = "generated generated" ]'
 
 section "The conversation continues"
+TURN_ENDED=$(q "$SID" "[e['ts_ms'] for e in events if e['body']['type'] == 'turn_ended'][-1]")
+FIRST_SENT=$(cache_of "$SID" "cache['used_at_ms'] if cache else 0")
+check "the record says the agent's last request cached the conversation for an hour" '[ "$(cache_of "$SID" "cache is not None and cache[\"ttl\"] == \"one_hour\" and cache[\"tokens\"] > 0 and \"claude-\" in (cache.get(\"model\") or \"\")")" = True ]'
+check "sent before the turn ended, by the hub's clock" '[ "$FIRST_SENT" -gt 0 ] && [ "$FIRST_SENT" -le "$TURN_ENDED" ]'
 OUT=$(cli send "$SID" "What file did you just create? Reply with only its file name." 2>&1)
 check "the same agent answers from context" 'echo "$OUT" | grep -q survived.txt'
 check "without starting a new process" '[ "$(q "$SID" "kinds.count(\"agent_started\")")" = 1 ]'
+check "a prompt to a warm cache isn't taken for one that had expired" '[ "$(expired_in "$SID")" = 0 ]'
+check "and the record moves on with each request" '[ "$(cache_of "$SID" "cache[\"used_at_ms\"]")" -gt "$FIRST_SENT" ]'
 check "status comes from the worker" 'cli workspace status smoke | grep -q "?? *survived.txt"'
 check "diff comes from the worker" 'cli workspace diff smoke | grep -q "+survived"'
 
@@ -206,7 +225,9 @@ AFTER_PLAN=$(mode_of)
 check "a plan chosen from full access goes back to it" '[ "$AFTER_PLAN" = bypassPermissions ]'
 check "the hub's record follows it" '[ "$AFTER_PLAN" = "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" ]'
 wait_until_idle_session "$MSID"
+check "plan mode's requests to Sonnet, which write the conversation again, aren't taken for an expired cache" '[ "$(expired_in "$MSID")" = 0 ]'
 cli session set "$MSID" --model sonnet >/dev/null
+check "choosing another model leaves nothing cached" '[ "$(cache_of "$MSID" "cache")" = None ]'
 OUT=$(cli send "$MSID" "Reply with the single word SWITCHED." 2>&1)
 check "another model takes over on the running agent" '[ "$(q "$MSID" "\"sonnet\" in str([e[\"body\"][\"model\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][-1])")" = True ] && [ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
 cli session set "$MSID" --model "$MODEL" >/dev/null
@@ -298,6 +319,13 @@ cli workspace restore smoke >/dev/null
 check "restoring brings the work back" '[ -f "$WT/survived.txt" ]'
 OUT=$(cli send "$SID" "What was the first file you created in this conversation? Reply with only its file name." 2>&1)
 check "and the conversation with it" 'echo "$OUT" | grep -q survived.txt'
+
+section "The prompt cache, across the run"
+# Nothing waits an hour, so any prompt said to have found the cache expired found something else, such as an agent
+# started again whose CLI no longer reads what the one before cached.
+for each in "$SID" "$ASID" "$MSID" "$QSID"; do
+  check "no prompt in ${each:0:8} is said to have found the cache expired" '[ "$(expired_in "$each")" = 0 ]'
+done
 
 section "Cost of this run"
 q "$SID" "'  session 1: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"

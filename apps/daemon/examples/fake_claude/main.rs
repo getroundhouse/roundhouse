@@ -79,6 +79,7 @@ use serde_json::{Value, json};
 mod account;
 mod advisor;
 mod background;
+mod cache;
 mod compact;
 mod prompt;
 mod read;

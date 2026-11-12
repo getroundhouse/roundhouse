@@ -13,8 +13,9 @@ use protocol::attachment::NewAttachment;
 use protocol::client::ApiError;
 use protocol::event::{AgentTask, ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, AttachmentId, ClientMessageId, ContextUsage, RunId, Seq, Session, SessionId,
-    SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, UsageLimit, WorkspaceId,
+    AgentKind, AgentSessionId, ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, PromptCache,
+    RunId, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, UsageLimit,
+    WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::{WorkerRequest, WorkerResponse};
@@ -25,6 +26,7 @@ use crate::error::internal;
 use crate::hub::Hub;
 use crate::store::{self, StoredSession};
 
+mod cache;
 mod commands;
 mod ingest;
 mod limits;
@@ -58,6 +60,12 @@ pub(crate) enum Item {
     Context {
         run: RunId,
         context: ContextUsage,
+    },
+    /// One of the agent's own requests to its model, as it began. It comes in the queue with the agent's events for
+    /// the same reason, and so that a request that found the cache expired is recorded before what the agent wrote.
+    Cache {
+        run: RunId,
+        request: CacheRequest,
     },
     /// What's used of the account's limits, as the agent answered when its worker asked. It comes in the queue with
     /// the agent's events for the same reason.
@@ -177,6 +185,8 @@ struct LiveState {
     background_tasks: Vec<AgentTask>,
     /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
     context: Option<ContextUsage>,
+    /// What the API's cache holds of the conversation, as the session's record says.
+    prompt_cache: Option<PromptCache>,
     /// Which account a launch of the agent runs under, learnt as it launches, for filing what it hears.
     hearing: Option<(RunId, limits::Hearing)>,
     /// When the newest turn started, as the session's record says, for the turn's end to carry.
@@ -252,6 +262,7 @@ impl LiveSession {
                 pending_approvals: open_approvals.into_iter().map(|id| (id, None)).collect(),
                 background_tasks: Vec::new(),
                 context: stored.session.context.clone(),
+                prompt_cache: stored.session.prompt_cache.clone(),
                 hearing: None,
                 turn_started_at_ms: stored.session.turn_started_at_ms,
                 agent: None,
@@ -331,10 +342,14 @@ impl LiveSession {
             let request = WorkerRequest::AgentConfigure { session_id: self.id.clone(), options: options.clone() };
             agent_took_it = !matches!(link.call(request).await?, WorkerResponse::AgentNotRunning);
         }
-        let was = self.state.lock().settings.permission_mode;
+        let was = self.state.lock().settings.clone();
         self.keep_options(&hub, options.clone()).await?;
-        if let Some(mode) = options.permission_mode.filter(|mode| *mode != was && !agent_took_it) {
+        if let Some(mode) = options.permission_mode.filter(|mode| *mode != was.permission_mode && !agent_took_it) {
             self.record_or_log(Origin::Hub, EventBody::AgentMode { permission_mode: mode }).await;
+        }
+        // Another model's cache doesn't hold the conversation, so the next request finds nothing cached.
+        if options.model.is_some_and(|model| model != was.model) {
+            self.keep_cache(None).await;
         }
         self.announce(&hub).await
     }

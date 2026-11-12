@@ -204,6 +204,9 @@ async fn read_frames(
             WorkerFrame::AgentContext { session_id, run, context } => {
                 hub.route(&session_id, Item::Context { run, context }).await;
             }
+            WorkerFrame::AgentCache { session_id, run, request } => {
+                hub.route(&session_id, Item::Cache { run, request }).await;
+            }
             WorkerFrame::AgentLimits { session_id, run, limits } => {
                 hub.route(&session_id, Item::Limits { run, limits }).await;
             }

@@ -21,6 +21,7 @@ mod launch_flags;
 mod misbehaving_worker;
 mod model_and_mode;
 mod processes_going_away;
+mod prompt_cache;
 mod pull_requests;
 mod questions;
 mod queueing;

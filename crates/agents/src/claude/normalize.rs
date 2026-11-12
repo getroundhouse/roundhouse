@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody};
-use protocol::model::{MessageId, ToolUseId};
+use protocol::model::{CacheRequest, MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
@@ -29,6 +29,7 @@ mod images;
 mod limits;
 mod pending;
 mod prompt;
+mod request;
 mod subagents;
 mod surrogates;
 mod tasks;
@@ -65,6 +66,8 @@ pub enum Parsed {
     /// Where a prompt the adapter sent has got to, by the `uuid` the adapter gave it. Only the adapter knows which
     /// recorded prompt that is.
     Prompt { uuid: String, progress: PromptProgress },
+    /// One of the agent's own requests to its model, as the model started to answer it.
+    Request(CacheRequest),
 }
 
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude
@@ -329,6 +332,9 @@ fn control_request(value: &Value) -> Parsed {
 
 fn stream_event(value: &Value) -> Parsed {
     let event = value.get("event").unwrap_or(&Value::Null);
+    if let Some(request) = request::request(value, event) {
+        return Parsed::Request(request);
+    }
     let message_id =
         string_of(value, "api_message_id").or_else(|| event.get("message").and_then(|m| string_of(m, "id")));
     let Some(message_id) = message_id else {
@@ -360,7 +366,7 @@ fn stream_event(value: &Value) -> Parsed {
             }
         }
         (Some("message_stop"), _) => DeltaChange::MessageStop,
-        // message_start, content_block_stop and message_delta add nothing to the tail.
+        // A subagent's message_start, content_block_stop and message_delta add nothing to the tail.
         _ => return Parsed::Drop,
     };
     Parsed::Delta(StreamDelta {
