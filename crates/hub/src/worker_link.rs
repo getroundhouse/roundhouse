@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::frame;
 use protocol::model::{InstanceId, WorkspaceId};
+use protocol::worker::WORKER_PROTOCOL_VERSION;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use providers::Provider;
 use tokio::sync::watch;
@@ -81,7 +81,12 @@ impl WorkerLink {
         });
         tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
 
-        let hello = link.call(WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION });
+        // Only its own version, until a break brings the one before it, as "Changing the protocol" in
+        // `docs/architecture.md` says.
+        let hello = link.call(WorkerRequest::Hello {
+            protocol_version: WORKER_PROTOCOL_VERSION,
+            oldest_protocol_version: Some(WORKER_PROTOCOL_VERSION),
+        });
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
             Ok(Ok(WorkerResponse::Hello { .. })) => return Ok(link),
             Ok(Ok(other)) => ApiError::new(ErrorCode::Worker, format!("unexpected hello reply: {other:?}")),

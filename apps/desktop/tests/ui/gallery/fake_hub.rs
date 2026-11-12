@@ -8,8 +8,8 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::Arc;
 
-use protocol::PROTOCOL_VERSION;
 use protocol::attachment::AttachmentBytes;
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome,
 };
@@ -78,7 +78,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
     let reply = |response| Ok(Outcome::Reply(response, Vec::new()));
     match request {
         R::Hello { .. } => {
-            reply(C::Hello { protocol_version: PROTOCOL_VERSION, hub_version: version(world).to_string() })
+            reply(C::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: version(world).to_string() })
         }
         R::HubStatus => reply(C::HubStatus(status(world))),
         R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
@@ -261,7 +261,7 @@ fn status(world: &World) -> HubStatus {
     HubStatus {
         pid: std::process::id(),
         hub_version: version(world).to_string(),
-        protocol_version: PROTOCOL_VERSION,
+        protocol_version: CLIENT_PROTOCOL_VERSION,
         started_at_ms: 0,
         workers: 0,
         running_sessions: u32::try_from(running).unwrap(),

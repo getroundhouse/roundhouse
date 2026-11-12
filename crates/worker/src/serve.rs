@@ -8,11 +8,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use agents::AgentProcess;
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
 use protocol::model::{RunId, SessionId};
-use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
@@ -198,7 +197,9 @@ async fn handle(
     // One this build can't read is a newer hub's, which does without whatever this worker refuses, where leaving it
     // unanswered would hold the hub's call until the connection closes.
     match request.map_err(|e| ApiError::unsupported_request("this worker", Some(&e)))? {
-        WorkerRequest::Hello { protocol_version } => hello(protocol_version),
+        WorkerRequest::Hello { protocol_version, oldest_protocol_version } => {
+            hello(protocol_version, oldest_protocol_version)
+        }
         WorkerRequest::Unknown => Err(ApiError::unsupported_request("this worker", None)),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
@@ -305,14 +306,16 @@ async fn handle(
     }
 }
 
-fn hello(protocol_version: u32) -> Result<WorkerResponse, ApiError> {
-    if protocol_version != PROTOCOL_VERSION {
-        return Err(ApiError::new(
-            ErrorCode::VersionMismatch,
-            format!("hub speaks protocol {protocol_version}, this worker speaks {PROTOCOL_VERSION}"),
-        ));
-    }
-    Ok(WorkerResponse::Hello { protocol_version: PROTOCOL_VERSION })
+/// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
+/// own too once a protocol breaks, as "Changing the protocol" in `docs/architecture.md` says.
+fn hello(newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
+    let only = WORKER_PROTOCOL_VERSION..=WORKER_PROTOCOL_VERSION;
+    let Some(chosen) = protocol::newest_shared(only, newest, oldest) else {
+        let hub = protocol::versions_named(newest, oldest);
+        let message = format!("the hub speaks {hub}, and this worker speaks protocol {WORKER_PROTOCOL_VERSION}");
+        return Err(ApiError::new(ErrorCode::VersionMismatch, message));
+    };
+    Ok(WorkerResponse::Hello { protocol_version: chosen })
 }
 
 fn delivery(delivered: bool) -> WorkerResponse {

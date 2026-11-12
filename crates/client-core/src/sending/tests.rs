@@ -4,8 +4,8 @@
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
 
-use protocol::PROTOCOL_VERSION;
 use protocol::attachment::{Attachment, MediaType};
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::frame;
 
@@ -18,7 +18,7 @@ fn connected_to_a_hub_that_goes_away(socket: &Path) -> Client {
     std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         BufReader::new(stream.try_clone().unwrap()).lines().next();
-        let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".to_string() };
+        let hello = ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".to_string() };
         let outcome = ReplyOutcome::Response(hello);
         stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
     });

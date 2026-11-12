@@ -4,9 +4,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-use protocol::PROTOCOL_VERSION;
 use protocol::client::ErrorCode;
 use protocol::frame;
+use protocol::worker::WORKER_PROTOCOL_VERSION;
 use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
 
 fn worker(dir: &Path) -> Child {
@@ -24,7 +24,8 @@ fn worker(dir: &Path) -> Child {
 
 /// Says hello, and returns the answer. A worker sends nothing else until it's asked for more.
 fn hello(worker: &mut Child) -> WorkerOutcome {
-    let call = WorkerCall { id: 1, request: WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION } };
+    let request = WorkerRequest::Hello { protocol_version: WORKER_PROTOCOL_VERSION, oldest_protocol_version: None };
+    let call = WorkerCall { id: 1, request };
     worker.stdin.as_mut().unwrap().write_all(&frame::encode(&call).unwrap()).unwrap();
     let mut line = String::new();
     BufReader::new(worker.stdout.as_mut().unwrap()).read_line(&mut line).unwrap();

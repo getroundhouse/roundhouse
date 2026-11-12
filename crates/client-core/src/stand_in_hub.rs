@@ -6,7 +6,7 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
-use protocol::PROTOCOL_VERSION;
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::frame;
 use protocol::model::Session;
@@ -29,7 +29,7 @@ pub(crate) fn connect(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does
         let (mut stream, _) = listener.accept().unwrap();
         let mut lines = BufReader::new(stream.try_clone().unwrap()).lines();
         lines.next();
-        let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".to_string() };
+        let hello = ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".to_string() };
         reply(&mut stream, 1, ReplyOutcome::Response(hello));
         for line in lines.map_while(std::result::Result::ok) {
             let frame: ClientFrame = serde_json::from_str(&line).unwrap();

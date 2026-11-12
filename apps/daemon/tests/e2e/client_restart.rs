@@ -204,7 +204,11 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
     // A client that subscribes, then doesn't read its socket until everything has finished.
     let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
     let requests = [
-        ClientRequest::Hello { protocol_version: protocol::PROTOCOL_VERSION, client: "stalled".into() },
+        ClientRequest::Hello {
+            protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
+            client: "stalled".into(),
+            oldest_protocol_version: None,
+        },
         ClientRequest::SessionSubscribe { id: session.id.clone(), from_seq: 1, subscription_id: 7 },
     ];
     for (id, request) in requests.into_iter().enumerate() {

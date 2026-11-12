@@ -111,11 +111,11 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         pid: std::process::id(),
         hub_version: "from-before-the-break".to_string(),
         protocol_version: if args.speaks_this_protocol {
-            protocol::PROTOCOL_VERSION
+            protocol::client::CLIENT_PROTOCOL_VERSION
         } else if args.newer {
-            protocol::PROTOCOL_VERSION + 1
+            protocol::client::CLIENT_PROTOCOL_VERSION + 1
         } else {
-            protocol::PROTOCOL_VERSION - 1
+            protocol::client::CLIENT_PROTOCOL_VERSION - 1
         },
         started_at_ms: 0,
         workers: running,
@@ -137,7 +137,7 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
         match request.request {
             ClientRequest::Hello { .. } if args.speaks_this_protocol => {
                 let hello = ClientResponse::Hello {
-                    protocol_version: protocol::PROTOCOL_VERSION,
+                    protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
                     hub_version: "stand-in".to_string(),
                 };
                 reply(&writer, request.id, ReplyOutcome::Response(hello));

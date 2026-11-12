@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
+use protocol::client::{
+    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
+};
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -119,6 +120,10 @@ async fn serve_connection(
     hub.clients.fetch_sub(1, Ordering::Relaxed);
 }
 
+/// The versions of the client protocol this hub speaks: only the current one, until a break brings the one before it,
+/// as "Changing the protocol" in `docs/architecture.md` says.
+const SPEAKS: std::ops::RangeInclusive<u32> = CLIENT_PROTOCOL_VERSION..=CLIENT_PROTOCOL_VERSION;
+
 /// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and
 /// stopped. Anyone who can reach this socket is this user, as `bind_socket` makes sure. A connection from
 /// elsewhere, once there are any, shouldn't get this, because stopping a shared hub is for its admins.
@@ -129,22 +134,22 @@ fn works_without_hello(request: &ClientRequest) -> bool {
 /// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
 fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    let Some(ClientRequest::Hello { protocol_version, .. }) = request else {
+    let Some(ClientRequest::Hello { protocol_version, oldest_protocol_version, .. }) = request else {
         return error("the first request on a connection must be hello".to_string());
     };
-    if *protocol_version == PROTOCOL_VERSION {
-        (
+    match protocol::newest_shared(SPEAKS, *protocol_version, *oldest_protocol_version) {
+        Some(chosen) => (
             ReplyOutcome::Response(ClientResponse::Hello {
-                protocol_version: PROTOCOL_VERSION,
+                protocol_version: chosen,
                 hub_version: protocol::BUILD_VERSION.to_string(),
             }),
             true,
-        )
-    } else {
-        error(format!(
-            "this hub is version {} on protocol {PROTOCOL_VERSION}, and this client speaks protocol {protocol_version}. Stopping the hub, which also stops its agents, lets one that matches start",
-            protocol::BUILD_VERSION
-        ))
+        ),
+        None => error(format!(
+            "this hub is version {} on protocol {CLIENT_PROTOCOL_VERSION}, and this client speaks {}. Stopping the hub, which also stops its agents, lets one that matches start",
+            protocol::BUILD_VERSION,
+            protocol::versions_named(*protocol_version, *oldest_protocol_version),
+        )),
     }
 }
 

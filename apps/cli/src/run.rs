@@ -119,8 +119,11 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }
-            if status.protocol_version != protocol::PROTOCOL_VERSION {
-                println!("this client speaks protocol {}, so it can only stop that hub", protocol::PROTOCOL_VERSION);
+            if status.protocol_version != protocol::client::CLIENT_PROTOCOL_VERSION {
+                println!(
+                    "this client speaks protocol {}, so it can only stop that hub",
+                    protocol::client::CLIENT_PROTOCOL_VERSION
+                );
             }
         }
         HubCmd::Stop => {

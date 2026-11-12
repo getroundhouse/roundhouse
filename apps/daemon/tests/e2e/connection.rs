@@ -58,7 +58,7 @@ impl RawConnection {
 }
 
 fn hello() -> String {
-    format!(r#"{{"method":"hello","client":"test","protocol_version":{}}}"#, protocol::PROTOCOL_VERSION)
+    format!(r#"{{"method":"hello","client":"test","protocol_version":{}}}"#, protocol::client::CLIENT_PROTOCOL_VERSION)
 }
 
 #[test]
@@ -72,6 +72,36 @@ fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
     assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported));
     let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
     assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
+}
+
+/// One newer than this hub that still speaks its version, as a client does for 30 days after a break.
+#[test]
+fn a_hub_takes_a_client_whose_hello_names_its_version_in_a_range() {
+    let stack = Stack::start();
+    let ours = protocol::client::CLIENT_PROTOCOL_VERSION;
+    let mut connection = RawConnection::open(&stack);
+    let newer = format!(
+        r#"{{"method":"hello","client":"newer","protocol_version":{},"oldest_protocol_version":{ours}}}"#,
+        ours + 1
+    );
+
+    let taken = connection.ask(1, &newer);
+
+    assert!(
+        matches!(&taken, ReplyOutcome::Response(ClientResponse::Hello { protocol_version, .. }) if *protocol_version == ours),
+        "{taken:?}"
+    );
+    let mut refused = RawConnection::open(&stack);
+    let past = format!(
+        r#"{{"method":"hello","client":"newer","protocol_version":{},"oldest_protocol_version":{}}}"#,
+        ours + 2,
+        ours + 1
+    );
+    let refusal = refused.ask(1, &past);
+    assert!(
+        matches!(&refusal, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch && e.message.contains(&format!("protocols {} to {}", ours + 1, ours + 2))),
+        "{refusal:?}"
+    );
 }
 
 /// As a newer client's known request would be, with a value this hub doesn't know: here, a kind of decision.
@@ -246,7 +276,7 @@ fn a_client_with_the_wrong_protocol_version_is_told_so() {
     let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
     let hello = protocol::client::ClientFrame {
         id: 1,
-        request: ClientRequest::Hello { protocol_version: 9999, client: "old".into() },
+        request: ClientRequest::Hello { protocol_version: 9999, client: "old".into(), oldest_protocol_version: None },
     };
     stream.write_all(&protocol::frame::encode(&hello).unwrap()).unwrap();
     let mut line = String::new();

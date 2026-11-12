@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{Place, Seq, Session};
@@ -50,7 +50,7 @@ fn serve(stream: UnixStream, answer: &Arc<Answer>, asked: &flume::Sender<ClientR
         std::thread::spawn(move || {
             let outcome = if matches!(request, ClientRequest::Hello { .. }) {
                 let hello =
-                    ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "scripted".into() };
+                    ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "scripted".into() };
                 Some(ReplyOutcome::Response(hello))
             } else {
                 answer(&request)

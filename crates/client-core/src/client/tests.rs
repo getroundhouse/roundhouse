@@ -12,7 +12,8 @@ fn start_hub_with_an_unreadable_reply(socket: &Path) {
         let (mut stream, _) = listener.accept().unwrap();
         let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
         requests.next();
-        let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "older".to_string() };
+        let hello =
+            ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "older".to_string() };
         let outcome = ReplyOutcome::Response(hello);
         stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
         requests.next();
@@ -50,7 +51,7 @@ fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<Client
         };
         let mut read = || frame::decode::<ClientFrame>(requests.next().unwrap().unwrap().as_bytes()).unwrap();
         let hello = read();
-        reply(hello.id, ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".into() });
+        reply(hello.id, ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".into() });
         let subscribe = read();
         let ClientRequest::FeedSubscribe { subscription_id } = subscribe.request else { panic!() };
         reply(subscribe.id, ClientResponse::Ok);
