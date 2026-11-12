@@ -1,7 +1,7 @@
 //! Every screen of the app, drawn from made-up data, with no real hub and no window on screen, and checked against
 //! its approved image in the spec. Each screen gets a fake hub that answers from fixed data, in `gallery/screens.rs`,
-//! `gallery/diff_screens.rs`, `gallery/tool_screens.rs`, `gallery/subagent_chats.rs` and `gallery/update_screens.rs`,
-//! and the real app connects to it, so what's drawn is exactly what the app draws. Each picture shows only the part of
+//! `gallery/context_screens.rs`, `gallery/diff_screens.rs`, `gallery/tool_screens.rs`, `gallery/subagent_chats.rs` and
+//! `gallery/update_screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. Each picture shows only the part of
 //! the window its screen is about, as `gallery/frame.rs` says. What each screen looks like now goes in
 //! `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and checked the same way, in
 //! `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark. Text of each kind is drawn the
@@ -15,6 +15,7 @@ mod cache_screens;
 mod capture;
 mod chats;
 mod compaction_chats;
+mod context_screens;
 mod diff_screens;
 mod events;
 mod fake_hub;
@@ -132,6 +133,7 @@ fn every_screen_has_a_name_of_its_own() {
 fn screens() -> impl Iterator<Item = &'static steps::Screen> {
     SCREENS
         .iter()
+        .chain(context_screens::SCREENS)
         .chain(DIFF_SCREENS)
         .chain(TOOL_SCREENS)
         .chain(subagent_chats::SCREENS)

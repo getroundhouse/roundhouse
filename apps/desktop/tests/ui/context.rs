@@ -67,6 +67,20 @@ fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_once_it_could
     ui.wait("the card to go", |ui| !ui.has("context-card"));
 }
 
+/// The fake agent's settings make its context a fifth of what its model holds, which it says once a turn has ended.
+#[gpui_kit::test]
+fn the_card_says_what_made_the_context_smaller_than_its_models(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_a_turn(cx, &stack);
+    ui.wait("the agent to say what its model holds", |ui| context(ui).is_some_and(|c| c.model_tokens.is_some()));
+
+    ui.hover("context");
+    ui.wait_out_a_tooltip();
+
+    assert!(ui.visible("context-card"));
+    assert!(ui.has("context-capped"), "what it says is in `words`");
+}
+
 /// Whether the chat's log holds a request to compact that said `keeping`, and the compaction that answers it.
 fn compacted(ui: &Ui<'_>, keeping: Option<&str>) -> bool {
     let events = ui.events();

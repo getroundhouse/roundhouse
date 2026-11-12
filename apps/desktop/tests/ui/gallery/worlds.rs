@@ -5,8 +5,8 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     Account, AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment,
-    DiffSide, FileContents, GitDiff, LimitWindow, MergeState, PermissionMode, PullRequest, Rev, SessionStatus,
-    SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    DiffSide, FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, PermissionMode, PullRequest, Rev,
+    SessionStatus, SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
@@ -112,6 +112,22 @@ pub(super) fn context() -> World {
     };
     world.sessions.last_mut().unwrap().account = Some(account.id.clone());
     world.accounts.push(account);
+    world
+}
+
+/// The same, nearly full, where the agent's settings make the context half of what its model holds.
+pub(super) fn context_capped() -> World {
+    let mut world = context();
+    let context = world.sessions.last_mut().unwrap().context.as_mut().unwrap();
+    (context.used_tokens, context.model_tokens, context.max_set_by) =
+        (465_200, Some(1_000_000), Some(MaxSetBy::Settings));
+    for part in &mut context.parts {
+        part.tokens = match part.name.as_str() {
+            "Messages" => 450_200,
+            "Free space" => 1_800,
+            _ => part.tokens,
+        };
+    }
     world
 }
 

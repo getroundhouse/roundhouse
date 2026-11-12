@@ -7,15 +7,14 @@ use look::Region;
 use protocol::model::SessionStatus;
 
 use super::frame::{
-    CHAT, COMPOSER, COMPOSER_MENU, CONTEXT, Frame, OUTLINE, Part, QUESTION, QUEUE, SIDEBAR, SIDEBAR_MENU, TABS,
-    TABS_MENU, TURN_CARD,
+    CHAT, COMPOSER, COMPOSER_MENU, Frame, OUTLINE, Part, QUESTION, QUEUE, SIDEBAR, SIDEBAR_MENU, TABS, TABS_MENU,
+    TURN_CARD,
 };
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    approval, attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation,
-    planning, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks,
-    working_background,
+    approval, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
+    setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, working_background,
 };
 use super::{chats, long_chats, pictures, question_chats};
 
@@ -66,37 +65,6 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen { name: "streaming", spec: "chats.md", world: Some(streaming), frame: CHAT, steps: &[Step::Select(FOCUS)] },
-    Screen {
-        name: "context",
-        spec: "chats.md",
-        world: Some(context),
-        frame: CONTEXT,
-        // The bars come once the hub has said what's left of the limits, which the picture is taken with.
-        steps: &[
-            Step::Select(FOCUS),
-            Step::WaitFor("usage"),
-            Step::Hover { on: Target::Id("context"), shows: Region::ContextCard.id() },
-        ],
-    },
-    Screen {
-        name: "context-account",
-        spec: "chats.md",
-        world: Some(context_without_limits),
-        // What the hover waits for is the bottom of the context card, so the frame names the whole card.
-        frame: CONTEXT,
-        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "account" }],
-    },
-    Screen {
-        name: "usage",
-        spec: "chats.md",
-        world: Some(context),
-        frame: Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::UsageCard)]),
-        steps: &[
-            Step::Select(FOCUS),
-            Step::WaitFor("usage"),
-            Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
-        ],
-    },
     Screen {
         name: "attachments",
         spec: "chats.md",

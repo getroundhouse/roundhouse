@@ -1,6 +1,6 @@
 //! What the cards beside Send say in words and numbers.
 
-use protocol::model::{AgentKind, LimitWindow};
+use protocol::model::{AgentKind, ContextUsage, LimitWindow, MaxSetBy};
 
 /// A share from 0 to 1, as a percentage to a tenth: `59.7%`.
 pub(super) fn percent(share: f32) -> String {
@@ -17,6 +17,20 @@ pub(super) fn whole_percent(share: f32) -> String {
 pub(super) fn room_left(tokens: u64, compacts: bool) -> String {
     let left = look::tokens(tokens);
     if compacts { format!("{left} until it compacts") } else { format!("{left} left") }
+}
+
+/// What made a context smaller than its model's, when something did, such as `Capped at 500.0k of 1.0M by your
+/// settings`. It names what did only when the agent said. Nothing, when the agent says its model set the size, since
+/// then the model holding more says something else, such as more than the account may use.
+pub(super) fn capped(context: &ContextUsage) -> Option<String> {
+    let model = context.model_holds_more()?;
+    let by = match context.max_set_by {
+        Some(MaxSetBy::Model) => return None,
+        Some(MaxSetBy::Settings) => " by your settings",
+        Some(MaxSetBy::Environment) => " by an environment variable",
+        Some(MaxSetBy::Unknown) | None => "",
+    };
+    Some(format!("Capped at {} of {}{by}", look::tokens(context.max_tokens), look::tokens(model)))
 }
 
 /// What a limit is called. `None` for a window this build has no name for, which the card leaves out.
@@ -58,6 +72,33 @@ mod tests {
     fn room_left_is_until_compacting_only_for_an_agent_that_keeps_room_back() {
         assert_eq!(room_left(153_500, true), "153.5k until it compacts");
         assert_eq!(room_left(186_500, false), "186.5k left");
+    }
+
+    #[test]
+    fn a_context_smaller_than_its_model_says_so_and_what_made_it_smaller_when_the_agent_said() {
+        let context = |model_tokens, max_set_by| ContextUsage {
+            used_tokens: 465_200,
+            max_tokens: 500_000,
+            model_tokens,
+            max_set_by,
+            parts: Vec::new(),
+        };
+        let capped_by = |by| capped(&context(Some(1_000_000), by));
+
+        assert_eq!(capped_by(Some(MaxSetBy::Settings)).unwrap(), "Capped at 500.0k of 1.0M by your settings");
+        assert_eq!(
+            capped_by(Some(MaxSetBy::Environment)).unwrap(),
+            "Capped at 500.0k of 1.0M by an environment variable"
+        );
+        assert_eq!(capped_by(Some(MaxSetBy::Unknown)).unwrap(), "Capped at 500.0k of 1.0M");
+        assert_eq!(capped_by(None).unwrap(), "Capped at 500.0k of 1.0M");
+        assert_eq!(capped_by(Some(MaxSetBy::Model)), None, "the agent says nothing made it smaller");
+        assert_eq!(
+            capped(&context(Some(500_000), Some(MaxSetBy::Settings))),
+            None,
+            "a setting of the model's own size"
+        );
+        assert_eq!(capped(&context(None, Some(MaxSetBy::Settings))), None, "nobody has said what the model holds");
     }
 
     #[test]
