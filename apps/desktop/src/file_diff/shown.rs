@@ -251,7 +251,7 @@ impl Shown {
             (old, hearing)
         });
         let settled = old.is_none();
-        let sides = Arc::new(Sides::from_patch(&file, None));
+        let sides = Arc::new(Sides::plain(&file));
         Self { file, sides, base, old, settled, runs: BTreeMap::new(), colouring: BTreeSet::new() }
     }
 }

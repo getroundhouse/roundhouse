@@ -1,8 +1,6 @@
 //! A change to a file, as lines to show: from the patch the agent sent back, with the file's own line numbers, or
-//! worked out from the call's text when there's no patch yet. Within a line that changed, the part that changed is
-//! picked out.
-
-use std::ops::Range;
+//! worked out from the call's text when there's no patch yet, and the words that changed within the lines it removed
+//! and added.
 
 use protocol::event::{Hunk, LineMark};
 use similar::{ChangeTag, TextDiff};
@@ -30,13 +28,13 @@ pub(crate) fn from_hunks(hunks: &[Hunk]) -> Vec<Section> {
                 }
                 Some(shown)
             });
-            pick_out_changes(lines.collect())
+            lines.collect()
         })
         .collect()
 }
 
 /// The lines of replacing `old` with `new`, worked out from the text alone. Removed lines come before what replaced
-/// them, so a line changed in place pairs with its new version.
+/// them, so the words that changed in a run of removed lines can be compared with the run that replaced it.
 pub(crate) fn from_text(old: &str, new: &str) -> Section {
     let (old, new): (Vec<&str>, Vec<&str>) = (old.lines().collect(), new.lines().collect());
     if old.len() > COMPARED_LINES || new.len() > COMPARED_LINES {
@@ -52,7 +50,7 @@ pub(crate) fn from_text(old: &str, new: &str) -> Section {
         };
         NumberedLine::new(mark, None, change.value())
     });
-    pick_out_changes(lines.collect())
+    lines.collect()
 }
 
 /// How many lines a patch added and removed, without copying it.
@@ -75,44 +73,31 @@ fn mark(mark: LineMark) -> Option<Mark> {
     }
 }
 
-/// Pairs each run of removed lines with the run of added lines after it, line by line, and marks what changed in
-/// each pair: everything between the start and end they share.
-fn pick_out_changes(mut lines: Section) -> Section {
-    let mut i = 0;
-    while i < lines.len() {
-        let removed = lines[i..].iter().take_while(|l| l.mark == Mark::Removed).count();
-        let added = lines[i + removed..].iter().take_while(|l| l.mark == Mark::Added).count();
-        if removed == added {
-            for k in 0..removed {
-                let (old, new) = changed_ranges(&lines[i + k].text, &lines[i + removed + k].text);
-                lines[i + k].changed = old;
-                lines[i + removed + k].changed = new;
-            }
-        }
-        i += (removed + added).max(1);
+/// `section`, with the words that changed marked in each run of removed lines and the run of added lines after it,
+/// which took its place.
+pub(crate) fn mark_changes(mut section: Section) -> Section {
+    let lines: Vec<(look::LineChange, &str)> = (section.iter())
+        .map(|line| {
+            let change = match line.mark {
+                Mark::Same => look::LineChange::Same,
+                Mark::Removed => look::LineChange::Removed,
+                Mark::Added => look::LineChange::Added,
+            };
+            (change, line.text.as_str())
+        })
+        .collect();
+    let marks = look::word_changes(&lines);
+    for (line, changed) in section.iter_mut().zip(marks) {
+        line.changed = changed;
     }
-    lines
-}
-
-/// The changed middle of each of two lines, or nothing when they share no start or end, since then the whole line
-/// changed.
-fn changed_ranges(old: &str, new: &str) -> (Option<Range<usize>>, Option<Range<usize>>) {
-    let start: usize = old.chars().zip(new.chars()).take_while(|(a, b)| a == b).map(|(a, _)| a.len_utf8()).sum();
-    let (old_rest, new_rest) = (&old[start..], &new[start..]);
-    let end: usize =
-        old_rest.chars().rev().zip(new_rest.chars().rev()).take_while(|(a, b)| a == b).map(|(a, _)| a.len_utf8()).sum();
-    if start == 0 && end == 0 {
-        return (None, None);
-    }
-    let range = |text: &str| (start < text.len() - end).then(|| start..text.len() - end);
-    (range(old), range(new))
+    section
 }
 
 #[cfg(test)]
 mod tests {
     use protocol::event::{Hunk, HunkLine, LineMark};
 
-    use super::{Counts, Mark, counts, from_hunks, from_text};
+    use super::{Counts, Mark, NumberedLine, counts, from_hunks, from_text, mark_changes};
 
     fn line(mark: LineMark, text: &str) -> HunkLine {
         HunkLine { mark, text: text.to_string() }
@@ -133,15 +118,16 @@ mod tests {
         }];
 
         let sections = from_hunks(&hunks);
+        let marked = mark_changes(sections[0].clone());
 
         let numbers: Vec<_> = sections[0].iter().map(|line| (line.mark, line.number)).collect();
         assert_eq!(
             numbers,
             [(Mark::Same, Some(30)), (Mark::Removed, Some(30)), (Mark::Added, Some(31)), (Mark::Same, Some(32))]
         );
-        let added = &sections[0][2];
-        assert_eq!(&added.text[added.changed.clone().unwrap()], "approach with ");
-        assert_eq!(sections[0][1].changed, None, "nothing was taken out of the old line");
+        let added = &marked[2];
+        assert_eq!(added.changed.iter().map(|range| &added.text[range.clone()]).collect::<Vec<_>>(), ["approach with"]);
+        assert!(marked[1].changed.is_empty(), "nothing was taken out of the old line");
         assert_eq!(counts(&sections), Counts { added: 1, removed: 1 });
     }
 
@@ -162,7 +148,7 @@ mod tests {
             ]
         );
         assert!(section.iter().all(|line| line.number.is_none()), "the file's numbers aren't known");
-        assert_eq!(section[1].changed, None, "lines with nothing in common changed whole");
+        assert!(mark_changes(section)[1].changed.is_empty(), "lines with nothing in common changed whole");
     }
 
     #[test]
@@ -187,9 +173,12 @@ mod tests {
     }
 
     #[test]
-    fn a_changed_letter_in_a_wide_character_line_is_found_on_a_character_boundary() {
-        let section = from_text("héllo wörld", "héllo wérld");
+    fn the_words_that_changed_are_marked_in_runs_of_any_length() {
+        let section = mark_changes(from_text("# one two\n# three", "# one three"));
 
-        assert_eq!(&section[1].text[section[1].changed.clone().unwrap()], "é");
+        let marked =
+            |line: &NumberedLine| line.changed.iter().map(|range| line.text[range.clone()].to_string()).collect();
+        let marks: Vec<Vec<String>> = section.iter().map(marked).collect();
+        assert_eq!(marks, [vec!["two".to_string()], vec![], vec![]], "`three` only moved");
     }
 }

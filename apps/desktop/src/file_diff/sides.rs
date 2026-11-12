@@ -1,7 +1,7 @@
 //! A changed file's two sides, as the diff draws them: each line's text with its tabs as spaces, in its colours, and
-//! what changed within a line that changed in place. Given the file as it was in the diff's commit, each side is
-//! whole, since what git leaves out between its hunks is the same on both. Without it, each side has only the lines
-//! of the hunks, and of a file too big to be read whole, the lines read of it a few at a time.
+//! the words that changed within the lines a change removed and added. Given the file as it was in the diff's commit,
+//! each side is whole, since what git leaves out between its hunks is the same on both. Without it, each side has only
+//! the lines of the hunks, and of a file too big to be read whole, the lines read of it a few at a time.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -15,9 +15,6 @@ use crate::patch::{FilePatch, Hunk, LineKind, PatchLine};
 
 #[cfg(test)]
 mod tests;
-mod words;
-
-use words::Changed;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Sides {
@@ -87,8 +84,9 @@ impl Run {
 #[derive(Clone, Debug, Default)]
 pub(super) struct Side {
     runs: Vec<(u32, Vec<Line>)>,
-    /// What changed within a line that a line on the other side changed into, or from.
-    changed: HashMap<u32, Changed>,
+    /// The words that changed within a line a change removed or added, as `look::word_changes` finds them, by byte
+    /// range of its text as it's drawn. A line with none isn't here.
+    changed: HashMap<u32, Vec<Range<usize>>>,
     /// Each line with a tab in it, as the file has it, since it's drawn with spaces for its tabs.
     tabbed: HashMap<u32, SharedString>,
 }
@@ -160,6 +158,11 @@ impl Side {
         lines.get(usize::try_from(number - start).ok()?)
     }
 
+    /// The text of line `number` as it's drawn, or nothing when it doesn't have it.
+    fn text(&self, number: u32) -> &str {
+        self.line(number).map_or("", |line| line.text.as_ref())
+    }
+
     pub(super) fn changed(&self, number: u32) -> &[Range<usize>] {
         self.changed.get(&number).map_or(&[], Vec::as_slice)
     }
@@ -170,9 +173,19 @@ impl Side {
 }
 
 impl Sides {
+    /// From the hunks alone, as they show before anything's been made: without colours, and with nothing marked within
+    /// their lines, since both are made off the main thread.
+    pub(super) fn plain(file: &FilePatch) -> Self {
+        Self::of_hunks(file, None)
+    }
+
     /// From the hunks alone, coloured as `language` if it's given, which is for a background thread. A file the change
     /// adds or removes is whole this way, since its hunk is all of it.
     pub(super) fn from_patch(file: &FilePatch, language: Option<&str>) -> Self {
+        Self::of_hunks(file, language).marked(file)
+    }
+
+    fn of_hunks(file: &FilePatch, language: Option<&str>) -> Self {
         let side = |kept: LineKind, start: fn(&Hunk) -> u32| {
             let runs = file.hunks().iter().filter_map(|hunk| {
                 let text = joined(hunk.lines().iter().filter(|line| line.kind == kept || line.kind == LineKind::Same));
@@ -186,7 +199,7 @@ impl Sides {
             (_, None) => Extent::Whole(file.hunks().last().map_or(0, |hunk| hunk.old_end() - 1)),
             _ => Extent::Hunks,
         };
-        Self::finish(old, new, extent, file)
+        Self::sized(old, new, extent)
     }
 
     /// From `base`, the file as it was, and the hunks, which make the file as it is. When the hunks don't match it, as
@@ -196,7 +209,7 @@ impl Sides {
         let language = language.filter(|_| base.len().max(new.len()) <= HIGHLIGHT_UP_TO);
         let length = u32::try_from(base.lines().count()).unwrap_or(u32::MAX);
         let (old, new) = (Side::new([(1, base.to_string())], language), Side::new([(1, new)], language));
-        Self::finish(old, new, Extent::Whole(length), file)
+        Self::sized(old, new, Extent::Whole(length)).marked(file)
     }
 
     /// From the hunks, coloured as `language` if it's given, for a file as it was that has `lines` lines and is too big
@@ -229,16 +242,32 @@ impl Sides {
         matches!(self.extent, Extent::InPart(_)).then(|| self.old.known().collect())
     }
 
-    fn finish(mut old: Side, mut new: Side, extent: Extent, file: &FilePatch) -> Self {
-        for (removed, added) in changed_in_place(file.hunks()) {
-            let (Some(before), Some(after)) = (old.line(removed), new.line(added)) else { continue };
-            if let Some((before, after)) = words::changed(&before.text, &after.text) {
-                old.changed.insert(removed, before);
-                new.changed.insert(added, after);
-            }
-        }
+    fn sized(old: Side, new: Side, extent: Extent) -> Self {
         let widest = old.widest().max(new.widest());
         Self { old, new, extent, widest }
+    }
+
+    /// With the words that changed within the hunks' lines marked, as `look::word_changes` finds them in their text as
+    /// it's drawn.
+    fn marked(mut self, file: &FilePatch) -> Self {
+        for hunk in file.hunks() {
+            let lines = numbered(hunk);
+            let marks = {
+                let changes: Vec<(look::LineChange, &str)> = (lines.iter())
+                    .map(|(kind, number)| match kind {
+                        LineKind::Same => (look::LineChange::Same, ""),
+                        LineKind::Removed => (look::LineChange::Removed, self.old.text(*number)),
+                        LineKind::Added => (look::LineChange::Added, self.new.text(*number)),
+                    })
+                    .collect();
+                look::word_changes(&changes)
+            };
+            for ((kind, number), marks) in lines.into_iter().zip(marks).filter(|(_, marks)| !marks.is_empty()) {
+                let side = if kind == LineKind::Removed { &mut self.old } else { &mut self.new };
+                side.changed.insert(number, marks);
+            }
+        }
+        self
     }
 }
 
@@ -286,34 +315,14 @@ fn changed_into(base: &str, hunks: &[Hunk]) -> Option<String> {
     Some(new)
 }
 
-/// Each line a hunk removes that a line it adds takes the place of, by number on each side: the first removed of a
-/// run with the first added after it, and so on.
-pub(super) fn changed_in_place(hunks: &[Hunk]) -> Vec<(u32, u32)> {
-    let mut pairs = Vec::new();
-    for hunk in hunks {
-        let (mut old, mut new) = (hunk.old_start(), hunk.new_start());
-        let (mut removed, mut added) = (Vec::new(), Vec::new());
-        for line in hunk.lines() {
-            match line.kind {
-                LineKind::Same => {
-                    // Draining both, whichever runs out first.
-                    pairs.extend(removed.drain(..).zip(added.drain(..)));
-                    (old, new) = (old + 1, new + 1);
-                }
-                LineKind::Removed => {
-                    if !added.is_empty() {
-                        pairs.extend(removed.drain(..).zip(added.drain(..)));
-                    }
-                    removed.push(old);
-                    old += 1;
-                }
-                LineKind::Added => {
-                    added.push(new);
-                    new += 1;
-                }
-            }
-        }
-        pairs.extend(removed.into_iter().zip(added));
-    }
-    pairs
+/// Each of a hunk's lines, by its number on its side: the old side for a line it removes, and the new otherwise.
+fn numbered(hunk: &Hunk) -> Vec<(LineKind, u32)> {
+    let (mut old, mut new) = (hunk.old_start(), hunk.new_start());
+    let numbered = hunk.lines().iter().map(|line| {
+        let number = if line.kind == LineKind::Removed { old } else { new };
+        old += u32::from(line.kind != LineKind::Added);
+        new += u32::from(line.kind != LineKind::Removed);
+        (line.kind, number)
+    });
+    numbered.collect()
 }
