@@ -32,7 +32,7 @@ pub use list::{Place, TranscriptList};
 pub use questions::QuestionPanel;
 pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, subagent_standing};
 pub use selection::KEY_CONTEXT;
-pub use transcript::{Transcript, TranscriptEvent};
+pub use transcript::{PullRequestStanding, Transcript, TranscriptEvent};
 
 /// How long a new question ignores keys, which a test can wait out.
 #[cfg(feature = "testing")]

@@ -14,7 +14,8 @@ use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
     approval, attachments, chat_tabs, chat_world, closed_chats, context, context_without_limits, conversation,
-    planning, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled, working_background,
+    planning, queue_held, queued, setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks,
+    working_background,
 };
 use super::{chats, long_chats, pictures, question_chats};
 
@@ -128,6 +129,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "working-background",
         spec: "chats.md",
         world: Some(working_background),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "waiting-on-pull-request",
+        spec: "chats.md",
+        world: Some(waiting_on_checks),
         frame: CHAT,
         steps: &[Step::Select(FOCUS)],
     },

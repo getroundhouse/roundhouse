@@ -14,7 +14,8 @@ use gpui_kit::{
 };
 use look::Work;
 use look::{Hand as _, Off as _};
-use protocol::model::{PullRequest, Standing, Workspace, WorkspaceId};
+use protocol::model::{Local, PullRequest, Standing, Workspace, WorkspaceId};
+use transcript::PullRequestStanding;
 
 use crate::busy::Busy;
 use crate::sides::{self, AtTheTop};
@@ -64,6 +65,16 @@ impl Lookup {
 
     pub fn work(&self) -> Work {
         self.standing().map_or(Work::NoPr, words::work)
+    }
+
+    /// Where it stands on GitHub, which a chat's line for a wait on it says, as [`words::for_a_wait`] does, leaving out
+    /// the worktree, since a wait goes by what GitHub says. `None` until it's known, with none, and where that says
+    /// nothing.
+    pub fn for_a_wait(&self) -> Option<PullRequestStanding> {
+        let pr = self.pull_request()?;
+        let on_github = PullRequest { local: Local::default(), ..pr.clone() };
+        let words = words::for_a_wait(Standing::of(Some(&on_github)), pr.checks, pr.base.as_deref())?;
+        Some(PullRequestStanding { number: pr.number, words })
     }
 
     /// Takes the hub's answer, unless a newer ask has been made, whose answer can arrive first, so this one says

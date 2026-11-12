@@ -283,6 +283,7 @@ impl WorkspacePane {
         if workspace != self.workspace {
             if let Some(recorded) = Lookup::recorded(&workspace) {
                 self.pull_request = recorded;
+                self.pass_on_pull_request(cx);
             }
             self.workspace = workspace;
             // Picks up the last lines of the log once setup has finished.

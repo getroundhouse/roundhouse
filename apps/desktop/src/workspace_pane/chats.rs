@@ -146,10 +146,12 @@ impl WorkspacePane {
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
         let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id));
+        let standing = self.pull_request.for_a_wait();
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
             transcript.set_subagents(&subagents, cx);
+            transcript.set_pull_request(standing, cx);
             transcript
         });
         // Its subagents' calls are drawn from their records, which client-core keeps once a chat asks for them.
