@@ -5,8 +5,6 @@
 use std::fs::{File, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
-#[cfg(unix)]
-use std::time::{Duration, Instant};
 
 use process::ProcessRecord;
 use protocol::paths::{WORKER_LOCK_FILE, WORKER_RECORD_FILE};
@@ -42,18 +40,15 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     Ok(InstanceClaim { _lock: lock })
 }
 
-/// Claims the instance whose state is kept in `state_dir`, for a worker that serves it on `socket`. A worker that's
-/// stopping has removed its socket, and this waits up to `wait` for it to let go of the instance. `None` if a worker
-/// is serving the socket, which this leaves to it: another worker started at the same time, to serve the same hub.
+/// Claims the instance whose state is kept in `state_dir`, for a worker that serves it on a socket. `None` if another
+/// worker has it, which this leaves it to: one started at the same time, to serve the same hub, whose socket the
+/// command that started this one waits for. It can't be one that's stopping, since the command starts no worker while
+/// one holds the instance.
 #[cfg(unix)]
-pub fn claim_to_serve(state_dir: &Path, socket: &Path, wait: Duration) -> Result<Option<InstanceClaim>, ClaimError> {
-    let deadline = Instant::now() + wait;
-    loop {
-        match claim_instance(state_dir) {
-            Err(ClaimError::Taken(_)) if std::os::unix::net::UnixStream::connect(socket).is_ok() => return Ok(None),
-            Err(ClaimError::Taken(_)) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            claimed => return claimed.map(Some),
-        }
+pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimError> {
+    match claim_instance(state_dir) {
+        Err(ClaimError::Taken(_)) => Ok(None),
+        claimed => claimed.map(Some),
     }
 }
 
@@ -76,10 +71,9 @@ pub fn instance_claimed(state_dir: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[cfg(not(unix))]
     use std::time::{Duration, Instant};
+
+    use super::*;
 
     /// Claims the instance once its last claim has let go. A lock goes with the open file, and a process another
     /// thread is starting holds a copy of every open file until it has started, so a claim let go a moment ago can
@@ -110,23 +104,6 @@ mod tests {
         assert!(record.is_running());
     }
 
-    /// As a worker started while one is stopping, which has removed its socket, finds the instance taken.
-    #[cfg(unix)]
-    #[test]
-    fn a_worker_started_while_another_stops_waits_for_it_to_let_go() {
-        let dir = tempfile::tempdir().unwrap();
-        let stopping = claim_instance(dir.path()).unwrap();
-        let letting_go = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(200));
-            drop(stopping);
-        });
-
-        let claimed = claim_to_serve(dir.path(), &dir.path().join("worker.sock"), Duration::from_secs(10));
-
-        letting_go.join().unwrap();
-        assert!(matches!(claimed, Ok(Some(_))), "{claimed:?}");
-    }
-
     #[cfg(unix)]
     #[test]
     fn an_instance_reads_as_claimed_only_while_a_worker_holds_it() {
@@ -145,15 +122,14 @@ mod tests {
         assert!(claim_once_let_go(dir.path()).is_ok(), "asking didn't keep it either");
     }
 
-    /// As one started at the same time as another, to serve the same hub, finds the other serving.
+    /// As one started at the same time as another, to serve the same hub, finds the other has it.
     #[cfg(unix)]
     #[test]
-    fn a_worker_leaves_an_instance_to_the_one_serving_it() {
+    fn a_worker_leaves_an_instance_to_another_that_has_it() {
         let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("worker.sock");
-        let _serving = (claim_instance(dir.path()).unwrap(), std::os::unix::net::UnixListener::bind(&socket).unwrap());
+        let _other = claim_instance(dir.path()).unwrap();
 
-        let claimed = claim_to_serve(dir.path(), &socket, Duration::from_secs(10));
+        let claimed = claim_to_serve(dir.path());
 
         assert!(matches!(claimed, Ok(None)), "{claimed:?}");
     }

@@ -34,10 +34,6 @@ pub(crate) struct Given {
 /// in `docs/architecture.md` says. Longer than a hub takes to restart, a migration included.
 #[cfg(unix)]
 const WITHOUT_A_HUB: Duration = Duration::from_mins(10);
-/// How long a worker that was started waits for one that's stopping to let go of the instance. Longer than its hub
-/// gives that one to stop.
-#[cfg(unix)]
-const CLAIM_WAIT: Duration = Duration::from_secs(15);
 
 pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
     match transport {
@@ -107,8 +103,8 @@ fn listen(given: Given) -> anyhow::Result<()> {
     let state_dir = in_state_dir(&given)?;
     let socket = Path::new(protocol::paths::WORKER_SOCKET_FILE);
     // Held until this process exits.
-    let Some(_claim) = worker::claim_to_serve(&state_dir, socket, CLAIM_WAIT)? else {
-        tracing::info!("another worker is serving the instance");
+    let Some(_claim) = worker::claim_to_serve(&state_dir)? else {
+        tracing::info!("another worker, started at the same time, has the instance");
         return Ok(());
     };
     let config = config(given, None)?;

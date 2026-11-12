@@ -8,9 +8,9 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-/// How long a worker that was just started gets to serve its socket. It can first wait for one that's stopping to let
-/// go of the instance, for up to its claim's wait.
-const START_WAIT: Duration = Duration::from_secs(30);
+/// How long a worker that was just started gets to serve its socket. As long as a hub waits for the worker's hello,
+/// which this wait is part of, since by then the hub has given up on it.
+const START_WAIT: Duration = Duration::from_secs(10);
 
 /// Copies this process's stdin to the worker serving `socket`, and what the worker sends to its stdout, until the
 /// worker closes the connection. Once stdin ends, the worker hears that nothing more is coming, and what it still
