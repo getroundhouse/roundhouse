@@ -1,4 +1,4 @@
-//! Process groups and signals, and `ps` for a process's start time.
+//! Process groups and signals, and a process's start time: from `/proc` on Linux, and from `ps` elsewhere.
 
 use std::os::unix::process::CommandExt as _;
 use std::process::Command;
@@ -31,10 +31,36 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
 pub(crate) fn keep_stdio_from_children() {}
 
 /// As `ps` prints it.
+#[cfg(not(target_os = "linux"))]
 pub(crate) fn start_time(pid: u32) -> Option<String> {
     let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().ok()?;
     let started = String::from_utf8_lossy(&output.stdout).trim().to_string();
     (!started.is_empty()).then_some(started)
+}
+
+/// Which boot this is, so a record made before the machine restarted can't match a process that has the same PID and
+/// start tick after it.
+#[cfg(target_os = "linux")]
+const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
+
+/// The clock tick since boot at which the kernel started the process, after the ID of the boot. Linux keeps no time of
+/// day for a process, so `ps` works one out from this tick and the time the system booted, which the kernel gives in
+/// whole seconds, worked out from the wall clock as it is now. Whenever the wall clock is stepped, as NTP or a virtual
+/// machine's time sync does, that can move by a second or more while the process runs, and a record of it made from
+/// `ps` would no longer match.
+#[cfg(target_os = "linux")]
+pub(crate) fn start_time(pid: u32) -> Option<String> {
+    let tick = start_tick(&std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?)?;
+    let boot = std::fs::read_to_string(BOOT_ID).ok()?;
+    Some(format!("{} {tick}", boot.trim()))
+}
+
+/// The 22nd field of a process's `stat`. The second is its name, in parentheses, which can hold anything, spaces and
+/// parentheses included, so the fields are counted from after the last parenthesis.
+#[cfg(target_os = "linux")]
+fn start_tick(stat: &str) -> Option<u64> {
+    let (_, after_name) = stat.rsplit_once(')')?;
+    after_name.split_whitespace().nth(19)?.parse().ok()
 }
 
 #[cfg(test)]
@@ -70,5 +96,28 @@ mod tests {
         signal_group(0, Signal::Kill);
         signal_group(1, Signal::Kill);
         signal_group(u32::MAX, Signal::Kill);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_start_tick_is_found_whatever_the_name_holds() {
+        // A process named `a) (b c`, which started at tick 987654.
+        let stat = "123 (a) (b c) S 1 123 123 0 -1 4194560 120 0 0 0 0 0 0 0 20 0 1 0 987654 2367488 200 0\n";
+
+        assert_eq!(start_tick(stat), Some(987_654));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_from_another_boot_is_not_the_one_running() {
+        let pid = std::process::id();
+        let started = start_time(pid).unwrap();
+        let (_, tick) = started.split_once(' ').unwrap();
+        let this_boot = crate::ProcessRecord { pid, started: started.clone() };
+        let before_a_restart =
+            crate::ProcessRecord { pid, started: format!("00000000-0000-0000-0000-000000000000 {tick}") };
+
+        assert!(this_boot.is_running());
+        assert!(!before_a_restart.is_running());
     }
 }

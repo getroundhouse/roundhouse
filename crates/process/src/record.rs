@@ -1,8 +1,10 @@
 use std::io;
 use std::path::Path;
 
-/// When a process started, or `None` if it isn't running. It's as `ps` prints it, or on Windows as a count from the
-/// system's own clock, and only ever compared with another from the same machine.
+/// When a process started, or `None` if it isn't running. It has to stay the same for as long as the process runs, and
+/// it's only ever compared with another from the same machine. It's as `ps` prints it on a Mac, the boot and the clock
+/// tick since it on Linux, where what `ps` prints moves when the wall clock is stepped, and on Windows a count from the
+/// system's own clock.
 pub fn start_time(pid: u32) -> Option<String> {
     crate::sys::start_time(pid)
 }
