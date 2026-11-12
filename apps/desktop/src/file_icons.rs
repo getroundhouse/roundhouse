@@ -2,9 +2,9 @@
 //! beside a folder's. They're the MIT-licensed Catppuccin icons, drawn in thin lines in its Mocha flavour's colours,
 //! and each name gets the icon Catppuccin's manifest gives it, so they match an editor that uses them.
 //! `tools/file-icons/update.py` puts a pinned release of them in `file-icons/`, with their license and colours, and
-//! `build.rs` fills the colours in and turns the manifest into the tables here. A file's is drawn as a picture, in its
-//! own colours, and the plain file, for a file with no kind of its own, and every folder's, whatever folder it is, as
-//! an icon in the muted text colour.
+//! `build/file_icons.rs` fills the colours in and turns the manifest into the tables here. A file's is drawn as a
+//! picture, in its own colours, and the plain file, for a file with no kind of its own, and every folder's, whatever
+//! folder it is, as an icon in the muted text colour.
 
 use gpui_kit::component::{ActiveTheme as _, Icon};
 use gpui_kit::{AnyElement, App, IntoElement as _, Styled as _, img, px};

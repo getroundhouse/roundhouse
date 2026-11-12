@@ -1,6 +1,7 @@
 //! The app icon, in each style and at every size macOS keeps a drawing for, checked against its images in the
 //! style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns` the app
-//! is packaged with.
+//! is packaged with, and `tools/package/ico.py` packs five of its drawings into `AppIcon.ico` beside it, for Windows,
+//! which `tools/package/test_ico.py` fails on once the drawings change, until it's made again.
 
 #![cfg(test)]
 
@@ -30,6 +31,9 @@ const FILES: [(&str, IconSize); 10] = [
     ("icon_512x512.png", IconSize::Px512),
     ("icon_512x512@2x.png", IconSize::Px1024),
 ];
+/// The one file beside the iconsets, which isn't drawn here: the Windows icon, which `tools/package/ico.py` makes from
+/// `working.iconset`, and `tools/package/test_ico.py` checks is what it makes from the drawings now.
+const WINDOWS_ICON: &str = "AppIcon.ico";
 
 #[test]
 fn every_size_of_the_icon_looks_as_approved() {
@@ -135,15 +139,16 @@ fn iconset(style: IconStyle) -> PathBuf {
     icons().join(format!("{}.iconset", name(style)))
 }
 
-/// Files in `icons/` that nothing draws, so nothing checks them: an iconset for no style, or a file in a style's
-/// iconset for no size.
+/// Files in `icons/` that nothing checks: an iconset for no style, a file in a style's iconset for no size, or any
+/// other file beside the iconsets but the Windows icon.
 fn unknown_files() -> Vec<String> {
     let names = |dir: PathBuf| -> Vec<String> {
         let entries = std::fs::read_dir(dir).into_iter().flatten().map(|entry| entry.unwrap().file_name());
         entries.map(|name| name.to_string_lossy().into_owned()).collect()
     };
     let styles: Vec<String> = IconStyle::ALL.iter().map(|style| format!("{}.iconset", name(*style))).collect();
-    let mut unknown: Vec<String> = names(icons()).into_iter().filter(|dir| !styles.contains(dir)).collect();
+    let known = |file: &String| styles.contains(file) || file == WINDOWS_ICON;
+    let mut unknown: Vec<String> = names(icons()).into_iter().filter(|file| !known(file)).collect();
     for style in IconStyle::ALL {
         let files = names(iconset(style)).into_iter().filter(|file| !FILES.iter().any(|(known, _)| known == file));
         unknown.extend(files.map(|file| format!("{}.iconset/{file}", name(style))));
