@@ -14,6 +14,7 @@ use tracing::warn;
 
 use super::launch::launch;
 use super::output::{read_stderr, read_stdout};
+use super::run_files::RunFiles;
 use super::{Shared, drain_grace, plan, write_to};
 use crate::{AgentOptions, AgentOutput};
 
@@ -22,6 +23,7 @@ pub(super) async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
     options: AgentOptions,
+    files: RunFiles,
     mut child: Child,
     mut stdout: ChildStdout,
     mut stderr: ChildStderr,
@@ -86,13 +88,13 @@ pub(super) async fn supervise(
         }
     };
 
-    finish(&shared, &options, &output, status, stderr_tail).await;
+    finish(&shared, files, &output, status, stderr_tail).await;
 }
 
 /// Closes up after the last process has exited, then reports what it held back and how it ended.
 async fn finish(
     shared: &Shared,
-    options: &AgentOptions,
+    files: RunFiles,
     output: &mpsc::Sender<AgentOutput>,
     status: std::io::Result<ExitStatus>,
     stderr_tail: Vec<String>,
@@ -100,9 +102,7 @@ async fn finish(
     shared.gone.store(true, Ordering::SeqCst);
     *shared.stdin.lock().await = None;
     shared.pending_controls.lock().clear();
-    if let Some(path) = &options.pid_file {
-        let _ = std::fs::remove_file(path);
-    }
+    drop(files);
     let held: Vec<_> = shared.held_output.lock().drain(..).collect();
     for item in held {
         let _ = output.send(item).await;

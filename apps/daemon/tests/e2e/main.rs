@@ -39,4 +39,5 @@ mod subagents;
 #[cfg(test)]
 mod support;
 mod titles;
+mod tools;
 mod workspaces;

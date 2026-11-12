@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{advisor, background, cache, read, subagent};
+use crate::{advisor, background, cache, mcp, read, subagent};
 
 mod prose;
 
@@ -350,6 +350,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(file) = command.strip_prefix("read:") {
         read::image(turn, file);
+    }
+    if let Some(tool) = command.strip_prefix("mcp:") {
+        mcp::call(turn, tool);
     }
     if let Some(reply) = advisor::Reply::read(command) {
         advisor::ask(turn, &reply);

@@ -5,15 +5,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agents::{AgentOptions, AgentOutput, BinaryLookup};
+use agents::{AgentOptions, AgentOutput, BinaryLookup, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
+use protocol::paths::AGENTS_DIR;
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{RunningAgent, State};
 
@@ -34,8 +35,8 @@ pub(crate) async fn title_for(
 /// if this worker is killed.
 fn one_off(state: &State, what: &str) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
-    let record = |dir: &std::path::PathBuf| dir.join("agents").join(format!("{what}-{call}.pid"));
-    AgentOptions { binary: binary(state), pid_file: state.config.state_dir.as_ref().map(record) }
+    let record = |dir: &std::path::PathBuf| dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"));
+    AgentOptions { binary: binary(state), pid_file: state.config.state_dir.as_ref().map(record), tools: None }
 }
 
 /// What `call` answers, unless the worker starts stopping first, which drops the call and so stops what it started.
@@ -60,7 +61,7 @@ pub(crate) async fn account_for(state: &State, agent: AgentKind) -> Result<Worke
 pub(crate) async fn start_agent(
     state: &Arc<State>,
     forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>,
-    spec: AgentSpec,
+    mut spec: AgentSpec,
 ) -> Result<WorkerResponse, ApiError> {
     let _guard = state.start_lock.lock().await;
     if state.shutting_down.load(Ordering::SeqCst) {
@@ -73,15 +74,16 @@ pub(crate) async fn start_agent(
     if let Some(agent) = state.agents.lock().get(&session_id).filter(|a| !a.process.is_gone()) {
         return Ok(WorkerResponse::AgentStarted { pid: agent.process.pid(), run: agent.run, already_running: true });
     }
-    if let Some(token) = spec.tools_token.clone() {
-        state.tools.admit(token, session_id.clone());
-    }
     let (tx, rx) = mpsc::channel(1024);
+    // Named by run, because a replaced agent removes its own files as it finishes, which can be after its replacement
+    // has started, and a CLI whose `--mcp-config` file has gone doesn't start at all.
+    let agent_file = |extension: &str| {
+        state.config.state_dir.as_ref().map(|dir| dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}")))
+    };
     let options = AgentOptions {
         binary: binary(state),
-        // Named by run, because a replaced agent removes its own file as it finishes, which can be
-        // after its replacement has started.
-        pid_file: state.config.state_dir.as_ref().map(|dir| dir.join("agents").join(format!("{session_id}-{run}.pid"))),
+        pid_file: agent_file("pid"),
+        tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
     };
     let process = agents::spawn(spec, tx, options).await?;
     let pid = process.pid();
@@ -90,6 +92,24 @@ pub(crate) async fn start_agent(
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
     Ok(WorkerResponse::AgentStarted { pid, run, already_running: false })
+}
+
+/// Where the agent reaches the worker's tools: at the address they're served on, with the token its hub gave it, which
+/// lets its calls through from then on. `None` when the hub gave it none, when they aren't served, or when there's no
+/// state directory to tell its CLI in, at `config`, and it goes without them.
+async fn tools_for(state: &State, spec: &mut AgentSpec, config: Option<PathBuf>) -> Option<ToolServer> {
+    let token = spec.tools_token.take()?;
+    let session_id = &spec.session_id;
+    let Some(url) = state.tools.url().await else {
+        warn!(%session_id, "the agent goes without the worker's tools, which aren't being served");
+        return None;
+    };
+    let Some(config) = config else {
+        warn!(%session_id, "the agent goes without the worker's tools, with no state directory to tell its CLI in");
+        return None;
+    };
+    state.tools.admit(token.clone(), session_id.clone());
+    Some(ToolServer { url, token, config })
 }
 
 /// Sends on what the agent says, in order, with the images its text points to in `worktree`.

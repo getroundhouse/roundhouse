@@ -1,123 +1,13 @@
-//! Each workspace's pull request, which the hub keeps on the workspace's record, from a stand-in `gh`, since GitHub
-//! can't be reached from a test.
+//! Each workspace's pull request, which the hub keeps on the workspace's record, from a stand-in `gh`.
 
 #![cfg(test)]
-
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
 use protocol::model::{PrState, PullRequestFound, WorkspaceId};
 
-use crate::support::{self, Stack, install_executable, is_alive, started_pid, wait_for_turn_end, wait_until};
-
-/// What `gh pr view` prints for an open pull request.
-const OPEN: &str = r#"{"isDraft":false,"number":7,"state":"OPEN","title":"T","url":"https://example.com/7"}"#;
-/// What it says for a branch with none, in its own words, as against failing.
-const NONE: &str = "none";
-/// What it says when it can't reach GitHub.
-const OFFLINE: &str = "offline";
-/// What it says before `gh auth login`.
-const LOGGED_OUT: &str = "logged-out";
-
-/// A `gh` at the front of the hub's `PATH`, which says what a test tells it to for `gh pr view` and `gh api rate_limit`,
-/// that the pull request isn't in a merge queue, and fails anything else. It writes down each time it's run.
-struct StandInGh {
-    bin: PathBuf,
-    says: PathBuf,
-    rate_limit: PathBuf,
-    ran: PathBuf,
-    /// While this file is there, `gh pr view` waits.
-    held: PathBuf,
-}
-
-impl StandInGh {
-    /// Replaces the stack's hub with one that uses it. Until told otherwise, it says there's no pull request, and that
-    /// nothing of GitHub's limit has been spent.
-    fn start(stack: &mut Stack) -> Self {
-        stack.kill_hub();
-        let bin = stack.path("bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        let gh = Self {
-            bin,
-            says: stack.path("gh-says"),
-            rate_limit: stack.path("gh-rate-limit"),
-            ran: stack.path("gh-ran"),
-            held: stack.path("gh-held"),
-        };
-        let script = format!(
-            r#"#!/bin/sh
-echo "$1 $2" >> '{ran}'
-[ "$1 $2" = 'api rate_limit' ] && exec cat '{rate_limit}'
-[ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
-[ "$1 $2" = 'pr view' ] || exit 1
-while [ -f '{held}' ]; do sleep 0.02; done
-case "$(cat '{says}')" in
-  {NONE}) echo 'no pull requests found for branch "x"' >&2; exit 1 ;;
-  {OFFLINE}) echo 'error connecting to api.github.com' >&2; exit 1 ;;
-  {LOGGED_OUT}) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;
-  *) exec cat '{says}' ;;
-esac
-"#,
-            ran = gh.ran.display(),
-            rate_limit = gh.rate_limit.display(),
-            held = gh.held.display(),
-            says = gh.says.display()
-        );
-        let source = stack.path("gh.source");
-        std::fs::write(&source, script).unwrap();
-        install_executable(&source, &gh.bin.join("gh"));
-        gh.say(NONE);
-        gh.limit_left(5000);
-        stack.add_env("PATH", format!("{}:{}", gh.bin.display(), std::env::var("PATH").unwrap()));
-        // No login shell, so workers get this PATH, with the stand-in at its front.
-        stack.add_env("SHELL", "/usr/bin/false".to_string());
-        stack.start_hub();
-        gh
-    }
-
-    fn say(&self, what: &str) {
-        write_whole(&self.says, what);
-    }
-
-    /// What GitHub's limit has left of 5,000, as `gh api rate_limit` prints it, resetting in an hour.
-    fn limit_left(&self, remaining: u32) {
-        let in_an_hour = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 3600;
-        let graphql = format!(r#"{{"limit":5000,"remaining":{remaining},"reset":{in_an_hour},"used":0}}"#);
-        write_whole(&self.rate_limit, &format!(r#"{{"resources":{{"graphql":{graphql}}}}}"#));
-    }
-
-    /// How many times `gh pr view` has run, which is a call to GitHub each.
-    fn views(&self) -> usize {
-        self.ran("pr view")
-    }
-
-    /// How many times `gh` has run with these first two arguments.
-    fn ran(&self, what: &str) -> usize {
-        std::fs::read_to_string(&self.ran).unwrap_or_default().lines().filter(|line| *line == what).count()
-    }
-
-    fn hold(&self) {
-        std::fs::write(&self.held, "").unwrap();
-    }
-
-    fn release(&self) {
-        std::fs::remove_file(&self.held).unwrap();
-    }
-}
-
-fn restart_hub(stack: &mut Stack) {
-    stack.kill_hub();
-    stack.start_hub();
-}
-
-/// Whole or not at all, since a worker may run the stand-in at any moment.
-fn write_whole(path: &Path, text: &str) {
-    let next = path.with_extension("next");
-    std::fs::write(&next, text).unwrap();
-    std::fs::rename(&next, path).unwrap();
-}
+use crate::support::gh::{LOGGED_OUT, NONE, OFFLINE, OPEN, StandInGh};
+use crate::support::{self, Stack, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request on the workspace's record, as every client gets it.
 fn recorded(client: &Client, id: &WorkspaceId) -> Option<u64> {
@@ -134,7 +24,7 @@ fn one_client_asking_records_the_pull_request_for_every_client_and_for_after_a_r
 
     let asked = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
     gh.say(OFFLINE);
-    restart_hub(&mut stack);
+    stack.restart_hub();
     let client = stack.client();
 
     assert_eq!((asked.number, asked.state, asked.url.as_str()), (7, PrState::Open, "https://example.com/7"));
@@ -198,7 +88,7 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
     let (second, _) = stack.workspace(&client);
     gh.say(OPEN);
 
-    restart_hub(&mut stack);
+    stack.restart_hub();
     let client = stack.client();
 
     wait_until("both to be read", || {
@@ -232,7 +122,7 @@ fn a_worker_started_only_to_read_a_pull_request_is_stopped_after() {
     let (workspace, session) = stack.workspace(&client);
     gh.say(OPEN);
 
-    restart_hub(&mut stack);
+    stack.restart_hub();
     let client = stack.client();
     wait_until("it to be read", || recorded(&client, &workspace.id) == Some(7));
 
@@ -255,7 +145,7 @@ fn a_worker_started_only_to_read_stays_once_a_prompt_wants_it() {
     client.workspace_pull_request(&first.id).unwrap();
     gh.hold();
 
-    restart_hub(&mut stack);
+    stack.restart_hub();
     let client = stack.client();
     wait_until("the first to be read again", || gh.views() == 2);
     client.session_prompt(&session.id, "hang:60000", None).unwrap();
@@ -283,7 +173,7 @@ fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
     gh.limit_left(900);
     let asked_before = gh.ran("api rate_limit");
 
-    restart_hub(&mut stack);
+    stack.restart_hub();
     let client = stack.client();
     wait_until("GitHub to be asked what's left", || gh.ran("api rate_limit") > asked_before);
     wait_until("the worker started to ask to stop", || client.hub_status().unwrap().workers == 0);

@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use agents::claude::spawn_at;
-use agents::{AgentOptions, AgentOutput};
+use agents::{AgentOptions, AgentOutput, ToolServer};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
 use protocol::model::{AgentKind, PermissionMode, RunId, SessionSettings};
-use protocol::worker::AgentSpec;
+use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -107,6 +107,79 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
     agent.stop().await;
     until_exit(&mut rx).await;
     assert!(!pid_file.exists());
+}
+
+/// Options that tell the agent of the worker's tools in `config`.
+fn with_tools(config: &Path) -> AgentOptions {
+    let tools = ToolServer {
+        url: "http://127.0.0.1:50123/mcp".into(),
+        token: ToolsToken::new("token-s"),
+        config: config.to_path_buf(),
+    };
+    AgentOptions { tools: Some(tools), ..AgentOptions::default() }
+}
+
+/// Copies the file it's given as `--mcp-config` to `given`, if it's given one, then waits to be stopped.
+const KEEPS_ITS_MCP_CONFIG: &str = r#"while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
+[ $# -gt 0 ] && cp "$2" given.tmp && mv given.tmp given; exec sleep 100"#;
+
+/// What the CLI was given as `--mcp-config`, once it has copied it.
+async fn given(dir: &Path) -> Vec<u8> {
+    let given = dir.join("given");
+    timeout(Duration::from_secs(10), async {
+        while !given.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the CLI to be given the file");
+    std::fs::read(given).unwrap()
+}
+
+#[tokio::test]
+async fn the_cli_is_told_of_the_workers_tools_in_a_file_that_goes_away_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    let config = dir.path().join("agents/s-1.mcp.json");
+    let cli = script(dir.path(), KEEPS_ITS_MCP_CONFIG);
+    let agent = spawn_at(cli, spec(dir.path()), tx, with_tools(&config)).await.unwrap();
+
+    assert_eq!(given(dir.path()).await, std::fs::read(&config).unwrap());
+    agent.stop().await;
+    until_exit(&mut rx).await;
+    assert!(!config.exists(), "the token isn't left on disk");
+}
+
+/// The CLI is started again with the other flag when it can't find the conversation, and that launch needs the file
+/// too, since a CLI given one that isn't there doesn't start.
+#[tokio::test]
+async fn a_launch_started_again_is_told_of_the_tools_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = mpsc::channel(16);
+    let config = dir.path().join("agents/s-1.mcp.json");
+    let body = format!(
+        r#"case " $* " in *" --resume "*) echo "No conversation found with session ID: s" >&2; exit 1;; esac
+{KEEPS_ITS_MCP_CONFIG}"#
+    );
+    let mut resumed = spec(dir.path());
+    resumed.resume = true;
+
+    let agent = spawn_at(script(dir.path(), &body), resumed, tx, with_tools(&config)).await.unwrap();
+
+    assert_eq!(given(dir.path()).await, std::fs::read(&config).unwrap());
+    agent.stop().await;
+}
+
+#[tokio::test]
+async fn a_launch_that_cant_start_leaves_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = mpsc::channel(16);
+    let config = dir.path().join("agents/s-1.mcp.json");
+
+    let started = spawn_at(dir.path().join("no-such-cli"), spec(dir.path()), tx, with_tools(&config)).await;
+
+    assert!(started.is_err());
+    assert!(!config.exists(), "the token isn't left on disk");
 }
 
 fn in_plan_mode(dir: &Path) -> AgentSpec {

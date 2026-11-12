@@ -45,6 +45,9 @@
 //!   advise:TEXT     Same, with TEXT as a reply that can be read.
 //!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
 //!   advise-unanswered   Same, with no reply at all, as the real CLI's call after one of the agent's own tools gets.
+//!   mcp:TOOL        Call TOOL on the MCP server `--mcp-config` names, as the real CLI does over HTTP, and get back what
+//!                   it says. As with the real CLI, a server that refused `server/discover` or `tools/list` as the
+//!                   agent launched has failed. A copy of the file is kept as `last-mcp-config` in `$FAKE_CLAUDE_STATE`.
 //!
 //! A prompt of `/compact`, with what to keep after it or not, is no script: it compacts, as the real CLI does, in a turn
 //! of its own.
@@ -82,6 +85,7 @@ mod advisor;
 mod background;
 mod cache;
 mod compact;
+mod mcp;
 mod prompt;
 mod read;
 mod result;
@@ -182,7 +186,7 @@ fn main() {
         }
         id
     };
-    std::fs::write(state.join("last-args"), args.join(" ")).unwrap();
+    keep_launch(&args, &state);
     start_as_launched(&args);
     let (input_tx, input_rx) = mpsc::channel();
     let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
@@ -209,6 +213,13 @@ fn main() {
         }
         run_turn(&config, &out, prompt, by_itself, &input_rx, &mut queued, &mut eof);
     }
+}
+
+/// What a test reads back of how it was launched, and the MCP server it was given, which the real CLI reaches as it
+/// launches.
+fn keep_launch(args: &[String], state: &Path) {
+    std::fs::write(state.join("last-args"), args.join(" ")).unwrap();
+    mcp::connect(args, state);
 }
 
 fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {

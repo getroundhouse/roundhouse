@@ -31,9 +31,11 @@ mod launch;
 mod output;
 mod plan;
 mod prompt;
+mod run_files;
 mod supervise;
 #[cfg(test)]
 mod tests;
+mod tools;
 mod usage;
 
 use compact::{AskedToCompact, ToCompact};
@@ -43,6 +45,7 @@ pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
 use prompt::user_message;
 pub(super) use prompt::{image_block, user_line};
+use run_files::RunFiles;
 use supervise::supervise;
 use usage::UsageWatch;
 
@@ -120,6 +123,7 @@ pub async fn spawn_at(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    let files = RunFiles::of(&options);
     let launched = launch(&bin, &spec, spec.resume, &options)?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
@@ -143,6 +147,7 @@ pub async fn spawn_at(
         bin,
         spec,
         options,
+        files,
         launched.child,
         launched.stdout,
         launched.stderr,
