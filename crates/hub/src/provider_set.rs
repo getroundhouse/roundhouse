@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
-use protocol::model::HubId;
+use protocol::model::{HubId, ProviderName};
 use providers::Provider;
 use serde::Deserialize;
 use tokio::task::JoinSet;
@@ -23,18 +23,18 @@ use tracing::{error, info, warn};
 use crate::provider_link::{self, ADAPTER_GRACE, AdapterCommand, AdapterProvider};
 
 pub(crate) struct ProviderSet {
-    by_name: HashMap<String, Arc<dyn Provider>>,
+    by_name: HashMap<ProviderName, Arc<dyn Provider>>,
     /// The same as their entries in `by_name`, for what only an adapter does.
     adapters: Vec<Arc<AdapterProvider>>,
     /// The one new workspaces go to, or why there's none.
-    default: Result<String, String>,
+    default: Result<ProviderName, String>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProvidersFile {
     #[serde(default)]
-    default: Option<String>,
+    default: Option<ProviderName>,
     #[serde(default)]
     providers: Vec<Entry>,
 }
@@ -42,7 +42,7 @@ struct ProvidersFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Entry {
-    name: String,
+    name: ProviderName,
     program: String,
     #[serde(default)]
     args: Vec<String>,
@@ -51,18 +51,18 @@ struct Entry {
 impl ProviderSet {
     /// Just `provider`, which new workspaces go to.
     pub(crate) fn only(provider: Arc<dyn Provider>) -> Self {
-        let default = provider.name().to_string();
+        let default = ProviderName::from(provider.name());
         Self { by_name: HashMap::from([(default.clone(), provider)]), adapters: Vec::new(), default: Ok(default) }
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<Arc<dyn Provider>> {
+    pub(crate) fn get(&self, name: &ProviderName) -> Option<Arc<dyn Provider>> {
         self.by_name.get(name).cloned()
     }
 
     /// The one new workspaces go to, and its name.
-    pub(crate) fn default_provider(&self) -> Result<(&str, Arc<dyn Provider>), ApiError> {
+    pub(crate) fn default_provider(&self) -> Result<(&ProviderName, Arc<dyn Provider>), ApiError> {
         let unavailable = |why: String| ApiError::new(ErrorCode::Unavailable, why);
-        let name = self.default.as_deref().map_err(|why| unavailable(why.clone()))?;
+        let name = self.default.as_ref().map_err(|why| unavailable(why.clone()))?;
         let provider = self.get(name).ok_or_else(|| unavailable(format!("provider {name} isn't set up")))?;
         Ok((name, provider))
     }
@@ -87,17 +87,17 @@ impl ProviderSet {
         };
         for entry in parsed.providers {
             if set.by_name.contains_key(&entry.name) {
-                warn!(provider = entry.name, "leaving out a second provider of the same name");
+                warn!(provider = %entry.name, "leaving out a second provider of the same name");
                 continue;
             }
             let open = provider_link::process(AdapterCommand { program: entry.program, args: entry.args });
-            let adapter = Arc::new(AdapterProvider::new(entry.name.clone(), hub_id.clone(), open));
+            let adapter = Arc::new(AdapterProvider::new(entry.name.to_string(), hub_id.clone(), open));
             set.by_name.insert(entry.name, adapter.clone());
             set.adapters.push(adapter);
         }
         if let Some(default) = parsed.default {
             if !set.by_name.contains_key(&default) {
-                error!(provider = default, "new workspaces go to a provider that isn't set up, so none can be made");
+                error!(provider = %default, "new workspaces go to a provider that isn't set up, so none can be made");
             }
             set.default = Ok(default);
         }

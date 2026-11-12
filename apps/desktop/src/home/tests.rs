@@ -12,7 +12,7 @@ fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64
         base_ref: None,
         path: None,
         status,
-        provider: "local".to_string(),
+        provider: "local".into(),
         instance_id: InstanceId::from("local"),
         created_at_ms,
         archived_at_ms: None,

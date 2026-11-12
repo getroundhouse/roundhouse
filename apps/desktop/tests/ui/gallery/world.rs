@@ -97,7 +97,7 @@ impl World {
             base_ref: Some("origin/main".to_string()),
             path: Some(format!("/workspaces/{name}")),
             status: WorkspaceStatus::Ready,
-            provider: "local".to_string(),
+            provider: "local".into(),
             instance_id: InstanceId::from("local"),
             created_at_ms,
             archived_at_ms: None,

@@ -99,6 +99,8 @@ ids!(
     ApprovalId,
     /// Where a workspace's worker runs, in its provider's terms.
     InstanceId,
+    /// One of a hub's providers, by the name the hub has it under, such as `local`, which each workspace records.
+    ProviderName,
     /// A hub's own ID, made once and kept, so a provider adapter serving several hubs on one host works only with
     /// the instances it made for the one that's asking.
     HubId,
@@ -228,7 +230,7 @@ pub struct Workspace {
     /// The worktree's path on the worker's machine. Empty until the worker has created it.
     pub path: Option<String>,
     pub status: WorkspaceStatus,
-    pub provider: String,
+    pub provider: ProviderName,
     pub instance_id: InstanceId,
     pub created_at_ms: i64,
     pub archived_at_ms: Option<i64>,

@@ -29,7 +29,7 @@ impl Hub {
                 Ok(()) => info!(instance_id = %instance.id, "destroyed an instance the last run left part way"),
                 Err(e) => {
                     let provider = &instance.provider;
-                    warn!(instance_id = %instance.id, provider, "an instance the last run left part way is still there: {e}");
+                    warn!(instance_id = %instance.id, %provider, "an instance the last run left part way is still there: {e}");
                 }
             }
         }

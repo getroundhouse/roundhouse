@@ -5,7 +5,8 @@ use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    ClientRequestId, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
+    ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace, WorkspaceId,
+    WorkspaceStatus,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
@@ -110,7 +111,7 @@ impl Hub {
     async fn record_new_workspace(
         &self,
         repo: &Repo,
-        provider_name: &str,
+        provider_name: &ProviderName,
         names: &mut Names,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Made<Workspace>, ApiError> {
@@ -124,7 +125,7 @@ impl Hub {
             base_ref: None,
             path: None,
             status: WorkspaceStatus::Creating,
-            provider: provider_name.to_string(),
+            provider: provider_name.clone(),
             instance_id: id.as_str().into(),
             created_at_ms: now,
             archived_at_ms: None,

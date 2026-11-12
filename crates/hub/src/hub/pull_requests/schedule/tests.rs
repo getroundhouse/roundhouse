@@ -35,7 +35,7 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Works
         base_ref: None,
         path: Some(format!("/w/{id}")),
         status,
-        provider: "local".to_string(),
+        provider: "local".into(),
         instance_id: id.into(),
         created_at_ms: 1,
         archived_at_ms: None,

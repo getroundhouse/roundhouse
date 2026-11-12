@@ -2,7 +2,7 @@
 //! knows which instances are its own whatever a provider lists, and can finish making or destroying one that a crash
 //! cut short. Whether an instance exists, and whether it's running, is the provider's to say.
 
-use protocol::model::InstanceId;
+use protocol::model::{InstanceId, ProviderName};
 use rusqlite::{Connection, Row, params};
 use serde::{Deserialize, Serialize};
 
@@ -27,8 +27,7 @@ pub enum InstanceStage {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecordedInstance {
     pub id: InstanceId,
-    /// The provider's name, as the hub's providers are named.
-    pub provider: String,
+    pub provider: ProviderName,
     pub stage: InstanceStage,
     pub created_at_ms: i64,
 }
@@ -38,7 +37,7 @@ const INSTANCE_COLUMNS: &str = "id, provider, stage, created_at_ms";
 fn instance_from_row(row: &Row<'_>) -> rusqlite::Result<RecordedInstance> {
     Ok(RecordedInstance {
         id: row.get::<_, String>(0)?.into(),
-        provider: row.get(1)?,
+        provider: row.get::<_, String>(1)?.into(),
         stage: from_text(row.get(2)?)?,
         created_at_ms: row.get(3)?,
     })
@@ -49,13 +48,13 @@ fn instance_from_row(row: &Row<'_>) -> rusqlite::Result<RecordedInstance> {
 pub(super) fn record_instance(
     conn: &Connection,
     id: &InstanceId,
-    provider: &str,
+    provider: &ProviderName,
     stage: InstanceStage,
     created_at_ms: i64,
 ) -> rusqlite::Result<()> {
     conn.execute(
         &format!("INSERT INTO instances ({INSTANCE_COLUMNS}) VALUES (?, ?, ?, ?)"),
-        params![id.as_str(), provider, text_of(&stage), created_at_ms],
+        params![id.as_str(), provider.as_str(), text_of(&stage), created_at_ms],
     )?;
     Ok(())
 }
@@ -63,7 +62,7 @@ pub(super) fn record_instance(
 impl Store {
     /// Before its provider is asked to make it again, once it's been destroyed, as for a workspace being made that
     /// has taken another name. One still recorded fails, as with [`record_instance`].
-    pub fn instance_creating(&self, id: &InstanceId, provider: &str) -> Result<(), StoreError> {
+    pub fn instance_creating(&self, id: &InstanceId, provider: &ProviderName) -> Result<(), StoreError> {
         record_instance(&lock(&self.writer), id, provider, InstanceStage::Creating, now_ms())?;
         Ok(())
     }
