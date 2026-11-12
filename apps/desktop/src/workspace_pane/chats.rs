@@ -295,6 +295,9 @@ impl WorkspacePane {
                 transcript.update(cx, |t, cx| t.set_session(session, cx));
             }
         }
+        // While the chat that shows is still the one that did, so a draft taken for the chat that shows next goes to
+        // that chat's own, and moves into the composer with it.
+        self.take_drafts_from_elsewhere(cx);
         self.keep_active_valid(&was_open, cx);
         self.keep_subagent_tab_valid(cx);
         self.keep_edit_valid(cx);

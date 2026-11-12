@@ -220,6 +220,7 @@ impl WorkspacePane {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
         }
+        this.took_drafts();
         this.bring_back_files(cx);
         this
     }

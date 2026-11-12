@@ -83,6 +83,11 @@ impl Attachments {
         self.0.remove(at).kept_in
     }
 
+    /// Keeps only the files `keep` picks, in their order, such as those a draft made elsewhere still names.
+    pub(crate) fn retain(&mut self, keep: impl Fn(&AttachmentId) -> bool) {
+        self.0.retain(|file| keep(&file.file.attachment.id));
+    }
+
     /// The files the hub hasn't been given for `chat`, to give it, and which from now on it's taken to have.
     pub(crate) fn not_yet_given(&mut self, chat: &SessionId) -> Vec<FileToSend> {
         let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(chat));

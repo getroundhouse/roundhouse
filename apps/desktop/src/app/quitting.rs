@@ -57,19 +57,6 @@ pub(super) fn ask_first(window: &Window, cx: &mut Context<AppView>) {
 }
 
 impl AppView {
-    /// Keeps drafts on `client`'s hub from here on, carrying on with any the last connection couldn't, and has quitting
-    /// wait for them.
-    pub(super) fn keep_drafts_on(&mut self, client: &Client, cx: &mut Context<Self>) {
-        let drafts = match &self.drafts {
-            Some(drafts) => {
-                drafts.reconnect(client);
-                drafts.clone()
-            }
-            None => self.drafts.insert(Drafts::start(client)).clone(),
-        };
-        wait_for(client, drafts, cx);
-    }
-
     /// Quits, as Cmd-Q, Quit in the menu and closing the window do, once what's on its way to the hub has reached it,
     /// as [`Self::once_kept`] waits for, or else once the person says to.
     /// Quitting again while it waits or asks changes nothing.
@@ -151,10 +138,16 @@ impl AppView {
     pub fn drafts(&self) -> Option<Drafts> {
         self.drafts.clone()
     }
+
+    /// Client-core's copy of the hub's records, for a test to see what's arrived before any view has.
+    #[cfg(feature = "testing")]
+    pub fn records(&self) -> Option<client_core::RecordsFeed> {
+        self.feed.clone()
+    }
 }
 
 /// Has quitting wait for the commands started on `client`, rather than on the connection before it, and for `drafts`.
-fn wait_for(client: &Client, drafts: Drafts, cx: &mut App) {
+pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut App) {
     if !cx.has_global::<Started>() {
         cx.on_app_quit(|cx| {
             let started = cx.try_global::<Started>().map(|started| (started.0.finished(), started.1.flushed()));

@@ -1,14 +1,14 @@
 //! What's typed and attached in each chat and not sent. The hub keeps each chat's, so it's there after the app
-//! restarts: the pane starts with what the hub has, reads back the files it kept, and has it keep each change. An
-//! answer being typed to a question stays only here, so it's what quitting loses, with anything the hub hasn't had
-//! yet.
+//! restarts, and in every client: the pane starts with what the hub has, reads back the files it kept, has it keep
+//! each change, and shows a change made elsewhere, such as in another client. An answer being typed to a question
+//! stays only here, so it's what quitting loses, with anything the hub hasn't had yet.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use client_core::{ClientError, FileToSend};
 use gpui_kit::{App, AppContext as _, Context};
 use protocol::attachment::Attachment;
-use protocol::model::{NewDraft, Session, SessionId};
+use protocol::model::{AttachmentId, Draft, NewDraft, Session, SessionId};
 use protocol::prompt::says_or_carries;
 
 use super::attaching::Composed;
@@ -100,36 +100,105 @@ impl WorkspacePane {
         }
     }
 
-    /// Reads back the files the hub kept with each chat's draft that's waiting for them, off the main thread. A read
-    /// isn't a command quitting waits for, as it can be a lot of bytes, and the hub keeps them anyway.
-    pub(super) fn bring_back_files(&self, cx: &mut Context<Self>) {
-        for (id, files) in &self.restoring {
-            let (client, chat, files) = (self.client.clone(), id.clone(), files.clone());
-            cx.spawn(async move |this, cx| {
-                let reading = cx.background_spawn({
-                    let chat = chat.clone();
-                    async move {
-                        let read = files.into_iter().map(|file| {
-                            let data = client.attachment_read(&chat, &file.id);
-                            (file, data)
-                        });
-                        read.collect::<Vec<ReadBack>>()
-                    }
-                });
-                let read = reading.await;
-                let _ = this.update(cx, |t, cx| t.brought_back(&chat, read, cx));
-            })
-            .detach();
+    /// Says that each open chat shows the draft on its record, as a pane does as it starts, so a newer record carrying
+    /// the same draft isn't taken for one made elsewhere.
+    pub(super) fn took_drafts(&self) {
+        for session in self.open_sessions() {
+            self.keeper.took(session);
         }
     }
 
-    /// Puts a chat's kept files back in its composer, before any attached since, then has the hub keep what the chat
-    /// has now. Without a connection, they're read again on the next.
+    /// Shows in each open chat a draft made elsewhere since, such as in another client, in place of this app's. What's
+    /// on its way to the hub from here goes on and replaces it, as [`client_core::Drafts::from_elsewhere`] says, so
+    /// what's typed here is never undone as it's typed. Whatever comes in its place is the hub's already, so none of it
+    /// is kept again.
+    pub(crate) fn take_drafts_from_elsewhere(&mut self, cx: &mut Context<Self>) {
+        let elsewhere: Vec<Session> = self.open_sessions().filter(|s| self.keeper.from_elsewhere(s)).cloned().collect();
+        for session in elsewhere {
+            self.keeper.took(&session);
+            self.take_draft(&session.id, session.draft, cx);
+        }
+    }
+
+    /// Puts a draft made elsewhere in its chat here: its text, the files here that it still names, and the rest once
+    /// they're read back. A file it stopped naming is let go of by whoever took it out.
+    fn take_draft(&mut self, id: &SessionId, draft: Draft, cx: &mut Context<Self>) {
+        let named: HashSet<AttachmentId> = draft.files.iter().map(|file| file.id.clone()).collect();
+        let files = self.files_for(Some(id));
+        files.retain(|file| named.contains(file));
+        let here: HashSet<AttachmentId> = files.ids().collect();
+        let missing: Vec<Attachment> = draft.files.into_iter().filter(|file| !here.contains(&file.id)).collect();
+        if self.active.as_ref() == Some(id) {
+            let (chat, text) = (id.clone(), draft.text);
+            self.with_window(cx, move |t, window, cx| {
+                // Another chat may be showing by now, and it has its own. Setting the same text would still move the
+                // cursor to the end and forget what undo had.
+                if t.active.as_ref() != Some(&chat) || *t.composer.read(cx).text() == text {
+                    return;
+                }
+                let end = text.len();
+                t.composer.update(cx, |c, cx| {
+                    c.set_value(text, window, cx);
+                    c.set_selected_range(end..end, cx);
+                });
+            });
+        } else {
+            // Its files are its draft's, which `files_for` made if it had none.
+            let here = self.drafts.entry(id.clone()).or_default();
+            here.text = draft.text;
+            if here.text.is_empty() && here.files.is_empty() {
+                self.drafts.remove(id);
+            }
+        }
+        if missing.is_empty() {
+            self.restoring.remove(id);
+        } else {
+            self.restoring.insert(id.clone(), missing.clone());
+            self.bring_back(id.clone(), missing, cx);
+        }
+        cx.notify();
+    }
+
+    /// Reads back the files the hub kept with each chat's draft that's waiting for them, off the main thread.
+    pub(super) fn bring_back_files(&self, cx: &mut Context<Self>) {
+        for (id, files) in &self.restoring {
+            self.bring_back(id.clone(), files.clone(), cx);
+        }
+    }
+
+    /// Reads back the files the hub kept with a chat's draft, off the main thread. A read isn't a command quitting
+    /// waits for, as it can be a lot of bytes, and the hub keeps them anyway.
+    fn bring_back(&self, chat: SessionId, files: Vec<Attachment>, cx: &mut Context<Self>) {
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let reading = cx.background_spawn({
+                let chat = chat.clone();
+                async move {
+                    let read = files.into_iter().map(|file| {
+                        let data = client.attachment_read(&chat, &file.id);
+                        (file, data)
+                    });
+                    read.collect::<Vec<ReadBack>>()
+                }
+            });
+            let read = reading.await;
+            let _ = this.update(cx, |t, cx| t.brought_back(&chat, read, cx));
+        })
+        .detach();
+    }
+
+    /// Puts a chat's kept files back in its composer, before any attached since, where every draft kept meanwhile has
+    /// named them, so nothing needs keeping again, which could undo a change made elsewhere that hasn't arrived yet.
+    /// Without a connection, they're read again on the next.
     fn brought_back(&mut self, chat: &SessionId, read: Vec<ReadBack>, cx: &mut Context<Self>) {
+        // Not once they've come back, nor when the chat is waiting for others, such as a draft made elsewhere names.
+        let read_ids = read.iter().map(|(file, _)| &file.id);
+        let waiting = self.restoring.get(chat).is_some_and(|files| files.iter().map(|file| &file.id).eq(read_ids));
         let gone = |(_, data): &ReadBack| matches!(data, Err(ClientError::Io(_) | ClientError::Disconnected));
-        if read.iter().any(gone) || self.restoring.remove(chat).is_none() {
+        if !waiting || read.iter().any(gone) {
             return;
         }
+        self.restoring.remove(chat);
         let mut files = Vec::new();
         for (attachment, data) in read {
             match data {
@@ -140,7 +209,6 @@ impl WorkspacePane {
         for problem in self.files_for(Some(chat)).bring_back(files, chat) {
             cx.emit(PaneEvent::Error(problem));
         }
-        self.keep_draft(chat, cx);
         cx.notify();
     }
 
