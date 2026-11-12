@@ -60,9 +60,11 @@ fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
     store.instance_creating(&workspace.instance_id, "incus").unwrap();
 
     assert!(while_recorded.is_err(), "{while_recorded:?}");
+    // By its ID, since it's recorded again at the time it is, which can be the millisecond `w` was made in, and then
+    // it's listed first.
     let recorded = store.recorded_instances().unwrap();
-    assert_eq!((recorded[1].id.as_str(), recorded[1].provider.as_str()), ("birch-instance", "incus"));
-    assert_eq!(recorded[1].stage, InstanceStage::Creating);
+    let again = recorded.iter().find(|instance| instance.id.as_str() == "birch-instance").unwrap();
+    assert_eq!((again.provider.as_str(), again.stage), ("incus", InstanceStage::Creating), "{recorded:?}");
 }
 
 #[test]
