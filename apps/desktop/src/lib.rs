@@ -85,6 +85,7 @@ actions!(
         Quit,
         Minimize,
         Zoom,
+        ToggleMenus,
         NewWorkspace,
         AddRepository,
         ArchiveWorkspace,

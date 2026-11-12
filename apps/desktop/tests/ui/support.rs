@@ -31,8 +31,8 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, ElementId, Entity, InputEvent as _, MouseMoveEvent, ScrollDelta, ScrollEvent,
-    SharedString, TestAppContext,
+    AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
+    ScrollEvent, SharedString, TestAppContext,
 };
 use protocol::model::{Effort, ModelName, PermissionMode};
 use tempfile::TempDir;
@@ -46,10 +46,11 @@ pub(crate) use daemons::{binaries, point_daemons_at_the_fake_agent};
 pub(crate) use diff::Diff;
 pub(crate) use frozen::Frozen;
 pub(crate) use held::Held;
+pub(crate) use labels::MENU;
 pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
-pub(crate) use labels::{MENU, first_labelled, menu_item};
+pub(crate) use labels::{first_labelled, menu_item};
 pub(crate) use order::{order, three_workspaces, top, worked_in};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
@@ -176,6 +177,13 @@ impl<'a> Ui<'a> {
         let id = id.into();
         self.frame();
         self.cx.update_window(self.handle, |_, window, _| window.try_find(id).is_some()).unwrap()
+    }
+
+    /// Where the last frame drew it.
+    pub(crate) fn bounds(&mut self, id: impl Into<ElementId>) -> Bounds<Pixels> {
+        let id = id.into();
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, _| window.find(id).bounds()).unwrap()
     }
 
     pub(crate) fn view(&self) -> AppViewRef<'_> {

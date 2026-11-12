@@ -30,6 +30,7 @@ These are part of the design, and the app is built to take them. None is built.
 - **A page of what each update changes.**
 - **A sound on Windows and Linux,** when an agent needs you.
 - **Updates on Windows that don't wait for agents.**
+- **Alt opening the menus on Windows and Linux,** as `F10` does.
 
 ## Say what's missing
 

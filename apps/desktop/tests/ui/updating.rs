@@ -7,7 +7,7 @@ use desktop::app::UpdateQuestion;
 use desktop::updates::{Kind, Problem};
 use gpui_kit::TestAppContext;
 
-use crate::menus::choose;
+use crate::menus::{CHECK_FOR_UPDATES, choose};
 use crate::support::{Frozen, Stack, Ui};
 
 #[gpui_kit::test]
@@ -232,7 +232,7 @@ fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx:
     let mut ui = Ui::open(cx, &stack);
     assert!(!ui.has("update-answer"));
 
-    choose(&mut ui, "Roundhouse", "Check for Updates…");
+    choose(&mut ui, CHECK_FOR_UPDATES.0, CHECK_FOR_UPDATES.1);
 
     assert!(ui.has("update-answer"));
     assert!(!ui.cx.has_pending_prompt());
@@ -246,7 +246,7 @@ fn checking_for_updates_where_the_app_cant_update_adds_nothing_to_why(cx: &mut T
     let problem = Problem { kind: Kind::Translocated, detail: "/private/var/folders/AppTranslocation".to_string() };
     ui.cx.update(|cx| desktop::updates::show_problem(problem, cx));
 
-    choose(&mut ui, "Roundhouse", "Check for Updates…");
+    choose(&mut ui, CHECK_FOR_UPDATES.0, CHECK_FOR_UPDATES.1);
 
     assert!(ui.has("update-problem"));
     assert!(!ui.has("update-answer"));

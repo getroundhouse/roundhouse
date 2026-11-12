@@ -11,7 +11,9 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    assert_eq!(items(&ui, "File"), ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat"]);
+    let made = ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat"];
+    // Off the Mac, what a Mac has in its app menu ends it, as `menus::tests` checks for each system.
+    assert_eq!(items(&ui, "File")[..made.len()], made);
     assert!(action(&ui, "File", "New Workspace").partial_eq(&desktop::NewWorkspace));
     assert!(action(&ui, "File", "New Chat").partial_eq(&desktop::NewChat));
     assert!(action(&ui, "File", "Add Project…").partial_eq(&desktop::AddRepository));
@@ -27,8 +29,12 @@ fn the_view_menu_shows_the_diff_and_moves_between_workspaces(cx: &mut TestAppCon
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    // macOS adds Enter Full Screen below the last separator.
-    assert_eq!(items(&ui, "View"), ["Show Diff", "-", "Previous Workspace", "Next Workspace", "-"]);
+    // macOS adds Enter Full Screen below the last separator, which only a Mac has.
+    let full_screen: &[&str] = if cfg!(target_os = "macos") { &["-"] } else { &[] };
+    assert_eq!(
+        items(&ui, "View"),
+        [&["Show Diff", "-", "Previous Workspace", "Next Workspace"][..], full_screen].concat()
+    );
     assert!(action(&ui, "View", "Show Diff").partial_eq(&desktop::ToggleDiff));
     assert!(action(&ui, "View", "Previous Workspace").partial_eq(&desktop::PreviousWorkspace));
     assert!(action(&ui, "View", "Next Workspace").partial_eq(&desktop::NextWorkspace));

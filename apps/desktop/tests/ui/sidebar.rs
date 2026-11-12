@@ -8,7 +8,6 @@ use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedStrin
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{Held, Stack, Ui, home_row, pencil, pull_request, sidebar_row as row};
-use crate::tools::bounds;
 
 /// More than the sidebar has room for in the window.
 const WORKSPACES: usize = 40;
@@ -148,7 +147,7 @@ fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_e
     let (pressed, showing) = (ui.new_workspace(), ui.new_workspace());
     let button = archive_button(&pressed);
     ui.hover(row(&pressed));
-    let on_row = bounds(&mut ui, row(&pressed)).center();
+    let on_row = ui.bounds(row(&pressed)).center();
     let held = Some(MouseButton::Left);
     let press_and_move = |ui: &mut Ui| {
         ui.cx
@@ -161,7 +160,7 @@ fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_e
 
     press_and_move(&mut ui);
     assert!(ui.has(button.clone()), "the button is still there while the row is held");
-    let elsewhere = bounds(&mut ui, ELSEWHERE).center();
+    let elsewhere = ui.bounds(ELSEWHERE).center();
     ui.cx
         .update_window(ui.handle, |_, window, cx| {
             window.pointer_move(elsewhere, held, cx);
@@ -228,31 +227,31 @@ fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_sh
     ui.hover(ELSEWHERE);
     ui.allow_motion();
     let repo = ui.view().records().repos()[0].id.clone();
-    let under = bounds(&mut ui, ElementId::Name(format!("new-in-{repo}").into())).center().x;
+    let under = ui.bounds(ElementId::Name(format!("new-in-{repo}").into())).center().x;
     let (pencil, button) = (pencil(&typed_in), archive_button(&typed_in));
-    let rests = bounds(&mut ui, pencil.clone());
+    let rests = ui.bounds(pencil.clone());
     assert_eq!(rests.center().x, under, "under the project's button, where its own button goes");
 
     ui.hover(row(&typed_in));
 
-    assert_eq!(bounds(&mut ui, button.clone()).center().x, under, "the button is in its place at once, to be pressed");
-    assert_eq!(bounds(&mut ui, pencil.clone()), rests, "and the pencil sets off from where it was");
+    assert_eq!(ui.bounds(button.clone()).center().x, under, "the button is in its place at once, to be pressed");
+    assert_eq!(ui.bounds(pencil.clone()), rests, "and the pencil sets off from where it was");
     ui.play(look::motion::FADE / 4);
-    let aside = bounds(&mut ui, button.clone()).left();
-    let partway = bounds(&mut ui, pencil.clone()).right();
+    let aside = ui.bounds(button.clone()).left();
+    let partway = ui.bounds(pencil.clone()).right();
     assert!(aside < partway && partway < rests.right(), "partway aside: {partway:?}");
     ui.settle(look::motion::FADE);
-    assert_eq!(bounds(&mut ui, pencil.clone()).right(), aside, "it ends against the button");
+    assert_eq!(ui.bounds(pencil.clone()).right(), aside, "it ends against the button");
 
     ui.hover(ELSEWHERE);
 
-    assert_eq!(bounds(&mut ui, pencil.clone()).right(), aside, "it sets off back from there");
+    assert_eq!(ui.bounds(pencil.clone()).right(), aside, "it sets off back from there");
     ui.play(look::motion::FADE / 4);
-    let partway = bounds(&mut ui, pencil.clone()).right();
+    let partway = ui.bounds(pencil.clone()).right();
     assert!(aside < partway && partway < rests.right(), "partway back: {partway:?}");
     assert!(ui.has(button.clone()), "the button is still fading");
     ui.settle(look::motion::FADE);
-    assert_eq!(bounds(&mut ui, pencil.clone()), rests, "back where it rests");
+    assert_eq!(ui.bounds(pencil.clone()), rests, "back where it rests");
     assert!(!ui.has(button), "and the button has gone");
     assert_eq!(ui.play(look::motion::FADE), 0, "nothing asks for another frame");
 }

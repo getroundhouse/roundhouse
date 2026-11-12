@@ -34,7 +34,7 @@
 
 ## Hiding and widening
 
-- **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the button: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.
+- **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. Off the Mac, the button that opens the menus is in the corner too, as `menus.md` says. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the corner's buttons: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.
 
   **The sidebar hidden, with the workspace's header starting after the button that shows it again.** *Unconfirmed.*
 

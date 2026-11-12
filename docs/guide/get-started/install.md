@@ -30,7 +30,7 @@ What differs from the Mac:
 - No sound plays when an agent needs you.
 - Nothing keeps the computer awake while agents work.
 - The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
-- There are no menus, so what's only in one, such as Check for Updates…, isn't there.
+- The menus open from the first button in the window's top left corner, or `F10`. Settings… and Exit are in File, and About Roundhouse and Check for Updates… in Help.
 
 ## On Linux
 
@@ -46,7 +46,7 @@ It updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, V
 What differs from the Mac:
 
 - The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
-- There are no menus, so what's only in one, such as Check for Updates…, isn't there.
+- The menus open from the first button in the window's top left corner, or `F10`. Settings… and Quit are in File, and About Roundhouse and Check for Updates… in Help.
 - A notification needs a notification service, and no sound plays.
 - Nothing keeps the computer awake while agents work.
 

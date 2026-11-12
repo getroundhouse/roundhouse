@@ -9,7 +9,7 @@ use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus, Title};
 
 use crate::support::{Stack, Ui};
-use crate::tools::{bounds, in_a_new_workspace};
+use crate::tools::in_a_new_workspace;
 
 #[gpui_kit::test]
 fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
@@ -303,7 +303,7 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     // The line the turn ends with can come just after, and would move the tasks' line as it's clicked.
     ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
 
-    let pointer = bounds(&mut ui, SEVERAL).center();
+    let pointer = ui.bounds(SEVERAL).center();
     ui.click_at(pointer);
     ui.wait("each task's own line", |ui| shown(ui, &lines) == 5);
     ui.click_at(pointer);
@@ -314,7 +314,7 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     ui.click_at(pointer);
     ui.keep_to_the_end();
     ui.wait("each task's own line again", |ui| shown(ui, &lines) == 5);
-    let pointer = bounds(&mut ui, SEVERAL).center();
+    let pointer = ui.bounds(SEVERAL).center();
     ui.click_at(pointer);
     ui.wait("their lines to go again", |ui| shown(ui, &lines) == 0);
     ui.click_at(pointer);

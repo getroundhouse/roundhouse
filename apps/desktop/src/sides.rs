@@ -24,7 +24,8 @@ mod clearance;
 
 use clearance::Clearance;
 pub(crate) use clearance::{
-    AtTheTop, WINDOW_BUTTONS_INSET, WINDOWS_BUTTONS_WIDTH, WindowButtons, clearance, placed_buttons, toggle_starts,
+    AtTheTop, MenusButton, WINDOW_BUTTONS_INSET, WINDOWS_BUTTONS_WIDTH, WindowButtons, clearance, corner_starts,
+    placed_buttons, toggle_starts,
 };
 
 /// How close to its usual width a dragged sidebar has to come to take it, so the usual width is easy to get back to.
@@ -139,9 +140,10 @@ impl Sides {
     }
 }
 
-/// Works out where both sidebars are for the frame the window is starting to draw, with `beside` them and the window's
-/// `buttons` where they are, and asks for the next frame for as long as either slides. Reduce Motion skips the slide.
-pub(crate) fn place(beside: Beside, buttons: WindowButtons, window: &mut Window, cx: &mut App) {
+/// Works out where both sidebars are for the frame the window is starting to draw, with `beside` them, the window's
+/// `buttons` where they are, and the button that opens the `menus` where it is, and asks for the next frame for as long
+/// as either slides. Reduce Motion skips the slide.
+pub(crate) fn place(beside: Beside, buttons: WindowButtons, menus: MenusButton, window: &mut Window, cx: &mut App) {
     let mut sides = Sides::of(cx);
     // The one on the right slides only where it's drawn.
     let right = if beside.changes { sides.right.open.draw(window, cx) } else { 0. };
@@ -150,7 +152,7 @@ pub(crate) fn place(beside: Beside, buttons: WindowButtons, window: &mut Window,
     // How far open each is, rather than how wide, so a drag moves its edge at once. In whole pixels, so what's beside
     // it stays on them as it moves.
     let shown = ((widths.0 * open.0).round(), (widths.1 * open.1).round());
-    let clearance = Clearance::new(buttons, shown, beside.above_the_header);
+    let clearance = Clearance::new(buttons, menus, shown, beside.above_the_header);
     sides.placed = Placed { beside, widths, shown, clearance };
     cx.set_global(sides);
 }

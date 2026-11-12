@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 use transcript::Place;
 
-use super::{COMMAND_LINE, bounds, in_a_new_workspace, open_a_call, open_a_command};
+use super::{COMMAND_LINE, in_a_new_workspace, open_a_call, open_a_command};
 use crate::support::{Stack, Ui};
 
 /// Longer than a mouse wheel's notches come apart in one spin, so the next notch starts a new gesture.
@@ -169,25 +169,25 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
     let mut ui = in_a_new_workspace(cx, &stack);
     open_a_call(&mut ui, &format!("edit:20:{LONG_LINE}"), "Edit");
     let lines = ui.shown("file/").remove(0);
-    let (start, transcript) = (bounds(&mut ui, lines.clone()).origin, scrolled_to(&ui));
-    let at = bounds(&mut ui, over(&lines)).center();
+    let (start, transcript) = (ui.bounds(lines.clone()).origin, scrolled_to(&ui));
+    let at = ui.bounds(over(&lines)).center();
 
     turn_at(&mut ui, at, point(px(-100.), px(0.)));
 
-    assert_eq!(bounds(&mut ui, lines.clone()).origin, start - point(px(100.), px(0.)), "a sideways swipe moves along");
+    assert_eq!(ui.bounds(lines.clone()).origin, start - point(px(100.), px(0.)), "a sideways swipe moves along");
     assert_eq!(scrolled_to(&ui), transcript, "and leaves the transcript");
 
     turn_at(&mut ui, at, point(px(0.), px(-40.)));
 
-    assert_eq!(bounds(&mut ui, lines.clone()).origin, start - point(px(100.), px(40.)), "the wheel down still scrolls");
+    assert_eq!(ui.bounds(lines.clone()).origin, start - point(px(100.), px(40.)), "the wheel down still scrolls");
     assert_eq!(scrolled_to(&ui), transcript, "the block, and not the transcript");
 
     keep_turning_at(&mut ui, at, point(px(30.), px(-4.)));
 
-    assert_eq!(bounds(&mut ui, lines.clone()).origin, start - point(px(100.), px(44.)), "a wobble doesn't drift it");
+    assert_eq!(ui.bounds(lines.clone()).origin, start - point(px(100.), px(44.)), "a wobble doesn't drift it");
 
     turn_at(&mut ui, at, point(px(-100_000.), px(0.)));
-    let (end, edge) = (bounds(&mut ui, lines.clone()).right(), bounds(&mut ui, over(&lines)).right());
+    let (end, edge) = (ui.bounds(lines.clone()).right(), ui.bounds(over(&lines)).right());
     assert!(
         (end - edge).abs() < px(1.),
         "it goes to the end of the longest line: {end:?}, at the block's edge {edge:?}"
@@ -195,7 +195,7 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
 
     turn_at(&mut ui, at, point(px(-100.), px(0.)));
 
-    assert_eq!(bounds(&mut ui, lines).right(), end, "and stops there");
+    assert_eq!(ui.bounds(lines).right(), end, "and stops there");
 }
 
 #[gpui_kit::test]
@@ -205,17 +205,17 @@ fn a_block_of_long_lines_moves_sideways_only_for_a_gesture_that_went_to_it(cx: &
     // Its two lines fit, so the block has nothing to scroll down.
     open_a_call(&mut ui, &format!("edit:1:{LONG_LINE}"), "Edit");
     let (lines, line) = (ui.shown("file/").remove(0), ui.labelled("Edit")[0].path().last().unwrap().clone());
-    let (at, transcript) = (bounds(&mut ui, over(&lines)).center(), scrolled_to(&ui));
+    let (at, transcript) = (ui.bounds(over(&lines)).center(), scrolled_to(&ui));
 
     turn_at(&mut ui, at, point(px(0.), px(40.)));
 
     assert_ne!(scrolled_to(&ui), transcript, "the wheel up over a block that fits scrolls the transcript");
 
     wheel(&mut ui, &line, 40.);
-    let (left, at) = (bounds(&mut ui, lines.clone()).left(), bounds(&mut ui, over(&lines)).center());
+    let (left, at) = (ui.bounds(lines.clone()).left(), ui.bounds(over(&lines)).center());
     keep_turning_at(&mut ui, at, point(px(-100.), px(-5.)));
 
-    assert_eq!(bounds(&mut ui, lines).left(), left, "a spin that started on the transcript doesn't move it sideways");
+    assert_eq!(ui.bounds(lines).left(), left, "a spin that started on the transcript doesn't move it sideways");
 }
 
 #[gpui_kit::test]
@@ -235,14 +235,14 @@ fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppC
     ui.wait_out_a_tooltip();
 
     assert!(ui.visible("edit-preview"), "the diff stays while the pointer is on it");
-    let (lines, transcript) = (bounds(&mut ui, "edit-preview-lines").origin, scrolled_to(&ui));
-    let over = bounds(&mut ui, "edit-preview").center();
+    let (lines, transcript) = (ui.bounds("edit-preview-lines").origin, scrolled_to(&ui));
+    let over = ui.bounds("edit-preview").center();
     turn_at(&mut ui, over, point(px(0.), px(-100.)));
     keep_turning_at(&mut ui, over, point(px(0.), px(40.)));
     assert_eq!(scrolled_to(&ui), transcript, "the wheel over the diff leaves the transcript under it");
-    assert_eq!(bounds(&mut ui, "edit-preview-lines").origin, lines - point(px(0.), px(60.)), "and scrolls the diff");
+    assert_eq!(ui.bounds("edit-preview-lines").origin, lines - point(px(0.), px(60.)), "and scrolls the diff");
     turn_at(&mut ui, over, point(px(-100.), px(0.)));
-    assert_eq!(bounds(&mut ui, "edit-preview-lines").origin, lines - point(px(100.), px(60.)), "and sideways");
+    assert_eq!(ui.bounds("edit-preview-lines").origin, lines - point(px(100.), px(60.)), "and sideways");
 
     ui.hover("new-chat");
     ui.wait_out_a_tooltip();
@@ -271,7 +271,7 @@ fn keep_turning(ui: &mut Ui<'_>, id: &ElementId, y: f32) {
 /// moving, lifting, or the fling they leave, which GPUI calls moving too.
 fn swipe(ui: &mut Ui<'_>, id: &ElementId, phase: TouchPhase, y: f32) {
     ui.hover(id.clone());
-    let position = bounds(ui, id.clone()).center();
+    let position = ui.bounds(id.clone()).center();
     send(
         ui,
         ScrollEvent {
@@ -306,7 +306,7 @@ fn send(ui: &mut Ui<'_>, event: ScrollEvent) {
 
 /// Where the top of the element is drawn.
 fn top(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Pixels {
-    bounds(ui, id).top()
+    ui.bounds(id).top()
 }
 
 /// How far the transcript is scrolled.

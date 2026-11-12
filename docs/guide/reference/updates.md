@@ -31,7 +31,7 @@ If something hasn't reached the hub yet, such as a prompt still on its way, the 
 
 ## Checking by hand
 
-Check for Updates… in the app menu looks right away. Otherwise the app looks when it opens, and every hour. The answer shows at the bottom of the sidebar, under the build.
+Check for Updates…, in the app menu, or in Help on Windows and Linux, looks right away. Otherwise the app looks when it opens, and every hour. The answer shows at the bottom of the sidebar, under the build.
 
 ## When the card says Finishing update
 

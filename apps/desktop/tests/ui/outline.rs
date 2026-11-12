@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId, SessionStatus, SettledAt, seq_index};
 
@@ -97,7 +97,7 @@ fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the outline", |ui| ui.has("outline"));
     open_the_list(&mut ui);
-    let before = bounds(&mut ui, "outline-list");
+    let before = ui.bounds("outline-list");
 
     stack.run(&session, "say:third");
     ui.wait("the third prompt", |ui| prompt_rows(ui).len() == 3);
@@ -105,7 +105,7 @@ fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
     ui.wait("it to join the list", |ui| ui.has(third.clone()));
 
     assert!(ui.visible(third), "it shows");
-    let after = bounds(&mut ui, "outline-list");
+    let after = ui.bounds("outline-list");
     assert!(after.size.height > before.size.height, "and the list grows to fit it: {before:?} {after:?}");
 }
 
@@ -127,7 +127,7 @@ fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
     assert!(selected(&mut ui, row_id("outline-prompt", last)), "at the end, the last prompt is the one being read");
     assert!(ui.visible(row_id("outline-prompt", last)), "and the list shows it");
     assert!(!ui.visible(row_id("outline-prompt", first)), "rather than its start");
-    let card = bounds(&mut ui, "outline-list");
+    let card = ui.bounds("outline-list");
     assert!(card.size.height <= px(440.), "stopping short of all sixteen rows: {card:?}");
 }
 
@@ -165,7 +165,7 @@ fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there(cx: &mu
     }
 
     assert!(ui.has("outline-list"), "the list, opening under the pointer, keeps it");
-    let (list, ticks) = (bounds(&mut ui, "outline-list"), bounds(&mut ui, "outline"));
+    let (list, ticks) = (ui.bounds("outline-list"), ui.bounds("outline"));
     let covers = list.left() <= ticks.left()
         && list.top() <= ticks.top()
         && list.right() >= ticks.right()
@@ -209,7 +209,7 @@ fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the outline", |ui| ui.has("outline"));
     let only = row_id("outline-tick", prompt_rows(&ui)[0]);
-    let (ticks, tick) = (bounds(&mut ui, "outline"), bounds(&mut ui, only));
+    let (ticks, tick) = (ui.bounds("outline"), ui.bounds(only));
     assert!(ticks.size.height >= tick.size.height * 3., "three ticks tall: {ticks:?} {tick:?}");
     assert!(!tick.contains(&ticks.center()), "so the middle, where the pointer goes, is past the tick: {ticks:?}");
 
@@ -232,7 +232,7 @@ fn a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestApp
     let row = seq_index(compaction.seq) - 1;
     ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
     let only = row_id("outline-tick", prompt_rows(&ui)[0]);
-    let (tick, dot) = (bounds(&mut ui, only), bounds(&mut ui, row_id("outline-dot", row)));
+    let (tick, dot) = (ui.bounds(only), ui.bounds(row_id("outline-dot", row)));
     assert!(dot.top() >= tick.bottom(), "under the prompt it came after: {tick:?} {dot:?}");
 }
 
@@ -253,12 +253,6 @@ fn open_the_list(ui: &mut Ui<'_>) {
     ui.hover("outline");
     wait_out_the_list(ui);
     ui.wait("the list", |ui| ui.has("outline-list"));
-}
-
-fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
-    let id = id.into();
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 /// Moves the app's clock past when the list would open or close.

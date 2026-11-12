@@ -17,8 +17,8 @@ use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 use crate::{
     ArchiveWorkspace, CloseChat, CloseSettings, CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting,
     FlipImage, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewWorkspace, NextChat, NextWorkspace, OpenSettings,
-    PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, TogglePlanMode, composing, file_diff, image_diff,
-    settings,
+    PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, composing, file_diff,
+    image_diff, settings,
 };
 
 /// Binds the app's shortcuts, after the kit's.
@@ -34,6 +34,11 @@ pub(crate) fn set(cx: &mut App) {
         // As Windows and Linux apps have them, besides the keys a Mac has. Bound first, since the kit shows the key
         // bound to an action last, which is then the one a Mac has too.
         cx.bind_keys([key("f3", FindNext, None, cx), key("shift-f3", FindPrevious, None, cx)]);
+    }
+    if crate::menus::System::THIS.draws_the_menus() {
+        // GPUI can bind Alt pressed alone, but sends it for any press of Alt let go with no key between, even over a
+        // click, or as Alt-Tab comes back to the window, which would open the menus by surprise.
+        cx.bind_keys([key("f10", ToggleMenus, None, cx)]);
     }
     let in_settings = Some(settings::KEY_CONTEXT);
     let in_a_prompt = format!("{} > Input", composing::KEY_CONTEXT);

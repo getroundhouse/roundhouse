@@ -11,9 +11,10 @@ use look::Hand as _;
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, corner, hub_source, title_bar, window_buttons};
+use crate::menus::System;
 use crate::sides::{self, AtTheTop, Side};
 use crate::workspace_pane::WorkspacePane;
-use crate::{CloseSettings, OpenSettings};
+use crate::{CloseSettings, OpenSettings, ToggleMenus};
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -40,6 +41,7 @@ impl Render for AppView {
             return self
                 .root(div(), cx)
                 .child(crate::settings::page(&self.settings_focus, width, back, hub))
+                .children(corner::menus(self, cx))
                 .children(window_buttons::of_windows(window, cx));
         }
         let danger = cx.theme().danger;
@@ -60,6 +62,7 @@ impl Render for AppView {
                     .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
                     .child(div().flex_1().min_h_0().child(main)),
             )
+            .children(corner::menus(self, cx))
             .child(corner::corner(cx))
             .children(window_buttons::of_windows(window, cx))
     }
@@ -130,6 +133,10 @@ impl AppView {
             .text_sm()
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
+            // F10 opens the menus wherever the app draws them.
+            .when(System::THIS.draws_the_menus(), |root| {
+                root.on_action(cx.listener(|t, _: &ToggleMenus, window, cx| t.toggle_menus(window, cx)))
+            })
             .child(self.unreleased.hears());
         title_bar::stands_in(root, cx)
     }
