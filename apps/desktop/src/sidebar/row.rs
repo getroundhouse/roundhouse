@@ -1,35 +1,43 @@
 //! A workspace's row in the sidebar: its mark and name, a pencil while something typed in it isn't sent, a clock while
-//! one of its chats' caches is about to expire, the button that archives it under the pointer, what it's waiting on the
-//! hub for, and what a right-click on it offers.
+//! one of its chats' caches is about to expire, the button that archives it under the pointer, which they make room
+//! for, what it's waiting on the hub for, and what a right-click on it offers.
 
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::base::motion::transition;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div,
+    ParentElement, Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::{Hand as _, LineText, Off as _, Placed};
-use protocol::model::Workspace;
+use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
 
+/// As wide as the kit's small icon button, which the button that archives a row is.
+const BUTTON: Pixels = px(24.);
+/// How far in from the row's right end a pencil or a clock rests: half of what the button is wider than its box by, so
+/// it's in the middle of the button's place.
+const IN_BUTTONS_PLACE: Pixels = px(4.);
+
 pub(super) fn workspace_row(
     app: &AppView,
     workspace: &Workspace,
     line_text: &LineText,
+    window: &mut Window,
     cx: &mut Context<AppView>,
 ) -> AnyElement {
     // While Home shows, it's what's showing, rather than the workspace still selected under it.
     let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
-    let (id, pointed) = (workspace.id.clone(), workspace.id.clone());
+    let id = workspace.id.clone();
     let muted = cx.theme().muted_foreground;
     let Standing { signal: mark, work, needs_a_look } = standing(app, workspace, cx);
     let menu = row_menu(app, workspace, cx);
@@ -46,8 +54,10 @@ pub(super) fn workspace_row(
         };
     let its_chats = app.records().sessions(&workspace.id).iter();
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
-    let end = right_end(app, workspace, End { drafted, expiring, pointing, waiting }, &line_text.small, cx);
-    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()))
+    let end = End { drafted, expiring, pointing, waiting };
+    let end = right_end(app, workspace, end, &line_text.small, window, cx);
+    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()));
+    let row = follows_the_pointer(row, &workspace.id, cx)
         .hand()
         .accessibility_label(label.clone())
         .ghost()
@@ -56,17 +66,6 @@ pub(super) fn workspace_row(
         .pl(ROW_INSET)
         .pr_1p5()
         .selected(selected)
-        .on_hover(cx.listener(move |t, hovered: &bool, _, cx| {
-            // Leaving one row and coming onto the next can be heard in either order.
-            if *hovered {
-                t.pointing_at = Some(pointed.clone());
-            } else if t.pointing_at.as_ref() == Some(&pointed) {
-                t.pointing_at = None;
-            } else {
-                return;
-            }
-            cx.notify();
-        }))
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(
             h_flex()
@@ -79,15 +78,55 @@ pub(super) fn workspace_row(
                 // look heavier too.
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
+                // The right end keeps the room between the name and it, so that room can come and go with it.
                 .child(
-                    line_text
-                        .body
-                        .set(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis())
-                        .child(label),
-                )
-                .children(end),
+                    h_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            line_text
+                                .body
+                                .set(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis())
+                                .child(label),
+                        )
+                        .children(end),
+                ),
         );
     row.context_menu(menu).into_any_element()
+}
+
+/// Has the row say when the pointer is over it, which is when it shows its archive button.
+fn follows_the_pointer(row: Button, id: &WorkspaceId, cx: &mut Context<AppView>) -> Button {
+    let (pointed, pressed, let_go) = (id.clone(), id.clone(), id.clone());
+    row.on_hover(cx.listener(move |t, hovered: &bool, _, cx| {
+        // Leaving one row and coming onto the next can be heard in either order.
+        if *hovered {
+            t.pointing_at = Some(pointed.clone());
+        } else if t.pointing_at.as_ref() == Some(&pointed) && t.sidebar.pressed.as_ref() != Some(&pointed) {
+            t.pointing_at = None;
+        } else {
+            return;
+        }
+        cx.notify();
+    }))
+    // A pressed row says the pointer has left at the first move, which the listener above then leaves alone, so
+    // the button and what made room for it don't go and come back around a click. Let go over the row, GPUI says
+    // again where the pointer is. Let go anywhere else, nothing does, so the pointer is taken to have left.
+    .on_mouse_down(MouseButton::Left, cx.listener(move |t, _, _, _| t.sidebar.pressed = Some(pressed.clone())))
+    .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.sidebar.pressed = None))
+    .on_mouse_up_out(
+        MouseButton::Left,
+        cx.listener(move |t, _, _, cx| {
+            if t.sidebar.pressed.as_ref() != Some(&let_go) {
+                return;
+            }
+            t.sidebar.pressed = None;
+            if t.pointing_at.as_ref() == Some(&let_go) {
+                t.pointing_at = None;
+                cx.notify();
+            }
+        }),
+    )
 }
 
 /// What a row has at its right end.
@@ -105,19 +144,30 @@ struct End {
 
 /// A pencil while something typed in the workspace isn't sent, then a clock while one of its chats' caches is about to
 /// expire, and after them what the workspace is waiting on the hub for, or else under the pointer the button that
-/// archives it. While there's a pencil or a clock, the button's place is kept beside it, so it stays put as the pointer
-/// comes and goes. Nothing says the cache while the workspace is waiting on the hub, since that's it going or coming.
-/// None when there's nothing, so the name has the row's width.
+/// archives it. The button's place is the row's right end, and whichever of the pencil and the clock is last rests in
+/// the middle of it, under the project's button for a new workspace, so no name is cut short for a button that isn't
+/// there. As the pointer comes, they slide aside while the button fades in, and back as it goes. Nothing says the
+/// cache while the workspace is waiting on the hub, since that's it going or coming. None when there's nothing, so the
+/// name has the row's width.
 fn right_end(
     app: &AppView,
     workspace: &Workspace,
     end: End,
     small: &Placed,
+    window: &mut Window,
     cx: &mut Context<AppView>,
 ) -> Option<AnyElement> {
     let End { drafted, expiring, pointing, waiting } = end;
     let expiring = expiring.filter(|_| waiting.is_none());
-    if !drafted && expiring.is_none() && !pointing && waiting.is_none() {
+    let icons = drafted || expiring.is_some();
+    // How far the button has come, from 0 to 1. The kit keeps it for as long as the row is drawn, so it goes on from
+    // wherever it has got to. A row scrolled out of sight partway finds it at its end once it's back, rather than
+    // where it was, which only cuts short a fade that set off under the pointer and that nobody saw the rest of.
+    let wanted = if pointing && waiting.is_none() { 1. } else { 0. };
+    let came = ElementId::Name(format!("archive-came-{}", workspace.id).into());
+    let came = transition(came, wanted, look::motion::fade(), window, cx);
+    let button = waiting.is_none() && (pointing || came > 0.);
+    if !icons && !button && waiting.is_none() {
         return None;
     }
     let pencil = icon_box(Lucide::Pencil, cx.theme().muted_foreground)
@@ -130,19 +180,25 @@ fn right_end(
         let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, cx.theme().muted_foreground);
         div().flex_none().size_4().flex().items_center().justify_center().child(clock)
     });
-    // Against the button's box, whose padding is the room between the icons and it: a little more than if they were
-    // set edge to edge, so they don't run together.
-    let icons = h_flex().gap_1().when(drafted, |d| d.child(pencil)).children(clock);
-    let end = h_flex().flex_none().child(icons);
-    let end = match waiting {
-        // Text has no padding of its own to keep it off the pencil, as the button has.
-        Some(waiting) => {
-            let doing = doing(format!("doing-{}", workspace.id), waiting, small);
-            end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
-        }
-        None if pointing => end.child(archive_button(app, workspace, cx)),
-        // As wide as the kit's small icon button.
-        None => end.child(div().flex_none().w_6()),
+    let icons_drawn = h_flex().gap_1().when(drafted, |d| d.child(pencil)).children(clock);
+    // With nothing else at the row's end, the room between the name and the button comes and goes with the button.
+    let before = if icons || waiting.is_some() { MARK_GAP } else { MARK_GAP * came };
+    let end = h_flex().flex_none().pl(before).child(icons_drawn);
+    // Text has no padding of its own to keep it off the pencil, as the button has.
+    let end = if let Some(waiting) = waiting {
+        let doing = doing(format!("doing-{}", workspace.id), waiting, small);
+        end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
+    } else {
+        // The icons rest in the middle of the button's place, and end against its box once it has come. Its padding
+        // is then the room between them and it: a little more than if they were set edge to edge, so they don't run
+        // together.
+        let rests = if icons { IN_BUTTONS_PLACE } else { px(0.) };
+        let room = div().flex_none().h(BUTTON).w(rests + (BUTTON - rests) * came);
+        // The button is whole and in its place from the first frame, over the room that's still opening for it, so a
+        // press where it's coming lands on it rather than on the row.
+        let button =
+            button.then(|| div().absolute().top_0().right_0().opacity(came).child(archive_button(app, workspace, cx)));
+        end.relative().child(room).children(button)
     };
     Some(end.into_any_element())
 }
@@ -155,9 +211,9 @@ pub(crate) fn doing(id: String, waiting: &'static str, small: &Placed) -> impl I
     div().id(ElementId::Name(id.into())).role(Role::Status).aria_label(waiting).child(text).test_support()
 }
 
-/// Archives the workspace without opening it. Drawn only while the pointer is over the row, so no name is cut short
-/// to keep room for it. The size and colour of its repository's button for a new workspace, which the row's padding
-/// lines it up under.
+/// Archives the workspace without opening it. Drawn only while the pointer is over the row, and as it fades once the
+/// pointer has gone, so no name is cut short to keep room for it. The size and colour of its repository's button for
+/// a new workspace, which the row's padding lines it up under.
 fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
     let id = workspace.id.clone();
     let button = Button::new(ElementId::Name(format!("archive-{}", workspace.id).into()))
@@ -170,7 +226,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
         .off_while(!app.busy.is_free())
         // A left press stops here, so the row under it isn't pressed. A pressed row would open the workspace that's
         // going once let go. It would also say the pointer had left at the first move, which a quick press makes, and
-        // stop drawing this button before the press was let go. A right press goes on to the row's menu.
+        // start this button fading before the press was let go. A right press goes on to the row's menu.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(cx.listener(move |t, _, _, cx| t.archive(id.clone(), false, cx)));
     div().flex_none().child(button)

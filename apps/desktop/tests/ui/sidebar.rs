@@ -8,9 +8,13 @@ use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedStrin
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{Held, Stack, Ui, home_row, pencil, pull_request, sidebar_row as row};
+use crate::tools::bounds;
 
 /// More than the sidebar has room for in the window.
 const WORKSPACES: usize = 40;
+
+/// Off every row, for the pointer to wait on.
+const ELSEWHERE: &str = "workspace-title";
 
 fn archive_button(id: &WorkspaceId) -> ElementId {
     ElementId::Name(SharedString::from(format!("archive-{id}")))
@@ -135,6 +139,48 @@ fn a_rows_archive_button_stays_under_a_press_while_the_pointer_moves(cx: &mut Te
     ui.wait("it to be archived", |ui| archived(ui, &going));
 }
 
+/// A press on the row itself moves as it's made too, and the row then says the pointer has left, though it hasn't. The
+/// button, and what made room for it, would go and come back around every click.
+#[gpui_kit::test]
+fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_elsewhere(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let (pressed, showing) = (ui.new_workspace(), ui.new_workspace());
+    let button = archive_button(&pressed);
+    ui.hover(row(&pressed));
+    let on_row = bounds(&mut ui, row(&pressed)).center();
+    let held = Some(MouseButton::Left);
+    let press_and_move = |ui: &mut Ui| {
+        ui.cx
+            .update_window(ui.handle, |_, window, cx| {
+                window.pointer_down(on_row, MouseButton::Left, cx);
+                window.pointer_move(on_row + point(px(1.), px(0.)), held, cx);
+            })
+            .unwrap();
+    };
+
+    press_and_move(&mut ui);
+    assert!(ui.has(button.clone()), "the button is still there while the row is held");
+    let elsewhere = bounds(&mut ui, ELSEWHERE).center();
+    ui.cx
+        .update_window(ui.handle, |_, window, cx| {
+            window.pointer_move(elsewhere, held, cx);
+            window.pointer_up(elsewhere, MouseButton::Left, cx);
+        })
+        .unwrap();
+    assert!(!ui.has(button.clone()), "let go off the row, the pointer has left it");
+    assert_eq!(ui.view().selected.as_ref(), Some(&showing), "and that's no click");
+
+    ui.hover(row(&pressed));
+    press_and_move(&mut ui);
+    let at = on_row + point(px(1.), px(0.));
+    ui.cx.update_window(ui.handle, |_, window, cx| window.pointer_up(at, MouseButton::Left, cx)).unwrap();
+    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&pressed));
+    assert!(ui.has(button.clone()), "let go on the row, the pointer is still over it");
+    ui.hover(ELSEWHERE);
+    assert!(!ui.has(button), "and it goes once the pointer does");
+}
+
 /// Shows the workspace, as its row does, and waits until it's showing.
 fn show(ui: &mut Ui, id: &WorkspaceId) {
     ui.click(row(id));
@@ -160,13 +206,55 @@ fn a_rows_pencil_shows_while_something_typed_in_it_isnt_sent(cx: &mut TestAppCon
     assert!(ui.visible(pencil(&typed_in)), "and once another workspace shows");
     assert!(!ui.has(pencil(&other)), "nothing's typed in that one");
     ui.hover(row(&typed_in));
-    assert!(ui.visible(pencil(&typed_in)) && ui.visible(archive_button(&typed_in)), "it stays beside the button");
+    assert!(ui.visible(pencil(&typed_in)) && ui.visible(archive_button(&typed_in)), "it shows beside the button");
 
     show(&mut ui, &typed_in);
     ui.press("enter");
     ui.wait("the prompt to be taken", |ui| ui.composer_text().is_empty());
     show(&mut ui, &other);
     assert!(!ui.has(pencil(&typed_in)), "sending it leaves nothing unsent");
+}
+
+/// The button's place is the row's right end, which a pencil rests in rather than beside, so no name is cut short for
+/// a button that isn't there.
+#[gpui_kit::test]
+fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_shows(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let (other, typed_in) = (ui.new_workspace(), ui.new_workspace());
+    ui.input("half typed");
+    show(&mut ui, &other);
+    // Somewhere with no tooltip, which would ask for frames of its own as it came.
+    ui.hover(ELSEWHERE);
+    ui.allow_motion();
+    let repo = ui.view().records().repos()[0].id.clone();
+    let under = bounds(&mut ui, ElementId::Name(format!("new-in-{repo}").into())).center().x;
+    let (pencil, button) = (pencil(&typed_in), archive_button(&typed_in));
+    let rests = bounds(&mut ui, pencil.clone());
+    assert_eq!(rests.center().x, under, "under the project's button, where its own button goes");
+
+    ui.hover(row(&typed_in));
+
+    assert_eq!(bounds(&mut ui, button.clone()).center().x, under, "the button is in its place at once, to be pressed");
+    assert_eq!(bounds(&mut ui, pencil.clone()), rests, "and the pencil sets off from where it was");
+    ui.play(look::motion::FADE / 4);
+    let aside = bounds(&mut ui, button.clone()).left();
+    let partway = bounds(&mut ui, pencil.clone()).right();
+    assert!(aside < partway && partway < rests.right(), "partway aside: {partway:?}");
+    ui.settle(look::motion::FADE);
+    assert_eq!(bounds(&mut ui, pencil.clone()).right(), aside, "it ends against the button");
+
+    ui.hover(ELSEWHERE);
+
+    assert_eq!(bounds(&mut ui, pencil.clone()).right(), aside, "it sets off back from there");
+    ui.play(look::motion::FADE / 4);
+    let partway = bounds(&mut ui, pencil.clone()).right();
+    assert!(aside < partway && partway < rests.right(), "partway back: {partway:?}");
+    assert!(ui.has(button.clone()), "the button is still fading");
+    ui.settle(look::motion::FADE);
+    assert_eq!(bounds(&mut ui, pencil.clone()), rests, "back where it rests");
+    assert!(!ui.has(button), "and the button has gone");
+    assert_eq!(ui.play(look::motion::FADE), 0, "nothing asks for another frame");
 }
 
 #[gpui_kit::test]

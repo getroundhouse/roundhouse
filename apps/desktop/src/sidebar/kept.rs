@@ -1,6 +1,8 @@
 //! What the sidebar keeps from one frame to the next, besides where it's scrolled to: where each line is on its way,
 //! what holds the order still while someone is using the list, and whether the menu of orders is open.
 
+use protocol::model::WorkspaceId;
+
 use super::LineId;
 use crate::reorder::{Hold, Places};
 use crate::workspace_order::Sort;
@@ -13,6 +15,9 @@ pub(crate) struct Kept {
     pub(super) hold: Hold<Sort>,
     /// The menu of orders is open, so the button it's from shows wherever the pointer is.
     pub(super) sort_menu_open: bool,
+    /// The workspace whose row is held pressed. GPUI has a pressed row say the pointer has left it at the first move,
+    /// and a quick press moves, so until the press is let go the pointer is taken to be where it was.
+    pub(super) pressed: Option<WorkspaceId>,
 }
 
 impl Kept {
@@ -21,5 +26,6 @@ impl Kept {
     pub(crate) fn not_drawn(&mut self) {
         self.hold.not_drawn();
         self.sort_menu_open = false;
+        self.pressed = None;
     }
 }
