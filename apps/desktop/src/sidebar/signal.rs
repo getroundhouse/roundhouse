@@ -74,6 +74,7 @@ mod tests {
             queued: Vec::new(),
             queue_held: false,
             draft: protocol::model::Draft::default(),
+            answer_draft: None,
             rev: protocol::model::Rev::default(),
             title_source: protocol::model::TitleSource::FirstLine,
         }

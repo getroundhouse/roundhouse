@@ -1,9 +1,10 @@
-//! What's typed and attached in a chat's composer and not sent.
+//! What's typed and not sent: in a chat's composer, with what's attached there, in answer to a chat's question, and
+//! in a comment on a workspace's diff. The hub keeps each, so it's there after the app restarts, and in every client.
 
 use serde::{Deserialize, Serialize};
 
 use crate::attachment::Attachment;
-use crate::model::AttachmentId;
+use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide};
 
 /// What's typed and attached in a chat's composer and not sent, kept on the hub so it's there after the app restarts,
 /// and in every client. It's the person's rather than the chat's, which a hub with several people would keep for each.
@@ -40,4 +41,52 @@ impl NewDraft {
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into(), files: Vec::new() }
     }
+}
+
+/// A comment being written on a workspace's diff and not saved, or a saved one being changed, kept on the hub so it's
+/// there after the app restarts, and in every client. A workspace has one at a time, since its diff has one box to
+/// write in. Like a chat's draft, it's the person's.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CommentDraft {
+    /// The changed line it's on, as a saved comment says where it is.
+    pub path: String,
+    pub side: DiffSide,
+    pub line: u32,
+    /// The saved comment it changes, rather than adding one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editing: Option<CommentId>,
+    #[serde(default)]
+    pub text: String,
+}
+
+/// What's chosen and typed in answer to the question a chat's agent is waiting on, and not sent, kept on the hub so
+/// it's there after the app restarts, and in every client. Like a chat's draft, it's the person's.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct AnswerDraft {
+    /// The question it answers, so what was typed for one that's gone is never taken for the next.
+    pub approval_id: ApprovalId,
+    /// What's chosen and typed on each of the questions asked together, in the order they were asked.
+    #[serde(default)]
+    pub answers: Vec<AnswerSoFar>,
+}
+
+impl AnswerDraft {
+    /// Whether anything's chosen or typed, since an answer with nothing is the same as none.
+    pub fn says_anything(&self) -> bool {
+        self.answers.iter().any(|so_far| !so_far.picked.is_empty() || !so_far.typed.is_empty())
+    }
+}
+
+/// What's chosen and typed on one question.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct AnswerSoFar {
+    /// The options chosen, by their place among the question's options.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub picked: Vec<u32>,
+    /// What's typed in the row for another answer.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub typed: String,
+    /// Whether what's typed counts as an answer. Where several answers are allowed, it can be taken back and kept.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub other: bool,
 }

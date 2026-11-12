@@ -93,8 +93,11 @@ impl LiveSession {
         if announce {
             hub.work_changed();
         }
-        // A prompt sent while the agent works changes no status, but it does change when the person was last active.
-        if (announce || appended.dequeued || appended.by_the_person)
+        // A prompt sent while the agent works changes no status, but it does change when the person was last active, and
+        // a question answered while another is open changes none either, but it takes any answer being typed to it. The
+        // feed leaves out a copy whose revision didn't move, so one that took none costs only the read.
+        let answered = matches!(appended.event.body, EventBody::ApprovalResolved { .. });
+        if (announce || appended.dequeued || appended.by_the_person || answered)
             && let Err(e) = self.announce(&hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");

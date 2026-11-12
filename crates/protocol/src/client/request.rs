@@ -6,12 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::files;
+use super::{drafts, files};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
-    NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
+    Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -380,14 +380,9 @@ pub enum ClientRequest {
     SessionMarkUnread {
         id: SessionId,
     },
-    /// Keeps `draft` as what's typed and attached in the session's composer and not sent, in place of what was kept, so
-    /// it's there after the app restarts, and in every client. An empty one clears it. Keeping what's kept already
-    /// changes nothing, so sending it again does nothing more. Answers with the session. A hub older than this refuses
-    /// it, as `is_unsupported` says.
-    SessionDraft {
-        id: SessionId,
-        draft: NewDraft,
-    },
+    SessionDraft(drafts::SessionDraft),
+    SessionAnswerDraft(drafts::SessionAnswerDraft),
+    WorkspaceCommentDraft(drafts::WorkspaceCommentDraft),
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {
         id: SessionId,

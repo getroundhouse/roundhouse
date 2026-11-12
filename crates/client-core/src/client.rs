@@ -17,6 +17,7 @@ mod places;
 mod queue;
 mod start;
 mod stream;
+mod typed;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};

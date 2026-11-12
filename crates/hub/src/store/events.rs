@@ -110,6 +110,17 @@ pub struct Places<'a> {
     pub through: Option<Seq>,
 }
 
+/// For a question answered or cancelled, lets go of what was being typed in answer to it, whoever answered it, since
+/// nobody can send it now.
+fn clear_answer(conn: &Connection, session_id: &SessionId, body: &EventBody) -> Result<(), StoreError> {
+    let EventBody::ApprovalResolved { approval_id, .. } = body else { return Ok(()) };
+    conn.execute(
+        "UPDATE sessions SET answer_draft = NULL WHERE id = ?1 AND json_extract(answer_draft, '$.approval_id') = ?2",
+        params![session_id.as_str(), approval_id.as_str()],
+    )?;
+    Ok(())
+}
+
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
     EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, answers: None }
@@ -183,6 +194,7 @@ impl Store {
             raw: None,
         };
         let subagents = note_subagents(&tx, &event)?;
+        clear_answer(&tx, session_id, body)?;
         tx.commit()?;
         Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, subagents })
     }

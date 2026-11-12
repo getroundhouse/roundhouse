@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::attachment::Attachment;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -55,7 +55,7 @@ fn added(request: &ClientRequest) -> Option<Attachment> {
 
 /// What a fake hub says it heard of a request, for one the keeper makes.
 fn heard_of(request: ClientRequest) -> Option<(SessionId, String)> {
-    if let ClientRequest::SessionDraft { id, draft } = request {
+    if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft }) = request {
         let named = draft.files.iter().map(|file| format!(" {file}"));
         return Some((id, named.fold(draft.text, |text, file| text + &file)));
     }
@@ -267,7 +267,7 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
 fn keeping_hub(socket: &Path, first: u64) -> Client {
     let mut rev = first;
     stand_in_hub::connect(socket, move |request| {
-        let ClientRequest::SessionDraft { id, draft } = request else { return Does::Nothing };
+        let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft }) = request else { return Does::Nothing };
         let session = told(id.as_str(), rev, &draft.text);
         rev += 1;
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Session(session))))

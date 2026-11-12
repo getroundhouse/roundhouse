@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, files};
+use protocol::client::{
+    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files,
+};
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
 use protocol::versions::Versions;
@@ -214,6 +216,9 @@ async fn handle(
         R::WorkspaceArchive { id, force } => C::Workspace(hub.workspace_archive(id, force).await?),
         R::WorkspaceRestore { id } => C::Workspace(hub.workspace_restore(id).await?),
         R::WorkspaceRename { id, title } => C::Workspace(hub.workspace_rename(id, &title).await?),
+        R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) => {
+            C::Workspace(hub.workspace_comment_draft(id, draft).await?)
+        }
         R::WorkspaceRegenerateTitle { id } => C::Workspace(hub.workspace_regenerate_title(id).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
@@ -308,7 +313,10 @@ async fn handle(
         R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
         R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
         R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
-        R::SessionDraft { id, draft } => C::Session(hub.session_draft(id, draft).await?),
+        R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
+        R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
+            C::Session(hub.session_answer_draft(id, draft).await?)
+        }
         R::SessionRename { id, title } => C::Session(hub.session_rename(id, &title).await?),
         R::SessionCancel { id } => {
             hub.session_cancel(id).await?;

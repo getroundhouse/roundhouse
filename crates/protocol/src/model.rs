@@ -25,7 +25,7 @@ pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
-pub use draft::{Draft, NewDraft};
+pub use draft::{AnswerDraft, AnswerSoFar, CommentDraft, Draft, NewDraft};
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};
@@ -278,6 +278,10 @@ pub struct Workspace {
     /// `None` until the hub has looked, and from a hub too old to look.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_found")]
     pub pull_request: Option<PullRequestFound>,
+    /// The comment being written on its diff and not saved, as [`CommentDraft`] says. `None` from a hub that doesn't
+    /// keep it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment_draft: Option<CommentDraft>,
 }
 
 impl Workspace {

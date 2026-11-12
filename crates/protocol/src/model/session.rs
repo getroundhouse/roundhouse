@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode, PromptCache,
-    QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
+    AccountId, AnswerDraft, CACHE_WORTH_TELLING_TOKENS, ContextUsage, Draft, Effort, ModelName, PermissionMode,
+    PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, WorkspaceId,
 };
 use crate::event::AgentTask;
 
@@ -132,6 +132,10 @@ pub struct Session {
     /// keep it, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Draft::is_empty")]
     pub draft: Draft,
+    /// What's chosen and typed in answer to the question its agent is waiting on, as [`AnswerDraft`] says. One for a
+    /// question that has gone means nothing. `None` from a hub that doesn't keep it, and once the chat is closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer_draft: Option<AnswerDraft>,
     #[serde(default)]
     pub rev: Rev,
     #[serde(default)]

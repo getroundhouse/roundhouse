@@ -12,6 +12,7 @@ use crate::model::{
 };
 use crate::tail::{StreamDelta, Tail};
 
+pub mod drafts;
 pub mod files;
 mod request;
 

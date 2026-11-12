@@ -23,6 +23,7 @@ fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64
         title: None,
         title_source: TitleSource::default(),
         pull_request: None,
+        comment_draft: None,
     }
 }
 

@@ -1,9 +1,12 @@
 use protocol::attachment::{Attachment, MAX_PER_PROMPT, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{AttachmentId, Draft, NewDraft, QueuedPrompt, SessionId};
+use protocol::model::{
+    AnswerDraft, AnswerSoFar, AttachmentId, CommentDraft, DiffSide, Draft, NewDraft, QueuedPrompt, SessionId,
+    WorkspaceId,
+};
 
 use crate::store::tests::{open_in, store_with_session};
-use crate::store::{AddedBy, Queued, StoreError};
+use crate::store::{AddedBy, Queued, StoreError, cancelled_approval};
 
 fn id() -> SessionId {
     "s".into()
@@ -178,4 +181,118 @@ fn closing_a_session_takes_its_draft_and_lets_go_of_the_files_only_the_draft_nam
     assert!(!typed_late.changed, "a closed session keeps none");
     assert_eq!(store.set_session_closed(&id(), None).unwrap(), [], "and none comes back as it opens again");
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default());
+}
+
+fn answer(typed: &str) -> AnswerDraft {
+    let so_far = AnswerSoFar { picked: vec![1], typed: typed.to_string(), other: true };
+    AnswerDraft { approval_id: "q".into(), answers: vec![so_far, AnswerSoFar::default()] }
+}
+
+fn comment(text: &str) -> CommentDraft {
+    CommentDraft { path: "src/lib.rs".into(), side: DiffSide::New, line: 12, editing: None, text: text.to_string() }
+}
+
+#[test]
+fn an_answer_being_typed_is_kept_until_another_replaces_it_and_none_clears_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None, "nothing's typed yet");
+    let before = store.get_session(&id()).unwrap().session.rev;
+
+    let kept = store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+
+    assert!(kept.changed);
+    assert!(
+        kept.session.session.rev > before,
+        "clients follow records by revision, so the feed would miss it otherwise"
+    );
+    assert_eq!(kept.session.session, store.get_session(&id()).unwrap().session, "it comes back as stored");
+    assert_eq!(kept.session.session.answer_draft, Some(answer("half")));
+    store.set_answer_draft(&id(), Some(&answer("half an answer"))).unwrap();
+    let again = store.set_answer_draft(&id(), Some(&answer("half an answer"))).unwrap();
+    assert!(!again.changed, "nothing changed, so nothing is announced");
+    assert_eq!(again.session.session.answer_draft, Some(answer("half an answer")));
+    let cleared = [None, None].map(|draft| store.set_answer_draft(&id(), draft).unwrap().changed);
+    assert_eq!(cleared, [true, false]);
+    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None);
+}
+
+#[test]
+fn closing_a_chat_lets_go_of_the_answer_being_typed_and_it_keeps_none_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+
+    store.set_session_closed(&id(), Some(1)).unwrap();
+
+    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None);
+    let typed_late = store.set_answer_draft(&id(), Some(&answer("typed as it closed"))).unwrap();
+    assert!(!typed_late.changed, "a closed session keeps none");
+}
+
+#[test]
+fn answering_a_question_takes_the_answer_being_typed_to_it_and_none_is_kept_for_it_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    store.append(&id(), None, &cancelled_approval("another".into()), None, None, None).unwrap();
+    let answer_draft = || store.get_session(&id()).unwrap().session.answer_draft;
+    assert_eq!(answer_draft(), Some(answer("half")), "another question's answer isn't this one's");
+
+    store.append(&id(), None, &cancelled_approval("q".into()), None, None, None).unwrap();
+
+    assert_eq!(answer_draft(), None);
+    let typed_late = store.set_answer_draft(&id(), Some(&answer("typed elsewhere as it was answered"))).unwrap();
+    assert!(!typed_late.changed, "nobody can send it now");
+    let next = AnswerDraft { approval_id: "next".into(), ..answer("for the next question") };
+    assert!(store.set_answer_draft(&id(), Some(&next)).unwrap().changed);
+}
+
+#[test]
+fn an_answer_with_nothing_chosen_or_typed_is_kept_as_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    let other = AnswerSoFar { other: true, ..AnswerSoFar::default() };
+    let nothing = AnswerDraft { approval_id: "q".into(), answers: vec![other, AnswerSoFar::default()] };
+
+    let kept = store.set_answer_draft(&id(), Some(&nothing)).unwrap();
+
+    assert!(kept.changed);
+    assert_eq!(kept.session.session.answer_draft, None);
+    assert!(!store.set_answer_draft(&id(), None).unwrap().changed, "it's the same as none");
+}
+
+#[test]
+fn a_comment_being_written_is_kept_on_its_workspace_until_none_clears_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let workspace = WorkspaceId::from("w");
+    let before = store.get_workspace(&workspace).unwrap();
+    assert_eq!(before.comment_draft, None, "nothing's being written yet");
+
+    let (kept, changed) = store.set_comment_draft(&workspace, Some(&comment("half"))).unwrap();
+
+    assert!(changed);
+    assert!(kept.rev > before.rev, "clients follow records by revision, so the feed would miss it otherwise");
+    assert_eq!(kept, store.get_workspace(&workspace).unwrap(), "it comes back as stored");
+    assert_eq!(kept.comment_draft, Some(comment("half")));
+    let editing = CommentDraft { editing: Some("c".into()), ..comment("changed") };
+    store.set_comment_draft(&workspace, Some(&editing)).unwrap();
+    let (again, changed) = store.set_comment_draft(&workspace, Some(&editing)).unwrap();
+    assert!(!changed, "nothing changed, so nothing is announced");
+    assert_eq!(again.comment_draft, Some(editing));
+    let cleared = [None, None].map(|draft| store.set_comment_draft(&workspace, draft).unwrap().1);
+    assert_eq!(cleared, [true, false]);
+    assert_eq!(store.get_workspace(&workspace).unwrap().comment_draft, None);
+}
+
+#[test]
+fn a_comment_being_written_on_a_workspace_that_isnt_there_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_in(dir.path());
+
+    let refused = store.set_comment_draft(&"w".into(), Some(&comment("half")));
+
+    assert!(matches!(refused, Err(StoreError::NotFound { kind: "workspace", .. })), "{refused:?}");
 }

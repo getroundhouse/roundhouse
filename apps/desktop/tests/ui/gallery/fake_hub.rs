@@ -11,7 +11,7 @@ use std::sync::Arc;
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome, files,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome, drafts, files,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -105,8 +105,16 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
         }),
         // A draft is taken as a hub that keeps it would, though it's left out of the screen's records, which don't
-        // change.
-        R::SessionGet { id } | R::SessionDraft { id, .. } => reply(C::Session(world.session(&id)?.clone())),
+        // change. So are an answer being typed and a comment being written.
+        R::SessionGet { id }
+        | R::SessionDraft(drafts::SessionDraft { id, .. })
+        | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
+            reply(C::Session(world.session(&id)?.clone()))
+        }
+        R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, .. }) => {
+            let workspace = world.workspaces.iter().find(|w| w.id == id).cloned();
+            reply(C::Workspace(workspace.ok_or_else(|| read_only("keep a comment on a workspace it doesn't show"))?))
+        }
         R::SessionEnsure { workspace_id, .. } => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat in the screen"))?))
