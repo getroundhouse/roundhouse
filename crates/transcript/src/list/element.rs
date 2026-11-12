@@ -8,12 +8,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, Pixels, Style, Window, point, px, relative, size,
+    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId, Hitbox, HitboxBehavior,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Style, Window, point, px, relative, size,
 };
 
 use super::layout::{Layout, Rows, lay_out};
 use super::state::State;
+use crate::selection::Selection;
 
 /// How many windows' height a turn of the wheel can move the top by and still have its place found row by row, each
 /// measured as it's passed. Further than that goes by what the rows between are guessed to come to, which is what a
@@ -32,6 +33,8 @@ pub(super) struct ListElement {
     pub(super) row: DrawRow,
     /// Told a row in or near the window that hasn't been fetched, to fetch it.
     pub(super) want: Rc<dyn Fn(usize)>,
+    /// What's selected of the rows' text, which a press on it starts and a drag past the list's edge scrolls on.
+    pub(super) selection: Selection,
 }
 
 /// The rows as a frame is laying them out, each drawn as wide as the list.
@@ -120,8 +123,8 @@ impl IntoElement for ListElement {
 
 impl Element for ListElement {
     type RequestLayoutState = ();
-    /// The rows that show, to paint.
-    type PrepaintState = Vec<AnyElement>;
+    /// The rows that show, to paint, and where the list hears the pointer.
+    type PrepaintState = (Vec<AnyElement>, Hitbox);
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -153,25 +156,33 @@ impl Element for ListElement {
         (): &mut (),
         window: &mut Window,
         cx: &mut App,
-    ) -> Vec<AnyElement> {
-        // A drag of the scrollbar's thumb ends when the button comes up, which the scrollbar only hears while it's
-        // drawn. If the list wasn't drawn in the last frame, such as when another workspace was shown mid-drag,
-        // that drag is over.
+    ) -> (Vec<AnyElement>, Hitbox) {
+        // A drag of the scrollbar's thumb, or one selecting text, ends when the button comes up, which the scrollbar,
+        // and the list, only hear while they're drawn. If the list wasn't drawn in the last frame, such as when
+        // another workspace was shown mid-drag, that drag is over.
         let drawn_last_frame =
             id.is_some_and(|id| window.with_element_state(id, |was: Option<()>, _| (was, ())).is_some());
         if !drawn_last_frame {
             self.state.borrow_mut().end_drag();
+            self.selection.release();
         }
         // What the rest of the transcript was drawn from in this frame: its button back to the latest row, which
         // shows while the list is scrolled up, and the row its outline marks a prompt by, which it goes by only then.
         let read = |state: &State| state.is_scrolled_up().then(|| state.bottom_row());
         let before = read(&self.state.borrow());
+        self.selection.new_frame();
+        // A pointer held past the top or bottom with the button down scrolls on, for as long as it's held there.
+        if let Some(by) = self.selection.scroll_past_edge(bounds, cx.background_executor().now()) {
+            self.state.borrow_mut().scroll_by(-by);
+            window.request_animation_frame();
+        }
         let layout = self.lay_out(bounds, window, cx);
         self.measure_out_of_sight(bounds.size.width, window, cx);
         if read(&self.state.borrow()) != before {
             // Laying the rows out found another row at the bottom, or the end in sight, so those are drawn again.
             window.request_animation_frame();
         }
+        let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
         let mut rows = Vec::new();
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             for row in layout.rows {
@@ -181,7 +192,12 @@ impl Element for ListElement {
                 }
             }
         });
-        rows
+        // What the rows drew says where the text under the pointer is now, so a drag's end follows it as the list
+        // moves under a pointer held still.
+        if self.selection.follow(bounds) {
+            window.request_animation_frame();
+        }
+        (rows, hitbox)
     }
 
     fn paint(
@@ -190,10 +206,11 @@ impl Element for ListElement {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         (): &mut (),
-        rows: &mut Vec<AnyElement>,
+        (rows, hitbox): &mut (Vec<AnyElement>, Hitbox),
         window: &mut Window,
         cx: &mut App,
     ) {
+        self.selection.hear_the_pointer(hitbox, bounds, window);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             for row in rows {
                 row.paint(window, cx);

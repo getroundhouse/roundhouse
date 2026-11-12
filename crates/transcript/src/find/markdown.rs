@@ -1,71 +1,38 @@
-//! Where the needle is in Markdown, as the chat shows it: in the text the kit's text view renders of it, so
-//! `**parser** is` holds `parser is`, and a link's address holds nothing. Counting reads that text from the kit's own
-//! parse, block by block, and a view finds each block in what it renders, so the two find the same matches.
+//! Where the needle is in Markdown, as the chat shows it: in the text the kit renders of it, so `**parser** is` holds
+//! `parser is`, and a link's address holds nothing. That's read leaf by leaf, from the kit's own parse as
+//! `crate::prose` keys it, so a match never runs from one leaf into the next. Counting parses a text again rather than
+//! asking `crate::prose` for it, since it runs on another thread too.
 
 use std::ops::Range;
-use std::sync::Arc;
 
-use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, Paragraph, parse_markdown};
 use protocol::find::Needle;
+
+use crate::prose::{ATOM, leaves};
 
 /// How many matches `source` shows, rendered.
 pub(crate) fn count(needle: &Needle, source: &str) -> usize {
     if !needle.may_be_in_markdown(source) {
         return 0;
     }
-    shown(source).iter().map(|text| needle.ranges(text).count()).sum()
+    leaves(source).iter().map(|leaf| needle.ranges(leaf).count()).sum()
 }
 
-/// Where the needle is in `rendered`, the text a view renders of `source`, in order. A match never runs from one
-/// block into the next.
+/// Where the needle is in `rendered`, the text the kit's text view renders of `source`, in order. The view renders an
+/// image as nothing, where a leaf has a character for it, but a needle that would run across one isn't in `source`,
+/// whose image has its address between the words, so this finds what counting does.
 pub(crate) fn ranges(needle: &Needle, source: &str, rendered: &str) -> Vec<Range<usize>> {
     if !needle.may_be_in_markdown(source) {
         return Vec::new();
     }
     let mut found = Vec::new();
     let mut from = 0;
-    for text in shown(source).iter().filter(|text| !text.is_empty()) {
+    for text in leaves(source).iter().map(|leaf| leaf.replace(ATOM, "")).filter(|text| !text.is_empty()) {
         let Some(at) = rendered.get(from..).and_then(|rest| rest.find(text.as_str())) else { continue };
         let start = from + at;
-        found.extend(needle.ranges(text).map(|range| start + range.start..start + range.end));
+        found.extend(needle.ranges(&text).map(|range| start + range.start..start + range.end));
         from = start + text.len();
     }
     found
-}
-
-/// The text each block of `source` renders, in order: each paragraph, heading, code block and table cell.
-fn shown(source: &str) -> Vec<String> {
-    let Ok(blocks) = parse_markdown(source, Arc::default()) else { return vec![source.to_string()] };
-    let mut texts = Vec::new();
-    for block in &blocks {
-        gather(block, &mut texts);
-    }
-    texts
-}
-
-fn gather(block: &BlockNode, texts: &mut Vec<String>) {
-    // The kit's blocks can grow, and one it adds is drawn its own way, so what it shows isn't known here.
-    #[expect(clippy::wildcard_enum_match_arm, reason = "the kit's blocks are non-exhaustive")]
-    match block {
-        BlockNode::Root { children, .. }
-        | BlockNode::Blockquote { children, .. }
-        | BlockNode::List { children, .. }
-        | BlockNode::ListItem { children, .. } => {
-            for child in children {
-                gather(child, texts);
-            }
-        }
-        BlockNode::Paragraph(paragraph) | BlockNode::Heading { children: paragraph, .. } => {
-            texts.push(text_of(paragraph));
-        }
-        BlockNode::CodeBlock(code) => texts.push(code.code().to_string()),
-        BlockNode::Table(table) => texts.extend(table.rows().flatten().map(text_of)),
-        _ => {}
-    }
-}
-
-fn text_of(paragraph: &Paragraph) -> String {
-    paragraph.children().iter().map(InlineNode::text).collect()
 }
 
 #[cfg(test)]
@@ -97,5 +64,13 @@ mod tests {
         assert_eq!(texts, ["parser", "parser"]);
         assert_eq!(found[1].start, "The parser\nThe ".len(), "in the second block");
         assert_eq!(found.len(), count(&needle("parser"), source));
+    }
+
+    #[test]
+    fn a_needle_across_an_image_is_found_neither_way() {
+        let (source, rendered) = ("before ![a picture](a.png)after", "before after");
+
+        assert_eq!(count(&needle("before after"), source), 0);
+        assert!(ranges(&needle("before after"), source, rendered).is_empty());
     }
 }

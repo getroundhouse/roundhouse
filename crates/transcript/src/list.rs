@@ -31,6 +31,7 @@ use look::{InRegion as _, Off as _, Region};
 
 use crate::around_column;
 use crate::scroll_area::hears_the_wheel;
+use crate::selection::Selection;
 use crate::transcript::Transcript;
 
 mod element;
@@ -60,11 +61,13 @@ pub struct TranscriptList {
     state: Rc<RefCell<State>>,
     /// The transcript, which is drawn again when the list moves.
     view: EntityId,
+    /// What's selected of the rows' text, which a press in the list starts and a drag past its edge scrolls on.
+    selection: Selection,
 }
 
 impl TranscriptList {
-    pub(crate) fn new(cx: &mut Context<Transcript>) -> Self {
-        Self { state: Rc::new(RefCell::new(State::new())), view: cx.entity_id() }
+    pub(crate) fn new(selection: Selection, cx: &mut Context<Transcript>) -> Self {
+        Self { state: Rc::new(RefCell::new(State::new())), view: cx.entity_id(), selection }
     }
 
     /// How many rows there are, loaded or not.
@@ -172,6 +175,12 @@ impl TranscriptList {
         self.state.borrow().out_of_date_near_the_top(usize::MAX).len()
     }
 
+    /// Each height `row` has been measured at, in turn.
+    #[cfg(feature = "testing")]
+    pub fn heights_measured(&self, row: usize) -> Vec<Pixels> {
+        self.state.borrow().measures.get(&row).cloned().unwrap_or_default()
+    }
+
     /// How tall the row at `row` was when it was last measured, or `None` if it never has been.
     #[cfg(feature = "testing")]
     pub fn row_height(&self, row: usize) -> Option<Pixels> {
@@ -211,6 +220,7 @@ impl TranscriptList {
             state: self.state.clone(),
             row: Box::new(spaced),
             want: Rc::new(want),
+            selection: self.selection.clone(),
         };
         let bounce = ScrollBounce::new((id.clone(), "bounce"), self, element).on_scroll(move |_, cx| cx.notify(view));
         let viewport = div()

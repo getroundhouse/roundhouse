@@ -9,8 +9,8 @@ use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
-    Stateful, Styled, WeakEntity, div, px,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
+    Styled, WeakEntity, div, px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -22,6 +22,8 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
+use crate::prose::{Prose, TextAt, Written};
+use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
 
@@ -30,6 +32,7 @@ mod approval;
 mod around;
 mod asked;
 mod cache_rule;
+mod column;
 pub(crate) mod compaction;
 mod line;
 mod mode;
@@ -44,45 +47,17 @@ mod turn_times;
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
 pub(crate) use around::{NEAR, REACH};
+pub(crate) use column::room_under;
+pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
 
 use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
+use column::column;
 use prompt::{Progress, Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
 use tools::Toggle;
-
-/// The reading column. Wide windows keep lines short enough to read, and the column stays centred.
-const COLUMN: f32 = 848.0;
-/// How far the composer reaches past the column on each side, so the transcript's text sits inside its edges.
-const COMPOSER_REACH: f32 = 24.0;
-/// The room the composer's row leaves between the chat's rows and the composer, or a question in its place.
-pub const ABOVE_THE_COMPOSER: Pixels = px(4.);
-
-/// What's left between the list and what's under it: the composer's room in a chat, and nothing in a subagent's tab,
-/// which has no composer, since a subagent can't be prompted.
-pub(crate) fn room_under(m: &Model) -> Pixels {
-    if m.alone.is_some() { Pixels::ZERO } else { ABOVE_THE_COMPOSER }
-}
-
-/// What's drawn under the transcript in its column, such as a note, so it starts where the rows do in a pane of any
-/// width. It's inset as the list insets each row, and then as the row is.
-pub fn in_column(content: impl IntoElement) -> Div {
-    div().w_full().px_3().child(column(content))
-}
-
-/// As wide as the composer under the transcript, which is centred under the column and wider than it on each side, for
-/// the composer, and for the list's button back to its latest row, which sits on the composer's left edge. In a pane
-/// too narrow for both, it keeps its own margin from the pane's edges, so it reaches less far past the column.
-pub fn around_column(content: impl IntoElement) -> Div {
-    let width = px(COLUMN + 2. * COMPOSER_REACH);
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(width).child(content))
-}
-
-fn column(content: impl IntoElement) -> Div {
-    div().w_full().px_4().flex().justify_center().child(div().w_full().max_w(px(COLUMN)).child(content))
-}
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
 #[derive(Clone, Copy)]
@@ -99,6 +74,9 @@ pub(crate) struct Shared {
     pub(crate) line_text: LineText,
     /// Where every text view the rows draw is made.
     pub(crate) texts: LongTexts,
+    /// The agent's words the rows draw from the kit's blocks, and what's selected of them.
+    pub(crate) prose: Prose,
+    pub(crate) selection: Selection,
 }
 
 pub(crate) fn render_row(
@@ -291,7 +269,9 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
                 .iter()
                 .enumerate()
                 .zip(&around.blocks)
-                .filter_map(|((_, block), drawing)| render_block(seq, block, drawing, shared, find, cx))
+                .filter_map(|((ix, block), drawing)| {
+                    render_block(seq, InRow::Own(ix), block, drawing, shared, find, cx)
+                })
                 .collect();
             if rendered.is_empty() {
                 return empty();
@@ -344,8 +324,18 @@ fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
     row().child(div().text_sm().text_color(color).child(find::marked(text.into(), marks, &[], None))).into_any_element()
 }
 
+/// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
+/// words are.
+#[derive(Clone, Copy)]
+pub(in crate::rows) enum InRow {
+    Own(usize),
+    Call,
+}
+
+/// A block of the event at `seq`, drawn in the row `in_row` says.
 fn render_block(
     seq: Seq,
+    in_row: InRow,
     block: &ContentBlock,
     drawing: &BlockAround,
     shared: &Shared,
@@ -356,6 +346,17 @@ fn render_block(
     let (fold, open, whole) = (drawing.fold, drawing.open, drawing.whole);
     let toggle = Toggle { seq, key, fold, open, whole, shared, find };
     Some(match block {
+        // In a row of its own, the transcript draws it from the kit's blocks, and selects it itself.
+        ContentBlock::Text { text, images } if let InRow::Own(block) = in_row => {
+            let written = Written { at: TextAt { seq, block }, id: (key.clone(), Part::Text), text };
+            // The view the agent wrote it into, until the record has a parse of its own.
+            let meanwhile = || {
+                let view = shared.texts.kept(text_id(key), text)?.image_source(shared.linked.resolver(seq, images));
+                Some(find::markdown_view(view, &written.id, find, None))
+            };
+            shared.prose.draw(&shared.selection, find, &written, shared.linked.resolver(seq, images), meanwhile)
+        }
+        // In a call's row, as a subagent's words are, it's the kit's text view.
         ContentBlock::Text { text, images } => {
             let view = agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images));
             find::markdown_view(view, &(key.clone(), Part::Text), find, None)

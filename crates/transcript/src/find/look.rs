@@ -181,14 +181,41 @@ impl FindLook {
 
     /// [`FindLook::marks`] of the text `text` makes, which is only made while something's being found.
     pub(crate) fn marks_of<'t>(&self, id: &TextId, text: impl FnOnce() -> Cow<'t, str>) -> Marks {
-        let Some(needle) = &self.needle else { return Marks::default() };
+        if self.needle.is_none() {
+            return Marks::default();
+        }
         let text = text();
+        self.marks_found(id, text.len(), |needle| needle.ranges(&text).collect())
+    }
+
+    /// [`FindLook::marks`] of each of `leaves`, the leaves of the Markdown text `id`, such as its paragraphs, none of
+    /// which a match runs on from into the next. They're counted as one text, as find counts them, each a line after
+    /// the last. None while nothing's being found.
+    pub(crate) fn marks_in_leaves(&self, id: &TextId, leaves: &[String]) -> Vec<Marks> {
+        if self.needle.is_none() {
+            return Vec::new();
+        }
+        let starts: Vec<usize> =
+            (leaves.iter()).scan(0, |at, leaf| Some(std::mem::replace(at, *at + leaf.len() + 1))).collect();
+        let len = starts.last().zip(leaves.last()).map_or(0, |(start, leaf)| start + leaf.len());
+        let all = self.marks_found(id, len, |needle| {
+            (leaves.iter().zip(&starts))
+                .flat_map(|(leaf, start)| needle.ranges(leaf).map(move |range| range.start + start..range.end + start))
+                .collect()
+        });
+        leaves.iter().zip(&starts).map(|(leaf, start)| all.within(*start, start + leaf.len())).collect()
+    }
+
+    /// The marks of the text `id`, `len` long, with the needle where `find` says, worked out once for each length
+    /// it's drawn at.
+    fn marks_found(&self, id: &TextId, len: usize, find: impl FnOnce(&Needle) -> Rc<[Range<usize>]>) -> Marks {
+        let Some(needle) = &self.needle else { return Marks::default() };
         let mut found = self.found.borrow_mut();
         let ranges = match found.get(id) {
-            Some((len, ranges)) if *len == text.len() => ranges.clone(),
+            Some((was, ranges)) if *was == len => ranges.clone(),
             Some(_) | None => {
-                let ranges: Rc<[Range<usize>]> = needle.ranges(&text).collect();
-                found.insert(id.clone(), (text.len(), ranges.clone()));
+                let ranges = find(needle);
+                found.insert(id.clone(), (len, ranges.clone()));
                 ranges
             }
         };

@@ -4,13 +4,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use client_core::session_log::{PromptState, Row, SessionLog};
+use client_core::session_log::SessionLog;
 use client_core::{Client, OpenSession, View};
 use gpui_kit::{
     AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, Task, Window,
 };
 use protocol::attachment::Attachment;
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::SessionEvent;
 use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
@@ -20,8 +20,10 @@ use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::long_texts::LongTexts;
+use crate::prose::Prose;
 use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
+use crate::selection::Selection;
 pub use events::TranscriptEvent;
 use find::Finding;
 
@@ -31,6 +33,8 @@ mod find;
 mod outline;
 mod record;
 mod sending;
+#[cfg(feature = "testing")]
+mod testing;
 
 use record::tick;
 pub(crate) use record::{AtWork, IdleCache};
@@ -56,8 +60,8 @@ pub(crate) struct Model {
     pub alone: Option<ToolUseId>,
     /// What's being found in the chat, for rows to draw.
     pub find: Rc<FindLook>,
-    /// The Markdown with matches in each row the log holds, as counting found it, which a row keeps views of once
-    /// it's drawn, so they draw them.
+    /// The Markdown the kit's text view draws with matches in each row the log holds, as counting found it, which a
+    /// row keeps views of once it's drawn, so they draw them.
     pub found_markdown: HashMap<usize, FoundMarkdown>,
 }
 
@@ -102,6 +106,10 @@ pub struct Transcript {
     linked: LinkedImages,
     /// Where the rows' text views are made, which keeps each long one and each the agent is still writing.
     texts: LongTexts,
+    /// The agent's words that the transcript draws from the kit's blocks, parsed.
+    prose: Prose,
+    /// What's selected of them.
+    selection: Selection,
     list: TranscriptList,
     _changes: Task<()>,
     /// Draws the time so far again while the agent works, and how long the cache has left while it doesn't.
@@ -139,7 +147,9 @@ impl Transcript {
         };
         let open = OpenSession::start_view(&client, session, view);
         let (rows, loaded) = open.read(rows_and_loaded);
-        let list = TranscriptList::new(cx);
+        let prose = Prose::new(cx.weak_entity());
+        let selection = Selection::new(prose.clone(), cx.focus_handle());
+        let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
@@ -160,6 +170,8 @@ impl Transcript {
             model,
             linked,
             texts: LongTexts::default(),
+            prose,
+            selection,
             list,
             _changes: following,
             ticking,
@@ -197,53 +209,9 @@ impl Transcript {
         self.session.read(SessionLog::loaded_events)
     }
 
-    /// How many rows are loaded as the session's log has them now. The list is told of them when the log says it has
-    /// changed, which is after the last of the pages asked for together is in, so this can be ahead of the list.
-    #[cfg(feature = "testing")]
-    pub fn loaded_rows(&self) -> usize {
-        self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
-    }
-
-    /// Whether every long text the rows have drawn has been read. One is read on another thread from the first time
-    /// its row is drawn, and its row is measured again as it's read, so until then the session's height isn't
-    /// settled.
-    #[cfg(feature = "testing")]
-    pub fn long_texts_read(&self, cx: &gpui_kit::App) -> bool {
-        self.texts.all_read(cx)
-    }
-
-    /// What each long text the rows have drawn, and each text the agent wrote as the transcript watched, shows as
-    /// of what's been read of it.
-    #[cfg(feature = "testing")]
-    pub fn kept_texts(&self, cx: &gpui_kit::App) -> Vec<String> {
-        self.texts.read(cx)
-    }
-
-    /// The event at a row, if it's loaded.
-    pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        self.session.read(|log| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded => None,
-        })
-    }
-
-    /// Where the prompt recorded at a row stands with the agent, if that row is a recorded prompt that's loaded.
-    pub fn prompt_state_at(&self, row: usize) -> Option<PromptState> {
-        self.session.read(|log| match log.row(row) {
-            Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
-                Some(log.prompt_state(event.seq))
-            }
-            Row::Event(_) | Row::Unloaded => None,
-        })
-    }
-
     /// Rows in the list, not counting the streaming tail.
     pub fn row_count(&self) -> usize {
         self.session.read(SessionLog::row_count)
-    }
-
-    pub fn streaming_text(&self) -> String {
-        self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
     }
 
     /// Shows what changed in the session since this last looked, however much that is.
@@ -256,6 +224,7 @@ impl Transcript {
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
         self.session.read(|log| self.texts.let_go(log));
+        self.session.read(|log| self.prose.let_go(log, self.selection.texts().as_ref()));
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed.clone());
             self.find_in_changes(changed, cx);
@@ -294,6 +263,13 @@ impl Transcript {
             self.find_in_changes(row..row + 1, cx);
         }
         cx.notify();
+    }
+
+    /// Measures the row of the event at `seq` again, since it draws what it drew another way, and draws it.
+    pub(crate) fn redrawn(&mut self, seq: Seq, cx: &mut Context<Self>) {
+        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+            self.remeasure_row(row, cx);
+        }
     }
 
     /// Measures `row` again, since what it draws has changed height, and draws it.
@@ -349,6 +325,8 @@ impl Render for Transcript {
             linked: self.linked.clone(),
             line_text: line_text.clone(),
             texts: self.texts.clone(),
+            prose: self.prose.clone(),
+            selection: self.selection.clone(),
         };
         // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
         // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
@@ -368,7 +346,8 @@ impl Render for Transcript {
             cx,
         );
         let bar = self.find_bar(cx);
-        self.with_outline(rows.into_any_element(), line_text, window, cx).children(bar)
+        let chat = self.with_outline(rows.into_any_element(), line_text, window, cx).children(bar);
+        self.selection.with_keys(chat)
     }
 }
 

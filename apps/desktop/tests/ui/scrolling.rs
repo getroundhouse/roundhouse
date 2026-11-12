@@ -19,6 +19,7 @@ use crate::support::{Stack, Ui};
 mod cost;
 mod late_heights;
 mod latest;
+mod selecting;
 
 /// A frame's length, for letting the list measure what it does a few rows to a frame.
 const A_FRAME: Duration = Duration::from_millis(16);

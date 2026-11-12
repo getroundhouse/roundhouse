@@ -7,10 +7,12 @@
 //! the row first showed at the top of the window, the text grew there by all of its length and took the window up to
 //! its start.
 //!
-//! Every row draws Markdown with [`LongTexts::markdown`], which keeps any long text it's given. The list draws each
-//! loaded row soon after it loads, to measure it, so a long text is read then, once, and its row is measured again
-//! whenever what's been read of it changes. Nothing lists ahead of time which texts a row shows, so a text view
-//! added to a row can't be left out, and `clippy.toml` disallows the kit's own ways to make one anywhere else.
+//! A row makes each text view it draws with [`LongTexts::markdown`], which keeps any long text it's given. The agent's
+//! recorded words are drawn by `crate::prose` instead, and with a view from here only until they're parsed. The list
+//! draws each loaded row soon after it loads, to measure it, so a long text is read then, once, and its row is
+//! measured again whenever what's been read of it changes. Nothing lists ahead of time which texts a row shows, so a
+//! text view added to a row can't be left out, and `clippy.toml` disallows the kit's own ways to make one anywhere
+//! else.
 //!
 //! A view draws matches over what it renders, so it keeps any text that has matches of what's being found too, and has
 //! it draw them, as `marks` says.
@@ -91,6 +93,13 @@ impl LongTexts {
     /// grows in is the one it's drawn in once it's recorded under the same ID.
     pub(crate) fn streaming(&self, id: ElementId, text: &str) -> TextView {
         self.view(id, text, Keep::Written)
+    }
+
+    /// The view kept under `id`, brought up to `text`, if one's kept: one the agent wrote `text` into, which its
+    /// recorded row draws until it has a parse of its own.
+    pub(crate) fn kept(&self, id: ElementId, text: &str) -> Option<TextView> {
+        let kept = self.0.borrow().kept.contains_key(&id);
+        kept.then(|| self.view(id, text, Keep::Written))
     }
 
     fn view(&self, id: ElementId, text: &str, keep: Keep) -> TextView {

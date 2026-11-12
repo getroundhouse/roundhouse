@@ -32,7 +32,7 @@ use crate::long_texts::LongTexts;
 use crate::model_names::model_name;
 use crate::rows::around::{Around, blocks_of};
 use crate::rows::shown::{self, Gather};
-use crate::rows::{agent_text, render_block};
+use crate::rows::{InRow, agent_text, render_block};
 use crate::transcript::Transcript;
 
 pub(super) fn draw(
@@ -81,7 +81,7 @@ pub(super) fn shown(
         }
         for (event, around) in events {
             for (block, drawing) in blocks_of(&event.body).iter().zip(&around.blocks) {
-                shown::of_block(block, drawing, gather);
+                shown::of_block(block, drawing, InRow::Call, gather);
             }
         }
         let report = match subagent {
@@ -202,7 +202,9 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
     // It changes as the subagent works, so nothing's found in it.
     let unfound = FindLook::default();
     let drawn: Vec<AnyElement> = (subagent.lately.iter())
-        .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.shared, &unfound, cx))
+        .filter_map(|(block, drawing)| {
+            render_block(toggle.seq, InRow::Call, block, drawing, toggle.shared, &unfound, cx)
+        })
         .collect();
     let lately = (!drawn.is_empty())
         .then(|| v_flex().gap_1().child(div().text_xs().text_color(look::faint()).child("Working on")).children(drawn));
@@ -248,10 +250,9 @@ fn gathered(
     let mut work = Vec::new();
     for (event, around) in events {
         // Drawn in the call's row, so opening one of its calls makes this row taller.
-        let drawn = blocks_of(&event.body)
-            .iter()
-            .zip(&around.blocks)
-            .filter_map(|(block, drawing)| render_block(toggle.seq, block, drawing, toggle.shared, toggle.find, cx));
+        let drawn = blocks_of(&event.body).iter().zip(&around.blocks).filter_map(|(block, drawing)| {
+            render_block(toggle.seq, InRow::Call, block, drawing, toggle.shared, toggle.find, cx)
+        });
         work.extend(drawn);
     }
     let report = gathered_report(answer, events);
