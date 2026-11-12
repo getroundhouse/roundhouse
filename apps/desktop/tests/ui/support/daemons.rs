@@ -1,5 +1,6 @@
 //! The daemons these tests start: building them, and the environment they run in.
 
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -8,24 +9,45 @@ use std::sync::OnceLock;
 pub(crate) fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
-        let output = Command::new(env!("CARGO"))
-            .args([
-                "build",
-                "-p",
-                "daemon",
-                "--bin",
-                "roundhoused",
-                "--example",
-                "fake_claude",
-                "--example",
-                "stand_in_hub",
-            ])
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        once_per_run("ui-binaries", || {
+            let output = Command::new(env!("CARGO"))
+                .args([
+                    "build",
+                    "-p",
+                    "daemon",
+                    "--bin",
+                    "roundhoused",
+                    "--example",
+                    "fake_claude",
+                    "--example",
+                    "stand_in_hub",
+                ])
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        });
         // target/debug/deps/ui-xxxx
         std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().to_path_buf()
     })
+}
+
+/// Builds once per nextest run, which starts a process for each test, so the `OnceLock` above alone would run cargo
+/// for every test, and those take turns on its lock on the target directory. Under `cargo test`, once per process.
+/// `name` names the lock, and the file that says which run built it.
+fn once_per_run(name: &str, build: impl FnOnce()) {
+    let Ok(run) = std::env::var("NEXTEST_RUN_ID") else { return build() };
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    // Cargo makes it only as it compiles a test.
+    std::fs::create_dir_all(dir).unwrap();
+    let lock = File::create(dir.join(format!("{name}.lock"))).unwrap();
+    // Let go as it drops, even in a panic.
+    lock.lock().unwrap();
+    let last_run = dir.join(format!("{name}.run"));
+    if std::fs::read_to_string(&last_run).is_ok_and(|last| last == run) {
+        return;
+    }
+    build();
+    std::fs::write(last_run, run).unwrap();
 }
 
 /// Where `gh` finds a login other than in `HOME`.
