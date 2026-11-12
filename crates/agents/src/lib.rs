@@ -84,6 +84,9 @@ pub struct AgentOptions {
     /// The worker's tools, which the agent is told about as it starts. `None` for a one-off call, and for an agent
     /// that goes without them.
     pub tools: Option<ToolServer>,
+    /// What the agent is told about working in Roundhouse, added to its system prompt at every launch. `None` for a
+    /// one-off call, which has a system prompt of its own.
+    pub instructions: Option<String>,
 }
 
 /// Where an agent reaches the worker's tools, over MCP.

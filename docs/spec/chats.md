@@ -42,6 +42,7 @@
 ![A reply being written](screens/streaming.png)
 
 - **An image a reply points to shows in the reply, if it's in the workspace,** written as Markdown, such as `![The board after](docs/screens/board-after.png)`, by its path in full or from the workspace. One written into the reply as a `data:` address shows too. On a line of its own, it's as wide as it is, up to the column's, and among words it's the height of the text. Images with nothing but spaces or line breaks between them, such as a before and an after on lines one after another, are each on a line of their own, one under another, and so are images written that way in a prompt. It's the file as it was when the reply came, which the hub keeps, so when the agent changes the file and points to it again, each reply keeps what it showed, and every client shows the same, even after the workspace is archived. One that wasn't there when the reply came shows nothing, and so does one in a reply from before the hub kept them. One anywhere else on the machine or on the web shows nothing, since what the agent writes can't be trusted to point only where it should, and neither does anything in the workspace that isn't an image. *Unconfirmed.*
+- **Every agent is told to show the person an image this way,** and to save one it made in the workspace, rather than in the system's temporary directory, where the image wouldn't show. *Unconfirmed:* in the workspace's `.context/tmp/`, where it keeps whatever else it makes for its own use.
 
 **A reply that points to a screenshot in the workspace.** *Unconfirmed.*
 
