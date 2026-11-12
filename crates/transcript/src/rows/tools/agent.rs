@@ -8,6 +8,8 @@
 //! From a hub that doesn't, opened, it shows what it was asked, then everything it did, under a rule, the way the
 //! transcript draws the agent's own work. [`crate::rows::around`] gathers that work from the log.
 
+use client_core::calls::agent::{self, Agent};
+use client_core::calls::count;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
@@ -23,8 +25,6 @@ use protocol::model::{SubagentStatus, ToolUseId};
 use super::line::{Line, Part};
 use super::{Answer, Subagent, Toggle, block, line};
 use crate::TranscriptEvent;
-use crate::calls::agent::{self, Agent};
-use crate::calls::count;
 use crate::find::{FindLook, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

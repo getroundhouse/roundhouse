@@ -1,6 +1,7 @@
 //! The card that asks for a tool's approval, or a plan's.
 
 use client_core::Approval;
+use client_core::calls::ToolCall;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -11,7 +12,6 @@ use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::Seq;
 
 use super::{Shared, empty, row};
-use crate::calls::summarize_input;
 use crate::item_key::ItemKey;
 use crate::prose::{TextAt, Written};
 
@@ -52,13 +52,14 @@ pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Sha
         ),
         Asking::ToolUse | Asking::Questions { .. } | Asking::Unknown => {
             let deny = answer_button("deny", "Deny", approval.refused());
+            let summary = description.clone().or_else(|| ToolCall::read(tool_name, input).summary());
             (
                 format!("{tool_name} needs approval"),
                 div()
                     .text_xs()
                     .font_family(theme.mono_font_family.clone())
                     .text_color(theme.muted_foreground)
-                    .child(description.clone().unwrap_or_else(|| summarize_input(input)))
+                    .children(summary)
                     .into_any_element(),
                 h_flex().gap_2().child(answer_button("allow", "Allow", allow).primary()).child(deny),
             )

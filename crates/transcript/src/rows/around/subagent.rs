@@ -9,12 +9,12 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use client_core::calls::agent;
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
 
 use super::{Around, BlockAround, Opening, Reply, blocks_of, nearby};
-use crate::calls::agent;
 use crate::transcript::Model;
 use lately::Lately;
 

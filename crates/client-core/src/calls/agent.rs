@@ -7,23 +7,23 @@ use serde_json::Value;
 use super::{description, str_field};
 
 /// The tools that hand work to a subagent. Claude calls it `Agent`, and called it `Task`.
-pub(crate) fn hands_off(name: &str) -> bool {
+pub fn hands_off(name: &str) -> bool {
     matches!(name, "Agent" | "Task")
 }
 
 /// A call to one of them. Every input is optional, so the call is always drawn as one, and the subagent's work,
 /// which is left out of its own rows, always shows in it.
-pub(crate) struct Agent<'a> {
+pub struct Agent<'a> {
     /// What the agent said the subagent is for.
     description: Option<&'a str>,
     /// What kind of agent it is, such as `Explore`.
-    pub(crate) kind: Option<&'a str>,
+    pub kind: Option<&'a str>,
     /// What it was asked.
-    pub(crate) prompt: Option<&'a str>,
+    pub prompt: Option<&'a str>,
 }
 
 /// What a subagent is called when the agent didn't say what it's for, wherever the subagent tab is opened from.
-pub(crate) const UNTITLED: &str = "Agent";
+pub const UNTITLED: &str = "Agent";
 
 impl<'a> Agent<'a> {
     pub(super) fn read(input: &'a Value) -> Self {
@@ -35,12 +35,12 @@ impl<'a> Agent<'a> {
     }
 
     /// What its line says: what the agent said the subagent is for.
-    pub(crate) fn title(&self) -> &'a str {
+    pub fn title(&self) -> &'a str {
         self.description.unwrap_or(UNTITLED)
     }
 
     /// What the agent said the subagent is for, if it said, which is the title then.
-    pub(crate) fn described(&self) -> Option<&'a str> {
+    pub fn described(&self) -> Option<&'a str> {
         self.description
     }
 }
@@ -56,7 +56,7 @@ pub fn shown_kind(kind: Option<&str>) -> Option<&str> {
 
 /// Whether a result only says the subagent started in the background. It's addressed to the agent, and the
 /// subagent's report comes later, in its own events.
-pub(crate) fn only_launched(text: &str) -> bool {
+pub fn only_launched(text: &str) -> bool {
     text.starts_with("Async agent launched")
 }
 

@@ -1,10 +1,11 @@
 //! How a request for approval prints: a tool's use by its input, questions with their options numbered, and a plan
 //! whole, each with the command that answers it, and once it's closed, what became of it and what was answered.
 
+use client_core::calls::ToolCall;
 use client_core::{Answered, Approval};
 use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent};
 
-use super::{Printer, summarize_input};
+use super::{Printer, about};
 use crate::run::short;
 
 impl Printer {
@@ -49,9 +50,9 @@ fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
             lines
         }
         Asking::ToolUse | Asking::Unknown => {
-            let summary = description.clone().unwrap_or_else(|| summarize_input(input));
+            let summary = description.clone().or_else(|| ToolCall::read(tool_name, input).summary());
             vec![
-                format!("APPROVAL NEEDED: {tool_name}: {summary}"),
+                format!("APPROVAL NEEDED: {}", about(tool_name, summary)),
                 format!("  roundhouse approve {session} {approval_id}"),
             ]
         }
