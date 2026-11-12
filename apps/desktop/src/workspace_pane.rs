@@ -7,7 +7,7 @@ use client_core::{Client, Drafts, RecordsFeed};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::attachment::Attachment;
-use protocol::model::{Seq, Session, SessionId, Workspace, WorkspaceId};
+use protocol::model::{Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
 use transcript::Transcript;
 
 use crate::all_files::AllFiles;
@@ -289,8 +289,8 @@ impl WorkspacePane {
                 self.pull_request = recorded;
                 self.pass_on_pull_request(cx);
             }
-            // Picks up the last lines of the log once setup has finished.
-            if self.setup_log.is_some() {
+            // Picks up the last lines of the log once setup has finished, while there's a worktree to read it from.
+            if self.setup_log.is_some() && self.workspace().status == WorkspaceStatus::Ready {
                 self.load_setup_log(cx);
             }
         }

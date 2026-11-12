@@ -28,11 +28,15 @@ pub(crate) fn expiring_in_ms(session: &Session, now_ms: i64) -> Option<i64> {
 }
 
 /// Whether anything outside a transcript says what the caches of `workspace`'s chats hold: not for an archived one,
-/// which nobody works in, or one still being made, or in a state this app doesn't know.
+/// which nobody works in, or one on its way there or back, or still being made, or in a state this app doesn't know.
 pub(crate) fn told_of(workspace: &Workspace) -> bool {
     match workspace.status {
         WorkspaceStatus::Ready => true,
-        WorkspaceStatus::Creating | WorkspaceStatus::Archived | WorkspaceStatus::Unknown => false,
+        WorkspaceStatus::Creating
+        | WorkspaceStatus::Archiving
+        | WorkspaceStatus::Archived
+        | WorkspaceStatus::Restoring
+        | WorkspaceStatus::Unknown => false,
     }
 }
 

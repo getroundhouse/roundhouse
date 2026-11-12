@@ -1,4 +1,4 @@
-//! Making, archiving and restoring workspaces.
+//! Making workspaces, and listing them. `archiving.rs` archives and restores them.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -10,14 +10,14 @@ use protocol::model::{
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use providers::Provider;
-use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 use super::ready::ReadyWorkspace;
 use super::{Hub, new_id, unexpected};
 use crate::error::{internal, provider_failed};
-use crate::session::Command;
 use crate::store::{Made, Store, now_ms};
+
+mod archiving;
 
 /// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
 pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
@@ -272,115 +272,5 @@ impl Hub {
 
     pub(crate) async fn workspace_list(&self, include_archived: bool) -> Result<Vec<Workspace>, ApiError> {
         self.blocking(move |store| store.list_workspaces(include_archived)).await
-    }
-
-    pub(crate) async fn workspace_archive(
-        self: &Arc<Self>,
-        id: WorkspaceId,
-        force: bool,
-    ) -> Result<Workspace, ApiError> {
-        let (workspace, path) = self.ready_workspace(&id).await?.into_parts();
-        let repo = {
-            let repo_id = workspace.repo_id.clone();
-            self.blocking(move |store| store.get_repo(&repo_id)).await?
-        };
-        let link = self.ensure_worker(&id).await?;
-
-        // Before anything changes, so refusing leaves the workspace as it was.
-        let status = link.call(WorkerRequest::GitStatus { path: path.clone() }).await;
-        if !force
-            && let Ok(WorkerResponse::GitStatus(status)) = &status
-            && let Some(loss) = status.loss_if_removed()
-        {
-            return Err(ApiError::new(ErrorCode::NeedsForce, loss));
-        }
-
-        // Interrupt setup first, so the script isn't running in a worktree that's about to go.
-        let _ = link.call(WorkerRequest::CancelSetup).await;
-        self.call_off_waits_of(&id).await?;
-        let script = WorkerRequest::ArchiveScript {
-            repo_path: repo.path.clone(),
-            path: path.clone(),
-            env: workspace_env(&workspace, &repo),
-        };
-        match link.call(script).await {
-            Ok(_) => {}
-            Err(e) if !force => return Err(e),
-            Err(e) => warn!(workspace = workspace.name, "the archive script failed: {}", e.message),
-        }
-
-        self.stop_workspace_agents(&id).await?;
-        // Again, now that none can start one, since an agent still running as the script ran could have, and marking the
-        // workspace archived would end that one with no client told.
-        self.call_off_waits_of(&id).await?;
-        // Checks again unless forced, because the agent may have written files before it stopped.
-        let reply = link.call(WorkerRequest::RemoveWorkspace { repo_path: repo.path, path, force }).await?;
-        if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(&reply));
-        }
-        let provider = self.provider(&workspace.provider)?;
-        self.close_worker(&workspace, &link, provider.as_ref()).await;
-        // Agents are expected to rename their branch to match the work. Restoring needs its real name.
-        let branch = match status {
-            Ok(WorkerResponse::GitStatus(status)) => status.branch,
-            _ => None,
-        };
-        let archived = id.clone();
-        self.blocking(move |store| {
-            if let Some(branch) = branch {
-                store.set_workspace_branch(&archived, &branch)?;
-            }
-            store.set_workspace_archived(&archived, true)
-        })
-        .await
-        .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))
-    }
-
-    async fn stop_workspace_agents(self: &Arc<Self>, workspace_id: &WorkspaceId) -> Result<(), ApiError> {
-        let sessions: Vec<_> = {
-            let owned = workspace_id.clone();
-            self.blocking(move |store| store.list_sessions(&owned)).await?
-        };
-        for session in sessions {
-            let live = self.live_session(&session.id).await?;
-            if !live.agent_running() {
-                // Its waits were called off as archiving started. Archiving goes on whether or not they come off its list.
-                if let Err(e) = live.unlist_waits().await {
-                    warn!(session = %session.id, "couldn't take an archived chat's waits off its list: {e}");
-                }
-                continue;
-            }
-            let (reply, done) = oneshot::channel();
-            live.command(Command::Stop { reply }).await?;
-            done.await.map_err(|_| internal("the session has stopped"))??;
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn workspace_restore(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
-        let workspace = self.workspace(&id).await?;
-        if workspace.status != WorkspaceStatus::Archived {
-            return Err(ApiError::new(ErrorCode::Conflict, format!("workspace {} isn't archived", workspace.name)));
-        }
-        let repo = {
-            let repo_id = workspace.repo_id.clone();
-            self.blocking(move |store| store.get_repo(&repo_id)).await?
-        };
-        let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
-        let link = self.ensure_worker(&id).await?;
-        let setup_repo = repo.clone();
-        let reply =
-            link.call(WorkerRequest::RestoreWorkspace { repo_path: repo.path, path, branch: workspace.branch }).await?;
-        if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(&reply));
-        }
-        let restored = self.blocking(move |store| store.set_workspace_archived(&id, false)).await?;
-        let restored = ReadyWorkspace::new(restored)?;
-        // The worktree has only the branch it's restored on now, which its record says before it's announced.
-        self.watch_branches_from_now(&restored, &link).await;
-        let restored = self.ready_workspace(restored.id()).await?;
-        self.notify(HubNotice::Workspace(restored.workspace().clone()));
-        // A restored worktree has lost what setup made, since none of it is committed.
-        self.start_setup(setup_repo, restored).await
     }
 }

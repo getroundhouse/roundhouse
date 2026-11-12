@@ -60,18 +60,21 @@ fn it_sorts_by_when_each_was_made_or_by_name_in_any_case() {
 
 #[test]
 fn it_shows_archived_workspaces_only_when_asked_and_never_one_being_made() {
-    use WorkspaceStatus::{Archived as Gone, Creating, Ready, Unknown};
+    use WorkspaceStatus::{Archived as Gone, Archiving, Creating, Ready, Restoring, Unknown};
     let workspaces = [
-        workspace("ready", "r", Ready, 4),
-        workspace("making", "r", Creating, 3),
-        workspace("gone", "r", Gone, 2),
+        workspace("ready", "r", Ready, 6),
+        workspace("going", "r", Archiving, 5),
+        workspace("making", "r", Creating, 4),
+        workspace("gone", "r", Gone, 3),
+        workspace("coming-back", "r", Restoring, 2),
         workspace("strange", "r", Unknown, 1),
     ];
     let shown = |archived| names(&workspaces, &listed(&workspaces, None, archived, Sort::Newest, ""));
 
-    assert_eq!(shown(ArchiveFilter::Hide), ["ready"]);
-    assert_eq!(shown(ArchiveFilter::Show), ["ready", "gone"]);
-    assert_eq!(shown(ArchiveFilter::Only), ["gone"]);
+    // One on its way out or back is where it was until it gets there.
+    assert_eq!(shown(ArchiveFilter::Hide), ["ready", "going"]);
+    assert_eq!(shown(ArchiveFilter::Show), ["ready", "going", "gone", "coming-back"]);
+    assert_eq!(shown(ArchiveFilter::Only), ["gone", "coming-back"]);
 }
 
 #[test]

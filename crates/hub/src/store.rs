@@ -56,7 +56,7 @@ pub use queue::{Changed, Queued};
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
 pub use waits::Seen;
-pub use workspaces::BranchesSet;
+pub use workspaces::{BranchesSet, Ended, Move};
 
 pub struct Store {
     /// One writer, which is what gives each session a gapless sequence.

@@ -32,11 +32,17 @@ pub struct HubConfig {
     pub agents: Vec<AgentDescription>,
 }
 
-/// What the last run left half done: setups that were running, which its workers can't report on to this hub, and
-/// workspaces and instances half-made. Returns the instances it left part way, to be destroyed once the hub is
-/// serving, taken before anything new is made. What it left at work, the hub carries on with as it starts.
+/// What the last run left half done: setups that were running, which its workers can't report on to this hub,
+/// workspaces it was archiving or restoring, and workspaces and instances half-made. Returns the instances it left part
+/// way, to be destroyed once the hub is serving, taken before anything new is made. What it left at work, the hub
+/// carries on with as it starts.
 fn recover(store: &Store) -> Result<Vec<RecordedInstance>, StoreError> {
     store.fail_interrupted_setups()?;
+    // Before what it left at work is read, so the worker of one put back as ready is carried on with.
+    for workspace in store.put_back_moves()? {
+        let status = workspace.status;
+        warn!(workspace = workspace.name, ?status, "putting back a workspace the last run was archiving or restoring");
+    }
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
     }

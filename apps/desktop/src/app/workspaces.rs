@@ -26,7 +26,8 @@ impl AppView {
         let Some(id) = self.selected.clone() else { return };
         if !self.panes.contains_key(&id) {
             let (Some(client), Some(shown)) = (self.client(), self.records.in_workspace(&id)) else { return };
-            if shown.workspace().status != WorkspaceStatus::Ready {
+            // Only for one the sidebar lists, which one being archived is until it's gone.
+            if !crate::sidebar::lists(shown.workspace()) {
                 return;
             }
             let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
@@ -76,7 +77,10 @@ impl AppView {
 
     /// Shows the workspace, or brings it back first if it's archived, as clicking its row does.
     pub(crate) fn open_workspace(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let archived = self.records.workspace(&id).is_some_and(|w| w.status == WorkspaceStatus::Archived);
+        let archived = self
+            .records
+            .workspace(&id)
+            .is_some_and(|w| matches!(w.status, WorkspaceStatus::Archived | WorkspaceStatus::Restoring));
         if archived {
             self.restore(id, cx);
         } else {

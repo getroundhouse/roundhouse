@@ -3,6 +3,7 @@
 use tokio::sync::broadcast::Receiver;
 
 use super::*;
+use crate::store::StoreError;
 
 /// The wait each copy of chat `s` the feed has announced since this was last asked shows, by its ID.
 fn announced(feed: &mut Receiver<HubNotice>) -> Vec<Option<WaitId>> {
@@ -50,20 +51,21 @@ async fn the_feed_announces_the_chat_with_its_open_wait_as_one_starts_and_with_n
     assert_eq!(ended, [Some(None), Some(None), Some(None)]);
 }
 
-/// An agent still running as the archive script runs can start a wait, which archiving ends once its agents have
-/// stopped, and the feed hears, where the workspace being marked archived would end it with nobody told.
+/// An agent still running as the archive script runs can ask for a wait, which is refused, since the workspace's record
+/// says it's being archived, so archiving leaves none that ends with nobody told.
 #[tokio::test(start_paused = true)]
-async fn a_wait_started_as_the_archive_script_runs_is_ended_and_the_feed_hears() {
+async fn a_wait_asked_for_as_the_archive_script_runs_is_refused_and_none_is_left_open() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
+    let refused = Arc::new(parking_lot::Mutex::new(None));
     let link = WorkerLink::answering({
-        let hub = Arc::downgrade(&hub);
+        let (hub, refused) = (Arc::downgrade(&hub), refused.clone());
         move |request| {
             if matches!(request, WorkerRequest::ArchiveScript { .. })
                 && let Some(hub) = hub.upgrade()
             {
-                hub.store.start_wait(&wait(WaitUntil::Done), Seen::default()).unwrap();
-                hub.notify(HubNotice::Session(hub.store.get_session(&"s".into()).unwrap().session));
+                let started = hub.store.start_wait(&wait(WaitUntil::Done), Seen::default());
+                *refused.lock() = Some(matches!(started, Err(StoreError::NotFound { .. })));
             }
             Some(Ok(WorkerResponse::Ok))
         }
@@ -73,8 +75,8 @@ async fn a_wait_started_as_the_archive_script_runs_is_ended_and_the_feed_hears()
 
     hub.workspace_archive("w".into(), true).await.unwrap();
 
-    let copies = announced(&mut feed);
-    assert_eq!(copies.first(), Some(&Some("a".into())), "the wait started");
-    assert_eq!(copies.last(), Some(&None), "and the feed heard it end");
-    assert_eq!(how(&hub.store.wait(&"a".into()).unwrap()), Some(WaitEnd::Cancelled));
+    assert_eq!(*refused.lock(), Some(true), "asked for, and refused");
+    assert!(matches!(hub.store.wait(&"a".into()), Err(StoreError::NotFound { .. })), "it never started");
+    assert!(announced(&mut feed).iter().all(Option::is_none), "no copy of the chat has one open");
+    assert!(hub.store.workspaces_waited_on().unwrap().is_empty());
 }
