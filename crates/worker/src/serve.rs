@@ -10,9 +10,9 @@ use agents::AgentProcess;
 use parking_lot::Mutex;
 use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::frame;
+use protocol::frame::{self, Call};
 use protocol::model::{RunId, SessionId};
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
@@ -122,7 +122,7 @@ where
             error!("frame from the hub is too large");
             break;
         }
-        let call: WorkerCall = match frame::decode(&line) {
+        let Call { id, request } = match frame::read_call::<WorkerRequest>(&line) {
             Ok(call) => call,
             Err(e) => {
                 warn!("ignoring a frame that didn't parse: {e}");
@@ -131,17 +131,17 @@ where
         };
         // Each request runs on a task of its own, so a stop read after this could otherwise be handled
         // before the setup it's for has begun.
-        if matches!(call.request, WorkerRequest::SetupWorkspace { .. }) {
+        if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
             setup_requested(&state);
         }
         let state = state.clone();
         let forwarders = forwarders.clone();
         tokio::spawn(async move {
-            let outcome = match handle(&state, &forwarders, call.request).await {
+            let outcome = match handle(&state, &forwarders, request).await {
                 Ok(response) => WorkerOutcome::Response(response),
                 Err(e) => WorkerOutcome::Error(e),
             };
-            let _ = state.frames.send(WorkerFrame::Reply { id: call.id, outcome }).await;
+            let _ = state.frames.send(WorkerFrame::Reply { id, outcome }).await;
         });
     }
 
@@ -190,13 +190,16 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
 async fn handle(
     state: &Arc<State>,
     forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>,
-    request: WorkerRequest,
+    request: Result<WorkerRequest, serde_json::Error>,
 ) -> Result<WorkerResponse, ApiError> {
     if let Some(reason) = &state.config.refused {
         return Err(ApiError::new(ErrorCode::Conflict, reason.clone()));
     }
-    match request {
+    // One this build can't read is a newer hub's, which does without whatever this worker refuses, where leaving it
+    // unanswered would hold the hub's call until the connection closes.
+    match request.map_err(|e| ApiError::unsupported_request("this worker", Some(&e)))? {
         WorkerRequest::Hello { protocol_version } => hello(protocol_version),
+        WorkerRequest::Unknown => Err(ApiError::unsupported_request("this worker", None)),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
                 &state.config.workspaces_root,

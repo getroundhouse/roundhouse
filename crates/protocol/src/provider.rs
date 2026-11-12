@@ -101,7 +101,7 @@ pub enum ProviderOutcome {
     /// `VersionMismatch` for a hello naming no version the adapter speaks, or a request before hello. `Conflict`
     /// for another hub's hello, or a request the instance's state refuses.
     /// `NotFound` for an instance that isn't there, `Unavailable` when the provider has no room, such as no spot
-    /// instances, `Unsupported` for what the adapter doesn't do, and `Worker` for the rest.
+    /// instances, `Unsupported` for what the adapter doesn't do or can't read, and `Worker` for the rest.
     Error(ApiError),
 }
 

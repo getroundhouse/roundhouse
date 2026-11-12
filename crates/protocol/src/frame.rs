@@ -1,7 +1,7 @@
 //! One JSON value per line. The callers own the IO.
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 /// Far above the largest event seen in real sessions (2.3 MB), but stops a corrupt stream from
 /// growing a buffer without limit.
@@ -15,6 +15,47 @@ pub fn encode<T: Serialize>(value: &T) -> serde_json::Result<Vec<u8>> {
 
 pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
     serde_json::from_slice(line)
+}
+
+/// A request as its reader reads it: the call it's for, and the request, unless this build can't read it.
+#[derive(Debug)]
+pub struct Call<R> {
+    pub id: u64,
+    pub request: Result<R, serde_json::Error>,
+}
+
+/// Reads a request frame, `{"id":…,"request":…}`, as a client, a hub and a provider adapter each send one. A request
+/// this build can't read as a whole, such as one with a value it doesn't know, is from a newer peer, so it still comes
+/// back with its call's `id`, for the reader to refuse once it has checked what it checks of any request. Leaving it
+/// unanswered would hold the call until the connection closes. Fails only for a frame that names no call.
+pub fn read_call<R: DeserializeOwned>(line: &[u8]) -> serde_json::Result<Call<R>> {
+    #[derive(Deserialize)]
+    #[serde(bound = "R: DeserializeOwned")]
+    struct Whole<R> {
+        id: u64,
+        request: R,
+    }
+    #[derive(Deserialize)]
+    struct Named {
+        id: u64,
+    }
+    match decode::<Whole<R>>(line) {
+        Ok(Whole { id, request }) => Ok(Call { id, request: Ok(request) }),
+        Err(error) => Ok(Call { id: decode::<Named>(line)?.id, request: Err(error) }),
+    }
+}
+
+/// The call a reply was for, when the reply as a whole didn't decode, so the call can still be ended. The frames that
+/// carry replies, from a hub, a worker or a provider's adapter, all say `"frame":"reply"`, and only a reply names an
+/// `id` there.
+pub fn reply_id(line: &[u8]) -> Option<u64> {
+    #[derive(Deserialize)]
+    struct Reply {
+        frame: String,
+        id: Option<u64>,
+    }
+    let reply = decode::<Reply>(line).ok()?;
+    if reply.frame == "reply" { reply.id } else { None }
 }
 
 /// The most a buffer for reading frames keeps between them.

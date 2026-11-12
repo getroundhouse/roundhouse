@@ -160,6 +160,10 @@ pub enum WorkerRequest {
     AccountFor {
         agent: AgentKind,
     },
+    /// Any request this build doesn't know, from a hub newer than it. A worker answers with
+    /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

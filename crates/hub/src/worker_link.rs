@@ -44,6 +44,10 @@ fn lost() -> ApiError {
     ApiError::new(ErrorCode::Worker, "the connection to the worker was lost")
 }
 
+fn unreadable_reply(error: &serde_json::Error) -> ApiError {
+    ApiError::new(ErrorCode::Worker, format!("a reply from the worker this hub can't read: {error}"))
+}
+
 impl WorkerLink {
     /// Starts the instance's worker and says hello. On failure nothing is left running, so the next
     /// attempt starts clean.
@@ -174,7 +178,13 @@ async fn read_frames(
         let parsed: WorkerFrame = match frame::decode(bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
-                warn!("ignoring a worker frame that didn't parse: {e}");
+                // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
+                // the connection closes.
+                if let Some(id) = frame::reply_id(bytes) {
+                    link.calls.reply(id, Err(unreadable_reply(&e)));
+                } else {
+                    warn!("ignoring a worker frame that didn't parse: {e}");
+                }
                 continue;
             }
         };

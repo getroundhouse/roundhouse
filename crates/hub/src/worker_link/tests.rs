@@ -27,6 +27,12 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
     }))
 }
 
+/// A hub with one session, whose only provider is `provider`.
+fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
+    let store = Arc::new(store_with_session(dir));
+    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("logs"), ProviderSet::only(provider.clone()), false))
+}
+
 #[tokio::test]
 async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     let dir = tempfile::tempdir().unwrap();
@@ -43,14 +49,7 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     provider.create(&instance_id, None, None, "i").await.unwrap();
     let mut serving = std::process::Command::new("sleep").arg("100").process_group(0).spawn().unwrap();
     ProcessRecord::write(&dir.path().join("instances/i").join(WORKER_RECORD_FILE), serving.id()).unwrap();
-    let store = Arc::new(store_with_session(dir.path()));
-    let hub = Arc::new(Hub::new(
-        store,
-        dir.path().join("attachments"),
-        dir.path().join("logs"),
-        ProviderSet::only(provider.clone()),
-        false,
-    ));
+    let hub = hub_using(dir.path(), &provider);
 
     let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
 
@@ -58,4 +57,22 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     assert!(serving.try_wait().unwrap().is_none(), "the worker serving the instance was ended");
     serving.kill().unwrap();
     serving.wait().unwrap();
+}
+
+/// As from a newer worker, after a rollback.
+#[tokio::test]
+async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let reply = r#"{"frame":"reply","id":1,"response":{"result":"from_a_newer_worker"}}"#;
+    let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
+    let instance_id: InstanceId = "i".into();
+    provider.create(&instance_id, None, None, "i").await.unwrap();
+    let hub = hub_using(dir.path(), &provider);
+    let asked = std::time::Instant::now();
+
+    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+
+    let Err(e) = opened else { panic!("the hello's reply was read") };
+    assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
+    assert!(asked.elapsed() < HELLO_TIMEOUT / 2, "it waited for the time limit");
 }
