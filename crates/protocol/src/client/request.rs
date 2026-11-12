@@ -6,13 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::files;
+use super::{drafts, files};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentDraft, CommentId,
-    DiffSide, HubSettingsChange, NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId,
-    WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
+    Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -381,32 +380,9 @@ pub enum ClientRequest {
     SessionMarkUnread {
         id: SessionId,
     },
-    /// Keeps `draft` as what's typed and attached in the session's composer and not sent, in place of what was kept, so
-    /// it's there after the app restarts, and in every client. An empty one clears it. Keeping what's kept already
-    /// changes nothing, so sending it again does nothing more. Answers with the session. A hub older than this refuses
-    /// it, as `is_unsupported` says.
-    SessionDraft {
-        id: SessionId,
-        draft: NewDraft,
-    },
-    /// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place
-    /// of what was kept, so it's there after the app restarts, and in every client. `None` clears it, as one with
-    /// nothing chosen or typed does, and so does the question being answered or cancelled, whoever answers it, after
-    /// which one for it is left out. Keeping what's kept already changes nothing, so sending it again does nothing
-    /// more. Answers with the session. A hub older than this refuses it, as `is_unsupported` says.
-    SessionAnswerDraft {
-        id: SessionId,
-        draft: Option<AnswerDraft>,
-    },
-    /// Keeps `draft` as the comment being written on the workspace's diff, in place of what was kept, so it's there
-    /// after the app restarts, and in every client. `None` clears it, which a client sends once the comment is saved or
-    /// cancelled, and one on a side of a diff the hub doesn't know is refused, as `CommentAdd` refuses it. Keeping
-    /// what's kept already changes nothing, so sending it again does nothing more. Answers with the workspace. A hub
-    /// older than this refuses it, as `is_unsupported` says.
-    WorkspaceCommentDraft {
-        id: WorkspaceId,
-        draft: Option<CommentDraft>,
-    },
+    SessionDraft(drafts::SessionDraft),
+    SessionAnswerDraft(drafts::SessionAnswerDraft),
+    WorkspaceCommentDraft(drafts::WorkspaceCommentDraft),
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {
         id: SessionId,
