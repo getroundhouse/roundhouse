@@ -20,7 +20,7 @@ use crate::support::{
 };
 
 /// As an update has the hub do: asks it to restart, and waits for it to go. A client starts the next one.
-fn restart(stack: &mut Stack) {
+pub(crate) fn restart(stack: &mut Stack) {
     match stack.client().call(ClientRequest::HubRestart) {
         // The hub did what was asked before its reply got out.
         Ok(ClientResponse::Ok) | Err(ClientError::Disconnected) => {}

@@ -24,6 +24,7 @@ mod hub_settings;
 mod launch_flags;
 mod misbehaving_worker;
 mod model_and_mode;
+mod other_builds;
 mod processes_going_away;
 mod prompt_cache;
 mod providers;
