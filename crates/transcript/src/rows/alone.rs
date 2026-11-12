@@ -2,7 +2,7 @@
 //! What it was asked comes above its first row, and its report, once it's done, in its last. Its last words, which
 //! its report says again, aren't drawn twice.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use client_core::session_log::{Row, SessionLog};
@@ -52,7 +52,7 @@ pub(crate) fn row_of(of: Of, tail: usize) -> Option<usize> {
 
 /// The subagent the tab shows, once its record has come.
 fn shown(m: &Model) -> Option<&Subagent> {
-    m.subagents.get(m.alone.as_ref()?).map(Rc::as_ref)
+    m.subagents.get(m.alone.as_ref()?).map(Arc::as_ref)
 }
 
 /// What the subagent was asked, above the tab's first row, drawn from the kit's blocks, and selected with the rest.
@@ -139,7 +139,7 @@ fn last_message(log: &SessionLog) -> Vec<(usize, &SessionEvent)> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use protocol::event::{ContentBlock, EventBody, SessionEvent};
     use protocol::model::{ModelName, Seq, Subagent, SubagentStatus};
@@ -164,7 +164,7 @@ mod tests {
     /// The tab showing `subagent`.
     fn tab(subagent: Subagent) -> Model {
         let mut m = Model { alone: Some(subagent.call.clone()), ..Model::default() };
-        m.subagents.insert(subagent.call.clone(), Rc::new(subagent));
+        m.subagents.insert(subagent.call.clone(), Arc::new(subagent));
         m
     }
 

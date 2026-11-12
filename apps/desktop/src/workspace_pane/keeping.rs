@@ -128,7 +128,7 @@ impl WorkspacePane {
             self.keeper.took(&session);
             self.take_draft(&session.id, session.draft, cx);
         }
-        if self.keeper.comment_from_elsewhere(&self.workspace) {
+        if self.keeper.comment_from_elsewhere(self.workspace()) {
             self.take_writing(cx);
         }
         let asked = self.open_sessions().filter(|s| self.keeper.answer_from_elsewhere(s)).map(|s| s.id.clone());
@@ -142,16 +142,15 @@ impl WorkspacePane {
     /// before it is.
     pub(super) fn take_writing(&self, cx: &mut Context<Self>) {
         let Some(diff) = &self.diff else { return };
-        self.keeper.took_comment(&self.workspace);
-        let (file, kept) = (diff.file.clone(), self.workspace.comment_draft.clone());
+        self.keeper.took_comment(self.workspace());
+        let (file, kept) = (diff.file.clone(), self.workspace().comment_draft.clone());
         self.with_window(cx, move |_, window, cx| file.update(cx, |f, cx| f.take_writing(kept.as_ref(), window, cx)));
     }
 
     /// The same, for what's chosen and typed in answer to the chat's question, as it's asked or as it changes
     /// elsewhere. One kept for a question that has gone means nothing.
     pub(super) fn take_answer(&self, chat: &SessionId, cx: &mut Context<Self>) {
-        let (Some(panel), Some(session)) = (self.question(chat, cx), self.sessions.iter().find(|s| &s.id == chat))
-        else {
+        let (Some(panel), Some(session)) = (self.question(chat, cx), self.shown.session(chat)) else {
             return;
         };
         self.keeper.took_answer(session);
@@ -168,7 +167,7 @@ impl WorkspacePane {
     /// Has the hub keep the comment being written on the diff, as the file tab asks.
     pub(super) fn keep_writing(&self, at_once: bool, cx: &App) {
         let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
-        let id = &self.workspace.id;
+        let id = &self.workspace().id;
         if at_once {
             self.keeper.set_comment(id, writing);
         } else {
@@ -261,7 +260,7 @@ impl WorkspacePane {
         let chats = self.unsent_chats(cx).filter(|unsent| unsent.lost()).count();
         let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
         let comment = writing.is_some_and(|writing| says_or_carries(&writing.text, 0));
-        let unkept = self.keeper.unkept_in(&Where::Comment(self.workspace.id.clone()));
+        let unkept = self.keeper.unkept_in(&Where::Comment(self.workspace().id.clone()));
         (chats, usize::from(comment && unkept))
     }
 

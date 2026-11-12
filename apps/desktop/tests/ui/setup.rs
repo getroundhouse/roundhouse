@@ -19,7 +19,7 @@ fn a_failed_setup_is_shown_with_its_log_and_can_be_run_again(cx: &mut TestAppCon
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
-    let setup = |ui: &Ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup);
+    let setup = |ui: &Ui| ui.cx.read_entity(&pane, |p, _| p.workspace().setup);
     ui.wait("setup to fail", |ui| matches!(setup(ui), SetupStatus::Failed { .. }));
 
     ui.click("setup-log");
@@ -48,12 +48,12 @@ fn a_setup_cut_off_by_the_hub_crashing_shows_as_failed_after_it_comes_back(cx: &
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
-    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
+    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace().setup == SetupStatus::Running));
 
     stack.crash_hub();
 
     ui.wait("the new hub to say setup didn't finish", |ui| {
-        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace.setup, SetupStatus::Failed { code: None }))
+        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace().setup, SetupStatus::Failed { code: None }))
     });
 }
 
@@ -66,9 +66,9 @@ fn setup_can_be_stopped_from_the_app(cx: &mut TestAppContext) {
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
-    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
+    ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace().setup == SetupStatus::Running));
     ui.click("stop-setup");
     ui.wait("setup to stop", |ui| {
-        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace.setup, SetupStatus::Failed { code: None }))
+        ui.cx.read_entity(&pane, |p, _| matches!(p.workspace().setup, SetupStatus::Failed { code: None }))
     });
 }

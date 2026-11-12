@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use client_core::ClientError;
+use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange};
@@ -38,7 +39,7 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let (id, agent) = (self.workspace.id.clone(), self.new_chat_agent());
+        let (id, agent) = (self.workspace().id.clone(), self.new_chat_agent());
         let finding = self.client.start(move |client| client.session_ensure(&id, agent));
         cx.spawn(async move |this, cx| {
             let found = finding.recv().await;
@@ -53,7 +54,7 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let (id, agent) = (self.workspace.id.clone(), self.new_chat_agent());
+        let (id, agent) = (self.workspace().id.clone(), self.new_chat_agent());
         // It keeps the model and effort, but not plan mode, which belongs to the task at hand.
         let (model, effort) = (self.session().map(|s| s.model.clone()), self.session().map(|s| s.effort));
         // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets what its agent
@@ -93,7 +94,7 @@ impl WorkspacePane {
             }
         }
         if !self.transcripts.contains_key(&id)
-            && let Some(session) = self.sessions.iter().find(|s| s.id == id).cloned()
+            && let Some(session) = self.shown.session(&id).cloned()
         {
             self.make_transcript(session, cx);
         }
@@ -144,7 +145,7 @@ impl WorkspacePane {
     }
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
-        let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id));
+        let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id).to_vec());
         let standing = self.pull_request.for_a_wait();
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
@@ -167,7 +168,7 @@ impl WorkspacePane {
             }
             TranscriptEvent::TurnEnded => {
                 // The hub reads the pull request again itself, and records it, except a hub too old to.
-                if this.workspace.pull_request.is_none() {
+                if this.workspace().pull_request.is_none() {
                     this.refresh_pull_request(cx);
                 }
                 this.turn_ended(cx);
@@ -213,7 +214,7 @@ impl WorkspacePane {
 
     /// Asks first if it would stop an agent that's working.
     pub fn close_chat(&mut self, id: SessionId, window: &mut Window, cx: &mut Context<Self>) {
-        let working = self.sessions.iter().any(|s| s.id == id && s.status.is_active());
+        let working = self.shown.session(&id).is_some_and(|s| s.status.is_active());
         if !working {
             self.finish_closing(id, cx);
             return;
@@ -292,10 +293,11 @@ impl WorkspacePane {
         self.took_reply(session, cx);
     }
 
-    pub(super) fn set_sessions(&mut self, sessions: Vec<Session>, cx: &mut Context<Self>) {
-        let was_open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        self.sessions = sessions;
-        for session in &self.sessions {
+    /// The workspace's sessions have changed since `earlier`, which the pane showed before.
+    pub(super) fn set_sessions(&mut self, earlier: &InWorkspace, cx: &mut Context<Self>) {
+        let was_open = earlier.sessions().iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone());
+        let was_open: Vec<SessionId> = was_open.collect();
+        for session in self.shown.sessions() {
             if let Some((transcript, _)) = self.transcripts.get(&session.id) {
                 transcript.update(cx, |t, cx| t.set_session(session, cx));
             }

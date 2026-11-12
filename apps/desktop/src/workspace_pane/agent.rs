@@ -28,7 +28,7 @@ impl WorkspacePane {
     /// Tells each chat's transcript what the hub says of its agent, which changes only with a new connection.
     pub(super) fn pass_on_agents(&self, cx: &mut Context<Self>) {
         let held = self.records.snapshot();
-        for session in &self.sessions {
+        for session in self.sessions() {
             if let Some((transcript, _)) = self.transcripts.get(&session.id) {
                 let agent = held.agents().of(session.agent);
                 transcript.update(cx, |t, cx| t.set_agent(agent, cx));

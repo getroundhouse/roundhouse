@@ -151,7 +151,7 @@ impl WorkspacePane {
     /// Lets go of an edit whose prompt has left the queue, which the hub does when it sends it.
     pub(super) fn keep_edit_valid(&mut self, cx: &mut Context<Self>) {
         let Some(editing) = &self.queue_edit else { return };
-        let session = self.sessions.iter().find(|s| s.id == editing.session_id);
+        let session = self.shown.session(&editing.session_id);
         let id = &editing.was.client_msg_id;
         let still_queued = session.is_some_and(|s| s.queued.iter().any(|queued| queued.client_msg_id == *id));
         if still_queued {

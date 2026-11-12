@@ -2,11 +2,12 @@
 
 use std::collections::HashMap;
 
+use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::attachment::Attachment;
-use protocol::model::{Account, AccountId, DiffComment, Session, SessionId, Workspace, WorkspaceId};
+use protocol::model::{Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::all_files::AllFiles;
@@ -19,7 +20,6 @@ use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
 use attaching::{Composed, Waiting};
-pub(crate) use context::accounts_named;
 use file_tab::FileTab;
 pub use file_tab::Opened;
 pub(crate) use keeping::drafted;
@@ -91,13 +91,11 @@ pub struct WorkspacePane {
     client: Client,
     /// Client-core's copy of the hub's records, which replies go into.
     records: RecordsFeed,
-    pub workspace: Workspace,
-    /// In the order they were made, including closed ones.
-    pub sessions: Vec<Session>,
+    /// What's shown of the workspace's records, as of client-core's last change: its own, its sessions' and its
+    /// comments', and through them the accounts its sessions name and their subagents.
+    shown: InWorkspace,
     /// A chat to show once client-core's copy has it, such as one just made.
     showing_next: Option<SessionId>,
-    /// What client-core holds for this workspace, for the diff.
-    comments: Vec<DiffComment>,
     pub active: Option<SessionId>,
     /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
     transcripts: HashMap<SessionId, (Entity<Transcript>, Subscription)>,
@@ -117,9 +115,6 @@ pub struct WorkspacePane {
     /// Prompts queued from here that the hub hasn't answered for yet, oldest first.
     queue_pending: Vec<queue::Pending>,
     closed_menu: closed::Menu,
-    /// The records of the accounts the workspace's chats name, which say who each is and what's left of its limits,
-    /// for what sits beside Send.
-    accounts: HashMap<AccountId, Account>,
     busy: Busy,
     /// The app is waiting on the hub for a new title for this workspace.
     retitling: bool,
@@ -157,35 +152,30 @@ impl WorkspacePane {
         self.pull_request.work()
     }
 
-    /// The pane for `workspace` and its `sessions`, with the comments on its diff from `records`.
+    /// The pane for the workspace `shown` is part of, as `records` had it.
     pub fn new(
         client: Client,
         records: RecordsFeed,
         keeper: Drafts,
-        workspace: Workspace,
-        sessions: Vec<Session>,
+        shown: InWorkspace,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let held = records.snapshot();
-        let comments = held.comments(&workspace.id).to_vec();
         let (composer, on_enter) = composer::new_input(window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
             }
         });
-        let pull_request = Lookup::recorded(&workspace).unwrap_or(Lookup::Looking);
-        let accounts = accounts_named(&held, &sessions);
+        let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
         // What the hub kept of each chat's composer, from when this app or another last had it.
-        let (drafts, restoring) = (keeping::drafts_kept_in(&sessions), keeping::files_kept_in(&sessions));
+        let sessions = shown.sessions();
+        let (drafts, restoring) = (keeping::drafts_kept_in(sessions), keeping::files_kept_in(sessions));
         let mut this = Self {
             client,
             records,
-            workspace,
-            sessions,
+            shown,
             showing_next: None,
-            comments,
             active: None,
             transcripts: HashMap::new(),
             drafts,
@@ -197,7 +187,6 @@ impl WorkspacePane {
             queue_edit: None,
             queue_pending: Vec::new(),
             closed_menu: closed::Menu::Shut,
-            accounts,
             busy: Busy::Free,
             retitling: false,
             plan_asked: HashMap::new(),
@@ -227,12 +216,21 @@ impl WorkspacePane {
         this
     }
 
+    pub fn workspace(&self) -> &Workspace {
+        self.shown.workspace()
+    }
+
+    /// In the order they were made, including closed ones.
+    pub fn sessions(&self) -> &[Session] {
+        self.shown.sessions()
+    }
+
     fn open_sessions(&self) -> impl Iterator<Item = &Session> {
-        self.sessions.iter().filter(|s| s.closed_at_ms.is_none())
+        self.sessions().iter().filter(|s| s.closed_at_ms.is_none())
     }
 
     pub fn session(&self) -> Option<&Session> {
-        self.active.as_ref().and_then(|id| self.sessions.iter().find(|s| &s.id == id))
+        self.active.as_ref().and_then(|id| self.shown.session(id))
     }
 
     pub fn transcript(&self) -> Option<Entity<Transcript>> {
@@ -272,39 +270,34 @@ impl WorkspacePane {
         self.load_changes(cx);
     }
 
-    /// What client-core holds for this workspace now. Only what changed is passed on.
-    pub fn set_records(
-        &mut self,
-        workspace: Workspace,
-        sessions: Vec<Session>,
-        comments: Vec<DiffComment>,
-        accounts: HashMap<AccountId, Account>,
-        cx: &mut Context<Self>,
-    ) {
-        self.accounts = accounts;
-        if workspace != self.workspace {
-            if let Some(recorded) = Lookup::recorded(&workspace) {
+    /// What client-core holds for this workspace now. Only what changed since the pane last looked is passed on.
+    pub fn set_records(&mut self, shown: InWorkspace, cx: &mut Context<Self>) {
+        let earlier = std::mem::replace(&mut self.shown, shown);
+        let (id, now) = (self.workspace().id.clone(), self.shown.all().clone());
+        let changes = now.changes_since(earlier.all());
+        if changes.workspace(&id) {
+            if let Some(recorded) = Lookup::recorded(self.workspace()) {
                 self.pull_request = recorded;
                 self.pass_on_pull_request(cx);
             }
-            self.workspace = workspace;
             // Picks up the last lines of the log once setup has finished.
             if self.setup_log.is_some() {
                 self.load_setup_log(cx);
             }
-            // Such as the comment being written, changed elsewhere.
+        }
+        if changes.sessions(&id) {
+            self.set_sessions(&earlier, cx);
+        } else if changes.workspace(&id) {
+            // Such as the comment being written, changed elsewhere, which a change to the sessions takes too.
             self.take_drafts_from_elsewhere(cx);
         }
-        if sessions != self.sessions {
-            self.set_sessions(sessions, cx);
-        }
-        self.pass_on_subagents(cx);
+        self.pass_on_subagents(&changes, cx);
         self.pass_on_agents(cx);
-        if comments != self.comments {
-            if let Some(diff) = &self.diff {
-                diff.review.update(cx, |r, cx| r.set_comments(comments.clone(), cx));
-            }
-            self.comments = comments;
+        if changes.comments(&id)
+            && let Some(diff) = &self.diff
+        {
+            let comments = self.shown.comments().to_vec();
+            diff.review.update(cx, |r, cx| r.set_comments(comments, cx));
         }
         cx.notify();
     }

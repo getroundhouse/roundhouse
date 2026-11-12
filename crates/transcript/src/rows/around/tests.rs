@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use client_core::Answered;
 use client_core::session_log::SessionLog;
@@ -145,7 +145,7 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
     let recent =
         RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
     let mut m = Model::default();
-    m.subagents.insert("agent".into(), Rc::new(working("agent", recent)));
+    m.subagents.insert("agent".into(), Arc::new(working("agent", recent)));
     m.folds.choose(ItemKey::Event(1, 0), Fold::Output, true);
     assert!(Around::read(&log, &m, 1, &agent).images().is_empty(), "its read is closed");
 

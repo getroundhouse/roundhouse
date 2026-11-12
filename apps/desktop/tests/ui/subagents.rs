@@ -217,7 +217,7 @@ fn the_subagent_tab_s_band_names_its_chat_which_it_shows(cx: &mut TestAppContext
     assert_eq!((showing(&ui), ui.active_chat()), (Showing::Subagent, other), "from the other chat");
     // The chat may be titled while the band shows, so it's the title it has now.
     ui.wait("the band to name the chat whose subagent it shows", |ui| {
-        let sessions = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.sessions.clone());
+        let sessions = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.sessions().to_vec());
         let title = sessions.iter().find(|s| s.id == chat).unwrap().title.clone();
         ui.shows_label("subagent-band-chat", title.as_deref().unwrap_or("Untitled"))
     });
@@ -252,7 +252,7 @@ fn an_archived_workspace_s_chats_let_go_of_their_subagents_records(cx: &mut Test
     let mut ui = in_a_new_workspace(cx, &stack);
     a_finished_subagent(&mut ui);
     let chat = ui.active_chat();
-    let workspace = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.workspace.id.clone());
+    let workspace = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.workspace().id.clone());
     assert_eq!(records_held(&ui, &chat), 1);
 
     stack.client().workspace_archive(&workspace, false).unwrap();

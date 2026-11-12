@@ -3,7 +3,7 @@
 //! rows are, and let go, so the transcript never holds more than it would anyway.
 
 use std::collections::{BTreeSet, HashMap};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use client_core::Stretch;
 use client_core::session_log::{SessionLog, Settled};
@@ -17,7 +17,7 @@ use crate::rows::{found_in_row, rows_to_count};
 use crate::transcript::{AtWork, Model, Transcript};
 
 /// The subagents' records, by the call that started each, copied to go to the thread that counts.
-pub(super) type Records = HashMap<ToolUseId, Subagent>;
+pub(super) type Records = HashMap<ToolUseId, Arc<Subagent>>;
 
 impl Transcript {
     /// Counts the rows that draw the events `stretch` was read for, on another thread, then takes the counts of those
@@ -74,7 +74,7 @@ pub(super) fn counted_in(
     // Its own, since what it remembers of where calls are is for the transcript's log, and the agent it names only
     // says how a turn's card reads, which isn't found.
     let mut m = Model::with(AtWork::default());
-    m.subagents = records.into_iter().map(|(call, record)| (call, Rc::new(record))).collect();
+    m.subagents = records;
     let rows: BTreeSet<usize> = holding.iter().flat_map(|place| rows_to_count(&log, &m, *place)).collect();
     rows.into_iter()
         .map(|row| (row, found_in_row(&log, &m, needle, row).iter().map(|found| found.matches).sum()))

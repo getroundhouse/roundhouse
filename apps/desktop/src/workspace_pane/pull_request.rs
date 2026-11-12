@@ -15,7 +15,7 @@ impl WorkspacePane {
     pub(crate) fn act(&mut self, action: Action, cx: &mut Context<Self>) {
         match action {
             Action::Ask(ask) => self.ask(ask, cx),
-            Action::Archive => cx.emit(PaneEvent::Archive(self.workspace.id.clone(), false)),
+            Action::Archive => cx.emit(PaneEvent::Archive(self.workspace().id.clone(), false)),
         }
     }
 
@@ -33,7 +33,7 @@ impl WorkspacePane {
         if let Some(base) = self.pull_request.pull_request().and_then(|pr| pr.base.as_ref()) {
             return base.as_str();
         }
-        let from = self.workspace.base_ref.as_deref().unwrap_or("the default branch");
+        let from = self.workspace().base_ref.as_deref().unwrap_or("the default branch");
         from.strip_prefix("origin/").unwrap_or(from)
     }
 
@@ -42,11 +42,11 @@ impl WorkspacePane {
     /// such as from a hub too old to keep it there.
     pub(super) fn refresh_pull_request(&mut self, cx: &mut Context<Self>) {
         self.pull_request_asks += 1;
-        let (client, id, asked) = (self.client.clone(), self.workspace.id.clone(), self.pull_request_asks);
+        let (client, id, asked) = (self.client.clone(), self.workspace().id.clone(), self.pull_request_asks);
         cx.spawn(async move |this, cx| {
             let found = cx.background_spawn(async move { client.workspace_pull_request(&id) }).await;
             let _ = this.update(cx, |t, cx| {
-                let unrecorded = t.workspace.pull_request.is_none();
+                let unrecorded = t.workspace().pull_request.is_none();
                 if unrecorded && t.pull_request.answer(asked == t.pull_request_asks, found) {
                     t.pass_on_pull_request(cx);
                     cx.notify();

@@ -130,7 +130,7 @@ fn a_diff_opened_after_a_comment_was_written_elsewhere_opens_its_box(cx: &mut Te
     };
 
     stack.client().workspace_comment_draft(&workspace, Some(&kept)).unwrap();
-    let heard = |ui: &mut Ui<'_>| ui.cx.read_entity(&pane, |p, _| p.workspace.comment_draft.is_some());
+    let heard = |ui: &mut Ui<'_>| ui.cx.read_entity(&pane, |p, _| p.workspace().comment_draft.is_some());
     ui.wait("the workspace's record to say it", heard);
 
     let diff = open_a_diff(&mut ui);

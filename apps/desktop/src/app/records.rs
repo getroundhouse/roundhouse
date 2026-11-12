@@ -9,7 +9,7 @@ use protocol::model::Record;
 
 use super::AppView;
 use crate::prompt_cache;
-use crate::workspace_pane::{WorkspacePane, accounts_named};
+use crate::workspace_pane::WorkspacePane;
 
 impl AppView {
     /// Passes on a record a reply carried, so what's shown needn't wait for the feed.
@@ -25,11 +25,8 @@ impl AppView {
         let records = feed.snapshot();
         self.drop_hidden_panes(&records, cx);
         for (id, pane) in &self.panes {
-            let Some(workspace) = records.workspace(id).cloned() else { continue };
-            let its_sessions = records.sessions(id);
-            let (its_comments, its_accounts) = (records.comments(id).to_vec(), accounts_named(&records, its_sessions));
-            let its_sessions = its_sessions.to_vec();
-            pane.update(cx, |p, cx| p.set_records(workspace, its_sessions, its_comments, its_accounts, cx));
+            let Some(shown) = records.in_workspace(id) else { continue };
+            pane.update(cx, |p, cx| p.set_records(shown, cx));
         }
         self.records = records;
         let still_there =

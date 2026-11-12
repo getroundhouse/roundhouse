@@ -52,7 +52,7 @@ impl Ui<'_> {
     pub(crate) fn open_chats(&self) -> Vec<SessionId> {
         let pane = self.pane().unwrap();
         self.cx.read_entity(&pane, |p, _| {
-            p.sessions.iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone()).collect()
+            p.sessions().iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone()).collect()
         })
     }
 
