@@ -92,6 +92,7 @@ fn asking(message: &str, call: &str, approval: &str, input: Value) -> Vec<EventB
             input,
             description: None,
             suggestions: Value::Null,
+            asking: None,
         },
     ]
 }

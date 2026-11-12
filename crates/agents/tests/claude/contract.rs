@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody, FileChange, TurnOutcome};
+use protocol::event::{AgentRunState, ApprovalOutcome, Asking, ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
@@ -76,20 +76,27 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
     let approvals: Vec<_> = events()
         .into_iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalRequested { approval_id, tool_name, tool_use_id, input, description, suggestions } => {
-                Some((approval_id, tool_name, tool_use_id, input, description, suggestions))
-            }
+            EventBody::ApprovalRequested {
+                approval_id,
+                tool_name,
+                tool_use_id,
+                input,
+                description,
+                suggestions,
+                asking,
+            } => Some((approval_id, tool_name, tool_use_id, input, description, suggestions, asking)),
             _ => None,
         })
         .collect();
     let bash: Vec<_> = approvals.iter().filter(|(_, tool, ..)| tool == "Bash").collect();
     assert_eq!(bash.len(), 3);
-    for (id, _, tool_use_id, input, description, suggestions) in bash {
+    for (id, _, tool_use_id, input, description, suggestions, asking) in bash {
         assert!(!id.as_str().is_empty());
         assert!(tool_use_id.as_ref().is_some_and(|t| t.as_str().starts_with("toolu_")));
         assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
         assert!(description.is_some());
         assert!(suggestions.is_array());
+        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse));
     }
 }
 
@@ -140,23 +147,36 @@ fn the_cli_answers_changes_and_says_why_it_refuses() {
 #[test]
 fn a_plan_comes_for_approval_with_its_text() {
     let plan = events().into_iter().find_map(|e| match e {
-        EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == "ExitPlanMode" => Some(input),
+        EventBody::ApprovalRequested { tool_name, input, asking, .. } if tool_name == "ExitPlanMode" => {
+            Some((input, asking))
+        }
         _ => None,
     });
-    assert!(plan.unwrap()["plan"].as_str().is_some_and(|text| !text.is_empty()));
+    let (input, asking) = plan.unwrap();
+    let text = input["plan"].as_str().unwrap();
+    assert!(!text.is_empty());
+    assert_eq!(asking.as_deref(), Some(&Asking::Plan { plan: text.to_string() }), "what it asks says the plan");
 }
 
 #[test]
 fn a_question_comes_for_approval_with_its_options_and_takes_answers_back() {
     let events = events();
     let asked = events.iter().find_map(|e| match e {
-        EventBody::ApprovalRequested { tool_name, input, .. } if tool_name == "AskUserQuestion" => Some(input),
+        EventBody::ApprovalRequested { tool_name, input, asking, .. } if tool_name == "AskUserQuestion" => {
+            Some((input, asking))
+        }
         _ => None,
     });
-    let question = &asked.unwrap()["questions"][0];
+    let (input, asking) = asked.unwrap();
+    let question = &input["questions"][0];
     assert!(question["question"].as_str().is_some());
     assert!(question["options"][1]["label"].as_str().is_some());
     assert!(question["multiSelect"].is_boolean());
+    let Some(Asking::Questions { questions }) = asking.as_deref() else { panic!("{asking:?}") };
+    let read = &questions[0];
+    assert_eq!(Some(read.text.as_str()), question["question"].as_str(), "what it asks says the question");
+    assert_eq!(Some(read.options[1].label.as_str()), question["options"][1]["label"].as_str());
+    assert_eq!(Some(read.multiple), question["multiSelect"].as_bool());
     let answered = events.iter().any(|e| match e {
         EventBody::AgentUser { blocks, .. } => blocks
             .iter()

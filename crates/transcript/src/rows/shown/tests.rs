@@ -186,6 +186,7 @@ fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
         input: input.clone(),
         description: None,
         suggestions: serde_json::Value::Null,
+        asking: None,
     };
     let answered = EventBody::ApprovalResolved {
         approval_id: "q".into(),

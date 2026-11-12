@@ -99,6 +99,7 @@ pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
         input: Value::Null,
         description: None,
         suggestions: Value::Null,
+        asking: None,
     }
 }
 

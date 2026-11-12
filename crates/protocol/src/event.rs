@@ -16,15 +16,19 @@ use crate::model::{
 };
 
 pub use approval::{ApprovalDecision, ApprovalOutcome};
+pub use asking::{Asking, Question, QuestionOption};
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, LinkedImage};
+pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
 pub use task::{AgentTask, TaskKind};
 pub use tokens::TokenUsage;
 
 mod approval;
+mod asking;
 mod compaction;
 mod content;
+mod ending;
 mod file_change;
 mod task;
 mod tokens;
@@ -193,6 +197,11 @@ pub enum EventBody {
         /// Agent-defined options for remembering the decision. Passed back unchanged.
         #[serde(default)]
         suggestions: Value,
+        /// What it asks of the person, as the agent's adapter read it from the tool and its input. `None` in one
+        /// recorded before adapters said, which a client reads from the tool and input as Claude's adapter sent them.
+        /// Boxed, since few events are approvals, and every event takes the room of the largest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asking: Option<Box<Asking>>,
     },
     ApprovalResolved {
         approval_id: ApprovalId,
@@ -344,45 +353,6 @@ pub enum AgentRunState {
     Idle,
     Running,
     RequiresAction,
-    #[serde(other)]
-    Unknown,
-}
-
-/// How a subagent stopped working. One this build doesn't know reads as `Unknown`.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SubagentOutcome {
-    Finished,
-    Failed,
-    /// The agent stopped it, or it went with the agent.
-    Stopped,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TurnOutcome {
-    Success,
-    Cancelled,
-    Error,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ExitReason {
-    /// The hub asked the agent to stop.
-    Requested,
-    /// The agent exited by itself.
-    Unexpected,
-    /// The worker process went away. The provider stops anything it left running.
-    WorkerLost,
-    /// The hub went away while the agent was running. Recorded when the hub next starts.
-    HubRestart,
-    /// The agent could not be started.
-    StartFailed,
     #[serde(other)]
     Unknown,
 }

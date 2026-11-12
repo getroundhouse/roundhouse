@@ -164,6 +164,7 @@ fn open_approvals_are_those_requested_and_not_resolved() {
         input: Value::Null,
         description: None,
         suggestions: Value::Null,
+        asking: None,
     };
     store.append(&"s".into(), None, &requested("a"), None, None, None).unwrap();
     store.append(&"s".into(), None, &requested("b"), None, None, None).unwrap();
