@@ -1,7 +1,8 @@
 //! The MCP server `--mcp-config` names, reached as the real CLI reaches one over HTTP, on protocol `2026-07-28`, with
 //! every header the version asks for. As it launches, it reads the file once, and asks the server `server/discover`
 //! and `tools/list`, and a server that refuses either has failed, as the real CLI marks it. `mcp:TOOL` calls one of
-//! its tools, and what the tool says comes back as the call's result.
+//! its tools, and what the tool says comes back as the call's result. With `CLAUDE_AUTO_BACKGROUND_TASKS=1`, a call
+//! offers to take an MCP task, and one answered with a task goes on in the background, as the real CLI's does.
 //!
 //! `crates/worker/tests/serve.rs` writes the same request by hand, so a change to what the real CLI sends goes in both.
 
@@ -13,6 +14,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use crate::background;
 use crate::settings::flag;
 use crate::turn::Turn;
 
@@ -20,6 +22,16 @@ use crate::turn::Turn;
 const SERVER: &str = "roundhouse";
 
 const VERSION: &str = "2026-07-28";
+
+/// MCP's tasks extension, which the real CLI offers in every request's `_meta` but a call's, and in a call's too with
+/// [`TAKES_TASKS`] set.
+const TASKS: &str = "io.modelcontextprotocol/tasks";
+
+const TAKES_TASKS: &str = "CLAUDE_AUTO_BACKGROUND_TASKS";
+
+/// The real CLI's bounds on how often it asks after a task, and what it takes when the server doesn't say.
+const POLL_BOUNDS_MS: (u64, u64) = (250, 30_000);
+const POLL_DEFAULT_MS: u64 = 2_000;
 
 /// Longer than the hub takes over an agent's read, which can wait 10 s after another, so a server that's stuck fails
 /// the call that reached it, rather than the test waiting on the turn.
@@ -67,31 +79,89 @@ pub(crate) fn connect(args: &[String], state: &Path) {
 /// Calls `tool`, which the model knows as `mcp__roundhouse__TOOL`, as the real CLI names a server's tools.
 pub(crate) fn call(turn: &mut Turn, tool: &str) {
     let tool_use_id = turn.named_tool_use(&format!("mcp__{SERVER}__{tool}"), json!({}));
-    let (text, is_error) = ask(tool).unwrap_or_else(|failed| (failed, true));
-    turn.tool_result(&tool_use_id, &text, is_error);
+    match ask(tool, &tool_use_id) {
+        Ok(Answered::Result(text, is_error)) => turn.tool_result(&tool_use_id, &text, is_error),
+        Ok(Answered::Task(task)) => in_the_background(turn, tool, &tool_use_id, &task),
+        Err(failed) => turn.tool_result(&tool_use_id, &failed, true),
+    }
 }
 
-/// What the tool said, and whether it failed. `Err` with why when it can't be called, as the real CLI says when a
-/// server isn't there or doesn't have the tool.
-fn ask(tool: &str) -> Result<(String, bool), String> {
-    let server = CONNECTED
-        .get()
-        .ok_or("no MCP server was given")?
-        .as_ref()
-        .map_err(|failed| format!("{SERVER} failed: {failed}"))?;
+/// How a server answered a call.
+enum Answered {
+    /// What the tool said, and whether it failed.
+    Result(String, bool),
+    /// An MCP task, which ends later.
+    Task(Value),
+}
+
+/// The server, once it has answered. `Err` with why when it can't be reached, as the real CLI says when a server
+/// isn't there.
+fn server() -> Result<&'static Server, String> {
+    CONNECTED.get().ok_or("no MCP server was given")?.as_ref().map_err(|failed| format!("{SERVER} failed: {failed}"))
+}
+
+/// How the server answered a call to `tool`, for the agent's call `tool_use_id`. `Err` with why when it can't be
+/// called, as the real CLI says when the server doesn't have the tool.
+fn ask(tool: &str, tool_use_id: &str) -> Result<Answered, String> {
+    let server = server()?;
     if !server.tools.iter().any(|listed| listed == tool) {
         return Err(format!("{SERVER} has no tool {tool}"));
     }
-    let result = server.request("tools/call", Some(tool), json!({ "name": tool, "arguments": {} }))?;
+    let params = json!({ "name": tool, "arguments": {}, "_meta": { "claudecode/toolUseId": tool_use_id } });
+    let result = server.request("tools/call", Some(tool), params)?;
+    if result["resultType"] == "task" {
+        return Ok(Answered::Task(result));
+    }
     let text = result["content"][0]["text"].as_str().ok_or(format!("{SERVER} said nothing"))?;
-    Ok((text.to_string(), result["isError"].as_bool().unwrap_or(false)))
+    Ok(Answered::Result(text.to_string(), result["isError"].as_bool().unwrap_or(false)))
+}
+
+/// Lists the task in the background, as the real CLI does, with the call's result saying so, and asks after it every
+/// `pollIntervalMs` the server last gave, asking again after an error. Once it's completed, the agent picks up again by
+/// itself and says the first line of what the tool said, as the CLI starts a turn with a `<task-notification>`.
+fn in_the_background(turn: &mut Turn, tool: &str, tool_use_id: &str, task: &Value) {
+    let id = format!("task_{tool_use_id}");
+    let server_id = task["taskId"].as_str().unwrap().to_string();
+    background::started(turn.config, turn.out, &id, "mcp_task", tool_use_id, &format!("{SERVER}/{tool}"));
+    turn.tool_result(tool_use_id, &format!("The task {server_id} was moved to the background."), false);
+    let (config, out, mut poll) = (turn.config.clone(), turn.out.clone(), poll_interval(task));
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(poll);
+            let Ok(task) = server()
+                .and_then(|server| server.request("tasks/get", Some(&server_id), json!({ "taskId": server_id })))
+            else {
+                continue;
+            };
+            poll = poll_interval(&task);
+            match task["status"].as_str() {
+                Some("completed") => {
+                    let said = task["result"]["content"][0]["text"].as_str().unwrap_or_default();
+                    let said = said.lines().next().unwrap_or_default().replace(';', ",");
+                    return background::finished(&config, &out, &id, Some(format!("say:{said}")));
+                }
+                Some("cancelled" | "failed") => return background::finished(&config, &out, &id, None),
+                _ => {}
+            }
+        }
+    });
+}
+
+fn poll_interval(task: &Value) -> Duration {
+    let (least, most) = POLL_BOUNDS_MS;
+    Duration::from_millis(task["pollIntervalMs"].as_u64().unwrap_or(POLL_DEFAULT_MS).clamp(least, most))
 }
 
 impl Server {
     /// Sends one request and returns its result, or why there wasn't one. `name` goes in `Mcp-Name`, which the real
-    /// CLI sends with a call.
+    /// CLI sends with a call and with a request about a task.
     fn request(&self, method: &str, name: Option<&str>, mut params: Value) -> Result<Value, String> {
-        params["_meta"] = json!({ "io.modelcontextprotocol/protocolVersion": VERSION });
+        let offers_tasks = method != "tools/call" || std::env::var(TAKES_TASKS).is_ok_and(|set| set == "1");
+        let meta = params.as_object_mut().unwrap().entry("_meta").or_insert_with(|| json!({}));
+        meta["io.modelcontextprotocol/protocolVersion"] = json!(VERSION);
+        if offers_tasks {
+            meta["io.modelcontextprotocol/clientCapabilities"] = json!({ "extensions": { TASKS: {} } });
+        }
         let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }).to_string();
         let name = name.map(|name| format!("Mcp-Name: {name}\r\n")).unwrap_or_default();
         let request = format!(

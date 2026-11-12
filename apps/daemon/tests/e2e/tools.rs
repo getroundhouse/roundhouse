@@ -5,11 +5,12 @@
 
 use client_core::Client;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::SessionId;
+use protocol::model::{SessionId, SessionStatus};
 
-use crate::support::gh::{OPEN, StandInGh};
+use crate::support::gh::{MERGED, OPEN, StandInGh};
 use crate::support::{
-    Stack, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_turn_end, wait_until,
+    Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
+    wait_for_turn_end, wait_until,
 };
 
 /// What each of the turn's calls to a tool came back with, and whether it failed, in order.
@@ -107,4 +108,35 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.starts_with("Pull request #7"), "{text}");
     assert_eq!(latest_started_pid(&read_all(&client, &chat.id)), Some(agent), "the agent the last hub started");
+}
+
+/// The call comes back at once, saying it's in the background, and the turn ends with the wait listed there. Once a
+/// read finds the pull request merged, the agent picks up again by itself, from what its CLI asked of the task, and
+/// hears how the wait ended.
+#[test]
+fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    gh.say(OPEN);
+    let client = stack.client();
+    let (workspace, chat) = stack.workspace(&client);
+
+    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    let mut answered = Vec::new();
+    wait_until("the call to come back", || {
+        answered = results(&read_all(&client, &chat.id));
+        !answered.is_empty()
+    });
+    let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
+    assert!(text.contains("moved to the background"), "it was answered with a task: {text}");
+    wait_for_status(&client, &chat.id, SessionStatus::Background);
+    let listed: Vec<_> =
+        client.session_get(&chat.id).unwrap().background_tasks.into_iter().map(|t| t.description).collect();
+    assert_eq!(listed, [Some("roundhouse/wait_for_pull_request".to_string())]);
+    gh.say(MERGED);
+    client.workspace_pull_request(&workspace.id).unwrap();
+
+    let events = wait_for_turn_end(&client, &chat.id, 2);
+    let said = assistant_text(&events);
+    assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
 }

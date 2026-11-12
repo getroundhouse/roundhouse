@@ -16,6 +16,24 @@ pub(super) fn seen_in(pr: &PullRequest) -> Seen {
     }
 }
 
+/// Why a wait on `pr` that doesn't end as it starts can't start yet: commits here that aren't pushed. GitHub's checks
+/// and review would be of an older commit, which ends nothing until they're pushed, so the wait could end only once
+/// the pull request is done, which those commits may be what stands in the way of. A queued pull request merges
+/// whatever the worktree holds, so it's waited on.
+pub(super) fn not_yet(pr: &PullRequest) -> Option<String> {
+    let (ahead, behind) = (pr.local.ahead, pr.local.behind);
+    if ahead == 0 || pr.queue.is_some() {
+        return None;
+    }
+    let here = if ahead == 1 { "1 commit here isn't".to_string() } else { format!("{ahead} commits here aren't") };
+    let then = match behind {
+        0 => "Push, then wait.".to_string(),
+        1 => "It has 1 commit that isn't here, so bring them together, push, then wait.".to_string(),
+        _ => format!("It has {behind} commits that aren't here, so bring them together, push, then wait."),
+    };
+    Some(format!("{here} on the pull request yet, so it would wait on an older commit. {then}"))
+}
+
 /// How `wait` ends, if the pull request as read now, `now`, ends it. What GitHub records ends it only when it's newer
 /// than what it had recorded as the wait started, `seen`, both by GitHub's clock, so what came before ends nothing.
 ///

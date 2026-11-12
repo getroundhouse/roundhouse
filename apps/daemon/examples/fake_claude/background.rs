@@ -23,7 +23,8 @@ static TERMINATED: AtomicBool = AtomicBool::new(false);
 /// A task in the list, as the CLI lists it.
 struct Task {
     id: String,
-    /// Its `task_type`: `local_bash` for a command or a monitor, and `local_agent` for a subagent.
+    /// Its `task_type`: `local_bash` for a command or a monitor, `local_agent` for a subagent, and `mcp_task` for a
+    /// tool's task.
     kind: &'static str,
     description: String,
 }
@@ -59,12 +60,7 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         }
     };
     let id = format!("task_{tool_use_id}");
-    listed(turn.config, turn.out, &id, "local_bash", &format!("Wait for {file}"));
-    emit(
-        turn.out,
-        json!({"type":"system","subtype":"task_started","task_id":id,"tool_use_id":tool_use_id,
-        "task_type":"local_bash","session_id":turn.config.session_id}),
-    );
+    started(turn.config, turn.out, &id, "local_bash", &tool_use_id, &format!("Wait for {file}"));
     turn.tool_result(&tool_use_id, &format!("Command running in background with ID: {id}"), false);
     watch_for_sigterm(turn.config, turn.out);
     let (config, out, file) = (turn.config.clone(), turn.out.clone(), PathBuf::from(file));
@@ -72,13 +68,31 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        notify(&config, &out, &id, "completed");
-        unlisted(&config, &out, &id);
-        // The real CLI tells the agent, which starts a turn of its own, or joins the one that's running.
-        let _ =
-            config.input.send(Input::Resume(Prompt { text: format!("say:finished {}", file.display()), uuid: None }));
+        finished(&config, &out, &id, Some(format!("say:finished {}", file.display())));
     });
     false
+}
+
+/// Lists a task the call `tool_use_id` started, then says which call started it, in the real CLI's order, which the
+/// call's result comes after.
+pub(crate) fn started(config: &Config, out: &Out, id: &str, kind: &'static str, tool_use_id: &str, description: &str) {
+    listed(config, out, id, kind, description);
+    emit(
+        out,
+        json!({"type":"system","subtype":"task_started","task_id":id,"tool_use_id":tool_use_id,"task_type":kind,
+        "description":description,"session_id":config.session_id}),
+    );
+}
+
+/// Ends a task, taking it out of the list. One that `completed`, when `told` is the prompt it gives, has the agent pick
+/// up again, as the real CLI tells the agent, which starts a turn of its own, or joins the one that's running. One
+/// that didn't is `stopped`, and starts nothing.
+pub(crate) fn finished(config: &Config, out: &Out, id: &str, told: Option<String>) {
+    notify(config, out, id, if told.is_some() { "completed" } else { "stopped" });
+    unlisted(config, out, id);
+    if let Some(text) = told {
+        let _ = config.input.send(Input::Resume(Prompt { text, uuid: None }));
+    }
 }
 
 /// Adds a task to the list, and lists them all.
@@ -131,7 +145,8 @@ fn watch_for_sigterm(config: &Config, out: &Out) {
             std::thread::sleep(POLL);
         }
         let stopped: Vec<_> = TASKS.lock().drain(..).collect();
-        for task in &stopped {
+        // A tool's task goes with no word of it, as with the real CLI.
+        for task in stopped.iter().filter(|task| task.kind != "mcp_task") {
             notify(&config, &out, &task.id, "stopped");
         }
         list(&config, &out);
