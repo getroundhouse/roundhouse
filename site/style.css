@@ -91,6 +91,19 @@ a {
   text-decoration: none;
 }
 
+/* A link among words is underlined in copper, faint until the pointer is on it, so it reads as a link without
+   standing out of its sentence. */
+.link {
+  color: var(--fg);
+  text-decoration: underline rgb(208 138 92 / 0.55) 1px;
+  text-underline-offset: 0.22em;
+  transition: text-decoration-color 0.2s;
+}
+
+.link:hover {
+  text-decoration-color: var(--copper);
+}
+
 :focus-visible {
   outline: 2px solid var(--copper);
   outline-offset: 3px;
@@ -166,6 +179,14 @@ canvas.fan {
   gap: 28px;
   font-size: 14px;
   color: var(--muted);
+}
+
+.nav-links a:not(.button) {
+  transition: color 0.2s;
+}
+
+.nav-links a:not(.button):hover {
+  color: var(--fg);
 }
 
 /* Buttons: one main action with a light fill, and an outline for one that opens something. */
@@ -1036,7 +1057,11 @@ kbd {
   color: var(--faint);
 }
 
-.footer-inner a:hover {
+.footer-inner .link {
+  color: var(--muted);
+}
+
+.footer-inner .link:hover {
   color: var(--fg);
 }
 
@@ -1147,6 +1172,14 @@ kbd {
 
   .soon {
     flex-basis: 100%;
+  }
+}
+
+/* The narrowest phones have no room for a link between the name and Download, and the page links to GitHub three
+   more times. */
+@media (max-width: 350px) {
+  .nav-links a:not(.button) {
+    display: none;
   }
 }
 
