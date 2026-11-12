@@ -8,7 +8,7 @@ use std::time::Duration;
 use gpui_kit::AppContext as _;
 use gpui_kit::TestAppContext;
 use gpui_kit::test::ElementSnapshot;
-use protocol::model::seq_index;
+use protocol::model::{SettledAt, seq_index};
 use transcript::Transcript;
 
 use crate::support::{Stack, Ui};
@@ -47,6 +47,9 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     let (events, _) = stack.client().session_read(&session, 1, 50, false).unwrap();
     let call = events.iter().find(|e| matches!(&e.body, protocol::event::EventBody::Assistant { .. })).unwrap();
     let call_row = seq_index(call.seq) - 1;
+    // The first prompt is drawn where the agent took it, once it had started.
+    let took_the_first = |e: &&protocol::event::SessionEvent| SettledAt::of(e).is_some_and(|(p, _)| p == events[0].seq);
+    let first_row = seq_index(events.iter().find(took_the_first).unwrap().seq) - 1;
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_none()), "the call isn't loaded");
 
     // With focus in the message box, as it is when a chat opens.
@@ -62,8 +65,8 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     assert_eq!(says(&ui).as_deref(), Some("5 of 5"));
     ui.press("enter");
     assert_eq!(says(&ui).as_deref(), Some("1 of 5"), "round to the first, in the first prompt");
-    assert_eq!(found_row(&ui), Some(0));
-    ui.wait("the first prompt to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(0).is_some()));
+    assert_eq!(found_row(&ui), Some(first_row));
+    ui.wait("the first prompt to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(first_row).is_some()));
 
     ui.press("enter");
     ui.wait("the call to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_some()));

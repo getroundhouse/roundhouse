@@ -10,7 +10,7 @@ use protocol::model::{Place, Rev, Seq, Subagent, SubagentStatus};
 use serde_json::json;
 
 use super::count::{At, Counts};
-use super::stretch::{Records, counted_in};
+use super::stretch::{Known, Records, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
 use crate::fixtures::{calls_to, event, log, record, within};
 use crate::transcript::Model;
@@ -149,7 +149,8 @@ fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
     let needle = needle("parser");
     let call = || placed(1, calls_to("Agent", &["helper"]));
 
-    let read = counted_in(vec![call()], &[1], &needle, reported("helper", "The parser is fixed"));
+    let known = Known { records: reported("helper", "The parser is fixed"), ..Known::default() };
+    let read = counted_in(vec![call()], &[1], &needle, known);
     let subagents = reported("helper", "The parser is fixed").into_iter().map(|(call, s)| (call, Rc::new(s)));
     let m = Model { subagents: subagents.collect(), ..Model::default() };
     let mut counts = Counts::default();
@@ -157,7 +158,7 @@ fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
 
     assert_eq!(read, [(0, 1)], "read in a stretch");
     assert_eq!(counts.of(0), 1, "and held");
-    assert!(counted_in(vec![call()], &[1], &needle, HashMap::new()).iter().all(|(_, n)| *n == 0), "with no report");
+    assert!(counted_in(vec![call()], &[1], &needle, Known::default()).iter().all(|(_, n)| *n == 0), "with no report");
 }
 
 #[test]
@@ -176,9 +177,30 @@ fn a_row_the_log_lets_go_of_keeps_what_it_was_counted_as() {
 fn a_stretch_counts_what_came_back_in_its_call_s_row_by_place() {
     let events = vec![placed(1, runs("run", "cargo test")), placed(2, printed("run", "test parser ... FAILED"))];
 
-    let counted = counted_in(events, &[2], &needle("failed"), HashMap::new());
+    let counted = counted_in(events, &[2], &needle("failed"), Known::default());
 
     assert_eq!(counted, [(0, 1), (1, 0)]);
+}
+
+/// A stretch puts a prompt where the chat does, which is where it was settled, rather than counting it in its own row,
+/// which draws nothing of it. Settled past the end of the stretch, it's in no row the stretch holds.
+#[test]
+fn a_stretch_counts_a_prompt_where_the_chat_draws_it() {
+    let prompt = |place| {
+        let body = EventBody::UserPrompt { text: "the parser".into(), client_msg_id: None, attachments: Vec::new() };
+        placed(place, body)
+    };
+    // A prompt's `seq` is three times its place.
+    let taken = |place, prompt_place: u64| placed(place, EventBody::PromptTaken { prompt: prompt_place * 3 });
+    let says = |place, text| placed(place, agent_says(text));
+    let chat = own([prompt(1), taken(2, 1), says(3, "first"), prompt(4), says(5, "second"), taken(6, 4)]);
+    let known = || Known { settled: chat.settled_prompts(), ..Known::default() };
+
+    let within = counted_in(vec![prompt(4), says(5, "second"), taken(6, 4)], &[4], &needle("parser"), known());
+    let past_its_end = counted_in(vec![prompt(4), says(5, "second")], &[4], &needle("parser"), known());
+
+    assert_eq!(within, [(3, 0), (5, 1)], "in the row that took it, not its own");
+    assert_eq!(past_its_end, [(3, 0)], "nowhere it holds");
 }
 
 #[test]

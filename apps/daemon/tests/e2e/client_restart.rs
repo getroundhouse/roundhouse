@@ -277,7 +277,7 @@ fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
     (0..log.row_count())
         .map(|row| match log.row(row) {
             Row::Event(event) => Some(event.clone()),
-            Row::Unloaded | Row::Pending(_) => None,
+            Row::Unloaded => None,
         })
         .collect()
 }

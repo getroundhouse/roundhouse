@@ -102,7 +102,8 @@ pub(crate) fn carried(m: &Model, attachments: &[Attachment]) -> Vec<Carried> {
 }
 
 /// Asks the hub for each image here it hasn't been asked for, once drawing has finished. `seq` is the row's, to
-/// measure it again when one arrives, and `None` for a prompt that's pending, when every image is already here.
+/// measure it again when one arrives, wherever it's drawn then, and `None` for a prompt that's pending, when every
+/// image is already here.
 pub(crate) fn fetch_missing<'a>(
     model: &Rc<RefCell<Model>>,
     this: &WeakEntity<Transcript>,

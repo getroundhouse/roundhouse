@@ -15,7 +15,9 @@ use super::{chats, file_chats, image_chats, patch, pictures, pull_requests, work
 
 mod working;
 
-pub(super) use working::{queue_held, queued, steered, streaming, thinking_streaming, working_background};
+pub(super) use working::{
+    queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, working_background,
+};
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(super) fn finishing_update() -> World {

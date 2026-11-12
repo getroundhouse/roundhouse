@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
-use protocol::event::EventBody;
-use protocol::model::{Seq, SessionId, SessionStatus, seq_index};
+use protocol::event::{EventBody, SessionEvent};
+use protocol::model::{Seq, SessionId, SessionStatus, SettledAt, seq_index};
 
 use crate::support::{Stack, TIMEOUT, Ui};
 
@@ -33,7 +33,7 @@ fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut T
     // The ticks go by the rows as the last frame laid them out, so they're right in the frame after.
     ui.bring_the_next_frame();
 
-    assert_eq!(scrolled_to(&ui), first, "the chat scrolls to its start");
+    assert_eq!(scrolled_to(&ui), 0, "the chat scrolls to its start");
     assert!(selected(&mut ui, row_id("outline-tick", first)), "and the first prompt is lit");
     assert!(!selected(&mut ui, row_id("outline-tick", second)));
 }
@@ -267,11 +267,19 @@ fn wait_out_the_list(ui: &mut Ui<'_>) {
     ui.frame();
 }
 
-/// The rows the chat's prompts are drawn in, as the hub recorded them.
+/// The row each prompt is drawn in: the row of the last event that took or dropped it, which is where the agent read
+/// it, or its own while it's loaded with nothing to say so.
 fn prompt_rows(ui: &Ui<'_>) -> Vec<usize> {
-    let seqs: Vec<Seq> =
-        ui.events().iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).map(|e| e.seq).collect();
-    seqs.into_iter().map(|seq| seq_index(seq) - 1).collect()
+    let Some(transcript) = ui.transcript() else { return Vec::new() };
+    let rows: Vec<(usize, SessionEvent)> = ui.cx.read_entity(&transcript, |t, _| {
+        (0..t.row_count()).filter_map(|row| t.event_at(row).map(|e| (row, e))).collect()
+    });
+    let settled = |seq: Seq| {
+        let settles = |e: &SessionEvent| SettledAt::of(e).is_some_and(|(prompt, _)| prompt == seq);
+        rows.iter().rev().find(|(_, e)| settles(e)).map(|(row, _)| *row)
+    };
+    let prompts = rows.iter().filter(|(_, e)| matches!(e.body, EventBody::UserPrompt { .. }));
+    prompts.map(|(row, e)| settled(e.seq).unwrap_or(*row)).collect()
 }
 
 fn row_id(part: &str, row: usize) -> ElementId {

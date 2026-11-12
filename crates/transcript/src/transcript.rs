@@ -223,7 +223,7 @@ impl Transcript {
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
         self.session.read(|log| match log.row(row) {
             Row::Event(event) => Some(event.clone()),
-            Row::Unloaded | Row::Pending(_) => None,
+            Row::Unloaded => None,
         })
     }
 
@@ -233,7 +233,7 @@ impl Transcript {
             Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
                 Some(log.prompt_state(event.seq))
             }
-            Row::Event(_) | Row::Unloaded | Row::Pending(_) => None,
+            Row::Event(_) | Row::Unloaded => None,
         })
     }
 
@@ -285,10 +285,10 @@ impl Transcript {
         self.remeasure(seq, cx);
     }
 
-    /// Measures the row of the event at `seq` again, since what it draws has changed height, and draws it.
+    /// Measures the row the event at `seq` is drawn in again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         // Not loaded, so not measured either.
-        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+        if let Some(row) = self.session.read(|log| log.row_drawing(seq)) {
             self.list.out_of_date(row..row + 1);
             // What it draws has changed too.
             self.find_in_changes(row..row + 1, cx);

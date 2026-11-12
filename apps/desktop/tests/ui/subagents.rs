@@ -10,7 +10,7 @@ use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{SessionId, seq_index};
+use protocol::model::{SessionId, SettledAt, seq_index};
 
 use crate::menus::items;
 use crate::support::{Stack, Ui};
@@ -269,14 +269,16 @@ fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAp
     let prompts: Vec<_> =
         ui.events().into_iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).map(|e| e.seq).collect();
     let transcript = ui.transcript().unwrap();
+    // Drawn where the agent took it.
+    let took = |event: &protocol::event::SessionEvent| SettledAt::of(event).is_some_and(|(p, _)| p == prompts[1]);
     let row = ui.cx.read_entity(&transcript, |t, _| {
-        (0..t.row_count()).find(|row| t.event_at(*row).is_some_and(|event| event.seq == prompts[1]))
+        (0..t.row_count()).find_map(|row| t.event_at(row).filter(took).map(|event| (row, event.seq)))
     });
-    let row = row.expect("the second prompt's row");
+    let (row, seq) = row.expect("the row that took the second prompt");
     let tick = |row: usize| SharedString::from(format!("outline-tick/{row}"));
 
     // The subagent's events are in the whole log before it, and not in the chat's rows.
-    assert!(row < seq_index(prompts[1]) - 1, "row {row}, seq {}", prompts[1]);
+    assert!(row < seq_index(seq) - 1, "row {row}, seq {seq}");
     ui.wait("the outline", |ui| ui.has("outline"));
     assert!(ui.has(tick(row)), "its tick is at the row it's drawn in");
 }

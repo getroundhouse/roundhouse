@@ -3,7 +3,10 @@
 use client_core::session_log::PromptState;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, Styled, div, px, relative};
+use gpui_kit::{
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, px,
+    relative,
+};
 
 use super::{Shared, row};
 use crate::attachments::{self, Carried};
@@ -53,6 +56,7 @@ pub(super) fn prompt_bubble(
         .items_end()
         .child(
             v_flex()
+                .id(key.element("bubble"))
                 .max_w(relative(WIDEST_SHARE))
                 .gap_2p5()
                 .px_4()
@@ -65,7 +69,8 @@ pub(super) fn prompt_bubble(
                     let id = (key.clone(), Part::Prompt);
                     let view = shared.texts.markdown(find::view_id(&id), text);
                     d.child(find::markdown_view(view, &id, find, None))
-                }),
+                })
+                .test_support(),
         )
         .when(dropped, |d| {
             d.child(

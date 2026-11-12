@@ -2,16 +2,17 @@
 //! it, never all of it.
 //!
 //! No IO and no UI. A view asks for rows by index, this says what to fetch, and whoever owns the
-//! connection does the fetching. Rows are indexed by each event's position less one, followed by prompts still
-//! waiting to be recorded, so an index means the same thing however much is loaded. An event's position is its
-//! `seq` in the whole log, and its place in the events from one agent or subagent.
+//! connection does the fetching. Rows are indexed by each event's position less one, so an index means the same thing
+//! however much is loaded. An event's position is its `seq` in the whole log, and its place in the events from one
+//! agent or subagent. The tail comes after the rows, with the prompts the agent hasn't read yet, recorded or still on
+//! their way, as [`PromptAt`] says.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 
 use protocol::attachment::Attachment;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Seq, seq_index};
+use protocol::model::{ClientMessageId, Seq, SettledAt, seq_index};
 use protocol::tail::{StreamDelta, Tail};
 
 mod approvals;
@@ -19,7 +20,7 @@ mod outline;
 mod prompts;
 mod restart;
 
-pub use prompts::PromptState;
+pub use prompts::{PromptAt, PromptState, Settled};
 
 pub(crate) const PAGE_EVENTS: u64 = 250;
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
@@ -37,8 +38,6 @@ pub enum Row<'a> {
     Event(&'a SessionEvent),
     /// In the log, but not loaded here. Worth asking for with [`SessionLog::pages_to_fetch`].
     Unloaded,
-    /// Sent, and not yet recorded.
-    Pending(&'a PendingPrompt),
 }
 
 /// What changed since a view last looked, gathered into one however many updates it took, so a view
@@ -80,12 +79,14 @@ pub struct SessionLog {
     /// The row a view last wanted, which decides what stays loaded. It starts at the last row, where a view opens a
     /// chat, so a log no view has asked of yet fetches nothing, since its end comes live.
     focus: usize,
+    /// Sent, and not yet recorded.
     pending: Vec<PendingPrompt>,
     tail: Tail,
     changes: Changes,
     /// How many times events have been put in, live or by the page.
     events_added: u64,
     outline: outline::Outline,
+    settled: Settled,
 }
 
 fn page_of(position: u64) -> u64 {
@@ -121,7 +122,7 @@ impl SessionLog {
     }
 
     pub fn row_count(&self) -> usize {
-        seq_index(self.last) + self.pending.len()
+        seq_index(self.last)
     }
 
     /// The position of the newest event.
@@ -130,15 +131,8 @@ impl SessionLog {
     }
 
     pub fn row(&self, index: usize) -> Row<'_> {
-        let position = index as u64 + 1;
-        if position <= self.last {
-            return match self.events.get(&position) {
-                Some(event) => Row::Event(event),
-                None => Row::Unloaded,
-            };
-        }
-        match self.pending.get(index - seq_index(self.last)) {
-            Some(prompt) => Row::Pending(prompt),
+        match self.events.get(&(index as u64 + 1)) {
+            Some(event) => Row::Event(event),
             None => Row::Unloaded,
         }
     }
@@ -172,6 +166,12 @@ impl SessionLog {
 
     pub fn tail(&self) -> &Tail {
         &self.tail
+    }
+
+    /// The prompts sent and not yet recorded, in the order they were sent, which the tail draws after
+    /// [`SessionLog::waiting_prompts`].
+    pub fn pending(&self) -> &[PendingPrompt] {
+        &self.pending
     }
 
     /// The newest event the subscription has delivered, so a new one carries on after it.
@@ -216,14 +216,24 @@ impl SessionLog {
         self.in_flight.remove(&page);
         self.pages.insert(page);
         let range = page_range(page);
+        let (mut settles, mut prompts) = (Vec::new(), Vec::new());
         for event in events {
             self.last = self.last.max(self.position(&event));
             self.outline.saw(&event);
+            settles.extend(SettledAt::of(&event));
+            prompts.extend(matches!(event.body, EventBody::UserPrompt { .. }).then_some(event.seq));
             self.insert(event);
         }
         self.events_added += 1;
         self.evict();
         self.touched(seq_index(range.start - 1)..seq_index((range.end - 1).min(self.last)));
+        // A prompt is drawn where it was settled, which can be in another page.
+        for (prompt, at) in settles {
+            self.settle(prompt, at);
+        }
+        for prompt in prompts {
+            self.prompt_moved(prompt, None);
+        }
     }
 
     /// A fetch failed, so the pages still on their way won't come. They aren't asked for again until
@@ -243,6 +253,7 @@ impl SessionLog {
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
+        let waited = self.at_the_end();
         self.tail.on_event(event.seq, event.run, &event.body);
         self.outline.saw(&event);
         let position = self.position(&event);
@@ -251,14 +262,12 @@ impl SessionLog {
         if matches!(event.body, EventBody::TurnEnded { .. }) {
             self.changes.turns_ended += 1;
         }
-        // Its own row, and everything after it, which a prompt it recorded may have moved, up to the tail.
+        // Its own row, and everything after it, up to the tail.
         self.touched(seq_index(position) - 1..self.row_count() + 1);
-        // A prompt the agent dropped says so under it.
-        if let EventBody::PromptDropped { prompt } = &event.body
-            && let Some(row) = self.row_of(*prompt)
-        {
-            self.touched(row..row + 1);
+        if let Some((prompt, at)) = SettledAt::of(&event) {
+            self.settle(prompt, at);
         }
+        self.moved_from_the_end(&waited);
         // Only the tail stays loaded from live events. Anything older is fetched when scrolled to.
         if page_of(position) + 1 >= page_of(self.last) {
             self.pages.insert(page_of(position));
@@ -278,10 +287,10 @@ impl SessionLog {
         self.touched(self.row_count()..self.row_count() + 1);
     }
 
-    /// Adds a prompt that's on its way, so it shows straight away. Recording it removes this.
+    /// Adds a prompt that's on its way, so it shows straight away, in the tail. Recording it removes this.
     pub(crate) fn add_pending(&mut self, client_msg_id: ClientMessageId, text: String, attachments: Vec<Attachment>) {
         self.pending.push(PendingPrompt { client_msg_id, text, attachments });
-        self.touched(seq_index(self.last)..self.row_count() + 1);
+        self.touched(self.row_count()..self.row_count() + 1);
     }
 
     /// What changed since this was last asked.
@@ -300,7 +309,7 @@ impl SessionLog {
     pub(crate) fn remove_pending(&mut self, client_msg_id: &ClientMessageId) -> Option<PendingPrompt> {
         let at = self.pending.iter().position(|prompt| prompt.client_msg_id == *client_msg_id)?;
         let removed = self.pending.remove(at);
-        self.touched(seq_index(self.last)..self.row_count() + 1);
+        self.touched(self.row_count()..self.row_count() + 1);
         Some(removed)
     }
 
@@ -327,13 +336,12 @@ impl SessionLog {
         }
     }
 
-    /// The rows that are loaded, as runs in order: each event held, and every prompt sent and not yet recorded.
-    /// Every other row is [`Row::Unloaded`].
+    /// The rows that are loaded, as runs in order: each event held. Every other row is [`Row::Unloaded`].
     pub fn loaded_rows(&self) -> Vec<Range<usize>> {
         let mut runs: Vec<Range<usize>> = Vec::new();
         let recorded = seq_index(self.last);
         let events = self.events.keys().map(|position| seq_index(*position) - 1).filter(|row| *row < recorded);
-        for row in events.chain(recorded..recorded + self.pending.len()) {
+        for row in events {
             match runs.last_mut() {
                 Some(run) if run.end == row => run.end += 1,
                 Some(_) | None => runs.push(row..row + 1),

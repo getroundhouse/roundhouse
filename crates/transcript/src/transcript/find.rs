@@ -250,6 +250,7 @@ impl Transcript {
     /// Counts the next stretch the search has read, unless it's counting one, and says if the search failed.
     pub(crate) fn find_news(&mut self, cx: &mut Context<Self>) {
         let model = self.model.clone();
+        let settled = self.session.read(SessionLog::settled_prompts);
         let Some(query) = self.query_mut() else { return };
         if query.counting.is_none()
             && let Some(stretch) = query.search.take()
@@ -257,7 +258,8 @@ impl Transcript {
             // The subagents' records, which draw what their calls show.
             let records =
                 model.borrow().subagents.iter().map(|(call, record)| (call.clone(), (**record).clone())).collect();
-            query.counting = Some(Self::count_stretch(stretch, query.needle.clone(), records, cx));
+            let known = stretch::Known { records, settled };
+            query.counting = Some(Self::count_stretch(stretch, query.needle.clone(), known, cx));
         }
         if let Some(e) = query.search.take_error() {
             cx.emit(TranscriptEvent::Error(format!("couldn't find in the whole chat: {e}")));

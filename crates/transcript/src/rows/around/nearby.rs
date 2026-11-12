@@ -55,7 +55,7 @@ pub(super) fn is_loaded(log: &SessionLog, seq: Seq) -> bool {
 fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {
     match log.row(ix) {
         Row::Event(event) => Some(event),
-        Row::Pending(_) | Row::Unloaded => None,
+        Row::Unloaded => None,
     }
 }
 

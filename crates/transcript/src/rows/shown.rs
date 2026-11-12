@@ -4,16 +4,18 @@
 //!
 //! What's counted is what's drawn: the person's and the agent's words, what calls were given and sent back, and what
 //! went wrong, but not what the app writes itself, such as how many lines a read sent back, or a closed call's summary
-//! of what it opens to. What asks the person something, a card or a question's line once it's answered, and the text
-//! still streaming in, aren't found. A test in the desktop app's gallery draws every kind of call and checks that what
-//! each draws is what's counted here.
+//! of what it opens to. What asks the person something, a card or a question's line once it's answered, and the end of
+//! the chat, with the text still streaming in and the prompts the agent hasn't read yet, aren't found. A test in the
+//! desktop app's gallery draws every kind of call and checks that what each draws is what's counted here.
 
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::find::Needle;
 use protocol::model::{Seq, seq_index};
 
-use super::around::{Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_with_its_call, its_call};
+use super::around::{
+    Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
+};
 use super::tools;
 use crate::calls;
 use crate::find::{self, Part, TextId};
@@ -35,7 +37,8 @@ pub(crate) struct Found {
 }
 
 /// The texts with matches that the row at `ix` draws, in the order it draws them, from the top. A row whose event is
-/// drawn in another's, such as a call's result, draws none of its own.
+/// drawn in another's, such as a call's result, draws none of its own, and one that settled a prompt draws the
+/// prompt.
 pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) -> Vec<Found> {
     let mut gather = Gather { needle, found: Vec::new(), opens: Vec::new() };
     if ix >= log.row_count() {
@@ -45,16 +48,21 @@ pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) ->
     if drawn_in_its_call(log, m, event) {
         return gather.found;
     }
+    let Some(event) = drawn_in_row(log, event) else { return gather.found };
     let around = Around::read_as(log, m, event.seq, &event.body, Opening::All);
     of_event(event, &around, &mut gather);
     gather.found
 }
 
 /// The rows the event at `position` in the log is drawn in: its own, unless it's a subagent's, drawn in the call that
-/// started it, and the rows of the calls any of its results are drawn with.
+/// started it, or a prompt, drawn where it was settled, and the rows of the calls any of its results are drawn with. A
+/// prompt at the end is in none that's found in.
 pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: u64) -> Vec<usize> {
     let own = seq_index(position).saturating_sub(1);
     let Row::Event(event) = log.row(own) else { return vec![own] };
+    if matches!(event.body, EventBody::UserPrompt { .. }) {
+        return log.row_drawing(event.seq).filter(|row| *row < log.row_count()).into_iter().collect();
+    }
     // A call found near it is loaded, so the log has its row.
     let row_of = |call: Seq| log.row_of(call);
     if let Some(call) = its_call(log, m, event) {

@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 use client_core::Stretch;
-use client_core::session_log::SessionLog;
+use client_core::session_log::{SessionLog, Settled};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
@@ -22,18 +22,13 @@ pub(super) type Records = HashMap<ToolUseId, Subagent>;
 impl Transcript {
     /// Counts the rows that draw the events `stretch` was read for, on another thread, then takes the counts of those
     /// the log doesn't hold, and goes on to the next stretch. Those the log holds are counted as they're drawn, from the
-    /// log.
-    pub(super) fn count_stretch(
-        stretch: Stretch,
-        needle: Needle,
-        records: Records,
-        cx: &mut Context<Self>,
-    ) -> Task<()> {
+    /// log. `known` is what the chat's log knows, so the stretch draws what the chat does.
+    pub(super) fn count_stretch(stretch: Stretch, needle: Needle, known: Known, cx: &mut Context<Self>) -> Task<()> {
         cx.spawn(async move |this, cx| {
             let Stretch { events, holding } = stretch;
             let (holding, counted) = cx
                 .background_spawn(async move {
-                    let counted = counted_in(events, &holding, &needle, records);
+                    let counted = counted_in(events, &holding, &needle, known);
                     (holding, counted)
                 })
                 .await;
@@ -54,15 +49,25 @@ impl Transcript {
     }
 }
 
+/// What drawing a stretch of the chat needs from the rest of it, copied to go to the thread that counts: the subagents'
+/// records, which their calls draw, and where each prompt was settled, which is where it's drawn.
+#[derive(Default)]
+pub(super) struct Known {
+    pub(super) records: Records,
+    pub(super) settled: Settled,
+}
+
 /// What the rows that draw each of the events at the places `holding` count to, among `events`, a stretch of the chat
-/// read for them, by place, with the subagents' `records`, which their calls draw.
+/// read for them, by place, with what's `known` of the rest. A prompt settled past the end of the stretch is drawn in a
+/// row it doesn't hold, so it counts once that row is loaded.
 pub(super) fn counted_in(
     events: Vec<SessionEvent>,
     holding: &[u64],
     needle: &Needle,
-    records: Records,
+    known: Known,
 ) -> Vec<(usize, usize)> {
-    let mut log = SessionLog::by_place(0);
+    let Known { records, settled } = known;
+    let mut log = SessionLog::by_place(0).knowing(settled);
     for event in events {
         log.apply_event(event);
     }
