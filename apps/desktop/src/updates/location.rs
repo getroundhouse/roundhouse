@@ -6,17 +6,17 @@ use std::path::{Path, PathBuf};
 use velopack::locator::VelopackLocatorConfig;
 
 use super::problem::{Kind, Problem};
-use crate::appimage::AppImage;
 
 /// Where Velopack finds the app and keeps what it downloads, or `None` to let it choose, which it does on a Mac and on
 /// Windows in a folder of this user's. On Linux its choice is `/var/tmp/velopack/Roundhouse/packages`, one folder for
 /// every user on the machine, so another user could replace a package between its download and its install, or keep
 /// this user from downloading at all. So there it keeps them in `updates/`, in this user's data directory. Velopack
-/// would find the `AppImage` through `APPIMAGE`, which the app leaves out of what it starts, so it's given `appimage`.
+/// would find the `AppImage` through `APPIMAGE`, which the app leaves out of what it starts, so it's told where it is.
 #[cfg(target_os = "linux")]
-pub(super) fn paths(data_dir: &Path, appimage: Option<&AppImage>) -> Option<VelopackLocatorConfig> {
+pub(super) fn paths(data_dir: &Path) -> Option<VelopackLocatorConfig> {
     use velopack::locator::{LocationContext, auto_locate_app_manifest};
-    let context = LocationContext::FromSpecifiedRootDir(appimage?.path().to_path_buf(), Some(data_dir.join("updates")));
+    let appimage = crate::appimage::path()?.to_path_buf();
+    let context = LocationContext::FromSpecifiedRootDir(appimage, Some(data_dir.join("updates")));
     let app = auto_locate_app_manifest(context).ok()?;
     let binaries = app.get_current_bin_dir();
     Some(VelopackLocatorConfig {
@@ -31,7 +31,7 @@ pub(super) fn paths(data_dir: &Path, appimage: Option<&AppImage>) -> Option<Velo
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(super) fn paths(_data_dir: &Path, _appimage: Option<&AppImage>) -> Option<VelopackLocatorConfig> {
+pub(super) fn paths(_data_dir: &Path) -> Option<VelopackLocatorConfig> {
     None
 }
 
