@@ -1,6 +1,7 @@
 //! The outline: a short tick at the right of the chat for each prompt, with the one being read in white, so a long chat
-//! shows how far it goes and where you are in it. Resting the pointer on the ticks lists the prompts over them, and
-//! clicking one jumps to it. The ticks themselves aren't clicked, so they can stay small.
+//! shows how far it goes and where you are in it, and a dot for each compaction, where the agent swapped what it held
+//! for a summary. Resting the pointer on them lists the prompts and compactions over them, and clicking one jumps to
+//! it. The ticks themselves aren't clicked, so they can stay small.
 
 use std::ops::Range;
 use std::rc::Rc;
@@ -14,7 +15,7 @@ use gpui_kit::{
     Window, canvas, deferred, div, px,
 };
 use look::{InRegion as _, LineText, Region};
-use protocol::model::PromptLine;
+use protocol::model::{CompactionLine, PromptLine};
 
 use super::Transcript;
 use crate::list::TranscriptList;
@@ -38,6 +39,8 @@ const FEWEST_TICKS_TALL: f32 = 3.;
 /// seeming to touch them.
 const TICK_WIDTH: Pixels = px(12.);
 const TICK_HEIGHT: Pixels = px(3.);
+/// A compaction's dot, a different shape from a tick's, so it reads as neither a prompt nor a gap.
+const DOT: Pixels = px(4.);
 /// How faint a tick is with more past it.
 const FADED: f32 = 0.35;
 /// In from the pane's right edge, clear by a pixel of the scrollbar's thumb, which reaches 12px in while it's dragged,
@@ -49,30 +52,56 @@ const LIST_ABOVE: Pixels = px(4.);
 /// Over the rows and the composer, as a menu is.
 const PRIORITY: usize = 1;
 
-/// A prompt, and the row of the chat it's drawn in, which the log says, since the chat's rows go by the agent's own
-/// events, or from a hub that can't read them apart, by every event.
+/// A prompt or a compaction, and the row of the chat it's drawn in, which the log says, since the chat's rows go by the
+/// agent's own events, or from a hub that can't read them apart, by every event.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Prompt {
-    line: PromptLine,
+struct Line {
+    kind: Kind,
     row: usize,
 }
 
-/// The prompts as the outline last read them, and the list's rows for them. A frame reads them once, so the ticks and
-/// the list agree, and copies them only when the log's have changed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Kind {
+    /// The prompt `number` places from the first, counting from 1. Compactions aren't counted.
+    Prompt {
+        line: PromptLine,
+        number: usize,
+    },
+    Compaction(CompactionLine),
+}
+
+impl Line {
+    fn is_prompt(&self) -> bool {
+        matches!(self.kind, Kind::Prompt { .. })
+    }
+}
+
+/// The prompts and compactions as the outline last read them, in the order they're drawn in the chat, and the list's
+/// rows for them. A frame reads them once, so the ticks and the list agree, and copies them only when the log's have
+/// changed.
 #[derive(Default)]
-pub(super) struct Prompts {
+pub(super) struct Outline {
     changes: u64,
-    lines: Rc<[Prompt]>,
+    lines: Rc<[Line]>,
     rows: list::Rows,
 }
 
-impl Prompts {
-    fn read(&mut self, session: &OpenSession) -> Rc<[Prompt]> {
+impl Outline {
+    fn read(&mut self, session: &OpenSession) -> Rc<[Line]> {
         let changed = session.read(|log| {
             let changed = log.outline_changes() != self.changes;
             if changed {
-                let prompt = |line: &PromptLine| Prompt { row: log.prompt_row(line), line: line.clone() };
-                self.lines = log.prompt_lines().map(prompt).collect();
+                let prompts = log.prompt_lines().zip(1..).map(|(line, number)| Line {
+                    row: log.prompt_row(line),
+                    kind: Kind::Prompt { line: line.clone(), number },
+                });
+                let compactions = log
+                    .compaction_lines()
+                    .map(|line| Line { row: log.compaction_row(line), kind: Kind::Compaction(line.clone()) });
+                let mut lines: Vec<Line> = prompts.chain(compactions).collect();
+                // Stable, so a compaction a hub without places puts in a prompt's row stays after it.
+                lines.sort_by_key(|line| line.row);
+                self.lines = lines.into();
                 self.changes = log.outline_changes();
             }
             changed
@@ -103,8 +132,8 @@ struct Jumps {
 }
 
 impl Jumps {
-    /// Shows the prompt in `row` at the bottom of the chat, with what it answered above it, and closes the list, so
-    /// it isn't over where it jumped to.
+    /// Shows the prompt or compaction in `row` at the bottom of the chat, with what came before it above it, and
+    /// closes the list, so it isn't over where it jumped to.
     fn to(&self, row: usize) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
         let Jumps { hover, chat_list, transcript } = self.clone();
         move |_, _, cx| {
@@ -117,7 +146,8 @@ impl Jumps {
 
 impl Transcript {
     /// The chat, with the ticks over it, and the list while it's open, once it has a prompt. One prompt is enough,
-    /// since a long turn takes it far above the screen, and the list is the way back up to it.
+    /// since a long turn takes it far above the screen, and the list is the way back up to it. Compactions alone
+    /// aren't, since one is never the prompt being read.
     pub(super) fn with_outline(
         &mut self,
         chat: AnyElement,
@@ -126,15 +156,15 @@ impl Transcript {
         cx: &mut Context<Self>,
     ) -> Div {
         let around = div().relative().size_full();
-        let lines = self.prompts.read(&self.session);
-        if lines.is_empty() {
+        let lines = self.outline.read(&self.session);
+        if !lines.iter().any(Line::is_prompt) {
             return around.child(chat);
         }
         let at = being_read(&lines, self.list.bottom_row(), !self.list.is_scrolled_up());
         let hover = window.use_keyed_state("outline", cx, |_, _| Hover::default());
         let showing = hover.update(cx, |hover, _| hover.frame());
         if showing == Showing::Opened {
-            self.prompts.rows.open_at(at);
+            self.outline.rows.open_at(at);
         }
         let ticks = ticks(&lines, at, &hover, window, cx);
         let list = (showing != Showing::Closed).then(|| {
@@ -142,7 +172,7 @@ impl Transcript {
                 h.hovered(Part::List, *hovered, cx);
             });
             let jumps = Jumps { hover: hover.clone(), chat_list: self.list.clone(), transcript: cx.entity_id() };
-            let list = list::draw(lines, at, &self.prompts.rows, jumps, on_hover, line_text, cx);
+            let list = list::draw(lines, at, &self.outline.rows, jumps, on_hover, line_text, cx);
             // Over the ticks, which it hides while it's open, with its right edge on theirs.
             let over = div().absolute().top(-LIST_ABOVE).right_0().child(list);
             deferred(over).with_priority(PRIORITY)
@@ -174,18 +204,14 @@ fn tells_the_outline_of_the_wheel(hover: &Entity<Hover>) -> AnyElement {
     .into_any_element()
 }
 
-/// The ticks around the prompt being read. They take the pointer from what's under them, such as a tool call's line
-/// reaching under them in a narrow pane, but let the wheel through to the chat. They're drawn while the list is open
-/// too, under it, so they hear the pointer leave.
-fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window, cx: &App) -> AnyElement {
+/// The ticks and dots around the prompt being read. They take the pointer from what's under them, such as a tool
+/// call's line reaching under them in a narrow pane, but let the wheel through to the chat. They're drawn while the
+/// list is open too, under it, so they hear the pointer leave.
+fn ticks(lines: &[Line], at: usize, hover: &Entity<Hover>, window: &mut Window, cx: &App) -> AnyElement {
     let shown = shown(lines.len(), at);
-    let ticks: Vec<AnyElement> = shown
-        .clone()
-        .map(|ix| {
-            let label = format!("Prompt {} of {}", ix + 1, lines.len());
-            tick(lines[ix].row, label, look(ix, at, &shown, lines.len()), cx)
-        })
-        .collect();
+    let prompts = lines.iter().filter(|line| line.is_prompt()).count();
+    let ticks: Vec<AnyElement> =
+        shown.clone().map(|ix| tick(&lines[ix], prompts, look(ix, at, &shown, lines.len()), cx)).collect();
     div()
         .region(Region::Outline)
         .role(Role::ListBox)
@@ -201,7 +227,7 @@ fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window
         .into_any_element()
 }
 
-/// How the tick for prompt `ix` of `count` is drawn, with `at` being read and the ticks `shown`.
+/// How the tick or dot for line `ix` of `count` is drawn, with `at` being read and the ticks `shown`.
 fn look(ix: usize, at: usize, shown: &Range<usize>, count: usize) -> Tick {
     if ix == at {
         Tick::BeingRead
@@ -212,10 +238,20 @@ fn look(ix: usize, at: usize, shown: &Range<usize>, count: usize) -> Tick {
     }
 }
 
-fn tick(row: usize, label: String, look: Tick, cx: &App) -> AnyElement {
+/// A prompt's tick, or a compaction's dot, of the chat's `prompts`.
+fn tick(line: &Line, prompts: usize, look: Tick, cx: &App) -> AnyElement {
     let color = if look == Tick::BeingRead { cx.theme().foreground } else { look::faint() };
+    let (id, label, mark) = match &line.kind {
+        Kind::Prompt { number, .. } => {
+            let tick = div().w_full().h(TICK_HEIGHT);
+            ("outline-tick", format!("Prompt {number} of {prompts}"), tick)
+        }
+        Kind::Compaction(compaction) => {
+            ("outline-dot", crate::rows::compaction::who(compaction.by).to_string(), div().size(DOT))
+        }
+    };
     div()
-        .id(ElementId::Name(format!("outline-tick/{row}").into()))
+        .id(ElementId::Name(format!("{id}/{}", line.row).into()))
         .role(Role::ListBoxOption)
         .aria_label(label)
         .aria_selected(look == Tick::BeingRead)
@@ -223,23 +259,23 @@ fn tick(row: usize, label: String, look: Tick, cx: &App) -> AnyElement {
         .w_full()
         .flex()
         .items_center()
-        .child(div().w_full().h(TICK_HEIGHT).rounded_full().bg(color).when(look == Tick::Faded, |d| d.opacity(FADED)))
+        .justify_center()
+        .child(mark.rounded_full().bg(color).when(look == Tick::Faded, |d| d.opacity(FADED)))
         .test_support()
         .into_any_element()
 }
 
 /// Which prompt is being read, as an index into `lines`: the last one at or above the bottom row, whose part of the
-/// chat is at the bottom. At the end of the chat, it's the last prompt, as its row makes it once the end is laid out,
-/// and also before then, when the list is first drawn.
-fn being_read(lines: &[Prompt], bottom: usize, at_end: bool) -> usize {
-    if at_end {
-        return lines.len().saturating_sub(1);
-    }
-    lines.partition_point(|prompt| prompt.row <= bottom).saturating_sub(1)
+/// chat is at the bottom, or before any has reached it, the first. At the end of the chat, it's the last prompt, as its
+/// row makes it once the end is laid out, and also before then, when the list is first drawn. A compaction is never
+/// the one being read, so the white tick is always a prompt's.
+fn being_read(lines: &[Line], bottom: usize, at_end: bool) -> usize {
+    let reached = if at_end { lines.len() } else { lines.partition_point(|line| line.row <= bottom) };
+    lines[..reached].iter().rposition(Line::is_prompt).or_else(|| lines.iter().position(Line::is_prompt)).unwrap_or(0)
 }
 
-/// The ticks to show, as a range of `count` prompts: all of them if they fit, and otherwise as many as fit, around the
-/// one being read.
+/// The ticks and dots to show, as a range of `count` lines: all of them if they fit, and otherwise as many as fit,
+/// around the prompt being read.
 fn shown(count: usize, at: usize) -> Range<usize> {
     if count <= MOST_TICKS {
         return 0..count;

@@ -1,5 +1,6 @@
 //! Chats whose agent compacted its conversation, and the screens about them, which the gallery takes after the
-//! subagents': once when asked, once by itself partway through a turn, once still at it, and once when it couldn't.
+//! subagents': once when asked, once by itself partway through a turn, once still at it, and once when it couldn't, and
+//! the outline's dots for them.
 
 #![cfg(test)]
 
@@ -10,9 +11,9 @@ use serde_json::json;
 
 use super::chats::{finished, looked_around};
 use super::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
-use super::frame::CHAT;
+use super::frame::{CHAT, OUTLINE};
 use super::screens::FOCUS;
-use super::steps::{Screen, Step};
+use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::chat_world;
 
@@ -60,7 +61,49 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Idle, failed())),
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "outline-compactions",
+        spec: "chats.md",
+        frame: OUTLINE,
+        world: Some(|| chat_world(SessionStatus::Idle, long_with_compactions())),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "outline-compactions-list",
+        spec: "chats.md",
+        frame: OUTLINE,
+        world: Some(|| chat_world(SessionStatus::Idle, long_with_compactions())),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Hover { on: Target::Id(look::Region::Outline.id()), shows: "outline-list" },
+        ],
+    },
+    Screen {
+        name: "outline-compacted",
+        spec: "chats.md",
+        frame: OUTLINE,
+        world: Some(|| chat_world(SessionStatus::Idle, by_itself())),
+        steps: &[Step::Select(FOCUS)],
+    },
 ];
+
+/// The long chat's twenty turns, with the agent compacting by itself partway through the tenth, and someone asking it
+/// to after the sixteenth.
+fn long_with_compactions() -> Vec<EventBody> {
+    let mut events = Vec::new();
+    for (turn, (asked, said)) in (1..).zip(super::long_chats::TURNS) {
+        let prompt = next(&events);
+        events.extend([user_prompt(asked), taken(prompt)]);
+        if turn == 10 {
+            events.push(compacted(CompactedBy::Agent, 467_499, 15_694, 89_120));
+        }
+        events.extend([text(&format!("msg-{turn}"), said), replied(said, 12, 0.04)]);
+        if turn == 16 {
+            compact_asked(&mut events, None);
+        }
+    }
+    events
+}
 
 /// The label of the compaction someone asked for in [`asked`] and [`asked_last`], which opens its summary.
 const ASKED_LABEL: &str = "Compacted, 226.9k to 9.0k tokens, 51s";

@@ -124,7 +124,7 @@ pub struct Transcript {
     _changes: Task<()>,
     /// Draws the time so far again while the agent works, and how long the cache has left while it doesn't.
     ticking: Option<Task<()>>,
-    prompts: outline::Prompts,
+    outline: outline::Outline,
     /// The oldest question waiting on an answer, to be asked in the composer's place.
     asking: Option<Entity<QuestionPanel>>,
     /// Where every question waiting on an answer is in the log. The transcript draws them once they're answered.
@@ -181,7 +181,7 @@ impl Transcript {
             list,
             _changes: following,
             ticking,
-            prompts: outline::Prompts::default(),
+            outline: outline::Outline::default(),
             asking: None,
             waiting: Vec::new(),
             finding: None,

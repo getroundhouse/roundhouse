@@ -30,7 +30,7 @@ mod approval;
 mod around;
 mod asked;
 mod cache_rule;
-mod compaction;
+pub(crate) mod compaction;
 mod line;
 mod mode;
 mod prompt;

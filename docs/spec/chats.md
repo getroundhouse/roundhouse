@@ -59,6 +59,8 @@
 - **In a pane narrower than the list, the list keeps its width,** running past the pane over what's beside it rather than squeezing its rows.
 - **Clicking a prompt in the list puts that prompt at the bottom of the chat, with what came before it above,** so the reply it answered is in sight without scrolling back up to it. The list closes, so it isn't over where it jumped to, and opens again once the pointer moves over the ticks, not because the click left it resting there. The prompt stays at the bottom as what's above it loads, until something else moves the chat, such as the wheel, the scrollbar, the button back down, opening or closing something in it, or sending a prompt. A prompt taller than the chat shows from its start instead, and one with less than a screen of chat above it can't reach the bottom, so the chat goes to its start, where that prompt shows. *Unconfirmed.*
 - **The outline has every prompt, however long the chat,** including those too far back for the app to have loaded, because the hub lists them. A hub too old to list them leaves only the prompts the app has loaded, and so does one that fails to, until the app reconnects to it, with the chat going on either way. A prompt shows in it once it's recorded. *Unconfirmed.*
+- **Each compaction has a dot in the outline, in its place among the ticks,** so a chat shows whether the agent compacted, and in which turn, without scrolling through it. A dot is a different shape from a tick, so it reads as neither a prompt nor a gap. It's never white, since the one being read is always a prompt, and it takes one of the sixteen places. Only a compaction that compacted has one, since one that failed changed nothing. A hub lists them as it does prompts, so they're there however long the chat, and one too old to list them leaves only those the app has loaded. *Unconfirmed:* a dot at an end with more past it is fainter, as a tick is.
+- **In the list, a compaction is a row between the prompts it came between,** with its icon where a number goes, then what its rule in the chat says, faint and on one line, such as `Compacted automatically · 467.5k → 15.7k tokens`. It has no number, so the prompts keep theirs. Clicking it puts the rule at the bottom of the chat, as clicking a prompt does, with what came before it above, and the prompt before it is the one being read.
 
 **A long chat, jumped to its fourteenth prompt from the list.** *Unconfirmed.*
 
@@ -67,6 +69,18 @@
 **The outline's list, open over its ticks.** *Unconfirmed.*
 
 ![The outline's list](screens/outline-list.png)
+
+**A long chat at its end, where the agent compacted by itself in the tenth turn, and someone asked it to after the sixteenth.** *Unconfirmed.*
+
+![A long chat's outline, with a dot for each compaction](screens/outline-compactions.png)
+
+**Its list, with the compaction someone asked for between the prompts it came between.** *Unconfirmed.*
+
+![The outline's list, with a compaction's row](screens/outline-compactions-list.png)
+
+**A chat of one turn, which the agent compacted partway through.** *Unconfirmed.*
+
+![A one-turn chat's outline, with its tick and a dot](screens/outline-compacted.png)
 
 **The button back down to the end of a long chat, scrolled up to its fourteenth prompt, in a pane wide enough for the composer to reach its full 24px past the column.** *Unconfirmed.*
 

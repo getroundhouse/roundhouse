@@ -3,11 +3,11 @@
 #![cfg(test)]
 
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Pixels, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, TestAppContext, point, px};
 use protocol::model::seq_index;
 
 use super::{
-    bounds, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
+    bounds, compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
 };
 use crate::support::{Stack, Ui};
 
@@ -138,11 +138,48 @@ fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(
     assert!(ui.has("outline-list"), "until it moves over them");
 }
 
+#[gpui_kit::test]
+fn a_compaction_too_far_back_to_be_loaded_is_marked_and_jumped_to(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    // Long replies, so the compaction after them has more than a screen of chat above it and can come to the bottom.
+    for turn in 0..3 {
+        stack.run(&session, &format!("prose:4:{turn}"));
+    }
+    compact(&stack, &session);
+    // Far more events than the transcript loads to start with, so the compaction before them isn't among them.
+    let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
+    stack.run(&session, &script.join("; "));
+    stack.run(&session, "say:the last turn");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    let listed = stack.client().session_compaction_list(&session).unwrap();
+    let [ref compaction] = listed[..] else { panic!("one compaction: {listed:?}") };
+    let row = seq_index(compaction.seq) - 1;
+    ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
+    assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_none()), "the compaction isn't loaded");
+
+    jump_to_line(&mut ui, row_id("outline-compaction", row));
+
+    ui.wait("the compaction to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
+    ui.frame();
+    assert_at_the_bottom(&mut ui, row, "the compaction");
+    let before = prompt_rows(&ui)[2];
+    assert!(selected(&mut ui, row_id("outline-tick", before)), "and the prompt before it is the one being read");
+    assert!(!selected(&mut ui, row_id("outline-dot", row)), "since a compaction never is");
+}
+
 /// Opens the list and clicks the prompt drawn in `row`, turning the wheel over the list first if it doesn't show it,
 /// as someone would.
 fn jump_to(ui: &mut Ui<'_>, row: usize) {
+    jump_to_line(ui, row_id("outline-prompt", row));
+}
+
+/// Opens the list and clicks its row `target`, a prompt's or a compaction's, turning the wheel over the list first if
+/// it doesn't show it.
+fn jump_to_line(ui: &mut Ui<'_>, target: ElementId) {
     open_the_list(ui);
-    let target = row_id("outline-prompt", row);
     for up in [true, false] {
         for _ in 0..40 {
             if ui.visible(target.clone()) {

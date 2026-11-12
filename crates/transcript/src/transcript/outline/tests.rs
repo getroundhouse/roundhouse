@@ -1,8 +1,33 @@
 use super::*;
 
 /// Prompts drawn in these rows.
-fn at_rows(rows: &[usize]) -> Vec<Prompt> {
-    rows.iter().map(|row| Prompt { line: PromptLine::new(*row as u64 + 1, "", 0), row: *row }).collect()
+fn at_rows(rows: &[usize]) -> Vec<Line> {
+    rows.iter().zip(1..).map(|(row, number)| prompt_at(*row, number)).collect()
+}
+
+fn prompt_at(row: usize, number: usize) -> Line {
+    Line { kind: Kind::Prompt { line: PromptLine::new(row as u64 + 1, "", 0), number }, row }
+}
+
+fn compaction_at(row: usize) -> Line {
+    let line = CompactionLine {
+        seq: row as u64 + 1,
+        place: protocol::model::Place::default(),
+        by: protocol::event::CompactedBy::Agent,
+        before_tokens: None,
+        after_tokens: None,
+    };
+    Line { kind: Kind::Compaction(line), row }
+}
+
+#[test]
+fn a_compaction_is_never_the_one_being_read() {
+    let lines = [prompt_at(0, 1), compaction_at(10), prompt_at(20, 2), compaction_at(30)];
+
+    assert_eq!(being_read(&lines, 15, false), 0, "the prompt before it is");
+    assert_eq!(being_read(&lines, 35, false), 2);
+    assert_eq!(being_read(&lines, 35, true), 2, "and at the end, the last prompt is");
+    assert_eq!(being_read(&[compaction_at(0), prompt_at(5, 1)], 0, false), 1, "and before any, the first");
 }
 
 #[test]

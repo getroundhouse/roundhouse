@@ -2,11 +2,11 @@ use protocol::model::seq_index;
 
 use super::*;
 
-fn prompt(line: PromptLine) -> Prompt {
-    Prompt { row: seq_index(line.seq()) - 1, line }
+fn prompt(line: PromptLine) -> Line {
+    Line { row: seq_index(line.seq()) - 1, kind: Kind::Prompt { line, number: 1 } }
 }
 
-fn lines(seqs: &[u64]) -> Vec<Prompt> {
+fn lines(seqs: &[u64]) -> Vec<Line> {
     seqs.iter().map(|seq| prompt(PromptLine::new(*seq, "a prompt", 0))).collect()
 }
 
