@@ -11,6 +11,7 @@ use protocol::frame;
 use protocol::model::{LimitWindow, MaxSetBy, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::{Compacting, StreamDelta, Tail};
 
+mod agents;
 mod approvals;
 mod calls;
 mod hellos;

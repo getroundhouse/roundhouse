@@ -6,6 +6,7 @@ use setup::SetupGate;
 pub(crate) use workspaces::workspace_env;
 
 mod accounts;
+mod agents;
 mod attachments;
 mod awake;
 mod branches;
@@ -43,7 +44,7 @@ use crate::versions;
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
-use protocol::model::{ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
+use protocol::model::{AgentDescription, ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -83,6 +84,8 @@ pub(crate) struct Hub {
     /// What each worker's command writes to stderr, a file per instance. Apart from any provider's own files.
     worker_logs_dir: PathBuf,
     providers: ProviderSet,
+    /// What each kind of agent the hub runs is called and offers, as `HubConfig` gave them.
+    agents: Vec<AgentDescription>,
     workers: Mutex<HashMap<WorkspaceId, Arc<WorkerLink>>>,
     /// Held while a workspace's worker starts or is cleaned up, so an instance never has two. One per
     /// workspace, because a slow or stuck worker mustn't hold up the others. It guards whether nothing but this hub's
@@ -119,6 +122,7 @@ impl Hub {
         attachments_dir: PathBuf,
         worker_logs_dir: PathBuf,
         providers: ProviderSet,
+        agents: Vec<AgentDescription>,
         on_demand: bool,
     ) -> Self {
         Self {
@@ -127,6 +131,7 @@ impl Hub {
             worker_logs_dir,
             on_demand,
             providers,
+            agents,
             workers: Mutex::new(HashMap::new()),
             worker_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),

@@ -6,9 +6,9 @@ use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, Place,
-    PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace,
-    WorkspaceDraft, WorktreeFiles,
+    AgentDescription, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
+    HubSettings, Place, PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent,
+    TitleError, Workspace, WorkspaceDraft, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -50,6 +50,10 @@ pub enum ClientResponse {
         repos: Vec<Repo>,
     },
     Records(Records),
+    /// Each kind of agent the hub runs, in the order a client offers them.
+    Agents {
+        agents: Vec<AgentDescription>,
+    },
     Workspace(Workspace),
     Workspaces {
         workspaces: Vec<Workspace>,

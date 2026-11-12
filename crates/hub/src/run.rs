@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use protocol::model::AgentDescription;
 use protocol::paths::Paths;
 use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
@@ -26,6 +27,9 @@ pub struct HubConfig {
     pub path: Option<String>,
     /// A client started this hub because it needed one.
     pub on_demand: bool,
+    /// What each kind of agent this hub runs is called and offers, as its adapter describes it. A kind with none is one
+    /// the hub doesn't run.
+    pub agents: Vec<AgentDescription>,
 }
 
 /// What the last run left half done: setups that were running, which its workers can't report on to this hub, and
@@ -92,6 +96,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         paths.attachments_dir.clone(),
         paths.worker_logs_dir.clone(),
         providers,
+        config.agents,
         config.on_demand,
     ));
     hub.carry_on(left_at_work).await;

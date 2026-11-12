@@ -17,8 +17,9 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    CompactionLine, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus, OpenedText, PageLine, Place,
-    PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
+    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, FileContents, FileOpened, FilePage, FilePages,
+    GitDiff, GitStatus, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place, PromptLine, Rev,
+    SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
 use super::world::World;
@@ -84,6 +85,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::HubStatus => reply(C::HubStatus(status(world))),
         R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
         R::RecordsList => reply(C::Records(world.records())),
+        // Even as an older hub, so a screen of one draws the agent as the app's own hub would describe it.
+        R::AgentList => reply(C::Agents { agents: vec![claude()] }),
         R::WorkspaceList { include_archived } => reply(C::Workspaces {
             workspaces: world
                 .workspaces
@@ -273,6 +276,31 @@ fn subscribe_places(
     let tail = world.tails.get(id).map(|tail| tail.of(subagent)).unwrap_or_default();
     let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
+}
+
+/// Claude as the app's own hub describes it, so the picker, the context's cards and a turn's card say what they would.
+fn claude() -> AgentDescription {
+    let offered =
+        |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
+    AgentDescription {
+        kind: AgentKind::Claude,
+        name: "Claude Code".into(),
+        usage_heading: "Claude usage".into(),
+        models: vec![
+            offered("fable", "Fable"),
+            offered("opus", "Opus"),
+            offered("sonnet", "Sonnet"),
+            offered("haiku", "Haiku"),
+        ],
+        efforts: Effort::ALL.to_vec(),
+        modes: PermissionMode::CHOSEN.to_vec(),
+        defaults: SessionSettings {
+            model: ModelName::named("opus"),
+            permission_mode: PermissionMode::FullAccess,
+            effort: Effort::Xhigh,
+        },
+        features: vec![AgentFeature::Compacts],
+    }
 }
 
 fn version(world: &World) -> &'static str {

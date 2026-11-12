@@ -108,7 +108,9 @@ fn main() -> anyhow::Result<()> {
                 .context("finding this binary to run workers")?;
             let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
             let path = std::env::var("PATH").ok();
-            run_to_end(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand }))??;
+            // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
+            let agents = agents::descriptions();
+            run_to_end(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand, agents }))??;
             Ok(())
         }
         Role::Delete { paths } => {
