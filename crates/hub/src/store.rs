@@ -23,6 +23,7 @@ mod events;
 mod find;
 mod hub_settings;
 mod instances;
+mod lines;
 mod made;
 #[cfg(test)]
 mod older;

@@ -17,7 +17,7 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
+    CompactionLine, GitDiff, GitStatus, Place, PromptLine, Rev, SessionId, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
 use super::world::World;
@@ -123,6 +123,15 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             world.session(&id)?;
             let prompts = world.events_from(&id, 1).filter_map(PromptLine::of);
             reply(C::Prompts { prompts: prompts.collect() })
+        }
+        // An older hub's build is from before compactions were listed too.
+        R::SessionCompactionList { .. } if world.hub.is_some() => {
+            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list compactions"))
+        }
+        R::SessionCompactionList { id } => {
+            world.session(&id)?;
+            let compactions = world.events_from(&id, 1).filter_map(CompactionLine::of);
+            reply(C::Compactions { compactions: compactions.collect() })
         }
         R::SessionFind { id, subagent, query } => {
             world.session(&id)?;

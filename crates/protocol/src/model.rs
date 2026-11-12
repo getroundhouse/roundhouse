@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 mod account;
 mod cache;
+mod compaction_line;
 mod context;
 mod draft;
 mod effort;
@@ -22,6 +23,7 @@ mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
+pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use draft::{Draft, NewDraft};
 pub use effort::Effort;

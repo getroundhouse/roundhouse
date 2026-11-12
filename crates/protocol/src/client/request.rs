@@ -172,6 +172,11 @@ pub enum ClientRequest {
     SessionPromptList {
         id: SessionId,
     },
+    /// Every compaction of the agent's own conversation that compacted, oldest first, each as one line, for marking
+    /// them in a long chat without reading the whole log. A hub older than this refuses it as unsupported.
+    SessionCompactionList {
+        id: SessionId,
+    },
     /// Which of the agent's own events, or those of the subagent `subagent` started, hold `query`, by place, as
     /// [`crate::find::Needle::is_in_event`] says, for finding text in a long chat without reading the whole log. It
     /// only reads. An empty query, or one longer than [`crate::find::Needle::MOST_CHARS`], is refused as invalid, and a
