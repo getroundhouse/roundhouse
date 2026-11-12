@@ -144,7 +144,7 @@ fn a_row_at_the_bottom_stays_as_rows_arrive_and_goes_once_the_end_is_in_sight() 
     let mut arriving = kept_at_the_bottom();
     let mut at_the_end = kept_at_the_bottom();
 
-    arriving.set_rows(120, vec![0..120]);
+    arriving.set_rows(120, std::iter::once(0..120).collect());
     at_the_end.laid_out(at(94, 0.), None, true);
 
     assert_eq!(lay_from(&arriving), Start::AtBottom { row: 40 });
