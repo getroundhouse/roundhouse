@@ -16,7 +16,7 @@ use serde_json::Value;
 use super::around::{AnswerTo, Asked, Settled};
 use super::line::{self, Line, Part};
 use super::tools::{Toggle, block};
-use super::{Shared, row};
+use super::{InRow, Shared, row};
 use crate::calls::first_line;
 use crate::find::FindLook;
 use crate::folds::Fold;
@@ -36,7 +36,9 @@ pub(super) fn draw(seq: Seq, input: &Value, asked: &Asked, shared: &Shared, cx: 
     // Nothing's found in a question, so nothing it draws is marked.
     let find = FindLook::default();
     let (key, open) = (&asked.key, asked.open);
-    let toggle = Toggle { seq, key, fold: Fold::Output, open, whole: false, shared, find: &find };
+    // It's in the approval's own row, though nothing a question draws is placed by its block.
+    let toggle =
+        Toggle { seq, key, fold: Fold::Output, open, whole: false, shared, find: &find, in_row: InRow::Own(0) };
     let title = if questions.len() > 1 { format!("Asked {} questions", questions.len()) } else { "Asked".to_string() };
     let mut line = Line::new(ICON, title);
     for header in questions.iter().filter_map(|question| question.header.clone()) {

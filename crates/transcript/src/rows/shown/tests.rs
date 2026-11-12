@@ -6,7 +6,7 @@ use protocol::find::Needle;
 
 use super::{count, of_row, rows_drawing};
 use crate::find::Part;
-use crate::fixtures::{calls_to, event, log, within};
+use crate::fixtures::{calls_to, event, from_the_agent, log, within};
 use crate::folds::Fold;
 use crate::transcript::Model;
 
@@ -107,6 +107,31 @@ fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
     assert_eq!(count(&log, "parser", 0), 1);
     assert_eq!(count(&log, "parser", 1), 0);
     assert_eq!(rows_drawing(&log, &Model::default(), 2), [0]);
+}
+
+/// A call's own prose is counted as the row it's in draws it: from the kit's blocks in a row of its own, and by the
+/// kit's text view in a call's row, as a call in a subagent's work is, while what its call draws after it, such as the
+/// subagent's report, is its call's row's own again.
+#[test]
+fn a_call_s_prose_is_counted_as_the_row_it_s_in_draws_it() {
+    let asked = json!({ "description": "Look", "prompt": "Ask about the parser" });
+    let log = log([
+        event(1, call("helper", "Agent", asked)),
+        event(2, within("helper", calls_to("advisor", &["nested"]))),
+        event(3, within("helper", from_the_agent(sent_back("nested", "Test the parser first.")))),
+        // In the foreground, it reports in its call's result.
+        event(4, sent_back("helper", "The parser is sound.")),
+        event(5, calls_to("advisor", &["own"])),
+        event(6, from_the_agent(sent_back("own", "The parser is fine."))),
+    ]);
+    let needle = Needle::new("parser").unwrap();
+    let by_the_kit = |ix| -> Vec<(Part, bool)> {
+        of_row(&log, &Model::default(), &needle, ix).into_iter().map(|found| (found.id.1, found.kit_view)).collect()
+    };
+
+    let in_the_agent_s = [(Part::Asked, false), (Part::Advice, true), (Part::Report, false)];
+    assert_eq!(by_the_kit(0), in_the_agent_s, "a subagent's call is in its call's row");
+    assert_eq!(by_the_kit(4), [(Part::Advice, false)], "and this one in a row of its own");
 }
 
 #[test]

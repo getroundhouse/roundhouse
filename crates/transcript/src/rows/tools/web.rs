@@ -53,7 +53,7 @@ pub(super) fn shown_fetch(fetch: &Fetch, answer: Option<&Answer>, key: &ItemKey,
             gather.plain(key, Text::Ask, prompt);
         }
         if let Some(answer) = answer.and_then(Answer::success).filter(|text| !text.trim().is_empty()) {
-            gather.markdown(key, Text::Answer, answer);
+            gather.written(key, Text::Answer, answer);
         }
     });
 }
@@ -68,7 +68,7 @@ pub(super) fn shown_search(search: &WebSearch, answer: Option<&Answer>, key: &It
             gather.plain(key, Text::nth(Text::Link, i), &link.title);
         }
         if !results.summary.is_empty() {
-            gather.markdown(key, Text::Findings, results.summary);
+            gather.written(key, Text::Findings, results.summary);
         }
     });
 }

@@ -9,7 +9,6 @@ use gpui_kit::AppContext as _;
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
 use protocol::model::{SettledAt, seq_index};
-use transcript::Transcript;
 
 use crate::support::{Stack, Ui};
 
@@ -184,9 +183,9 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     ui.wait("its call to open", |ui| {
         ui.labelled(SUBAGENT_LINE).first().and_then(ElementSnapshot::expanded) == Some(true)
     });
-    // What it was asked is Markdown, whose matches only the view the transcript keeps of it draws.
-    ui.wait("the match to be drawn in the view that marks it", |ui| {
-        ui.cx.read_entity(&transcript, Transcript::match_in_its_view) == Some(true)
+    // What it was asked is drawn from the kit's blocks, which say where they drew the match being shown.
+    ui.wait("the match to be drawn with its marks", |ui| {
+        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
     });
 }
 

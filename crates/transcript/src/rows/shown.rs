@@ -40,7 +40,8 @@ pub(crate) struct Found {
 /// drawn in another's, such as a call's result, draws none of its own, and one that settled a prompt draws the
 /// prompt.
 pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) -> Vec<Found> {
-    let mut gather = Gather { needle, found: Vec::new(), opens: Vec::new() };
+    // A row's own, until a block it gathers says otherwise, as the prompt's text is the only one its row draws.
+    let mut gather = Gather { needle, found: Vec::new(), opens: Vec::new(), in_row: InRow::Own(0) };
     if ix >= log.row_count() {
         return gather.found;
     }
@@ -101,11 +102,13 @@ pub(crate) fn count(log: &SessionLog, needle: &str, ix: usize) -> usize {
 #[cfg(test)]
 mod tests;
 
-/// Where a row's texts with matches are gathered, and what has to be opened to show the ones being gathered now.
+/// Where a row's texts with matches are gathered, what has to be opened to show the ones being gathered now, and the
+/// row the block they're in is drawn in, its own or a call's, as a subagent's are.
 pub(in crate::rows) struct Gather<'n> {
     needle: &'n Needle,
     found: Vec<Found>,
     opens: Vec<(ItemKey, Fold)>,
+    in_row: InRow,
 }
 
 impl Gather<'_> {
@@ -114,15 +117,21 @@ impl Gather<'_> {
         self.add(key, part, text, Drawn::Plain);
     }
 
-    /// `text`, which is Markdown the kit's text view draws, as it was written, if what it renders has matches.
-    pub(in crate::rows) fn markdown(&mut self, key: &ItemKey, part: Part, text: &str) {
-        self.add(key, part, text, Drawn::KitView);
+    /// `text`, which is recorded Markdown, as it was written, if what it renders has matches, as `super::written`
+    /// draws it: from the kit's blocks in a row of its own, and with the kit's text view in a call's row.
+    pub(in crate::rows) fn written(&mut self, key: &ItemKey, part: Part, text: &str) {
+        let drawn = match self.in_row.own_block() {
+            Some(_) => Drawn::Prose,
+            None => Drawn::KitView,
+        };
+        self.add(key, part, text, drawn);
     }
 
-    /// `text`, which is Markdown the transcript draws from the kit's blocks, as `crate::prose` has it, as it was
-    /// written, if what it renders has matches.
-    fn prose(&mut self, key: &ItemKey, part: Part, text: &str) {
-        self.add(key, part, text, Drawn::Prose);
+    /// Gathers with `gather` what a block drawn in the row `in_row` says shows, and then goes back to the row it was in.
+    fn in_row(&mut self, in_row: InRow, gather: impl FnOnce(&mut Self)) {
+        let was = std::mem::replace(&mut self.in_row, in_row);
+        gather(self);
+        self.in_row = was;
     }
 
     /// Gathers what the block `key` shows once its `fold` is open.
@@ -156,7 +165,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     let seq = event.seq;
     match &event.body {
         EventBody::UserPrompt { text, client_msg_id, .. } if !text.trim().is_empty() => {
-            gather.prose(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
+            gather.written(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             for (ix, (block, drawing)) in blocks.iter().zip(&around.blocks).enumerate() {
@@ -202,13 +211,11 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
 /// What a block shows, as [`super::render_block`] draws it in the row `in_row` says.
 pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_row: InRow, gather: &mut Gather) {
     let key = &drawing.key;
-    match block {
-        ContentBlock::Text { text, .. } if matches!(in_row, InRow::Own(_)) => gather.prose(key, Part::Text, text),
-        ContentBlock::Text { text, .. } => gather.markdown(key, Part::Text, text),
+    gather.in_row(in_row, |gather| match block {
+        ContentBlock::Text { text, .. } => gather.written(key, Part::Text, text),
         ContentBlock::Thinking { text } if text.is_empty() => {}
-        ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| match in_row {
-            InRow::Own(_) => gather.prose(key, Part::Thinking, text),
-            InRow::Call => gather.markdown(key, Part::Thinking, text),
+        ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| {
+            gather.written(key, Part::Thinking, text);
         }),
         ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => {}
         ContentBlock::ToolUse { name, input, .. } => {
@@ -221,5 +228,5 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_
             }
         }
         ContentBlock::Image { .. } | ContentBlock::Unknown => {}
-    }
+    });
 }

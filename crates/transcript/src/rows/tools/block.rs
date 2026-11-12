@@ -13,10 +13,9 @@ use gpui_kit::{
 use super::Toggle;
 use super::highlight::spans;
 use crate::attachments::{self, Carried};
-use crate::find::{self, FindLook, Marks, Part, marked};
-use crate::item_key::ItemKey;
+use crate::find::{FindLook, Marks, Part, marked};
 use crate::log_block::{self, LogBlock, LogText};
-use crate::long_texts::LongTexts;
+use crate::rows::written;
 use crate::scroll_area::ScrollArea;
 use crate::selectable_lines::SelectableLines;
 
@@ -194,21 +193,13 @@ pub(in crate::rows) fn code_text(text: &str) -> &str {
     text.trim_end()
 }
 
-/// Prose in a block, the call's `part`, such as what a subagent was asked or what a model made of a page, as
-/// Markdown, scrolling past a dozen lines or so, with its matches.
+/// Prose in a block, the call's `part`, such as what the advisor said or what a model made of a page, as Markdown,
+/// scrolling past a dozen lines or so, with its matches.
 pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
     let id = part.element(toggle.key);
-    let view = markdown(&toggle.shared.texts, toggle.key, part, text, toggle.find);
+    let view = written(toggle, part, text, Some(scroll_id(&id)), None);
     let shown = div().id(id.clone()).px_3().py_2().text_sm().child(view).test_support();
-    scrolling(toggle.find, &id, shown).into_any_element()
-}
-
-/// The item `key`'s `part`, Markdown, as [`prose`] draws it but without its padding or the area that scrolls it, with
-/// the matches of what `find` looks for, which the view `texts` keeps of it draws.
-pub(super) fn markdown(texts: &LongTexts, key: &ItemKey, part: Part, text: &str, find: &FindLook) -> AnyElement {
-    let id = (key.clone(), part);
-    let view = texts.markdown(find::view_id(&id), text);
-    find::markdown_view(view, &id, find, Some(scroll_id(&part.element(key))))
+    scrolling(toggle.find, &id, shown).follows_drags(toggle.drags()).into_any_element()
 }
 
 /// A part of a block, such as its output, which keeps its own ID, in an area that scrolls it once it's taller than a

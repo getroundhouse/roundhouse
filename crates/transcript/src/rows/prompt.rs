@@ -13,7 +13,7 @@ use super::{Shared, recorded, row};
 use crate::attachments::{self, Carried};
 use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
-use crate::prose::TextAt;
+use crate::prose::{TextAt, Written};
 
 /// The widest a prompt is, as a share of the column. What was asked sits at the right, as wide as it needs, so it
 /// stands apart from the agent's work, which starts at the left.
@@ -87,8 +87,8 @@ pub(super) fn prompt_bubble(
                     d.child(match place {
                         // In a row, the transcript draws it from the kit's blocks, and selects it itself, with the
                         // view it was drawn by while it was sent until the record has a parse of its own.
-                        Some(place) => recorded(TextAt { seq: place, block: 0 }, &id, text, None, find, shared),
-                        None => find::markdown_view(shared.texts.markdown(find::view_id(&id), text), &id, find, None),
+                        Some(place) => recorded(&Written::found(TextAt::only(place, 0), &id, find, text), None, shared),
+                        None => find::markdown_view(shared.texts.markdown(&id, text), &id, find, None),
                     })
                 })
                 .test_support(),

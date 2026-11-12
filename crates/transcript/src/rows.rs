@@ -21,7 +21,7 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
-use crate::prose::{Prose, TextAt};
+use crate::prose::Prose;
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
@@ -57,7 +57,7 @@ use around::{Around, BlockAround, drawn_in_its_call, drawn_in_row};
 use column::column;
 use prompt::{Progress, Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
-use text::{agent_text, recorded};
+use text::{recorded, written};
 use tools::Toggle;
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
@@ -332,10 +332,21 @@ fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
 
 /// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
 /// words are.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::rows) enum InRow {
     Own(usize),
     Call,
+}
+
+impl InRow {
+    /// Which of its event's blocks it is, in a row of its own, where the transcript draws the recorded texts it shows
+    /// from the kit's blocks, and selects them itself. None in a call's row, where they're the kit's text views.
+    pub(in crate::rows) fn own_block(self) -> Option<usize> {
+        match self {
+            InRow::Own(block) => Some(block),
+            InRow::Call => None,
+        }
+    }
 }
 
 /// A block of the event at `seq`, drawn in the row `in_row` says.
@@ -350,19 +361,11 @@ fn render_block(
 ) -> Option<AnyElement> {
     let key = &drawing.key;
     let (fold, open, whole) = (drawing.fold, drawing.open, drawing.whole);
-    let toggle = Toggle { seq, key, fold, open, whole, shared, find };
+    let toggle = Toggle { seq, key, fold, open, whole, shared, find, in_row };
     Some(match block {
-        // In a row of its own, the transcript draws it from the kit's blocks, and selects it itself.
-        ContentBlock::Text { text, images } if let InRow::Own(block) = in_row => {
-            recorded(TextAt { seq, block }, &(key.clone(), Part::Text), text, Some(images), find, shared)
-        }
-        // In a call's row, as a subagent's words are, it's the kit's text view.
-        ContentBlock::Text { text, images } => {
-            let view = agent_text(&shared.texts, key, text).image_source(shared.linked.resolver(seq, images));
-            find::markdown_view(view, &(key.clone(), Part::Text), find, None)
-        }
+        ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
-        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, in_row, cx),
+        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These are drawn from their approvals, which have everything that was asked.
         ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => return None,
         ContentBlock::ToolUse { name, input, .. } => {

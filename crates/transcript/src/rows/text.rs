@@ -3,41 +3,58 @@
 //! by [`find::view_id`], from its first word to its record, so what the view read while the text was written or sent
 //! carries over to the record until its parse is in.
 
-use gpui_kit::AnyElement;
-use gpui_kit::component::text::TextView;
+use gpui_kit::{AnyElement, ElementId};
 use protocol::event::LinkedImage;
 
 use super::Shared;
-use crate::find::{self, FindLook, Part, TextId};
-use crate::item_key::ItemKey;
-use crate::long_texts::LongTexts;
-use crate::prose::{Images, TextAt, Written};
+use super::tools::Toggle;
+use crate::find::{self, Part};
+use crate::prose::{Among, Images, TextAt, Written};
 
-/// The recorded text `id` at `at`, in a row of its own, drawn from the kit's blocks, with what's found in it as `find`
-/// says, and with the images the hub kept of those it points to, if it can point to any. Until it's parsed, it's the
-/// view it was written or sent into, if that's still kept, so it doesn't go blank between.
-pub(super) fn recorded(
-    at: TextAt,
-    id: &TextId,
+/// A recorded text, the `part` of the item the block `toggle` draws, as the row it's in draws it, with the images the
+/// hub kept of those it points to, if it can point to any, and with its matches. In a row of its own, the transcript
+/// draws it from the kit's blocks, where its part places it among the texts its block draws, in the area `area` if one
+/// scrolls it, and selects it itself. In a call's row, as a subagent's words and calls are, it's the kit's text view.
+pub(super) fn written(
+    toggle: &Toggle,
+    part: Part,
     text: &str,
+    area: Option<ElementId>,
     images: Option<&[LinkedImage]>,
-    find: &FindLook,
-    shared: &Shared,
 ) -> AnyElement {
-    let resolver = || images.map(|images| shared.linked.resolver(at.seq, images));
+    let (id, find, shared) = ((toggle.key.clone(), part), toggle.find, toggle.shared);
+    let Some(block) = toggle.in_row.own_block() else {
+        let view = shared.texts.markdown(&id, text);
+        let view = match images {
+            Some(images) => view.image_source(shared.linked.resolver(toggle.seq, images)),
+            None => view,
+        };
+        return find::markdown_view(view, &id, find, area);
+    };
+    let at = TextAt { seq: toggle.seq, block, among: among(part) };
+    recorded(&Written { area, ..Written::found(at, &id, find, text) }, images, shared)
+}
+
+/// Where a text goes among those its block draws, by what it is: a reply's text and a thought are all their blocks
+/// draw, and anything else is one of a call's own, such as what a subagent was asked and its report.
+fn among(part: Part) -> Among {
+    if matches!(part, Part::Text | Part::Thinking) { Among::Only } else { Among::Call(part) }
+}
+
+/// The recorded text `written`, drawn from the kit's blocks, with the images the hub kept of those it points to, if it
+/// can point to any. Until it's parsed, it's the view it was written or sent into, if that's still kept and find looks
+/// in it, so it doesn't go blank between.
+pub(super) fn recorded(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
+    let resolver = || images.map(|images| shared.linked.resolver(written.at.seq, images));
     let meanwhile = || {
-        let view = shared.texts.kept(find::view_id(id), text)?;
+        let (id, find) = written.found?;
+        let view = shared.texts.kept(id, written.text)?;
         let view = match resolver() {
             Some(resolver) => view.image_source(resolver),
             None => view,
         };
-        Some(find::markdown_view(view, id, find, None))
+        Some(find::markdown_view(view, id, find, written.area.clone()))
     };
     let images = resolver().map(|resolver| -> Images { Box::new(resolver) });
-    shared.prose.draw(&shared.selection, &Written::found(at, id, find, text), images, meanwhile)
-}
-
-/// Text the agent wrote under `key`, in the kit's text view, as it streams, and once it's recorded in a call's row.
-pub(super) fn agent_text(texts: &LongTexts, key: &ItemKey, text: &str) -> TextView {
-    texts.markdown(find::view_id(&(key.clone(), Part::Text)), text)
+    shared.prose.draw(&shared.selection, written, images, meanwhile)
 }

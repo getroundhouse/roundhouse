@@ -61,7 +61,9 @@ pub(crate) fn start(
     eof: &mut bool,
 ) -> bool {
     let Asked { description, in_background, calls, until } = *asked;
-    let input = json!({"description":description,"subagent_type":"Explore","prompt":"Look around."});
+    // It's asked to do what it's for, as a sentence.
+    let prompt = format!("{description}.");
+    let input = json!({"description":description,"subagent_type":"Explore","prompt":prompt});
     let agent = turn.named_tool_use("Agent", input);
     let (task, session_id) = (format!("task_{agent}"), &turn.config.session_id);
     if in_background {
@@ -70,7 +72,7 @@ pub(crate) fn start(
     emit(
         turn.out,
         json!({"type":"system","subtype":"task_started","task_id":task,"tool_use_id":agent,"description":description,
-        "task_type":"local_agent","subagent_type":"Explore","prompt":"Look around.","is_backgrounded":in_background,
+        "task_type":"local_agent","subagent_type":"Explore","prompt":prompt,"is_backgrounded":in_background,
         "session_id":session_id}),
     );
     if in_background {

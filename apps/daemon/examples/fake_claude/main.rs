@@ -35,7 +35,8 @@
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
 //!                   SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
-//!   agent:TEXT      Start a subagent for TEXT in the background, which makes a call and reports a second later.
+//!   agent:TEXT      Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes a call
+//!                   and reports a second later.
 //!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
 //!   agent-calls:N:TEXT  The same in the background, making N calls, so its work is long enough to scroll.
 //!   agent-until:FILE:TEXT  The same in the background, working until FILE exists, so a test can catch it at work.

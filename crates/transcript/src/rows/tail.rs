@@ -23,7 +23,7 @@ use super::tools::agent::open_tab;
 use super::{Shared, empty, render_event, row, thinking, turn_times};
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
-use crate::find::{self, FindLook, Part};
+use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
 use crate::transcript::{AtWork, Model};
 
@@ -106,12 +106,10 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             match block.kind {
                 BlockKind::Text => {
-                    out.push(
-                        texts.streaming(find::view_id(&(key.clone(), Part::Text)), &block.text).into_any_element(),
-                    );
+                    out.push(texts.streaming(&(key.clone(), Part::Text), &block.text).into_any_element());
                 }
                 BlockKind::Thinking if thinking_open => {
-                    let text = texts.streaming(find::view_id(&(key.clone(), Part::Thinking)), &block.text);
+                    let text = texts.streaming(&(key.clone(), Part::Thinking), &block.text);
                     out.push(thought("Thinking…".to_string(), cx).into_any_element());
                     out.push(thinking::text(&key, text, cx).into_any_element());
                 }

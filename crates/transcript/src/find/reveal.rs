@@ -3,10 +3,11 @@
 //! transcript scrolls its list to it, so it's below the bar. Each frame says where it's drawn now, so the two settle in
 //! a frame or two.
 //!
-//! The agent's recorded words say where a match is as plain text does. Other Markdown is drawn by the kit's text view,
-//! which scrolls the transcript's list to a match itself, and says where it is only while it's out of view. So while
-//! it's being brought into view, it's laid out as if what the bar covers were out of view too, and what it says goes
-//! the same two ways.
+//! Recorded Markdown the transcript draws from the kit's blocks, such as the agent's replies and a call's prose in a
+//! row of its own, says where a match is as plain text does. Other Markdown, such as a subagent's words in its call's
+//! row, is drawn by the kit's text view, which scrolls the transcript's list to a match itself, and says where it is
+//! only while it's out of view. So while it's being brought into view, it's laid out as if what the bar covers were
+//! out of view too, and what it says goes the same two ways.
 
 use std::cell::RefCell;
 use std::rc::Rc;

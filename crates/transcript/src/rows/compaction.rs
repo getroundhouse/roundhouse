@@ -103,7 +103,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
     let (theme, key) = (cx.theme(), ItemKey::Event(seq, 0));
     // What a compaction says isn't found. A drag from it scrolls on its area, as the wheel does.
     let area = key.element("summary-scroll");
-    let written = Written::unfound(TextAt { seq, block: 0 }, key.element("summary"), summary).in_area(area.clone());
+    let written = Written::unfound(TextAt::only(seq, 0), key.element("summary"), summary).in_area(area.clone());
     let text = shared.prose.draw(&shared.selection, &written, None, || None);
     let text = div().pr_3().text_sm().text_color(theme.muted_foreground).child(text);
     v_flex()
@@ -116,7 +116,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
         .border_1()
         .border_color(theme.border)
         .child(div().text_xs().text_color(look::faint()).child("What the agent carries on from"))
-        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text).follows_drags(&shared.selection))
+        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text).follows_drags(Some(&shared.selection)))
 }
 
 /// The rule for `body`, if it's a compaction, or a line saying why it couldn't.
