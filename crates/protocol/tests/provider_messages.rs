@@ -77,6 +77,10 @@ fn reply(response: ProviderResponse) -> ProviderFrame {
 fn every_response_and_event_keeps_its_form() {
     keeps_its_form(&reply(ProviderResponse::Ok), r#"{"frame":"reply","id":7,"response":{"result":"ok"}}"#);
     keeps_its_form(
+        &ProviderFrame::Reply { id: 7, outcome: ProviderOutcome::Error(ApiError::new(ErrorCode::NotFound, "no i")) },
+        r#"{"frame":"reply","id":7,"error":{"code":"not_found","message":"no i"}}"#,
+    );
+    keeps_its_form(
         &reply(ProviderResponse::Instances {
             instances: vec![
                 Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false },
