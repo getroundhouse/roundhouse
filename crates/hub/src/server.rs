@@ -305,16 +305,16 @@ async fn handle(
             hub.file_remove(FileFor::Session(session_id), id).await?;
             C::Ok
         }
-        R::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) => {
-            C::WorkspaceDraft(hub.workspace_draft_keep(draft).await?)
+        R::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) => {
+            C::NewWorkspaceDraft(hub.new_workspace_draft_keep(draft).await?)
         }
-        R::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, name, media_type, data }) => {
+        R::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data }) => {
             C::Attachment(hub.file_add(FileFor::NewWorkspace, id, name, media_type, data, AddedBy::Client).await?)
         }
-        R::WorkspaceDraftFileRead(drafts::WorkspaceDraftFileRead { id }) => {
+        R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
             C::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? }
         }
-        R::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id }) => {
+        R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
             hub.file_remove(FileFor::NewWorkspace, id).await?;
             C::Ok
         }

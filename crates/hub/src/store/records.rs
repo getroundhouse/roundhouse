@@ -6,9 +6,9 @@ use rusqlite::{Row, Transaction};
 use super::accounts::accounts;
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
 use super::hub_settings::hub_settings;
+use super::new_workspace_draft::new_workspace_draft;
 use super::repos::{REPO_COLUMNS, repo_from_row};
 use super::sessions::{SESSION_COLUMNS, session_from_row};
-use super::workspace_draft::workspace_draft;
 use super::workspaces::{WORKSPACE_COLUMNS, workspace_from_row};
 use super::{Store, StoreError, current_rev, lock};
 
@@ -36,7 +36,7 @@ impl Store {
             )?,
             hub_settings: Some(hub_settings(&tx)?),
             accounts: accounts(&tx)?,
-            workspace_draft: Some(workspace_draft(&tx)?),
+            new_workspace_draft: Some(new_workspace_draft(&tx)?),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

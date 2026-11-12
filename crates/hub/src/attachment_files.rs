@@ -16,8 +16,9 @@ use crate::error::internal;
 /// Longer than any ID a client or worker makes, which is a UUID.
 const MAX_ID_CHARS: usize = 64;
 
-/// Where the new-workspace dialog's files wait, which has a `.`, so no session's directory can be it.
-const WORKSPACE_DRAFT_DIR: &str = "workspace-draft.files";
+/// Where the new-workspace dialog's files wait, which has a `.`, so no session's directory can be it. It keeps the name
+/// it was first made with, since a hub may have files there already.
+const NEW_WORKSPACE_DRAFT_DIR: &str = "workspace-draft.files";
 
 /// What a file is kept for, which says where it's kept: a session, for its prompts to carry, or the new-workspace
 /// dialog, before any session exists to add it to.
@@ -41,7 +42,7 @@ impl AttachmentFiles {
     fn path(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<PathBuf, ApiError> {
         let dir = match kept_for {
             FileFor::Session(session_id) => self.session_dir(session_id)?,
-            FileFor::NewWorkspace => self.dir.join(WORKSPACE_DRAFT_DIR),
+            FileFor::NewWorkspace => self.dir.join(NEW_WORKSPACE_DRAFT_DIR),
         };
         Ok(dir.join(safe(id.as_str())?))
     }
@@ -87,7 +88,7 @@ impl AttachmentFiles {
     /// Lets go of each of the new-workspace dialog's files on disk but those in `kept`, such as one a hub stopping
     /// mid-write left half of, or one whose row went without it.
     pub(crate) async fn remove_draft_files_except(&self, kept: HashSet<AttachmentId>) -> Result<(), ApiError> {
-        let dir = self.dir.join(WORKSPACE_DRAFT_DIR);
+        let dir = self.dir.join(NEW_WORKSPACE_DRAFT_DIR);
         on_disk(move || {
             let entries = match std::fs::read_dir(&dir) {
                 Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),

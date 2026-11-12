@@ -12,7 +12,7 @@ use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide, Effort, ModelN
 /// every client, such as on a phone after it was started on a Mac. A hub keeps one, since a person writes one at a
 /// time, and like a chat's draft it's the person's, which a hub with several people would keep for each.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct WorkspaceDraft {
+pub struct NewWorkspaceDraft {
     /// The repository it's to be made in, which may have gone since. `None` until something's kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo_id: Option<RepoId>,
@@ -35,11 +35,11 @@ pub struct WorkspaceDraft {
     pub rev: Rev,
 }
 
-/// What a client asks the hub to keep as its [`WorkspaceDraft`], in place of what's there: the same, with the files by
+/// What a client asks the hub to keep as its [`NewWorkspaceDraft`], in place of what's there: the same, with the files by
 /// ID. Each file is added first, as a chat's draft's are, so the hub names each as it has it, and leaves out any it
 /// hasn't been given.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct WorkspaceDraftToKeep {
+pub struct NewWorkspaceDraftToKeep {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo_id: Option<RepoId>,
     #[serde(default)]
@@ -77,14 +77,14 @@ impl Draft {
 /// file is added to the session first, as a prompt's are, so the hub names each as it has it, and leaves out any it
 /// hasn't been given.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct NewDraft {
+pub struct DraftToKeep {
     #[serde(default)]
     pub text: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<AttachmentId>,
 }
 
-impl NewDraft {
+impl DraftToKeep {
     /// Only `text`, with no files.
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into(), files: Vec::new() }

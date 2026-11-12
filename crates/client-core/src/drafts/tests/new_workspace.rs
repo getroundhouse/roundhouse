@@ -2,14 +2,14 @@
 
 use super::*;
 
-fn dialog(text: &str, files: &[&str]) -> WorkspaceDraftToKeep {
+fn dialog(text: &str, files: &[&str]) -> NewWorkspaceDraftToKeep {
     let files = files.iter().map(|&id| id.into()).collect();
-    WorkspaceDraftToKeep { text: text.to_string(), files, ..WorkspaceDraftToKeep::default() }
+    NewWorkspaceDraftToKeep { text: text.to_string(), files, ..NewWorkspaceDraftToKeep::default() }
 }
 
 /// The dialog's record as the hub's feed might tell of it, at `rev`, with `typed` in it.
-fn told(rev: u64, typed: &str) -> WorkspaceDraft {
-    WorkspaceDraft { rev: Rev::new(rev), text: typed.to_string(), ..WorkspaceDraft::default() }
+fn told(rev: u64, typed: &str) -> NewWorkspaceDraft {
+    NewWorkspaceDraft { rev: Rev::new(rev), text: typed.to_string(), ..NewWorkspaceDraft::default() }
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn the_dialogs_files_go_before_the_draft_that_names_them_and_are_let_go_of_after
 
     drafts.attach_to_new_workspace(file("f1"));
     drafts.typed_new_workspace(dialog("fix the login", &["f1"]));
-    drafts.set(&chat("a"), NewDraft::new("a chat's"));
+    drafts.set(&chat("a"), DraftToKeep::new("a chat's"));
 
     assert!(drafts.unkept_in(&Where::NewWorkspace));
     let said = kept(&drafts, &heard);
@@ -46,7 +46,7 @@ fn what_a_hub_that_keeps_only_chats_drafts_refuses_of_the_dialog_waits_for_the_n
     let refused = pairs(&[("dialog", "refused +f1"), ("dialog", "refused +f1")]);
     assert_eq!(kept(&drafts, &heard), refused, "its first file, as it is, then as one of a kind any hub knows");
 
-    drafts.set(&chat("a"), NewDraft::new("typed"));
+    drafts.set(&chat("a"), DraftToKeep::new("typed"));
 
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "typed")]), "the rest goes on, and the hub isn't asked again");
     assert!(drafts.unkept_in(&Where::NewWorkspace), "it would be lost if the app stopped now");

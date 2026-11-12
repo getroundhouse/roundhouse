@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{Account, HubSettings, LimitWindow, Session, SessionId, Title, UsageLimit, WorkspaceDraft};
+use protocol::model::{Account, HubSettings, LimitWindow, NewWorkspaceDraft, Session, SessionId, Title, UsageLimit};
 
 use super::*;
 
@@ -197,27 +197,31 @@ fn a_hub_from_before_it_kept_settings_has_none() {
     assert_eq!(held.snapshot().hub_settings().cloned(), None);
 }
 
-fn dialog(text: &str, rev: u64) -> WorkspaceDraft {
-    WorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..WorkspaceDraft::default() }
+fn dialog(text: &str, rev: u64) -> NewWorkspaceDraft {
+    NewWorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..NewWorkspaceDraft::default() }
 }
 
 #[test]
 fn whats_in_the_new_workspace_dialog_is_a_record_like_the_rest() {
     let mut held = HubRecords::default();
     assert_eq!(
-        held.snapshot().workspace_draft().cloned(),
+        held.snapshot().new_workspace_draft().cloned(),
         None,
         "from a hub from before it kept one, and until the list has arrived"
     );
 
-    assert!(held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(2), ..Records::default() }));
-    assert!(held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix the login", 5))));
-    assert!(!held.apply_notice(HubNotice::WorkspaceDraft(dialog("fix", 4))), "an older copy that arrives late");
+    assert!(held.apply_list(Records {
+        new_workspace_draft: Some(dialog("", 2)),
+        rev: Rev::new(2),
+        ..Records::default()
+    }));
+    assert!(held.apply_notice(HubNotice::NewWorkspaceDraft(dialog("fix the login", 5))));
+    assert!(!held.apply_notice(HubNotice::NewWorkspaceDraft(dialog("fix", 4))), "an older copy that arrives late");
 
-    assert_eq!(held.snapshot().workspace_draft().cloned(), Some(dialog("fix the login", 5)));
-    held.apply_list(Records { workspace_draft: Some(dialog("", 2)), rev: Rev::new(3), ..Records::default() });
+    assert_eq!(held.snapshot().new_workspace_draft().cloned(), Some(dialog("fix the login", 5)));
+    held.apply_list(Records { new_workspace_draft: Some(dialog("", 2)), rev: Rev::new(3), ..Records::default() });
     assert_eq!(
-        held.snapshot().workspace_draft().cloned(),
+        held.snapshot().new_workspace_draft().cloned(),
         Some(dialog("fix the login", 5)),
         "a list from before the change"
     );

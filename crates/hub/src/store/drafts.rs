@@ -1,7 +1,7 @@
 //! What's typed and attached in each session's composer and not sent, and letting go of a file nothing will send, and
 //! what's typed and not sent in answer to each session's question and in a comment on each workspace's diff.
 
-use protocol::model::{AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, SessionId, Workspace, WorkspaceId};
+use protocol::model::{AnswerDraft, AttachmentId, CommentDraft, Draft, DraftToKeep, SessionId, Workspace, WorkspaceId};
 use rusqlite::{Connection, params};
 
 use super::attachments::named_on;
@@ -19,7 +19,7 @@ impl Store {
     /// has it, and one it hasn't been given is left out, as are any past what a prompt can carry. A closed session
     /// keeps none, since its composer went with it. Keeping what's kept already changes nothing, so the session's
     /// revision only moves when the draft does.
-    pub fn set_draft(&self, id: &SessionId, draft: &NewDraft) -> Result<Reading, StoreError> {
+    pub fn set_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
         let files = named_on(&conn, &FileFor::Session(id.clone()), &draft.files)?;
         let kept = Draft { text: draft.text.clone(), files };

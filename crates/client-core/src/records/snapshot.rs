@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, Record, Repo, RepoId, Session, SessionId, Subagent, ToolUseId,
-    Workspace, WorkspaceDraft, WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Record, Repo, RepoId, Session, SessionId,
+    Subagent, ToolUseId, Workspace, WorkspaceId,
 };
 
 use super::Taken;
@@ -40,7 +40,7 @@ pub(super) struct Listed {
     comments: HashMap<WorkspaceId, Group<DiffComment>>,
     accounts: HashMap<AccountId, Account>,
     hub_settings: Option<HubSettings>,
-    workspace_draft: Option<WorkspaceDraft>,
+    new_workspace_draft: Option<NewWorkspaceDraft>,
 }
 
 /// The subagents of the sessions views asked for, as views read them.
@@ -99,7 +99,7 @@ impl Listed {
                 Record::Account(account) => {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
-                Record::WorkspaceDraft(draft) => listed.workspace_draft = Some(draft.clone()),
+                Record::NewWorkspaceDraft(draft) => listed.new_workspace_draft = Some(draft.clone()),
                 // Held apart, as `HubRecords::apply_record` says.
                 Record::Subagent(_) => {}
             }
@@ -201,8 +201,8 @@ impl Snapshot {
 
     /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived, and for good
     /// from a hub from before it kept one.
-    pub fn workspace_draft(&self) -> Option<&WorkspaceDraft> {
-        self.records.workspace_draft.as_ref()
+    pub fn new_workspace_draft(&self) -> Option<&NewWorkspaceDraft> {
+        self.records.new_workspace_draft.as_ref()
     }
 
     /// The session's subagents, in the order they started, once a view has asked for them with

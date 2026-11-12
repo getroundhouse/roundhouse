@@ -54,3 +54,6 @@ pub(crate) const BEFORE_SUBAGENT_MODELS: usize = 32;
 
 /// How many migrations there were before sessions' records said what their agents wait on.
 pub(crate) const BEFORE_WAITING_ON: usize = 41;
+
+/// How many migrations there were before the new-workspace dialog's tables were named for it.
+pub(crate) const BEFORE_NEW_WORKSPACE_DRAFT_NAMES: usize = 43;

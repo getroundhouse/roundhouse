@@ -5,7 +5,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::client::HubNotice;
-use protocol::model::{RecordKey, Rev, Session, Subagent, WorkspaceDraft};
+use protocol::model::{NewWorkspaceDraft, RecordKey, Rev, Session, Subagent};
 use tokio::sync::broadcast;
 
 use super::Feed;
@@ -110,7 +110,8 @@ fn a_copy_without_a_revision_is_always_told_of() {
 fn the_new_workspace_dialogs_copies_are_in_order() {
     let feed = Feed::new();
     let mut client = feed.subscribe();
-    let dialog = |rev| HubNotice::WorkspaceDraft(WorkspaceDraft { rev: Rev::new(rev), ..WorkspaceDraft::default() });
+    let dialog =
+        |rev| HubNotice::NewWorkspaceDraft(NewWorkspaceDraft { rev: Rev::new(rev), ..NewWorkspaceDraft::default() });
 
     feed.send(dialog(2));
     feed.send(dialog(1));

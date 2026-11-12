@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use client_core::{Client, Drafts, Where};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, PermissionMode, WorkspaceDraft, WorkspaceDraftToKeep};
+use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
 use protocol::prompt::says_or_carries;
 
 use super::{DialogEvent, NewWorkspaceDialog};
@@ -19,7 +19,7 @@ pub(crate) struct Keeping {
     keeper: Option<Drafts>,
     client: Option<Client>,
     /// The hub's record as it was last told of, to compare what's here with.
-    kept: WorkspaceDraft,
+    kept: NewWorkspaceDraft,
     /// Files the record names that haven't been read back yet, in its order, which come before any here.
     restoring: Vec<Attachment>,
 }
@@ -58,9 +58,9 @@ impl NewWorkspaceDialog {
 
     /// What's here, as the hub keeps it. Files still being read back come first, where they'll be put back, so the
     /// draft goes on naming them.
-    fn to_keep(&self, cx: &App) -> WorkspaceDraftToKeep {
+    fn to_keep(&self, cx: &App) -> NewWorkspaceDraftToKeep {
         let coming_back = self.keeping.restoring.iter().map(|file| file.id.clone());
-        WorkspaceDraftToKeep {
+        NewWorkspaceDraftToKeep {
             repo_id: Some(self.repo.clone()),
             text: self.prompt.read(cx).text().to_string(),
             files: coming_back.chain(self.attached.ids()).collect(),
@@ -72,7 +72,7 @@ impl NewWorkspaceDialog {
 
     /// Whether what's here is what the record says, its files in whatever order. What it doesn't say, such as a
     /// repository it names that isn't offered, can't differ.
-    fn has_kept(&self, kept: &WorkspaceDraft, cx: &App) -> bool {
+    fn has_kept(&self, kept: &NewWorkspaceDraft, cx: &App) -> bool {
         let here = self.to_keep(cx);
         let (files, there): (HashSet<_>, HashSet<_>) =
             (here.files.into_iter().collect(), kept.files.iter().map(|file| file.id.clone()).collect());
@@ -93,7 +93,7 @@ impl NewWorkspaceDialog {
     /// the app last started, as [`Drafts::new_workspace_from_elsewhere`] says. What's on its way to the hub from here
     /// goes on and replaces it, so what's typed here is never undone as it's typed. Whatever comes in its place is the
     /// hub's already, so none of it is kept again, and this client says it shows it, as taking a chat's draft does.
-    pub(crate) fn take_kept(&mut self, kept: WorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn take_kept(&mut self, kept: NewWorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
         let keeper = self.keeping.keeper.as_ref();
         let elsewhere = keeper.is_some_and(|keeper| keeper.new_workspace_from_elsewhere(&kept));
         if let Some(keeper) = keeper.filter(|_| elsewhere) {
@@ -144,7 +144,7 @@ impl NewWorkspaceDialog {
         if files.is_empty() {
             return;
         }
-        let read = move |file: &AttachmentId| client.workspace_draft_file_read(file);
+        let read = move |file: &AttachmentId| client.new_workspace_draft_file_read(file);
         read_back(files, read, Self::brought_back, cx);
     }
 
@@ -180,12 +180,12 @@ impl NewWorkspaceDialog {
 #[cfg(feature = "testing")]
 impl NewWorkspaceDialog {
     /// The hub's record as the dialog was last told of it, for a test to see that it has heard of a change.
-    pub fn kept(&self) -> &WorkspaceDraft {
+    pub fn kept(&self) -> &NewWorkspaceDraft {
         &self.keeping.kept
     }
 
     /// Takes `kept` as the hub's record, as the app does, for a test to act before what that starts has run.
-    pub fn take_kept_now(&mut self, kept: WorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn take_kept_now(&mut self, kept: NewWorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
         self.take_kept(kept, window, cx);
     }
 }

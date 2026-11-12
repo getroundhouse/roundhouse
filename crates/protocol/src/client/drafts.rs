@@ -7,14 +7,16 @@
 use serde::{Deserialize, Serialize};
 
 use crate::attachment::{AttachmentBytes, MediaType};
-use crate::model::{AnswerDraft, AttachmentId, CommentDraft, NewDraft, SessionId, WorkspaceDraftToKeep, WorkspaceId};
+use crate::model::{
+    AnswerDraft, AttachmentId, CommentDraft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId, WorkspaceId,
+};
 
 /// Keeps `draft` as what's typed and attached in the session's composer and not sent, in place of what was kept. An
 /// empty one clears it. Answers with the session.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionDraft {
     pub id: SessionId,
-    pub draft: NewDraft,
+    pub draft: DraftToKeep,
 }
 
 /// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place of
@@ -35,18 +37,18 @@ pub struct WorkspaceCommentDraft {
     pub draft: Option<CommentDraft>,
 }
 
-/// Keeps `draft` as what's in the new-workspace dialog, as [`WorkspaceDraft`](crate::model::WorkspaceDraft) says, in
+/// Keeps `draft` as what's in the new-workspace dialog, as [`NewWorkspaceDraft`](crate::model::NewWorkspaceDraft) says, in
 /// place of what was kept. Answers with the draft as kept.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct WorkspaceDraftKeep {
-    pub draft: WorkspaceDraftToKeep,
+pub struct NewWorkspaceDraftKeep {
+    pub draft: NewWorkspaceDraftToKeep,
 }
 
 /// A file for the new-workspace dialog's draft to name, kept by the hub before any workspace or chat exists to add it
 /// to, with the same checks as `AttachmentAdd`. Sent again with the same ID, it returns what the first one added
 /// without looking at the rest.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct WorkspaceDraftFileAdd {
+pub struct NewWorkspaceDraftFileAdd {
     pub id: AttachmentId,
     pub name: String,
     pub media_type: MediaType,
@@ -56,14 +58,14 @@ pub struct WorkspaceDraftFileAdd {
 /// A file's bytes, for putting the draft's files back in the dialog, such as in another client. Not found once the hub
 /// has let go of it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct WorkspaceDraftFileRead {
+pub struct NewWorkspaceDraftFileRead {
     pub id: AttachmentId,
 }
 
 /// Lets go of a file the draft no longer names, and of its bytes. The hub keeps one the draft still names. One that
 /// isn't there changes nothing. Answers with `Ok` either way.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct WorkspaceDraftFileRemove {
+pub struct NewWorkspaceDraftFileRemove {
     pub id: AttachmentId,
 }
 
@@ -82,12 +84,12 @@ mod tests {
     /// The same as when their fields were the requests' own, so a peer from before reads them.
     #[test]
     fn a_request_s_body_travels_beside_its_method() {
-        let draft = NewDraft::new("half");
+        let draft = DraftToKeep::new("half");
         let answer = AnswerDraft { approval_id: "q".into(), answers: vec![AnswerSoFar::default()] };
         let comment =
             CommentDraft { path: "a.txt".into(), side: DiffSide::New, line: 3, editing: None, text: "why?".into() };
         let dialog =
-            WorkspaceDraftToKeep { text: "fix the login".into(), files: vec!["f1".into()], ..Default::default() };
+            NewWorkspaceDraftToKeep { text: "fix the login".into(), files: vec!["f1".into()], ..Default::default() };
         let data = AttachmentBytes::new(b"a line".to_vec());
         let requests = [
             (
@@ -110,25 +112,25 @@ mod tests {
                 json!({"method": "workspace_comment_draft", "id": "w1", "draft": value(&comment)}),
             ),
             (
-                ClientRequest::WorkspaceDraftKeep(WorkspaceDraftKeep { draft: dialog.clone() }),
-                json!({"method": "workspace_draft_keep", "draft": value(&dialog)}),
+                ClientRequest::NewWorkspaceDraftKeep(NewWorkspaceDraftKeep { draft: dialog.clone() }),
+                json!({"method": "new_workspace_draft_keep", "draft": value(&dialog)}),
             ),
             (
-                ClientRequest::WorkspaceDraftFileAdd(WorkspaceDraftFileAdd {
+                ClientRequest::NewWorkspaceDraftFileAdd(NewWorkspaceDraftFileAdd {
                     id: "f1".into(),
                     name: "notes.txt".into(),
                     media_type: MediaType::Text,
                     data: data.clone(),
                 }),
-                json!({"method": "workspace_draft_file_add", "id": "f1", "name": "notes.txt", "media_type": value(&MediaType::Text), "data": value(&data)}),
+                json!({"method": "new_workspace_draft_file_add", "id": "f1", "name": "notes.txt", "media_type": value(&MediaType::Text), "data": value(&data)}),
             ),
             (
-                ClientRequest::WorkspaceDraftFileRead(WorkspaceDraftFileRead { id: "f1".into() }),
-                json!({"method": "workspace_draft_file_read", "id": "f1"}),
+                ClientRequest::NewWorkspaceDraftFileRead(NewWorkspaceDraftFileRead { id: "f1".into() }),
+                json!({"method": "new_workspace_draft_file_read", "id": "f1"}),
             ),
             (
-                ClientRequest::WorkspaceDraftFileRemove(WorkspaceDraftFileRemove { id: "f1".into() }),
-                json!({"method": "workspace_draft_file_remove", "id": "f1"}),
+                ClientRequest::NewWorkspaceDraftFileRemove(NewWorkspaceDraftFileRemove { id: "f1".into() }),
+                json!({"method": "new_workspace_draft_file_remove", "id": "f1"}),
             ),
         ];
 
