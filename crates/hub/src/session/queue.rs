@@ -16,7 +16,7 @@ use protocol::prompt::{Prompt, PromptProblem};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
 
-use super::{Command, LiveSession};
+use super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
 use crate::store::{Changed, Queued, Reading};
 
@@ -145,8 +145,7 @@ impl LiveSession {
     }
 
     pub(super) fn ready_for_queue(&self) -> bool {
-        let state = self.state.lock();
-        state.queue.ready(state.status, state.closed_at_ms.is_some())
+        self.state.lock().ready_for_queue()
     }
 
     /// Asks the command task to send the first queued prompt. It looks again whether the agent is ready when it gets
@@ -236,5 +235,12 @@ impl LiveSession {
             hub.notify(HubNotice::Session(reading.session.session.clone()));
         }
         reading.session.session
+    }
+}
+
+impl LiveState {
+    /// Whether the agent can take a queued prompt as a turn of its own now, in a chat that's open.
+    pub(super) fn ready_for_queue(&self) -> bool {
+        self.progress.queue.ready(self.progress.status, !self.is_open())
     }
 }

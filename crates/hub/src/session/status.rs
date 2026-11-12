@@ -1,4 +1,4 @@
-//! What an event does to a session's status.
+//! What an event does to a session's status, and to what its agent has left open.
 
 use std::collections::HashMap;
 
@@ -10,8 +10,8 @@ use crate::store::TurnEdge;
 impl super::LiveSession {
     /// Whether the agent is doing something that goes on without a person.
     pub(crate) fn works_unattended(&self) -> bool {
-        let state = self.state.lock();
-        works_unattended(state.status, state.background_tasks.len())
+        let progress = &self.state.lock().progress;
+        works_unattended(progress.status, progress.background_tasks.len())
     }
 
     /// As this hub stops, for a session with a wait open: has its agent's exit leave it as the next hub's `recover`
@@ -21,15 +21,14 @@ impl super::LiveSession {
         // After what's being recorded, which the store has before this state does, so a turn that has just ended
         // counts as ended.
         let _in_order = self.recording.lock().await;
-        let mut state = self.state.lock();
-        state.outlives_this_hub = state.status.only_waits(&state.background_tasks);
+        self.state.lock().progress.outlive_this_hub(true);
     }
 
     /// Whether the hub counts this session's agent as running, so a hub asked to stop only if nothing would notice
     /// carries on for it, as [`SessionStatus::counts_as_running`] says.
     pub(crate) fn counts_as_running(&self) -> bool {
-        let state = self.state.lock();
-        state.status.counts_as_running(&state.background_tasks)
+        let progress = &self.state.lock().progress;
+        progress.status.counts_as_running(&progress.background_tasks)
     }
 }
 
@@ -141,57 +140,28 @@ pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus) -> TurnEdge
     }
 }
 
-/// What stays open once this event is applied, from what was open before it, and what's then running in the
-/// background.
+/// Open approvals, by the run that asked. `None` means an earlier hub's, which can't be answered.
+pub(crate) type Approvals = HashMap<ApprovalId, Option<RunId>>;
+
+/// What the agent has left open once this event, from `run`, is applied to what was open before it: the approvals it's
+/// waiting on, and what it's running in the background. That goes with the agent that started it, which stops it when
+/// it's stopped.
 pub(crate) fn open_after(
-    pending: &HashMap<ApprovalId, Option<RunId>>,
+    approvals: &Approvals,
     tasks: &[AgentTask],
+    run: Option<RunId>,
     body: &EventBody,
-    agent: bool,
-) -> (Open, Vec<AgentTask>) {
-    let tasks = tasks_after(tasks, body);
-    (Open { approvals: approvals_after(pending, body), tasks: tasks.len(), agent }, tasks)
-}
-
-/// How many approvals stay open once this event is applied.
-fn approvals_after(pending: &HashMap<ApprovalId, Option<RunId>>, body: &EventBody) -> usize {
+) -> (Approvals, Vec<AgentTask>) {
+    let (mut approvals, mut tasks) = (approvals.clone(), tasks.to_vec());
     match body {
-        EventBody::ApprovalRequested { approval_id, .. } if !pending.contains_key(approval_id) => pending.len() + 1,
-        EventBody::ApprovalResolved { approval_id, .. } if pending.contains_key(approval_id) => pending.len() - 1,
-        EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::ApprovalRequested { .. }
-        | EventBody::ApprovalResolved { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::Notice { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::Unknown => pending.len(),
-    }
-}
-
-/// What's running in the background once this event is applied. It goes with the agent that started it, which
-/// stops it when it's stopped.
-fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
-    match body {
-        EventBody::AgentTasks { tasks, .. } => tasks.clone(),
-        EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => Vec::new(),
+        EventBody::ApprovalRequested { approval_id, .. } => {
+            approvals.insert(approval_id.clone(), run);
+        }
+        EventBody::ApprovalResolved { approval_id, .. } => {
+            approvals.remove(approval_id);
+        }
+        EventBody::AgentTasks { tasks: listed, .. } => tasks.clone_from(listed),
+        EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => tasks.clear(),
         EventBody::UserPrompt { .. }
         | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
@@ -203,8 +173,6 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }
-        | EventBody::ApprovalRequested { .. }
-        | EventBody::ApprovalResolved { .. }
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
@@ -213,6 +181,7 @@ fn tasks_after(tasks: &[AgentTask], body: &EventBody) -> Vec<AgentTask> {
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
-        | EventBody::Unknown => tasks.to_vec(),
+        | EventBody::Unknown => {}
     }
+    (approvals, tasks)
 }

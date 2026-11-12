@@ -1,53 +1,15 @@
 //! Writing an event to the log and telling everyone who's watching.
 
 use protocol::client::{ApiError, HubNotice};
-use protocol::event::{AgentTask, EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Session, SessionStatus, ToolUseId};
+use protocol::event::{EventBody, SessionEvent};
+use protocol::model::{ClientMessageId, Session, ToolUseId};
 use protocol::tail::Tail;
 use tracing::error;
 
-use super::status::{after_background, next_status, open_after, turn_edge};
+use super::progress::{Next, Step};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
-use crate::store::{Appended, SessionChange, StatusChange, TurnEdge};
-
-/// What recording an event does.
-struct After {
-    /// The event as it's recorded.
-    body: EventBody,
-    status: SessionStatus,
-    /// What of the status, the work in the background and the queue's hold has changed, to commit with it.
-    change: SessionChange,
-    tasks: Vec<AgentTask>,
-    /// Whether it leaves the session waiting for the agent to pick up again, as [`after_background`] says.
-    waits: bool,
-}
-
-/// The status and the work in the background once `body` is applied, and what has changed, to commit with it. Only
-/// the hub and the current agent speak for the session. A turn's end from the agent says when the hub recorded that
-/// turn's start, which the agent can't know, so anything it said is replaced.
-fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
-    // As the hub stops, the agent of a session whose only work is a wait the next hub keeps cuts nothing off by going.
-    let outlived = state.outlives_this_hub && matches!(body, EventBody::AgentExited { .. });
-    if !origin.speaks_for_session() || outlived {
-        let (status, tasks) = (state.status, state.background_tasks.clone());
-        return After { body, status, change: SessionChange::default(), tasks, waits: false };
-    }
-    if let EventBody::TurnEnded { started_at_ms, .. } = &mut body {
-        *started_at_ms = state.turn_started_at_ms;
-    }
-    // The current agent saying it, which only a running one can, or the hub with one running.
-    let agent = state.agent.is_some() || origin.run().is_some();
-    let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, &body, agent);
-    let next = next_status(state.status, &body, open, state.queue.idle_is_stale());
-    let turn = turn_edge(state.status, next);
-    let background_tasks = (tasks != state.background_tasks).then(|| tasks.clone());
-    let changed = next != state.status || background_tasks.is_some();
-    let status = changed.then_some(StatusChange { status: next, turn, background_tasks });
-    let queue_held = state.queue.held_after(&body, state.status, next);
-    let waits = after_background(state.status, next, state.background_tasks.len(), tasks.len());
-    After { body, status: next, change: SessionChange { status, queue_held, recorded: None }, tasks, waits }
-}
+use crate::store::{Appended, TurnEdge};
 
 /// The ID a prompt was sent under, which the store records it once under.
 fn sent_as(body: &EventBody) -> Option<&ClientMessageId> {
@@ -80,18 +42,20 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let After { body, status: next, mut change, tasks, waits } = {
+        let Step { body, mut change, next, waits } = {
             let state = self.state.lock();
             if let Some(refusal) = refused(&state) {
                 return Err(refusal);
             }
-            after(&state, origin, body)
+            // The current agent saying it, which only a running one can, or the hub with one running.
+            let agent = state.agent.is_some() || run.is_some();
+            state.progress.step(origin, body, agent)
         };
         // In the same commit as the event, so a hub that connects to the worker again knows what it has.
         if let Origin::Run { run, numbered: Some(through), .. } = origin {
             change.recorded = Some((run, through));
         }
-        let (announce, held) = (!change.is_none(), change.queue_held);
+        let announce = !change.is_none();
         let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
         let id = self.id.clone();
         let client_msg_id = sent_as(&body).cloned();
@@ -104,7 +68,7 @@ impl LiveSession {
         if appended.duplicate {
             return Ok((appended.event, true));
         }
-        if apply(&mut self.state.lock(), origin, &appended, next, tasks, held) {
+        if apply(&mut self.state.lock(), origin, &appended, next) {
             self.wake_queue();
         }
         if waits {
@@ -171,65 +135,15 @@ impl LiveSession {
 
 /// Updates live state for an event just recorded, and says whether that has just made the agent ready for the next
 /// queued prompt.
-fn apply(
-    state: &mut LiveState,
-    origin: Origin,
-    appended: &Appended,
-    next: SessionStatus,
-    tasks: Vec<AgentTask>,
-    held: Option<bool>,
-) -> bool {
+fn apply(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) -> bool {
     let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
-    let closed = state.closed_at_ms.is_some();
-    let was_ready = state.queue.ready(state.status, closed);
+    let was_ready = state.ready_for_queue();
     state.last_seq = seq;
     let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
     let others_before = others(&state.tail);
     state.tail.on_event(seq, origin.run(), body);
     let ended_others = others(&state.tail) < others_before;
-    match body {
-        EventBody::ApprovalRequested { approval_id, .. } => {
-            state.pending_approvals.insert(approval_id.clone(), origin.run());
-        }
-        EventBody::ApprovalResolved { approval_id, .. } => {
-            state.pending_approvals.remove(approval_id);
-        }
-        EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::Notice { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::Unknown => {}
-    }
-    // The same rule decided what was committed, so this is the start the record now has.
-    if turn_edge(state.status, next) == TurnEdge::Starts {
-        state.turn_started_at_ms = Some(appended.event.ts_ms);
-    }
-    state.status = next;
-    state.background_tasks = tasks;
-    if let Some(untaken) = &appended.untaken {
-        state.queue.set_untaken(untaken.clone());
-    }
-    if let Some(held) = held {
-        state.queue.hold(held);
-    }
+    state.progress.take(next, appended.event.ts_ms, appended.untaken.clone());
     publish(state, LiveItem::Appended { seq, subagent: subagent.clone(), ended_others });
-    !was_ready && state.queue.ready(state.status, closed)
+    !was_ready && state.ready_for_queue()
 }

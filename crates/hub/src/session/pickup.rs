@@ -33,9 +33,10 @@ impl LiveSession {
     pub(super) async fn no_pickup(&self) {
         let idle = EventBody::AgentState { state: AgentRunState::Idle };
         let ended = |state: &LiveState| {
-            let waiting = state.status == SessionStatus::Background
-                && state.background_tasks.is_empty()
-                && !state.queue.idle_is_stale();
+            let progress = &state.progress;
+            let waiting = progress.status == SessionStatus::Background
+                && progress.background_tasks.is_empty()
+                && !progress.queue.idle_is_stale();
             (!waiting).then(|| ApiError::new(ErrorCode::Conflict, "the agent has said something since"))
         };
         match self.record_unless(Origin::Hub, idle, None, ended).await {

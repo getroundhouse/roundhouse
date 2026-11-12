@@ -10,7 +10,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, Workspace, WorkspaceId};
 use protocol::provider::InstanceState;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -20,8 +20,8 @@ use super::{BEFORE_SERVING, Hub};
 #[cfg(test)]
 mod tests;
 use crate::error::provider_failed;
-use crate::session::{CarriedOver, Item, LiveSession};
-use crate::store::{SessionChange, StatusChange, Store, StoreError, cancelled_approval};
+use crate::session::{CarriedOver, Item, LiveSession, Progress};
+use crate::store::{Store, StoreError, cancelled_approval};
 
 /// What an earlier hub left at work: its sessions at work, by workspace, every workspace that isn't archived, for
 /// finding the workers it left running, and the prompts each session's agent hadn't taken.
@@ -167,7 +167,7 @@ impl Hub {
             .await;
         let started = read.and_then(|(stored, approvals, recorded)| {
             let carried = CarriedOver { link, run, recorded, untaken };
-            self.sessions.lock().keep(id, || LiveSession::start(self, stored, approvals, Some(carried)))
+            self.sessions.lock().keep(id, || LiveSession::start(self, stored, &approvals, Some(carried)))
         });
         if let Err(e) = started {
             warn!(session = %id, "carrying on with a session: {}", e.message);
@@ -183,34 +183,38 @@ impl Hub {
 }
 
 /// A session an earlier hub left at work whose agent has gone. A prompt it hadn't taken never will be, its open
-/// approvals can't be answered, and it took what it was running in the background with it. Its queue is held, as when
-/// the agent exits mid-turn with the hub still there. But a session whose only work was a wait, which the hub keeps,
-/// had nothing cut off, so it's still at work in the background, with the wait listed and its queue free, and its
-/// agent is started again once the wait ends.
+/// approvals can't be answered, and then its agent's exit is recorded, which does what it does with the hub there: the
+/// session is interrupted, what it ran in the background went with it, and its queue is held. But a session whose only
+/// work was a wait, which the hub keeps, had nothing cut off, as when this hub stops with it, so it's still at work in
+/// the background, with the wait listed and its queue free, and its agent is started again once the wait ends.
 fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), StoreError> {
-    drop_untaken(store, id, untaken)?;
-    for approval_id in store.open_approvals(id)? {
-        store.append(id, None, &cancelled_approval(approval_id), None, None, None)?;
+    let open_approvals = store.open_approvals(id)?;
+    let mut progress = Progress::recorded(&store.get_session(id)?.session, &open_approvals, None, untaken.clone());
+    drop_untaken_in(store, id, &mut progress, untaken)?;
+    for approval_id in open_approvals {
+        progress.record_in(store, id, cancelled_approval(approval_id))?;
     }
     let exited =
         EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
-    let only_waiting = store.sessions_waiting()?.contains(id) && {
-        let session = store.get_session(id)?.session;
-        session.status.only_waits(&session.background_tasks)
-    };
-    let status = if only_waiting {
-        SessionStatus::Background.into()
-    } else {
-        StatusChange { background_tasks: Some(Vec::new()), ..SessionStatus::Interrupted.into() }
-    };
-    let change = SessionChange { status: Some(status), queue_held: Some(!only_waiting), recorded: None };
-    store.append(id, None, &exited, None, None, Some(change))?;
-    Ok(())
+    progress.outlive_this_hub(store.sessions_waiting()?.contains(id));
+    progress.record_in(store, id, exited)
 }
 
+/// Drops the prompts a session that isn't at work had left untaken, as [`interrupt`] does those of one that is.
 fn drop_untaken(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), StoreError> {
+    let mut progress =
+        Progress::recorded(&store.get_session(id)?.session, &store.open_approvals(id)?, None, untaken.clone());
+    drop_untaken_in(store, id, &mut progress, untaken)
+}
+
+fn drop_untaken_in(
+    store: &Store,
+    id: &SessionId,
+    progress: &mut Progress,
+    untaken: Vec<Seq>,
+) -> Result<(), StoreError> {
     for prompt in untaken {
-        store.append(id, None, &EventBody::PromptDropped { prompt }, None, None, None)?;
+        progress.record_in(store, id, EventBody::PromptDropped { prompt })?;
     }
     Ok(())
 }

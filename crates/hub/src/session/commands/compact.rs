@@ -33,8 +33,9 @@ impl LiveSession {
         self.can_be_asked(hub).await?;
         let keeping = keeping.as_deref().and_then(said);
         let asked = EventBody::CompactionAsked { keeping: keeping.clone() };
-        let refused =
-            |state: &LiveState| refused_compaction(state.status, state.queue.idle_is_stale(), state.agent_opened);
+        let refused = |state: &LiveState| {
+            refused_compaction(state.progress.status, state.progress.queue.idle_is_stale(), state.agent_opened)
+        };
         let (event, _) = self.record_unless(Origin::Hub, asked, None, refused).await?;
         Ok((event.seq, keeping))
     }

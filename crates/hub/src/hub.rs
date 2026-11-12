@@ -227,7 +227,7 @@ impl Hub {
                 Ok((stored, approvals))
             })
             .await?;
-        self.sessions.lock().keep(id, || LiveSession::start(self, stored, approvals, None))
+        self.sessions.lock().keep(id, || LiveSession::start(self, stored, &approvals, None))
     }
 
     // Platform API --------------------------------------------------------------------------------
