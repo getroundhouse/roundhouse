@@ -122,6 +122,25 @@ fn what_was_opened_stays_open_when_the_diff_loads_again(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
+fn what_was_opened_stays_open_while_another_file_shows_and_folds_once_the_tab_closes(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, diff) = changing_a_long_file(cx, &stack);
+    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    std::fs::write(worktree.join("other.txt"), "other\n").unwrap();
+    ui.click("sidebar-tab-changes");
+    ui.wait("the other file", |ui| ui.cx.read_entity(&diff.review, |r, _| r.file("other.txt").is_some()));
+    ui.click(down_at_the_end());
+
+    ui.open_diff_of(&diff, "other.txt");
+    ui.open_diff_of(&diff, "long.txt");
+    assert!(!ui.has(down_at_the_end()), "the lines opened below the change are still open");
+    ui.press("cmd-w");
+    ui.open_diff_of(&diff, "long.txt");
+
+    assert!(ui.has(down_at_the_end()), "and fold again once the tab has closed");
+}
+
+#[gpui_kit::test]
 fn the_view_chosen_shows_in_every_workspace(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, diff) = changing_a_long_file(cx, &stack);

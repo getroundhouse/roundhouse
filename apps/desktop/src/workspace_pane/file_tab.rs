@@ -15,6 +15,7 @@ use look::Hand as _;
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
+use crate::file_diff::FileDiff;
 
 /// What the file tab shows of its file, which depends on where it was opened from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,9 +61,12 @@ impl WorkspacePane {
         self.bring_to_front(Showing::File, cx);
     }
 
-    /// Closes the file tab, and shows the chat it covered.
+    /// Closes the file tab, folding what was opened of each file's diff, and shows the chat it covered.
     pub fn close_file_tab(&mut self, cx: &mut Context<Self>) {
         self.set_file_tab(None, cx);
+        if let Some(diff) = &self.diff {
+            diff.file.update(cx, FileDiff::fold_all);
+        }
         self.bring_to_front(Showing::Chat, cx);
     }
 
