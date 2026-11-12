@@ -14,6 +14,7 @@ use tracing::warn;
 
 use super::Hub;
 use crate::error::internal;
+use crate::store::AddedBy;
 use crate::worker_link::WorkerLink;
 
 impl Hub {
@@ -26,6 +27,7 @@ impl Hub {
         name: String,
         media_type: MediaType,
         data: AttachmentBytes,
+        by: AddedBy,
     ) -> Result<Attachment, ApiError> {
         self.attachment_files.check(&session_id, &id)?;
         let earlier = {
@@ -53,7 +55,7 @@ impl Hub {
         let attachment = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
         self.attachment_files.write(&session_id, &id, data.into_vec()).await?;
         let session = session_id.clone();
-        let added = self.blocking(move |store| store.add_attachment(&session, &attachment)).await;
+        let added = self.blocking(move |store| store.add_attachment(&session, &attachment, by)).await;
         if added.is_err() {
             // Such as because its session was deleted meanwhile, which takes the session's files with it.
             let _ = self.attachment_files.remove(&session_id, &id).await;
@@ -70,7 +72,8 @@ impl Hub {
                 warn!(session = %session_id, attachment = %id, "the agent sent {} as an image", media_type.mime());
                 continue;
             }
-            if let Err(e) = self.attachment_add(session_id.clone(), id.clone(), name, media_type, data).await {
+            let added = self.attachment_add(session_id.clone(), id.clone(), name, media_type, data, AddedBy::Agent);
+            if let Err(e) = added.await {
                 warn!(session = %session_id, attachment = %id, "couldn't keep an image from the agent: {e}");
             }
         }
@@ -98,6 +101,29 @@ impl Hub {
             "the hub keeps only images once they've been sent"
         };
         Err(ApiError::new(ErrorCode::NotFound, format!("{} can't be read: {why}", attachment.name)))
+    }
+
+    /// Lets go of a file a client added that nothing will send, as [`crate::store::Store::let_go_of_attachment`]
+    /// decides, and of its bytes.
+    pub(crate) async fn attachment_remove(&self, session_id: SessionId, id: AttachmentId) -> Result<(), ApiError> {
+        self.attachment_files.check(&session_id, &id)?;
+        let removed = {
+            let (session_id, id) = (session_id.clone(), id.clone());
+            self.blocking(move |store| store.let_go_of_attachment(&session_id, &id)).await?
+        };
+        if removed {
+            self.let_go_of_bytes(&session_id, &[id]).await;
+        }
+        Ok(())
+    }
+
+    /// The bytes of files the store has let go of. One that can't be is only left on disk, so it's logged.
+    pub(crate) async fn let_go_of_bytes(&self, session_id: &SessionId, files: &[AttachmentId]) {
+        for id in files {
+            if let Err(e) = self.attachment_files.remove(session_id, id).await {
+                warn!(session = %session_id, attachment = %id, "couldn't let go of a file nothing will send: {e}");
+            }
+        }
     }
 
     /// Has the worker put each file in the worktree, unless a prompt already has, and lets go of the hub's copy of any

@@ -370,8 +370,9 @@ impl LiveSession {
         {
             // An agent being started right now either finishes first, and is stopped below, or sees this.
             let _no_start_meanwhile = self.configuring.lock().await;
-            hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
+            let let_go_of = hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
             self.state.lock().closed_at_ms = Some(closed_at);
+            hub.let_go_of_bytes(&self.id, &let_go_of).await;
         }
         // Past anything in the queue, so a prompt waiting on setup can't outlive this. It's closed whether
         // or not the agent stopped cleanly, so everyone hears that first.

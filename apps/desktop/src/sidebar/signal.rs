@@ -73,6 +73,7 @@ mod tests {
             prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
+            draft: protocol::model::Draft::default(),
             rev: protocol::model::Rev::default(),
             title_source: protocol::model::TitleSource::FirstLine,
         }

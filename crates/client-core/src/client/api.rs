@@ -7,8 +7,8 @@ use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, HubSettings, HubSettingsChange, PromptLine, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
-    SessionId, Subagent, ToolUseId, Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, NewDraft, PromptLine, PullRequest, Records, Repo, RepoId, Rev, Seq,
+    Session, SessionId, Subagent, ToolUseId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -336,6 +336,11 @@ impl Client {
     /// See [`ClientRequest::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_mark_unread(&self, id: &SessionId) -> Result<Session> {
         self.expect_session(ClientRequest::SessionMarkUnread { id: id.clone() })
+    }
+
+    /// See [`ClientRequest::SessionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_draft(&self, id: &SessionId, draft: &NewDraft) -> Result<Session> {
+        self.expect_session(ClientRequest::SessionDraft { id: id.clone(), draft: draft.clone() })
     }
 
     /// See [`ClientRequest::SessionRename`]. A hub older than this refuses it, as `is_unsupported` says.

@@ -48,6 +48,7 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
         prompt_cache: None,
         queued: Vec::new(),
         queue_held: false,
+        draft: protocol::model::Draft::default(),
         rev: Rev::new(rev),
         title_source: TitleSource::FirstLine,
     }

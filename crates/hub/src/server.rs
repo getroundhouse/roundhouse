@@ -18,6 +18,7 @@ use tracing::{debug, warn};
 
 use crate::hub::Hub;
 use crate::listener::Listener;
+use crate::store::AddedBy;
 use pump::{Following, pump};
 
 mod pump;
@@ -275,9 +276,13 @@ async fn handle(
             C::PromptRecorded { seq, duplicate }
         }
         R::AttachmentAdd { session_id, id, name, media_type, data } => {
-            C::Attachment(hub.attachment_add(session_id, id, name, media_type, data).await?)
+            C::Attachment(hub.attachment_add(session_id, id, name, media_type, data, AddedBy::Client).await?)
         }
         R::AttachmentRead { session_id, id } => C::AttachmentData { data: hub.attachment_read(session_id, id).await? },
+        R::AttachmentRemove { session_id, id } => {
+            hub.attachment_remove(session_id, id).await?;
+            C::Ok
+        }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
         R::SessionQueue { id, client_msg_id, text, attachments } => {
             C::Session(hub.session_queue(id, client_msg_id, text, attachments).await?)
@@ -296,6 +301,7 @@ async fn handle(
         R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
         R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
         R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
+        R::SessionDraft { id, draft } => C::Session(hub.session_draft(id, draft).await?),
         R::SessionRename { id, title } => C::Session(hub.session_rename(id, &title).await?),
         R::SessionCancel { id } => {
             hub.session_cancel(id).await?;

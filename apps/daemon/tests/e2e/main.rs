@@ -13,6 +13,7 @@ mod compacting;
 mod connection;
 mod context;
 mod core_loop;
+mod drafts;
 mod effort;
 mod feed;
 mod finding_a_hub;

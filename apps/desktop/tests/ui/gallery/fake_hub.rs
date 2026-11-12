@@ -103,7 +103,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionList { workspace_id } => reply(C::Sessions {
             sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
         }),
-        R::SessionGet { id } => reply(C::Session(world.session(&id)?.clone())),
+        // A draft is taken as a hub that keeps it would, though it's left out of the screen's records, which don't
+        // change.
+        R::SessionGet { id } | R::SessionDraft { id, .. } => reply(C::Session(world.session(&id)?.clone())),
         R::SessionEnsure { workspace_id, .. } => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat in the screen"))?))
@@ -188,6 +190,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCreate { .. }
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
+        | R::AttachmentRemove { .. }
         | R::SessionQueue { .. }
         | R::SessionChangeQueued { .. }
         | R::SessionUnqueue { .. }
