@@ -248,6 +248,7 @@ impl AppView {
         for pane in self.panes.values() {
             pane.update(cx, |p, cx| p.reconnect(&client, cx));
         }
+        self.reconnect_dialog(&client, cx);
         self.joining = Some(client);
         self.restartable_hub = hub_source::may_restart(status, self.hub.build_number).then_some(status.pid);
         self.finishing = self.restartable_hub.map(|_| Self::keep_finishing(cx));

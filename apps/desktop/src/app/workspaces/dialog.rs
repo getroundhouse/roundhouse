@@ -1,13 +1,15 @@
-//! The new-workspace dialog's side of the app: opening it, telling it where a workspace can be made and whether one can
-//! be made now, taking what it asks to make, and giving back a prompt for a workspace that couldn't be made.
+//! The new-workspace dialog's side of the app. It opens the dialog, and tells it where a workspace can be made, whether
+//! one can be made now, and what the hub keeps of it. It makes what the dialog asks for, and gives back a prompt for a
+//! workspace that couldn't be made.
 
-use client_core::FileToSend;
+use client_core::records::HubRecords;
+use client_core::{Client, FileToSend};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
 use protocol::model::{PermissionMode, RepoId, WorkspaceId};
 
 use crate::app::AppView;
-use crate::new_workspace::{self, DialogEvent, NewWorkspaceDialog, Offer};
+use crate::new_workspace::{self, DialogEvent, Keeping, NewWorkspaceDialog, Offer};
 
 impl AppView {
     /// Opens the new-workspace dialog for `repo`, with whatever was left in it last time. Only one dialog shows at a
@@ -25,13 +27,19 @@ impl AppView {
         new_workspace::open(&dialog, closed(cx.weak_entity()), window, cx);
     }
 
-    /// The dialog, made the first time it's asked for.
+    /// The dialog, made the first time it's asked for, with what the hub keeps of it.
     fn dialog(&mut self, repo: RepoId, window: &mut Window, cx: &mut Context<Self>) -> Entity<NewWorkspaceDialog> {
         if let Some(dialog) = &self.new_workspace {
             return dialog.clone();
         }
-        let offer = self.offer();
-        let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, window, cx));
+        // The connection there is, even one still catching up, which a dialog made now would otherwise hear of only on
+        // the next, so it couldn't read back its files until then.
+        let client = self.client().or_else(|| self.joining.clone());
+        let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
+        let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
+        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.read(HubRecords::workspace_draft)) {
+            dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
+        }
         cx.subscribe_in(&dialog, window, |t, dialog, event: &DialogEvent, window, cx| match event {
             DialogEvent::Create => t.create_from(dialog, window, cx),
             DialogEvent::Error(message) => t.show_error(message.clone(), cx),
@@ -59,6 +67,32 @@ impl AppView {
     fn offer(&self) -> Offer {
         let repos = self.repos.iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
         Offer { repos, can_create: self.can_create() }
+    }
+
+    /// Tells the dialog what the hub keeps of it, as the records change, and as the keeper catches up, which can let
+    /// it show a change made elsewhere that it held back. Once the window can be updated, since this can come while
+    /// it's being drawn.
+    pub(in crate::app) fn show_kept_in_dialog(&self, cx: &mut Context<Self>) {
+        let (Some(dialog), Some(feed), handle) = (self.new_workspace.clone(), self.feed.clone(), self.window) else {
+            return;
+        };
+        let offer = self.offer();
+        cx.defer(move |cx| {
+            let Some(kept) = feed.read(HubRecords::workspace_draft) else { return };
+            let _ = handle.update(cx, |_, window, cx| {
+                dialog.update(cx, |dialog, cx| {
+                    dialog.set_offer(offer, cx);
+                    dialog.take_kept(kept, window, cx);
+                });
+            });
+        });
+    }
+
+    /// Has the dialog read back on a new connection what the last couldn't.
+    pub(in crate::app) fn reconnect_dialog(&self, client: &Client, cx: &mut Context<Self>) {
+        if let Some(dialog) = &self.new_workspace {
+            dialog.update(cx, |dialog, cx| dialog.reconnect(client, cx));
+        }
     }
 
     /// Tells the dialog what's changed since it was last told, each time the window draws.

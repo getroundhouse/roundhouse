@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use client_core::{ClientError, FileToSend, Where};
-use gpui_kit::{App, AppContext as _, Context, Entity};
+use client_core::Where;
+use gpui_kit::{App, Context, Entity};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, Draft, NewDraft, Session, SessionId};
 use protocol::prompt::says_or_carries;
@@ -14,7 +14,7 @@ use transcript::QuestionPanel;
 
 use super::attaching::Composed;
 use super::{PaneEvent, WorkspacePane};
-use crate::attached::Attachments;
+use crate::attached::{Attachments, ReadBack, came_back, read_back};
 
 /// What the hub kept of each open chat's composer, for a pane to start with. The files come once they're read back.
 pub(super) fn drafts_kept_in(sessions: &[Session]) -> HashMap<SessionId, Composed> {
@@ -68,9 +68,6 @@ impl Unsent {
     }
 }
 
-/// A file read back from the hub, or why it couldn't be.
-type ReadBack = (Attachment, Result<Vec<u8>, ClientError>);
-
 impl WorkspacePane {
     /// Has the hub keep what's typed and attached in the chat showing, once typing pauses, or at once for a change
     /// nobody's still typing, such as the composer emptied by sending.
@@ -93,7 +90,7 @@ impl WorkspacePane {
             Some(draft) => (draft.text.clone(), &mut draft.files),
             None => (String::new(), &mut none),
         };
-        for file in files.not_yet_given(id) {
+        for file in files.not_yet_given(&Where::Composer(id.clone())) {
             self.keeper.attach(id, file);
         }
         let coming_back = self.restoring.get(id).into_iter().flatten().map(|file| file.id.clone());
@@ -108,7 +105,7 @@ impl WorkspacePane {
     /// Has the hub let go of the files it was given for a chat that has closed. Closing takes the draft and the files
     /// it named, and this catches one that reached the hub after, such as one still being added as the chat closed.
     pub(super) fn let_go_of_files(&self, id: &SessionId, files: &Attachments) {
-        for file in files.given_for(id) {
+        for file in files.given_for(&Where::Composer(id.clone())) {
             self.keeper.detach(id, &file);
         }
     }
@@ -238,44 +235,20 @@ impl WorkspacePane {
     /// Reads back the files the hub kept with a chat's draft, off the main thread. A read isn't a command quitting
     /// waits for, as it can be a lot of bytes, and the hub keeps them anyway.
     fn bring_back(&self, chat: SessionId, files: Vec<Attachment>, cx: &mut Context<Self>) {
-        let client = self.client.clone();
-        cx.spawn(async move |this, cx| {
-            let reading = cx.background_spawn({
-                let chat = chat.clone();
-                async move {
-                    let read = files.into_iter().map(|file| {
-                        let data = client.attachment_read(&chat, &file.id);
-                        (file, data)
-                    });
-                    read.collect::<Vec<ReadBack>>()
-                }
-            });
-            let read = reading.await;
-            let _ = this.update(cx, |t, cx| t.brought_back(&chat, read, cx));
-        })
-        .detach();
+        let (client, of) = (self.client.clone(), chat.clone());
+        let read = move |file: &AttachmentId| client.attachment_read(&of, file);
+        read_back(files, read, move |t: &mut Self, read, cx| t.brought_back(&chat, read, cx), cx);
     }
 
     /// Puts a chat's kept files back in its composer, before any attached since, where every draft kept meanwhile has
     /// named them, so nothing needs keeping again, which could undo a change made elsewhere that hasn't arrived yet.
     /// Without a connection, they're read again on the next.
     fn brought_back(&mut self, chat: &SessionId, read: Vec<ReadBack>, cx: &mut Context<Self>) {
-        // Not once they've come back, nor when the chat is waiting for others, such as a draft made elsewhere names.
-        let read_ids = read.iter().map(|(file, _)| &file.id);
-        let waiting = self.restoring.get(chat).is_some_and(|files| files.iter().map(|file| &file.id).eq(read_ids));
-        let gone = |(_, data): &ReadBack| matches!(data, Err(ClientError::Io(_) | ClientError::Disconnected));
-        if !waiting || read.iter().any(gone) {
-            return;
-        }
+        let waiting = self.restoring.get(chat).map_or(&[][..], Vec::as_slice);
+        let Some((files, mut problems)) = came_back(waiting, read) else { return };
         self.restoring.remove(chat);
-        let mut files = Vec::new();
-        for (attachment, data) in read {
-            match data {
-                Ok(data) => files.push(FileToSend { attachment, data }),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't bring back {}: {e}", attachment.name))),
-            }
-        }
-        for problem in self.files_for(Some(chat)).bring_back(files, chat) {
+        problems.extend(self.files_for(Some(chat)).bring_back(files, &Where::Composer(chat.clone())));
+        for problem in problems {
             cx.emit(PaneEvent::Error(problem));
         }
         cx.notify();

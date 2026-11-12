@@ -85,7 +85,7 @@ impl NewWorkspaceDialog {
             .small()
             .label("Create")
             .children(enter)
-            .off_while(!self.offer.can_create)
+            .off_while(!self.can_create())
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         h_flex()
             .w_full()

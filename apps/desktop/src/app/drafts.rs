@@ -23,8 +23,8 @@ impl AppView {
     }
 }
 
-/// Has each pane show a draft made elsewhere that it held back while one from here was on its way, once that one has
-/// reached the hub.
+/// Has each pane, and the new-workspace dialog, show a draft made elsewhere that it held back while one from here was
+/// on its way, once that one has reached the hub.
 fn follow_drafts(drafts: &Drafts, cx: &mut Context<AppView>) {
     let caught_up = drafts.caught_up().clone();
     cx.spawn(async move |this, cx| {
@@ -33,6 +33,7 @@ fn follow_drafts(drafts: &Drafts, cx: &mut Context<AppView>) {
                 for pane in t.panes.values() {
                     pane.update(cx, WorkspacePane::take_drafts_from_elsewhere);
                 }
+                t.show_kept_in_dialog(cx);
             });
             if shown.is_err() {
                 return;

@@ -249,10 +249,10 @@ impl AppView {
     }
 
     /// How many chats and comments have something in them that isn't sent, and that quitting or restarting would lose.
-    /// What's typed and attached in a composer isn't, once the hub has it. What's left in the new-workspace dialog
+    /// What's typed and attached in a composer or the new-workspace dialog isn't, once the hub has it. The dialog's
     /// counts as a chat's, since it's for a workspace's first chat.
     pub(super) fn unsent(&self, cx: &App) -> (usize, usize) {
-        let dialog = self.new_workspace.as_ref().is_some_and(|dialog| dialog.read(cx).has_anything(cx));
+        let dialog = self.new_workspace.as_ref().is_some_and(|dialog| dialog.read(cx).would_lose(cx));
         let panes = self.panes.values().map(|pane| pane.read(cx).unsent(cx));
         panes.fold((usize::from(dialog), 0), |(a, b), (c, d)| (a + c, b + d))
     }

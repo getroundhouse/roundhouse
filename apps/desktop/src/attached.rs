@@ -1,21 +1,24 @@
 //! Files waiting to go with a prompt that hasn't been sent, in a chat's composer or the new-workspace dialog: the list
 //! of them, drawn as tiles above what's typed, and the file picker and drop target that add to it. Each file is read
 //! and checked as it comes, in `reading`, so nothing that would be refused gets as far as sending. A prompt that can't
-//! be sent comes back with its files. The hub keeps a chat's with its draft, so each says which chat it was given to.
+//! be sent comes back with its files. The hub keeps a chat's with its draft, and the dialog's with what's in it, so each
+//! says where it was given to.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use client_core::FileToSend;
+use client_core::{FileToSend, Where};
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
 use protocol::attachment::MAX_PER_PROMPT;
-use protocol::model::{AttachmentId, SessionId};
+use protocol::model::AttachmentId;
 use protocol::prompt::PromptProblem;
 
+mod from_the_hub;
 mod reading;
 
+pub(crate) use from_the_hub::{ReadBack, came_back, read_back};
 pub(crate) use reading::{pasted, pick, read_into};
 
 /// A file waiting to go, checked and ready to send.
@@ -23,8 +26,8 @@ pub(crate) struct Attached {
     file: FileToSend,
     /// What its tile shows, for an image.
     preview: Option<Arc<Image>>,
-    /// The chat the hub was given it for, to keep with its draft.
-    kept_in: Option<SessionId>,
+    /// Where the hub was given it for, a chat or the new-workspace dialog, to keep with what's typed there.
+    kept_in: Option<Where>,
 }
 
 impl Attached {
@@ -61,9 +64,9 @@ impl Attachments {
         self.put_first(files.into_iter().map(Attached::new).collect())
     }
 
-    /// Puts back the files the hub kept with `chat`'s draft, as [`Attachments::put_back`] does.
-    pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, chat: &SessionId) -> Vec<String> {
-        let kept = |file| Attached { kept_in: Some(chat.clone()), ..Attached::new(file) };
+    /// Puts back the files the hub kept with what's typed `at` a place, as [`Attachments::put_back`] does.
+    pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, at: &Where) -> Vec<String> {
+        let kept = |file| Attached { kept_in: Some(at.clone()), ..Attached::new(file) };
         self.put_first(files.into_iter().map(kept).collect())
     }
 
@@ -77,8 +80,8 @@ impl Attachments {
         other.0.into_iter().filter_map(|file| self.push(file).err()).collect()
     }
 
-    /// Takes a file out, and says which chat the hub was given it for, if any.
-    pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<SessionId> {
+    /// Takes a file out, and says where the hub was given it for, if anywhere.
+    pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<Where> {
         let at = self.0.iter().position(|file| &file.file.attachment.id == id)?;
         self.0.remove(at).kept_in
     }
@@ -88,19 +91,19 @@ impl Attachments {
         self.0.retain(|file| keep(&file.file.attachment.id));
     }
 
-    /// The files the hub hasn't been given for `chat`, to give it, and which from now on it's taken to have.
-    pub(crate) fn not_yet_given(&mut self, chat: &SessionId) -> Vec<FileToSend> {
-        let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(chat));
+    /// The files the hub hasn't been given for `at`, to give it, and which from now on it's taken to have.
+    pub(crate) fn not_yet_given(&mut self, at: &Where) -> Vec<FileToSend> {
+        let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(at));
         new.map(|file| {
-            file.kept_in = Some(chat.clone());
+            file.kept_in = Some(at.clone());
             file.file.clone()
         })
         .collect()
     }
 
-    /// The IDs of the files the hub was given for `chat`.
-    pub(crate) fn given_for<'a>(&'a self, chat: &'a SessionId) -> impl Iterator<Item = AttachmentId> + 'a {
-        let given = self.0.iter().filter(move |file| file.kept_in.as_ref() == Some(chat));
+    /// The IDs of the files the hub was given for `at`.
+    pub(crate) fn given_for<'a>(&'a self, at: &'a Where) -> impl Iterator<Item = AttachmentId> + 'a {
+        let given = self.0.iter().filter(move |file| file.kept_in.as_ref() == Some(at));
         given.map(|file| file.file.attachment.id.clone())
     }
 

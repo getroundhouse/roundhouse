@@ -10,6 +10,7 @@ use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, Permissi
 use crate::support::{Held, Stack, Ui, git, sidebar_row};
 
 mod given_back;
+mod kept;
 
 fn open_with_a_repo<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
