@@ -133,7 +133,9 @@ class Publishing(unittest.TestCase):
         feed.write_text(json.dumps({"Assets": assets + made}))
 
     def sign(self, work: Path) -> None:
-        feed = work / "feed" / publish.FEED
+        self.sign_file(work / "feed" / publish.FEED)
+
+    def sign_file(self, feed: Path) -> None:
         subprocess.run([str(HERE / "feed-signature.sh"), "sign", str(feed), str(self.private), self.key], check=True,
                        capture_output=True)
 
@@ -145,6 +147,9 @@ class Publishing(unittest.TestCase):
             self.pack(work, version)
             self.assertEqual(publish.merge(version, keep, work), work / "feed" / publish.FEED)
             self.sign(work)
+            older = publish.bridge(version, work)
+            if older is not None:
+                self.sign_file(older)
             publish.upload(store, self.key, version, work)
         return work
 
@@ -315,6 +320,12 @@ class Publishing(unittest.TestCase):
             publish.upload(self.store, self.key, "0.1.2", work)
         self.assertEqual(self.published(), [("0.1.1", "Full")])
 
+    def test_only_a_channel_that_took_over_from_another_publishes_that_one_s_feed_too(self) -> None:
+        self.release("0.1.1")
+
+        feeds = sorted(path.name for path in self.bucket.glob("releases.*.json"))
+        self.assertEqual(feeds, sorted([publish.FEED, *([publish.OLDER_FEED] if publish.OLDER_FEED else [])]))
+
     def test_a_run_starts_from_an_empty_directory(self) -> None:
         work = self.release("0.1.1")
         with self.assertRaisesRegex(Refused, "start from an empty directory"):
@@ -403,6 +414,67 @@ class Windows(BesideAnother, Publishing):
     BESIDE = "osx"
     PACKAGE = "Roundhouse-0.1.1-win-amd64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-amd64-Setup.exe", "Roundhouse-win-amd64-Portable.zip")
+    # What amd64 Windows was called before, where an app packaged then still looks.
+    OLDER = "releases.win.json"
+
+    def full(self, version: str) -> list[dict]:
+        assets = json.loads(self.store.get(publish.FEED))["Assets"]
+        return [entry for entry in assets if entry["Version"] == version and entry["Type"] == "Full"]
+
+    def offered_on_the_older_channel(self) -> list[dict]:
+        older, signature = self.store.get(self.OLDER), self.store.get(self.OLDER + ".sig")
+        self.assertIsNotNone(older)
+        self.assertTrue(publish.signed(older, signature, self.key))
+        return json.loads(older)["Assets"]
+
+    def merged(self, version: str) -> Path:
+        """A run of the release job that stops before it uploads, with the older channel's feed not signed yet."""
+        work = self.work()
+        publish.prepare(self.store, self.key, version, work)
+        self.pack(work, version)
+        publish.merge(version, 10, work)
+        self.sign(work)
+        return work
+
+    def test_an_app_on_the_older_channel_is_offered_only_the_newest_full_package(self) -> None:
+        self.release("0.1.1")
+        self.release("0.1.2")
+
+        # Not the delta, which starts from 0.1.1, where such an app isn't. The package is this channel's, so an app
+        # that takes it looks here from then on.
+        self.assertEqual(self.offered_on_the_older_channel(), self.full("0.1.2"))
+        self.assertEqual(self.full("0.1.2")[0]["FileName"], "Roundhouse-0.1.2-win-amd64-full.nupkg")
+        self.assertTrue(publish.file_matches(self.bucket / self.full("0.1.2")[0]["FileName"], self.full("0.1.2")[0]))
+
+    def test_an_older_channel_s_feed_that_isnt_signed_or_offers_more_is_refused_before_anything_goes_up(self) -> None:
+        self.release("0.1.1")
+        work = self.merged("0.1.2")
+        older = publish.bridge("0.1.2", work)
+        assert older is not None
+
+        with self.assertRaisesRegex(Refused, "releases.win.json isn't signed"):
+            publish.upload(self.store, self.key, "0.1.2", work)
+
+        merged = json.loads((work / "feed" / publish.FEED).read_bytes())["Assets"]
+        older.write_text(json.dumps({"Assets": [entry for entry in merged if entry["Version"] == "0.1.2"]}))
+        self.sign_file(older)
+        with self.assertRaisesRegex(Refused, "should offer only 0.1.2's full package"):
+            publish.upload(self.store, self.key, "0.1.2", work)
+
+        self.assertEqual(self.published(), [("0.1.1", "Full")])
+        self.assertEqual(self.offered_on_the_older_channel(), self.full("0.1.1"))
+        self.assertFalse((self.bucket / package_name("0.1.2", "Full")).exists())
+
+    def test_the_check_reads_the_older_channel_s_feed_as_apps_do(self) -> None:
+        first = self.release("0.1.1")
+        work = self.release("0.1.2")
+        url = self.serve()
+        publish.check(url, self.key, "0.1.2", work, wait=0)
+
+        for name in (self.OLDER, self.OLDER + ".sig"):
+            shutil.copyfile(first / "bridge" / name, self.bucket / name)
+        with self.assertRaisesRegex(Refused, "doesn't serve the releases.win.json this run published"):
+            publish.check(url, self.key, "0.1.2", work, attempts=2, wait=0)
 
 
 class WindowsOnArm(BesideAnother, Publishing):
