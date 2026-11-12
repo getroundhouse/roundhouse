@@ -13,6 +13,7 @@ use serde_json::Value;
 use super::{Shared, row};
 use crate::calls::{self, summarize_input};
 use crate::item_key::ItemKey;
+use crate::prose::{TextAt, Written};
 
 #[expect(
     clippy::too_many_arguments,
@@ -43,13 +44,20 @@ pub(super) fn approval_card(
     };
     let (title, content, buttons): (String, AnyElement, Div) = if tool_name == calls::PLAN {
         let plan = input.get("plan").and_then(Value::as_str).unwrap_or_default().to_string();
+        let plan_id = ItemKey::Event(seq, 0).element("plan");
         let keep_planning = ApprovalDecision::Deny {
             message: "The user wants to keep planning. Ask them what to change.".to_string(),
             interrupt: false,
         };
         (
             "Plan".to_string(),
-            shared.texts.markdown(ItemKey::Event(seq, 0).element("plan"), &plan).into_any_element(),
+            // Nothing's found in what asks the person something.
+            shared.prose.draw(
+                &shared.selection,
+                &Written::unfound(TextAt { seq, block: 0 }, plan_id, &plan),
+                None,
+                || None,
+            ),
             h_flex()
                 .gap_2()
                 .child(answer_button("approve-plan", "Approve plan", allow).primary())

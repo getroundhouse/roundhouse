@@ -18,6 +18,7 @@ use super::around::Around;
 use super::{Shared, colored_line, row, rule_across, rule_middle, turn_times};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
+use crate::prose::{TextAt, Written};
 use crate::scroll_area::ScrollArea;
 
 const ICON: f32 = 13.0;
@@ -93,14 +94,17 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
         let said = div().max_w(relative(0.8)).text_center().text_sm().text_color(theme.muted_foreground);
         h_flex().w_full().justify_center().child(said.child(format!("“{keeping}”")))
     });
-    let summary = compacted.summary.filter(|_| open).map(|summary| opened(&key, summary, shared, cx));
+    let summary = compacted.summary.filter(|_| open).map(|summary| opened(compacted.seq, summary, shared, cx));
     row().pt_2().child(across).children(keeping).children(summary).into_any_element()
 }
 
 /// The summary, under a heading that stays put while it scrolls. The scrollbar sits in the gap on the right.
-fn opened(key: &ItemKey, summary: &str, shared: &Shared, cx: &App) -> Div {
-    let theme = cx.theme();
-    let text = shared.texts.markdown(key.element("summary"), summary);
+fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
+    let (theme, key) = (cx.theme(), ItemKey::Event(seq, 0));
+    // What a compaction says isn't found. A drag from it scrolls on its area, as the wheel does.
+    let area = key.element("summary-scroll");
+    let written = Written::unfound(TextAt { seq, block: 0 }, key.element("summary"), summary).in_area(area.clone());
+    let text = shared.prose.draw(&shared.selection, &written, None, || None);
     let text = div().pr_3().text_sm().text_color(theme.muted_foreground).child(text);
     v_flex()
         .w_full()
@@ -112,7 +116,7 @@ fn opened(key: &ItemKey, summary: &str, shared: &Shared, cx: &App) -> Div {
         .border_1()
         .border_color(theme.border)
         .child(div().text_xs().text_color(look::faint()).child("What the agent carries on from"))
-        .child(ScrollArea::new(key.element("summary-scroll"), px(SUMMARY_HEIGHT), text))
+        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text).follows_drags(&shared.selection))
 }
 
 /// The rule for `body`, if it's a compaction, or a line saying why it couldn't.

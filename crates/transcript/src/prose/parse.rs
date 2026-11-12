@@ -2,9 +2,11 @@
 //! text: each paragraph, heading, code block and table cell. The kit reports where it drew each keyed leaf, and paints
 //! the ranges it's given for one behind it.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, Paragraph, Table, parse_markdown};
+use gpui_kit::SharedString;
+use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, LinkMark, Paragraph, Table, parse_markdown};
 
 /// What an image, or anything else drawn inline that isn't text, is in a leaf's text: one character, as the kit counts
 /// it.
@@ -18,6 +20,9 @@ pub(crate) struct Parsed {
     /// What each leaf shows, by its key, which is its place in the text. A selection's bytes, and find's matches,
     /// are in these.
     pub(crate) leaves: Arc<[String]>,
+    /// Where each reference link, such as `[the docs][1]`, goes, by what it's defined as. The kit's parser leaves
+    /// these in the blocks for its text view to find, so a text drawn from its blocks is given them itself.
+    pub(super) links: BTreeMap<SharedString, LinkMark>,
 }
 
 /// Parses `source`, and keys each of its leaves by its place in it.
@@ -28,8 +33,37 @@ pub(super) fn parse(source: String) -> Parsed {
         vec![BlockNode::Paragraph(paragraph)]
     });
     let mut leaves = Vec::new();
-    let blocks = blocks.into_iter().map(|block| keyed(block, &mut leaves)).collect();
-    Parsed { source, blocks, leaves: leaves.into() }
+    let blocks: Vec<BlockNode> = blocks.into_iter().map(|block| keyed(block, &mut leaves)).collect();
+    let mut links = BTreeMap::new();
+    defined(&blocks, &mut links);
+    Parsed { source, blocks, leaves: leaves.into(), links }
+}
+
+/// Adds where each reference link defined in `blocks` goes to `links`, unless it's there. As the Markdown standard has
+/// it, the first definition of one is the one it goes by, wherever it is, even inside a quote or a list.
+fn defined(blocks: &[BlockNode], links: &mut BTreeMap<SharedString, LinkMark>) {
+    for block in blocks {
+        match block {
+            BlockNode::Definition { identifier, url, title, .. } => {
+                let link = || LinkMark { url: url.clone(), identifier: Some(identifier.clone()), title: title.clone() };
+                links.entry(identifier.clone()).or_insert_with(link);
+            }
+            BlockNode::Root { children, .. }
+            | BlockNode::Blockquote { children, .. }
+            | BlockNode::List { children, .. }
+            | BlockNode::ListItem { children, .. } => defined(children, links),
+            // These hold no blocks, nor does a kind a later kit adds, as far as this knows.
+            BlockNode::Paragraph(_)
+            | BlockNode::Heading { .. }
+            | BlockNode::CodeBlock(_)
+            | BlockNode::Custom { .. }
+            | BlockNode::Table(_)
+            | BlockNode::Break { .. }
+            | BlockNode::HorizontalRule { .. }
+            | BlockNode::Unknown
+            | _ => {}
+        }
+    }
 }
 
 /// What each leaf of `source` shows, in order, as it's drawn.
@@ -98,7 +132,7 @@ fn next_key(leaves: &[String]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{ATOM, leaves};
+    use super::{ATOM, leaves, parse};
 
     #[test]
     fn each_paragraph_heading_code_block_and_cell_is_a_leaf_in_order() {
@@ -112,6 +146,17 @@ mod tests {
         let source = "Before ![a picture](a.png) after\n\n![alone](b.png)\n\nThe end";
 
         assert_eq!(*leaves(source), [format!("Before {ATOM} after"), "The end".to_string()]);
+    }
+
+    #[test]
+    fn a_reference_link_goes_where_its_first_definition_says_even_inside_a_quote() {
+        let source =
+            "See [the docs][docs].\n\n> [docs]: https://example.com/first\n\n[docs]: https://example.com/second";
+
+        let links = parse(source.to_owned()).links;
+
+        assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
+        assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");
     }
 
     #[test]

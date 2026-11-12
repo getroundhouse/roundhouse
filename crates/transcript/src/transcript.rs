@@ -106,7 +106,7 @@ pub struct Transcript {
     linked: LinkedImages,
     /// Where the rows' text views are made, which keeps each long one and each the agent is still writing.
     texts: LongTexts,
-    /// The agent's words that the transcript draws from the kit's blocks, parsed.
+    /// The texts the transcript draws from the kit's blocks, parsed.
     prose: Prose,
     /// What's selected of them.
     selection: Selection,

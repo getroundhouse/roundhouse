@@ -20,10 +20,10 @@ use super::around::Around;
 use super::line::{HEIGHT, still_icon};
 use super::prompt::{Progress, Prompt, prompt_bubble};
 use super::tools::agent::open_tab;
-use super::{Shared, empty, render_event, row, text_id, thinking, turn_times};
+use super::{Shared, empty, render_event, row, thinking, turn_times};
 use crate::attachments::{self, Carried};
 use crate::calls::agent;
-use crate::find::FindLook;
+use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
 use crate::transcript::{AtWork, Model};
 
@@ -105,9 +105,13 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             match block.kind {
-                BlockKind::Text => out.push(texts.streaming(text_id(&key), &block.text).into_any_element()),
+                BlockKind::Text => {
+                    out.push(
+                        texts.streaming(find::view_id(&(key.clone(), Part::Text)), &block.text).into_any_element(),
+                    );
+                }
                 BlockKind::Thinking if thinking_open => {
-                    let text = texts.streaming(thinking::text_id(&key), &block.text);
+                    let text = texts.streaming(find::view_id(&(key.clone(), Part::Thinking)), &block.text);
                     out.push(thought("Thinking…".to_string(), cx).into_any_element());
                     out.push(thinking::text(&key, text, cx).into_any_element());
                 }
@@ -124,7 +128,7 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
 /// A prompt the agent hasn't read yet, drawn as it will be once it's read, faint until then.
 fn waiting_prompt(prompt: &Waiting, shared: &Shared, find: &FindLook, cx: &App) -> AnyElement {
     match prompt {
-        Waiting::Recorded(event, around) => render_event(event, around, shared, find, cx),
+        Waiting::Recorded(event, around) => render_event(event, around, None, shared, find, cx),
         Waiting::Sending(prompt, carried) => {
             let key = ItemKey::Prompt(prompt.client_msg_id.clone());
             let text = Prompt { text: &prompt.text, find };
