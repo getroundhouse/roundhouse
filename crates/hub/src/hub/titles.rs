@@ -8,6 +8,7 @@ use std::sync::Arc;
 use protocol::attachment::{Attachment, AttachmentBytes, NewAttachment};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::short_text::start_of;
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
 
@@ -113,7 +114,7 @@ impl Hub {
             }
         };
         if titled.session.is_some() || titled.workspace.is_some() {
-            let asked = prompt.chars().take(MOST_PROMPT_CHARS).collect();
+            let asked = start_of(prompt, MOST_PROMPT_CHARS).0.to_owned();
             tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked, images));
         }
     }

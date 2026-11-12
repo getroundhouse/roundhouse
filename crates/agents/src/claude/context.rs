@@ -1,6 +1,7 @@
 //! How full the CLI's context is, from what it answers `get_context_usage`. `docs/claude-cli.md` has how it behaves.
 
 use protocol::model::{ContextPart, ContextPartKind, ContextUsage};
+use protocol::short_text::start_of;
 use serde_json::Value;
 
 /// More parts than the CLI names, and longer than any name it gives one, so a record can't grow without limit on a
@@ -30,7 +31,7 @@ fn part(category: &Value) -> Option<ContextPart> {
         _ => ContextPartKind::Unknown,
     };
     (!name.is_empty() && tokens > 0).then(|| ContextPart {
-        name: name.chars().take(MAX_NAME_CHARS).collect(),
+        name: start_of(name, MAX_NAME_CHARS).0.to_owned(),
         tokens,
         kind,
     })

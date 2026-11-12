@@ -5,6 +5,7 @@
 
 use std::fmt::Write as _;
 
+use protocol::short_text::start_of;
 use serde_json::Value;
 
 use super::{each_string, str_of, string_of};
@@ -53,7 +54,11 @@ fn as_json(block: &Value) -> String {
 
 /// `text` cut to [`LONGEST_STRING_CHARS`], saying how much was left out.
 fn cut(text: &mut String) {
-    let Some((at, _)) = text.char_indices().nth(LONGEST_STRING_CHARS) else { return };
+    let (start, cut) = start_of(text, LONGEST_STRING_CHARS);
+    if !cut {
+        return;
+    }
+    let at = start.len();
     let more = text[at..].chars().count();
     text.truncate(at);
     let unit = if more == 1 { "character" } else { "characters" };

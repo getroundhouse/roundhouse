@@ -13,7 +13,6 @@ mod files;
 mod git;
 mod hub_settings;
 mod model_name;
-mod one_line;
 mod permission_mode;
 mod prompt_line;
 mod pull_request;

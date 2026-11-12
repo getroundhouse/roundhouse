@@ -1,12 +1,14 @@
-//! Text as it reads on one line, for a title or a prompt's line in a list, so a row shows it as it reads.
+//! Text made short to show it: on one line, as a title or a prompt's line in a list shows it, so a row shows it as it
+//! reads, or only its start, saying whether that's all of it. Every part of the system that shortens text the same way
+//! does it with these, so a hub, a client and an agent's adapter can't disagree.
 
 #[cfg(test)]
-pub(super) mod laws;
+pub(crate) mod laws;
 
 /// `text` as it reads on one line, at most `most` characters long: each run of whitespace, line breaks included, is one
 /// space, with none at either end, and control characters and those [`hides`] are gone. It stops at the limit rather
 /// than reading the rest, so a long text costs no more than its start.
-pub(super) fn one_line(text: &str, most: usize) -> String {
+pub fn one_line(text: &str, most: usize) -> String {
     let mut line = String::new();
     let (mut chars, mut gap) = (0, false);
     for c in text.chars() {
@@ -31,10 +33,19 @@ pub(super) fn one_line(text: &str, most: usize) -> String {
     line
 }
 
+/// The first `most` characters of `text`, in whole characters, and whether that's less than all of it. It stops at the
+/// limit, as [`one_line`] does.
+pub fn start_of(text: &str, most: usize) -> (&str, bool) {
+    match text.char_indices().nth(most) {
+        Some((end, _)) => (&text[..end], true),
+        None => (text, false),
+    }
+}
+
 /// Characters that show as nothing or reorder what follows them: bidirectional controls, which can make a row read
 /// backwards, and zero-width spaces, which can make a title look empty. Joiners stay, since emoji and some scripts
 /// need them.
-pub(super) fn hides(c: char) -> bool {
+fn hides(c: char) -> bool {
     matches!(
         c,
         '\u{061C}' | '\u{200B}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}'

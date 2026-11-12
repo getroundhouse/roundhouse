@@ -6,6 +6,7 @@
 
 use protocol::event::ContentBlock;
 use protocol::model::{CallResult, RecentCall, RecentWork, Said};
+use protocol::short_text::start_of;
 
 use super::call_in;
 
@@ -52,8 +53,8 @@ pub(super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrote: bool) -
             ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, .. } => {
                 let Some(made) = work.calls.iter_mut().find(|made| made.call.id == *tool_use_id) else { continue };
                 let (kept, cut) = start_of(text, RESULT_KEPT);
-                let (images, encrypted) = (images.clone(), *encrypted);
-                made.result = Some(CallResult { is_error: *is_error, text: kept, cut, images, encrypted });
+                let (text, images, encrypted) = (kept.to_owned(), images.clone(), *encrypted);
+                made.result = Some(CallResult { is_error: *is_error, text, cut, images, encrypted });
                 changed = true;
             }
             ContentBlock::Text { .. }
@@ -67,15 +68,7 @@ pub(super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrote: bool) -
 
 fn said(text: &str) -> Said {
     let (text, cut) = start_of(text, TEXT_KEPT);
-    Said { text, cut }
-}
-
-/// The first `kept` characters of `text`, and whether that's less than all of it.
-fn start_of(text: &str, kept: usize) -> (String, bool) {
-    match text.char_indices().nth(kept) {
-        Some((end, _)) => (text[..end].to_owned(), true),
-        None => (text.to_owned(), false),
-    }
+    Said { text: text.to_owned(), cut }
 }
 
 #[cfg(test)]

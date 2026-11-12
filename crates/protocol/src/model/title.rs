@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::one_line::one_line;
+use crate::short_text::{one_line, start_of};
 
 #[cfg(test)]
 mod laws;
@@ -32,11 +32,11 @@ impl Title {
     pub fn from_first_line(text: &str) -> Option<Self> {
         const MOST: usize = 48;
         let line = text.split(breaks_line).find_map(Self::tidied)?;
-        if line.0.chars().count() <= MOST {
+        let (start, cut) = start_of(&line.0, MOST);
+        if !cut {
             return Some(line);
         }
-        let cut: String = line.0.chars().take(MOST).collect();
-        let shortened = cut.rsplit_once(' ').map_or(cut.as_str(), |(start, _)| start);
+        let shortened = start.rsplit_once(' ').map_or(start, |(start, _)| start);
         Some(Self(format!("{}…", shortened.trim_end())))
     }
 

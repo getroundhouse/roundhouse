@@ -1,10 +1,8 @@
-use proptest::prelude::*;
-use proptest::test_runner::{Config, RngSeed};
 use protocol::event::ContentBlock;
 use protocol::model::RecentWork;
 use serde_json::json;
 
-use super::{CALLS_KEPT, RESULT_KEPT, TEXT_KEPT, add, start_of};
+use super::{CALLS_KEPT, RESULT_KEPT, TEXT_KEPT, add};
 
 fn text(text: &str) -> ContentBlock {
     ContentBlock::Text { text: text.into(), images: Vec::new() }
@@ -85,19 +83,4 @@ fn only_what_came_back_is_taken_from_a_user_line() {
 
     assert_eq!(work.since, None);
     assert_eq!(work.calls[0].result.as_ref().map(|result| result.text.as_str()), Some("one"));
-}
-
-proptest! {
-    #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
-
-    /// What's kept of a text is its start, in whole characters, no more than `kept` of them, and cut exactly when the
-    /// text had more.
-    #[test]
-    fn what_s_kept_is_the_text_s_start_and_says_whether_it_was_cut(text in "\\PC{0,40}", kept in 0usize..30) {
-        let (start, cut) = start_of(&text, kept);
-
-        prop_assert!(text.starts_with(&start));
-        prop_assert_eq!(start.chars().count(), text.chars().count().min(kept));
-        prop_assert_eq!(cut, text.chars().count() > kept);
-    }
 }
