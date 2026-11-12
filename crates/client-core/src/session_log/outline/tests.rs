@@ -8,16 +8,7 @@ use crate::session_log::tests::page;
 
 fn prompt(seq: Seq, text: &str) -> SessionEvent {
     let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) };
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
+    protocol::fixtures::event(seq, body)
 }
 
 fn line(seq: Seq) -> PromptLine {

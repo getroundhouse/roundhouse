@@ -9,7 +9,6 @@ use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, Err
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
 use protocol::frame;
 use protocol::model::{Place, Session, ToolUseId};
-use serde_json::json;
 
 use super::super::{OpenSession, View};
 use crate::Client;
@@ -30,16 +29,8 @@ fn recorded(seq: u64, era: Era) -> SessionEvent {
         Era::Now if seq.is_multiple_of(2) => (Some("call".into()), Place::new(seq / 2)),
         Era::Now => (None, Place::new(seq.div_ceil(2))),
     };
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent,
-        place,
-        body: EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") },
-        raw: None,
-    }
+    let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") };
+    SessionEvent { subagent, place, ..protocol::fixtures::event(seq, body) }
 }
 
 const LAST_SEQ: u64 = 5;
@@ -141,11 +132,7 @@ fn first<T>(requests: &flume::Receiver<ClientRequest>, pick: impl Fn(&ClientRequ
 }
 
 fn session() -> Session {
-    serde_json::from_value(json!({
-        "id": "s", "workspace_id": "w", "agent": "claude", "model": "opus", "permission_mode": "bypassPermissions", "effort": "xhigh",
-        "status": "idle", "last_seq": LAST_SEQ, "created_at_ms": 0, "updated_at_ms": 0,
-    }))
-    .unwrap()
+    Session { last_seq: LAST_SEQ, ..protocol::fixtures::session("s") }
 }
 
 #[test]

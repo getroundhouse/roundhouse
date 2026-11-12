@@ -9,7 +9,6 @@ use std::path::Path;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::frame;
-use protocol::model::{Session, Workspace};
 
 use crate::Client;
 
@@ -41,25 +40,6 @@ pub(crate) fn connect(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does
         }
     });
     Client::connect(socket, "test").unwrap()
-}
-
-/// A session as a hub answers with one, with nothing in it.
-pub(crate) fn session(id: &str) -> Session {
-    let record = format!(
-        r#"{{"id":"{id}","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions",
-        "effort":"xhigh","status":"idle","last_seq":0,"created_at_ms":0,"updated_at_ms":0}}"#
-    );
-    serde_json::from_str(&record).unwrap()
-}
-
-/// A workspace as a hub answers with one, with nothing in it.
-pub(crate) fn workspace(id: &str) -> Workspace {
-    let record = format!(
-        r#"{{"id":"{id}","repo_id":"r","name":"{id}","branch":"{id}","base_ref":null,"path":null,"status":"ready",
-        "provider":"local","instance_id":"i","created_at_ms":0,"archived_at_ms":null,"setup":{{"state":"succeeded"}},
-        "port_base":0}}"#
-    );
-    serde_json::from_str(&record).unwrap()
 }
 
 fn reply(stream: &mut UnixStream, id: u64, outcome: ReplyOutcome) {

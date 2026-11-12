@@ -336,12 +336,12 @@ fn keeping_hub(socket: &Path, first: u64) -> Client {
 /// The chat's record as the hub's feed might tell of it, at `rev`, with `typed` in its composer.
 fn told(id: &str, rev: u64, typed: &str) -> Session {
     let draft = Draft { text: typed.to_string(), files: Vec::new() };
-    Session { rev: Rev::new(rev), draft, ..stand_in_hub::session(id) }
+    Session { rev: Rev::new(rev), draft, ..protocol::fixtures::session(id) }
 }
 
 /// The workspace's record as the hub's feed might tell of it, at `rev`, with `comment` being written on its diff.
 fn writing(id: &str, rev: u64, comment: Option<CommentDraft>) -> Workspace {
-    Workspace { rev: Rev::new(rev), comment_draft: comment, ..stand_in_hub::workspace(id) }
+    Workspace { rev: Rev::new(rev), comment_draft: comment, ..protocol::fixtures::workspace(id) }
 }
 
 #[test]

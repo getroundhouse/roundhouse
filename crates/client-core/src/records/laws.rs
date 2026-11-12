@@ -5,10 +5,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{
-    Account, AgentKind, HubSettings, LimitWindow, Session, SessionId, SessionStatus, Title, TitleSource, UsageLimit,
-    WorkspaceDraft,
-};
+use protocol::model::{Account, HubSettings, LimitWindow, Session, SessionId, Title, UsageLimit, WorkspaceDraft};
 
 use super::*;
 
@@ -28,38 +25,7 @@ enum Delivery {
 }
 
 fn session(id: &SessionId, title: u8, rev: u64) -> Session {
-    Session {
-        account: None,
-        id: id.clone(),
-        workspace_id: "w".into(),
-        agent: AgentKind::Claude,
-        model: protocol::model::ModelName::named("opus"),
-        permission_mode: protocol::model::PermissionMode::FullAccess,
-        effort: protocol::model::Effort::Xhigh,
-        status: SessionStatus::Idle,
-        last_seq: 0,
-        created_at_ms: 0,
-        updated_at_ms: 0,
-        title: Title::tidied(&title.to_string()),
-        closed_at_ms: None,
-        reply_seq: 0,
-        read_seq: 0,
-        turn_started_at_ms: None,
-        user_active_at_ms: None,
-        background_tasks: Vec::new(),
-        wait: None,
-        context: None,
-        prompt_cache: None,
-        queued: Vec::new(),
-        queue_held: false,
-        draft: protocol::model::Draft::default(),
-        answer_draft: None,
-        open_approvals: None,
-        untaken: None,
-        agent_opened: None,
-        rev: Rev::new(rev),
-        title_source: TitleSource::FirstLine,
-    }
+    Session { title: Title::tidied(&title.to_string()), rev: Rev::new(rev), ..protocol::fixtures::session(id.as_str()) }
 }
 
 impl Hub {

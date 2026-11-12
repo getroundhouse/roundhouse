@@ -1,21 +1,8 @@
 use protocol::event::{ApprovalOutcome, NoticeLevel};
-use protocol::model::Place;
+use protocol::fixtures::event;
 use serde_json::Value;
 
 use super::*;
-
-fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
-}
 
 fn asked(seq: Seq, id: &str) -> SessionEvent {
     let body = EventBody::ApprovalRequested {

@@ -39,7 +39,7 @@ fn following(dir: &Path, agents: ReplyOutcome) -> RecordsFeed {
         } else if request == ClientRequest::AgentList {
             agents.take().unwrap()
         } else if request == ClientRequest::RecordsList {
-            let workspaces = vec![stand_in_hub::workspace("w")];
+            let workspaces = vec![protocol::fixtures::workspace("w")];
             ReplyOutcome::Response(ClientResponse::Records(Records {
                 workspaces,
                 rev: Rev::new(1),
