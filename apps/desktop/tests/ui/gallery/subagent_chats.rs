@@ -8,7 +8,7 @@ use protocol::model::SessionStatus;
 use serde_json::json;
 
 use super::events::{
-    replied, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result, tool_use, user_prompt,
+    on, replied, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result, tool_use, user_prompt,
     within,
 };
 use super::frame::{CHAT, TABS_AND_CHAT};
@@ -65,12 +65,12 @@ const REPORT: &str = "Two places check for a stop signal outside the signal itse
 
 Both compare with `Aspect::Stop` directly, so either could use `may_pass`.";
 
-/// The first subagent's search, with the agent's own read of the signal in the middle of it.
+/// The first subagent's search, on Haiku, with the agent's own read of the signal in the middle of it.
 fn finding(agent: &str) -> Vec<EventBody> {
     let found = "crates/signals/src/signal.rs:16:            Self::Caution => Self::Stop,\n\
                  crates/signals/src/train.rs:53:        if signal == Aspect::Stop {\n\
                  crates/signals/src/depot.rs:19:    if aspect == Aspect::Stop { return None; }";
-    vec![
+    let events = vec![
         within(agent, text("sub-1", "I'll search for comparisons with the stop aspect first.")),
         within(
             agent,
@@ -120,7 +120,9 @@ fn finding(agent: &str) -> Vec<EventBody> {
             ),
         ),
         within(agent, text("sub-5", REPORT)),
-    ]
+    ];
+    let haiku = |event: EventBody| if event.subagent().is_some() { on("claude-haiku-5-5", event) } else { event };
+    events.into_iter().map(haiku).collect()
 }
 
 /// What the second subagent, started by the call `agent`, has done while the screens show it at work: it read both
