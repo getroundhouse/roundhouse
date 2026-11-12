@@ -1,28 +1,12 @@
 use std::sync::Arc;
 
-use protocol::model::{RecentWork, Rev, Subagent, SubagentStatus};
+use protocol::model::{Rev, Subagent, SubagentStatus};
 
 use super::Subagents;
 use crate::records::Snapshot;
 
 fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent {
-    Subagent {
-        session_id: session.into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: false,
-        model: None,
-        status: SubagentStatus::Working,
-        started_at_ms,
-        ended_at_ms: None,
-        calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
-        report: None,
-        rev: Rev::new(rev),
-    }
+    Subagent { session_id: session.into(), started_at_ms, rev: Rev::new(rev), ..protocol::fixtures::subagent(call) }
 }
 
 /// The calls that started a session's subagents, as a view would read them.

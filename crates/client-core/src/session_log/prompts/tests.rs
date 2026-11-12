@@ -1,23 +1,11 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
+use protocol::fixtures::event;
 use protocol::model::SettledAt;
 use protocol::model::{Place, Seq, seq_index};
 use protocol::prompt::Prompt;
 
 use super::*;
 use crate::session_log::Row;
-
-fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
-}
 
 fn prompt() -> EventBody {
     EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("steer") }

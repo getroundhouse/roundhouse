@@ -34,15 +34,13 @@ fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
     };
     let from = from_place.get();
     let events = (from..(from + u64::from(*limit)).min(LAST_SEQ + 1))
-        .map(|place| SessionEvent {
-            session_id: "s".into(),
-            seq: place * 3,
-            ts_ms: 0,
-            run: None,
-            subagent: subagent.clone(),
-            place: Place::new(place),
-            body: EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}") },
-            raw: None,
+        .map(|place| {
+            let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}") };
+            SessionEvent {
+                subagent: subagent.clone(),
+                place: Place::new(place),
+                ..protocol::fixtures::event(place * 3, body)
+            }
         })
         .collect();
     Some(ReplyOutcome::Response(ClientResponse::PlacedEvents { events, last_place: Place::new(LAST_SEQ) }))
@@ -248,16 +246,8 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     });
     let client = connect(&socket);
     let open = own(&client);
-    let only = SessionEvent {
-        session_id: "s".into(),
-        seq: 1,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::new(1),
-        body: EventBody::Notice { level: NoticeLevel::Info, message: "parser".into() },
-        raw: None,
-    };
+    let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into() };
+    let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(1, parser) };
 
     let before = open.search(&client, needle("parser"), 64);
     answer.send(()).unwrap();

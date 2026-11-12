@@ -82,11 +82,7 @@ pub(super) fn answered_simply(request: &ClientRequest) -> Option<ReplyOutcome> {
 }
 
 pub(super) fn session() -> Session {
-    let record = format!(
-        r#"{{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle",
-        "last_seq":{LAST_SEQ},"created_at_ms":0,"updated_at_ms":0}}"#
-    );
-    serde_json::from_str(&record).unwrap()
+    Session { last_seq: LAST_SEQ, ..protocol::fixtures::session("s") }
 }
 
 pub(in crate::client) fn refused(code: ErrorCode, message: &str) -> ReplyOutcome {

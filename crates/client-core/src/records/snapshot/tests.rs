@@ -1,8 +1,5 @@
 use protocol::client::HubNotice;
-use protocol::model::{
-    AgentKind, DiffComment, DiffSide, Draft, PermissionMode, RecentWork, RecordKey, Records, Repo, Rev, Session,
-    SessionStatus, SetupStatus, Subagent, SubagentStatus, Title, TitleSource, Workspace, WorkspaceStatus,
-};
+use protocol::model::{DiffComment, DiffSide, RecordKey, Records, Repo, Rev, Session, Subagent, Title, Workspace};
 
 use crate::records::HubRecords;
 
@@ -11,63 +8,16 @@ fn repo(id: &str, name: &str) -> Repo {
 }
 
 fn workspace(id: &str, created_at_ms: i64, rev: u64) -> Workspace {
-    Workspace {
-        id: id.into(),
-        repo_id: "r".into(),
-        name: id.into(),
-        branch: id.into(),
-        base_ref: None,
-        path: None,
-        status: WorkspaceStatus::Ready,
-        provider: "local".into(),
-        instance_id: "local".into(),
-        created_at_ms,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: SetupStatus::Succeeded,
-        port_base: 4000,
-        rev: Rev::new(rev),
-        title: None,
-        title_source: TitleSource::FirstLine,
-        pull_request: None,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
+    Workspace { created_at_ms, rev: Rev::new(rev), ..protocol::fixtures::workspace(id) }
 }
 
 fn session(id: &str, workspace: &str, created_at_ms: i64, rev: u64) -> Session {
     Session {
-        account: None,
-        id: id.into(),
         workspace_id: workspace.into(),
-        agent: AgentKind::Claude,
-        model: protocol::model::ModelName::named("opus"),
-        permission_mode: PermissionMode::FullAccess,
-        effort: protocol::model::Effort::Xhigh,
-        status: SessionStatus::Idle,
-        last_seq: 0,
         created_at_ms,
-        updated_at_ms: 0,
         title: Title::tidied(id),
-        closed_at_ms: None,
-        reply_seq: 0,
-        read_seq: 0,
-        turn_started_at_ms: None,
-        user_active_at_ms: None,
-        background_tasks: Vec::new(),
-        wait: None,
-        context: None,
-        prompt_cache: None,
-        queued: Vec::new(),
-        queue_held: false,
-        draft: Draft::default(),
-        answer_draft: None,
-        open_approvals: None,
-        untaken: None,
-        agent_opened: None,
         rev: Rev::new(rev),
-        title_source: TitleSource::FirstLine,
+        ..protocol::fixtures::session(id)
     }
 }
 
@@ -85,23 +35,7 @@ fn comment(id: &str, workspace: &str, rev: u64) -> DiffComment {
 }
 
 fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent {
-    Subagent {
-        session_id: session.into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: false,
-        model: None,
-        status: SubagentStatus::Working,
-        started_at_ms,
-        ended_at_ms: None,
-        calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
-        report: None,
-        rev: Rev::new(rev),
-    }
+    Subagent { session_id: session.into(), started_at_ms, rev: Rev::new(rev), ..protocol::fixtures::subagent(call) }
 }
 
 /// Two workspaces, each with a session, and a comment on the first's diff.

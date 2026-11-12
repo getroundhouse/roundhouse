@@ -1,34 +1,13 @@
 use super::*;
 use protocol::event::{ApprovalOutcome, NoticeLevel};
+use protocol::fixtures::event;
 use protocol::model::Place;
 use protocol::prompt::Prompt;
 use protocol::tail::DeltaChange;
 use serde_json::Value;
 
 fn notice(seq: Seq) -> SessionEvent {
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body: EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") },
-        raw: None,
-    }
-}
-
-fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
+    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") })
 }
 
 pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {

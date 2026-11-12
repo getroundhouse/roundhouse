@@ -43,7 +43,7 @@ fn a_prompt_the_hub_never_takes_comes_back_with_its_files() {
         prompt.files.iter().map(|file| (&file.attachment, &file.data)).collect::<Vec<_>>(),
         [(&log.attachment, &log.data)]
     );
-    assert!(client.queueing(&stand_in_hub::session("s")).is_empty(), "it's handed back, not shown as queued");
+    assert!(client.queueing(&protocol::fixtures::session("s")).is_empty(), "it's handed back, not shown as queued");
 }
 
 /// So the queue shows a prompt from the moment it's queued, before the hub has it, and shows it once.
@@ -54,15 +54,17 @@ fn a_prompt_being_queued_shows_until_the_hub_answers_and_not_again_once_it_s_on_
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
         let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = request else { return Does::Nothing };
         let _ = answered.recv();
-        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Session(stand_in_hub::session(id.as_str())))))
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Session(protocol::fixtures::session(
+            id.as_str(),
+        )))))
     });
-    let (session, written) = (stand_in_hub::session("s"), Written::new(Prompt::new("next")));
+    let (session, written) = (protocol::fixtures::session("s"), Written::new(Prompt::new("next")));
     let shown = written.on_its_way();
 
     let queueing = client.start_queueing(&session.id, written);
 
     assert_eq!(client.queueing(&session), std::slice::from_ref(&shown));
-    assert!(client.queueing(&stand_in_hub::session("t")).is_empty(), "only in its own chat");
+    assert!(client.queueing(&protocol::fixtures::session("t")).is_empty(), "only in its own chat");
     let mut on_record = session.clone();
     on_record.queued.push(shown);
     assert!(client.queueing(&on_record).is_empty(), "the record shows it");
@@ -80,7 +82,7 @@ fn hub_that_says(socket: &Path, mut missing: usize) -> (Client, flume::Receiver<
         let (prompt, taken) = if matches!(request, ClientRequest::SessionPrompt { .. }) {
             ("prompt", ClientResponse::PromptRecorded { seq: 1, duplicate: false })
         } else if let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = &request {
-            ("queued", ClientResponse::Session(stand_in_hub::session(id.as_str())))
+            ("queued", ClientResponse::Session(protocol::fixtures::session(id.as_str())))
         } else if let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request {
             let _ = said.send(format!("add {id}"));
             let size_bytes = data.into_vec().len() as u64;
