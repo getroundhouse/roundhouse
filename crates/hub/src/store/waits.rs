@@ -25,7 +25,8 @@ pub struct Seen {
 
 impl Store {
     /// Starts a wait, in a chat that's open in a ready workspace, from what GitHub had recorded then, and ends the
-    /// chat's open one as cancelled, since an agent waits on one at a time. Returns the one it ended.
+    /// chat's open one as replaced, since an agent waits on one at a time. Returns the one it ended. One that ends as it
+    /// starts never waits, so it replaces nothing, and the agent's open one goes on, as the agent hears.
     pub fn start_wait(&self, wait: &Wait, seen: Seen) -> Result<Option<WaitId>, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
@@ -41,7 +42,10 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        let replaced = call_off(&tx, &wait.session_id, wait.started_at_ms)?;
+        let replaced = match wait.ended {
+            None => call_off(&tx, &wait.session_id, None, wait.started_at_ms, WaitEnd::Replaced)?,
+            Some(_) => None,
+        };
         tx.prepare_cached(&format!(
             "INSERT INTO waits ({COLUMNS}, seen_left_queue_at_ms, seen_changes_requested_at_ms)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -72,6 +76,17 @@ impl Store {
         let waits =
             query.query_map(params![at_ms, text_of(&WaitEnd::Cancelled), workspace_id.as_str()], wait_from_row)?;
         Ok(waits.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Ends the session's wait `wait` as the person calling it off, if it's the one the session has open. Returns it,
+    /// if it was.
+    pub fn call_off_session_wait(
+        &self,
+        session_id: &SessionId,
+        wait: &WaitId,
+        at_ms: i64,
+    ) -> Result<Option<WaitId>, StoreError> {
+        Ok(call_off(&lock(&self.writer), session_id, Some(wait), at_ms, WaitEnd::CalledOffByPerson)?)
     }
 
     pub fn wait(&self, id: &WaitId) -> Result<Wait, StoreError> {
@@ -152,12 +167,21 @@ impl Store {
     }
 }
 
-/// Ends the chat's open wait, if it has one, as cancelled.
-fn call_off(conn: &Connection, session_id: &SessionId, at_ms: i64) -> rusqlite::Result<Option<WaitId>> {
+/// Ends the chat's open wait, if it has one, and it's `wait` when that's given, as called off `how`.
+fn call_off(
+    conn: &Connection,
+    session_id: &SessionId,
+    wait: Option<&WaitId>,
+    at_ms: i64,
+    how: WaitEnd,
+) -> rusqlite::Result<Option<WaitId>> {
     conn.prepare_cached(
-        "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE session_id = ? AND ended_at_ms IS NULL RETURNING id",
+        "UPDATE waits SET ended_at_ms = ?1, ended = ?2
+             WHERE session_id = ?3 AND (?4 IS NULL OR id = ?4) AND ended_at_ms IS NULL RETURNING id",
     )?
-    .query_row(params![at_ms, text_of(&WaitEnd::Cancelled), session_id.as_str()], |row| row.get::<_, String>(0))
+    .query_row(params![at_ms, text_of(&how), session_id.as_str(), wait.map(WaitId::as_str)], |row| {
+        row.get::<_, String>(0)
+    })
     .optional()
     .map(|id| id.map(WaitId::from))
 }

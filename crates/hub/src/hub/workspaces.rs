@@ -345,6 +345,10 @@ impl Hub {
         for session in sessions {
             let live = self.live_session(&session.id).await?;
             if !live.agent_running() {
+                // Its waits were called off as archiving started. Archiving goes on whether or not they come off its list.
+                if let Err(e) = live.unlist_waits().await {
+                    warn!(session = %session.id, "couldn't take an archived chat's waits off its list: {e}");
+                }
                 continue;
             }
             let (reply, done) = oneshot::channel();

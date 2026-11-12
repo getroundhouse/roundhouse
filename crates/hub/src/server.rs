@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files, queue,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files, queue, waits,
 };
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
@@ -334,6 +334,9 @@ async fn handle(
         R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
         R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
         R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
+        R::SessionCallOffWait(waits::SessionCallOffWait { id, wait }) => {
+            C::Session(hub.session_call_off_wait(id, wait).await?)
+        }
         R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
         R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
             C::Session(hub.session_answer_draft(id, draft).await?)

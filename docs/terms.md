@@ -144,7 +144,8 @@ These sound alike, and do different things.
 | Word | Applies to | What it does | Afterwards |
 |---|---|---|---|
 | Cancel | A turn | Ends the current turn and any setup still running. The agent's process stays up. `session_cancel`, `AgentCancel` | It takes the next prompt |
-| Stop, in the interface | A turn | The Stop button and `Cmd-.` mean cancel, not a process stop | As for cancel |
+| Stop, in the interface | A turn | The Stop button and `Cmd-.` mean cancel, not a process stop. On a wait's line, Stop calls the wait off | As for cancel |
+| Call off | A wait | Ends a wait on the pull request before what it waits for: by its agent, by the person, by a wait the agent starts after it, or by closing its chat or archiving its workspace. `session_call_off_wait`, `WaitEnd::Cancelled`, `CalledOffByPerson`, `Replaced` | The agent hears, in a turn of its own, unless it called it off itself, or its chat or workspace went with it |
 | Interrupt | A turn | What the agent CLI calls a cancel. Only the adapter says this, as in `AgentProcess::interrupt` | As for cancel |
 | Interrupted | A session | A status, not an action: the agent went away mid-turn without being asked. A cancel doesn't cause it | The next prompt resumes the conversation |
 | Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
