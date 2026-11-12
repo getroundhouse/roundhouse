@@ -6,9 +6,9 @@ use super::one_line::one_line;
 use super::{Place, Seq};
 use crate::event::{EventBody, SessionEvent};
 
-/// A recorded prompt as one line: where it is in the log, and how it starts. Every way to make one tidies its text,
-/// including reading one from a hub, so a line from a hub that tidies differently still reads as one line. A prompt is
-/// one of the agent's own events, so it has a place among them too.
+/// A recorded prompt as one line: where it is in the log, where it was settled, and how it starts. Every way to make
+/// one tidies its text, including reading one from a hub, so a line from a hub that tidies differently still reads as
+/// one line. A prompt is one of the agent's own events, so it has a place among them too.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(from = "Sent")]
 pub struct PromptLine {
@@ -16,6 +16,27 @@ pub struct PromptLine {
     place: Place,
     text: String,
     files: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    settled: Option<SettledAt>,
+}
+
+/// Where the event is that settled a prompt: the last `PromptTaken` or `PromptDropped` that names it, such as where the
+/// agent took it after it was dropped with a lost worker. A chat draws the prompt there, after what the agent did
+/// before then.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SettledAt {
+    pub seq: Seq,
+    /// Among the agent's own events, or 0 from a hub that doesn't record places.
+    #[serde(default)]
+    pub place: Place,
+}
+
+impl SettledAt {
+    /// Where `event` is, if it settles a prompt, and the prompt it settles.
+    pub fn of(event: &SessionEvent) -> Option<(Seq, Self)> {
+        let (EventBody::PromptTaken { prompt } | EventBody::PromptDropped { prompt }) = event.body else { return None };
+        Some((prompt, Self { seq: event.seq, place: event.place }))
+    }
 }
 
 /// A line as it's sent, before it's tidied.
@@ -27,11 +48,15 @@ struct Sent {
     place: Place,
     text: String,
     files: u32,
+    /// A hub from before it said where each prompt was settled sends none.
+    #[serde(default)]
+    settled: Option<SettledAt>,
 }
 
 impl From<Sent> for PromptLine {
     fn from(sent: Sent) -> Self {
-        Self::new(sent.seq, &sent.text, sent.files).placed(sent.place)
+        let line = Self::new(sent.seq, &sent.text, sent.files).placed(sent.place);
+        Self { settled: sent.settled, ..line }
     }
 }
 
@@ -43,13 +68,19 @@ impl PromptLine {
     /// The line for a prompt recorded at `seq` that says `text` and carries `files` files, with no place until
     /// [`PromptLine::placed`] gives it one.
     pub fn new(seq: Seq, text: &str, files: u32) -> Self {
-        Self { seq, place: Place::default(), text: one_line(text, Self::MOST_CHARS), files }
+        Self { seq, place: Place::default(), text: one_line(text, Self::MOST_CHARS), files, settled: None }
     }
 
     /// The same line, at `place` among the agent's own events.
     #[must_use]
     pub fn placed(self, place: Place) -> Self {
         Self { place, ..self }
+    }
+
+    /// The same line, settled `at`.
+    #[must_use]
+    pub fn settled_at(self, at: SettledAt) -> Self {
+        Self { settled: Some(at), ..self }
     }
 
     /// The line for `event`, if it's a prompt, as the hub lists it.
@@ -79,6 +110,12 @@ impl PromptLine {
     /// How many files it carries.
     pub fn files(&self) -> u32 {
         self.files
+    }
+
+    /// Where it was settled, as the hub listed it. `None` while the agent hasn't taken it, from a hub that doesn't
+    /// say, and for a line made from the prompt's event, which can't.
+    pub fn settled(&self) -> Option<SettledAt> {
+        self.settled
     }
 }
 
@@ -153,6 +190,19 @@ mod tests {
             serde_json::to_value(line.placed(Place::new(3))).unwrap(),
             serde_json::json!({ "seq": 7, "place": 3, "text": "Fix it", "files": 2 })
         );
+    }
+
+    #[test]
+    fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_has_nowhere() {
+        let at = SettledAt { seq: 9, place: Place::new(6) };
+        let line = PromptLine::new(7, "Fix it", 2).placed(Place::new(3)).settled_at(at);
+
+        let sent = serde_json::to_value(&line).unwrap();
+
+        assert_eq!(sent["settled"], serde_json::json!({ "seq": 9, "place": 6 }));
+        assert_eq!(serde_json::from_value::<PromptLine>(sent).unwrap(), line);
+        let older = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
+        assert_eq!(serde_json::from_value::<PromptLine>(older).unwrap().settled(), None);
     }
 
     #[test]

@@ -35,7 +35,7 @@ pub use git::{GitDiff, GitFile, GitStatus};
 pub use hub_settings::{HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
-pub use prompt_line::PromptLine;
+pub use prompt_line::{PromptLine, SettledAt};
 pub use pull_request::{
     Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
