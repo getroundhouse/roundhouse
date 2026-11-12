@@ -6,14 +6,14 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use client_core::{FileToSend, Where};
+use client_core::{Agents, FileToSend, Where};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, WindowExt as _};
 use gpui_kit::{
     App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
 };
-use protocol::model::{AttachmentId, DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode, RepoId};
+use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
 use protocol::prompt::says_or_carries;
 
 use crate::attached::{self, Attachments, joined};
@@ -37,8 +37,12 @@ pub struct Request {
     /// What was typed. With nothing typed and no files, nothing is sent.
     pub prompt: String,
     pub files: Vec<FileToSend>,
-    pub model: ModelName,
-    pub effort: Effort,
+    /// The kind of agent its first chat runs.
+    pub agent: AgentKind,
+    /// The model and effort the dialog showed. `None` from a hub that doesn't describe its agents, with nothing picked,
+    /// for what the agent starts a chat with.
+    pub model: Option<ModelName>,
+    pub effort: Option<Effort>,
     /// Plan mode, if it was on in the dialog, and full access otherwise.
     pub permission_mode: PermissionMode,
 }
@@ -50,12 +54,14 @@ impl Request {
     }
 }
 
-/// What the app tells the dialog: the repositories a workspace can be made in, and whether one can be made now.
+/// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, and what the
+/// hub says of its agents, which the first chat runs one of.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Offer {
     /// Each repository's ID and name, in the sidebar's order.
     pub(crate) repos: Vec<(RepoId, String)>,
     pub(crate) can_create: bool,
+    pub(crate) agents: Agents,
 }
 
 /// What the dialog asks of the app.
@@ -73,9 +79,9 @@ pub struct NewWorkspaceDialog {
     repo: RepoId,
     offer: Offer,
     prompt: Entity<TextareaState>,
-    /// What the hub gives a chat that names neither, until another is picked.
-    model: ModelName,
-    effort: Effort,
+    /// What was picked, or kept by the hub. `None` until then, which is what the first chat's agent starts a chat with.
+    model: Option<ModelName>,
+    effort: Option<Effort>,
     /// The mode the first chat starts in: full access for each new workspace, unless plan mode is turned on, since it
     /// belongs to the task at hand.
     mode: PermissionMode,
@@ -134,7 +140,7 @@ impl NewWorkspaceDialog {
             InputEvent::Change => this.keep(false, cx),
             InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
-        let (model, effort, attached) = (DEFAULT_MODEL, DEFAULT_EFFORT, Attachments::default());
+        let (model, effort, attached) = (None, None, Attachments::default());
         let mode = PermissionMode::FullAccess;
         Self { repo, offer, prompt, model, effort, mode, attached, keeping, _subscriptions: vec![typed] }
     }
@@ -172,14 +178,15 @@ impl NewWorkspaceDialog {
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
         let prompt = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
-        let (repo, model, effort) = (self.repo.clone(), self.model.clone(), self.effort);
+        let (repo, (model, effort)) = (self.repo.clone(), self.to_run());
         let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
         let given: Vec<AttachmentId> = self.attached.given_for(&Where::NewWorkspace).collect();
         let files = self.attached.take();
         self.keep(true, cx);
         self.let_go_of(&given);
         cx.notify();
-        Request { repo, prompt, files, model, effort, permission_mode }
+        let agent = self.offer.agents.for_new_chat();
+        Request { repo, prompt, files, agent, model, effort, permission_mode }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
@@ -240,6 +247,25 @@ impl NewWorkspaceDialog {
         self.mode == PermissionMode::Plan
     }
 
+    /// What the hub says of the agent the first chat runs. `None` from a hub that doesn't describe it.
+    fn agent(&self) -> Option<&AgentDescription> {
+        self.offer.agents.new_chat()
+    }
+
+    /// The model and effort the first chat is to run: what was picked or kept, or else what its agent starts a chat
+    /// with. Either is `None` from a hub that doesn't say, until it's picked or kept, which leaves it to the hub.
+    fn to_run(&self) -> (Option<ModelName>, Option<Effort>) {
+        let defaults = self.agent().map(|agent| &agent.defaults);
+        let model = self.model.clone().or_else(|| defaults.map(|defaults| defaults.model.clone()));
+        (model, self.effort.or_else(|| defaults.map(|defaults| defaults.effort)))
+    }
+
+    /// The same, when both are known, for the picker to show.
+    fn shown(&self) -> Option<(ModelName, Effort)> {
+        let (model, effort) = self.to_run();
+        Some((model?, effort?))
+    }
+
     /// Its surface, and its edge, which the line under the repository is too: the composer's surface and a dialog's
     /// edge, or in plan mode the composer's copper, on which a dialog's own line would hardly show.
     fn colors(&self, cx: &App) -> (Hsla, Hsla) {
@@ -257,8 +283,8 @@ impl NewWorkspaceDialog {
     /// on there.
     fn pick(&mut self, picked: Picked, cx: &mut Context<Self>) {
         match picked {
-            Picked::Model(model) => self.model = model,
-            Picked::Effort(effort) => self.effort = effort,
+            Picked::Model(model) => self.model = Some(model),
+            Picked::Effort(effort) => self.effort = Some(effort),
         }
         self.keep(true, cx);
         cx.notify();
@@ -281,9 +307,9 @@ impl NewWorkspaceDialog {
         self.attached.names()
     }
 
-    /// The model and effort chosen.
-    pub fn chosen(&self) -> (ModelName, Effort) {
-        (self.model.clone(), self.effort)
+    /// The model and effort shown, as picked, kept, or what the agent starts a chat with.
+    pub fn chosen(&self) -> Option<(ModelName, Effort)> {
+        self.shown()
     }
 
     /// The mode the first chat is to start in.
@@ -293,7 +319,7 @@ impl NewWorkspaceDialog {
 
     /// Chooses a level, such as one a hub doesn't know, which no menu offers.
     pub fn choose_effort(&mut self, effort: Effort, cx: &mut Context<Self>) {
-        self.effort = effort;
+        self.effort = Some(effort);
         self.keep(true, cx);
         cx.notify();
     }

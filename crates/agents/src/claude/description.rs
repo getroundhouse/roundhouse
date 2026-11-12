@@ -13,6 +13,14 @@ const MODELS: [(ModelName, &str); 4] = [
     (ModelName::named("haiku"), "Haiku"),
 ];
 
+/// What a chat runs with until another is chosen, with full access. `docs/spec/chats.md` has why it's Opus at Extra
+/// high. An alias, so it stays the newest of its kind without a release here.
+const DEFAULTS: SessionSettings = SessionSettings {
+    model: ModelName::named("opus"),
+    permission_mode: PermissionMode::FullAccess,
+    effort: Effort::Xhigh,
+};
+
 pub fn description() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Claude,
@@ -22,7 +30,7 @@ pub fn description() -> AgentDescription {
         // Every level, since the CLI names each, as `effort` says.
         efforts: Effort::ALL.to_vec(),
         modes: PermissionMode::CHOSEN.to_vec(),
-        defaults: SessionSettings::default(),
+        defaults: DEFAULTS,
         // It's asked with `/compact`, as `process` sends it.
         features: vec![AgentFeature::Compacts],
     }

@@ -10,7 +10,7 @@ use std::time::Duration;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::frame;
-use protocol::model::{AgentKind, RunId, SessionSettings};
+use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
     AgentSpec, RunningAgent, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
     WorkerResponse,
@@ -61,7 +61,7 @@ impl Listening {
             cwd: self.dir.path().to_string_lossy().into_owned(),
             agent_session_id: "a".into(),
             resume: false,
-            settings: SessionSettings::default(),
+            settings: agents::claude::description().defaults,
             env: vec![],
             tools_token: None,
         })

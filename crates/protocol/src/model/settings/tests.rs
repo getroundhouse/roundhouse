@@ -98,7 +98,8 @@ fn a_launch_always_names_its_model_mode_and_effort() {
 fn a_session_always_names_its_model_mode_and_effort() {
     let session = r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions",
         "effort":"xhigh","status":"idle","last_seq":0,"created_at_ms":0,"updated_at_ms":0}"#;
-    assert_eq!(serde_json::from_str::<Session>(session).unwrap().settings(), SessionSettings::default());
+    let named = SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::Xhigh };
+    assert_eq!(serde_json::from_str::<Session>(session).unwrap().settings(), named);
 
     for (named, left) in [
         (r#""model":"opus","#, ""),
@@ -132,13 +133,4 @@ fn a_change_takes_what_it_sets_and_keeps_the_rest() {
     let after = before.changed(change);
 
     assert_eq!(after, SessionSettings { model: OPUS, permission_mode: PermissionMode::Plan, effort: Effort::Low });
-}
-
-#[test]
-fn a_session_nobody_has_chosen_for_runs_the_defaults_with_full_access() {
-    assert_eq!(
-        SessionSettings::default(),
-        SessionSettings { model: DEFAULT_MODEL, permission_mode: PermissionMode::FullAccess, effort: DEFAULT_EFFORT }
-    );
-    assert_eq!(SessionSettings::default().changed(SessionSettingsChange::default()), SessionSettings::default());
 }

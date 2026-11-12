@@ -3,11 +3,9 @@
 use std::io::Write;
 
 use anyhow::bail;
-use client_core::{Client, Ended, SubscriptionItem};
+use client_core::{Agents, Client, Ended, SubscriptionItem};
 use protocol::event::EventBody;
-use protocol::model::{
-    AgentKind, Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus,
-};
+use protocol::model::{Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus};
 
 use crate::args::SessionCmd;
 use crate::render;
@@ -19,12 +17,8 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
         SessionCmd::New { workspace, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
             let options = SessionSettingsChange { model, permission_mode, effort };
-            let session = client.session_create(
-                &workspace.id,
-                AgentKind::Claude,
-                options,
-                Some(client_core::new_request_id()),
-            )?;
+            let agent = Agents::read(client)?.for_new_chat();
+            let session = client.session_create(&workspace.id, agent, options, Some(client_core::new_request_id()))?;
             println!("{}", session.id);
         }
         SessionCmd::List { workspace } => {
@@ -95,7 +89,7 @@ pub(crate) fn mode_name(mode: PermissionMode) -> &'static str {
 }
 
 /// A level from a newer hub has no name here.
-fn effort_name(effort: Effort) -> &'static str {
+pub(crate) fn effort_name(effort: Effort) -> &'static str {
     effort.as_str().unwrap_or("unknown")
 }
 

@@ -34,9 +34,12 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, ElementId, Entity, InputEvent as _, MouseMoveEvent, ScrollDelta, ScrollEvent,
     SharedString, TestAppContext,
 };
-use protocol::model::PermissionMode;
+use protocol::model::{Effort, ModelName, PermissionMode};
 use tempfile::TempDir;
 use transcript::Transcript;
+
+/// What the hub's Claude gives a chat that names neither, as its adapter describes it.
+pub(crate) const CLAUDE_STARTS_WITH: (ModelName, Effort) = (ModelName::named("opus"), Effort::Xhigh);
 
 pub(crate) use click::click;
 pub(crate) use daemons::{binaries, point_daemons_at_the_fake_agent};

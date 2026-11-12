@@ -8,6 +8,7 @@ use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
 use protocol::versions::Versions;
 
+use crate::agents::print_agents;
 use crate::args::{Args, Cmd, HubCmd, RepoCmd};
 use crate::session::{find_session, follow, print_log, session_command};
 use crate::workspace::workspace_command;
@@ -30,6 +31,7 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Repo(command) => repo_command(&client, command)?,
         Cmd::Workspace(command) => workspace_command(&client, command)?,
         Cmd::Session(command) => session_command(&client, command)?,
+        Cmd::Agents => print_agents(&client)?,
         Cmd::Send { session, prompt, no_follow, client_msg_id, attach } => {
             let session = find_session(&client, &session)?;
             let files = attach.iter().map(|path| FileToSend::read(path)).collect::<Result<Vec<_>, _>>()?;

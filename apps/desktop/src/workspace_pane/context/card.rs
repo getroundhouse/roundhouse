@@ -10,7 +10,7 @@ use gpui_kit::{
     Stateful, Styled, TestSupportExt as _, WeakEntity, div, px, relative,
 };
 use look::{InRegion as _, Off as _, Region};
-use protocol::model::{Account, AgentKind, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
+use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
 use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
@@ -25,16 +25,19 @@ fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
 }
 
 /// The ring's card: the chat's context. `account` is given only when the bars aren't drawn, since this is then the
-/// one card there is to say whose account it is. `off` turns its button off.
+/// one card there is to say whose account it is. Its button is there only for an agent that `compacts` when asked, and
+/// `off` turns it off.
 pub(super) fn context_card(
     context: &ContextUsage,
     account: Option<&Account>,
     pane: &WeakEntity<WorkspacePane>,
+    compacts: bool,
     off: bool,
     cx: &App,
 ) -> AnyElement {
     let whose = account.and_then(|account| whose(account, Plan::WithWhose, cx));
-    let card = surface(Region::ContextCard, cx).child(room(context, cx)).child(compact(pane, off, cx));
+    let compact = compacts.then(|| compact(pane, off, cx));
+    let card = surface(Region::ContextCard, cx).child(room(context, cx)).children(compact);
     card.children(whose).into_any_element()
 }
 
@@ -51,12 +54,12 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
     v_flex().child(div().my_2().h(px(1.)).bg(cx.theme().border)).child(under)
 }
 
-/// The bars' card: the plan beside its heading, how much of each limit shown is left, as a bar that empties, and
-/// when it starts again, then whose account it is.
-pub(super) fn usage_card(usage: &Usage, agent: AgentKind, cx: &App) -> AnyElement {
+/// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
+/// bar that empties, and when it starts again, then whose account it is.
+pub(super) fn usage_card(usage: &Usage, called: SharedString, cx: &App) -> AnyElement {
     let limits = usage.limits.iter().map(|&(name, limit)| self::limit(name, &limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
-    let limits = v_flex().gap_2p5().child(heading(words::usage_heading(agent), plan, cx)).children(limits);
+    let limits = v_flex().gap_2p5().child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, cx);
     surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
 }
@@ -149,11 +152,11 @@ fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
 }
 
 /// A section's name, in medium weight, and what it comes to, if anything, at the far end.
-fn heading(name: &'static str, comes_to: Option<SharedString>, cx: &App) -> Div {
+fn heading(name: impl Into<SharedString>, comes_to: Option<SharedString>, cx: &App) -> Div {
     let muted = cx.theme().muted_foreground;
     h_flex()
         .justify_between()
-        .child(div().font_weight(FontWeight::MEDIUM).child(name))
+        .child(div().font_weight(FontWeight::MEDIUM).child(name.into()))
         .children(comes_to.map(|comes_to| div().text_color(muted).child(comes_to)))
 }
 

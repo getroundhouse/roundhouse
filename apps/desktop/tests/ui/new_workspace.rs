@@ -5,9 +5,9 @@
 
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{DEFAULT_EFFORT, DEFAULT_MODEL, Effort, ModelName, PermissionMode};
+use protocol::model::{Effort, ModelName, PermissionMode};
 
-use crate::support::{Held, Stack, Ui, git, sidebar_row};
+use crate::support::{CLAUDE_STARTS_WITH, Held, Stack, Ui, git, sidebar_row};
 
 mod given_back;
 mod kept;
@@ -66,7 +66,7 @@ fn the_model_and_effort_picked_in_the_dialog_are_the_first_chats(cx: &mut TestAp
 
     ui.open_new_workspace();
     let at_first = ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen());
-    assert_eq!(at_first, (DEFAULT_MODEL, DEFAULT_EFFORT), "what the hub gives a chat that names neither");
+    assert_eq!(at_first, Some(CLAUDE_STARTS_WITH), "what the agent's description gives a chat that names neither");
     ui.pick_item("new-workspace-model", "Sonnet");
     ui.pick_item("new-workspace-model", "High");
     ui.input("effort");
@@ -82,7 +82,7 @@ fn the_model_and_effort_picked_in_the_dialog_are_the_first_chats(cx: &mut TestAp
     });
     assert_eq!(launched.as_deref(), Some("sonnet"), "the agent ran with it from its first prompt");
     let kept = ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen());
-    assert_eq!(kept, (ModelName::named("sonnet"), Effort::High), "the next workspace starts with them too");
+    assert_eq!(kept, Some((ModelName::named("sonnet"), Effort::High)), "the next workspace starts with them too");
 }
 
 #[gpui_kit::test]

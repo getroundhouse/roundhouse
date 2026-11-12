@@ -62,10 +62,11 @@ impl AppView {
         }
     }
 
-    /// Where a workspace can be made, in the sidebar's order, and whether one can be made now.
+    /// Where a workspace can be made, in the sidebar's order, whether one can be made now, and what the hub says of its
+    /// agents.
     fn offer(&self) -> Offer {
         let repos = self.records.repos().iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
-        Offer { repos, can_create: self.can_create() }
+        Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone() }
     }
 
     /// Tells the dialog what the hub keeps of it, as the records change, and as the keeper catches up, which can let

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use protocol::client::ErrorCode;
 use protocol::frame;
-use protocol::model::{AgentKind, RunId, SessionSettings};
+use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
     AgentSpec, AskAnswer, AskOutcome, AskReply, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall,
     WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
@@ -310,7 +310,7 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
         cwd: cwd.to_string_lossy().into_owned(),
         agent_session_id: "a".into(),
         resume: false,
-        settings: SessionSettings::default(),
+        settings: agents::claude::description().defaults,
         env: vec![],
         tools_token,
     }

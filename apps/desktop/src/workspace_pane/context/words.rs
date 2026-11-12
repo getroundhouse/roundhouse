@@ -1,6 +1,6 @@
 //! What the cards beside Send say in words and numbers.
 
-use protocol::model::{AgentKind, ContextUsage, LimitWindow, MaxSetBy};
+use protocol::model::{AgentDescription, ContextUsage, LimitWindow, MaxSetBy};
 
 /// A share from 0 to 1, as a percentage to a tenth: `59.7%`.
 pub(super) fn percent(share: f32) -> String {
@@ -42,12 +42,10 @@ pub(super) fn window(window: LimitWindow) -> Option<&'static str> {
     }
 }
 
-/// The heading over an account's limits, which are on the use of its agent.
-pub(super) fn usage_heading(agent: AgentKind) -> &'static str {
-    match agent {
-        AgentKind::Claude => "Claude usage",
-        AgentKind::Unknown => "Usage",
-    }
+/// The heading over an account's limits, which are on the use of its agent: what the agent's description says, or
+/// with none, only that it's the usage.
+pub(super) fn usage_heading(agent: Option<&AgentDescription>) -> &str {
+    agent.map_or("Usage", |agent| agent.usage_heading.as_str())
 }
 
 #[cfg(test)]

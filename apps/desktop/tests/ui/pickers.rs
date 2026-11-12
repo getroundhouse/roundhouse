@@ -6,9 +6,9 @@ use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::PermissionMode::{FullAccess, Plan};
-use protocol::model::{DEFAULT_MODEL, Effort, ModelName, PermissionMode, SessionStatus};
+use protocol::model::{Effort, ModelName, PermissionMode, SessionStatus};
 
-use crate::support::{Stack, Ui};
+use crate::support::{CLAUDE_STARTS_WITH, Stack, Ui};
 
 /// The composer's `+`.
 const ADD: &str = "add";
@@ -173,7 +173,7 @@ fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppConte
     ui.cx.update_entity(&pane, |p, cx| p.configure(Some(ModelName::named("not-a-model")), None, cx));
     ui.wait("the refusal", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("not found")));
     let model = ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone()));
-    assert_eq!(model, Some(DEFAULT_MODEL));
+    assert_eq!(model, Some(CLAUDE_STARTS_WITH.0));
 }
 
 #[gpui_kit::test]
