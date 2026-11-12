@@ -63,3 +63,32 @@ fn a_line_cut_short_in_a_page_ends_in_an_ellipsis() {
     let texts: Vec<&str> = run.lines.iter().map(|line| line.text.as_ref()).collect();
     assert_eq!((run.numbers(), texts), (8..10, vec!["short", "lo…"]));
 }
+
+/// The text marked on each of lines `numbers` of `side`.
+fn marked(side: &Side, numbers: Range<u32>) -> Vec<Vec<String>> {
+    let line = |number| side.line(number).map(|line| line.text.to_string()).unwrap_or_default();
+    numbers.map(|n| side.changed(n).iter().map(|range| line(n)[range.clone()].to_string()).collect()).collect()
+}
+
+#[test]
+fn the_words_that_changed_are_marked_in_each_run_of_lines_that_took_another_s_place() {
+    let changed = file("--- a/f\n+++ b/f\n@@ -1,4 +1,3 @@\n keep\n-# one two\n-# three\n+# one three\n keep\n");
+
+    let sides = Sides::from_patch(&changed, None);
+
+    assert_eq!(marked(&sides.old, 1..5), [vec![], vec!["two".to_string()], vec![], vec![]], "only on line 2");
+    assert!(marked(&sides.new, 1..4).iter().all(Vec::is_empty), "`three` only moved");
+    assert!(marked(&Sides::plain(&changed).old, 1..5).iter().all(Vec::is_empty), "none before they're made");
+}
+
+#[test]
+fn marks_are_where_each_hunk_s_lines_are_drawn() {
+    let patch =
+        "--- a/f\n+++ b/f\n@@ -1,2 +1,3 @@\n keep\n+added\n keep\n@@ -10,2 +11,2 @@\n-\tx one\n+\tx two\n end\n";
+    let changed = file(patch);
+
+    let sides = Sides::from_patch(&changed, None);
+
+    assert_eq!(marked(&sides.old, 10..11), [vec!["one".to_string()]], "after the tab, drawn as spaces");
+    assert_eq!(marked(&sides.new, 11..12), [vec!["two".to_string()]], "a line further down on the new side");
+}

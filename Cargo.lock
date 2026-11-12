@@ -4317,7 +4317,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "gpui-kit",
+ "proptest",
  "serde_json",
+ "similar",
  "syntect",
  "two-face",
 ]

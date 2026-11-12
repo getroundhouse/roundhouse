@@ -3,22 +3,23 @@
 
 use std::ops::Range;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Mark {
     Same,
     Removed,
     Added,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct NumberedLine {
     pub(crate) mark: Mark,
     /// Its number in the file: before the change for a removed line, and after it otherwise. Unknown when a change
     /// was worked out from the call.
     pub(crate) number: Option<u32>,
     pub(crate) text: String,
-    /// The part of the line that changed, when it's a line changed in place.
-    pub(crate) changed: Option<Range<usize>>,
+    /// The words that changed within it, when the change removed or added it, as `look::word_changes` finds them, by
+    /// byte range, in order. They're marked only to be drawn, by `rows::tools::marks`.
+    pub(crate) changed: Vec<Range<usize>>,
 }
 
 /// Lines that are next to each other in a file. Sections are shown apart, with a gap between them.
@@ -26,7 +27,7 @@ pub(crate) type Section = Vec<NumberedLine>;
 
 impl NumberedLine {
     pub(crate) fn new(mark: Mark, number: Option<u32>, text: &str) -> Self {
-        Self { mark, number, text: text.to_string(), changed: None }
+        Self { mark, number, text: text.to_string(), changed: Vec::new() }
     }
 
     /// A line as it is in the file, such as one a read sent back.

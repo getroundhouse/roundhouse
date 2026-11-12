@@ -29,7 +29,6 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-similar.workspace = true
 velopack.workspace = true
 ureq.workspace = true
 flume.workspace = true
@@ -66,6 +65,7 @@ tempfile.workspace = true
 flate2.workspace = true
 parking_lot.workspace = true
 proptest.workspace = true
+similar.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple.workspace = true

@@ -135,7 +135,7 @@ fn row(
         Mark::Added => (Some(theme.success), theme.success.opacity(0.75)),
         Mark::Removed => (Some(theme.danger), theme.danger.opacity(0.75)),
     };
-    let styles = with_changed(syntax, line.changed.clone(), tint.map(|t| t.opacity(0.3)), line.text.len());
+    let styles = with_changed(syntax, &line.changed, tint.map(|t| t.opacity(0.3)), line.text.len());
     let styles = marks.over(&styles, line.text.len());
     let here =
         marks.here().zip(marks.reveal()).map(|(range, reveal)| (tabbed(&line.text, range.start), reveal.clone()));
@@ -198,15 +198,17 @@ fn styles_within(spans: &Spans, range: &Range<usize>) -> Vec<(Range<usize>, High
         .collect()
 }
 
-/// The syntax colours, with a background added over the part of the line that changed.
+/// The syntax colours, with a background added over the words that changed.
 fn with_changed(
     syntax: &[(Range<usize>, HighlightStyle)],
-    changed: Option<Range<usize>>,
+    changed: &[Range<usize>],
     background: Option<Hsla>,
     len: usize,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
-    let (Some(changed), Some(background)) = (changed, background) else { return syntax.to_vec() };
-    behind(syntax, &[(changed.start.min(len)..changed.end.min(len), background)], len)
+    let Some(background) = background.filter(|_| !changed.is_empty()) else { return syntax.to_vec() };
+    let backgrounds: Vec<_> =
+        changed.iter().map(|range| (range.start.min(len)..range.end.min(len), background)).collect();
+    behind(syntax, &backgrounds, len)
 }
 
 #[cfg(test)]

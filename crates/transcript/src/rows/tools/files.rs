@@ -17,7 +17,7 @@ use client_core::calls::{EditFile, ReadFile, WriteFile, count};
 use look::{InRegion as _, Region, language};
 
 use super::line::{Line, Part, Preview};
-use super::{Answer, Toggle, amount, block, line, numbered};
+use super::{Answer, Toggle, amount, block, line, marks, numbered};
 use crate::calls::diff;
 use crate::calls::lines::{Mark, NumberedLine, Section};
 use crate::find::{Marks, Part as Text};
@@ -102,7 +102,8 @@ pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, 
     let line = Line::new(icon, title)
         .part(chip(file.path))
         .part(replaced.map(|hunks| Part::Counts(diff::change_counts(hunks))));
-    let opened = toggle.open.then(|| shown_file(toggle, file.path, &written(file, answer), cx));
+    let opened =
+        toggle.open.then(|| shown_file(toggle, file.path, &marks::marked(&Rc::new(written(file, answer))), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -122,7 +123,7 @@ pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx
         .part(chip(file.path))
         .part(Part::Counts(diff::counts(&sections)))
         .preview(preview(language(file.path), sections.clone()));
-    let opened = toggle.open.then(|| shown_file(toggle, file.path, &sections, cx));
+    let opened = toggle.open.then(|| shown_file(toggle, file.path, &marks::marked(&sections), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -168,7 +169,7 @@ fn preview(language: &str, sections: Rc<Vec<Section>>) -> Preview {
     let language: SharedString = language.to_string().into();
     Rc::new(move |_, cx: &mut App| {
         let (language, sections) = (language.clone(), sections.clone());
-        cx.new(|_| DiffPreview { language, sections }).into()
+        cx.new(|_| DiffPreview { language, sections: marks::marked(&sections) }).into()
     })
 }
 

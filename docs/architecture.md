@@ -112,7 +112,7 @@ crates/
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
-  look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the status mark, the app icon, and the parts of the window tests find
+  look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find
   terminal-view/   GPUI terminal element. Not built
 apps/
   daemon/          One binary that runs as a hub, a worker or the local provider's adapter

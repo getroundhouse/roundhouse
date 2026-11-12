@@ -24,6 +24,7 @@ pub(super) mod block;
 mod command;
 mod files;
 mod highlight;
+mod marks;
 mod numbered;
 mod other;
 mod search;
