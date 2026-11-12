@@ -6,8 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use client_core::{Client, ClientError};
-use protocol::client::{ClientRequest, ClientResponse};
+use client_core::{Client, Restart};
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{BranchName, Head, SetupStatus};
 use protocol::worker::{WorkerOutcome, WorkerRequest, WorkerResponse};
@@ -21,11 +20,12 @@ use crate::support::{
 
 /// As an update has the hub do: asks it to restart, and waits for it to go. A client starts the next one.
 pub(crate) fn restart(stack: &mut Stack) {
-    match stack.client().call(ClientRequest::HubRestart) {
-        // The hub did what was asked before its reply got out.
-        Ok(ClientResponse::Ok) | Err(ClientError::Disconnected) => {}
-        other => panic!("{other:?}"),
-    }
+    restart_then(stack, Restart::Exited);
+}
+
+/// Asks the hub to restart, as `restart` does, and waits for it to go, once it has said how that went.
+fn restart_then(stack: &mut Stack, said: Restart) {
+    assert_eq!(client_core::restart_hub(&stack.client()).unwrap(), said);
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
 }
@@ -173,7 +173,8 @@ fn a_restart_waits_for_a_setup_script_to_finish() {
     wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
     drop(client);
 
-    restart(&mut stack);
+    // Asking says it's still finishing, rather than waiting for the setup.
+    restart_then(&mut stack, Restart::Finishing);
     assert!(PathBuf::from(workspace.path.clone().unwrap()).join("ready.txt").exists(), "it went once setup was done");
     stack.start_hub();
     assert_eq!(wait_for_setup(&stack.client(), &workspace.id), SetupStatus::Succeeded);

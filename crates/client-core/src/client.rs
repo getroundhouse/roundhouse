@@ -37,7 +37,7 @@ use protocol::model::{AttachmentId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 use stream::Stream;
 
-pub use admin::{HubAdmin, IdleStop, stop_hub, stop_hub_if_idle, stop_hub_if_still};
+pub use admin::{HubAdmin, IdleStop, Restart, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still};
 pub use api::{new_attachment_id, new_message_id, new_request_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
