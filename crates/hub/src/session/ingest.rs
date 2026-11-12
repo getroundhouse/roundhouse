@@ -155,6 +155,9 @@ impl LiveSession {
     /// and announced, so the feed isn't told what it knows.
     async fn note_context(&self, run: RunId, context: ContextUsage) {
         let Ok(hub) = self.hub() else { return };
+        // Held from writing it until it's announced, as an event is, so the feed hears each copy of the record in the
+        // order they were made, and an event recorded meanwhile can't be announced twice.
+        let _in_order = self.recording.lock().await;
         {
             let state = self.state.lock();
             let current = state.agent.map(|agent| agent.run);
@@ -177,6 +180,8 @@ impl LiveSession {
     /// planning when its agent went is still planning when it comes back.
     async fn note_mode(&self, mode: PermissionMode) {
         let Ok(hub) = self.hub() else { return };
+        // Held until it's announced, as the agent's context is.
+        let _in_order = self.recording.lock().await;
         if self.state.lock().settings.permission_mode == mode {
             return;
         }
