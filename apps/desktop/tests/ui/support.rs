@@ -7,6 +7,7 @@ mod chats;
 mod click;
 mod daemons;
 mod diff;
+mod drawn;
 mod held;
 mod hover;
 mod hub;
@@ -32,8 +33,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, ElementId, Entity, InputEvent as _, MouseMoveEvent, ScrollDelta, ScrollEvent,
     SharedString, TestAppContext,
 };
-use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{PermissionMode, SessionStatus};
+use protocol::model::PermissionMode;
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -315,34 +315,6 @@ impl<'a> Ui<'a> {
 
     pub(crate) fn transcript(&self) -> Option<Entity<Transcript>> {
         self.pane().and_then(|pane| self.cx.read_entity(&pane, |p, _| p.transcript()))
-    }
-
-    pub(crate) fn events(&self) -> Vec<SessionEvent> {
-        let Some(transcript) = self.transcript() else { return Vec::new() };
-        self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect())
-    }
-
-    pub(crate) fn assistant_text(&self) -> String {
-        let mut text = String::new();
-        for event in self.events() {
-            if let EventBody::Assistant { blocks, .. } = &event.body {
-                for block in blocks {
-                    if let protocol::event::ContentBlock::Text { text: t, .. } = block {
-                        text.push_str(t);
-                    }
-                }
-            }
-        }
-        text
-    }
-
-    pub(crate) fn session_status(&self) -> Option<SessionStatus> {
-        let pane = self.pane()?;
-        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.status))
-    }
-
-    pub(crate) fn wait_idle_with(&mut self, what: &str, mut text: impl FnMut(&str) -> bool) {
-        self.wait(what, |ui| ui.session_status() == Some(SessionStatus::Idle) && text(&ui.assistant_text()));
     }
 
     pub(crate) fn composer_text(&self) -> String {
