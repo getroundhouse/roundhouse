@@ -9,6 +9,7 @@ mod accounts;
 mod attachments;
 mod awake;
 mod branches;
+mod builds;
 mod carrying_on;
 mod comments;
 mod feed;

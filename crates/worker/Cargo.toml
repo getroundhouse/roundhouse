@@ -5,6 +5,10 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# What only tests use: a worker that says it's another build, as one an earlier hub left would.
+testing = []
+
 [dependencies]
 process.workspace = true
 parking_lot.workspace = true

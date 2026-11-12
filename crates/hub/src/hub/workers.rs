@@ -16,7 +16,7 @@ use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
 impl Hub {
-    fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
+    pub(super) fn worker_gate(&self, workspace_id: &WorkspaceId) -> Arc<AsyncMutex<bool>> {
         self.worker_gates.lock().entry(workspace_id.clone()).or_default().clone()
     }
 
@@ -165,11 +165,23 @@ impl Hub {
             }
             workers.remove(&workspace.id);
         }
+        self.stop_and_clear(workspace, link, &mut cleared, "stopping a worker started to read a pull request").await;
+    }
+
+    /// Stops `link`, which is out of the hub's map of workers by now, and gives back its instance. Under the
+    /// workspace's gate, whose `cleared` this sets. `doing` says what stopping it was for, if giving it back fails.
+    pub(super) async fn stop_and_clear(
+        &self,
+        workspace: &Workspace,
+        link: &WorkerLink,
+        cleared: &mut bool,
+        doing: &str,
+    ) {
         link.stop(STOP_GRACE).await;
         *cleared = match self.provider(&workspace.provider) {
             Ok(provider) => clear_instance(provider.as_ref(), &workspace.instance_id).await,
             Err(e) => {
-                warn!(id = %workspace.id, "stopping a worker started to read a pull request: {}", e.message);
+                warn!(id = %workspace.id, "{doing}: {}", e.message);
                 false
             }
         };

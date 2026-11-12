@@ -19,6 +19,14 @@ pub(super) struct SetupGate {
     stop: watch::Sender<bool>,
 }
 
+#[cfg(test)]
+impl SetupGate {
+    /// One for a script that's running, as far as anything that only reads the hub's map of them can tell.
+    pub(super) fn running() -> Self {
+        Self { done: watch::channel(false).0, stop: watch::channel(false).0 }
+    }
+}
+
 impl Hub {
     /// Records that setup is running, starts it in the background, and returns the workspace as stored,
     /// so a reply says only what the hub has recorded. Prompts wait for setup.

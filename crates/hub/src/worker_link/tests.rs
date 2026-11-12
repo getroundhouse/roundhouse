@@ -4,8 +4,9 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 
 use process::ProcessRecord;
+use protocol::frame;
 use protocol::paths::WORKER_RECORD_FILE;
-use protocol::worker::{AskOutcome, AskReply, WorkerOutcome};
+use protocol::worker::{AskId, AskOutcome, AskReply, WorkerAsk, WorkerOutcome};
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;

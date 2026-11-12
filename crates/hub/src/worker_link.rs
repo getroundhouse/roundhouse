@@ -1,32 +1,28 @@
 //! The hub's end of one worker connection.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
-use protocol::frame;
+use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
-use protocol::worker::{
-    AskAnswer, AskId, RunningAgent, WorkerAsk, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
-};
+use protocol::worker::{AskAnswer, RunningAgent, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse};
 use providers::Provider;
 use tokio::sync::{Mutex as AsyncMutex, watch};
-use tracing::{debug, warn};
+use tracing::warn;
 
 use acks::Acks;
 
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned};
 use crate::error::internal;
-use crate::frames::FrameReader;
 use crate::hub::Hub;
-use crate::session::Item;
 use crate::versions;
 
 mod acks;
 mod reaching;
+mod reading;
 
 pub(crate) use reaching::Opening;
 use reaching::reach;
@@ -58,14 +54,12 @@ pub(crate) struct WorkerLink {
     acks: Acks,
     /// Set as the hub leaves the worker running for the next hub, so its going isn't taken for the worker's.
     left: AtomicBool,
+    /// Which build the worker said it is, once it has said hello: `None` for a worker from before workers said.
+    build: OnceLock<Option<String>>,
 }
 
 fn lost() -> ApiError {
     ApiError::new(ErrorCode::Worker, "the connection to the worker was lost")
-}
-
-fn unreadable_reply(error: &serde_json::Error) -> ApiError {
-    ApiError::new(ErrorCode::Worker, format!("a reply from the worker this hub can't read: {error}"))
 }
 
 impl WorkerLink {
@@ -90,9 +84,17 @@ impl WorkerLink {
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            build: OnceLock::new(),
         });
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
-        tokio::spawn(read_frames(hub, provider.clone(), link.clone(), workspace_id, instance_id.clone(), reader));
+        tokio::spawn(reading::read_frames(
+            hub,
+            provider.clone(),
+            link.clone(),
+            workspace_id,
+            instance_id.clone(),
+            reader,
+        ));
 
         let hello = link.call(WorkerRequest::Hello {
             protocol_version: versions::WORKERS.newest,
@@ -101,7 +103,8 @@ impl WorkerLink {
             keep_running_without_hub: true,
         });
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
-            Ok(Ok(WorkerResponse::Hello { protocol_version, .. })) if versions::WORKERS.speaks(protocol_version) => {
+            Ok(Ok(WorkerResponse::Hello { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
+                let _ = link.build.set(build);
                 return Ok(link);
             }
             Ok(Ok(WorkerResponse::Hello { protocol_version, .. })) => ApiError::new(
@@ -165,6 +168,7 @@ impl WorkerLink {
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            build: OnceLock::new(),
         })
     }
 
@@ -178,6 +182,22 @@ impl WorkerLink {
     /// Whether anything but a read nobody asked for has wanted it.
     pub(crate) fn kept(&self) -> bool {
         self.kept.load(Ordering::Relaxed)
+    }
+
+    /// Whether the worker is another build than this hub, as its hello said, such as one an earlier hub left. One that
+    /// didn't say is from before workers said, so it's another too.
+    pub(crate) fn is_another_build(&self) -> bool {
+        self.build.get().is_some_and(|build| build.as_deref() != Some(protocol::BUILD_VERSION))
+    }
+
+    /// The build its hello named, for the log.
+    pub(crate) fn build(&self) -> &str {
+        self.build.get().and_then(Option::as_deref).unwrap_or("one from before workers said")
+    }
+
+    /// How many calls to the worker wait for its reply.
+    pub(crate) fn calls_under_way(&self) -> usize {
+        self.calls.waiting()
     }
 
     /// For a worker that didn't serve its tools when asked.
@@ -244,14 +264,14 @@ impl WorkerLink {
 
     /// Which run each session's agent is, by what the worker has sent of it while it's held, the last if several.
     pub(crate) async fn held_runs(&self) -> HashMap<SessionId, RunId> {
-        self.held.lock().await.iter().flatten().filter_map(agent_of).collect()
+        self.held.lock().await.iter().flatten().filter_map(reading::agent_of).collect()
     }
 
     /// Sends on what the worker sent while it was held, and from then on as it comes.
     pub(crate) async fn release(&self, hub: &Arc<Hub>) {
         let mut held = self.held.lock().await;
         for frame in held.take().unwrap_or_default() {
-            route(hub, self, frame).await;
+            reading::route(hub, self, frame).await;
         }
     }
 
@@ -259,131 +279,6 @@ impl WorkerLink {
     pub(crate) async fn wait_closed(&self) {
         let mut closed = self.closed.subscribe();
         let _ = closed.wait_for(|done| *done).await;
-    }
-}
-
-/// Answers what the worker asked on a task of its own, since answering can take a call to the worker, whose reply
-/// comes the way the ask did.
-fn start_answering(
-    hub: &Arc<Hub>,
-    link: &Arc<WorkerLink>,
-    workspace_id: &WorkspaceId,
-    id: AskId,
-    session_id: SessionId,
-    ask: WorkerAsk,
-) {
-    let (hub, link, workspace_id) = (hub.clone(), link.clone(), workspace_id.clone());
-    tokio::spawn(async move {
-        let outcome = hub.answer_ask(&workspace_id, &link, session_id, ask).await.into();
-        link.answer(AskAnswer { answer: id, outcome }).await;
-    });
-}
-
-/// Refuses an ask, as a call this hub can't read is refused, so the agent that called the tool hears why at once.
-fn refuse_unreadable(link: &Arc<WorkerLink>, id: AskId, error: &serde_json::Error) {
-    let outcome = Outcome::Error(ApiError::unsupported_request("this hub", Some(error)));
-    let link = link.clone();
-    tokio::spawn(async move { link.answer(AskAnswer { answer: id, outcome }).await });
-}
-
-async fn read_frames(
-    hub: Arc<Hub>,
-    provider: Arc<dyn Provider>,
-    link: Arc<WorkerLink>,
-    workspace_id: WorkspaceId,
-    instance_id: InstanceId,
-    reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
-) {
-    let mut incoming = FrameReader::new(reader);
-    loop {
-        let bytes = match incoming.next().await {
-            Ok(Some(bytes)) => bytes,
-            Ok(None) => break,
-            Err(e) => {
-                warn!("reading from a worker failed: {}", error_chain(&e));
-                break;
-            }
-        };
-        let parsed: WorkerFrame = match frame::decode(bytes) {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
-                // the connection closes.
-                if let Some(id) = frame::reply_id(bytes) {
-                    link.calls.reply(id, Err(unreadable_reply(&e)));
-                } else if let Some(id) = AskId::of_unreadable(bytes) {
-                    refuse_unreadable(&link, id, &e);
-                } else {
-                    warn!("ignoring a worker frame that didn't parse: {e}");
-                }
-                continue;
-            }
-        };
-        if let WorkerFrame::Reply { id, outcome } = parsed {
-            link.calls.reply(id, outcome.into_result());
-            continue;
-        }
-        // Taken at once, even while what the worker sends is held, since neither an ask nor the branches are about
-        // which agent a session has.
-        if let WorkerFrame::Ask { id, session_id, ask } = parsed {
-            start_answering(&hub, &link, &workspace_id, id, session_id, ask);
-            continue;
-        }
-        if let WorkerFrame::Branches { branches } = parsed {
-            hub.branches_read(&workspace_id, &link, branches).await;
-            continue;
-        }
-        let mut held = link.held.lock().await;
-        match held.as_mut() {
-            Some(held) => held.push(parsed),
-            None => route(&hub, &link, parsed).await,
-        }
-    }
-    debug!(%instance_id, "worker connection ended");
-    // Wakes each waiting call with an error.
-    link.calls.end();
-    // A worker the hub left running has gone on to the next hub, and nothing of it has gone.
-    if !link.left.load(Ordering::SeqCst) {
-        hub.worker_gone(&workspace_id, &link, provider.as_ref(), &instance_id).await;
-    }
-    // With `send_replace`, because nobody may be waiting yet. A plain `send` with no receivers leaves
-    // the value unset, and whoever waits later would wait forever.
-    link.closed.send_replace(true);
-}
-
-/// Passes one of the agents' frames on to its session, and notes what's numbered to acknowledge once it's recorded.
-async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame) {
-    let (session_id, item, seq) = match frame {
-        // Taken where they're read.
-        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => return,
-        WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
-            (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
-        }
-        WorkerFrame::AgentDelta { session_id, run, delta } => (session_id, Item::Delta { run, delta }, None),
-        WorkerFrame::AgentContext { session_id, run, context, seq } => {
-            (session_id, Item::Context { run, context, seq }, seq)
-        }
-        WorkerFrame::AgentCache { session_id, run, request, seq } => {
-            (session_id, Item::Cache { run, request, seq }, seq)
-        }
-        WorkerFrame::AgentLimits { session_id, run, limits, seq } => {
-            (session_id, Item::Limits { run, limits, seq }, seq)
-        }
-    };
-    hub.route(&session_id, item).await;
-    if let Some(seq) = seq {
-        link.acks.routed(&session_id, seq);
-    }
-}
-
-fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
-    match frame {
-        WorkerFrame::Reply { .. } | WorkerFrame::Ask { .. } | WorkerFrame::Branches { .. } => None,
-        WorkerFrame::AgentEvent { session_id, run, .. }
-        | WorkerFrame::AgentDelta { session_id, run, .. }
-        | WorkerFrame::AgentContext { session_id, run, .. }
-        | WorkerFrame::AgentCache { session_id, run, .. }
-        | WorkerFrame::AgentLimits { session_id, run, .. } => Some((session_id.clone(), *run)),
     }
 }
 

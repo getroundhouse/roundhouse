@@ -84,6 +84,11 @@ impl<O> Calls<O> {
         drop(self.waiting.lock().take());
     }
 
+    /// How many calls wait for their reply.
+    pub(crate) fn waiting(&self) -> usize {
+        self.waiting.lock().as_ref().map_or(0, HashMap::len)
+    }
+
     /// Whether calls can still be sent.
     pub(crate) fn is_open(&self) -> bool {
         self.lines.lock().is_some() && self.waiting.lock().is_some()

@@ -2,7 +2,10 @@
 
 use std::sync::Weak;
 
+use protocol::frame;
+
 use super::*;
+use crate::frames::FrameReader;
 
 impl WorkerLink {
     /// A link to a stand-in for a worker, which answers each call with what `answer` says, in the order they come, or
@@ -22,6 +25,7 @@ impl WorkerLink {
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
+            build: OnceLock::new(),
         });
         let gone = Gone(Arc::downgrade(&link));
         tokio::spawn(async move {

@@ -236,6 +236,17 @@ impl LiveSession {
             self.record_or_log(Origin::Run { run: lost.run, current: true, numbered: None }, body).await;
         }
     }
+
+    /// Lets go of its agent if it's on the worker `link`, which the hub is about to stop with nothing at work, to
+    /// replace it. The agent's exit is then of one the session has moved on from, so it changes nothing, even if a
+    /// prompt is recorded first, and the next prompt starts an agent on the next worker, which resumes the
+    /// conversation.
+    pub(crate) fn let_go_of_agent_on(&self, link: u64) {
+        let mut state = self.state.lock();
+        if state.agent.is_some_and(|agent| agent.link == link) {
+            state.agent = None;
+        }
+    }
 }
 
 /// Whether what the worker numbered `seq`, from the agent `run`, is at or before `recorded`, the last the session took

@@ -27,6 +27,8 @@ pub use claim::{ClaimError, InstanceClaim, claim_instance};
 #[cfg(unix)]
 pub use claim::{claim_to_serve, instance_claimed};
 pub use deleting::{Deleter, delete_trees};
+#[cfg(feature = "testing")]
+pub use serve::TEST_BUILD;
 #[cfg(unix)]
 pub use serve::listen;
 pub use serve::{Config, serve};

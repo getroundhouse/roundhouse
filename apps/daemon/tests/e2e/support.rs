@@ -111,6 +111,11 @@ impl Stack {
         self.env.push((name, value));
     }
 
+    /// Set for no hub started from now on.
+    pub(crate) fn remove_env(&mut self, name: &str) {
+        self.env.retain(|(set, _)| *set != name);
+    }
+
     pub(crate) fn start_hub(&mut self) {
         self.hub = Some(self.command().spawn().unwrap());
         wait_until("the hub to accept connections", || Client::connect(&self.socket(), "test").is_ok());
