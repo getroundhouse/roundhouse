@@ -6,7 +6,7 @@ use std::rc::Rc;
 use gpui_kit::App;
 
 use super::parse::{self, Again};
-use super::{AT_ONCE, Parsed, Prose, Text, TextAt};
+use super::{AT_ONCE, Parsed, Prose, ProseId, Text};
 
 /// How a text is to be parsed on another thread: `source` whole, or again from where `again` says, as it goes on from
 /// `was`, which it's drawn as until it's in, if it goes on from that.
@@ -17,20 +17,16 @@ pub(super) struct Apart {
 }
 
 impl Prose {
-    /// What the text at `at` is drawn as now that it says `source`, if it has a parse to draw, and how it's to be
+    /// What the text known as `id` is drawn as now that it says `source`, if it has a parse to draw, and how it's to be
     /// parsed on another thread, if it is. A text is parsed where it's drawn when what's to be parsed of it is short:
     /// all of it, or for one that goes on from what it was parsed as, what's parsed again from near its end. A longer
     /// one is parsed on another thread, and one that goes on is drawn as it was meanwhile. While a parse is on another
     /// thread, another isn't started for a text that goes on from what that's parsing, so a text that goes on faster
     /// than a parse ends, such as one the agent is writing, is drawn as each parse comes in.
-    pub(super) fn parsed(&self, at: TextAt, source: &str) -> (Option<Rc<Parsed>>, Option<Apart>) {
+    pub(super) fn parsed(&self, id: &ProseId, source: &str) -> (Option<Rc<Parsed>>, Option<Apart>) {
         let mut texts = self.0.borrow_mut();
-        let now = texts.frame;
-        let was = match texts.texts.get_mut(&at) {
-            Some(Text::Parsed { parsed, drawn }) if parsed.source == source => {
-                *drawn = now;
-                return (Some(parsed.clone()), None);
-            }
+        let was = match texts.texts.get(id) {
+            Some(Text::Parsed { parsed }) if parsed.source == source => return (Some(parsed.clone()), None),
             Some(Text::Parsing { source: parsing, was, .. }) if source.starts_with(parsing.as_str()) => {
                 return (was.clone(), None);
             }
@@ -45,21 +41,22 @@ impl Prose {
             (Some(was), Some(again)) => parse::gone_on(&was, again, source.to_owned()),
             _ => parse::parse(source.to_owned()),
         });
-        texts.texts.insert(at, Text::Parsed { parsed: parsed.clone(), drawn: now });
+        texts.texts.insert(id.clone(), Text::Parsed { parsed: parsed.clone() });
         texts.parsed_one();
         (Some(parsed), None)
     }
 
-    /// Parses the text at `at` on another thread, as `apart` says, unless what it says goes on from what's being
-    /// parsed there, and measures its row again once it's in. It says what it said, so there's nothing new to find in
-    /// it.
-    pub(super) fn parse_apart(&self, at: TextAt, apart: Apart, cx: &mut App) {
+    /// Parses the text known as `id` on another thread, as `apart` says, unless what it says goes on from what's being
+    /// parsed of it, and measures the row it's in then again once it's in. It says what it said, so there's nothing
+    /// new to find in it.
+    pub(super) fn parse_apart(&self, id: ProseId, apart: Apart, cx: &mut App) {
         let Apart { source, was, again } = apart;
         let mut texts = self.0.borrow_mut();
-        if texts.texts.get(&at).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
+        if texts.texts.get(&id).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
             return;
         }
-        let (prose, transcript, given) = (Rc::downgrade(&self.0), texts.transcript.clone(), source.clone());
+        let (prose, redrawn, given, known) =
+            (Rc::downgrade(&self.0), texts.redrawn.clone(), source.clone(), id.clone());
         let from = was.clone().zip(again);
         let parsing = cx.spawn(async move |cx| {
             let background = cx.background_executor().clone();
@@ -76,17 +73,19 @@ impl Prose {
             };
             let Some(prose) = prose.upgrade() else { return };
             // What it replaces holds this task, which goes once it's done.
-            let _was = {
+            let (_was, place) = {
                 let mut texts = prose.borrow_mut();
-                if texts.texts.get(&at).and_then(Text::parsing) != Some(parsed.source.as_str()) {
+                if texts.texts.get(&known).and_then(Text::parsing) != Some(parsed.source.as_str()) {
                     return;
                 }
-                let drawn = texts.frame;
-                texts.texts.insert(at, Text::Parsed { parsed: Rc::new(parsed), drawn })
+                let place = texts.places.of(&known);
+                (texts.texts.insert(known, Text::Parsed { parsed: Rc::new(parsed) }), place)
             };
-            let _ = transcript.update(cx, |transcript, cx| transcript.redrawn(at.of, cx));
+            if let Some(at) = place {
+                cx.update(|cx| redrawn(at.of, cx));
+            }
         });
-        texts.texts.insert(at, Text::Parsing { source, was, _task: parsing });
+        texts.texts.insert(id, Text::Parsing { source, was, _task: parsing });
     }
 }
 
@@ -95,12 +94,12 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    use gpui_kit::{Task, TestAppContext, WeakEntity};
+    use gpui_kit::{Task, TestAppContext};
 
-    use super::super::{AT_ONCE, Parsed, Prose, Text, TextAt, parse};
+    use super::super::{AT_ONCE, Parsed, Prose, ProseId, Text, TextAt, parse};
 
-    fn at() -> TextAt {
-        TextAt::only(1, 0)
+    fn id() -> ProseId {
+        ProseId::of(TextAt::only(1, 0))
     }
 
     /// Paragraphs of a reply, `bytes` long or a little more.
@@ -115,10 +114,13 @@ mod tests {
         item.repeat(bytes / item.len() + 1)
     }
 
-    /// `prose` with `parsed` as the text at [`at`].
+    /// `prose` with `parsed` as the text known as [`id`].
     fn with(parsed: Parsed) -> Prose {
-        let prose = Prose::new(WeakEntity::new_invalid());
-        prose.0.borrow_mut().texts.insert(at(), Text::Parsed { parsed: Rc::new(parsed), drawn: 0 });
+        let prose = Prose::alone();
+        let mut store = prose.0.borrow_mut();
+        store.placed(&id(), TextAt::only(1, 0));
+        store.texts.insert(id(), Text::Parsed { parsed: Rc::new(parsed) });
+        drop(store);
         prose
     }
 
@@ -132,7 +134,7 @@ mod tests {
         let source = format!("{was}And a last few words.");
         let prose = with(parse::parse(was));
 
-        let (parsed, apart) = prose.parsed(at(), &source);
+        let (parsed, apart) = prose.parsed(&id(), &source);
 
         let parsed = parsed.expect("drawn at once");
         assert!(apart.is_none(), "with nothing to parse on another thread");
@@ -145,7 +147,7 @@ mod tests {
         let was = paragraphs(AT_ONCE / 2);
         let prose = with(parse::parse(was.clone()));
 
-        let (parsed, apart) = prose.parsed(at(), &format!("{was}{}", list(2 * AT_ONCE)));
+        let (parsed, apart) = prose.parsed(&id(), &format!("{was}{}", list(2 * AT_ONCE)));
 
         assert_eq!(source_of(parsed), Some(was), "what it was parsed as");
         assert!(apart.is_some(), "while what it went on to is parsed on another thread");
@@ -158,7 +160,7 @@ mod tests {
         let was = paragraphs(2 * AT_ONCE);
         let prose = with(parse::parse(was.clone()));
 
-        let (parsed, apart) = prose.parsed(at(), &format!("{was}[docs]: https://example.com\n"));
+        let (parsed, apart) = prose.parsed(&id(), &format!("{was}[docs]: https://example.com\n"));
 
         assert_eq!(source_of(parsed), Some(was));
         assert!(apart.is_some());
@@ -168,7 +170,7 @@ mod tests {
     fn a_long_text_that_changes_other_than_by_going_on_isn_t_drawn_as_it_was() {
         let prose = with(parse::parse(paragraphs(2 * AT_ONCE)));
 
-        let (parsed, apart) = prose.parsed(at(), &list(2 * AT_ONCE));
+        let (parsed, apart) = prose.parsed(&id(), &list(2 * AT_ONCE));
 
         assert_eq!(source_of(parsed), None, "drawn as nothing until it's in");
         assert!(apart.is_some());
@@ -179,11 +181,11 @@ mod tests {
         let was = paragraphs(AT_ONCE / 2);
         let parsing = format!("{was}{}", list(2 * AT_ONCE));
         let prose = with(parse::parse(was.clone()));
-        let old = prose.parsed(at(), &was).0;
+        let old = prose.parsed(&id(), &was).0;
         let task = Task::ready(());
-        prose.0.borrow_mut().texts.insert(at(), Text::Parsing { source: parsing.clone(), was: old, _task: task });
+        prose.0.borrow_mut().texts.insert(id(), Text::Parsing { source: parsing.clone(), was: old, _task: task });
 
-        let (parsed, apart) = prose.parsed(at(), &format!("{parsing}- One more\n"));
+        let (parsed, apart) = prose.parsed(&id(), &format!("{parsing}- One more\n"));
 
         assert_eq!(source_of(parsed), Some(was), "drawn as it was");
         assert!(apart.is_none(), "and no other parse started");
@@ -200,12 +202,12 @@ mod tests {
         leaves[0] = "Kept as it was".to_owned();
         kept.leaves = Arc::from(leaves);
         let prose = with(kept);
-        let (_, apart) = prose.parsed(at(), &source);
+        let (_, apart) = prose.parsed(&id(), &source);
 
-        cx.update(|cx| prose.parse_apart(at(), apart.expect("parsed apart"), cx));
+        cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
         cx.run_until_parked();
 
-        let (parsed, _) = prose.parsed(at(), &source);
+        let (parsed, _) = prose.parsed(&id(), &source);
         let parsed = parsed.expect("parsed");
         let whole = parse::parse(source.clone()).leaves;
         assert_eq!(parsed.leaves[0], "Kept as it was");
@@ -218,13 +220,13 @@ mod tests {
         let was = paragraphs(AT_ONCE / 2);
         let parsing = format!("{was}{}", list(2 * AT_ONCE));
         let prose = with(parse::parse(was.clone()));
-        let (_, apart) = prose.parsed(at(), &parsing);
-        cx.update(|cx| prose.parse_apart(at(), apart.expect("parsed apart"), cx));
+        let (_, apart) = prose.parsed(&id(), &parsing);
+        cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
         let more = format!("{parsing}- One more\n");
 
-        let waiting = source_of(prose.parsed(at(), &more).0);
+        let waiting = source_of(prose.parsed(&id(), &more).0);
         cx.run_until_parked();
-        let (parsed, apart) = prose.parsed(at(), &more);
+        let (parsed, apart) = prose.parsed(&id(), &more);
 
         assert_eq!(waiting, Some(was), "drawn as it was while the parse is apart");
         assert_eq!(source_of(parsed), Some(parsing), "and as that parse once it's in");

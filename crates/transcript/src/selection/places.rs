@@ -7,7 +7,7 @@ use std::sync::Arc;
 use gpui_kit::{Pixels, Point, point, px};
 
 use super::{Drawn, Spot};
-use crate::prose::{ATOM, TextAt};
+use crate::prose::{ATOM, ProseId, TextAt};
 
 /// What's selected from `start` to `end` of `texts`, as text: what's selected of each leaf a line apart, and of each
 /// text a blank line apart, leaving out a leaf, or a text, that has none of it selected.
@@ -56,13 +56,14 @@ pub(super) fn selected(
     })
 }
 
-/// The place in what shows of the texts drawn in this frame nearest `position`: in the leaf under it, or across from
-/// it, or at the end of what shows of the last leaf above it, or the start of the first if it's above them all. What
-/// an area that scrolls a text has moved out of sight doesn't show, so a leaf it cuts short ends where it's cut, and
-/// one it cuts at its top starts there, for a point anywhere above it.
-pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<Spot> {
+/// The place in what shows of the texts drawn in this frame nearest `position`, and the text it's in: in the leaf
+/// under it, or across from it, or at the end of what shows of the last leaf above it, or the start of the first if
+/// it's above them all. What an area that scrolls a text has moved out of sight doesn't show, so a leaf it cuts short
+/// ends where it's cut, and one it cuts at its top starts there, for a point anywhere above it.
+pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<(Spot, &ProseId)> {
     let mut nearest = None;
     for drawn in drawn {
+        let text = &drawn.text;
         for (leaf, geometry) in &drawn.leaves {
             let (at, leaf, whole) = (drawn.at, *leaf, geometry.bounds());
             let shows = whole.intersect(&drawn.bounds);
@@ -70,17 +71,17 @@ pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<Spot> 
                 // Cut at its top, it starts where what shows of it does, which is nearer than anything drawn above
                 // the area that cuts it.
                 if shows.top() > whole.top() {
-                    return Some(Spot { at, leaf, byte: geometry.index_for_position(shows.origin) });
+                    return Some((Spot { at, leaf, byte: geometry.index_for_position(shows.origin) }, text));
                 }
-                return nearest.or(Some(Spot { at, leaf, byte: 0 }));
+                return nearest.or(Some((Spot { at, leaf, byte: 0 }, text)));
             }
             if position.y <= shows.bottom() {
                 let spot = Spot { at, leaf, byte: geometry.index_for_position(position) };
                 // A table's cells sit side by side, so the one across from it is the one it's over, if it's over one.
                 if shows.left() <= position.x && position.x <= shows.right() {
-                    return Some(spot);
+                    return Some((spot, text));
                 }
-                nearest = Some(spot);
+                nearest = Some((spot, text));
                 continue;
             }
             let cut = shows.bottom() < whole.bottom();
@@ -89,7 +90,7 @@ pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<Spot> 
             } else {
                 geometry.len()
             };
-            nearest = Some(Spot { at, leaf, byte });
+            nearest = Some((Spot { at, leaf, byte }, text));
         }
     }
     nearest

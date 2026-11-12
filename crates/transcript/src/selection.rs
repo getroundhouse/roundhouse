@@ -3,12 +3,15 @@
 //! of what's selected once a text holding either end of it isn't painted, which in a list that draws only what's in
 //! sight is as soon as that text's row leaves the window.
 //!
-//! Each end is a place in a text: which text, which of its leaves, and a byte in that leaf. Each frame, every text
-//! that's drawn says where its leaves are, so a point in the window can be turned into a place. A press on a text
-//! starts a selection, a drag moves its far end, and with the pointer past the top or bottom of the list, the list
-//! scrolls on, faster the further past it is, for as long as the button is held. A copy reads the texts between the
-//! ends as they were parsed, drawn or not, which is each the chat has loaded, and each it loaded as the selection was
-//! made, since what's selected is kept. `crate::prose` draws them.
+//! Each end is a place in a text: which text, which of its leaves, and a byte in that leaf. The text is named by what
+//! its element is known by, which stays the same as it moves, as a reply does from being written to its record, so an
+//! end stays in it, and `crate::prose` says where it is now, which orders the ends. Each frame, every text that's drawn
+//! says what it's known by and where its leaves are, so a point in the window can be turned into a place in it. A
+//! press on a text starts a selection, a drag moves its far end, and with the pointer past the top or bottom of the
+//! list, the list scrolls on, faster the further past it is, for as long as the button is held. A copy reads the texts
+//! between the ends as they were parsed, drawn or not, which is each the chat has loaded, and each it loaded as the
+//! selection was made, since the texts from one end to the other are kept, as is the one a press was on, for a
+//! shift-click to extend from. `crate::prose` draws them.
 //!
 //! It's the mouse's: a press, a drag and a release. The kit's selection also takes a touch screen's long press and
 //! handles, which a transcript on a phone will need here.
@@ -29,10 +32,12 @@ use gpui_kit::{
     Point, SharedString, Window, point, px,
 };
 
-use crate::prose::{Prose, TextAt};
+use crate::prose::{Prose, ProseId, TextAt};
 
 mod places;
 mod pointer;
+#[cfg(test)]
+mod tests;
 
 use places::{copied, leaf_text, selected, spot_at, word_around};
 
@@ -46,6 +51,21 @@ struct Spot {
     at: TextAt,
     leaf: u64,
     byte: usize,
+}
+
+/// An end of what's selected: a place in the text known as `text`, wherever that is now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct End {
+    text: ProseId,
+    leaf: u64,
+    byte: usize,
+}
+
+impl End {
+    /// The place `spot` names, in the text known as `text`, which is there now.
+    fn at(text: ProseId, spot: Spot) -> Self {
+        Self { text, leaf: spot.leaf, byte: spot.byte }
+    }
 }
 
 /// What a press selects, and a drag from it goes by: a character, a word for a double click, or a whole paragraph,
@@ -69,7 +89,7 @@ pub(crate) struct Selection {
 #[derive(Default)]
 struct Selecting {
     /// Where it started and where it's got to, in either order. Nothing's selected while they're the same.
-    ends: Option<(Spot, Spot)>,
+    ends: Option<(End, End)>,
     /// Whether anything is, which a link asks as the button comes up over it, from a handler the kit has be `Send`.
     any: Arc<AtomicBool>,
     drag: Option<Drag>,
@@ -81,7 +101,7 @@ struct Drag {
     pointer: Point<Pixels>,
     unit: Unit,
     /// What the press chose, which stays selected however the drag goes.
-    chosen: (Spot, Spot),
+    chosen: (End, End),
     /// When the list last moved under the pointer past its edge.
     moved: Option<Instant>,
     /// The area that scrolls the text the press was on, if it's in one.
@@ -90,9 +110,10 @@ struct Drag {
     area_moved: Option<Instant>,
 }
 
-/// A text drawn in this frame, what shows of it, the area that scrolls it, if it's in one, and where each of its
-/// leaves is, by key.
+/// A text drawn in this frame, what it's known by and where it is, what shows of it, the area that scrolls it, if it's
+/// in one, and where each of its leaves is, by key.
 struct Drawn {
+    text: ProseId,
     at: TextAt,
     bounds: Bounds<Pixels>,
     area: Option<ElementId>,
@@ -100,9 +121,9 @@ struct Drawn {
 }
 
 impl Selecting {
-    fn set(&mut self, ends: Option<(Spot, Spot)>) {
+    fn set(&mut self, ends: Option<(End, End)>) {
+        self.any.store(ends.as_ref().is_some_and(|(a, b)| a != b), Ordering::Relaxed);
         self.ends = ends;
-        self.any.store(ends.is_some_and(|(a, b)| a != b), Ordering::Relaxed);
     }
 }
 
@@ -128,11 +149,12 @@ impl Selection {
         self.prose.new_frame();
     }
 
-    /// Notes that the text at `at` shows in `bounds`, in `area` if one scrolls it, with its leaves where `leaves`
-    /// says. A leaf that doesn't show, such as one an area that scrolls the text has moved out of sight, can't be
-    /// pressed on or dragged to.
+    /// Notes that the text known as `text`, at `at`, shows in `bounds`, in `area` if one scrolls it, with its leaves
+    /// where `leaves` says. A leaf that doesn't show, such as one an area that scrolls the text has moved out of sight,
+    /// can't be pressed on or dragged to.
     pub(crate) fn drawn(
         &self,
+        text: ProseId,
         at: TextAt,
         bounds: Bounds<Pixels>,
         area: Option<ElementId>,
@@ -141,7 +163,7 @@ impl Selection {
         let showing = leaves.into_iter().filter(|(_, geometry)| geometry.bounds().intersects(&bounds));
         let mut leaves: Vec<(u64, LeafGeometry)> = showing.collect();
         leaves.sort_by_key(|(key, _)| *key);
-        self.inner.borrow_mut().drawn.push(Drawn { at, bounds, area, leaves });
+        self.inner.borrow_mut().drawn.push(Drawn { text, at, bounds, area, leaves });
     }
 
     /// What's selected of the text at `at`, whose leaves are `leaves`, by leaf.
@@ -150,9 +172,14 @@ impl Selection {
         selected(start, end, at, leaves).filter(|(_, range)| !range.is_empty()).collect()
     }
 
-    /// The texts anything's selected in, if it is, from the first to the last.
-    pub(crate) fn texts(&self) -> Option<RangeInclusive<TextAt>> {
-        self.ordered().map(|(start, end)| start.at..=end.at)
+    /// Where the texts from one end of the selection to the other were last drawn, from the first to the last, which
+    /// are kept for a copy, as the one a press was on is, with nothing selected yet, for a shift-click to extend from.
+    /// A text whose place another has taken is there until it's drawn again.
+    pub(crate) fn held(&self) -> Option<RangeInclusive<TextAt>> {
+        let selecting = self.inner.borrow();
+        let (a, b) = selecting.ends.as_ref()?;
+        let (a, b) = (self.prose.last_drawn_at(&a.text)?, self.prose.last_drawn_at(&b.text)?);
+        Some(a.min(b)..=a.max(b))
     }
 
     /// What a click on a link in a text does: opens it, as the kit does, unless something's selected, which the kit's
@@ -184,14 +211,23 @@ impl Selection {
         let (pointer, unit, chosen) = {
             let selecting = self.inner.borrow();
             let Some(drag) = selecting.drag.as_ref() else { return false };
-            (drag.pointer, drag.unit, drag.chosen)
+            (drag.pointer, drag.unit, drag.chosen.clone())
         };
+        let Some(chosen_at) = self.spots(&chosen) else { return false };
         let inside = point(pointer.x, pointer.y.clamp(bounds.top() + px(1.), bounds.bottom() - px(1.)));
-        let Some(spot) = spot_at(&self.inner.borrow().drawn, inside) else { return false };
-        let (from, to) = self.around(spot, unit);
-        let ends = if spot < chosen.0 { (chosen.1, from) } else { (chosen.0, to.max(chosen.1)) };
+        let under = spot_at(&self.inner.borrow().drawn, inside).map(|(spot, text)| (spot, text.clone()));
+        let Some((spot, text)) = under else { return false };
+        let (from, to) = self.around(spot, &text, unit);
+        let (start, end) = chosen;
+        let ends = if spot < chosen_at.0 {
+            (end, End::at(text, from))
+        } else if to < chosen_at.1 {
+            (start, end)
+        } else {
+            (start, End::at(text, to))
+        };
         let mut selecting = self.inner.borrow_mut();
-        let changed = selecting.ends != Some(ends);
+        let changed = selecting.ends.as_ref() != Some(&ends);
         selecting.set(Some(ends));
         changed
     }
@@ -206,26 +242,28 @@ impl Selection {
         let mut selecting = self.inner.borrow_mut();
         let on = selecting.drawn.iter().find(|drawn| drawn.bounds.contains(&position));
         let (on_text, area) = (on.is_some(), on.and_then(|drawn| drawn.area.clone()));
-        let Some(spot) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
+        let Some((spot, text)) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
             selecting.set(None);
             selecting.drag = None;
             return false;
         };
+        let text = text.clone();
         let unit = match clicks {
             0 | 1 => Unit::Character,
             2 => Unit::Word,
             _ => Unit::Leaf,
         };
-        let chosen = match selecting.ends {
-            Some((anchor, _)) if extend && unit == Unit::Character => {
-                selecting.set(Some((anchor, spot)));
-                (anchor, anchor)
-            }
-            Some(_) | None => {
-                let chosen = self.around(spot, unit);
-                selecting.set(Some(chosen));
-                chosen
-            }
+        // Extending from where what's selected starts, if its text still has a place, and otherwise starting afresh.
+        let anchor = (selecting.ends.as_ref().map(|(anchor, _)| anchor.clone()))
+            .filter(|anchor| extend && unit == Unit::Character && self.prose.place_of(&anchor.text).is_some());
+        let chosen = if let Some(anchor) = anchor {
+            selecting.set(Some((anchor.clone(), End::at(text, spot))));
+            (anchor.clone(), anchor)
+        } else {
+            let (from, to) = self.around(spot, &text, unit);
+            let chosen = (End::at(text.clone(), from), End::at(text, to));
+            selecting.set(Some(chosen.clone()));
+            chosen
         };
         selecting.drag = Some(Drag { pointer: position, unit, chosen, moved: None, area, area_moved: None });
         true
@@ -248,9 +286,9 @@ impl Selection {
             return;
         };
         TextSelection::clear(window, cx);
+        let ends = (End { text: first, leaf: 0, byte: 0 }, End { text: last, leaf: u64::MAX, byte: usize::MAX });
         let mut selecting = self.inner.borrow_mut();
-        let end = Spot { at: last, leaf: u64::MAX, byte: usize::MAX };
-        selecting.set(Some((Spot { at: first, leaf: 0, byte: 0 }, end)));
+        selecting.set(Some(ends));
         selecting.drag = None;
         window.refresh();
     }
@@ -271,15 +309,21 @@ impl Selection {
         copied(start, end, &self.prose.between(start.at, end.at))
     }
 
-    /// Its ends, first first, if anything's selected.
+    /// Its ends, first first, where they are now, if anything's selected.
     fn ordered(&self) -> Option<(Spot, Spot)> {
-        let (a, b) = self.inner.borrow().ends?;
+        let (a, b) = self.spots(self.inner.borrow().ends.as_ref()?)?;
         (a != b).then(|| if a <= b { (a, b) } else { (b, a) })
     }
 
-    /// The `unit` that `spot` is in, as two places.
-    fn around(&self, spot: Spot, unit: Unit) -> (Spot, Spot) {
-        let leaves = self.prose.leaves_of(spot.at);
+    /// Where `ends` are now, if their texts are kept.
+    fn spots(&self, (a, b): &(End, End)) -> Option<(Spot, Spot)> {
+        let spot = |end: &End| Some(Spot { at: self.prose.place_of(&end.text)?, leaf: end.leaf, byte: end.byte });
+        Some((spot(a)?, spot(b)?))
+    }
+
+    /// The `unit` that `spot`, in the text known as `text`, is in, as two places.
+    fn around(&self, spot: Spot, text: &ProseId, unit: Unit) -> (Spot, Spot) {
+        let leaves = self.prose.leaves_of(text);
         let text = leaves.as_deref().and_then(|leaves| leaf_text(leaves, spot.leaf));
         let range = match (unit, text) {
             (Unit::Character, _) | (Unit::Word | Unit::Leaf, None) => spot.byte..spot.byte,
