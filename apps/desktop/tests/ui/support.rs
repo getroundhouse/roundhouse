@@ -8,6 +8,7 @@ mod click;
 mod daemons;
 mod diff;
 mod drawn;
+mod frozen;
 mod held;
 mod hover;
 mod hub;
@@ -40,6 +41,7 @@ use transcript::Transcript;
 pub(crate) use click::click;
 pub(crate) use daemons::{binaries, point_daemons_at_the_fake_agent};
 pub(crate) use diff::Diff;
+pub(crate) use frozen::Frozen;
 pub(crate) use held::Held;
 pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.

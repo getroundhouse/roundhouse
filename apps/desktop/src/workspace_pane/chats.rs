@@ -301,6 +301,7 @@ impl WorkspacePane {
         self.show_next(cx);
         self.read_showing(cx);
         self.wind_cache_clock(cx);
+        self.take_drafts_from_elsewhere(cx);
         cx.notify();
     }
 
