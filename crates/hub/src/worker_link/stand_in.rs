@@ -26,7 +26,6 @@ impl WorkerLink {
             acks: Acks::default(),
             left: AtomicBool::new(false),
             build: OnceLock::new(),
-            uses: AtomicU64::new(0),
         });
         let gone = Gone(Arc::downgrade(&link));
         tokio::spawn(async move {

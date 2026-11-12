@@ -49,7 +49,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot, watch};
+use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, oneshot};
 use tokio::task::JoinSet;
 use tracing::warn;
 
@@ -93,8 +93,6 @@ pub(crate) struct Hub {
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pull_requests: pull_requests::Reading,
     awake: Arc<Awake>,
-    /// Told each time what's at work may have changed, for whatever waits for a workspace to have nothing at work.
-    work_changes: watch::Sender<()>,
     /// Held while the hub's settings change.
     configuring: AsyncMutex<()>,
     feed: Feed,
@@ -138,7 +136,6 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
             awake: Arc::default(),
-            work_changes: watch::Sender::new(()),
             configuring: AsyncMutex::new(()),
             feed: Feed::new(),
             started_at_ms: now_ms(),
@@ -290,11 +287,9 @@ impl Hub {
         }
     }
 
-    /// Says that what's at work may have changed, for whatever keeps this machine awake, and whatever waits for a
-    /// workspace to have nothing at work.
+    /// Says that what's at work may have changed, for whatever keeps this machine awake.
     pub(crate) fn work_changed(&self) {
         self.awake.work_changed();
-        self.work_changes.send_replace(());
     }
 
     /// Stops every worker and waits until what they said is recorded.

@@ -74,10 +74,6 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         }
         notify(&config, &out, &id, "completed");
         unlisted(&config, &out, &id);
-        // As long as the file says, if it says, which leaves a test time to see that nothing is at work in between.
-        if let Some(ms) = std::fs::read_to_string(&file).ok().and_then(|said| said.trim().parse().ok()) {
-            std::thread::sleep(Duration::from_millis(ms));
-        }
         // The real CLI tells the agent, which starts a turn of its own, or joins the one that's running.
         let _ =
             config.input.send(Input::Resume(Prompt { text: format!("say:finished {}", file.display()), uuid: None }));
