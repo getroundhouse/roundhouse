@@ -144,7 +144,7 @@ struct Inner {
     /// Subscriptions ended because their readers fell behind.
     lagged: Mutex<HashSet<u64>>,
     next_id: AtomicU64,
-    /// Set once the reader has finished, so a later call can't wait forever.
+    /// Set once the reader has finished, or a write has failed, so a later call can't wait forever.
     disconnected: Mutex<bool>,
     /// Set by the hello, before anyone else has this connection.
     hub_version: OnceLock<String>,
@@ -234,6 +234,12 @@ impl Client {
         self.inner.hub_version.get().map_or("", String::as_str)
     }
 
+    /// Whether the hub has closed this connection, or gone. It's set before any request fails with
+    /// [`ClientError::Disconnected`], and every request on it fails that way from then on.
+    pub fn is_disconnected(&self) -> bool {
+        *self.inner.disconnected.lock()
+    }
+
     pub fn call(&self, request: ClientRequest) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
@@ -243,9 +249,10 @@ impl Client {
             self.inner.pending.lock().remove(&id);
             return Err(ClientError::Disconnected);
         }
-        // Writing to the hub only fails once it has gone.
+        // Writing to the hub only fails once it has gone, which the reader may not have found yet.
         if self.inner.writer.lock().write_all(&line).is_err() {
             self.inner.pending.lock().remove(&id);
+            *self.inner.disconnected.lock() = true;
             return Err(ClientError::Disconnected);
         }
         reply_rx.recv().map_err(|_| ClientError::Disconnected)?
