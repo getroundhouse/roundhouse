@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Signal, TaskRing};
+use look::{LineText, Signal, TaskRing};
 use protocol::event::{AgentTask, TaskKind};
 use protocol::tail::{BlockKind, Compacting, Tail};
 
@@ -56,8 +56,9 @@ pub(super) fn render_tail(
             };
         }
     }
-    out = out
-        .when(at_work.working, |out| out.child(working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), cx)));
+    out = out.when(at_work.working, |out| {
+        out.child(working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), &shared.line_text, cx))
+    });
     // Left going by a turn, or started during one.
     out.children(at_work.background.iter().map(|task| going(task, by, shared, cx))).into_any_element()
 }
@@ -119,9 +120,14 @@ fn clipped(text: String) -> Div {
 
 /// The mark with its light sweeping, and how long the turn has taken so far, in the code font so the digits stay put.
 /// While the agent compacts its conversation, it says so after the time, and how much of the summary it has written
-/// when it says, since that's the only sign a compaction is getting on.
-fn working_line(started_at_ms: Option<i64>, compacting: Option<&Compacting>, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
+/// when it says, since that's the only sign a compaction is getting on. The time and the words are on one baseline,
+/// as a call's title and its code are.
+fn working_line(
+    started_at_ms: Option<i64>,
+    compacting: Option<&Compacting>,
+    line_text: &LineText,
+    cx: &App,
+) -> impl IntoElement {
     let so_far = started_at_ms.map(|started| {
         let elapsed = look::now_ms(cx) - started;
         // The hub's clock can be a little ahead of this one.
@@ -129,20 +135,14 @@ fn working_line(started_at_ms: Option<i64>, compacting: Option<&Compacting>, cx:
     });
     tail_line(cx)
         .id("working-line")
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
         .child(look::chat_mark(Signal::Working, look::Size::Inline, cx))
-        .children(so_far)
+        .children(so_far.map(|so_far| line_text.code.set(div().flex_none().child(so_far))))
         .children(compacting.map(|compacting| {
             // Counted as tokens are, since it's said beside them.
             let written = compacting.written_chars.filter(|chars| *chars > 0);
             let written = written.map(|chars| format!(" · {} characters written", look::tokens(chars)));
             // Cut off where the line ends, rather than running past the pane.
-            div()
-                .min_w_0()
-                .font_family(theme.font_family.clone())
-                .text_sm()
-                .child(clipped(format!("Compacting the conversation{}", written.unwrap_or_default())))
+            line_text.body.set(clipped(format!("Compacting the conversation{}", written.unwrap_or_default())).min_w_0())
         }))
         .test_support()
 }
