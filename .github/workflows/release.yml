@@ -80,8 +80,18 @@ jobs:
           # Not mac.yml's, since this holds release builds.
           key: release-mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: release-mac-
+      # The cache above holds the dependencies. sccache holds our own crates, by their contents, since a checkout makes
+      # every file look changed to cargo. Only main adds to it. Its stats are on the run's page, and in the log of its
+      # post step.
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
       - name: Build
         id: build
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+          SCCACHE_GHA_RW_MODE: ${{ github.ref == 'refs/heads/main' && 'READ_WRITE' || 'READ_ONLY' }}
         run: |
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
