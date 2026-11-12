@@ -41,9 +41,15 @@ impl AppView {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
                 PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
+                PaneEvent::Showing => t.tell_of_needs(cx),
             })
             .detach();
             self.panes.insert(id.clone(), pane);
+        }
+        if let (Some((_, chat)), Some(pane)) =
+            (self.chat_to_show.take_if(|(at, _)| *at == id), self.panes.get(&id).cloned())
+        {
+            pane.update(cx, |p, cx| p.activate(chat, cx));
         }
         // Only with a connection. Without one, `refresh` catches it up once there is one.
         if let Some(pane) = self.selected_pane() {

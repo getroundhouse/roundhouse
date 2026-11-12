@@ -26,6 +26,7 @@ mod lost_release;
 mod marks;
 mod menus;
 mod new_workspace;
+mod notifications;
 mod other_hubs;
 mod outline;
 mod pickers;

@@ -198,7 +198,7 @@ Each piece of state has one owner, and every other copy is a cache.
 | Code, PRs, CI | Git and GitHub data | Git and GitHub. The worker and hub only cache |
 | Per-device view | Scroll position, open panels, selection | The client |
 | Agent accounts | The login an agent runs under, and how much of its limits is left | The login is on the worker's machine, and a worker reads it when its hub asks, as each agent launches. Each account is a record of the hub's, with who it is, as last read, and what agents under it have heard of its limits, since agents in any workspace can run under one, and several accounts can share a model provider. A session's record names the account its agent's newest launch runs under. *Unconfirmed* |
-| App settings | Always expand thinking | The client, in a file in its data directory, since a client can show several hubs. *Unconfirmed* |
+| App settings | Always expand thinking, notifications and their sound | The client, in a file in its data directory, since a client can show several hubs. *Unconfirmed* |
 | Hub settings | Keeping the Mac awake | The hub that carries them out, as one record, so they hold with no client there and every client shows the same |
 | Where the window was left | Its place, size and display, and whether it was in full screen | The client, in a file of its own in its data directory, since nobody chooses it in Settings. *Unconfirmed* |
 | The worker's tools | The port each workspace's worker serves its agents' tools on, and each session's token for them | The hub, in tables of their own, since every launch of an agent needs the same, as "The worker's tools" below says. Neither is on a record, since no client is shown them. *Unconfirmed* |

@@ -12,6 +12,7 @@ gpui_kit::assets::icon_assets!(
         ArchiveRestore,
         ArrowUpDown,
         ArrowUpRight,
+        Bell,
         Brain,
         Columns2,
         CornerDownRight,

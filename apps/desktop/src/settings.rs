@@ -16,11 +16,12 @@ mod tests;
 pub(crate) use page::{FIND_KEY, KEY_CONTEXT, OfHub, page};
 
 use crate::saving::{Failure, Saver, write_json};
+use crate::sounds::Sound;
 use crate::workspace_order::Sort;
 
 /// Every setting that's the app's own, each with the value it has when nobody has chosen. A setting a hub carries
 /// out is the hub's, which keeps it.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Settings {
     /// Thinking shows in full, rather than as a line to open.
     #[serde(default)]
@@ -29,9 +30,36 @@ pub(crate) struct Settings {
     /// from the sidebar's heading rather than in Settings, and kept here so it lasts.
     #[serde(default)]
     pub(crate) sidebar_sort: Sort,
+    /// A notification tells of each chat that comes to need the person, unless it's the one being read. On unless
+    /// turned off, since an agent finishing while you're elsewhere is what the app is for.
+    #[serde(default = "on")]
+    pub(crate) notify: bool,
+    /// `sound` plays as a chat comes to need the person, whether or not a notification tells of it.
+    #[serde(default = "on")]
+    pub(crate) play_sound: bool,
+    #[serde(default, deserialize_with = "Sound::or_chime")]
+    pub(crate) sound: Sound,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     others: Map<String, Value>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            always_expand_thinking: false,
+            sidebar_sort: Sort::default(),
+            notify: on(),
+            play_sound: on(),
+            sound: Sound::default(),
+            others: Map::new(),
+        }
+    }
+}
+
+/// What a setting that's on unless turned off is when nobody has chosen.
+fn on() -> bool {
+    true
 }
 
 /// The file the settings are kept in.

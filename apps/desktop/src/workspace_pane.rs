@@ -102,6 +102,8 @@ pub enum PaneEvent {
     Archive(WorkspaceId, bool),
     /// Title the workspace again from what's been asked in it.
     RegenerateTitle(WorkspaceId),
+    /// What's in front under the tabs changed, so the chat being read may have.
+    Showing,
 }
 
 pub struct WorkspacePane {

@@ -6,14 +6,14 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
+use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::switch::Switch;
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, v_flex};
 use gpui_kit::{
-    AnyElement, App, ClickEvent, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, Styled as _, TestSupportExt as _, Window, div, px,
+    App, ClickEvent, Context, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, Off as _};
+use look::Hand as _;
 
 use client_core::Client;
 use protocol::model::{HubSettings, HubSettingsChange};
@@ -21,6 +21,8 @@ use protocol::model::{HubSettings, HubSettingsChange};
 use crate::FindSetting;
 use crate::workspace_pane::HEADER_HEIGHT;
 
+mod notifications;
+mod rows;
 mod sidebar;
 #[cfg(test)]
 mod tests;
@@ -110,13 +112,24 @@ fn takes_focus(focus: &FocusHandle) -> impl IntoElement {
 type IsOn = Box<dyn Fn(&App) -> Option<bool>>;
 /// Turns a setting on or off.
 type Set = Rc<dyn Fn(bool, &mut App)>;
+/// What's chosen now, as its button says it.
+type Chosen = Box<dyn Fn(&App) -> SharedString>;
+/// Fills the menu a setting chooses from, as it opens.
+type Menu = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
-/// A setting that's on or off.
+/// A setting, as a row on its page.
 struct Setting {
     name: &'static str,
     does: &'static str,
-    is_on: IsOn,
-    set: Set,
+    control: Control,
+}
+
+/// How a setting is changed.
+enum Control {
+    /// It's on or off.
+    Switch { is_on: IsOn, set: Set },
+    /// It's one of a list, from a button that says which and opens a menu of them. `id` is the button's.
+    Choice { id: &'static str, chosen: Chosen, menu: Menu },
 }
 
 impl Setting {
@@ -131,6 +144,7 @@ impl Setting {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum PageId {
     General,
+    Notifications,
 }
 
 impl PageId {
@@ -138,6 +152,7 @@ impl PageId {
     fn row_id(self) -> &'static str {
         match self {
             PageId::General => "settings-page-general",
+            PageId::Notifications => "settings-page-notifications",
         }
     }
 }
@@ -157,7 +172,7 @@ struct Section {
 
 /// Every page, under its heading.
 fn sections(hub: Option<OfHub>) -> Vec<Section> {
-    vec![Section { heading: "Personal", pages: vec![general(hub)] }]
+    vec![Section { heading: "Personal", pages: vec![general(hub), notifications::page()] }]
 }
 
 /// What a search leaves: the settings that match it, on their pages, under their headings. A page with nothing left on
@@ -185,21 +200,25 @@ fn general(hub: Option<OfHub>) -> Page {
     let always_expand_thinking = Setting {
         name: "Always expand thinking",
         does: "Show what the agent thinks in full, rather than as a line to open.",
-        is_on: Box::new(|cx| Some(super::get(cx).always_expand_thinking)),
-        set: Rc::new(|on, cx| super::change(cx, |settings| settings.always_expand_thinking = on)),
+        control: Control::Switch {
+            is_on: Box::new(|cx| Some(super::get(cx).always_expand_thinking)),
+            set: Rc::new(|on, cx| super::change(cx, |settings| settings.always_expand_thinking = on)),
+        },
     };
     let hub_says = hub.as_ref().map(|hub| hub.settings.keep_awake);
     let keep_awake = Setting {
         name: "Keep computer awake while agents are working",
         does: "The display still sleeps, and closing the lid still puts the computer to sleep.",
-        is_on: Box::new(move |_| hub_says),
-        set: Rc::new(move |on, _| {
-            let Some(hub) = &hub else { return };
-            let change = HubSettingsChange { keep_awake: Some(on) };
-            // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once
-            // it has changed, and a hub that couldn't change it leaves the switch as it was.
-            drop(hub.client.start(move |client| client.hub_configure(change)));
-        }),
+        control: Control::Switch {
+            is_on: Box::new(move |_| hub_says),
+            set: Rc::new(move |on, _| {
+                let Some(hub) = &hub else { return };
+                let change = HubSettingsChange { keep_awake: Some(on) };
+                // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once
+                // it has changed, and a hub that couldn't change it leaves the switch as it was.
+                drop(hub.client.start(move |client| client.hub_configure(change)));
+            }),
+        },
     };
     let settings = vec![always_expand_thinking, keep_awake];
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, settings }
@@ -232,7 +251,7 @@ fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
         .font_weight(FontWeight::MEDIUM)
         .text_color(cx.theme().foreground)
         .child(page.name);
-    let rows = page.settings.iter().map(|setting| switch(setting, cx));
+    let rows = page.settings.iter().map(|setting| rows::row(setting, cx));
     let rows =
         v_flex().id("settings-rows").flex_1().min_h_0().px_8().py_4().gap_4().children(rows).overflow_y_scrollbar();
     v_flex().size_full().child(title).child(rows)
@@ -249,35 +268,4 @@ fn nothing_found(cx: &App) -> impl IntoElement {
         .text_color(cx.theme().muted_foreground)
         .child("No settings match")
         .test_support()
-}
-
-/// A setting that's on or off: what it's called and what it does on the left, its switch on the right, and a line
-/// under it that sets it apart from the next. One that can't be read or changed just now shows off and can't be
-/// flipped.
-fn switch(setting: &Setting, cx: &App) -> AnyElement {
-    let on = (setting.is_on)(cx);
-    let said = v_flex()
-        .flex_1()
-        .gap_1()
-        .child(div().font_weight(FontWeight::MEDIUM).child(setting.name))
-        .child(div().text_color(cx.theme().muted_foreground).child(setting.does));
-    let set = setting.set.clone();
-    let flip = Switch::new(setting.name)
-        .accessibility_label(setting.name)
-        .checked(on.unwrap_or(false))
-        .off_while(on.is_none())
-        .on_click(move |on: &bool, _, cx: &mut App| set(*on, cx));
-    h_flex()
-        .w_full()
-        .items_center()
-        .justify_between()
-        .gap_6()
-        .pt_1()
-        .pb_5()
-        .border_b_1()
-        .border_color(cx.theme().border)
-        .text_sm()
-        .child(said)
-        .child(flip)
-        .into_any_element()
 }

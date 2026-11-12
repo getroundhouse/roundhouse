@@ -84,6 +84,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Outline | The ticks at the right of a chat, one for each prompt, with the one being read in white, and a dot for each compaction, and the list of them that opens over them, for jumping to one. `docs/spec/chats.md` has the rules | `Transcript::with_outline`, `SessionLog::prompt_lines`, `SessionLog::compaction_lines`, `PromptLine`, `CompactionLine`, `SessionPromptList`, `SessionCompactionList` |
 | Prompt being read | The prompt whose part of the chat is at the bottom, which is where a jump from the outline puts it, or at the end of the chat, the last prompt. One jumped to is the one being read until something else moves the chat. The outline lights it. It says where someone is in a chat, and has nothing to do with whether a reply is unread | `being_read` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
+| Notification | What the system shows as a chat comes to need you, unless it's the chat being read, with the app's sound. A chat needs you while it needs a look or is stopped short. The client tells of it, from what the hub records of the chat, and only while it's open. Unrelated to a feed notice | `notifications::Watch`, `notifications::Came`, `notifications::Why`, `AppView::tell_of_needs`, `sounds::Sound` |
 
 ## History and delivery
 

@@ -26,6 +26,7 @@ pub mod lost_release;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
+mod notifications;
 pub mod patch;
 mod prompt_cache;
 pub mod pull_request;
@@ -38,6 +39,7 @@ mod settings;
 mod sidebar;
 pub mod sidebar_tabs;
 mod sides;
+mod sounds;
 pub mod updates;
 pub mod why_quit;
 mod window_place;
@@ -64,6 +66,10 @@ pub const ORDER_HOLDS_FOR: std::time::Duration = reorder::HOLDS_FOR;
 /// How long after the window last moved its place is saved, which a test can wait out.
 #[cfg(feature = "testing")]
 pub const WINDOW_SETTLES_AFTER: std::time::Duration = window_place::SETTLES_AFTER;
+
+/// The sounds the app has played, by name, for a test to read.
+#[cfg(feature = "testing")]
+pub use sounds::played as sounds_played;
 
 actions!(
     roundhouse,
@@ -108,6 +114,8 @@ pub fn open_main_window(
     opens: Opens,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<app::AppView>)> {
+    // Before any notification, which Windows shows only for an app that has said what it's called.
+    cx.set_app_identity(notifications::APP_ID, "Roundhouse");
     settings::load(&hub.paths.data_dir, cx);
     #[cfg(target_os = "macos")]
     accessibility_focus::install();
@@ -182,6 +190,8 @@ pub fn open_main_window(
 pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
+        // Only the app as it runs plays sounds, so a test or a picture of the app is quiet.
+        cx.set_global(sounds::Speaker);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);

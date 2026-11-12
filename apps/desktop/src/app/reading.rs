@@ -17,6 +17,8 @@ impl AppView {
             let on_screen = Some(pane.entity_id()) == showing;
             pane.update(cx, |p, cx| p.set_on_screen(on_screen, cx));
         }
+        // Every change to the records comes through here too, so this is where a chat that needs the person is told of.
+        self.tell_of_needs(cx);
     }
 
     /// The same, for when this isn't in the middle of updating the window, which it asks whether it's in front.

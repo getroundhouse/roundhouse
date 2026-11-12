@@ -30,6 +30,7 @@ impl AppView {
             return;
         }
         self.settings = Some(Shown { focus_before: window.focused(cx) });
+        crate::sounds::read_list(cx);
         window.focus(&self.settings_focus, cx);
         // The chat showing is hidden, so a reply that comes now isn't read.
         self.read_on_screen(window.is_window_active(), cx);

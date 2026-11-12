@@ -41,6 +41,12 @@ impl WorkspacePane {
         self.reading.on_screen
     }
 
+    /// The chat being read: the one showing, when this is the pane showing in the window in front, and the file tab
+    /// doesn't cover it.
+    pub(crate) fn chat_being_read(&self) -> Option<&SessionId> {
+        self.active.as_ref().filter(|_| self.reading.on_screen && self.showing() == Showing::Chat)
+    }
+
     /// Marks the chat showing read, when it's on screen with a reply that has just come, or that the screen hasn't
     /// shown it with yet. For after anything that changes which chat is showing, or what it holds.
     pub(super) fn read_showing(&mut self, cx: &mut Context<Self>) {

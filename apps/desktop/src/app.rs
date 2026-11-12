@@ -8,7 +8,7 @@ use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
 use protocol::client::HubStatus;
-use protocol::model::{Workspace, WorkspaceId};
+use protocol::model::{SessionId, Workspace, WorkspaceId};
 
 use crate::busy::Busy;
 use crate::checkout::Checkout;
@@ -20,6 +20,7 @@ mod corner;
 mod drafts;
 mod home;
 mod hub_source;
+mod notifying;
 mod pull_requests;
 mod quitting;
 mod reading;
@@ -44,6 +45,10 @@ pub use title_bar::the_title_bar_is;
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
 #[cfg(feature = "testing")]
 pub const LOOK_AGAIN: std::time::Duration = restarts::LOOK_AGAIN;
+
+/// How long after a sound for a chat that needs the person the next one waits, which a test can wait out.
+#[cfg(feature = "testing")]
+pub const SOUNDS_APART: std::time::Duration = notifying::SOUNDS_APART;
 
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,
 /// and `by` no bigger than the list.
@@ -121,6 +126,11 @@ pub struct AppView {
     cache_clock: Option<Task<()>>,
     /// What the menu bar was last given to say.
     menus_say: crate::menus::Says,
+    /// Which chats have been told of as needing the person, and when that last sounded.
+    telling: notifying::Telling,
+    /// The chat to show once its workspace's pane is made, as when a notification for a workspace with no pane yet is
+    /// clicked, so the pane shows it from the start rather than reading another first.
+    chat_to_show: Option<(WorkspaceId, SessionId)>,
 }
 
 impl AppView {
@@ -174,6 +184,8 @@ impl AppView {
             _watching_pull_requests: Self::watch_pull_requests(cx),
             cache_clock: None,
             menus_say: crate::menus::Says::default(),
+            telling: notifying::Telling::default(),
+            chat_to_show: None,
         };
         this.connect(cx);
         this

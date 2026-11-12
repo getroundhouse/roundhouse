@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
 
-use super::{Page, PageId, Section, Setting, found, shown};
+use super::{Control, Page, PageId, Section, Setting, found, shown};
 
 fn setting(name: &'static str, does: &'static str) -> Setting {
-    Setting { name, does, is_on: Box::new(|_| Some(false)), set: Rc::new(|_, _| {}) }
+    Setting { name, does, control: Control::Switch { is_on: Box::new(|_| Some(false)), set: Rc::new(|_, _| {}) } }
 }
 
 /// A page made up for a test. Only `shown` tells pages apart by their ID, and there's one page to tell apart.
