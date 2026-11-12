@@ -210,7 +210,14 @@ pub struct Repo {
 pub enum WorkspaceStatus {
     Creating,
     Ready,
+    /// On its way to `Archived`, from the moment it's asked, while the hub checks nothing would be lost, runs the
+    /// archive script, stops its agents and removes its worktree. Back to `Ready` if any of that refuses or fails.
+    /// An older hub says `Ready` throughout.
+    Archiving,
     Archived,
+    /// On its way back to `Ready`, from the moment it's asked, while its worker makes its worktree again. Back to
+    /// `Archived` if that fails. An older hub says `Archived` throughout.
+    Restoring,
     #[serde(other)]
     Unknown,
 }

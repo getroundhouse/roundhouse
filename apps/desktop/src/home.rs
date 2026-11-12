@@ -105,13 +105,14 @@ impl ArchiveFilter {
     }
 
     /// A workspace still being made isn't listed, since there's nothing to open yet, and the sidebar says it's on its
-    /// way. Neither is one in a state this app doesn't know.
+    /// way. Neither is one in a state this app doesn't know. One being archived is listed as it was until it's gone, and
+    /// one being restored until it's back.
     fn lists(self, status: WorkspaceStatus) -> bool {
         use ArchiveFilter::{Hide, Only, Show};
-        use WorkspaceStatus::{Archived, Creating, Ready, Unknown};
+        use WorkspaceStatus::{Archived, Archiving, Creating, Ready, Restoring, Unknown};
         match (self, status) {
-            (Hide | Show, Ready) | (Show | Only, Archived) => true,
-            (_, Creating | Unknown) | (Hide, Archived) | (Only, Ready) => false,
+            (Hide | Show, Ready | Archiving) | (Show | Only, Archived | Restoring) => true,
+            (_, Creating | Unknown) | (Hide, Archived | Restoring) | (Only, Ready | Archiving) => false,
         }
     }
 }
@@ -249,7 +250,7 @@ fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Con
     if let Some(waiting) = app.busy.doing(&workspace.id) {
         return doing(format!("home-doing-{}", workspace.id), waiting, small).into_any_element();
     }
-    let archived = workspace.status == WorkspaceStatus::Archived;
+    let archived = matches!(workspace.status, WorkspaceStatus::Archived | WorkspaceStatus::Restoring);
     let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };
     let id = workspace.id.clone();
     Button::new(ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()))

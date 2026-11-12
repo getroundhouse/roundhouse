@@ -29,6 +29,8 @@ fn archiving_protects_uncommitted_work_keeps_the_branch_and_restoring_brings_it_
     let err = client.workspace_archive(&workspace.id, false).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NeedsForce));
     assert!(worktree.join("work.txt").exists());
+    // Its record said it was being archived, and is put back.
+    assert_eq!(client.workspace_list(false).unwrap()[0].status, WorkspaceStatus::Ready);
     client.session_prompt(&session.id, "say:the agent was left running by the refused archive", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
     let started = events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();

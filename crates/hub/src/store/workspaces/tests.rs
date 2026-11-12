@@ -3,7 +3,7 @@ use protocol::model::{
 };
 
 use super::super::tests::{store_with_session, workspace_w};
-use super::super::{Made, now_ms};
+use super::super::{Ended, Made, Move, now_ms};
 use super::super::{Store, older, schema};
 
 fn open() -> PullRequest {
@@ -143,4 +143,50 @@ fn reading_the_same_branches_again_changes_nothing_and_says_what_they_were() {
     assert_eq!((again.before, again.workspace), (Some(on("aspen")), None));
     assert_eq!(switched.before, Some(on("aspen")));
     assert!(switched.workspace.unwrap().rev > read_first.rev);
+}
+
+/// Starting is what keeps a second request from archiving or restoring it too, and putting it back leaves it as it was,
+/// when it was archived included.
+#[test]
+fn a_workspace_is_moved_by_one_request_at_a_time_and_put_back_as_it_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let id = WorkspaceId::from("w");
+    let ready = store.get_workspace(&id).unwrap();
+
+    let archiving = store.start_move(&id, Move::Archive).unwrap().unwrap();
+    let twice = store.start_move(&id, Move::Archive).unwrap();
+    let restoring_too = store.start_move(&id, Move::Restore).unwrap();
+    let put_back = store.end_move(&id, Move::Archive, Ended::PutBack).unwrap();
+
+    assert_eq!(archiving.status, WorkspaceStatus::Archiving);
+    assert!(archiving.rev > ready.rev, "so the feed tells every client");
+    assert_eq!((twice, restoring_too), (None, None));
+    assert_eq!((put_back.status, put_back.archived_at_ms), (WorkspaceStatus::Ready, None));
+    assert!(put_back.rev > archiving.rev);
+
+    store.start_move(&id, Move::Archive).unwrap().unwrap();
+    let archived = store.end_move(&id, Move::Archive, Ended::Done).unwrap();
+    let restoring = store.start_move(&id, Move::Restore).unwrap().unwrap();
+    let not_restored = store.end_move(&id, Move::Restore, Ended::PutBack).unwrap();
+    store.start_move(&id, Move::Restore).unwrap().unwrap();
+    let restored = store.end_move(&id, Move::Restore, Ended::Done).unwrap();
+
+    let archived_at = archived.archived_at_ms;
+    assert_eq!(archived.status, WorkspaceStatus::Archived);
+    assert!(archived_at.is_some());
+    assert_eq!((restoring.status, restoring.archived_at_ms), (WorkspaceStatus::Restoring, archived_at));
+    assert_eq!((not_restored.status, not_restored.archived_at_ms), (WorkspaceStatus::Archived, archived_at));
+    assert_eq!((restored.status, restored.archived_at_ms), (WorkspaceStatus::Ready, None));
+}
+
+/// Putting back only undoes what the move it's for did.
+#[test]
+fn putting_back_leaves_a_workspace_the_move_isnt_holding() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+
+    let left = store.end_move(&"w".into(), Move::Restore, Ended::PutBack).unwrap();
+
+    assert_eq!(left.status, WorkspaceStatus::Ready, "it wasn't being restored, so it isn't put back as archived");
 }

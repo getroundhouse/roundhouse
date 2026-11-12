@@ -2,6 +2,13 @@ use protocol::model::WaitUntil;
 
 use super::*;
 use crate::store::tests::{idle_session, store_with_session};
+use crate::store::{Ended, Move};
+
+/// Archives the workspace `w`, as the hub does once its worktree has gone.
+fn archive(store: &Store) -> protocol::model::Workspace {
+    store.start_move(&"w".into(), Move::Archive).unwrap().expect("it was ready");
+    store.end_move(&"w".into(), Move::Archive, Ended::Done).unwrap()
+}
 
 /// A wait of session `s`'s, in workspace `w`, as [`store_with_session`] makes them.
 fn wait(id: &str) -> Wait {
@@ -96,7 +103,7 @@ fn closing_a_chat_or_archiving_its_workspace_ends_its_waits() {
 
     store.set_session_closed(&"s".into(), Some(3)).unwrap();
     let after_closing = (how(&store, "a"), how(&store, "b"));
-    let archived = store.set_workspace_archived(&"w".into(), true).unwrap();
+    let archived = archive(&store);
 
     let cancelled = |at_ms| Some(WaitEnded { at_ms, how: WaitEnd::Cancelled });
     assert_eq!(after_closing, (cancelled(3), None), "only the closed chat's");
@@ -152,10 +159,13 @@ fn a_wait_doesnt_start_in_a_closed_chat_or_an_archived_workspace() {
     let store = store_with_two_chats(dir.path());
     store.set_session_closed(&"s".into(), Some(3)).unwrap();
     let in_a_closed_chat = store.start_wait(&wait("a"), Seen::default());
-    store.set_workspace_archived(&"w".into(), true).unwrap();
+    store.start_move(&"w".into(), Move::Archive).unwrap();
+    let as_it_is_archived = store.start_wait(&Wait { session_id: "t".into(), ..wait("b") }, Seen::default());
+    store.end_move(&"w".into(), Move::Archive, Ended::Done).unwrap();
     let in_an_archived_workspace = store.start_wait(&Wait { session_id: "t".into(), ..wait("b") }, Seen::default());
 
     assert!(matches!(in_a_closed_chat, Err(StoreError::NotFound { .. })), "{in_a_closed_chat:?}");
+    assert!(matches!(as_it_is_archived, Err(StoreError::NotFound { .. })), "{as_it_is_archived:?}");
     assert!(matches!(in_an_archived_workspace, Err(StoreError::NotFound { .. })), "{in_an_archived_workspace:?}");
     assert!(store.workspaces_waited_on().unwrap().is_empty());
 }

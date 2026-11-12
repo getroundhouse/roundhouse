@@ -23,6 +23,48 @@ pub struct BranchesSet {
 
 const PORTS_PER_WORKSPACE: u16 = 10;
 
+/// Archiving or restoring a workspace, which its record says from when it's asked until it's done, or until it's put
+/// back as it was, when it can't be done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Move {
+    Archive,
+    Restore,
+}
+
+impl Move {
+    /// Where it starts from.
+    pub fn before(self) -> WorkspaceStatus {
+        match self {
+            Move::Archive => WorkspaceStatus::Ready,
+            Move::Restore => WorkspaceStatus::Archived,
+        }
+    }
+
+    /// What the record says meanwhile.
+    pub fn during(self) -> WorkspaceStatus {
+        match self {
+            Move::Archive => WorkspaceStatus::Archiving,
+            Move::Restore => WorkspaceStatus::Restoring,
+        }
+    }
+
+    /// Where it ends once it's done.
+    pub fn after(self) -> WorkspaceStatus {
+        match self {
+            Move::Archive => WorkspaceStatus::Archived,
+            Move::Restore => WorkspaceStatus::Ready,
+        }
+    }
+}
+
+/// How archiving or restoring a workspace ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ended {
+    Done,
+    /// It was refused, or failed, so the workspace is as it was before.
+    PutBack,
+}
+
 pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft, branches, pull_request_branch";
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
@@ -167,14 +209,64 @@ impl Store {
         self.get_workspace(id).map(Some)
     }
 
-    pub fn set_workspace_archived(&self, id: &WorkspaceId, archived: bool) -> Result<Workspace, StoreError> {
-        let (status, archived_at) =
-            if archived { (WorkspaceStatus::Archived, Some(now_ms())) } else { (WorkspaceStatus::Ready, None) };
-        lock(&self.writer).execute(
-            "UPDATE workspaces SET status = ?, archived_at_ms = ? WHERE id = ?",
-            params![text_of(&status), archived_at, id.as_str()],
+    /// Records that the workspace is being archived or restored, if it's where that starts from, so only one request
+    /// can do it at once. Returns the workspace if it was.
+    pub fn start_move(&self, id: &WorkspaceId, moving: Move) -> Result<Option<Workspace>, StoreError> {
+        let changed = lock(&self.writer).execute(
+            "UPDATE workspaces SET status = ? WHERE id = ? AND status = ?",
+            params![text_of(&moving.during()), id.as_str(), text_of(&moving.before())],
         )?;
-        self.get_workspace(id)
+        if changed == 0 {
+            return Ok(None);
+        }
+        self.get_workspace(id).map(Some)
+    }
+
+    /// Records that archiving or restoring the workspace is done, or puts it back as it was before. When it was
+    /// archived moves only as archiving is done, and goes only as restoring is.
+    pub fn end_move(&self, id: &WorkspaceId, moving: Move, ended: Ended) -> Result<Workspace, StoreError> {
+        let conn = lock(&self.writer);
+        match ended {
+            Ended::Done => {
+                let archived_at = (moving == Move::Archive).then(now_ms);
+                conn.execute(
+                    "UPDATE workspaces SET status = ?, archived_at_ms = ? WHERE id = ?",
+                    params![text_of(&moving.after()), archived_at, id.as_str()],
+                )?;
+            }
+            // Only from where the move left it, so nothing else is undone.
+            Ended::PutBack => {
+                conn.execute(
+                    "UPDATE workspaces SET status = ? WHERE id = ? AND status = ?",
+                    params![text_of(&moving.before()), id.as_str(), text_of(&moving.during())],
+                )?;
+            }
+        }
+        workspace_on(&conn, id)
+    }
+
+    /// Puts back every workspace a hub was archiving or restoring when it stopped, as it was before, since it can't
+    /// tell how far that got. Returns them as they are now.
+    pub fn put_back_moves(&self) -> Result<Vec<Workspace>, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let mut put_back = Vec::new();
+        for moving in [Move::Archive, Move::Restore] {
+            let ids: Vec<String> = {
+                let mut statement = tx.prepare_cached("SELECT id FROM workspaces WHERE status = ?")?;
+                let rows = statement.query_map([text_of(&moving.during())], |row| row.get(0))?;
+                rows.collect::<rusqlite::Result<_>>()?
+            };
+            tx.execute(
+                "UPDATE workspaces SET status = ? WHERE status = ?",
+                params![text_of(&moving.before()), text_of(&moving.during())],
+            )?;
+            for id in ids {
+                put_back.push(workspace_on(&tx, &WorkspaceId::from(id))?);
+            }
+        }
+        tx.commit()?;
+        Ok(put_back)
     }
 
     /// Records what the hub found of the workspace's pull request, and on which branch it looked. Returns the workspace

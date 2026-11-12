@@ -4,6 +4,7 @@
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{AnyElement, App, AppContext as _, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 use look::LineText;
+use protocol::model::WorkspaceStatus;
 
 use super::{Diff, Opened, PaneEvent, WorkspacePane};
 use crate::all_files::{AllFiles, AllFilesEvent};
@@ -52,9 +53,18 @@ impl WorkspacePane {
         }
     }
 
+    /// Whether the worktree can be read, which the hub refuses once the workspace is on its way out, so what was last
+    /// read of it stays until it's gone.
+    fn worktree_readable(&self) -> bool {
+        self.workspace().status == WorkspaceStatus::Ready
+    }
+
     /// Loads the diff, or loads it again, if the sidebar of changes or the file tab shows it, with what else they show
     /// of the worktree.
     pub(super) fn load_changes(&mut self, cx: &mut Context<Self>) {
+        if !self.worktree_readable() {
+            return;
+        }
         let open = self.changes_open(cx);
         match &self.diff {
             Some(diff) if open || diff.tab.is_some() => self.reread_worktree(cx),
@@ -68,7 +78,7 @@ impl WorkspacePane {
     /// such as at the end of a turn: the diff, all the files if they show, and the file the file tab shows, if it's
     /// opened from them.
     pub(super) fn reread_worktree(&mut self, cx: &mut Context<Self>) {
-        let Some(diff) = &self.diff else { return };
+        let Some(diff) = self.diff.as_ref().filter(|_| self.worktree_readable()) else { return };
         diff.review.update(cx, Review::refresh);
         if diff.tab.as_ref().is_some_and(|tab| tab.opened == Opened::File) {
             diff.viewer.update(cx, FileView::refresh);
@@ -80,6 +90,10 @@ impl WorkspacePane {
     /// screen, and otherwise once it is, since listing the files of every workspace that shows All files at every
     /// turn would be wasted.
     pub(super) fn turn_ended(&mut self, cx: &mut Context<Self>) {
+        // Such as the agents archiving stops.
+        if !self.worktree_readable() {
+            return;
+        }
         if self.on_screen() {
             self.reread_worktree(cx);
             return;

@@ -134,7 +134,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Account | An agent's account is the login its CLI runs under. A hub's accounts, once a hub serves several people, are who may use it | "Account" alone means the agent's, until hubs have their own. Then say which |
 | Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
 | Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
-| Restore | `workspace_restore` recreates an archived worktree from its branch. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
+| Restore | `workspace_restore` recreates an archived worktree from its branch, and the workspace's record says `WorkspaceStatus::Restoring` meanwhile. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
 | Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
 | Settings | The app's own, chosen in Settings and kept on this Mac, a hub's, chosen there too and kept by the hub that carries them out, or a repository's, in its `.conductor/settings.toml` files | "Settings" alone means what's chosen in Settings. Say "hub settings" for the ones a hub keeps, `HubSettings`, and "repository settings" for a repository's |
 
@@ -152,6 +152,6 @@ These sound alike, and do different things.
 | Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
 | Kill | An instance | Like stop, without the time. For a worker that isn't responding. `Provider::kill` | The next prompt starts a new one |
 | Close | A session | Stops its agent and hides it from the tabs. The history stays. `session_close` | It can be reopened with `session_reopen` |
-| Archive | A workspace | Removes the worktree and keeps the branch. Refuses if work would be lost, unless forced. `workspace_archive` | It can be restored |
+| Archive | A workspace | Removes the worktree and keeps the branch. Refuses if work would be lost, unless forced. Its record says it's being archived until it's done, or put back. `workspace_archive`, `WorkspaceStatus::Archiving` | It can be restored |
 | Destroy | An instance | Removes it. `Provider::destroy` | It's gone |
 | Discard | A half-made workspace | Removes a workspace that failed while being created, or was left by a crash. `discard_workspace`, `take_unfinished_workspaces` | It's gone |

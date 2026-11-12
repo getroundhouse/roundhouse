@@ -255,7 +255,8 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     store.set_workspace_branch(&"w".into(), &"renamed".into()).unwrap();
     newer(workspace(&store), "a branch");
     newer(store.retitle_workspace(&"w".into(), &title, Retitle::FirstLine).unwrap().record.rev, "a title");
-    newer(store.set_workspace_archived(&"w".into(), true).unwrap().rev, "archiving");
+    newer(store.start_move(&"w".into(), Move::Archive).unwrap().unwrap().rev, "being archived");
+    newer(store.end_move(&"w".into(), Move::Archive, Ended::Done).unwrap().rev, "archiving");
     let mut half_made = store.get_workspace(&"w".into()).unwrap();
     half_made.id = "w2".into();
     half_made.name = "birch".into();

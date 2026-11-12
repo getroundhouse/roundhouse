@@ -105,9 +105,14 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let none = Some(PullRequestFound { pull_request: None });
     assert_eq!((looked.id.as_str(), looked.pull_request), (workspace.id.as_str(), none));
 
+    // Each is announced as it starts, so every client shows it on its way out or back, and again once it's done.
     let archived = client.workspace_archive(&workspace.id, true).unwrap();
+    let HubNotice::Workspace(going) = sidebar.next_notice(&feed, "archiving") else { panic!() };
+    assert_eq!((going.id.as_str(), going.status), (archived.id.as_str(), WorkspaceStatus::Archiving));
     assert_eq!(sidebar.next_notice(&feed, "the archive"), HubNotice::Workspace(archived));
     let restored = client.workspace_restore(&workspace.id).unwrap();
+    let HubNotice::Workspace(coming) = sidebar.next_notice(&feed, "restoring") else { panic!() };
+    assert_eq!((coming.id.as_str(), coming.status), (restored.id.as_str(), WorkspaceStatus::Restoring));
     let HubNotice::Workspace(seen) = sidebar.next_notice(&feed, "the restore") else { panic!() };
     assert_eq!((seen.id.as_str(), seen.status), (restored.id.as_str(), WorkspaceStatus::Ready));
 }

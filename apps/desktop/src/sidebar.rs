@@ -108,10 +108,11 @@ fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
     let held = app.sidebar.hold.held(&sort, now);
     let workspaces = app.records().workspaces();
+    // One being archived is listed until it's gone, and one being restored once it's back.
     let line = |w: usize| match workspaces[w].status {
-        WorkspaceStatus::Ready => Some(Line::Workspace(w)),
+        WorkspaceStatus::Ready | WorkspaceStatus::Archiving => Some(Line::Workspace(w)),
         WorkspaceStatus::Creating => Some(Line::Creating(w)),
-        WorkspaceStatus::Archived | WorkspaceStatus::Unknown => None,
+        WorkspaceStatus::Archived | WorkspaceStatus::Restoring | WorkspaceStatus::Unknown => None,
     };
     for (r, repo) in app.records().repos().iter().enumerate() {
         lines.push(Line::Repo(r));
@@ -158,9 +159,10 @@ pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
 }
 
 /// Whether the sidebar lists this workspace, to be opened. An archived one is only in Home, which can show it and bring
-/// it back, and one being made shows only as a note until it's ready.
+/// it back, and one being made shows only as a note until it's ready. One being archived is still there until it's
+/// gone.
 pub(crate) fn lists(workspace: &Workspace) -> bool {
-    workspace.status == WorkspaceStatus::Ready
+    matches!(workspace.status, WorkspaceStatus::Ready | WorkspaceStatus::Archiving)
 }
 
 /// The space each line takes: its height and the gap below it. Only the height is used, since the list is as wide as
