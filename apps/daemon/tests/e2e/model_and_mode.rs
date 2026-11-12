@@ -8,9 +8,7 @@ use std::time::{Duration, Instant};
 use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
-use protocol::model::{
-    AgentKind, DEFAULT_EFFORT, DEFAULT_MODEL, ModelName, PermissionMode, SessionSettings, SessionSettingsChange,
-};
+use protocol::model::{AgentKind, ModelName, PermissionMode, SessionSettingsChange};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
@@ -88,7 +86,7 @@ fn a_change_with_no_agent_running_is_saved_and_a_change_of_mode_goes_in_the_log(
     let (_, session) = stack.workspace(&client);
     let changed = client.session_configure(&session.id, in_mode(Plan)).unwrap();
     assert_eq!(changed.permission_mode, Plan);
-    assert_eq!(changed.model, DEFAULT_MODEL, "None leaves a setting as it is");
+    assert_eq!(changed.model, agents::claude::description().defaults.model, "None leaves a setting as it is");
     let changed = client.session_configure(&session.id, on_model("haiku")).unwrap();
     assert_eq!(changed.permission_mode, Plan, "None leaves a setting as it is");
     client.session_configure(&session.id, in_mode(Plan)).unwrap();
@@ -102,17 +100,18 @@ fn a_change_with_no_agent_running_is_saved_and_a_change_of_mode_goes_in_the_log(
 }
 
 #[test]
-fn a_chat_made_with_no_model_or_effort_names_the_defaults_to_its_agent() {
+fn a_chat_made_with_no_model_or_effort_names_what_its_agents_description_says_to_its_agent() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    assert_eq!(session.settings(), SessionSettings::default());
+    let defaults = agents::claude::description().defaults;
+    assert_eq!(session.settings(), defaults);
 
     client.session_prompt(&session.id, "say:ready", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
 
     let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
-    let launched = format!("--model {} --effort {}", DEFAULT_MODEL.as_str(), DEFAULT_EFFORT.as_str().unwrap());
+    let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
     assert!(args.contains(&launched), "{args}");
 }
 

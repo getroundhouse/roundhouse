@@ -69,8 +69,10 @@ impl WorkspacePane {
         }
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
-        // As `Compact now` does, so it's recorded and drawn as a compaction whichever way it was asked.
+        // As `Compact now` does, so it's recorded and drawn as a compaction whichever way it was asked. To an agent that
+        // doesn't compact when asked, or one the hub doesn't describe, it goes as a prompt, as any other text does.
         if self.attached.is_empty()
+            && self.compacts()
             && let Some(rest) = after_compact(&text)
         {
             let keeping = (!rest.is_empty()).then(|| rest.to_string());
@@ -172,9 +174,9 @@ impl WorkspacePane {
         });
     }
 
-    /// The model and its effort of the chat showing.
+    /// The model and its effort of the chat showing, and what its agent is offered.
     fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let now_ms = look::now_ms(cx);
+        let (now_ms, agent) = (look::now_ms(cx), self.agent());
         let model_and_effort =
             self.session().map(|s| (s.model.clone(), s.effort, prompt_cache::switching_note(s, now_ms)));
         let this = cx.weak_entity();
@@ -190,7 +192,7 @@ impl WorkspacePane {
             .gap_0p5()
             // Only a chat has a model, so there's none to show while the workspace's first is being made.
             .when_some(model_and_effort, |row, (model, effort, switching)| {
-                row.child(model_picker("model-picker", &model, effort, switching, models))
+                row.child(model_picker("model-picker", agent.as_ref(), &model, effort, switching, models))
             })
     }
 

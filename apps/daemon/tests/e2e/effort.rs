@@ -5,7 +5,7 @@
 use client_core::ClientError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AgentKind, DEFAULT_EFFORT, Effort, ModelName, PermissionMode, SessionSettingsChange};
+use protocol::model::{AgentKind, Effort, ModelName, PermissionMode, SessionSettingsChange};
 
 use crate::support::{Stack, assistant_text, wait_for_turn_end};
 
@@ -112,6 +112,6 @@ fn an_effort_this_hub_doesnt_know_is_refused() {
     let refused = client.session_create(&workspace.id, AgentKind::Claude, at(Effort::Unknown), None).unwrap_err();
     assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
 
-    assert_eq!(client.session_get(&session.id).unwrap().effort, DEFAULT_EFFORT);
+    assert_eq!(client.session_get(&session.id).unwrap().effort, agents::claude::description().defaults.effort);
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
 }

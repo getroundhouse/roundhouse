@@ -7,11 +7,12 @@ use std::rc::Rc;
 use client_core::session_log::SessionLog;
 use client_core::{Client, OpenSession, View};
 use gpui_kit::{
-    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, Task, Window,
+    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, SharedString, Task,
+    Window,
 };
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
-use protocol::model::{AgentKind, AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
+use protocol::model::{AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
 use crate::find::{FindLook, TextId};
@@ -42,8 +43,9 @@ use record::tick;
 pub(crate) use record::{AtWork, IdleCache};
 
 pub(crate) struct Model {
-    /// The agent the chat runs, as its record names it, which never changes.
-    pub agent: AgentKind,
+    /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and from a hub that
+    /// doesn't.
+    pub agent: Option<SharedString>,
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
@@ -71,10 +73,10 @@ pub(crate) struct Model {
 }
 
 impl Model {
-    /// One that's drawn nothing yet, for a chat with `agent`, or for its subagent tab.
-    fn with(agent: AgentKind, at_work: AtWork) -> Self {
+    /// One that's drawn nothing yet, for a chat or for its subagent tab.
+    fn with(at_work: AtWork) -> Self {
         Model {
-            agent,
+            agent: None,
             folds: Folds::default(),
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),
@@ -89,11 +91,11 @@ impl Model {
     }
 }
 
-/// An idle chat with Claude, for tests that draw rows without one.
+/// An idle chat, for tests that draw rows without one.
 #[cfg(test)]
 impl Default for Model {
     fn default() -> Self {
-        Model::with(AgentKind::Claude, AtWork::default())
+        Model::with(AtWork::default())
     }
 }
 
@@ -159,7 +161,7 @@ impl Transcript {
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
-        let model = Rc::new(RefCell::new(Model::with(session.agent, at_work)));
+        let model = Rc::new(RefCell::new(Model::with(at_work)));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {

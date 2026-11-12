@@ -170,9 +170,9 @@ impl World {
             workspace_id: workspace.clone(),
             agent: AgentKind::Claude,
             // As the hub gives a chat that names neither.
-            model: protocol::model::DEFAULT_MODEL,
+            model: ModelName::named("opus"),
             permission_mode: protocol::model::PermissionMode::FullAccess,
-            effort: protocol::model::DEFAULT_EFFORT,
+            effort: protocol::model::Effort::Xhigh,
             status,
             last_seq,
             created_at_ms,

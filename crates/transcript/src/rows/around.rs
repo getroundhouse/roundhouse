@@ -4,8 +4,9 @@
 use client_core::Approval;
 use client_core::calls::agent;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
+use gpui_kit::SharedString;
 use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
-use protocol::model::{AgentKind, PermissionMode, Seq, ToolUseId};
+use protocol::model::{PermissionMode, Seq, ToolUseId};
 
 use crate::attachments::{self, Carried};
 use crate::folds::Fold;
@@ -40,8 +41,8 @@ pub(super) struct Around {
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
     pub(super) prompt: PromptState,
-    /// For a turn's end: the agent the chat runs, which its card names.
-    pub(super) agent: AgentKind,
+    /// For a turn's end: what the agent the chat runs is called, which its card names, if the hub has said.
+    pub(super) agent: Option<SharedString>,
     /// For the newest turn's end: what the cache holds of the conversation while it can expire, which its line and
     /// card say. An older turn's say nothing of it, since only the newest can still be warm.
     pub(super) cache: Option<IdleCache>,
@@ -105,7 +106,7 @@ impl Around {
             closes_a_question: false,
             carried: Vec::new(),
             prompt: PromptState::Taken,
-            agent: m.agent,
+            agent: m.agent.clone(),
             cache: (seq == m.at_work.reply_seq).then(|| m.at_work.cache.clone()).flatten(),
             mode_before: None,
             open: false,

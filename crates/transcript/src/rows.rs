@@ -286,7 +286,7 @@ fn render_event(
             let only_lines = blocks.iter().all(is_a_line);
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, around.cache.as_ref(), find, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
         EventBody::ApprovalRequested { .. } => approval_card(seq, body, around.approval_open, shared, cx),
         // A question's line says what became of it.
         EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),

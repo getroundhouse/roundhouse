@@ -1,14 +1,15 @@
 //! Following the session's record: whether the agent is working on a turn and since when, what it's running in the
 //! background, and the wait it has open on the pull request, which the transcript's last row draws, and what the cache
 //! holds of the conversation, which the newest turn's line and card say. Also its subagents' records, which their calls
-//! are drawn from, and in the subagent tab, the one it shows, which says whether that one is at work.
+//! are drawn from, and in the subagent tab, the one it shows, which says whether that one is at work, and what the hub
+//! says of the chat's agent.
 
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui_kit::{Context, Task};
+use gpui_kit::{Context, SharedString, Task};
 use protocol::event::{AgentTask, TaskKind};
-use protocol::model::{PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus, Wait};
+use protocol::model::{AgentDescription, PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus, Wait};
 
 use super::Transcript;
 use crate::prose::Of;
@@ -73,6 +74,17 @@ impl AtWork {
 }
 
 impl Transcript {
+    /// Takes what the hub says of the agent the chat runs, which a turn's card names, and draws every row again if that
+    /// changed, which only a new connection does.
+    pub fn set_agent(&mut self, agent: Option<&AgentDescription>, cx: &mut Context<Self>) {
+        let named = agent.map(|agent| SharedString::from(agent.name.clone()));
+        if std::mem::replace(&mut self.model.borrow_mut().agent, named.clone()) != named {
+            let rows = self.list.row_count();
+            self.list.out_of_date(0..rows);
+            cx.notify();
+        }
+    }
+
     /// Follows the session's record.
     pub fn set_session(&mut self, session: &Session, cx: &mut Context<Self>) {
         let at_work = AtWork::of(session);

@@ -19,7 +19,7 @@ fn at(effort: Effort) -> SessionSettingsChange {
 fn an_effort_is_kept_until_another_is_set() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    assert_eq!(effort(&store), protocol::model::DEFAULT_EFFORT);
+    assert_eq!(effort(&store), Effort::Xhigh);
 
     store.set_session_options(&"s".into(), &at(Effort::Medium)).unwrap();
     assert_eq!(effort(&store), Effort::Medium);

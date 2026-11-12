@@ -10,7 +10,7 @@ use client_core::session_log::{SessionLog, Settled};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{AgentKind, Subagent, ToolUseId};
+use protocol::model::{Subagent, ToolUseId};
 
 use super::is_loaded;
 use crate::rows::{found_in_row, rows_to_count};
@@ -73,7 +73,7 @@ pub(super) fn counted_in(
     }
     // Its own, since what it remembers of where calls are is for the transcript's log, and the agent it names only
     // says how a turn's card reads, which isn't found.
-    let mut m = Model::with(AgentKind::Claude, AtWork::default());
+    let mut m = Model::with(AtWork::default());
     m.subagents = records.into_iter().map(|(call, record)| (call, Rc::new(record))).collect();
     let rows: BTreeSet<usize> = holding.iter().flat_map(|place| rows_to_count(&log, &m, *place)).collect();
     rows.into_iter()

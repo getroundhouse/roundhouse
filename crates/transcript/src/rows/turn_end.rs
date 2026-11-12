@@ -5,11 +5,11 @@ use std::time::Duration;
 use gpui_kit::component::clipboard::Clipboard;
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::{
-    Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
+    Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
+    TestSupportExt as _, div,
 };
 use look::Hand as _;
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
-use protocol::model::AgentKind;
 
 use super::{empty, marked_line, muted_line, row, turn_times};
 use crate::find::{FindLook, Marks, Part};
@@ -21,13 +21,13 @@ mod cache;
 mod card;
 mod words;
 
-/// How the turn `ended`, in a chat with `agent`. A finished one says how long it took and when it ended, with a button
+/// How the turn `ended`, in a chat whose agent is called `agent`. A finished one says how long it took and when it ended, with a button
 /// that copies what the agent said last, its `result`, and resting the pointer on what it says shows the turn's card.
 /// The newest one's also says what the cache holds, `cache`, as [`cache`] says. A failed one says what went wrong,
 /// with its matches.
 pub(super) fn line(
     ended: &SessionEvent,
-    agent: AgentKind,
+    agent: Option<SharedString>,
     cache: Option<&IdleCache>,
     find: &FindLook,
     cx: &App,

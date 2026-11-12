@@ -21,7 +21,7 @@ fn typed_elsewhere(text: &str) -> WorkspaceDraftToKeep {
 }
 
 fn chosen(ui: &Ui<'_>) -> (ModelName, Effort) {
-    ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen())
+    ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen()).expect("the hub describes the agent the first chat runs")
 }
 
 #[gpui_kit::test]

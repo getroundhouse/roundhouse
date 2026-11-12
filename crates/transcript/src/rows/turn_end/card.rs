@@ -5,12 +5,12 @@
 
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
 };
 use look::{InRegion as _, Region};
 use protocol::event::TokenUsage;
-use protocol::model::{AgentKind, ModelName, PromptCache};
+use protocol::model::{ModelName, PromptCache};
 
 use super::words::{self, Moment};
 
@@ -19,7 +19,8 @@ const MIN_WIDTH: Pixels = px(220.);
 
 /// What a finished turn's end recorded, for its card.
 pub(super) struct TurnCard {
-    pub(super) agent: AgentKind,
+    /// What the agent is called, if the hub has said.
+    pub(super) agent: Option<SharedString>,
     pub(super) models: Vec<ModelName>,
     /// By the hub's clock. `None` from a hub too old to say.
     pub(super) started_at_ms: Option<i64>,
@@ -36,7 +37,7 @@ impl TurnCard {
     /// a table of when the turn started and ended and how long it took, then one of what it asked of the models, then
     /// what the cache holds, each under a rule.
     pub(super) fn card(&self, cx: &App) -> AnyElement {
-        let heading = words::heading(&self.models, self.agent);
+        let heading = words::heading(&self.models, self.agent.as_deref());
         let times = Moment::at(self.ended_at_ms, cx).map(|ended| {
             let started = self.started_at_ms.and_then(|at_ms| Moment::at(at_ms, cx));
             words::times(started.as_ref(), &ended, self.took.clone())

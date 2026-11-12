@@ -72,8 +72,12 @@ impl NewWorkspaceDialog {
     /// dialog's one main action.
     fn footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.weak_entity();
-        let picker = model_picker("new-workspace-model", &self.model, self.effort, None, move |picked, _, cx| {
-            let _ = this.update(cx, |t, cx| t.pick(picked, cx));
+        // Only once there's something to show, which a hub that doesn't describe its agents leaves to the hub.
+        let picker = self.shown().map(|(model, effort)| {
+            model_picker("new-workspace-model", self.agent(), &model, effort, None, move |picked, _, cx| {
+                let _ = this.update(cx, |t, cx| t.pick(picked, cx));
+            })
+            .into_any_element()
         });
         let field = self.prompt.focus_handle(cx);
         let plan = Plan::of(self.planning());
@@ -95,7 +99,7 @@ impl NewWorkspaceDialog {
             .gap_2()
             .child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
-            .child(h_flex().flex_1().min_w_0().child(picker))
+            .child(h_flex().flex_1().min_w_0().children(picker))
             .child(create)
     }
 }

@@ -12,7 +12,7 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::hover_card::HoverCard;
 use gpui_kit::{
     Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px, relative,
+    SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px, relative,
 };
 use protocol::model::{Account, AccountId, Session, UsageLimit};
 
@@ -78,12 +78,14 @@ impl WorkspacePane {
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
         let ring = middle().size(Slot::SIZE).child(div().size(RING).child(ring(used, cx)));
-        // There's no asking while the agent is on a turn, or with no hub to ask.
-        let (pane, off) = (cx.weak_entity(), session.status.in_turn() || self.hub == Hub::Away);
+        // There's no asking while the agent is on a turn, or with no hub to ask, nor an agent that doesn't compact when
+        // asked.
+        let (pane, off, compacts) =
+            (cx.weak_entity(), session.status.in_turn() || self.hub == Hub::Away, self.compacts());
         // It holds a button, so it waits a moment for the pointer to cross the gap between the ring and the card.
         let hover = card_over("context-hover", ring)
             .close_delay(CROSSING)
-            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), &pane, off, cx));
+            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), &pane, compacts, off, cx));
         // Said in words too, since the ring alone says nothing to someone who can't see it.
         let said = format!("Context {} used", words::percent(used));
         Some(Slot::holding(div().id("context").role(Role::Status).aria_label(said).child(hover).test_support()))
@@ -94,14 +96,17 @@ impl WorkspacePane {
     /// under the account hears of a change to its limits, in whichever workspace. They're bars and not a second ring,
     /// so the two can't be taken for each other, and in the ring's colour for the same reason.
     pub(super) fn usage_bars(&self, usage: Option<&Usage>, cx: &mut Context<Self>) -> Option<Slot> {
-        let agent = self.session()?.agent;
+        // Only beside a chat, as its agent's limits.
+        self.session()?;
+        let called = SharedString::from(words::usage_heading(self.agent().as_ref()).to_string());
         let usage = usage.filter(|usage| !usage.limits.is_empty())?.clone();
         let left: Vec<f32> = usage.limits.iter().map(|(_, limit)| f32::from(limit.left_percent()) / 100.).collect();
         let least = left.iter().copied().reduce(f32::min)?;
         let bars = middle().size(Slot::SIZE).child(bars(&left, cx));
-        let hover = card_over("usage-hover", bars).content(move |_, _, cx| card::usage_card(&usage, agent, cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
-        let said = format!("{} {} left", words::usage_heading(agent), words::whole_percent(least));
+        let said = format!("{called} {} left", words::whole_percent(least));
+        let hover =
+            card_over("usage-hover", bars).content(move |_, _, cx| card::usage_card(&usage, called.clone(), cx));
         Some(Slot::holding(div().id("usage").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
 }

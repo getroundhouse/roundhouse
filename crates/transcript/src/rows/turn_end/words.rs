@@ -1,16 +1,16 @@
 //! What a finished turn's card says in words and numbers.
 
 use gpui_kit::App;
-use protocol::model::{AgentKind, ModelName};
+use protocol::model::ModelName;
 
 use crate::model_names::model_name;
 
-/// What answered: the models the agent's replies came from, in the order they first did, and the agent, as "Opus 5.5
-/// via Claude Code". Only the agent, from a turn whose end doesn't say which models, and only the models with an agent
-/// this build has no name for. `None` with neither.
-pub(super) fn heading(models: &[ModelName], agent: AgentKind) -> Option<String> {
+/// What answered: the models the agent's replies came from, in the order they first did, and the agent, as its
+/// description calls it, as "Opus 5.5 via Claude Code". Only the agent, from a turn whose end doesn't say which models,
+/// and only the models with an agent the hub hasn't described. `None` with neither.
+pub(super) fn heading(models: &[ModelName], agent: Option<&str>) -> Option<String> {
     let models = names(models);
-    match (models, agent_name(agent)) {
+    match (models, agent) {
         (Some(models), Some(agent)) => Some(format!("{models} via {agent}")),
         (models, agent) => models.or(agent.map(str::to_string)),
     }
@@ -26,14 +26,6 @@ fn names(models: &[ModelName]) -> Option<String> {
     }
     let last = names.pop()?;
     Some(if names.is_empty() { last } else { format!("{} and {last}", names.join(", ")) })
-}
-
-/// What an agent is called. `None` for one this build doesn't know.
-fn agent_name(agent: AgentKind) -> Option<&'static str> {
-    match agent {
-        AgentKind::Claude => Some("Claude Code"),
-        AgentKind::Unknown => None,
-    }
 }
 
 /// A moment as the card says it: its day, with its year, its time of day, and both together.
@@ -78,16 +70,16 @@ mod tests {
         let models = |ids: &[&'static str]| ids.iter().map(|id| ModelName::named(id)).collect::<Vec<_>>();
         let heading = |ids: &[&'static str], agent| heading(&models(ids), agent);
 
-        assert_eq!(heading(&["claude-opus-5-5"], AgentKind::Claude).as_deref(), Some("Opus 5.5 via Claude Code"));
+        assert_eq!(heading(&["claude-opus-5-5"], Some("Claude Code")).as_deref(), Some("Opus 5.5 via Claude Code"));
         assert_eq!(
-            heading(&["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"], AgentKind::Claude).as_deref(),
+            heading(&["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"], Some("Claude Code")).as_deref(),
             Some("Sonnet 5.5, Haiku 5.5 and Opus 5.5 via Claude Code")
         );
         let one_twice = ["claude-opus-5-5", "claude-opus-5-5[1m]"];
-        assert_eq!(heading(&one_twice, AgentKind::Claude).as_deref(), Some("Opus 5.5 via Claude Code"));
-        assert_eq!(heading(&[], AgentKind::Claude).as_deref(), Some("Claude Code"), "a turn that doesn't say");
-        assert_eq!(heading(&["claude-opus-5-5"], AgentKind::Unknown).as_deref(), Some("Opus 5.5"));
-        assert_eq!(heading(&[], AgentKind::Unknown), None);
+        assert_eq!(heading(&one_twice, Some("Claude Code")).as_deref(), Some("Opus 5.5 via Claude Code"));
+        assert_eq!(heading(&[], Some("Claude Code")).as_deref(), Some("Claude Code"), "a turn that doesn't say");
+        assert_eq!(heading(&["claude-opus-5-5"], None).as_deref(), Some("Opus 5.5"));
+        assert_eq!(heading(&[], None), None);
     }
 
     /// Said together as look says them.

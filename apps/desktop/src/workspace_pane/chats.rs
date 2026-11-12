@@ -5,7 +5,7 @@ use std::time::Duration;
 use client_core::ClientError;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{AgentKind, Effort, Record, Session, SessionId, SessionSettingsChange};
+use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
@@ -38,8 +38,8 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let id = self.workspace.id.clone();
-        let finding = self.client.start(move |client| client.session_ensure(&id, AgentKind::Claude));
+        let (id, agent) = (self.workspace.id.clone(), self.new_chat_agent());
+        let finding = self.client.start(move |client| client.session_ensure(&id, agent));
         cx.spawn(async move |this, cx| {
             let found = finding.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(found, cx));
@@ -53,15 +53,15 @@ impl WorkspacePane {
             return;
         }
         self.creating_chat = true;
-        let id = self.workspace.id.clone();
+        let (id, agent) = (self.workspace.id.clone(), self.new_chat_agent());
         // It keeps the model and effort, but not plan mode, which belongs to the task at hand.
         let (model, effort) = (self.session().map(|s| s.model.clone()), self.session().map(|s| s.effort));
-        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets the hub's
-        // default.
+        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets what its agent
+        // starts a chat with.
         let options = SessionSettingsChange { model, permission_mode: None, effort: effort.and_then(Effort::known) };
-        let creating = self.client.start(move |client| {
-            client.session_create(&id, AgentKind::Claude, options, Some(client_core::new_request_id()))
-        });
+        let creating = self
+            .client
+            .start(move |client| client.session_create(&id, agent, options, Some(client_core::new_request_id())));
         cx.spawn(async move |this, cx| {
             let created = creating.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(created, cx));
@@ -186,6 +186,7 @@ impl WorkspacePane {
             TranscriptEvent::FindClosed => this.with_window(cx, |t, window, cx| t.focus_showing(window, cx)),
         });
         self.transcripts.insert(session.id, (view, events));
+        self.pass_on_agents(cx);
     }
 
     /// Moves to the tab before or after this one, in the order they're drawn, wrapping around: the file tab, the

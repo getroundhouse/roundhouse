@@ -25,6 +25,9 @@ pub(crate) enum Cmd {
     Workspace(WorkspaceCmd),
     #[command(subcommand)]
     Session(SessionCmd),
+    /// What each kind of agent the hub runs is offered: its models, efforts and approval modes, with what a chat starts
+    /// with marked.
+    Agents,
     /// Send a prompt, then follow until the agent stops working.
     Send {
         /// A session ID or prefix, or a workspace name for its newest session.
@@ -149,14 +152,14 @@ pub(crate) enum SessionCmd {
     /// Start a session. Nothing runs until the first prompt.
     New {
         workspace: String,
-        /// Such as fable, opus, sonnet or haiku, or a full model ID. Leave it out for the hub's
-        /// default.
+        /// One the agent is offered, as `roundhouse agents` lists them, or a full model ID. Leave it
+        /// out for what the agent starts a chat with.
         #[arg(long, value_parser = model())]
         model: Option<ModelName>,
         /// plan, or bypassPermissions for full access, which is what leaving it out gives.
         #[arg(long, value_parser = mode())]
         permission_mode: Option<PermissionMode>,
-        /// How hard the agent thinks. Leave it out for the hub's default.
+        /// How hard the agent thinks. Leave it out for what the agent starts a chat with.
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
     },

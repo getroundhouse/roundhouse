@@ -26,6 +26,7 @@ pub(crate) use keeping::drafted;
 pub use reading::Mark;
 use reading::Reading;
 
+mod agent;
 mod attaching;
 mod changes_sidebar;
 mod chats;
@@ -298,6 +299,7 @@ impl WorkspacePane {
             self.set_sessions(sessions, cx);
         }
         self.pass_on_subagents(cx);
+        self.pass_on_agents(cx);
         if comments != self.comments {
             if let Some(diff) = &self.diff {
                 diff.review.update(cx, |r, cx| r.set_comments(comments.clone(), cx));

@@ -1,5 +1,7 @@
 use protocol::attachment::MediaType;
-use protocol::model::{DEFAULT_MODEL, Effort, RepoId};
+use protocol::model::{Effort, ModelName, RepoId};
+
+const OPUS: ModelName = ModelName::named("opus");
 
 use super::*;
 use crate::store::tests::store_with_session;
@@ -13,7 +15,7 @@ fn typed(text: &str, files: &[&str]) -> WorkspaceDraftToKeep {
         repo_id: Some(RepoId::from("r")),
         text: text.to_string(),
         files: files.iter().map(|&id| id.into()).collect(),
-        model: Some(DEFAULT_MODEL),
+        model: Some(OPUS),
         effort: Some(Effort::High),
         plan: true,
     }
@@ -43,7 +45,7 @@ fn whats_kept_is_there_until_something_else_is_and_the_same_again_changes_nothin
 
     assert!(changed && kept.rev > before);
     assert_eq!((kept.repo_id.as_ref(), kept.text.as_str()), (Some(&RepoId::from("r")), "fix the login"));
-    assert_eq!((kept.model.clone(), kept.effort, kept.plan), (Some(DEFAULT_MODEL), Some(Effort::High), true));
+    assert_eq!((kept.model.clone(), kept.effort, kept.plan), (Some(OPUS), Some(Effort::High), true));
     assert!(!changed_again);
     assert_eq!(again, kept, "the same revision");
     assert!(replaced.rev > kept.rev);

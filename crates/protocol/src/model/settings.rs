@@ -5,28 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use super::{Effort, ModelName, PermissionMode};
 
-/// The model a session runs with until another is chosen. An alias, so it stays the newest of its kind without a release
-/// here. `docs/spec/chats.md` has why it's this one.
-pub const DEFAULT_MODEL: ModelName = ModelName::named("opus");
-
-/// The effort a session runs with until another is chosen.
-pub const DEFAULT_EFFORT: Effort = Effort::Xhigh;
-
 /// What a session runs with. It always names a model, an approval mode and an effort, so the agent's CLI never picks
-/// any of them for itself.
+/// any of them for itself. What a session runs with until another is chosen is its agent's to say, as
+/// [`AgentDescription::defaults`](super::AgentDescription::defaults) does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SessionSettings {
     pub model: ModelName,
     pub permission_mode: PermissionMode,
     pub effort: Effort,
-}
-
-impl Default for SessionSettings {
-    /// What a session runs with until something else is chosen: [`DEFAULT_MODEL`] and [`DEFAULT_EFFORT`], with full
-    /// access.
-    fn default() -> Self {
-        SessionSettings { model: DEFAULT_MODEL, permission_mode: PermissionMode::FullAccess, effort: DEFAULT_EFFORT }
-    }
 }
 
 impl SessionSettings {
@@ -45,7 +31,7 @@ impl SessionSettings {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionSettingsChange {
     pub model: Option<ModelName>,
-    /// Full access or plan mode, since the hub refuses [`PermissionMode::Unknown`].
+    /// One the agent is offered, since the hub refuses any other, [`PermissionMode::Unknown`] included.
     pub permission_mode: Option<PermissionMode>,
     #[serde(default)]
     pub effort: Option<Effort>,

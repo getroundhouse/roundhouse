@@ -8,7 +8,7 @@ use std::time::Duration;
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput, ToolServer};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId, SessionSettings};
+use protocol::model::{AgentKind, PermissionMode, RunId};
 use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -33,7 +33,7 @@ fn spec(dir: &Path) -> AgentSpec {
         cwd: dir.to_string_lossy().into_owned(),
         agent_session_id: "s".into(),
         resume: false,
-        settings: SessionSettings::default(),
+        settings: agents::claude::description().defaults,
         env: vec![],
         tools_token: None,
     }

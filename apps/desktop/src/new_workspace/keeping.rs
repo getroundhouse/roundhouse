@@ -64,8 +64,8 @@ impl NewWorkspaceDialog {
             repo_id: Some(self.repo.clone()),
             text: self.prompt.read(cx).text().to_string(),
             files: coming_back.chain(self.attached.ids()).collect(),
-            model: Some(self.model.clone()),
-            effort: Some(self.effort),
+            model: self.model.clone(),
+            effort: self.effort,
             plan: self.planning(),
         }
     }
@@ -80,8 +80,8 @@ impl NewWorkspaceDialog {
         here.text == kept.text
             && files == there
             && repo.is_none_or(|repo| *repo == self.repo)
-            && kept.model.as_ref().is_none_or(|model| *model == self.model)
-            && kept.effort.is_none_or(|effort| effort == self.effort)
+            && kept.model.as_ref().is_none_or(|model| Some(model) == self.model.as_ref())
+            && kept.effort.is_none_or(|effort| Some(effort) == self.effort)
             && kept.plan == self.planning()
     }
 
@@ -109,10 +109,10 @@ impl NewWorkspaceDialog {
             self.repo = repo;
         }
         if let Some(model) = kept.model {
-            self.model = model;
+            self.model = Some(model);
         }
         if let Some(effort) = kept.effort {
-            self.effort = effort;
+            self.effort = Some(effort);
         }
         self.mode = if kept.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
         // A file it stopped naming is let go of by whoever took it out.

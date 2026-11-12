@@ -45,7 +45,7 @@ pub use pull_request::{
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
 pub use session::{AgentKind, Session, SessionStatus};
-pub use settings::{DEFAULT_EFFORT, DEFAULT_MODEL, SessionSettings, SessionSettingsChange};
+pub use settings::{SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};

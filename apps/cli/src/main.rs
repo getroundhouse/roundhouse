@@ -1,5 +1,6 @@
 //! Command-line client. It only talks to the hub, the same way the desktop app will.
 
+mod agents;
 mod args;
 mod render;
 mod run;
