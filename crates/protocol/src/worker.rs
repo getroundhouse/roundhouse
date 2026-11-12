@@ -9,8 +9,9 @@ use crate::attachment::{AttachmentBytes, AttachmentFile, NewAttachment};
 use crate::client::ApiError;
 use crate::event::{ApprovalDecision, EventBody};
 use crate::model::{
-    AgentAccount, AgentKind, AgentSessionId, ApprovalId, CacheRequest, CommitId, ContextUsage, FileContents, GitDiff,
-    GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange, UsageLimit, WorktreeFiles,
+    AgentAccount, AgentKind, AgentSessionId, ApprovalId, CacheRequest, CommitId, ContextUsage, FileContents,
+    FileOpened, FilePages, GitDiff, GitStatus, PullRequest, RunId, Seq, SessionId, SessionSettings,
+    SessionSettingsChange, UsageLimit, WorktreeFiles,
 };
 use crate::tail::StreamDelta;
 
@@ -114,6 +115,21 @@ pub enum WorkerRequest {
         path: String,
         commit: CommitId,
         file: String,
+    },
+    /// Opens the file at `file` as `commit` held it, relative to the worktree at `path`, from the worktree's
+    /// repository, to be read a page at a time.
+    FileOpenAt {
+        path: String,
+        commit: CommitId,
+        file: String,
+    },
+    /// Pages of a file opened with `FileOpenAt`, with `page_lines` lines a page.
+    FilePages {
+        path: String,
+        commit: CommitId,
+        file: String,
+        page_lines: u32,
+        pages: Vec<u32>,
     },
     AgentStart(AgentSpec),
     /// Each of `attachments` has been written into the worktree first. `prompt` is where it's recorded, which the
@@ -227,6 +243,8 @@ pub enum WorkerResponse {
     },
     Files(WorktreeFiles),
     FileContents(FileContents),
+    FileOpened(FileOpened),
+    FilePages(FilePages),
     /// `run` is the one already going if `already_running` is set.
     AgentStarted {
         pid: u32,

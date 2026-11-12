@@ -70,6 +70,8 @@ libc = "0.2"
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does.
 markdown = "1"
+# Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
+memchr = "2"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width.

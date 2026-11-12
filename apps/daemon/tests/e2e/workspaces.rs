@@ -8,8 +8,8 @@ use client_core::{ClientError, new_request_id};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, ClientRequestId, DiffSide, FileContents, RecordKey, SessionSettingsChange, SessionStatus,
-    WorkspaceStatus,
+    AgentKind, ClientRequestId, DiffSide, FileContents, FileOpened, FilePage, PageLine, RecordKey,
+    SessionSettingsChange, SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{
@@ -123,8 +123,8 @@ fn status_and_diff_come_from_the_worker() {
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
 }
 
-/// The worker lists and reads them, as they are and as the diff's base has them, and its own tests cover what it
-/// leaves out and refuses.
+/// The worker lists and reads them, as they are and as the diff's base has them, whole or a page at a time, and its
+/// own tests cover what it leaves out and refuses.
 #[test]
 fn a_client_browses_the_worktree_s_files_through_the_hub() {
     let stack = Stack::start();
@@ -140,6 +140,10 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
     let folder = client.workspace_folder_read(&workspace.id, "build/out").unwrap();
     let read = client.workspace_file_read(&workspace.id, "src/main.rs").unwrap();
     let before = client.workspace_file_read_at(&workspace.id, &base, "a.txt").unwrap();
+    let FileOpened::Text(opened) = client.workspace_file_open_at(&workspace.id, &base, "a.txt").unwrap() else {
+        panic!("a.txt isn't text");
+    };
+    let pages = client.workspace_file_pages(&workspace.id, &base, "a.txt", opened.page_lines, &[0]).unwrap();
 
     assert!(files.paths.iter().any(|path| path == "a.txt"), "a tracked file: {:?}", files.paths);
     assert!(files.paths.iter().any(|path| path == "src/main.rs"), "a new one: {:?}", files.paths);
@@ -147,6 +151,9 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
     assert_eq!(folder.paths, ["build/out/app.txt"]);
     assert_eq!(read, FileContents::Text { text: "fn main() {}\n".to_string() });
     assert_eq!(before, FileContents::Text { text: "one\n".to_string() }, "as the diff's base has it");
+    let one = vec![FilePage { index: 0, lines: vec![PageLine { text: "one".to_string(), cut: None }] }];
+    assert_eq!((opened.lines, &opened.pages), (1, &one), "opened to be read in pages, and small enough to come whole");
+    assert_eq!(pages.pages, one, "and read a page at a time");
 }
 
 #[test]
