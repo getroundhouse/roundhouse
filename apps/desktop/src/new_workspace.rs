@@ -13,8 +13,11 @@ use gpui_kit::{
     App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
 };
-use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
-use protocol::prompt::Prompt;
+use protocol::attachment::Attachment;
+use protocol::model::{
+    AgentDescription, AgentKind, AttachmentId, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId,
+};
+use protocol::prompt::{Prompt, says_or_carries};
 
 use crate::attached::{self, Attachments, joined};
 use crate::composing;
@@ -35,8 +38,11 @@ const RADIUS: Pixels = px(10.);
 pub struct Request {
     pub repo: RepoId,
     /// What was typed and attached, which is sent once the workspace is made, unless it says nothing and carries
-    /// nothing, as [`Prompt::says_or_carries`] says.
+    /// nothing, as [`Request::has_prompt`] says. Its files are the ones the dialog had, to give back, or to send to a
+    /// hub too old to make the workspace from what it keeps.
     pub prompt: Prompt<FileToSend>,
+    /// Files the hub keeps for the dialog that hadn't been read back yet, which come before the prompt's.
+    pub coming_back: Vec<Attachment>,
     /// The kind of agent its first chat runs.
     pub agent: AgentKind,
     /// The model and effort the dialog showed. `None` from a hub that doesn't describe its agents, with nothing picked,
@@ -45,6 +51,41 @@ pub struct Request {
     pub effort: Option<Effort>,
     /// Plan mode, if it was on in the dialog, and full access otherwise.
     pub permission_mode: PermissionMode,
+    /// What Create had the hub keep as what's in the dialog, which the hub makes the workspace from. It's what the
+    /// dialog keeps, not what it shows, so its model and effort are `None` unless one was picked or kept, as the hub's
+    /// copy says, and the hub can tell once the dialog says nothing else.
+    pub made_of: NewWorkspaceDraftToKeep,
+    /// Answers once the hub keeps `made_of` as what's in the dialog, or once that's as far as it can get, so the hub
+    /// can make the workspace from what it keeps. `None` for a request that's not from the dialog.
+    pub kept: Option<flume::Receiver<()>>,
+}
+
+impl Request {
+    /// A request that's not from the dialog, which asks the hub to make what it says, with the model and effort it
+    /// names, or with `None`, what the agent starts a chat with.
+    pub fn new(
+        repo: RepoId,
+        prompt: Prompt<FileToSend>,
+        agent: AgentKind,
+        (model, effort): (Option<ModelName>, Option<Effort>),
+        permission_mode: PermissionMode,
+    ) -> Self {
+        let made_of = NewWorkspaceDraftToKeep {
+            repo_id: Some(repo.clone()),
+            text: prompt.text.clone(),
+            files: prompt.files.iter().map(|file| file.attachment.id.clone()).collect(),
+            model: model.clone(),
+            effort,
+            plan: permission_mode == PermissionMode::Plan,
+        };
+        let coming_back = Vec::new();
+        Self { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept: None }
+    }
+
+    /// Whether there's a prompt to send once the workspace is made, counting the files still coming back.
+    pub fn has_prompt(&self) -> bool {
+        says_or_carries(&self.prompt.text, self.coming_back.len() + self.prompt.files.len())
+    }
 }
 
 /// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, and what the
@@ -154,7 +195,7 @@ impl NewWorkspaceDialog {
     }
 
     /// Asks the app to make the workspace. Nothing happens while it can't, such as while it's making or archiving
-    /// another, or while files the hub kept are still coming back, which Create shows by being disabled.
+    /// another, which Create shows by being disabled.
     fn create(&mut self, cx: &mut Context<Self>) {
         if self.can_create() {
             cx.emit(DialogEvent::Create);
@@ -162,31 +203,35 @@ impl NewWorkspaceDialog {
     }
 
     fn can_create(&self) -> bool {
-        self.offer.can_create && !self.bringing_back()
+        self.offer.can_create
     }
 
     /// Empties the dialog of what it was asked to make, and turns plan mode off, keeping the repository, model and
-    /// effort for the next. The hub keeps it emptied at once, and lets go of the files it was given, which go with the
-    /// first prompt.
+    /// effort for the next. The hub goes on keeping what's asked for, files and all, until the new workspace's first
+    /// chat has it, so it's kept at once rather than emptied, and the request says once it has been. Emptying the
+    /// prompt here isn't a change the hub hears of, since setting a field's text isn't typing.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
+        self.keep(true, cx);
+        let made_of = self.to_keep(cx);
+        let kept = self.kept_once_flushed();
         let text = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, (model, effort)) = (self.repo.clone(), self.to_run());
         let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
-        let given: Vec<AttachmentId> = self.attached.given_for(&Where::NewWorkspace).collect();
         let files = self.attached.take();
-        self.keep(true, cx);
-        self.let_go_of(&given);
+        let coming_back = self.stop_bringing_back();
         cx.notify();
         let agent = self.offer.agents.for_new_chat();
-        Request { repo, prompt: Prompt::carrying(text, files), agent, model, effort, permission_mode }
+        let prompt = Prompt::carrying(text, files);
+        Request { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
-    /// mode if it was to be planned, so nothing is lost.
+    /// mode if it was to be planned, so nothing is lost. Files that were still coming back from the hub are read back.
     pub(crate) fn give_back(
         &mut self,
         prompt: Prompt<FileToSend>,
+        coming_back: Vec<Attachment>,
         mode: PermissionMode,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -198,6 +243,7 @@ impl NewWorkspaceDialog {
         for problem in self.attached.put_back(files) {
             cx.emit(DialogEvent::Error(problem));
         }
+        self.bring_back_too(coming_back, cx);
         if !text.is_empty() {
             let text = joined(text, &self.prompt.read(cx).text().to_string());
             self.prompt.update(cx, |prompt, cx| prompt.set_value(text, window, cx));

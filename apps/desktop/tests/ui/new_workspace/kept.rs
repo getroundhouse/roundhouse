@@ -127,13 +127,10 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     ui.wait("what was typed elsewhere", |ui| ui.dialog_text() == "typed elsewhere");
 }
 
-/// Create waits while the files the hub kept are read back, so they go with the prompt rather than being left behind.
-/// A read is a task, and a test's tasks run only once it lets them, so the dialog takes the record here, and Enter is
-/// pressed before the read can run.
-#[gpui_kit::test]
-fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_with_a_repo(cx, &stack);
+/// Has the dialog take a record kept elsewhere, of a prompt carrying a file, which it hasn't read back yet. A read is a
+/// task, and a test's tasks run only once it lets them, so the dialog takes the record here, and what the test does
+/// next comes before the read can run.
+fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack) {
     ui.open_new_workspace();
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     let elsewhere = stack.client();
@@ -147,19 +144,53 @@ fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppConte
     let in_records =
         || records.snapshot().new_workspace_draft().filter(|draft| draft.text == "say:with notes").cloned();
     wait_until("client-core to hear of the change", || in_records().is_some());
-    let (dialog, kept) = (ui.dialog(), in_records().unwrap());
+    let (dialog, record) = (ui.dialog(), in_records().unwrap());
     ui.cx
-        .update_window(ui.handle, |_, window, cx| dialog.update(cx, |d, cx| d.take_kept_now(kept, window, cx)))
+        .update_window(ui.handle, |_, window, cx| dialog.update(cx, |d, cx| d.take_kept_now(record, window, cx)))
         .unwrap();
+}
 
-    ui.press("enter");
-
-    assert_eq!(ui.dialog_text(), "say:with notes", "nothing was taken to make");
-    assert!(ui.has_dialog());
-    ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
+/// Create doesn't wait while the files the hub kept are read back, as the hub makes the workspace from what it keeps,
+/// and sends them itself.
+#[gpui_kit::test]
+fn files_the_hub_kept_go_with_the_prompt_before_theyre_read_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    kept_elsewhere_with_a_file(&mut ui, &stack);
     let before = ui.view().records().workspaces().len();
+
     ui.press("enter");
+
+    assert!(!ui.has_dialog(), "Create didn't wait");
     ui.wait_for_a_new_workspace(before);
+    let carried = |ui: &Ui<'_>| {
+        let prompt = ui.events().into_iter().find_map(|e| match e.body {
+            EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => Some(attachments),
+            _ => None,
+        });
+        prompt.map(|files| files.into_iter().map(|file| file.name).collect::<Vec<_>>())
+    };
+    ui.wait("the prompt", |ui| carried(ui).is_some());
+    assert_eq!(carried(&ui), Some(vec!["notes.txt".to_string()]));
+    ui.wait("the dialog emptied on the hub", |_| kept(&stack).text.is_empty() && kept(&stack).files.is_empty());
+    assert!(ui.dialog_attached().is_empty(), "the file wasn't brought back once it had gone");
+}
+
+/// One that wasn't read back before Create was pressed is read back with the prompt, which the dialog shows again.
+#[gpui_kit::test]
+fn files_the_hub_kept_come_back_to_the_dialog_when_the_workspace_cant_be_made(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    kept_elsewhere_with_a_file(&mut ui, &stack);
+    std::fs::remove_dir_all(stack.repo()).unwrap();
+
+    ui.press("enter");
+
+    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
+    assert!(ui.view().records().workspaces().is_empty());
+    assert_eq!(ui.dialog_text(), "say:with notes");
+    ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
+    assert_eq!(kept(&stack).files.iter().map(|file| file.name.as_str()).collect::<Vec<_>>(), ["notes.txt"]);
 }
 
 #[gpui_kit::test]
