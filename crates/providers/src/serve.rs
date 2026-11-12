@@ -16,12 +16,6 @@ use tracing::warn;
 
 use crate::{Provider, ProviderError};
 
-/// Whatever a frame that didn't parse says its call's ID is.
-#[derive(serde::Deserialize)]
-struct IdOnly {
-    id: Option<u64>,
-}
-
 /// Makes the provider once the hub has said which hub it is, since an adapter works only with that hub's instances.
 pub type MakeProvider = Box<dyn FnOnce(&HubId) -> Result<Arc<dyn Provider>, ProviderError> + Send>;
 
@@ -51,9 +45,11 @@ where
         let call: ProviderCall = match frame::decode(&line) {
             Ok(call) => call,
             Err(e) => {
-                // One that names its call is answered, so the hub isn't left waiting for a reply.
-                if let Some(id) = frame::decode::<IdOnly>(&line).ok().and_then(|call| call.id) {
-                    let refused = ApiError::new(ErrorCode::InvalidRequest, format!("the request didn't parse: {e}"));
+                // One that names its call is a newer hub's, so it's refused as one this adapter doesn't do, and the
+                // hub isn't left waiting for a reply.
+                if let Some(id) = frame::request_id(&line) {
+                    let refused =
+                        ApiError::new(ErrorCode::Unsupported, format!("this adapter can't read that request: {e}"));
                     let _ = frames.send(ProviderFrame::Reply { id, outcome: ProviderOutcome::Error(refused) }).await;
                 } else {
                     warn!("ignoring a request that didn't parse: {e}");

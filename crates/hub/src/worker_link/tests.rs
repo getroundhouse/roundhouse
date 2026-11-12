@@ -59,3 +59,28 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
     serving.kill().unwrap();
     serving.wait().unwrap();
 }
+
+/// As from a newer worker, after a rollback.
+#[tokio::test]
+async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let reply = r#"{"frame":"reply","id":1,"response":{"result":"from_a_newer_worker"}}"#;
+    let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
+    let instance_id: InstanceId = "i".into();
+    provider.create(&instance_id, None, None, "i").await.unwrap();
+    let store = Arc::new(store_with_session(dir.path()));
+    let hub = Arc::new(Hub::new(
+        store,
+        dir.path().join("attachments"),
+        dir.path().join("logs"),
+        ProviderSet::only(provider.clone()),
+        false,
+    ));
+    let asked = std::time::Instant::now();
+
+    let opened = WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log")).await;
+
+    let Err(e) = opened else { panic!("the hello's reply was read") };
+    assert!(e.code == ErrorCode::Worker && e.message.contains("can't read"), "{e:?}");
+    assert!(asked.elapsed() < HELLO_TIMEOUT / 2, "it waited for the time limit");
+}

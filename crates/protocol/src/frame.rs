@@ -1,7 +1,7 @@
 //! One JSON value per line. The callers own the IO.
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 /// Far above the largest event seen in real sessions (2.3 MB), but stops a corrupt stream from
 /// growing a buffer without limit.
@@ -15,6 +15,30 @@ pub fn encode<T: Serialize>(value: &T) -> serde_json::Result<Vec<u8>> {
 
 pub fn decode<T: DeserializeOwned>(line: &[u8]) -> serde_json::Result<T> {
     serde_json::from_slice(line)
+}
+
+/// The `id` a request names, when the request as a whole didn't decode, so it can still be refused. A request this
+/// build can't read is from a newer peer, such as one carrying a value it doesn't know, and refusing it lets that peer
+/// do without, where leaving it unanswered would hold the call until the connection closes.
+pub fn request_id(line: &[u8]) -> Option<u64> {
+    #[derive(Deserialize)]
+    struct Named {
+        id: Option<u64>,
+    }
+    decode::<Named>(line).ok()?.id
+}
+
+/// The call a reply was for, when the reply as a whole didn't decode, so the call can still be ended. The frames that
+/// carry replies, from a hub, a worker or a provider's adapter, all say `"frame":"reply"`, and only a reply names an
+/// `id` there.
+pub fn reply_id(line: &[u8]) -> Option<u64> {
+    #[derive(Deserialize)]
+    struct Reply {
+        frame: String,
+        id: Option<u64>,
+    }
+    let reply = decode::<Reply>(line).ok()?;
+    if reply.frame == "reply" { reply.id } else { None }
 }
 
 /// The most a buffer for reading frames keeps between them.

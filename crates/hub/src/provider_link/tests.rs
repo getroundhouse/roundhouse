@@ -255,3 +255,28 @@ async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters
     assert!(provider.stop(&"i".into()).await.is_err());
     assert_eq!(opens.load(Ordering::SeqCst), 1, "nothing started it again");
 }
+
+/// As from a newer adapter, after a rollback.
+#[tokio::test(start_paused = true)]
+async fn a_reply_this_hub_cant_read_fails_its_request_rather_than_leaving_it_waiting() {
+    let open = opening(Arc::default(), |_, stdio| async move {
+        let (reader, mut writer) = tokio::io::split(stdio);
+        let mut lines = BufReader::new(reader).lines();
+        let call: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        let reply = ProviderFrame::Reply { id: call["id"].as_u64().unwrap(), outcome: hello() };
+        writer.write_all(&frame::encode(&reply).unwrap()).await.unwrap();
+        let call: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+        let reply =
+            format!("{{\"frame\":\"reply\",\"id\":{},\"response\":{{\"result\":\"from_later\"}}}}\n", call["id"]);
+        writer.write_all(reply.as_bytes()).await.unwrap();
+        while let Ok(Some(_)) = lines.next_line().await {}
+    });
+    let provider = started(open).await;
+    let asked = tokio::time::Instant::now();
+
+    let started = provider.start(&"i".into(), &[]).await;
+
+    let Err(ProviderError::Adapter(e)) = started else { panic!("{started:?}") };
+    assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
+    assert!(asked.elapsed() < REQUEST_TIMEOUT, "it waited for the time limit");
+}

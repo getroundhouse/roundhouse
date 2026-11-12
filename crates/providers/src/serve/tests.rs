@@ -180,6 +180,7 @@ async fn a_request_whose_answer_panics_is_still_answered() {
     assert_eq!(hub.reply().await["id"], 2, "it goes on serving");
 }
 
+/// As one from a newer hub with a value this adapter doesn't know would be, so it's refused as one it doesn't do.
 #[tokio::test]
 async fn a_request_that_doesnt_parse_is_refused_if_it_says_its_id() {
     let mut hub = serving(Arc::default());
@@ -188,6 +189,6 @@ async fn a_request_that_doesnt_parse_is_refused_if_it_says_its_id() {
     hub.send(json!({"request": {"method": "stop"}})).await;
     hub.send(json!({"id": 2, "request": {"method": "list"}})).await;
     let refused = hub.reply().await;
-    assert_eq!((&refused["id"], &refused["error"]["code"]), (&json!(1), &json!("invalid_request")), "{refused}");
+    assert_eq!((&refused["id"], &refused["error"]["code"]), (&json!(1), &json!("unsupported")), "{refused}");
     assert_eq!(hub.reply().await["id"], 2, "one without an ID is passed over");
 }

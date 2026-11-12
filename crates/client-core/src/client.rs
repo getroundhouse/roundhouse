@@ -289,13 +289,7 @@ fn read_frames(inner: &Arc<Inner>, stream: Stream) {
 /// A hub can be a different version, so a reply might not decode, and without this whoever made the
 /// call would wait forever. Anything else this can't read gets skipped.
 fn fail_unreadable_reply(inner: &Inner, line: &[u8], error: &serde_json::Error) {
-    #[derive(serde::Deserialize)]
-    struct AnyReply {
-        id: u64,
-    }
-    let Ok(AnyReply { id }) = frame::decode(line) else {
-        return;
-    };
+    let Some(id) = frame::reply_id(line) else { return };
     if let Some(reply) = inner.pending.lock().remove(&id) {
         let _ = reply.send(Err(ClientError::Unexpected(format!("a reply this client can't read: {error}"))));
     }

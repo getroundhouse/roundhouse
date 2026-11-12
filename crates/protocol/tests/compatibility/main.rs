@@ -11,6 +11,8 @@ use protocol::frame;
 use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::{Compacting, StreamDelta, Tail};
 
+mod refusals;
+
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
 /// break. If this fails, a client can no longer see or stop a hub it can't otherwise talk to.
 #[test]

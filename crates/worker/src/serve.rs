@@ -125,7 +125,13 @@ where
         let call: WorkerCall = match frame::decode(&line) {
             Ok(call) => call,
             Err(e) => {
-                warn!("ignoring a frame that didn't parse: {e}");
+                // One that names its call is a newer hub's, and the hub does without whatever this worker refuses.
+                if let Some(id) = frame::request_id(&line) {
+                    let refused = unsupported(format!("can't read that request: {e}"));
+                    let _ = state.frames.send(WorkerFrame::Reply { id, outcome: WorkerOutcome::Error(refused) }).await;
+                } else {
+                    warn!("ignoring a frame that didn't parse: {e}");
+                }
                 continue;
             }
         };
@@ -197,6 +203,7 @@ async fn handle(
     }
     match request {
         WorkerRequest::Hello { protocol_version } => hello(protocol_version),
+        WorkerRequest::Unknown => Err(unsupported("doesn't know that request")),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
                 &state.config.workspaces_root,
@@ -300,6 +307,11 @@ async fn handle(
         WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,
         WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
     }
+}
+
+/// A request from a newer hub, which this worker refuses so the hub can do without it.
+fn unsupported(what: impl std::fmt::Display) -> ApiError {
+    ApiError::new(ErrorCode::Unsupported, format!("this worker, version {}, {what}", protocol::BUILD_VERSION))
 }
 
 fn hello(protocol_version: u32) -> Result<WorkerResponse, ApiError> {

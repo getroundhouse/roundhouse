@@ -82,6 +82,12 @@ async fn serve_connection(
         let request: ClientFrame = match frame::decode(line) {
             Ok(request) => request,
             Err(e) => {
+                // One that names its call is a newer client's, and it hides whatever this hub refuses.
+                if let Some(id) = frame::request_id(line) {
+                    let outcome = ReplyOutcome::Error(unreadable(&e));
+                    let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
+                    continue;
+                }
                 debug!("closing a connection that sent a bad frame: {e}");
                 break;
             }
@@ -113,6 +119,13 @@ async fn serve_connection(
     // Finish writing what's queued, such as the error for a version mismatch.
     let _ = writer.await;
     hub.clients.fetch_sub(1, Ordering::Relaxed);
+}
+
+/// A request this hub can't read, such as a known one with a value it doesn't know, which is refused as one it doesn't
+/// know at all is, since either comes from a newer client.
+fn unreadable(error: &serde_json::Error) -> ApiError {
+    let message = format!("this hub, version {}, can't read that request: {error}", protocol::BUILD_VERSION);
+    ApiError::new(ErrorCode::Unsupported, message)
 }
 
 /// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and

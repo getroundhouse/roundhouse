@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use protocol::PROTOCOL_VERSION;
+use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId, SessionSettings};
 use protocol::worker::{AgentSpec, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
@@ -114,4 +115,54 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     .await
     .expect("the script should have been stopped");
     assert_eq!(setup, WorkerOutcome::Response(WorkerResponse::SetupDone { code: None }));
+}
+
+/// From a newer hub: one it doesn't know, and a known one with a value it can't read. Either is refused, so the hub
+/// does without it, rather than left for the hub's call to wait on until the connection closes.
+#[tokio::test]
+async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub_end, worker_end) = tokio::io::duplex(64 * 1024);
+    let (worker_read, worker_write) = tokio::io::split(worker_end);
+    let (hub_read, mut hub_write) = tokio::io::split(hub_end);
+    let config = Config {
+        workspaces_root: dir.path().to_path_buf(),
+        state_dir: None,
+        home: None,
+        path: None,
+        claude_bin: None,
+        scratch_dir: dir.path().to_path_buf(),
+        deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+        refused: None,
+    };
+    tokio::spawn(serve(worker_read, worker_write, config));
+    let hello =
+        frame::encode(&WorkerCall { id: 0, request: WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION } });
+    hub_write.write_all(&hello.unwrap()).await.unwrap();
+    hub_write.write_all(b"{\"id\":1,\"request\":{\"method\":\"from_a_newer_hub\",\"path\":\"a\"}}\n").await.unwrap();
+    hub_write
+        .write_all(b"{\"id\":2,\"request\":{\"method\":\"account_for\",\"agent\":{\"newer\":true}}}\n")
+        .await
+        .unwrap();
+    let again =
+        frame::encode(&WorkerCall { id: 3, request: WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION } });
+    hub_write.write_all(&again.unwrap()).await.unwrap();
+
+    let mut replies = BufReader::new(hub_read).lines();
+    let mut answered = std::collections::BTreeMap::new();
+    while answered.len() < 4 {
+        let line = timeout(Duration::from_secs(10), replies.next_line()).await.expect("a reply").unwrap().unwrap();
+        if let WorkerFrame::Reply { id, outcome } = frame::decode(line.as_bytes()).unwrap() {
+            answered.insert(id, outcome);
+        }
+    }
+
+    for (id, says) in [(1, "doesn't know that request"), (2, "can't read that request")] {
+        let refused = &answered[&id];
+        assert!(
+            matches!(refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported && e.message.contains(says)),
+            "{id}: {refused:?}"
+        );
+    }
+    assert!(matches!(answered[&3], WorkerOutcome::Response(WorkerResponse::Hello { .. })), "it carried on");
 }
