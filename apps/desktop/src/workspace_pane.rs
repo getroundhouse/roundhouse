@@ -125,8 +125,6 @@ pub struct WorkspacePane {
     creating_chat: bool,
     /// A queued prompt being changed.
     queue_edit: Option<queue::Editing>,
-    /// Prompts queued from here that the hub hasn't answered for yet, oldest first.
-    queue_pending: Vec<queue::Pending>,
     closed_menu: closed::Menu,
     busy: Busy,
     /// The app is waiting on the hub for a new title for this workspace.
@@ -193,7 +191,6 @@ impl WorkspacePane {
             waiting: None,
             creating_chat: false,
             queue_edit: None,
-            queue_pending: Vec::new(),
             closed_menu: closed::Menu::Shut,
             busy: Busy::Free,
             retitling: false,
