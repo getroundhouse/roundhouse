@@ -19,6 +19,7 @@ mod outline;
 mod prompts;
 mod restart;
 
+pub use approvals::RecordedApprovals;
 pub use prompts::{PromptAt, PromptState, Settled};
 
 pub(crate) const PAGE_EVENTS: u64 = 250;

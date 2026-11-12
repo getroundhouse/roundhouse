@@ -172,7 +172,7 @@ fn open_approvals_are_those_not_yet_answered() {
             answers_by_position: None,
         },
     ));
-    let open = log.open_approvals();
+    let open = log.open_approvals(None);
     assert_eq!(open.len(), 1);
     assert_eq!(open[0].seq, 2);
 }
@@ -194,7 +194,7 @@ fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
     // Its answer could be the event that isn't here.
     log.apply_event(event(3, EventBody::Notice { level: NoticeLevel::Info, message: "later".into() }));
 
-    assert!(log.open_approvals().is_empty());
+    assert!(log.open_approvals(None).is_empty());
 }
 
 #[test]

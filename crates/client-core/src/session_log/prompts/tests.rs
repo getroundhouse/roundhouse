@@ -223,6 +223,20 @@ fn a_prompt_the_hub_lists_as_taken_stays_at_the_end_until_the_event_that_took_it
     assert!(log.waiting_prompts().is_empty());
 }
 
+/// The hub's list says which way each prompt was settled, so one whose event isn't loaded isn't taken for taken.
+#[test]
+fn a_prompt_whose_settling_isnt_loaded_stands_as_the_hubs_list_says() {
+    let mut log = SessionLog::new(0);
+    log.apply_event(event(1, prompt()));
+    log.apply_event(event(3, notice()));
+    assert_eq!(log.prompt_state(1), PromptState::Taken, "guessed, as from a hub that doesn't say");
+
+    let dropped = SettledAt { seq: 2, place: Place::new(2), how: Some(Settlement::Dropped) };
+    log.list_prompts(vec![protocol::model::PromptLine::new(1, "steer", 0).settled_at(dropped)]);
+
+    assert_eq!(log.prompt_state(1), PromptState::Dropped);
+}
+
 #[test]
 fn a_prompt_far_behind_what_is_loaded_is_drawn_in_its_own_row() {
     let mut log = SessionLog::new(0);

@@ -2,9 +2,10 @@
 //! cards in the transcript.
 
 use client_core::Approval;
+use client_core::session_log::RecordedApprovals;
 use gpui_kit::{AppContext as _, Context, Entity, Focusable as _};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{ApprovalId, Seq};
+use protocol::model::{ApprovalId, Seq, Session};
 
 use super::{Transcript, TranscriptEvent};
 use crate::questions::QuestionPanel;
@@ -15,12 +16,38 @@ impl Transcript {
         self.asking.as_ref()
     }
 
+    /// Follows what the session's record says of the approvals its agent is waiting on. A card whose approval opens or
+    /// closes with it changes height, and so may the question asked in the composer's place.
+    pub(super) fn follow_approvals(&mut self, session: &Session, cx: &mut Context<Self>) {
+        let recorded = RecordedApprovals::of(session);
+        if self.model.borrow().approvals == recorded {
+            return;
+        }
+        let open = |transcript: &Self| -> Vec<Seq> {
+            let m = transcript.model.borrow();
+            transcript.session.read(|log| log.open_approvals(m.approvals.as_ref()).iter().map(|e| e.seq).collect())
+        };
+        let before = open(self);
+        self.model.borrow_mut().approvals = recorded;
+        let after = open(self);
+        if before == after {
+            return;
+        }
+        let changed: Vec<Seq> =
+            before.iter().chain(&after).copied().filter(|seq| before.contains(seq) != after.contains(seq)).collect();
+        for seq in changed {
+            self.remeasure(seq, cx);
+        }
+        self.follow_question(cx);
+    }
+
     /// Asks the oldest question that's waiting, in place of whatever was asked before. The transcript draws a question
     /// only once it's no longer waiting, so each row a question leaves changes height. Several waiting at once are
     /// asked in turn.
     pub(super) fn follow_question(&mut self, cx: &mut Context<Self>) {
+        let recorded = self.model.borrow().approvals.clone();
         let waiting: Vec<(Seq, ApprovalId, Approval<'static>)> = self.session.read(|log| {
-            log.open_approvals()
+            log.open_approvals(recorded.as_ref())
                 .into_iter()
                 .filter_map(|event| {
                     let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };

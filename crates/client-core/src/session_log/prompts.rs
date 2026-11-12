@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Seq, SettledAt};
+use protocol::model::{Seq, SettledAt, Settlement};
 
 use super::SessionLog;
 
@@ -65,10 +65,16 @@ impl Settled {
 }
 
 impl SessionLog {
-    /// Where the prompt recorded at `seq` stands, from what's loaded after it. The log records whether the agent took
-    /// or dropped every prompt, and until it does, the prompt is waiting. One the agent dropped can still be taken by
-    /// the agent after it.
+    /// Where the prompt recorded at `seq` stands. The log records whether the agent took or dropped every prompt, and
+    /// until it does, the prompt is waiting. One the agent dropped can still be taken by the agent after it, so the last
+    /// to settle it says, as the hub's list of prompts does without its event being loaded. From a hub too old to say
+    /// which, it's found from what's loaded after the prompt.
     pub fn prompt_state(&self, seq: Seq) -> PromptState {
+        match self.settled.at(seq).and_then(|at| at.how) {
+            Some(Settlement::Taken) => return PromptState::Taken,
+            Some(Settlement::Dropped) => return PromptState::Dropped,
+            Some(Settlement::Unknown) | None => {}
+        }
         let mut dropped = false;
         // What comes after it in this log, which holds every event about a prompt, whether it's the whole log or the
         // agent's own events. One it doesn't hold, such as one past its end, has nothing after it yet.
@@ -154,7 +160,7 @@ impl SessionLog {
     }
 
     /// The event recorded at `seq`, if it's loaded.
-    fn event_of(&self, seq: Seq) -> Option<&SessionEvent> {
+    pub(super) fn event_of(&self, seq: Seq) -> Option<&SessionEvent> {
         self.events.get(&(self.row_of(seq)? as u64 + 1))
     }
 

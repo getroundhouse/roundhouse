@@ -121,7 +121,7 @@ impl Around {
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log
-                .open_approvals()
+                .open_approvals(m.approvals.as_ref())
                 .iter()
                 .any(|e| matches!(&e.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id));
             let questions = Approval::of(body).and_then(|approval| approval.questions().map(<[Question]>::to_vec));
