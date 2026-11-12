@@ -12,7 +12,9 @@ impl AppView {
         let client = self.client();
         let hub = client.as_ref().map(Client::hub_version);
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = Agents::of(self.records.every_session().map(|s| (s.status, s.background_tasks.as_slice())));
+        let restarting = self.restartable_hub.is_some_and(|older| older.restarting);
+        let chats = self.records.every_session().map(|s| (s.status, s.background_tasks.as_slice()));
+        let agents = Agents::holding_up(restarting, chats);
         BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 }
@@ -42,6 +44,15 @@ pub struct Agents {
 }
 
 impl Agents {
+    /// The agents an update waits on, of these chats on an older hub: none, on one `restarting`, which stops none of
+    /// them and waits only on a setup script, and otherwise the ones [`Agents::of`] counts.
+    pub(super) fn holding_up<'a>(
+        restarting: bool,
+        chats: impl IntoIterator<Item = (SessionStatus, &'a [AgentTask])>,
+    ) -> Self {
+        if restarting { Self::default() } else { Self::of(chats) }
+    }
+
     /// Counts the same chats the hub does, from each one's status and what it has in the background, as
     /// [`SessionStatus::counts_as_running`] says. One that only waits on its pull request isn't counted, since the next
     /// hub keeps the wait.
@@ -141,5 +152,14 @@ mod tests {
             }
         }
         assert_eq!(Agents::of([(Background, &wait[..])]), NONE);
+    }
+
+    /// It stops none of them, and waits only on a setup script.
+    #[test]
+    fn an_update_waits_on_no_agent_of_an_older_hub_restarting() {
+        let command = [task(TaskKind::Command)];
+        let chats = [(Running, &[][..]), (WaitingApproval, &[][..]), (Background, &command[..])];
+        assert_eq!(Agents::holding_up(true, chats), NONE);
+        assert_eq!(Agents::holding_up(false, chats), Agents { working: 2, waiting_on_you: 1 });
     }
 }

@@ -70,9 +70,7 @@ pub struct AppView {
     drafts: Option<Drafts>,
     /// A new connection, until client-core has caught up on it.
     joining: Option<Client>,
-    /// The pid of the hub this is connected to, when it's an older one a client started, which this app may restart.
-    /// A hub's build can't change while it runs, so this is only found when connecting.
-    restartable_hub: Option<u32>,
+    restartable_hub: Option<restarts::OlderHub>,
     /// What's shown of the hub's records, as of client-core's last change to them.
     records: Snapshot,
     pub selected: Option<WorkspaceId>,
@@ -203,7 +201,7 @@ impl AppView {
     pub fn connect(&mut self, cx: &mut Context<Self>) {
         self.show_connecting(cx);
         // What it was connected to says nothing about what it connects to next.
-        (self.restartable_hub, self.finishing, self.looking) = (None, None, None);
+        (self.restartable_hub, self.finishing, self.looking, self.joining) = (None, None, None, None);
         self.drop_restart_question(cx);
         cx.notify();
         let hub = self.hub.clone();
@@ -248,7 +246,10 @@ impl AppView {
         }
         self.reconnect_dialog(&client, cx);
         self.joining = Some(client);
-        self.restartable_hub = hub_source::may_restart(status, self.hub.build_number).then_some(status.pid);
+        let build = self.hub.build_number;
+        let restarting = hub_source::restarts_at_once(status, build);
+        let older = restarts::OlderHub { pid: status.pid, restarting };
+        self.restartable_hub = hub_source::may_restart(status, build).then_some(older);
         self.finishing = self.restartable_hub.map(|_| Self::keep_finishing(cx));
     }
 
@@ -268,13 +269,15 @@ impl AppView {
         let errors = feed.take_errors();
         if !feed.connected() {
             // Following failed on a connection that's there, which needs a person. A connection that went
-            // is made again.
+            // is made again, even one still being joined, such as an older hub's that went as it restarted.
             if let Some(error) = errors.first() {
                 self.joining = None;
                 self.drop_restart_question(cx);
                 self.connection = Connection::Failed(error.to_string());
                 cx.notify();
-            } else if matches!(self.connection, Connection::Ready(_)) {
+            } else if matches!(self.connection, Connection::Ready(_))
+                || self.joining.as_ref().is_some_and(Client::is_disconnected)
+            {
                 self.connect(cx);
             }
             return;

@@ -131,13 +131,44 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
             }
         }
         HubCmd::Stop => {
+            // Asked first, since a hub that has stopped can't say.
+            let agents = hub.status()?.running_sessions;
             hub.stop()?;
-            println!("hub stopped");
+            println!("{}", stopped(agents));
         }
     }
     Ok(())
 }
 
+/// What `hub stop` says, with this many agents at work on the hub as it stopped, which it stopped with it. One only
+/// waiting on its pull request isn't, since the next hub keeps the wait.
+fn stopped(agents: u32) -> String {
+    match agents {
+        0 => "hub stopped".to_string(),
+        1 => "hub stopped, with the 1 agent at work on it, which picks up its conversation at its next prompt"
+            .to_string(),
+        n => format!(
+            "hub stopped, with the {n} agents at work on it, which pick up their conversations at their next prompts"
+        ),
+    }
+}
+
 pub(crate) fn short(id: &str) -> &str {
     &id[..id.len().min(8)]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stopped;
+
+    #[test]
+    fn stopping_the_hub_says_how_many_agents_it_stopped() {
+        assert_eq!(stopped(0), "hub stopped");
+        assert!(
+            stopped(1).starts_with("hub stopped, with the 1 agent at work on it, which picks up"),
+            "{}",
+            stopped(1)
+        );
+        assert!(stopped(3).starts_with("hub stopped, with the 3 agents at work on it"), "{}", stopped(3));
+    }
 }
