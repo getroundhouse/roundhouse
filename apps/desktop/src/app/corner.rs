@@ -17,7 +17,7 @@ impl AppView {
     pub(super) fn place_sidebars(&self, window: &mut Window, cx: &mut Context<Self>) {
         let pane = self.pane_to_draw().filter(|_| !self.settings_open() && !self.home_showing());
         let changes = pane.is_some_and(|pane| pane.read(cx).lists_changes());
-        let buttons = title_bar::window_buttons(window, cx);
+        let buttons = title_bar::buttons_in_this_frame(window, cx);
         sides::place(Beside { changes, above_the_header: self.error.is_some() }, buttons, window, cx);
     }
 }

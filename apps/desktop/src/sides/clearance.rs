@@ -112,7 +112,7 @@ pub(crate) fn clearance(at: AtTheTop, cx: &App) -> Insets {
 }
 
 /// Where the window's buttons are in the frame being drawn.
-pub(crate) fn window_buttons(cx: &App) -> WindowButtons {
+pub(crate) fn placed_buttons(cx: &App) -> WindowButtons {
     Sides::of(cx).placed.clearance.buttons
 }
 

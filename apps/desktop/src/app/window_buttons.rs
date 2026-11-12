@@ -85,7 +85,7 @@ impl Button {
 /// from the pointer, so the press is the button's rather than the strip's, and nothing in the app hears it. They're
 /// drawn after everything else, a dialog included.
 pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoElement> {
-    if sides::window_buttons(cx) != WindowButtons::AtTheEnd {
+    if sides::placed_buttons(cx) != WindowButtons::AtTheEnd {
         return None;
     }
     let glyphs = Glyphs::of(cx);

@@ -24,7 +24,7 @@ mod clearance;
 
 use clearance::Clearance;
 pub(crate) use clearance::{
-    AtTheTop, WINDOW_BUTTONS_INSET, WINDOWS_BUTTONS_WIDTH, WindowButtons, clearance, toggle_starts, window_buttons,
+    AtTheTop, WINDOW_BUTTONS_INSET, WINDOWS_BUTTONS_WIDTH, WindowButtons, clearance, placed_buttons, toggle_starts,
 };
 
 /// How close to its usual width a dragged sidebar has to come to take it, so the usual width is easy to get back to.

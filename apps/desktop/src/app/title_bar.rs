@@ -29,7 +29,7 @@ impl TitleBar {
 
 /// Where the window's buttons are in the frame the window is starting to draw. In full screen the system puts them
 /// away.
-pub(super) fn window_buttons(window: &Window, cx: &App) -> WindowButtons {
+pub(super) fn buttons_in_this_frame(window: &Window, cx: &App) -> WindowButtons {
     match title_bar(cx) {
         _ if window.is_fullscreen() => WindowButtons::Absent,
         TitleBar::Windows => WindowButtons::AtTheEnd,
