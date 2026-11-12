@@ -275,6 +275,9 @@ fn worked_in(stack: &Stack, client: &Client) -> (protocol::model::Workspace, Ses
     wait_until("the second chat's generated title", || {
         client.session_get(&second.id).unwrap().title_source == TitleSource::Generated
     });
+    // Each turn's end reads the workspace's pull request, which a repository with no GitHub remote doesn't have, and
+    // the first records that, which would otherwise change the record while a test compares it with what it was told.
+    wait_until("the pull request read as the turns ended", || workspace(client, &made.id).pull_request.is_some());
     (made, chat, state)
 }
 
