@@ -38,8 +38,8 @@ fn start_answering(
 }
 
 /// Refuses an ask, as a call this hub can't read is refused, so the agent that called the tool hears why at once.
-fn refuse_unreadable(link: &Arc<WorkerLink>, id: AskId, error: &serde_json::Error) {
-    let outcome = Outcome::Error(ApiError::unsupported_request("this hub", Some(error)));
+fn refuse_unreadable(hub: &Hub, link: &Arc<WorkerLink>, id: AskId, error: &serde_json::Error) {
+    let outcome = Outcome::Error(hub.unsupported(Some(error)));
     let link = link.clone();
     tokio::spawn(async move { link.answer(AskAnswer { answer: id, outcome }).await });
 }
@@ -70,7 +70,7 @@ pub(super) async fn read_frames(
                 if let Some(id) = frame::reply_id(bytes) {
                     link.calls.reply(id, Err(unreadable_reply(&e)));
                 } else if let Some(id) = AskId::of_unreadable(bytes) {
-                    refuse_unreadable(&link, id, &e);
+                    refuse_unreadable(&hub, &link, id, &e);
                 } else {
                     warn!("ignoring a worker frame that didn't parse: {e}");
                 }

@@ -150,7 +150,7 @@ impl Hub {
                 Ok(ready) => self.watch_branches(&ready, &link).await,
                 Err(e) => debug!(%workspace_id, "watching the branches of a worker carried on with: {}", e.message),
             }
-            if link.is_another_build() {
+            if link.is_another_build(self.build) {
                 self.replace_once_idle(workspace_id, link);
             }
         } else {

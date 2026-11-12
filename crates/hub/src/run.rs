@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use protocol::Build;
 use protocol::model::AgentDescription;
 use protocol::paths::Paths;
 use providers::Provider;
@@ -18,6 +19,8 @@ use crate::store::{RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
 
 pub struct HubConfig {
+    /// Which build this hub is, which it tells clients, workers and provider adapters.
+    pub build: Build,
     pub paths: Paths,
     /// The binary that runs a worker, which the local provider starts.
     pub worker_exe: PathBuf,
@@ -55,6 +58,7 @@ fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
 
 /// The local provider, and the others this hub's data directory names.
 fn load_providers(
+    build: Build,
     paths: &Paths,
     worker_exe: PathBuf,
     shell: Option<String>,
@@ -69,7 +73,7 @@ fn load_providers(
         path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
-    Ok(ProviderSet::load(local, &paths.providers, &hub_id))
+    Ok(ProviderSet::load(local, &paths.providers, &hub_id, build))
 }
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
@@ -90,8 +94,9 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let providers = load_providers(&paths, config.worker_exe, config.shell, config.path, &store)?;
+    let providers = load_providers(config.build, &paths, config.worker_exe, config.shell, config.path, &store)?;
     let hub = Arc::new(Hub::new(
+        config.build,
         store,
         paths.attachments_dir.clone(),
         paths.worker_logs_dir.clone(),

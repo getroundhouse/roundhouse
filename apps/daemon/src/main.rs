@@ -12,8 +12,11 @@ use runtime::run_to_end;
 use tracing_subscriber::EnvFilter;
 use worker_role::Transport;
 
+/// Which build this is, from the stamp it was compiled with, which the hub and the worker are given.
+const BUILD: protocol::Build = protocol::this_build!();
+
 #[derive(Parser)]
-#[command(name = protocol::paths::DAEMON_NAME, version = protocol::BUILD_VERSION, about = "Runs as a hub or a worker")]
+#[command(name = protocol::paths::DAEMON_NAME, version = BUILD.version(), about = "Runs as a hub or a worker")]
 struct Args {
     #[command(subcommand)]
     role: Role,
@@ -110,7 +113,8 @@ fn main() -> anyhow::Result<()> {
             let path = std::env::var("PATH").ok();
             // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
             let agents = agents::descriptions();
-            run_to_end(hub::run(hub::HubConfig { paths, worker_exe, shell, path, on_demand, agents }))??;
+            let config = hub::HubConfig { build: BUILD, paths, worker_exe, shell, path, on_demand, agents };
+            run_to_end(hub::run(config))??;
             Ok(())
         }
         Role::Delete { paths } => {
@@ -127,7 +131,7 @@ fn main() -> anyhow::Result<()> {
                 (_, true) => Transport::Listen,
                 _ => Transport::Stdio,
             };
-            worker_role::run(transport, worker_role::Given { workspaces_root, state_dir, claude_bin })
+            worker_role::run(transport, worker_role::Given { build: BUILD, workspaces_root, state_dir, claude_bin })
         }
     }
 }

@@ -33,7 +33,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("logs"), providers, Vec::new(), false))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, dir.join("attachments"), dir.join("logs"), providers, Vec::new(), false))
 }
 
 /// Writes each frame to a file in `dir` by its name, for a script to send.

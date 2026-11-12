@@ -130,7 +130,7 @@ pub struct HubStatus {
     /// like this can be restarted from a client.
     #[serde(default)]
     pub on_demand: bool,
-    /// Which build it is, if it's one that has an order. See [`crate::BUILD_NUMBER`].
+    /// Which build it is, if it's one that has an order. See [`crate::Build::number`].
     #[serde(default)]
     pub build_number: Option<u64>,
     /// Workspaces whose setup script is running.
@@ -212,10 +212,10 @@ impl ApiError {
         Self { code, message: message.into() }
     }
 
-    /// The refusal of a request from a newer peer, which `reader`, such as "this hub", doesn't know, or knows but
-    /// can't read, such as one carrying a value it doesn't know. Its caller does without either way.
-    pub fn unsupported_request(reader: &str, unreadable: Option<&serde_json::Error>) -> Self {
-        let build = crate::BUILD_VERSION;
+    /// The refusal of a request from a newer peer, which `reader`, such as "this hub", of the build whose version is
+    /// `build`, doesn't know, or knows but can't read, such as one carrying a value it doesn't know. Its caller does
+    /// without either way.
+    pub fn unsupported_request(reader: &str, build: &str, unreadable: Option<&serde_json::Error>) -> Self {
         let message = match unreadable {
             None => format!("{reader}, version {build}, doesn't know that request"),
             Some(error) => format!("{reader}, version {build}, can't read that request: {error}"),

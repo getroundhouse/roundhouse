@@ -25,7 +25,7 @@
 use std::time::Duration;
 
 use desktop::app::{AppView, Connection, HubSource};
-use desktop::checkout::Checkout;
+use desktop::checkout::{Checkout, built_from};
 use gpui_kit::SharedString;
 use gpui_kit::test::TestWindowExt as _;
 
@@ -34,15 +34,19 @@ mod probes;
 /// How many tenths of a second to wait for something to click to be drawn: long enough for a hub to read a file.
 const CLICK_WAITS: usize = 100;
 
+/// Which build this is, from the stamp it was compiled with.
+const BUILD: protocol::Build = protocol::this_build!();
+const BUILT_FROM: Option<&str> = built_from(BUILD, env!("CARGO_MANIFEST_DIR"));
+
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let checkout = Checkout::of_this_build(desktop::checkout::take_note(&mut args));
+    let checkout = Checkout::of_this_build(BUILT_FROM, desktop::checkout::take_note(&mut args));
     gpui_kit::application().with_assets(desktop::Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         // In its usual place, so one picture is the same size as the next.
         desktop::why_quit::say(checkout.as_ref(), cx);
-        let hub = HubSource::default_local().expect("find the hub");
+        let hub = HubSource::default_local(BUILD).expect("find the hub");
         let (handle, view) =
             desktop::open_main_window(hub, checkout, desktop::Opens::InItsUsualPlace, cx).expect("open a window");
         let args = args.clone();

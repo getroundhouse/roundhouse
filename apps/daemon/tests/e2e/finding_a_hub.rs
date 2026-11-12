@@ -135,7 +135,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     std::fs::create_dir_all(&app).unwrap();
     install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
     // The version this daemon gives, which its copy is checked against.
-    let build = StampedBuild::new(protocol::BUILD_VERSION, 1).unwrap();
+    let build = StampedBuild::new(protocol::this_build!().version(), 1).unwrap();
     let daemon = Daemon { path: app.join("roundhoused"), build: Some(build) };
     let copy = stack.paths().hub_copy(&build);
 

@@ -32,7 +32,7 @@ fn says_which_build_is_running(cx: &mut TestAppContext) {
 
     let mut ui = Ui::open(cx, &stack);
 
-    assert_eq!(ui.build_line(), BuildLine::Current { app: protocol::BUILD_VERSION.to_string() });
+    assert_eq!(ui.build_line(), BuildLine::Current { app: protocol::this_build!().version().to_string() });
 }
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {

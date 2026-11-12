@@ -8,7 +8,7 @@ use super::*;
 
 fn tools() -> Arc<Tools> {
     let (frames, _) = mpsc::channel(8);
-    Arc::new(Tools::new(Arc::new(Asks::new(frames))))
+    Arc::new(Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED))
 }
 
 /// A port nothing is on, as of just now, which the system chooses.

@@ -25,4 +25,4 @@ pub mod tail;
 pub mod versions;
 pub mod worker;
 
-pub use build::{BUILD_NUMBER, BUILD_VERSION, STAMPED_BUILD, StampedBuild};
+pub use build::{Build, StampedBuild};

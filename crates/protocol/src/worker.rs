@@ -257,8 +257,8 @@ pub enum WorkerResponse {
     Hello {
         /// The one chosen: the newest both sides speak.
         protocol_version: u32,
-        /// Which build the worker is, as `BUILD_VERSION` says, so a hub can move a worker from another build onto
-        /// its own once nothing is at work in its workspace. `None` from a worker from before this.
+        /// Which build the worker is, as [`crate::Build::version`] says, so a hub can move a worker from another build
+        /// onto its own once nothing is at work in its workspace. `None` from a worker from before this.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         build: Option<String>,
     },

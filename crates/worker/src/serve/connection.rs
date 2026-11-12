@@ -85,7 +85,7 @@ where
         // call after, and when the connection ends.
         match request {
             Ok(WorkerRequest::Hello { protocol_version, oldest_protocol_version, keep_running_without_hub }) => {
-                let answer = hello(protocol_version, oldest_protocol_version);
+                let answer = hello(worker.state.config.build, protocol_version, oldest_protocol_version);
                 let greeted = answer.is_ok();
                 let _ = frames.send(reply(answer)).await;
                 if greeted {

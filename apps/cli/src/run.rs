@@ -15,7 +15,7 @@ use crate::workspace::workspace_command;
 
 fn connect(paths: &Paths) -> anyhow::Result<Client> {
     let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
-    let daemon = Daemon::find(named).context("finding the daemon next to this binary")?;
+    let daemon = Daemon::find(named, crate::BUILD).context("finding the daemon next to this binary")?;
     Client::connect_or_start(paths, &daemon, "cli").context("connecting to the hub")
 }
 
@@ -119,8 +119,8 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
             if status.keeping_awake {
                 println!("keeping this machine awake while there's work");
             }
-            if status.hub_version != protocol::BUILD_VERSION {
-                println!("this client is version {}", protocol::BUILD_VERSION);
+            if status.hub_version != crate::BUILD.version() {
+                println!("this client is version {}", crate::BUILD.version());
             }
             let speaks = Versions::from_hello(status.protocol_version, status.oldest_protocol_version);
             if !speaks.speaks(protocol::client::CLIENT_PROTOCOL_VERSION) {

@@ -9,8 +9,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use protocol::StampedBuild;
 use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
+use protocol::{Build, StampedBuild};
 
 use super::{Client, Result, hub_is_missing};
 
@@ -51,11 +51,11 @@ pub struct Daemon {
 
 impl Daemon {
     /// The one `named` by `ROUNDHOUSE_DAEMON_BIN`, started where it is, or else the one that ships next to this
-    /// binary.
-    pub fn find(named: Option<PathBuf>) -> io::Result<Self> {
+    /// binary, which is `build`, this binary's.
+    pub fn find(named: Option<PathBuf>, build: Build) -> io::Result<Self> {
         match named {
             Some(path) => Ok(Self::in_place(path)),
-            None => Self::beside(&std::env::current_exe()?),
+            None => Self::beside(&std::env::current_exe()?, build),
         }
     }
 
@@ -64,10 +64,10 @@ impl Daemon {
         Self { path: path.into(), build: None }
     }
 
-    /// The one that ships next to `exe`, which is this build. Follows symlinks first, so a hub started through an
+    /// The one that ships next to `exe`, which is `exe`'s build. Follows symlinks first, so a hub started through an
     /// install's `current` link stays on that version, whichever one the link names later.
-    fn beside(exe: &Path) -> io::Result<Self> {
-        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: protocol::STAMPED_BUILD })
+    fn beside(exe: &Path, build: Build) -> io::Result<Self> {
+        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: build.stamped() })
     }
 
     /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.

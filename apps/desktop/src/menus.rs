@@ -21,10 +21,11 @@ pub(crate) struct Says {
 }
 
 /// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
-/// reads each item's key from the bindings each time the bar is given, so they're bound first.
-pub(crate) fn set(cx: &mut App) {
+/// reads each item's key from the bindings each time the bar is given, so they're bound first. `build_version` is the
+/// app's, which About says.
+pub(crate) fn set(build_version: &'static str, cx: &mut App) {
     show(Says::default(), cx);
-    cx.on_action(|_: &About, cx| about(cx));
+    cx.on_action(move |_: &About, cx| about(build_version, cx));
     cx.on_action(|_: &CheckForUpdates, cx| crate::updates::check_now(cx));
     cx.on_action(|_: &Hide, cx| cx.hide());
     cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
@@ -123,8 +124,8 @@ fn window_menu() -> Menu {
 }
 
 /// Says which build this is, the same as the sidebar does.
-fn about(cx: &mut App) {
-    let version = format!("Version {}", protocol::BUILD_VERSION);
+fn about(build_version: &str, cx: &mut App) {
+    let version = format!("Version {build_version}");
     crate::alert::show(PromptLevel::Info, "Roundhouse".to_string(), version, cx);
 }
 

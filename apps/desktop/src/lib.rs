@@ -147,7 +147,7 @@ pub fn open_main_window(
         // kit selects all with, and copies with the keys it copies with, from its own binding.
         KeyBinding::new(select_all, SelectAll, Some(transcript::KEY_CONTEXT)),
     ]);
-    menus::set(cx);
+    menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);
     let (display_id, window_bounds) = window_place::open_at(opens, &hub.paths.data_dir, cx);
     let options = WindowOptions {
@@ -178,13 +178,14 @@ pub fn open_main_window(
     })
 }
 
-pub fn run(checkout: Option<Checkout>) {
-    gpui_kit::application().with_assets(Assets).run(|cx| {
+/// Runs the app, which is `build`, from `checkout`, until it quits.
+pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
+    gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);
-        let opened = app::HubSource::default_local().and_then(|hub| {
+        let opened = app::HubSource::default_local(build).and_then(|hub| {
             let data_dir = hub.paths.data_dir.clone();
             open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
         });

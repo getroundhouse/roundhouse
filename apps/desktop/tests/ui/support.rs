@@ -85,7 +85,8 @@ impl Stack {
             paths,
             daemon: Daemon::in_place(binaries().join("roundhoused")),
             build_number: None,
-            build_version: protocol::BUILD_VERSION,
+            // The daemon's, which was compiled with the same stamp as this test.
+            build_version: protocol::this_build!().version(),
         };
         Self { dir, hub, checkout: None }
     }

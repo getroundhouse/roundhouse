@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use agents::AgentProcess;
 use parking_lot::Mutex;
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{RunId, SessionId};
 use protocol::versions::Versions;
@@ -43,6 +44,8 @@ const SETUP_LOG_TAIL_BYTES: u64 = 256 * 1024;
 const QUEUED_ASKS: usize = 64;
 
 pub struct Config {
+    /// Which build this worker is, which its hello tells the hub.
+    pub build: Build,
     pub workspaces_root: PathBuf,
     /// Where to record running agents, so they can be found if this process is killed.
     pub state_dir: Option<PathBuf>,
@@ -117,7 +120,6 @@ impl Worker {
         tokio::spawn(send_asks(asked, outbox.clone()));
         let asks = Arc::new(Asks::new(asking));
         let state = Arc::new(State {
-            config,
             agents: Mutex::new(HashMap::new()),
             start_lock: tokio::sync::Mutex::new(()),
             shutting_down: AtomicBool::new(false),
@@ -126,7 +128,8 @@ impl Worker {
             calls: AtomicU64::new(0),
             watching: Mutex::new(None),
             outbox,
-            tools: Arc::new(Tools::new(asks.clone())),
+            tools: Arc::new(Tools::new(asks.clone(), config.build)),
+            config,
             asks,
         });
         Self { state, forwarders: Arc::new(tokio::sync::Mutex::new(JoinSet::new())) }
@@ -199,7 +202,10 @@ async fn handle(
 ) -> Result<WorkerResponse, ApiError> {
     // One this build can't read is a newer hub's, which does without whatever this worker refuses, where leaving it
     // unanswered would hold the hub's call until the connection closes.
-    match request.map_err(|e| ApiError::unsupported_request("this worker", Some(&e)))? {
+    let build = state.config.build.version();
+    let unsupported =
+        |unreadable: Option<&serde_json::Error>| ApiError::unsupported_request("this worker", build, unreadable);
+    match request.map_err(|e| unsupported(Some(&e)))? {
         // About the connection they came on, which answers them itself.
         WorkerRequest::Hello { .. } | WorkerRequest::Stop => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
@@ -209,7 +215,7 @@ async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::Unknown => Err(ApiError::unsupported_request("this worker", None)),
+        WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
                 &state.config.workspaces_root,
@@ -338,23 +344,23 @@ async fn handle(
 
 /// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
 /// own too once a protocol breaks, as "Changing the protocol" in `docs/architecture.md` says.
-fn hello(newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
+fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
     let (ours, hub) = (Versions::only(WORKER_PROTOCOL_VERSION), Versions::from_hello(newest, oldest));
     let Some(chosen) = ours.newest_shared(hub) else {
         let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
-    Ok(WorkerResponse::Hello { protocol_version: chosen, build: Some(build()) })
+    Ok(WorkerResponse::Hello { protocol_version: chosen, build: Some(said(build)) })
 }
 
 /// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
 /// earlier hub left would.
-fn build() -> String {
+fn said(build: Build) -> String {
     #[cfg(feature = "testing")]
     if let Ok(build) = std::env::var(TEST_BUILD) {
         return build;
     }
-    protocol::BUILD_VERSION.to_string()
+    build.version().to_string()
 }
 
 /// The variable that names the build a worker says it is, in tests.

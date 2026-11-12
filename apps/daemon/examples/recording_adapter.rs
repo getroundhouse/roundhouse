@@ -104,5 +104,6 @@ async fn main() {
     });
     let provider: Arc<dyn Provider> = Arc::new(Recording { local, made: args.made });
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
-    providers::serve::serve(Box::new(move |_| Ok(provider)), protocol::BUILD_VERSION, stdin, stdout).await.unwrap();
+    let build = protocol::this_build!().version();
+    providers::serve::serve(Box::new(move |_| Ok(provider)), build, stdin, stdout).await.unwrap();
 }

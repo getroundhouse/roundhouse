@@ -4,14 +4,19 @@
 
 use std::path::{Path, PathBuf};
 
+use protocol::Build;
+
 /// Says why the app is open, such as what to try in it: `--note TEXT` or `--note=TEXT`.
 pub const NOTE_FLAG: &str = "--note";
 
-/// Where this package was when it was built, if the build isn't stamped. A const, so a stamped build holds no path.
-const BUILT_FROM: Option<&str> = match protocol::STAMPED_BUILD {
-    None => Some(env!("CARGO_MANIFEST_DIR")),
-    Some(_) => None,
-};
+/// Where the package was when `build` was built, which is `manifest_dir`, if it isn't stamped. A binary keeps this in
+/// a const, given its own `env!("CARGO_MANIFEST_DIR")`, so a stamped build holds no path.
+pub const fn built_from(build: Build, manifest_dir: &'static str) -> Option<&'static str> {
+    match build.stamped() {
+        None => Some(manifest_dir),
+        Some(_) => None,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Checkout {
@@ -27,10 +32,10 @@ impl Checkout {
         Self { root, note }
     }
 
-    /// The checkout this build is from, or `None` for a stamped build.
-    pub fn of_this_build(note: Option<String>) -> Option<Self> {
+    /// The checkout of the package that [`built_from`] says, or `None` for a stamped build.
+    pub fn of_this_build(built_from: Option<&str>, note: Option<String>) -> Option<Self> {
         // The package is `apps/desktop`, two below the top.
-        let manifest = Path::new(BUILT_FROM?);
+        let manifest = Path::new(built_from?);
         Some(Self::new(manifest.ancestors().nth(2).unwrap_or(manifest).to_path_buf(), note))
     }
 
@@ -123,11 +128,12 @@ mod tests {
 
     #[test]
     fn only_an_unstamped_build_is_from_a_checkout_the_one_this_package_is_in() {
-        let checkout = Checkout::of_this_build(None);
+        let here = env!("CARGO_MANIFEST_DIR");
+        let stamped = protocol::StampedBuild::new("abc123", 1).unwrap().into();
 
-        match protocol::STAMPED_BUILD {
-            None => assert_eq!(checkout.unwrap().root().join("apps/desktop"), Path::new(env!("CARGO_MANIFEST_DIR"))),
-            Some(_) => assert_eq!(checkout, None),
-        }
+        let checkout = Checkout::of_this_build(built_from(Build::UNSTAMPED, here), None);
+
+        assert_eq!(checkout.unwrap().root().join("apps/desktop"), Path::new(here));
+        assert_eq!(Checkout::of_this_build(built_from(stamped, here), None), None);
     }
 }

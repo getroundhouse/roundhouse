@@ -25,6 +25,7 @@ pub(crate) enum Transport {
 
 /// What a worker is given, whichever way it reaches its hub.
 pub(crate) struct Given {
+    pub build: protocol::Build,
     pub workspaces_root: PathBuf,
     pub state_dir: Option<PathBuf>,
     pub claude_bin: Option<PathBuf>,
@@ -125,6 +126,7 @@ fn in_state_dir(given: &Given) -> anyhow::Result<PathBuf> {
 fn config(given: Given, refused: Option<String>) -> anyhow::Result<worker::Config> {
     let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
     Ok(worker::Config {
+        build: given.build,
         workspaces_root: given.workspaces_root,
         state_dir: given.state_dir,
         home: std::env::var_os(protocol::paths::HOME_VAR).map(PathBuf::from),
