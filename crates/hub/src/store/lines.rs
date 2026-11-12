@@ -1,22 +1,34 @@
 //! Each prompt and compaction recorded in a chat, as one line, for the lists that don't need whole events: a chat's
 //! outline, and what a workspace's title is worked out from.
 
-use protocol::model::{CompactionLine, Place, PromptLine, SessionId, WorkspaceId};
+use std::collections::HashMap;
+
+use protocol::model::{CompactionLine, Place, PromptLine, Seq, SessionId, SettledAt, WorkspaceId};
+use rusqlite::Connection;
 use rusqlite::types::ValueRef;
 use serde_json::Value;
 
 use super::{Store, StoreError, lock};
 
 impl Store {
-    /// Every prompt recorded in the session, oldest first, each as one line. It reads only prompts, by their kind, and
-    /// of each only its text and how many files it carries, so a long session costs no more than its prompts' text.
+    /// Every prompt recorded in the session, oldest first, each as one line, with where it was settled. It reads only
+    /// prompts and the events that settle them, by their kind, and of each prompt only its text and how many files it
+    /// carries, so a long session costs no more than its prompts' text.
     pub fn prompt_lines(&self, session_id: &SessionId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
             "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments'), place FROM events \
              WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq",
         )?;
-        lines_of(statement.query([session_id.as_str()])?)
+        let lines = lines_of(statement.query([session_id.as_str()])?)?;
+        let settled = settled_prompts(&conn, session_id)?;
+        Ok(lines
+            .into_iter()
+            .map(|line| match settled.get(&line.seq()) {
+                Some(at) => line.settled_at(*at),
+                None => line,
+            })
+            .collect())
     }
 
     /// Every compaction of the agent's own conversation that compacted, oldest first, each as one line. It reads only
@@ -47,7 +59,8 @@ impl Store {
     }
 
     /// Every prompt recorded in the workspace's chats, oldest first whichever chat it was in, each as one line, read as
-    /// [`Store::prompt_lines`] reads one chat's. A line's `seq` is its place in its own chat's log.
+    /// [`Store::prompt_lines`] reads one chat's but without where it was settled, which nothing that reads these needs.
+    /// A line's `seq` is its place in its own chat's log.
     pub fn workspace_prompt_lines(&self, workspace_id: &WorkspaceId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
@@ -57,6 +70,26 @@ impl Store {
         )?;
         lines_of(statement.query([workspace_id.as_str()])?)
     }
+}
+
+/// Where each prompt in the session was settled, by the prompt's `seq`: the last event that took or dropped it, as
+/// [`SettledAt`] says. It reads only those events, by their kind, and of each only which prompt it names and where it
+/// is.
+fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<Seq, SettledAt>, StoreError> {
+    let mut statement = conn.prepare_cached(
+        "SELECT json_extract(body, '$.prompt'), seq, place FROM events \
+         WHERE session_id = ? AND kind IN ('prompt_taken', 'prompt_dropped') ORDER BY seq",
+    )?;
+    let mut rows = statement.query([session_id.as_str()])?;
+    let mut settled = HashMap::new();
+    while let Some(row) = rows.next()? {
+        let Some(prompt) = row.get::<_, Option<i64>>(0)? else { continue };
+        let seq = row.get::<_, i64>(1)?.cast_unsigned();
+        let place = Place::new(row.get::<_, i64>(2)?.cast_unsigned());
+        // In order, so the last to name it stays.
+        settled.insert(prompt.cast_unsigned(), SettledAt { seq, place });
+    }
+    Ok(settled)
 }
 
 /// The line for each row of a prompt's `seq`, text, how many files it carries, and place.

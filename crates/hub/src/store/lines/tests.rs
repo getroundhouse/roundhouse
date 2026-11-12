@@ -1,5 +1,5 @@
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody};
-use protocol::model::Workspace;
+use protocol::model::{SettledAt, Workspace};
 use rusqlite::params;
 
 use super::*;
@@ -31,8 +31,33 @@ fn every_prompt_is_listed_in_order_as_a_line_and_nothing_else_is() {
     append(&prompt("", 2));
 
     let placed = |seq, text, files, place| PromptLine::new(seq, text, files).placed(Place::new(place));
-    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [placed(1, "Fix this", 0, 1), placed(5, "", 2, 4)]);
+    let taken = placed(1, "Fix this", 0, 1).settled_at(SettledAt { seq: 2, place: Place::new(2) });
+    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [taken, placed(5, "", 2, 4)]);
     assert!(store.prompt_lines(&"other".into()).unwrap().is_empty());
+}
+
+/// A chat draws a prompt where it was settled, and its outline jumps there, so the list says where for the prompts
+/// whose events aren't loaded.
+#[test]
+fn each_prompt_is_listed_with_the_last_event_that_settled_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let append = |body: &EventBody| store.append(&"s".into(), None, body, None, None, None).unwrap().event;
+
+    append(&prompt("taken", 0));
+    append(&subagents_message());
+    let taken = append(&EventBody::PromptTaken { prompt: 1 });
+    append(&prompt("dropped, then taken by the agent after", 0));
+    append(&EventBody::PromptDropped { prompt: 4 });
+    let taken_after = append(&EventBody::PromptTaken { prompt: 4 });
+    append(&prompt("dropped", 0));
+    let dropped = append(&EventBody::PromptDropped { prompt: 7 });
+    append(&prompt("waiting", 0));
+
+    let at = |event: &protocol::event::SessionEvent| SettledAt::of(event).unwrap().1;
+    let settled: Vec<_> = store.prompt_lines(&"s".into()).unwrap().iter().map(PromptLine::settled).collect();
+    assert_eq!(settled, [Some(at(&taken)), Some(at(&taken_after)), Some(at(&dropped)), None]);
+    assert_ne!(at(&taken).place.get(), taken.seq, "at its place among the agent's own, as well as its seq");
 }
 
 fn compaction(by: CompactedBy, tokens: Option<(u64, u64)>) -> EventBody {
