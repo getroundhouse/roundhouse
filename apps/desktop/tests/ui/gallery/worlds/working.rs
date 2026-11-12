@@ -2,6 +2,7 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{Checks, PullRequest, PullRequestFound, QueuedPrompt, SessionStatus, Wait, WaitUntil};
+use protocol::prompt::Prompt;
 
 use super::{chat_world, sidebar};
 use crate::gallery::world::World;
@@ -88,25 +89,24 @@ fn three_queued() -> Vec<QueuedPrompt> {
     vec![
         QueuedPrompt {
             client_msg_id: "queued-1".into(),
-            text: "Once that's in, add the PR state to the header as well, as in this sketch.".to_string(),
-            attachments: vec![Attachment {
-                id: "sketch".into(),
-                name: "header sketch.png".to_string(),
-                media_type: MediaType::Png,
-                size_bytes: 48_213,
-            }],
+            prompt: Prompt::carrying(
+                "Once that's in, add the PR state to the header as well, as in this sketch.",
+                vec![Attachment {
+                    id: "sketch".into(),
+                    name: "header sketch.png".to_string(),
+                    media_type: MediaType::Png,
+                    size_bytes: 48_213,
+                }],
+            ),
         },
-        QueuedPrompt {
-            client_msg_id: "queued-2".into(),
-            text: "Then open a draft PR for all of it.".to_string(),
-            attachments: Vec::new(),
-        },
+        QueuedPrompt { client_msg_id: "queued-2".into(), prompt: Prompt::new("Then open a draft PR for all of it.") },
         QueuedPrompt {
             client_msg_id: "queued-3".into(),
-            text: "After that, look at whether the CLI should show it too. It lists workspaces with their \
+            prompt: Prompt::new(
+                "After that, look at whether the CLI should show it too. It lists workspaces with their \
                    branches, so the state could go beside each one, but only if it fits on one line at 80 columns."
-                .to_string(),
-            attachments: Vec::new(),
+                    .to_string(),
+            ),
         },
     ]
 }
@@ -125,7 +125,7 @@ pub(in crate::gallery) fn queue_held() -> World {
     chat.queued = three_queued();
     let file =
         |name: &str, media_type| Attachment { id: name.into(), name: name.to_string(), media_type, size_bytes: 2_048 };
-    chat.queued[2].attachments = vec![file("workspaces.txt", MediaType::Text), file("header.png", MediaType::Png)];
+    chat.queued[2].prompt.files = vec![file("workspaces.txt", MediaType::Text), file("header.png", MediaType::Png)];
     chat.queue_held = true;
     world
 }

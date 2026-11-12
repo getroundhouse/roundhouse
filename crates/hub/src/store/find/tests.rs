@@ -1,11 +1,12 @@
 use protocol::event::{ContentBlock, EventBody};
 use protocol::find::{Found, Needle};
 use protocol::model::{Place, ToolUseId};
+use protocol::prompt::Prompt;
 
 use crate::store::tests::{notice, store_with_session};
 
 fn prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
 }
 
 /// What the subagent `call` started says.

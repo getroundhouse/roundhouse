@@ -191,7 +191,7 @@ proptest! {
         let used = ContentBlock::ToolUse { id: "t".into(), name: "Bash".into(), input };
         let blocks = vec![said, used];
         let bodies = [
-            EventBody::UserPrompt { text: texts[3].clone(), client_msg_id: None, attachments: Vec::new() },
+            EventBody::UserPrompt { client_msg_id: None, prompt: crate::prompt::Prompt::new(texts[3].clone()) },
             EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None },
             changed(&texts[0], &texts[1]),
         ];

@@ -68,7 +68,7 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
     let mut feed = hub.subscribe_feed();
     let live = hub.live_session(&"s".into()).await.unwrap();
 
-    live.record(Origin::Hub, cancelled_approval("q".into()), None, None).await.unwrap();
+    live.record(Origin::Hub, cancelled_approval("q".into()), None).await.unwrap();
 
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
@@ -97,8 +97,8 @@ async fn flushed(live: &LiveSession) {
 
 /// The last of its work in the background has gone, between turns.
 async fn background_over(live: &LiveSession) {
-    live.record(FROM_AGENT, listed(1), None, None).await.unwrap();
-    live.record(FROM_AGENT, listed(0), None, None).await.unwrap();
+    live.record(FROM_AGENT, listed(1), None).await.unwrap();
+    live.record(FROM_AGENT, listed(0), None).await.unwrap();
 }
 
 /// What the hub recorded of its own accord that the agent's state is.
@@ -140,7 +140,7 @@ async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
         permission_mode: None,
         agent_version: None,
     };
-    live.record(FROM_AGENT, init, None, None).await.unwrap();
+    live.record(FROM_AGENT, init, None).await.unwrap();
     tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
     flushed(&live).await;
 

@@ -115,8 +115,8 @@ impl Around {
         if matches!(body, EventBody::AgentCompacted { .. }) {
             around.open = m.folds.is_open(&ItemKey::Event(seq, 0), Fold::Output);
         }
-        if let EventBody::UserPrompt { attachments, .. } = body {
-            around.carried = attachments::carried(m, attachments);
+        if let EventBody::UserPrompt { prompt, .. } = body {
+            around.carried = attachments::carried(m, &prompt.files);
             around.prompt = log.prompt_state(seq);
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {

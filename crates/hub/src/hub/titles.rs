@@ -8,6 +8,7 @@ use std::sync::Arc;
 use protocol::attachment::{Attachment, AttachmentBytes, NewAttachment};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId};
+use protocol::prompt::Prompt;
 use protocol::short_text::start_of;
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tracing::warn;
@@ -97,11 +98,10 @@ impl Hub {
         self: &Arc<Self>,
         session: &SessionId,
         workspace: &WorkspaceId,
-        prompt: &str,
-        attachments: &[Attachment],
+        prompt: &Prompt<Attachment>,
     ) {
-        let images = chosen_images(attachments.iter().map(|attachment| (session.clone(), attachment.clone())));
-        let titled = match Title::from_first_line(prompt) {
+        let images = chosen_images(prompt.files.iter().map(|attachment| (session.clone(), attachment.clone())));
+        let titled = match Title::from_first_line(&prompt.text) {
             Some(title) => self.title_from_first_line(session, workspace, title).await,
             None if !images.is_empty() => self.untitled(session, workspace).await,
             None => return,
@@ -114,7 +114,7 @@ impl Hub {
             }
         };
         if titled.session.is_some() || titled.workspace.is_some() {
-            let asked = start_of(prompt, MOST_PROMPT_CHARS).0.to_owned();
+            let asked = start_of(&prompt.text, MOST_PROMPT_CHARS).0.to_owned();
             tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked, images));
         }
     }

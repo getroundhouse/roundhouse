@@ -8,6 +8,7 @@ use gpui_kit::{
 };
 use protocol::event::EventBody;
 use protocol::model::QueuedPrompt;
+use protocol::prompt::Prompt;
 
 use crate::steering::working;
 use crate::support::{Stack, Ui};
@@ -82,7 +83,7 @@ fn a_queued_prompt_can_be_changed_or_taken_out_before_its_sent(cx: &mut TestAppC
 
     ui.wait("the change and the removal", |ui| {
         let queue = queued(ui);
-        queue.len() == 1 && queue[0].client_msg_id == first.client_msg_id && queue[0].text == "say:changed"
+        queue.len() == 1 && queue[0].client_msg_id == first.client_msg_id && queue[0].prompt.text == "say:changed"
     });
     ui.wait_idle_with("the changed prompt's answer", |text| text.contains("changed"));
     assert!(!ui.assistant_text().contains("kept") && !ui.assistant_text().contains("taken out"));
@@ -107,7 +108,7 @@ fn escape_leaves_a_queued_prompt_as_it_was(cx: &mut TestAppContext) {
     assert!(ui.has(id("queued", &prompt)), "the text shows again, not the editor");
     ui.input("typed after");
     assert_eq!(ui.composer_text(), "typed after", "back in the composer");
-    assert_eq!(queued(&ui)[0].text, "say:as it was");
+    assert_eq!(queued(&ui)[0].prompt.text, "say:as it was");
 }
 
 #[gpui_kit::test]
@@ -176,7 +177,9 @@ fn the_arrow_on_a_queued_prompt_steers_the_agent_with_it(cx: &mut TestAppContext
     ui.wait("the turn to end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
     let events = ui.events();
     let at = |found: fn(&EventBody) -> bool| events.iter().position(|e| found(&e.body)).unwrap();
-    let sent = at(|body| matches!(body, EventBody::UserPrompt { text, .. } if text.contains("steered")));
+    let sent = at(
+        |body| matches!(body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.contains("steered")),
+    );
     let ended = at(|body| matches!(body, EventBody::TurnEnded { .. }));
     assert!(sent < ended, "into the running turn, not one after it");
 }
@@ -203,7 +206,7 @@ fn cmd_enter_queues_a_prompt_with_its_files_and_the_agent_gets_them_with_it(cx: 
     assert!(ui.attached().is_empty(), "queueing takes what was attached");
     ui.wait("the queue to show it with its file", |ui| {
         let queue = queued(ui);
-        queue.first().is_some_and(|prompt| prompt.attachments.len() == 1 && ui.visible(id("queued-files", prompt)))
+        queue.first().is_some_and(|prompt| prompt.prompt.files.len() == 1 && ui.visible(id("queued-files", prompt)))
     });
     let said = format!("attached: image/png {len} bytes | Pasted image.png: on disk, {len} bytes");
     ui.wait_idle_with("the agent to get the image", |text| text.ends_with(&said));

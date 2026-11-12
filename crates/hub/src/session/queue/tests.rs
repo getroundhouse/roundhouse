@@ -1,10 +1,11 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, TurnOutcome};
 use protocol::model::SessionStatus;
+use protocol::prompt::Prompt;
 
 use super::*;
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { text: "x".into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") }
 }
 
 fn idle() -> EventBody {

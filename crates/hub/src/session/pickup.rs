@@ -38,7 +38,7 @@ impl LiveSession {
                 && !state.queue.idle_is_stale();
             (!waiting).then(|| ApiError::new(ErrorCode::Conflict, "the agent has said something since"))
         };
-        match self.record_unless(Origin::Hub, idle, None, None, ended).await {
+        match self.record_unless(Origin::Hub, idle, None, ended).await {
             Ok(_) => {
                 warn!(session = %self.id, "the agent didn't pick up again by itself after its work in the background");
             }

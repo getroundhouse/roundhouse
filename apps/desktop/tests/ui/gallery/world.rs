@@ -13,6 +13,7 @@ use protocol::model::{
     ModelName, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus,
     SetupStatus, Subagent, Title, TitleSource, ToolUseId, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
 };
+use protocol::prompt::Prompt;
 use protocol::tail::Tail;
 
 use super::subagent_records::records_of;
@@ -150,7 +151,7 @@ impl World {
         let id = SessionId::from(format!("chat-{}", self.sessions.len() + 1));
         let created_at_ms = self.next_time();
         let title = events.iter().find_map(|body| match body {
-            EventBody::UserPrompt { text, .. } => Title::from_first_line(text),
+            EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } => Title::from_first_line(text),
             _ => None,
         });
         let log = log_of(&id, created_at_ms, events);

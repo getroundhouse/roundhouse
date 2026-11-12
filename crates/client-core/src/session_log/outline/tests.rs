@@ -1,12 +1,13 @@
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Place;
+use protocol::prompt::Prompt;
 
 use super::*;
 use crate::session_log::PromptAt;
 use crate::session_log::tests::page;
 
 fn prompt(seq: Seq, text: &str) -> SessionEvent {
-    let body = EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() };
+    let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) };
     SessionEvent {
         session_id: "s".into(),
         seq,

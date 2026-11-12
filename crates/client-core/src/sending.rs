@@ -3,7 +3,7 @@
 //! earlier one is still adding a large file. One that doesn't arrive is handed back whole, so nothing written is lost.
 
 use protocol::model::{AttachmentId, ClientMessageId, Seq, Session, SessionId};
-use protocol::prompt::check_prompt;
+use protocol::prompt::Prompt;
 
 use crate::attachments::FileToSend;
 use crate::client::{Client, ClientError, Place, Reply, Result};
@@ -149,10 +149,10 @@ impl Client {
         files: &[FileToSend],
         call: impl Fn(Vec<AttachmentId>) -> Result<T>,
     ) -> Result<T> {
-        check_prompt(text, files.len()).map_err(protocol::client::ApiError::from)?;
+        let carried: Vec<AttachmentId> = files.iter().map(|file| file.attachment.id.clone()).collect();
+        Prompt::carrying(text, carried.clone()).check().map_err(protocol::client::ApiError::from)?;
         let given: Vec<&FileToSend> = files.iter().filter(|file| self.has_given(id, &file.attachment.id)).collect();
         self.add_files(id, files.iter().filter(|file| !self.has_given(id, &file.attachment.id)))?;
-        let carried: Vec<AttachmentId> = files.iter().map(|file| file.attachment.id.clone()).collect();
         place.wait_turn();
         match call(carried.clone()) {
             Err(e) if e.is_not_found() && !given.is_empty() => {

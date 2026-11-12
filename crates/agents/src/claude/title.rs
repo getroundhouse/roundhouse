@@ -8,10 +8,11 @@ use std::time::Duration;
 
 use protocol::attachment::NewAttachment;
 use protocol::model::Title;
-use serde_json::{Value, json};
+use protocol::prompt::Prompt;
+use serde_json::Value;
 
 use super::one_off::{self, OneOff};
-use super::process::{image_block, resolve_binary, user_line};
+use super::process::{image_block, resolve_binary, user_line_saying};
 use crate::{AgentError, AgentOptions, NoTitle};
 
 /// Haiku answers in a second or two, and in about three with a full screenshot to read, so a call taking this long is
@@ -28,14 +29,13 @@ const SYSTEM_PROMPT: &str = "You name tasks. Reply with only a short title for t
 /// Runs in an empty directory of its own inside `scratch_dir`, so the CLI finds no project's instructions. Dropping
 /// the future stops the call and everything it started.
 pub async fn title_for(
-    prompt: &str,
-    images: &[NewAttachment],
+    prompt: &Prompt<NewAttachment>,
     options: &AgentOptions,
     scratch_dir: &Path,
 ) -> Result<Title, AgentError> {
     let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
     let room = tempfile::Builder::new().prefix("title-").tempdir_in(scratch_dir).map_err(NoTitle::NoRoom)?;
-    let mut asked = asked(prompt, images).to_string();
+    let mut asked = asked(prompt).to_string();
     asked.push('\n');
     let call = OneOff {
         bin: &bin,
@@ -54,13 +54,9 @@ pub async fn title_for(
 
 /// What the call reads: the prompt's images, then its words, which is where Anthropic's guidance puts images, as a
 /// session's prompt does. Anything that isn't an image, such as a kind from a newer hub, is left out.
-fn asked(prompt: &str, images: &[NewAttachment]) -> Value {
-    let images = images.iter().filter(|image| image.attachment.media_type.is_image());
-    let mut content: Vec<Value> = images.map(|image| image_block(image.attachment.media_type, &image.data)).collect();
-    if !prompt.trim().is_empty() || content.is_empty() {
-        content.push(json!({"type": "text", "text": prompt}));
-    }
-    user_line(content)
+fn asked(prompt: &Prompt<NewAttachment>) -> Value {
+    let images = prompt.files.iter().filter(|image| image.attachment.media_type.is_image());
+    user_line_saying(images.map(|image| image_block(image.attachment.media_type, &image.data)).collect(), prompt)
 }
 
 /// No tools, MCP servers, slash commands, hooks or project settings, and nothing saved, so the call only writes a
@@ -138,6 +134,7 @@ fn tidy(answer: &str) -> Option<Title> {
 #[cfg(test)]
 mod tests {
     use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+    use serde_json::json;
 
     use super::*;
 
@@ -207,15 +204,16 @@ mod tests {
         let (shot, chart) = (image(MediaType::Png, b"\x89PNG"), image(MediaType::Jpeg, b"\xff\xd8\xff"));
         let newer = image(MediaType::Unknown, b"?");
 
-        let line = asked("How do we fix this?", &[shot.clone(), newer, chart.clone()]);
+        let line = asked(&Prompt::carrying("How do we fix this?", vec![shot.clone(), newer, chart.clone()]));
 
         let content = line["message"]["content"].as_array().unwrap();
         let block = |image: &NewAttachment| image_block(image.attachment.media_type, &image.data);
         assert_eq!(content[..2], [block(&shot), block(&chart)], "a kind from a newer hub is left out");
         assert_eq!(content[2], json!({"type": "text", "text": "How do we fix this?"}));
         assert_eq!(content.len(), 3);
-        assert_eq!(line, user_line(content.clone()), "a user line, as a session's prompt is");
-        let images_alone = asked(" ", std::slice::from_ref(&shot));
+        let as_a_session_s = user_line_saying(content[..2].to_vec(), &Prompt::<()>::new("How do we fix this?"));
+        assert_eq!(line, as_a_session_s, "a user line, as a session's prompt is");
+        let images_alone = asked(&Prompt::carrying(" ", vec![shot.clone()]));
         assert_eq!(images_alone["message"]["content"], json!([block(&shot)]), "no empty words after them");
     }
 

@@ -9,6 +9,7 @@ use tokio::time::sleep_until;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunId, SessionId, SessionStatus};
+use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
 use tokio::sync::oneshot;
 
@@ -25,7 +26,7 @@ fn w() -> WorkspaceId {
 }
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { text: "next".into(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next") }
 }
 
 /// The hub, with a stand-in as `w`'s worker.
@@ -56,7 +57,7 @@ async fn a_prompt_recorded_as_the_worker_is_replaced_isnt_interrupted_by_its_age
 
     assert!(hub.replace_if_idle(&w(), &link).await, "nothing was at work");
     assert!(hub.existing_worker(&w()).is_none(), "the worker is still the workspace's");
-    live.record(Origin::Hub, prompt(), None, None).await.unwrap();
+    live.record(Origin::Hub, prompt(), None).await.unwrap();
     let body = Box::new(EventBody::AgentExited {
         reason: ExitReason::Requested,
         code: None,
@@ -76,7 +77,7 @@ async fn a_worker_whose_workspace_has_a_session_at_work_isnt_replaced() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, live) = carrying_on(dir.path());
 
-    live.record(Origin::Hub, prompt(), None, None).await.unwrap();
+    live.record(Origin::Hub, prompt(), None).await.unwrap();
     // A prompt from the person has the hub read their account through the worker, which isn't what's at work here.
     let deadline = Instant::now() + TIMEOUT;
     while link.calls_under_way() > 0 {

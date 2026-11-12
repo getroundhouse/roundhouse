@@ -6,6 +6,7 @@ use protocol::event::{ApprovalDecision, EventBody, ExitReason};
 use protocol::model::{
     ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, RunId, Seq, Session, UsageLimit,
 };
+use protocol::prompt::Prompt;
 use protocol::tail::StreamDelta;
 use tokio::sync::oneshot;
 
@@ -66,9 +67,8 @@ pub(crate) enum Item {
 
 pub(crate) enum Command {
     Prompt {
-        text: String,
         client_msg_id: Option<ClientMessageId>,
-        attachments: Vec<AttachmentId>,
+        prompt: Prompt<AttachmentId>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     },
     Approve {

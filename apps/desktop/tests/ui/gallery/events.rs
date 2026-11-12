@@ -7,9 +7,10 @@ use protocol::event::{
     AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, SubagentOutcome, TaskKind, TokenUsage, TurnOutcome,
 };
 use protocol::model::{MessageId, ModelName, Seq, ToolUseId};
+use protocol::prompt::Prompt;
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { text: text.to_string(), client_msg_id: None, attachments: Vec::new() }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
 }
 
 /// The agent taking the prompt recorded at `prompt`, which is the first event of every chat here.

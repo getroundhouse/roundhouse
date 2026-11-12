@@ -6,6 +6,7 @@ use client_core::session_log::PromptState;
 use gpui_kit::{AppContext as _, Pixels, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
+use protocol::prompt::Prompt;
 
 use crate::queue::queued;
 use crate::support::{Stack, Ui, top};
@@ -34,7 +35,7 @@ fn enter_while_the_agent_works_steers_it_and_the_prompt_waits_until_its_taken(cx
     let row = |ui: &Ui| {
         ui.events()
             .iter()
-            .position(|e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text.ends_with("steered")))
+            .position(|e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.ends_with("steered")))
     };
     ui.wait("the prompt to be recorded", |ui| row(ui).is_some());
     let at = row(&ui).unwrap();
@@ -81,8 +82,9 @@ fn a_prompt_sent_while_the_agent_thinks_is_drawn_under_the_thought(cx: &mut Test
     assert!(under_the_thought(&mut ui), "as soon as it's sent, under the thought as it streams");
     let recorded = |ui: &Ui| {
         let events = ui.events();
-        let prompt =
-            events.iter().position(|e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text == "say:steered"));
+        let prompt = events.iter().position(
+            |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text == "say:steered"),
+        );
         prompt.map(|row| ui.cx.read_entity(&transcript, |t, _| t.prompt_state_at(row)))
     };
     ui.wait("the prompt to be recorded", |ui| recorded(ui).is_some());

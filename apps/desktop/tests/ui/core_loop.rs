@@ -8,6 +8,7 @@ use gpui_kit::component::Theme;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, PermissionMode, RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::prompt::Prompt;
 
 use desktop::busy::Busy;
 use desktop::workspace_pane::Showing;
@@ -53,7 +54,7 @@ fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     assert_eq!(ui.cx.read_entity(&pane, |p, _| p.showing()), Showing::Chat);
     ui.wait("the comment to reach the agent", |ui| {
         ui.events().iter().any(
-            |e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text.contains("`a.txt:2`: Why this word?")),
+            |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.contains("`a.txt:2`: Why this word?")),
         )
     });
     ui.wait("the comment to be cleared", |ui| {
@@ -90,7 +91,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     ui.wait("the PR request to reach the agent", |ui| {
         ui.events()
             .iter()
-            .any(|e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text.contains("gh pr create")))
+            .any(|e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.contains("gh pr create")))
     });
     ui.wait("the turn to finish", |ui| ui.session_status() == Some(SessionStatus::Idle));
 

@@ -264,10 +264,10 @@ fn render_event(
         EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
         }
-        EventBody::UserPrompt { text, client_msg_id, .. } => {
+        EventBody::UserPrompt { client_msg_id, prompt, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::recorded(place, around.prompt));
-            let text = Prompt { text, find };
+            let text = Prompt { text: &prompt.text, find };
             prompt_bubble(&key, text, &around.carried, progress, shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {

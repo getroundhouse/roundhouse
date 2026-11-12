@@ -2,6 +2,7 @@
 
 use protocol::client::{ClientRequest, queue};
 use protocol::model::{AttachmentId, ClientMessageId, Session, SessionId};
+use protocol::prompt::Prompt;
 
 use super::{Client, Result};
 
@@ -24,8 +25,7 @@ impl Client {
         self.expect_session(ClientRequest::SessionQueue(queue::SessionQueue {
             id: id.clone(),
             client_msg_id,
-            text,
-            attachments,
+            prompt: Prompt::carrying(text, attachments),
         }))
     }
 

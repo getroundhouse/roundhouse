@@ -164,8 +164,8 @@ enum Drawn {
 fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     let seq = event.seq;
     match &event.body {
-        EventBody::UserPrompt { text, client_msg_id, .. } if !text.trim().is_empty() => {
-            gather.written(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, text);
+        EventBody::UserPrompt { client_msg_id, prompt, .. } if prompt.says_anything() => {
+            gather.written(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, &prompt.text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             for (ix, (block, drawing)) in blocks.iter().zip(&around.blocks).enumerate() {

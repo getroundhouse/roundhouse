@@ -1,5 +1,6 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{AttachmentId, CacheTtl, ContextUsage, Effort, ModelName, PermissionMode, PromptCache};
+use protocol::prompt::Prompt;
 
 use super::super::tests::{notice, store_with_session};
 use super::super::{AddedBy, SessionChange};
@@ -227,7 +228,7 @@ fn a_session_anything_has_been_sent_in_is_kept() {
         store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
     });
     kept_once("a queued prompt", |store| {
-        let later = QueuedPrompt { client_msg_id: "m".into(), text: "later".into(), attachments: Vec::new() };
+        let later = QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("later") };
         store.queue_prompt(&"s".into(), &later).unwrap();
     });
 }

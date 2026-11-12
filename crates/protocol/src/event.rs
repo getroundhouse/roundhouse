@@ -14,6 +14,7 @@ use crate::model::{
     AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
     TaskId, ToolUseId, UsageLimit,
 };
+use crate::prompt::Prompt;
 
 pub use approval::{ApprovalDecision, ApprovalOutcome};
 pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
@@ -61,12 +62,11 @@ pub enum EventBody {
     /// A prompt becomes real once this is recorded. Until then a client shows it as pending, and
     /// matches it here by `client_msg_id`.
     UserPrompt {
-        text: String,
         #[serde(default)]
         client_msg_id: Option<ClientMessageId>,
-        /// The files it carries, in the order they were added. Their bytes are read with `AttachmentRead`.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<Attachment>,
+        /// Its files are in the order they were added, and their bytes are read with `AttachmentRead`.
+        #[serde(flatten)]
+        prompt: Prompt<Attachment>,
     },
     /// The agent took the prompt recorded at `prompt` into its conversation. One sent mid-turn waits until the agent
     /// can take it, such as when a running tool finishes. Every prompt gets this or `PromptDropped`, and until then the

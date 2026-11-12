@@ -10,6 +10,7 @@ use desktop::app::Quitting;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext};
 use protocol::event::EventBody;
+use protocol::prompt::Prompt;
 
 use crate::menus::choose;
 use crate::support::{Frozen, Stack, Ui};
@@ -35,7 +36,7 @@ fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
     let prompts: Vec<_> = events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::UserPrompt { text, .. } => Some(text.as_str()),
+            EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } => Some(text.as_str()),
             _ => None,
         })
         .collect();
@@ -180,7 +181,11 @@ fn quitting_waits_for_a_prompt_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
     assert!(!ui.cx.has_pending_prompt());
     let (events, _) = stack.client().session_read(&chat, 0, 1000, false).unwrap();
-    assert!(events.iter().any(|e| matches!(&e.body, EventBody::UserPrompt { text, .. } if text == "say:look")));
+    assert!(
+        events.iter().any(
+            |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text == "say:look")
+        )
+    );
 }
 
 /// Quitting waits for any call the app has made that the hub hasn't answered yet, as it does for what's typed.

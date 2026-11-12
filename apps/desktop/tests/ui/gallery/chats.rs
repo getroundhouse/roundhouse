@@ -6,6 +6,7 @@
 use protocol::attachment::Attachment;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::model::{ApprovalId, MessageId, PermissionMode, TaskId, ToolUseId};
+use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
@@ -107,11 +108,13 @@ const ATTACHED_REPLY: &str = "The badge comes after the name in the row, but the
 pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
     vec![
         EventBody::UserPrompt {
-            text: "When the sidebar is narrow, the PR badge runs over the workspace's name. This is how it looks, \
-                   with the layout log."
-                .to_string(),
             client_msg_id: None,
-            attachments,
+            prompt: Prompt::carrying(
+                "When the sidebar is narrow, the PR badge runs over the workspace's name. This is how it looks, \
+                   with the layout log."
+                    .to_string(),
+                attachments,
+            ),
         },
         taken(1),
         text("msg-1", ATTACHED_REPLY),
@@ -190,9 +193,8 @@ pub(crate) fn steered() -> Vec<EventBody> {
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
     events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
     events.push(EventBody::UserPrompt {
-        text: "Only the sidebar's tests matter here, so skip the rest next time.".to_string(),
         client_msg_id: None,
-        attachments: Vec::new(),
+        prompt: Prompt::new("Only the sidebar's tests matter here, so skip the rest next time."),
     });
     events
 }

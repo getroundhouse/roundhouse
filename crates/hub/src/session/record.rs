@@ -49,6 +49,12 @@ fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
     After { body, status: next, change: SessionChange { status, queue_held, recorded: None }, tasks, waits }
 }
 
+/// The ID a prompt was sent under, which the store records it once under.
+fn sent_as(body: &EventBody) -> Option<&ClientMessageId> {
+    let EventBody::UserPrompt { client_msg_id, .. } = body else { return None };
+    client_msg_id.as_ref()
+}
+
 impl LiveSession {
     /// Commits to the log first, so nothing is seen that isn't durable, then updates live state.
     /// One at a time: both tasks record, and status has to change in the same order as the log.
@@ -57,19 +63,18 @@ impl LiveSession {
         origin: Origin,
         body: EventBody,
         raw: Option<String>,
-        client_msg_id: Option<ClientMessageId>,
     ) -> Result<(SessionEvent, bool), ApiError> {
-        self.record_unless(origin, body, raw, client_msg_id, |_| None).await
+        self.record_unless(origin, body, raw, |_| None).await
     }
 
     /// Records `body` unless `refused` says why not, of the session as everything recorded before it left it. It's
-    /// asked in the same order as everything is recorded, so nothing recorded meanwhile can make its answer wrong.
+    /// asked in the same order as everything is recorded, so nothing recorded meanwhile can make its answer wrong. A
+    /// prompt is recorded once under its `client_msg_id`, and recording it again returns the first, as a duplicate.
     pub(super) async fn record_unless(
         &self,
         origin: Origin,
         body: EventBody,
         raw: Option<String>,
-        client_msg_id: Option<ClientMessageId>,
         refused: impl FnOnce(&LiveState) -> Option<ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
@@ -89,6 +94,7 @@ impl LiveSession {
         let (announce, held) = (!change.is_none(), change.queue_held);
         let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
         let id = self.id.clone();
+        let client_msg_id = sent_as(&body).cloned();
         let for_store = body.clone();
         let appended = hub
             .blocking(move |store| {
@@ -157,7 +163,7 @@ impl LiveSession {
 
     /// For where nobody is waiting to hear that recording failed.
     pub(crate) async fn record_or_log(&self, origin: Origin, body: EventBody) {
-        if let Err(e) = self.record(origin, body, None, None).await {
+        if let Err(e) = self.record(origin, body, None).await {
             error!(session = %self.id, "could not record an event: {e}");
         }
     }

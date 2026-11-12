@@ -11,6 +11,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
 use protocol::paths::AGENTS_DIR;
+use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -24,11 +25,10 @@ use crate::instructions::INSTRUCTIONS;
 pub(crate) async fn title_for(
     state: &State,
     agent: AgentKind,
-    prompt: &str,
-    images: &[NewAttachment],
+    prompt: &Prompt<NewAttachment>,
 ) -> Result<WorkerResponse, ApiError> {
     let options = one_off(state, "title");
-    let title = agents::title_for(agent, prompt, images, &options, &state.config.scratch_dir);
+    let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
     let title = until_stopping(state, title).await?;
     Ok(WorkerResponse::Title { title: title?.to_string() })
 }

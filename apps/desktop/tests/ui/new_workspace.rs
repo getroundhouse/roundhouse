@@ -6,6 +6,7 @@
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{Effort, ModelName, PermissionMode};
+use protocol::prompt::Prompt;
 
 use crate::support::{CLAUDE_STARTS_WITH, Held, Stack, Ui, git, sidebar_row};
 
@@ -22,7 +23,7 @@ fn open_with_a_repo<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 /// The text of each prompt the chat showing has been sent, in order.
 fn prompts(ui: &Ui<'_>) -> Vec<String> {
     let prompts = ui.events().into_iter().filter_map(|event| match event.body {
-        EventBody::UserPrompt { text, .. } => Some(text),
+        EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } => Some(text),
         _ => None,
     });
     prompts.collect()
@@ -142,7 +143,7 @@ fn a_file_pasted_in_the_dialog_goes_with_the_first_prompt(cx: &mut TestAppContex
     ui.wait_for_a_new_workspace(before);
     ui.wait_idle_with("the agent to see the file", |text| text.contains("notes.txt"));
     let carried = ui.events().into_iter().find_map(|e| match e.body {
-        EventBody::UserPrompt { attachments, .. } => Some(attachments),
+        EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => Some(attachments),
         _ => None,
     });
     let names: Vec<String> = carried.unwrap_or_default().into_iter().map(|a| a.name).collect();

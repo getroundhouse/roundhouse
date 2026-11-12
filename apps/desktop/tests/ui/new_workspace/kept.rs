@@ -6,6 +6,7 @@ use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, Te
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
 use protocol::model::{Effort, ModelName, PermissionMode, WorkspaceDraft, WorkspaceDraftToKeep};
+use protocol::prompt::Prompt;
 
 use super::open_with_a_repo;
 use crate::support::{Frozen, Stack, Ui, wait_until};
@@ -55,7 +56,7 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_until_the_workspace_is_
     ui.wait_for_a_new_workspace(before);
     ui.wait("the first prompt, with the file read back", |ui| {
         let carried = ui.events().into_iter().find_map(|e| match e.body {
-            EventBody::UserPrompt { attachments, .. } => Some(attachments),
+            EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => Some(attachments),
             _ => None,
         });
         carried.is_some_and(|files| files.iter().map(|file| file.name.as_str()).eq(["notes.txt"]))

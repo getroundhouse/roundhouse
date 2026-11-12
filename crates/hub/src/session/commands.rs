@@ -6,6 +6,7 @@ use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, ExitReason, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionStatus, SetupStatus};
+use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -19,15 +20,15 @@ mod compact;
 
 /// What the agent is asked, once it's recorded.
 enum Asking {
-    Prompt { text: String, attachments: Vec<Attachment> },
+    Prompt(Prompt<Attachment>),
     Compact { keeping: Option<String> },
 }
 
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
         match command {
-            Command::Prompt { text, client_msg_id, attachments, reply } => {
-                session.handle_prompt(text, client_msg_id, &attachments, reply).await;
+            Command::Prompt { client_msg_id, prompt, reply } => {
+                session.handle_prompt(client_msg_id, prompt, reply).await;
             }
             Command::Approve { approval_id, decision, reply } => {
                 let _ = reply.send(session.handle_approve(approval_id, decision).await);
@@ -184,10 +185,10 @@ impl LiveSession {
     async fn forward(&self, seq: Seq, asking: Asking) -> Result<(), ApiError> {
         let session_id = self.id.clone();
         let request = match asking {
-            Asking::Prompt { text, attachments } => {
+            Asking::Prompt(prompt) => {
                 // Only now, after waiting on setup, since the worktree has to be ready for them.
-                let attachments = self.hub()?.place_attachments(&self.id, &self.workspace_id, &attachments).await?;
-                WorkerRequest::AgentPrompt { session_id, prompt: seq, text, attachments }
+                let placed = self.hub()?.place_attachments(&self.id, &self.workspace_id, &prompt.files).await?;
+                WorkerRequest::AgentPrompt { session_id, seq, prompt: prompt.with_files(placed) }
             }
             Asking::Compact { keeping } => WorkerRequest::AgentCompact { session_id, asked: seq, keeping },
         };
@@ -213,18 +214,19 @@ impl LiveSession {
         hub.ready_workspace(&self.workspace_id).await.map(drop)
     }
 
-    /// Returns the prompt's place in the log, whether it had already been recorded, and what it carries.
+    /// Returns the prompt's place in the log, whether it had already been recorded, and the prompt with the hub's record
+    /// of each file it carries.
     async fn record_prompt(
         &self,
         hub: &Arc<Hub>,
-        text: &str,
         client_msg_id: Option<ClientMessageId>,
-        attachments: &[AttachmentId],
-    ) -> Result<(Seq, bool, Vec<Attachment>), ApiError> {
-        let (id, ids) = (self.id.clone(), attachments.to_vec());
-        let attachments = hub.blocking(move |store| store.attachments(&id, &ids)).await?;
-        let (seq, duplicate) = self.record_carrying(hub, text, client_msg_id, &attachments).await?;
-        Ok((seq, duplicate, attachments))
+        prompt: Prompt<AttachmentId>,
+    ) -> Result<(Seq, bool, Prompt<Attachment>), ApiError> {
+        let Prompt { text, files } = prompt;
+        let id = self.id.clone();
+        let prompt = Prompt::carrying(text, hub.blocking(move |store| store.attachments(&id, &files)).await?);
+        let (seq, duplicate) = self.record_carrying(hub, client_msg_id, &prompt).await?;
+        Ok((seq, duplicate, prompt))
     }
 
     /// Records a prompt whose files are known already, such as a queued one's, and returns its place in the log and
@@ -232,28 +234,22 @@ impl LiveSession {
     pub(super) async fn record_carrying(
         &self,
         hub: &Arc<Hub>,
-        text: &str,
         client_msg_id: Option<ClientMessageId>,
-        attachments: &[Attachment],
+        prompt: &Prompt<Attachment>,
     ) -> Result<(Seq, bool), ApiError> {
         self.can_be_asked(hub).await?;
-        let body = EventBody::UserPrompt {
-            text: text.to_string(),
-            client_msg_id: client_msg_id.clone(),
-            attachments: attachments.to_vec(),
-        };
-        let (event, duplicate) = self.record(Origin::Hub, body, None, client_msg_id).await?;
+        let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone() };
+        let (event, duplicate) = self.record(Origin::Hub, body, None).await?;
         if !duplicate {
-            hub.title_from_prompt(&self.id, &self.workspace_id, text, attachments).await;
+            hub.title_from_prompt(&self.id, &self.workspace_id, prompt).await;
         }
         Ok((event.seq, duplicate))
     }
 
     async fn handle_prompt(
         &self,
-        text: String,
         client_msg_id: Option<ClientMessageId>,
-        attachments: &[AttachmentId],
+        prompt: Prompt<AttachmentId>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     ) {
         let hub = match self.hub() {
@@ -263,7 +259,7 @@ impl LiveSession {
                 return;
             }
         };
-        let (seq, duplicate, attachments) = match self.record_prompt(&hub, &text, client_msg_id, attachments).await {
+        let (seq, duplicate, prompt) = match self.record_prompt(&hub, client_msg_id, prompt).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 let _ = reply.send(Err(e));
@@ -274,12 +270,12 @@ impl LiveSession {
         // reported in the log, where every client can see them.
         let _ = reply.send(Ok((seq, duplicate)));
         if !duplicate {
-            self.deliver_prompt(&hub, seq, text, attachments).await;
+            self.deliver_prompt(&hub, seq, prompt).await;
         }
     }
 
-    pub(super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, text: String, attachments: Vec<Attachment>) {
-        self.deliver(hub, seq, Asking::Prompt { text, attachments }).await;
+    pub(super) async fn deliver_prompt(&self, hub: &Hub, seq: Seq, prompt: Prompt<Attachment>) {
+        self.deliver(hub, seq, Asking::Prompt(prompt)).await;
     }
 
     /// Gets what was recorded at `seq` to the agent, starting one if it has to. Failures go in the log, and so does
@@ -345,7 +341,7 @@ impl LiveSession {
             answers_by_text,
             answers_by_position,
         };
-        self.record(Origin::Hub, resolved, None, None).await?;
+        self.record(Origin::Hub, resolved, None).await?;
         let hub = self.hub()?;
         let link = hub
             .existing_worker(&self.workspace_id)
