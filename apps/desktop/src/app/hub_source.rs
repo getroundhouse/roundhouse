@@ -84,6 +84,8 @@ mod tests {
             running_setups: 0,
             requests: 1,
             keeping_awake: false,
+            keeps_workers: false,
+            oldest_protocol_version: None,
         }
     }
 

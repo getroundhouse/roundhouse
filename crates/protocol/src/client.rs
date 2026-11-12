@@ -14,6 +14,7 @@ use crate::tail::{StreamDelta, Tail};
 
 pub mod drafts;
 pub mod files;
+pub mod queue;
 mod request;
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
@@ -133,6 +134,14 @@ pub struct HubStatus {
     /// it's been told not to.
     #[serde(default)]
     pub keeping_awake: bool,
+    /// Whether restarting it with `hub_restart` leaves its workers running, with their agents. A hub from before
+    /// that stops them, so a client replaces it only once nothing is running on it.
+    #[serde(default)]
+    pub keeps_workers: bool,
+    /// The oldest version of the client protocol it speaks, as well as `protocol_version`, the newest. `None` from a
+    /// hub from before this, which speaks only the one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest_protocol_version: Option<u32>,
 }
 
 impl HubStatus {

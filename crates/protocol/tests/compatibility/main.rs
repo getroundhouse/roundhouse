@@ -13,6 +13,7 @@ use protocol::tail::{Compacting, StreamDelta, Tail};
 
 mod hellos;
 mod refusals;
+mod restarts;
 mod worker;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real

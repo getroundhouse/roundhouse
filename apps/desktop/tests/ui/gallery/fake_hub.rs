@@ -213,6 +213,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::FilePages(FilePages { pages: pages_of(base_text(world, &path)?, page_lines, &pages) }))
         }
         R::HubShutdown
+        | R::HubRestart
         | R::HubShutdownIfIdle
         | R::HubConfigure { .. }
         | R::RepoAdd { .. }
@@ -227,10 +228,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionPrompt { .. }
         | R::AttachmentAdd { .. }
         | R::AttachmentRemove { .. }
-        | R::SessionQueue { .. }
-        | R::SessionChangeQueued { .. }
-        | R::SessionUnqueue { .. }
-        | R::SessionSendQueued { .. }
+        | R::SessionQueue(_)
+        | R::SessionChangeQueued(_)
+        | R::SessionUnqueue(_)
+        | R::SessionSendQueued(_)
         | R::SessionApprove { .. }
         | R::SessionCancel { .. }
         | R::SessionCompact { .. }
@@ -298,6 +299,8 @@ fn status(world: &World) -> HubStatus {
         running_setups: 0,
         requests: 1,
         keeping_awake: false,
+        keeps_workers: false,
+        oldest_protocol_version: None,
     }
 }
 

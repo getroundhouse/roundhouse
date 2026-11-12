@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{drafts, files};
+use super::{drafts, files, queue};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
@@ -36,6 +36,10 @@ pub enum ClientRequest {
     ///
     /// [`HubStatus::is_idle`]: super::HubStatus::is_idle
     HubShutdownIfIdle,
+    /// Stops the hub without stopping its workers, whose agents carry on, for the next hub to connect to again. It
+    /// waits for setup scripts that are running and requests under way to finish first. Works without a hello, as
+    /// `HubShutdown` does. Only a hub whose status says [`keeps_workers`](super::HubStatus::keeps_workers) knows it.
+    HubRestart,
     /// Changes the hub's own settings, which it keeps and every client shows. A setting left out is left as it is. Sent
     /// again, it sets the same again.
     HubConfigure {
@@ -293,41 +297,14 @@ pub enum ClientRequest {
     WorkspaceFileOpenAt(files::WorkspaceFileOpenAt),
     /// See [`files::WorkspaceFilePages`].
     WorkspaceFilePages(files::WorkspaceFilePages),
-    /// Puts a prompt at the end of the queue. Sending it again under the same `client_msg_id` changes nothing, so a
-    /// retry is safe, and `SessionChangeQueued` is what changes it. Refused with `Conflict` once that prompt has been
-    /// sent, since the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the
-    /// queue is held, as `Session::queue_held` says. As with `SessionPrompt`, each of `attachments` has to have been
-    /// added to this session first, and a prompt with any can have no text.
-    SessionQueue {
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-        text: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<AttachmentId>,
-    },
-    /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and the files it was queued
-    /// with, so with any the text can be empty. Refused with `Conflict` once it's been sent, since the agent has it by
-    /// then, and with `NotFound` once it's been taken out, so a change that comes too late is never queued as a prompt
-    /// of its own. Answers with the session. A hub older than this refuses it as unsupported.
-    SessionChangeQueued {
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-        text: String,
-    },
-    /// Takes a prompt out of the queue. Taking out one that isn't there, because it's been sent or taken out already,
-    /// changes nothing. Answers with the session.
-    SessionUnqueue {
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-    },
-    /// Sends the prompt queued under `client_msg_id` now, out of its turn: into the turn the agent is working on, which
-    /// steers it, or as a turn of its own. Like any prompt the person sends, it lets a held queue go on once its turn
-    /// ends. Sending one that isn't queued, because it's been sent or taken out, changes nothing. Answers with the
-    /// session once the prompt is recorded.
-    SessionSendQueued {
-        id: SessionId,
-        client_msg_id: ClientMessageId,
-    },
+    /// See [`queue::SessionQueue`].
+    SessionQueue(queue::SessionQueue),
+    /// See [`queue::SessionChangeQueued`].
+    SessionChangeQueued(queue::SessionChangeQueued),
+    /// See [`queue::SessionUnqueue`].
+    SessionUnqueue(queue::SessionUnqueue),
+    /// See [`queue::SessionSendQueued`].
+    SessionSendQueued(queue::SessionSendQueued),
     /// Answering again is refused, changing nothing.
     SessionApprove {
         id: SessionId,

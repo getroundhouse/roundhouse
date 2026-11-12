@@ -1,6 +1,6 @@
 //! The calls for a session's queue: prompts waiting for the agent to finish.
 
-use protocol::client::ClientRequest;
+use protocol::client::{ClientRequest, queue};
 use protocol::model::{AttachmentId, ClientMessageId, Session, SessionId};
 
 use super::{Client, Result};
@@ -21,22 +21,34 @@ impl Client {
         attachments: Vec<AttachmentId>,
     ) -> Result<Session> {
         let text = text.to_string();
-        self.expect_session(ClientRequest::SessionQueue { id: id.clone(), client_msg_id, text, attachments })
+        self.expect_session(ClientRequest::SessionQueue(queue::SessionQueue {
+            id: id.clone(),
+            client_msg_id,
+            text,
+            attachments,
+        }))
     }
 
     /// See [`ClientRequest::SessionChangeQueued`].
     pub fn session_change_queued(&self, id: &SessionId, client_msg_id: ClientMessageId, text: &str) -> Result<Session> {
         let text = text.to_string();
-        self.expect_session(ClientRequest::SessionChangeQueued { id: id.clone(), client_msg_id, text })
+        self.expect_session(ClientRequest::SessionChangeQueued(queue::SessionChangeQueued {
+            id: id.clone(),
+            client_msg_id,
+            text,
+        }))
     }
 
     /// See [`ClientRequest::SessionUnqueue`].
     pub fn session_unqueue(&self, id: &SessionId, client_msg_id: ClientMessageId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionUnqueue { id: id.clone(), client_msg_id })
+        self.expect_session(ClientRequest::SessionUnqueue(queue::SessionUnqueue { id: id.clone(), client_msg_id }))
     }
 
     /// See [`ClientRequest::SessionSendQueued`].
     pub fn session_send_queued(&self, id: &SessionId, client_msg_id: ClientMessageId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionSendQueued { id: id.clone(), client_msg_id })
+        self.expect_session(ClientRequest::SessionSendQueued(queue::SessionSendQueued {
+            id: id.clone(),
+            client_msg_id,
+        }))
     }
 }

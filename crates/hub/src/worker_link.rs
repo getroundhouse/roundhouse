@@ -89,12 +89,13 @@ impl WorkerLink {
         let hello = link.call(WorkerRequest::Hello {
             protocol_version: versions::WORKERS.newest,
             oldest_protocol_version: Some(versions::WORKERS.oldest),
+            keep_running_without_hub: false,
         });
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
-            Ok(Ok(WorkerResponse::Hello { protocol_version })) if versions::WORKERS.speaks(protocol_version) => {
+            Ok(Ok(WorkerResponse::Hello { protocol_version, .. })) if versions::WORKERS.speaks(protocol_version) => {
                 return Ok(link);
             }
-            Ok(Ok(WorkerResponse::Hello { protocol_version })) => ApiError::new(
+            Ok(Ok(WorkerResponse::Hello { protocol_version, .. })) => ApiError::new(
                 ErrorCode::VersionMismatch,
                 format!("the worker chose protocol {protocol_version}, and this hub speaks {}", versions::WORKERS),
             ),
@@ -273,19 +274,19 @@ async fn read_frames(
         };
         match parsed {
             WorkerFrame::Reply { id, outcome } => link.calls.reply(id, outcome.into_result()),
-            WorkerFrame::AgentEvent { session_id, run, body, raw, attachments } => {
+            WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq: _ } => {
                 hub.route(&session_id, Item::Event { run, body, raw, attachments }).await;
             }
             WorkerFrame::AgentDelta { session_id, run, delta } => {
                 hub.route(&session_id, Item::Delta { run, delta }).await;
             }
-            WorkerFrame::AgentContext { session_id, run, context } => {
+            WorkerFrame::AgentContext { session_id, run, context, seq: _ } => {
                 hub.route(&session_id, Item::Context { run, context }).await;
             }
-            WorkerFrame::AgentCache { session_id, run, request } => {
+            WorkerFrame::AgentCache { session_id, run, request, seq: _ } => {
                 hub.route(&session_id, Item::Cache { run, request }).await;
             }
-            WorkerFrame::AgentLimits { session_id, run, limits } => {
+            WorkerFrame::AgentLimits { session_id, run, limits, seq: _ } => {
                 hub.route(&session_id, Item::Limits { run, limits }).await;
             }
             WorkerFrame::Ask { id, session_id, ask } => {

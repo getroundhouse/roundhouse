@@ -6,6 +6,7 @@ use anyhow::Context;
 use client_core::{Client, Daemon, FileToSend, HubAdmin};
 use protocol::event::ApprovalDecision;
 use protocol::paths::Paths;
+use protocol::versions::Versions;
 
 use crate::args::{Args, Cmd, HubCmd, RepoCmd};
 use crate::session::{find_session, follow, print_log, session_command};
@@ -119,7 +120,8 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
             if status.hub_version != protocol::BUILD_VERSION {
                 println!("this client is version {}", protocol::BUILD_VERSION);
             }
-            if status.protocol_version != protocol::client::CLIENT_PROTOCOL_VERSION {
+            let speaks = Versions::from_hello(status.protocol_version, status.oldest_protocol_version);
+            if !speaks.speaks(protocol::client::CLIENT_PROTOCOL_VERSION) {
                 println!(
                     "this client speaks protocol {}, so it can only stop that hub",
                     protocol::client::CLIENT_PROTOCOL_VERSION

@@ -25,6 +25,7 @@ fn hello() -> WorkerRequest {
     WorkerRequest::Hello {
         protocol_version: WORKER_PROTOCOL_VERSION,
         oldest_protocol_version: Some(WORKER_PROTOCOL_VERSION),
+        keep_running_without_hub: false,
     }
 }
 
@@ -228,11 +229,12 @@ async fn replies_to(config: Config, calls: &[Vec<u8>]) -> std::collections::BTre
 async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
     let dir = tempfile::tempdir().unwrap();
     let ours = WORKER_PROTOCOL_VERSION;
-    let hellos = [
-        WorkerRequest::Hello { protocol_version: ours + 1, oldest_protocol_version: Some(ours) },
-        WorkerRequest::Hello { protocol_version: ours + 2, oldest_protocol_version: Some(ours + 1) },
-        WorkerRequest::Hello { protocol_version: ours, oldest_protocol_version: None },
-    ];
+    let hello = |protocol_version, oldest_protocol_version| WorkerRequest::Hello {
+        protocol_version,
+        oldest_protocol_version,
+        keep_running_without_hub: false,
+    };
+    let hellos = [hello(ours + 1, Some(ours)), hello(ours + 2, Some(ours + 1)), hello(ours, None)];
     let calls: Vec<_> = hellos
         .into_iter()
         .enumerate()
@@ -241,7 +243,8 @@ async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
 
     let answered = replies_to(config(dir.path(), None), &calls).await;
 
-    let chosen = WorkerOutcome::Response(WorkerResponse::Hello { protocol_version: ours });
+    let build = Some(protocol::BUILD_VERSION.to_string());
+    let chosen = WorkerOutcome::Response(WorkerResponse::Hello { protocol_version: ours, build });
     assert_eq!(answered[&0], chosen, "a newer hub that still speaks this worker's version");
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{answered:?}");
     assert_eq!(answered[&2], chosen, "a hub from before ranges");
@@ -370,4 +373,28 @@ async fn an_agent_goes_without_the_tools_when_they_arent_served_or_there_is_nowh
         told_at_start(untold.path(), config(untold.path(), Some(cli(untold.path(), KEEPS_ITS_MCP_CONFIG))), true).await;
 
     assert_eq!((unserved.as_str(), untold.as_str()), ("", ""), "started without a --mcp-config");
+}
+
+/// So a hub that connects to it again carries on with their sessions rather than taking them for stopped.
+#[tokio::test]
+async fn a_worker_lists_the_agents_it_is_running() {
+    let dir = tempfile::tempdir().unwrap();
+    let Worker { read: hub_read, write: mut hub_write, running } =
+        start_worker(config(dir.path(), Some(waiting_cli(dir.path()))));
+    let mut frames = BufReader::new(hub_read).lines();
+    let start = WorkerRequest::AgentStart(AgentSpec { run: RunId::new(4), ..agent_start("s", dir.path(), None) });
+
+    let mut answered = Vec::new();
+    // One at a time, since each request runs on a task of its own.
+    for (id, request) in [hello(), start, WorkerRequest::RunningAgents].into_iter().enumerate() {
+        let id = id as u64;
+        hub_write.write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).await.unwrap();
+        answered.push(reply(&mut frames, id).await);
+    }
+
+    assert!(matches!(answered[1], WorkerOutcome::Response(WorkerResponse::AgentStarted { .. })), "{answered:?}");
+    let agent = protocol::worker::RunningAgent { session_id: "s".into(), run: RunId::new(4) };
+    assert_eq!(answered[2], WorkerOutcome::Response(WorkerResponse::RunningAgents { agents: vec![agent] }));
+    hub_write.shutdown().await.unwrap();
+    timeout(Duration::from_secs(10), running).await.expect("the worker to stop its agent and exit").unwrap();
 }

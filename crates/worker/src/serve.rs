@@ -223,9 +223,13 @@ async fn handle(
     // One this build can't read is a newer hub's, which does without whatever this worker refuses, where leaving it
     // unanswered would hold the hub's call until the connection closes.
     match request.map_err(|e| ApiError::unsupported_request("this worker", Some(&e)))? {
-        WorkerRequest::Hello { protocol_version, oldest_protocol_version } => {
+        // A hub that asks it to keep running without one is a later layer's: until then, losing its hub stops it
+        // whatever it was told, so asking it to stop changes nothing, and there's nothing kept to let go of.
+        WorkerRequest::Hello { protocol_version, oldest_protocol_version, keep_running_without_hub: _ } => {
             hello(protocol_version, oldest_protocol_version)
         }
+        WorkerRequest::Stop | WorkerRequest::Received { .. } => Ok(WorkerResponse::Ok),
+        WorkerRequest::RunningAgents => Ok(running_agents(state)),
         WorkerRequest::Unknown => Err(ApiError::unsupported_request("this worker", None)),
         WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
             let prepared = git::prepare_workspace(
@@ -361,7 +365,19 @@ fn hello(newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
         let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
-    Ok(WorkerResponse::Hello { protocol_version: chosen })
+    Ok(WorkerResponse::Hello { protocol_version: chosen, build: Some(protocol::BUILD_VERSION.to_string()) })
+}
+
+/// Those whose process hasn't gone, which is every one whose session a hub connecting again can carry on with.
+fn running_agents(state: &State) -> WorkerResponse {
+    let agents = state.agents.lock();
+    let running = agents.iter().filter(|(_, agent)| !agent.process.is_gone());
+    let listed = |(session_id, agent): (&SessionId, &RunningAgent)| protocol::worker::RunningAgent {
+        session_id: session_id.clone(),
+        run: agent.run,
+    };
+    let agents = running.map(listed);
+    WorkerResponse::RunningAgents { agents: agents.collect() }
 }
 
 fn delivery(delivered: bool) -> WorkerResponse {

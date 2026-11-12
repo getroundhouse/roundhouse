@@ -243,6 +243,8 @@ impl Hub {
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),
             keeping_awake: self.awake.holding(),
+            keeps_workers: false,
+            oldest_protocol_version: Some(versions::CLIENTS.oldest),
         }
     }
 
