@@ -22,7 +22,12 @@
     <link rel="icon" href="assets/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" />
-    <script>document.documentElement.classList.add("js")</script>
+    <script>
+      document.documentElement.classList.add("js");
+      // Someone on Windows is offered its download first. It's set before anything is drawn, so no button changes
+      // under them. site.js finds out later whether it's Windows on ARM.
+      if (/^win/i.test(navigator.userAgentData?.platform || navigator.platform || "")) document.documentElement.dataset.os = "win";
+    </script>
     <script src="fan.js" defer></script>
     <script src="site.js" defer></script>
     <script src="backdrop.js" defer></script>
@@ -37,7 +42,9 @@
         </a>
         <nav class="nav-links">
           <a href="https://github.com/getroundhouse/roundhouse">GitHub</a>
-          <a class="button outline small" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
+          <a class="button outline small for-mac" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
+          <a class="button outline small for-win" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe">Download</a>
+          <a class="button outline small for-win-arm64" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe">Download</a>
         </nav>
       </div>
     </header>
@@ -61,8 +68,12 @@
           <p class="lede">A native Mac app for running many coding agents, each in a workspace of its own, from idea to production.</p>
         </div>
         <div class="actions reveal">
-          <a class="button primary" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download for Mac</a>
-          <span class="soon">For Apple silicon. It's early: Claude Code today.</span>
+          <a class="button primary for-mac" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download for Mac</a>
+          <a class="button primary for-win" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe">Download for Windows</a>
+          <a class="button primary for-win-arm64" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe">Download for Windows</a>
+          <span class="soon for-mac">For Apple silicon. It's early: Claude Code today. <a class="link" href="#download">All downloads</a></span>
+          <span class="soon for-win">A first preview, for x64. Claude Code today. <a class="link" href="#download">All downloads</a></span>
+          <span class="soon for-win-arm64">A first preview, for ARM64. Claude Code today. <a class="link" href="#download">All downloads</a></span>
         </div>
       </section>
 
@@ -233,8 +244,25 @@
         <canvas class="fan home-mark reveal" data-work="copper" aria-hidden="true"></canvas>
         <h2 class="reveal">Coming from Conductor? You'll feel at home.</h2>
         <p class="reveal">Repositories set up for it work unchanged. It's early: Mac and Claude Code today.</p>
+        <ul class="facts platforms reveal">
+          <li>
+            <strong>Mac</strong><span>Apple silicon</span>
+            <a class="button primary small for-mac" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
+            <a class="button outline small unless-mac" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
+          </li>
+          <li>
+            <strong>Windows</strong><span>x64 &middot; Preview</span>
+            <a class="button primary small for-win" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe">Download</a>
+            <a class="button outline small unless-win" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-Setup.exe">Download</a>
+          </li>
+          <li>
+            <strong>Windows on ARM</strong><span>ARM64 &middot; Preview</span>
+            <a class="button primary small for-win-arm64" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe">Download</a>
+            <a class="button outline small unless-win-arm64" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe">Download</a>
+          </li>
+        </ul>
+        <p class="preview reveal">Windows is a first preview: unsigned, so Windows asks before it runs.</p>
         <div class="actions reveal">
-          <a class="button primary" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download for Mac</a>
           <a class="button outline" href="https://github.com/getroundhouse/roundhouse">View on GitHub</a>
         </div>
       </section>

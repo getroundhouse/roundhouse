@@ -21,6 +21,20 @@ const reveal = new IntersectionObserver(
 
 document.querySelectorAll(".reveal").forEach((el) => reveal.observe(el));
 
+// The page's first script offers someone on Windows the x64 download, which every Windows runs. Only some browsers
+// say what the processor is, and only when asked, so Windows on ARM gets its own download once they answer.
+
+const root = document.documentElement;
+if (root.dataset.os === "win") {
+  if (/\b(arm64|aarch64)\b/i.test(navigator.userAgent)) root.dataset.os = "win-arm64";
+  navigator.userAgentData
+    ?.getHighEntropyValues?.(["architecture"])
+    .then(({ architecture }) => {
+      if (architecture === "arm") root.dataset.os = "win-arm64";
+    })
+    .catch(() => {});
+}
+
 // Words that change with the hero fan's light: a slot changes on the sweep event it names, and an item can hold for
 // a few more sweeps with data-rest. Reduce Motion shows the slot's data-still words instead.
 
