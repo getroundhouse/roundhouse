@@ -1,6 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{AttachmentId, ContextUsage, Effort, ModelName, PermissionMode};
+use protocol::model::{AttachmentId, CacheTtl, ContextUsage, Effort, ModelName, PermissionMode, PromptCache};
 
+use super::super::AddedBy;
 use super::super::tests::{notice, store_with_session};
 use super::super::{older, schema};
 use super::*;
@@ -161,6 +162,25 @@ fn how_full_the_context_is_is_kept_until_the_agent_says_otherwise_and_moves_the_
 }
 
 #[test]
+fn what_the_cache_holds_is_kept_until_the_hub_says_otherwise_and_moves_the_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let before = store.get_session(&"s".into()).unwrap().session;
+    assert_eq!(before.prompt_cache, None, "a new session's agent hasn't asked anything");
+    let cache = PromptCache { used_at_ms: 5, ttl: CacheTtl::OneHour, model: None, tokens: 252_800 };
+
+    store.set_session_cache(&"s".into(), Some(&cache)).unwrap();
+
+    let after = store.get_session(&"s".into()).unwrap().session;
+    assert_eq!(after.prompt_cache, Some(cache));
+    assert!(after.rev > before.rev, "two copies of a record at one revision have to be the same");
+    store.set_session_cache(&"s".into(), None).unwrap();
+    let cleared = store.get_session(&"s".into()).unwrap().session;
+    assert_eq!(cleared.prompt_cache, None);
+    assert!(cleared.rev > after.rev);
+}
+
+#[test]
 fn a_session_nothing_has_been_sent_in_is_deleted_with_a_revision_of_its_own() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
@@ -182,7 +202,7 @@ fn a_file_no_prompt_carried_goes_with_its_session() {
     let store = store_with_session(dir.path());
     let file =
         Attachment { id: AttachmentId::from("a"), name: "a.log".into(), media_type: MediaType::Text, size_bytes: 1 };
-    store.add_attachment(&"s".into(), &file).unwrap();
+    store.add_attachment(&"s".into(), &file, AddedBy::Client).unwrap();
 
     assert!(store.delete_unused_session(&"s".into()).unwrap().is_some());
 

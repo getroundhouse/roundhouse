@@ -10,7 +10,7 @@ use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, CommitId, DiffSide,
-    HubSettingsChange, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
+    HubSettingsChange, NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -247,9 +247,18 @@ pub enum ClientRequest {
         media_type: MediaType,
         data: AttachmentBytes,
     },
-    /// An image's bytes, for drawing it. Only the session it was added to has it, and once its prompt has gone,
-    /// the hub keeps only images, so any other file is not found.
+    /// A file's bytes, for drawing an image, or for putting a draft's file back in the composer. Only the session it
+    /// was added to has it, and once its prompt has gone, the hub keeps only images, so any other file is not found.
     AttachmentRead {
+        session_id: SessionId,
+        id: AttachmentId,
+    },
+    /// Lets go of a file a client added to a session that's no longer going anywhere, such as one taken off a draft.
+    /// The hub keeps one the session's draft, a prompt waiting in its queue or a prompt it was sent still names, and
+    /// one put in the worktree, and it never lets go of an image from the agent. One that isn't there changes nothing,
+    /// so sending it again does nothing more. Answers with `Ok` either way. A hub older than this refuses it, as
+    /// `is_unsupported` says.
+    AttachmentRemove {
         session_id: SessionId,
         id: AttachmentId,
     },
@@ -382,6 +391,14 @@ pub enum ClientRequest {
     /// it again does nothing more.
     SessionMarkUnread {
         id: SessionId,
+    },
+    /// Keeps `draft` as what's typed and attached in the session's composer and not sent, in place of what was kept, so
+    /// it's there after the app restarts, and in every client. An empty one clears it. Keeping what's kept already
+    /// changes nothing, so sending it again does nothing more. Answers with the session. A hub older than this refuses
+    /// it, as `is_unsupported` says.
+    SessionDraft {
+        id: SessionId,
+        draft: NewDraft,
     },
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {

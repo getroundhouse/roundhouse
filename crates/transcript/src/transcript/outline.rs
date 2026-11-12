@@ -29,16 +29,20 @@ mod tests;
 /// end that has more past it.
 const MOST_TICKS: usize = 16;
 /// From one tick to the next, which is also how tall each is to the pointer.
-const TICK_PITCH: Pixels = px(8.);
+const TICK_PITCH: Pixels = px(12.);
+/// The ticks are at least this many ticks tall to the pointer, so one or two are as easy to rest on as three. The
+/// room past the last tick is empty.
+const FEWEST_TICKS_TALL: f32 = 3.;
 /// Narrow enough to fit between the scrollbar and the rows, which are inset 28px from the pane's edge, so in a narrow
-/// pane the ticks stay clear of a prompt at the right of the column.
-const TICK_WIDTH: Pixels = px(10.);
-const TICK_HEIGHT: Pixels = px(2.);
+/// pane, as at the size the app opens at, a prompt at the right of the column has a gap beside its ticks, rather than
+/// seeming to touch them.
+const TICK_WIDTH: Pixels = px(12.);
+const TICK_HEIGHT: Pixels = px(3.);
 /// How faint a tick is with more past it.
 const FADED: f32 = 0.35;
-/// In from the pane's right edge, clear of the scrollbar's thumb, which reaches 12px in while it's dragged, and down
-/// from the tabs.
-const RIGHT: Pixels = px(14.);
+/// In from the pane's right edge, clear by a pixel of the scrollbar's thumb, which reaches 12px in while it's dragged,
+/// and down from the tabs.
+const RIGHT: Pixels = px(13.);
 const TOP: Pixels = px(20.);
 /// How far above the ticks the list's edge is, so its first row starts level with them.
 const LIST_ABOVE: Pixels = px(4.);
@@ -99,19 +103,21 @@ struct Jumps {
 }
 
 impl Jumps {
-    /// Shows the prompt in `row` at the top of the chat, and closes the list, so it isn't over where it jumped to.
+    /// Shows the prompt in `row` at the bottom of the chat, with what it answered above it, and closes the list, so
+    /// it isn't over where it jumped to.
     fn to(&self, row: usize) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
         let Jumps { hover, chat_list, transcript } = self.clone();
         move |_, _, cx| {
             hover.update(cx, Hover::jumped);
-            chat_list.go_to_row(row);
+            chat_list.go_to_row_at_bottom(row);
             cx.notify(transcript);
         }
     }
 }
 
 impl Transcript {
-    /// The chat, with the ticks over it, and the list while it's open, if it has more than one prompt to move between.
+    /// The chat, with the ticks over it, and the list while it's open, once it has a prompt. One prompt is enough,
+    /// since a long turn takes it far above the screen, and the list is the way back up to it.
     pub(super) fn with_outline(
         &mut self,
         chat: AnyElement,
@@ -121,10 +127,10 @@ impl Transcript {
     ) -> Div {
         let around = div().relative().size_full();
         let lines = self.prompts.read(&self.session);
-        if lines.len() < 2 {
+        if lines.is_empty() {
             return around.child(chat);
         }
-        let at = being_read(&lines, self.list.top().row, !self.list.is_scrolled_up());
+        let at = being_read(&lines, self.list.bottom_row(), !self.list.is_scrolled_up());
         let hover = window.use_keyed_state("outline", cx, |_, _| Hover::default());
         let showing = hover.update(cx, |hover, _| hover.frame());
         if showing == Showing::Opened {
@@ -185,6 +191,7 @@ fn ticks(lines: &[Prompt], at: usize, hover: &Entity<Hover>, window: &mut Window
         .role(Role::ListBox)
         .aria_label("Prompts")
         .w(TICK_WIDTH)
+        .min_h(TICK_PITCH * FEWEST_TICKS_TALL)
         .block_mouse_except_scroll()
         .on_hover(window.listener_for(hover, |h: &mut Hover, hovered: &bool, _, cx| {
             h.hovered(Part::Ticks, *hovered, cx);
@@ -221,13 +228,14 @@ fn tick(row: usize, label: String, look: Tick, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// Which prompt is being read, as an index into `lines`: the last one at or above the top row. At the end of the chat,
-/// it's the last prompt, even if it starts lower down, since nothing after it can come to the top.
-fn being_read(lines: &[Prompt], top: usize, at_end: bool) -> usize {
+/// Which prompt is being read, as an index into `lines`: the last one at or above the bottom row, whose part of the
+/// chat is at the bottom. At the end of the chat, it's the last prompt, as its row makes it once the end is laid out,
+/// and also before then, when the list is first drawn.
+fn being_read(lines: &[Prompt], bottom: usize, at_end: bool) -> usize {
     if at_end {
         return lines.len().saturating_sub(1);
     }
-    lines.partition_point(|prompt| prompt.row <= top).saturating_sub(1)
+    lines.partition_point(|prompt| prompt.row <= bottom).saturating_sub(1)
 }
 
 /// The ticks to show, as a range of `count` prompts: all of them if they fit, and otherwise as many as fit, around the

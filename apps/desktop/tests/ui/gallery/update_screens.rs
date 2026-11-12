@@ -8,7 +8,7 @@ use look::Region;
 use super::frame::{Frame, Part, SIDEBAR};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{conversation, finishing_update, own_hub};
+use super::worlds::{conversation, diff, finishing_update, own_hub};
 
 pub(crate) const UPDATE_SCREENS: &[Screen] = &[
     Screen { name: "no-hub", spec: "updates.md", world: None, frame: Frame::Layout, steps: &[] },
@@ -22,11 +22,14 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
     Screen {
         name: "restart-to-update-question",
         spec: "updates.md",
-        world: Some(conversation),
+        world: Some(diff),
         frame: SIDEBAR,
+        // The hub keeps what's typed and attached in a composer, so it's the comment that restarting would lose.
         steps: &[
             Step::Select(FOCUS),
-            Step::Type("Also show it in the header"),
+            Step::OpenFile("crates/protocol/src/model.rs"),
+            Step::StartComment(99),
+            Step::Type("Could this be an enum?"),
             Step::UpdateReady("1.0.1"),
             Step::Click("restart-to-update"),
         ],

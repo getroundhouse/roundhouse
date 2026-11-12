@@ -16,6 +16,19 @@ pub(crate) fn ago(then_ms: i64, now_ms: i64) -> String {
     }
 }
 
+/// How long after `now_ms` what [`ago`] says of `then_ms` changes: as the next minute goes in the first hour, the next
+/// hour in the first day, and the next day after that. A time after now is looked at again as each minute before it
+/// goes.
+pub(crate) fn changes_in_ms(then_ms: i64, now_ms: i64) -> i64 {
+    let ago_ms = now_ms.saturating_sub(then_ms);
+    let unit = match ago_ms / MINUTE_MS {
+        ..MINUTES_IN_AN_HOUR => MINUTE_MS,
+        MINUTES_IN_AN_HOUR..MINUTES_IN_A_DAY => MINUTES_IN_AN_HOUR * MINUTE_MS,
+        _ => MINUTES_IN_A_DAY * MINUTE_MS,
+    };
+    unit - ago_ms.rem_euclid(unit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -33,6 +46,17 @@ mod tests {
         assert_eq!(before(23 * 60 + 59), "23h ago");
         assert_eq!(before(24 * 60), "1d ago");
         assert_eq!(before(45 * 24 * 60), "45d ago");
+    }
+
+    #[test]
+    fn what_is_said_changes_as_its_unit_goes() {
+        let changes = |minutes: i64, ms: i64| changes_in_ms(NOW_MS - minutes * MINUTE_MS - ms, NOW_MS);
+
+        assert_eq!(changes(0, 0), MINUTE_MS, "just now, until it's a minute ago");
+        assert_eq!(changes(12, 1_000), MINUTE_MS - 1_000);
+        assert_eq!(changes(125, 0), 55 * MINUTE_MS, "then by the hour");
+        assert_eq!(changes(24 * 60 + 1, 0), (24 * 60 - 1) * MINUTE_MS, "then by the day");
+        assert_eq!(changes_in_ms(NOW_MS + 5_000, NOW_MS), 5_000, "a time after now");
     }
 
     #[test]

@@ -25,6 +25,8 @@ pub use problem::{Kind, Problem, Refusal, Step};
 use problem::{OutOfReach, Shown, problem};
 use source::{SignedSource, UpdateFeedKey};
 
+use crate::appimage::AppImage;
+
 /// Where updates come from. The release workflow publishes to the URL in `update-feed.url`. A build can name another
 /// in `ROUNDHOUSE_UPDATE_URL`, such as a server on this Mac.
 const UPDATE_URL: &str = match option_env!("ROUNDHOUSE_UPDATE_URL") {
@@ -56,10 +58,17 @@ struct Updater {
 
 impl Global for Updater {}
 
-/// Velopack's hooks, which it runs through the app's own binary, so this comes first in `main`. An update installs
-/// only as the app quits or restarts for it, never as it launches, which would quit and relaunch it as it opens.
-pub fn run_hooks() {
-    VelopackApp::build().set_auto_apply_on_startup(false).run();
+/// Velopack's hooks, which it runs through the app's own binary, so this comes first in `main`, once
+/// `appimage::leave_behind` has said where the `AppImage` is. An update installs only as the app quits or restarts for
+/// it, never as it launches, which would quit and relaunch it as it opens.
+pub fn run_hooks(appimage: Option<&AppImage>) {
+    let mut app = VelopackApp::build().set_auto_apply_on_startup(false);
+    // The paths `start` gives Velopack, since this is where it clears out old downloads.
+    let data_dir = protocol::paths::resolve(|name| std::env::var(name).ok()).map(|paths| paths.data_dir);
+    if let Some(paths) = data_dir.ok().and_then(|data_dir| location::paths(&data_dir, appimage)) {
+        app = app.set_locator(paths);
+    }
+    app.run();
 }
 
 /// How Velopack chooses an update: only a newer version than this one, so a feed can't take the app back to a
@@ -70,14 +79,17 @@ fn options() -> UpdateOptions {
 
 /// Starts looking for updates, if Velopack installed this app somewhere it can replace it, and has the newest it
 /// downloads installed when the app quits. `data_dir` is this user's, where it notes how long the update server has
-/// been out of reach.
-pub fn start(data_dir: &Path, cx: &mut App) {
-    let manager = match UpdateManager::new(SignedSource::new(UPDATE_URL, UPDATE_FEED_KEY), Some(options()), None) {
-        Ok(manager) => manager,
-        Err(velopack::Error::NotInstalled(_)) => return,
-        Err(e) => return show(problem(Step::Check, &e), cx),
-    };
-    if let Some(problem) = location::bundle().and_then(|bundle| location::cant_install(&bundle)) {
+/// been out of reach, and where Velopack keeps downloads on Linux. `appimage` is the one the app runs from, if any.
+pub fn start(data_dir: &Path, appimage: Option<&AppImage>, cx: &mut App) {
+    let paths = location::paths(data_dir, appimage);
+    let manager =
+        match UpdateManager::new(SignedSource::new(UPDATE_URL, UPDATE_FEED_KEY), Some(options()), paths.clone()) {
+            Ok(manager) => manager,
+            Err(velopack::Error::NotInstalled(_)) => return,
+            Err(e) => return show(problem(Step::Check, &e), cx),
+        };
+    if let Some(problem) = location::installed(paths.as_ref()).and_then(|installed| location::cant_install(&installed))
+    {
         return show(problem, cx);
     }
     cx.on_app_quit(|cx| {

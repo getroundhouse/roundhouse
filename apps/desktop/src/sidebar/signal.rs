@@ -70,8 +70,10 @@ mod tests {
             user_active_at_ms: None,
             background_tasks: Vec::new(),
             context: None,
+            prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
+            draft: protocol::model::Draft::default(),
             rev: protocol::model::Rev::default(),
             title_source: protocol::model::TitleSource::FirstLine,
         }
@@ -83,7 +85,7 @@ mod tests {
 
     /// A chat whose turn ended with these still running.
     fn left_running(kinds: &[TaskKind]) -> Session {
-        let task = |kind: &TaskKind| AgentTask { id: "t".into(), description: None, kind: *kind };
+        let task = |kind: &TaskKind| AgentTask { id: "t".into(), description: None, kind: *kind, call: None };
         Session { background_tasks: kinds.iter().map(task).collect(), ..session(SessionStatus::Background) }
     }
 

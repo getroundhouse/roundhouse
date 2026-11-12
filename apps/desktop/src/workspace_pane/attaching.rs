@@ -1,5 +1,6 @@
 //! Files waiting in a chat's composer to go with its next prompt, kept with the chat while another is showing, and a
-//! prompt given back because it couldn't be sent. `crate::attached` reads, checks and draws the files.
+//! prompt given back because it couldn't be sent. `crate::attached` reads, checks and draws the files, and the hub
+//! keeps each chat's with its draft, as `keeping.rs` says.
 
 use std::path::PathBuf;
 
@@ -11,14 +12,14 @@ use protocol::prompt::says_or_carries;
 use super::{PaneEvent, WorkspacePane};
 use crate::attached::{self, Attachments, joined};
 
-/// What a chat's composer holds while another chat is showing.
+/// What a chat's composer holds while another chat is showing, which the hub keeps as its [`protocol::model::Draft`].
 #[derive(Default)]
-pub(crate) struct Draft {
+pub(crate) struct Composed {
     pub(crate) text: String,
     pub(crate) files: Attachments,
 }
 
-impl Draft {
+impl Composed {
     pub(crate) fn has_anything(&self) -> bool {
         says_or_carries(&self.text, self.files.len())
     }
@@ -27,7 +28,7 @@ impl Draft {
 /// A prompt handed back before the workspace had a chat to show, for the first that shows.
 #[derive(Default)]
 pub(crate) struct Waiting {
-    pub(crate) draft: Draft,
+    pub(crate) draft: Composed,
     /// Whether it was to be planned, so that chat is asked into plan mode.
     pub(crate) to_plan: bool,
 }
@@ -37,13 +38,13 @@ impl WorkspacePane {
     pub fn paste(&self, item: &ClipboardItem, cx: &mut Context<Self>) -> bool {
         let Some(reading) = attached::pasted(item) else { return false };
         // The chat showing when the files came, even if another is showing by the time they're read.
-        let chat = self.active.clone();
+        let (chat, into) = (self.active.clone(), self.active.clone());
         attached::read_into(
             reading,
             cx,
-            move |t| t.files_for(chat.as_ref()),
-            |_, problem, cx| {
-                cx.emit(PaneEvent::Error(problem));
+            move |t| t.files_for(into.as_ref()),
+            move |t, problems, cx| {
+                t.attached_to(chat.as_ref(), problems, cx);
             },
         );
         true
@@ -51,15 +52,31 @@ impl WorkspacePane {
 
     /// Files dropped on the composer, or chosen in the file picker.
     pub(crate) fn attach_paths(&self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
-        let chat = self.active.clone();
+        let (chat, into) = (self.active.clone(), self.active.clone());
         attached::read_paths_into(
             paths,
             cx,
-            move |t| t.files_for(chat.as_ref()),
-            |_, problem, cx| {
-                cx.emit(PaneEvent::Error(problem));
+            move |t| t.files_for(into.as_ref()),
+            move |t, problems, cx| {
+                t.attached_to(chat.as_ref(), problems, cx);
             },
         );
+    }
+
+    /// Once files have come for `chat`, or with none for the chat showing, has the hub keep them with its draft, and
+    /// says why for each that couldn't be attached.
+    fn attached_to(&mut self, chat: Option<&SessionId>, problems: Vec<String>, cx: &mut Context<Self>) {
+        match chat {
+            // Closed while they were read, so they go with it.
+            Some(chat) if !self.open_sessions().any(|session| &session.id == chat) => {
+                self.drafts.remove(chat);
+            }
+            Some(chat) => self.keep_draft(chat, cx),
+            None => self.keep_typed(true, cx),
+        }
+        for problem in problems {
+            cx.emit(PaneEvent::Error(problem));
+        }
     }
 
     /// The names of what's attached in the chat showing, in order, for a test to see what a paste or drop did.
@@ -68,8 +85,21 @@ impl WorkspacePane {
         self.attached.names()
     }
 
-    pub(crate) fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
-        self.attached.remove(id);
+    /// Takes a file out of the chat showing, as its tile's remove button does, for a test, since the button only shows
+    /// under the pointer.
+    #[cfg(feature = "testing")]
+    pub fn click_remove(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
+        self.remove_attached(id, cx);
+    }
+
+    /// Takes a file out of the chat showing, and has the hub let go of it once the draft without it is kept, since it
+    /// keeps a file a draft names.
+    fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
+        let kept_in = self.attached.remove(id);
+        self.keep_typed(true, cx);
+        if let Some(chat) = kept_in {
+            self.keeper.detach(&chat, id);
+        }
         cx.notify();
     }
 
@@ -97,17 +127,19 @@ impl WorkspacePane {
         for problem in self.files_for(Some(&chat)).put_back(files) {
             cx.emit(PaneEvent::Error(problem));
         }
-        if !text.is_empty() {
-            if self.active.as_ref() == Some(&chat) {
-                // Setting the composer needs the window.
-                self.with_window(cx, move |t, window, cx| {
-                    let text = joined(text, &t.composer.read(cx).text().to_string());
-                    t.composer.update(cx, |c, cx| c.set_value(text, window, cx));
-                });
-            } else {
-                let draft = self.drafts.entry(chat).or_default();
+        if !text.is_empty() && self.active.as_ref() == Some(&chat) {
+            // Setting the composer needs the window.
+            self.with_window(cx, move |t, window, cx| {
+                let text = joined(text, &t.composer.read(cx).text().to_string());
+                t.composer.update(cx, |c, cx| c.set_value(text, window, cx));
+                t.keep_typed(true, cx);
+            });
+        } else {
+            if !text.is_empty() {
+                let draft = self.drafts.entry(chat.clone()).or_default();
                 draft.text = joined(text, &draft.text);
             }
+            self.keep_draft(&chat, cx);
         }
         cx.notify();
     }
@@ -122,7 +154,7 @@ impl WorkspacePane {
     }
 
     /// The files waiting in `chat`'s composer: the composer's own while it's showing, or else its draft's.
-    fn files_for(&mut self, chat: Option<&SessionId>) -> &mut Attachments {
+    pub(super) fn files_for(&mut self, chat: Option<&SessionId>) -> &mut Attachments {
         match chat {
             Some(chat) if self.active.as_ref() != Some(chat) => &mut self.drafts.entry(chat.clone()).or_default().files,
             _ => &mut self.attached,

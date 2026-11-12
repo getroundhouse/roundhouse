@@ -60,7 +60,7 @@ const TURNS: [(&str, &str); 20] = [
 const EVENTS_A_TURN: usize = 4;
 
 /// The fourteenth prompt's row in the outline's list. The list shows it when it opens at the end of the chat, and it has
-/// more than a screen of chat below it, so it can come to the top.
+/// more than a screen of chat above it, so it can come to the bottom.
 pub(crate) const FOURTEENTH_PROMPT: &str = "outline-prompt/52";
 
 /// The twenty turns, in order.

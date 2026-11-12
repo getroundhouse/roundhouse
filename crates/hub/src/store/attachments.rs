@@ -8,10 +8,23 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Store, StoreError, from_text, lock, now_ms, text_of};
 
+/// Who added a file to a session. Only a client's can be in a draft, so only those can a client have the hub let go of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddedBy {
+    Client,
+    /// An image a tool sent, or one the agent's text points to.
+    Agent,
+}
+
 impl Store {
     /// Records `attachment` in the session, unless the session already has one with its ID, and returns the one
-    /// recorded, so adding the same ID again returns the first.
-    pub fn add_attachment(&self, session_id: &SessionId, attachment: &Attachment) -> Result<Attachment, StoreError> {
+    /// recorded, so adding the same ID again returns the first, as whoever added it first.
+    pub fn add_attachment(
+        &self,
+        session_id: &SessionId,
+        attachment: &Attachment,
+        by: AddedBy,
+    ) -> Result<Attachment, StoreError> {
         let conn = lock(&self.writer);
         // Under the writer's lock, so a session deleted meanwhile is found missing rather than failing the insert.
         let session: Option<i64> = conn
@@ -21,8 +34,8 @@ impl Store {
             return Err(StoreError::NotFound { kind: "session", id: session_id.to_string() });
         }
         conn.execute(
-            "INSERT INTO attachments (session_id, id, name, media_type, size_bytes, created_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, id) DO NOTHING",
+            "INSERT INTO attachments (session_id, id, name, media_type, size_bytes, created_at_ms, by_client)
+             VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, id) DO NOTHING",
             params![
                 session_id.as_str(),
                 attachment.id.as_str(),
@@ -30,6 +43,7 @@ impl Store {
                 text_of(&attachment.media_type),
                 attachment.size_bytes.cast_signed(),
                 now_ms(),
+                by == AddedBy::Client,
             ],
         )?;
         read_attachment(&conn, session_id, &attachment.id)?.ok_or_else(|| not_found(&attachment.id))
@@ -100,7 +114,7 @@ impl Store {
     }
 }
 
-fn read_attachment(
+pub(super) fn read_attachment(
     conn: &Connection,
     session_id: &SessionId,
     id: &AttachmentId,

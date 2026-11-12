@@ -4,13 +4,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use client_core::OpenSession;
-use client_core::session_log::{PendingPrompt, Row};
+use client_core::session_log::{By, PendingPrompt, Row};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, Pixels, SharedString, Styled, WeakEntity, div,
-    px,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
+    Stateful, Styled, WeakEntity, div, px,
 };
 use look::LineText;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, NoticeLevel, SessionEvent};
@@ -29,6 +29,7 @@ mod alone;
 mod approval;
 mod around;
 mod asked;
+mod cache_rule;
 mod compaction;
 mod line;
 mod mode;
@@ -122,7 +123,8 @@ pub(crate) fn render_row(
 /// What a row shows, copied out so the log isn't held while it's drawn.
 #[expect(clippy::large_enum_variant, reason = "made for one row and matched straight away")]
 enum Shown {
-    Tail(Tail),
+    /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab.
+    Tail(Tail, By),
     Event(SessionEvent, Around),
     Pending(PendingPrompt, Vec<Carried>),
     Unloaded,
@@ -145,7 +147,7 @@ fn render_row_inner(
         let m = model.borrow();
         session.read(|log| {
             if ix >= tail || ix >= log.row_count() {
-                return Shown::Tail(log.tail().clone());
+                return Shown::Tail(log.tail().clone(), log.by());
             }
             match log.row(ix) {
                 Row::Event(event) if drawn_in_its_call(log, &m, event) || alone::repeats_report(log, &m, ix) => {
@@ -158,9 +160,9 @@ fn render_row_inner(
         })
     };
     Some(match shown {
-        Shown::Tail(tail) => {
+        Shown::Tail(tail, by) => {
             let m = model.borrow();
-            render_tail(&tail, &m.at_work, &shared.texts, m.folds.thinking_open(), cx)
+            render_tail(&tail, &m.at_work, shared, by, m.folds.thinking_open(), cx)
         }
         Shown::Event(event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
@@ -204,6 +206,18 @@ fn row() -> Div {
 
 fn empty() -> AnyElement {
     div().into_any_element()
+}
+
+/// A rule across the chat with `middle` in its middle, as a compaction and a cache that had expired are drawn.
+fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
+    let border = cx.theme().border;
+    let rule = || div().flex_1().h(px(1.)).bg(border);
+    h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule())
+}
+
+/// What's said in the middle of a rule across the chat, small and faint.
+fn rule_middle(id: impl Into<ElementId>) -> Stateful<Div> {
+    h_flex().id(id).flex_none().gap_1p5().px_2().py_0p5().text_xs().text_color(look::faint())
 }
 
 fn muted_line(text: impl Into<SharedString>) -> AnyElement {
@@ -260,6 +274,9 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
         // The compaction says all there is of what asked for it, and of a turn that was only it.
         EventBody::CompactionAsked { .. } | EventBody::TurnEnded { only_compacted: true, .. } => empty(),
         EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
+        EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
+            cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
+        }
         EventBody::UserPrompt { text, client_msg_id, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::Recorded(seq, around.prompt));
@@ -280,7 +297,7 @@ fn render_event(event: &SessionEvent, around: &Around, shared: &Shared, find: &F
             let only_lines = blocks.iter().all(is_a_line);
             row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, find, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent, around.cache.as_ref(), find, cx),
         EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } => {
             approval_card(seq, approval_id, tool_name, input, description.as_deref(), around.approval_open, shared, cx)
         }

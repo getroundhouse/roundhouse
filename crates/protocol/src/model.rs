@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 mod account;
+mod cache;
 mod context;
+mod draft;
 mod effort;
 mod files;
 mod hub_settings;
@@ -19,7 +21,9 @@ mod subagent;
 mod title;
 
 pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
+pub use draft::{Draft, NewDraft};
 pub use effort::Effort;
 pub use files::{FileContents, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};

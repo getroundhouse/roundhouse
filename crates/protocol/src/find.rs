@@ -194,6 +194,8 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
         | EventBody::CompactionAsked { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
+        // Nor is a cache that expired, which says only how long and how much.
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => false,
     }
 }

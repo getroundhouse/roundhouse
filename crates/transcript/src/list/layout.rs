@@ -1,5 +1,5 @@
-//! Which rows are in the window, and where, worked out from one row that stays where it was in the last frame. A
-//! row's place comes from the rows laid out around it, so the rows nobody is looking at are never measured for it. A
+//! Which rows are in the window, and where, worked out from one row: one that stays where it was in the last frame,
+//! or one sent to the window's top or bottom. A row's place comes from the rows laid out around it, so the rows nobody is looking at are never measured for it. A
 //! row is drawn to show it, or to find a height that isn't known. One out of the window whose height is known is only
 //! given its place.
 
@@ -12,6 +12,9 @@ use super::state::Place;
 /// How far past each end of the window rows are laid out, so one that hasn't been fetched is asked for before it's in
 /// sight, and one whose height is out of date has it before it scrolls in.
 pub(super) const OVERDRAW: Pixels = px(400.);
+/// Less of a row than this at the window's bottom doesn't count, since rounding can leave a fraction of a pixel there:
+/// of the latest row, past it, or of the row after one put at the bottom, in it.
+const SLIVER: Pixels = px(1.);
 
 /// What laying rows out asks of them.
 pub(super) trait Rows<T> {
@@ -66,6 +69,10 @@ pub(super) enum Start {
     /// up, past the window's top, and moves nothing below. If the row is now too short to reach down into the window
     /// from where its top was, its end is at the window's top.
     Anchored { at: Anchor, moved: Pixels },
+    /// A row with its end at the window's bottom and the rows before it above, so what led up to it is in sight. A
+    /// row taller than the window has its top at the window's top instead, so it reads from its start. Near the start
+    /// of the session, where the rows before it don't fill the window, the first row is at the window's top.
+    AtBottom { row: usize },
 }
 
 /// The row the list keeps where it is in the window from one frame to the next, so what's on screen stays still
@@ -90,6 +97,8 @@ pub(super) struct Layout<T> {
     pub(super) top: Place,
     /// The row to keep where it is in the next frame, and where it came out.
     pub(super) anchor: Option<Anchor>,
+    /// The last row with more than a pixel of it in the window, fetched or not, or the row at the top if none has.
+    pub(super) last_in_sight: usize,
     /// Whether the latest row ends in the window, so there's nothing further down to scroll to.
     pub(super) end_in_sight: bool,
 }
@@ -98,7 +107,7 @@ pub(super) struct Layout<T> {
 pub(super) fn lay_out<T>(rows: usize, start: Start, tall: Pixels, of: &mut impl Rows<T>) -> Layout<T> {
     let mut laid: VecDeque<LaidRow<T>> = VecDeque::new();
     let Some(last) = rows.checked_sub(1) else {
-        return Layout { rows: laid, top: Place::default(), anchor: None, end_in_sight: true };
+        return Layout { rows: laid, top: Place::default(), anchor: None, last_in_sight: 0, end_in_sight: true };
     };
     let mut place = |row: usize, top_of: &dyn Fn(Pixels) -> Pixels| {
         // A row whose height is known, and which wouldn't show at it, has its place without being drawn.
@@ -115,6 +124,7 @@ pub(super) fn lay_out<T>(rows: usize, start: Start, tall: Pixels, of: &mut impl 
         Start::Latest => place(last, &|height| tall - height),
         Start::Top { at, moved } => place(at.row.min(last), &|height| -at.offset.min(height) - moved),
         Start::Anchored { at, moved } => place(at.row.min(last), &|height| at.top.max(-height) - moved),
+        Start::AtBottom { row } => place(row.min(last), &|height| (tall - height).max(px(0.))),
     });
     fill_up(&mut laid, px(0.), &mut place);
     fill_down(&mut laid, last, tall + OVERDRAW, &mut place);
@@ -130,9 +140,10 @@ pub(super) fn lay_out<T>(rows: usize, start: Start, tall: Pixels, of: &mut impl 
     show(&mut laid, tall, of);
     let top = laid.iter().find(|row| row.bottom() > px(0.)).or(laid.back());
     let top = top.map_or(Place::default(), |at| Place { row: at.row, offset: (-at.top).max(px(0.)) });
-    let end_in_sight = laid.back().is_some_and(|row| row.row == last && row.bottom() <= tall + px(1.));
+    let last_in_sight = laid.iter().rev().find(|row| row.shows(tall - SLIVER)).map_or(top.row, |row| row.row);
+    let end_in_sight = laid.back().is_some_and(|row| row.row == last && row.bottom() <= tall + SLIVER);
     let anchor = anchor(&laid, start, top, tall);
-    Layout { rows: laid, top, anchor, end_in_sight }
+    Layout { rows: laid, top, anchor, last_in_sight, end_in_sight }
 }
 
 /// The row to keep where it is in the next frame, as [`Anchor`] says: the one this frame kept, while nothing has
@@ -144,7 +155,7 @@ fn anchor<T>(laid: &VecDeque<LaidRow<T>>, start: Start, top: Place, tall: Pixels
         Start::Anchored { at: kept, moved } if moved == px(0.) => {
             laid.iter().find(|row| row.row == kept.row && row.shows(tall)).map(at)
         }
-        Start::Latest | Start::Top { .. } | Start::Anchored { .. } => None,
+        Start::Latest | Start::Top { .. } | Start::Anchored { .. } | Start::AtBottom { .. } => None,
     };
     let first_in_sight = || laid.iter().find(|row| row.top >= px(0.) && row.shows(tall)).map(at);
     let at_the_top = || laid.iter().find(|row| row.row == top.row).map(|_| Anchor { row: top.row, top: -top.offset });

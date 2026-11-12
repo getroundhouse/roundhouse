@@ -15,7 +15,7 @@ fn an_attachment_keeps_what_it_was_given() {
     let store = store_with_session(dir.path());
     let session = SessionId::from("s");
 
-    let added = store.add_attachment(&session, &log_file("a1", "build.log")).unwrap();
+    let added = store.add_attachment(&session, &log_file("a1", "build.log"), AddedBy::Client).unwrap();
 
     assert_eq!(added, log_file("a1", "build.log"));
     assert_eq!(store.attachment(&session, &"a1".into()).unwrap(), Some(added));
@@ -26,9 +26,9 @@ fn adding_the_same_id_again_keeps_the_first() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let session = SessionId::from("s");
-    store.add_attachment(&session, &log_file("a1", "build.log")).unwrap();
+    store.add_attachment(&session, &log_file("a1", "build.log"), AddedBy::Client).unwrap();
 
-    let again = store.add_attachment(&session, &log_file("a1", "other.log")).unwrap();
+    let again = store.add_attachment(&session, &log_file("a1", "other.log"), AddedBy::Client).unwrap();
 
     assert_eq!(again.name, "build.log");
 }
@@ -38,8 +38,8 @@ fn attachments_come_back_in_the_order_asked_and_a_missing_one_fails() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let session = SessionId::from("s");
-    store.add_attachment(&session, &log_file("a1", "one.log")).unwrap();
-    store.add_attachment(&session, &log_file("a2", "two.log")).unwrap();
+    store.add_attachment(&session, &log_file("a1", "one.log"), AddedBy::Client).unwrap();
+    store.add_attachment(&session, &log_file("a2", "two.log"), AddedBy::Client).unwrap();
 
     let found = store.attachments(&session, &["a2".into(), "a1".into()]).unwrap();
     let missing = store.attachments(&session, &["a1".into(), "a3".into()]);
@@ -52,7 +52,7 @@ fn attachments_come_back_in_the_order_asked_and_a_missing_one_fails() {
 fn another_session_doesnt_have_an_attachment() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.add_attachment(&"s".into(), &log_file("a1", "build.log")).unwrap();
+    store.add_attachment(&"s".into(), &log_file("a1", "build.log"), AddedBy::Client).unwrap();
 
     assert_eq!(store.attachment(&"t".into(), &"a1".into()).unwrap(), None);
 }
@@ -62,7 +62,7 @@ fn where_an_attachment_was_put_is_kept() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let session = SessionId::from("s");
-    store.add_attachment(&session, &log_file("a1", "build.log")).unwrap();
+    store.add_attachment(&session, &log_file("a1", "build.log"), AddedBy::Client).unwrap();
     assert_eq!(store.attachment_placed_at(&session, &"a1".into()).unwrap(), None);
 
     store.set_attachment_placed_at(&session, &"a1".into(), "/w/.context/attachments/build.log").unwrap();
@@ -78,7 +78,7 @@ fn a_file_for_a_session_thats_been_deleted_is_refused_as_not_found() {
     let store = store_with_session(dir.path());
     store.delete_unused_session(&"s".into()).unwrap().unwrap();
 
-    let added = store.add_attachment(&"s".into(), &log_file("a1", "build.log"));
+    let added = store.add_attachment(&"s".into(), &log_file("a1", "build.log"), AddedBy::Client);
 
     assert!(matches!(added, Err(StoreError::NotFound { .. })), "{added:?}");
 }

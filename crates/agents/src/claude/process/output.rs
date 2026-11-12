@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use protocol::event::EventBody;
+use protocol::model::CacheRequest;
 use serde_json::json;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::process::{ChildStderr, ChildStdout};
@@ -33,16 +34,15 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
     let mut reader = BufReader::new(stdout);
     let mut buffer = Vec::new();
     let mut normalizer = Normalizer::default();
+    let mut answering = Answering::default();
     while let Some(line) = next_line(&mut reader, &mut buffer).await {
         if line.trim().is_empty() {
             continue;
         }
-        let Normalized { dropped, parsed } = normalizer.line(&line);
-        for tool_use_id in dropped {
-            let said = AgentOutput::event(EventBody::ToolCallDropped { tool_use_id }, None);
-            if !deliver(&shared, &output, said).await {
-                return;
-            }
+        let Normalized { dropped, parsed, relisted } = normalizer.line(&line);
+        let dropped = dropped.into_iter().map(|tool_use_id| EventBody::ToolCallDropped { tool_use_id });
+        if !deliver_shown(&shared, &output, dropped).await {
+            return;
         }
         let item = match parsed {
             Parsed::Drop => continue,
@@ -56,9 +56,8 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
             Parsed::EventWithImages { body, images, raw } => {
                 AgentOutput::Event { body, raw: Some(raw), attachments: images }
             }
-            Parsed::Prompt { uuid, progress } => {
-                AgentOutput::event(prompt_progress(&shared, &uuid, progress), Some(line))
-            }
+            Parsed::Prompt { uuid, progress } => answering.took(prompt_progress(&shared, &uuid, progress), line),
+            Parsed::Request(request) => AgentOutput::Cache(answering.name(request)),
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
                 let kind = format!("control_request/{subtype}");
@@ -69,6 +68,7 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                     continue;
                 }
                 note(&shared, &mut body);
+                answering.note(&body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
                 if opened || shared.confirmed.load(Ordering::SeqCst) {
@@ -82,10 +82,52 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
                 item
             }
         };
-        if !deliver(&shared, &output, item).await {
+        if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, relisted).await {
             return;
         }
     }
+}
+
+/// Whether the CLI has taken a prompt that no request has answered yet, so the request that does can say it's the
+/// first for it.
+#[derive(Default)]
+struct Answering(bool);
+
+impl Answering {
+    /// The CLI took a prompt, or ended a turn, which forgets it, since a turn the agent starts by itself answers none.
+    fn note(&mut self, body: &EventBody) {
+        if let EventBody::PromptTaken { .. } = body {
+            self.0 = true;
+        } else if let EventBody::TurnEnded { .. } = body {
+            self.0 = false;
+        }
+    }
+
+    /// What the CLI said of a prompt, `body`, in `line`, noted.
+    fn took(&mut self, body: EventBody, line: String) -> AgentOutput {
+        self.note(&body);
+        AgentOutput::event(body, Some(line))
+    }
+
+    /// `request`, saying whether it's the first for a prompt.
+    fn name(&mut self, mut request: CacheRequest) -> CacheRequest {
+        request.first_for_prompt = std::mem::take(&mut self.0);
+        request
+    }
+}
+
+/// Sends on what a line showed without saying, which has no raw line of its own. False once nobody is reading.
+async fn deliver_shown(
+    shared: &Shared,
+    output: &mpsc::Sender<AgentOutput>,
+    bodies: impl IntoIterator<Item = EventBody>,
+) -> bool {
+    for body in bodies {
+        if !deliver(shared, output, AgentOutput::event(body, None)).await {
+            return false;
+        }
+    }
+    true
 }
 
 /// The CLI has opened the session, so what was held for it goes on. False once nobody is reading.
@@ -179,6 +221,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => {}
     }
 }
@@ -194,4 +237,41 @@ pub(super) async fn read_stderr(stderr: ChildStderr) -> Vec<String> {
         tail.push_back(line);
     }
     tail.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn event(body: serde_json::Value) -> EventBody {
+        serde_json::from_value(body).unwrap()
+    }
+
+    fn named(answering: &mut Answering) -> bool {
+        answering.name(serde_json::from_str("{}").unwrap()).first_for_prompt
+    }
+
+    #[test]
+    fn only_the_first_request_after_a_prompt_is_the_first_for_it() {
+        let mut answering = Answering::default();
+        assert!(!named(&mut answering), "a turn the agent started by itself");
+
+        answering.note(&event(json!({"type": "prompt_taken", "prompt": 7})));
+
+        assert!(named(&mut answering));
+        assert!(!named(&mut answering), "the next request of the same turn");
+    }
+
+    #[test]
+    fn a_turn_that_ends_before_any_request_forgets_its_prompt() {
+        let mut answering = Answering::default();
+        answering.note(&event(json!({"type": "prompt_taken", "prompt": 7})));
+
+        answering.note(&event(json!({"type": "turn_ended", "outcome": "cancelled", "result": null,
+            "duration_ms": null, "cost_usd": null, "num_turns": null})));
+
+        assert!(!named(&mut answering), "the next turn's first request is the agent's own");
+    }
 }

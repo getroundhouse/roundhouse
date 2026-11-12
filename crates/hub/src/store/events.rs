@@ -285,6 +285,7 @@ impl Store {
                 | EventBody::AgentOther { .. }
                 | EventBody::AgentCompacting { .. }
                 | EventBody::AgentCompacted { .. }
+                | EventBody::CacheExpired { .. }
                 | EventBody::Unknown => {}
             }
         }

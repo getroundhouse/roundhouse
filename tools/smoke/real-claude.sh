@@ -50,6 +50,24 @@ chat = db.execute('SELECT title_source FROM sessions WHERE workspace_id = ? ORDE
 print(source, chat[0])" "$ROUNDHOUSE_HOME/hub.db" "$1"
 }
 
+# A Python expression over what the hub keeps on a session's record of what the API's cache holds, `cache`, a dict or
+# None, since the CLI doesn't print that.
+cache_of() { # session, python expression
+  python3 -I -c "
+import json, sqlite3, sys
+db = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
+row = db.execute(\"SELECT prompt_cache FROM sessions WHERE id LIKE ? || '%'\", (sys.argv[2],)).fetchone()
+cache = json.loads(row[0]) if row and row[0] else None
+print($2)" "$ROUNDHOUSE_HOME/hub.db" "$1"
+}
+# How many prompts in a session's log found the cache expired.
+expired_in() { q "$1" "kinds.count('cache_expired')"; }
+# How many plans a session's agent has asked to have approved, as a Python expression over its events, so a wait for
+# the next one isn't met by one before it.
+PLANS_ASKED="sum(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)"
+# The hub's pid. Status says more on the lines after the first, such as that it keeps the Mac awake.
+hub_pid() { cli hub status | awk 'NR == 1 {print $2}'; }
+
 wait_for() { # description, session, python expression that's truthy when done, timeout
   local deadline=$((SECONDS + ${4:-90}))
   while [ $SECONDS -lt $deadline ]; do
@@ -117,7 +135,7 @@ SEEN=$(q "$SID" "len(events)")
 AGENT=$(q "$SID" "pid()")
 WORKER=$(ps -o ppid= -p "$AGENT" | tr -d ' ')
 HUB=$(ps -o ppid= -p "$WORKER" | tr -d ' ')
-HUB_REPORTED=$(cli hub status | awk '{print $2}')
+HUB_REPORTED=$(hub_pid)
 check "the agent is a real claude process in the worktree's session" 'ps -o command= -p "$AGENT" | grep -q claude'
 check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -q "roundhoused worker"'
 check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -q "roundhoused hub"'
@@ -135,9 +153,15 @@ check "raw agent lines were kept" '[ "$(q "$SID" "any(\"raw\" in e and json.load
 check "the first prompt's title was generated, for the workspace and its chat" '[ "$(title_sources smoke)" = "generated generated" ]'
 
 section "The conversation continues"
+TURN_ENDED=$(q "$SID" "[e['ts_ms'] for e in events if e['body']['type'] == 'turn_ended'][-1]")
+FIRST_SENT=$(cache_of "$SID" "cache['used_at_ms'] if cache else 0")
+check "the record says the agent's last request cached the conversation for an hour" '[ "$(cache_of "$SID" "cache is not None and cache[\"ttl\"] == \"one_hour\" and cache[\"tokens\"] > 0 and \"claude-\" in (cache.get(\"model\") or \"\")")" = True ]'
+check "sent before the turn ended, by the hub's clock" '[ "$FIRST_SENT" -gt 0 ] && [ "$FIRST_SENT" -le "$TURN_ENDED" ]'
 OUT=$(cli send "$SID" "What file did you just create? Reply with only its file name." 2>&1)
 check "the same agent answers from context" 'echo "$OUT" | grep -q survived.txt'
 check "without starting a new process" '[ "$(q "$SID" "kinds.count(\"agent_started\")")" = 1 ]'
+check "a prompt to a warm cache isn't taken for one that had expired" '[ "$(expired_in "$SID")" = 0 ]'
+check "and the record moves on with each request" '[ "$(cache_of "$SID" "cache[\"used_at_ms\"]")" -gt "$FIRST_SENT" ]'
 check "status comes from the worker" 'cli workspace status smoke | grep -q "?? *survived.txt"'
 check "diff comes from the worker" 'cli workspace diff smoke | grep -q "+survived"'
 
@@ -151,7 +175,7 @@ ASID=$(cli session new timing --model "$MODEL" --permission-mode plan)
 WT2="$ROUNDHOUSE_WORKSPACES/myrepo/timing"
 plan_for() { echo "Make a one line plan to create a file $1 containing hello, then call ExitPlanMode. Do not ask questions."; }
 cli send "$ASID" "$(plan_for approved.txt)" --no-follow >/dev/null
-wait_for "the plan comes back for approval" "$ASID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+wait_for "the plan comes back for approval" "$ASID" "$PLANS_ASKED > 0" 120
 check "nothing has been done yet" '[ ! -f "$WT2/approved.txt" ]'
 check "the session reports waiting" '[ "$(session_status timing)" = WaitingApproval ]'
 check "its first turn was in plan mode" '[ "$(q "$ASID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][0]")" = plan ]'
@@ -196,8 +220,10 @@ if [ "$(q "$MSID" "kinds.count('approval_requested')")" -gt "$ASKED" ]; then
   cli approve "$MSID" "$APPROVAL" --deny "Not while planning"
 fi
 check "and nothing ran" 'wait_until_idle_session "$MSID" && [ ! -f "$WT2/asked.txt" ]'
+# The agent may have made a plan for the tool above, which was refused, so it's the plan after that one.
+PLANS=$(q "$MSID" "$PLANS_ASKED")
 cli send "$MSID" "$(plan_for planned.txt)" --no-follow >/dev/null
-wait_for "the plan comes back for approval" "$MSID" "any(e['body']['type'] == 'approval_requested' and e['body']['tool_name'] == 'ExitPlanMode' for e in events)" 120
+wait_for "the plan comes back for approval" "$MSID" "$PLANS_ASKED > $PLANS" 120
 check "nothing has been done yet" '[ ! -f "$WT2/planned.txt" ]'
 APPROVAL=$(q "$MSID" "[e['body']['approval_id'] for e in events if e['body']['type'] == 'approval_requested'][-1]")
 cli approve "$MSID" "$APPROVAL"
@@ -206,7 +232,9 @@ AFTER_PLAN=$(mode_of)
 check "a plan chosen from full access goes back to it" '[ "$AFTER_PLAN" = bypassPermissions ]'
 check "the hub's record follows it" '[ "$AFTER_PLAN" = "$(q "$MSID" "[e[\"body\"][\"permission_mode\"] for e in events if e[\"body\"][\"type\"] == \"agent_mode\"][-1]")" ]'
 wait_until_idle_session "$MSID"
+check "plan mode's requests to Sonnet, which write the conversation again, aren't taken for an expired cache" '[ "$(expired_in "$MSID")" = 0 ]'
 cli session set "$MSID" --model sonnet >/dev/null
+check "choosing another model leaves nothing cached" '[ "$(cache_of "$MSID" "cache")" = None ]'
 OUT=$(cli send "$MSID" "Reply with the single word SWITCHED." 2>&1)
 check "another model takes over on the running agent" '[ "$(q "$MSID" "\"sonnet\" in str([e[\"body\"][\"model\"] for e in events if e[\"body\"][\"type\"] == \"agent_init\"][-1])")" = True ] && [ "$(q "$MSID" "pid()")" = "$MAGENT" ]'
 cli session set "$MSID" --model "$MODEL" >/dev/null
@@ -257,7 +285,7 @@ section "The hub crashing mid-turn"
 cli send "$SID" "$(slow_tool 43 crashed crashed.txt)" --no-follow >/dev/null
 wait_for "a long tool is running" "$SID" "any(b['type'] == 'tool_use' and '43' in str(b['input']) for e in events if e['body']['type'] == 'assistant' for b in e['body']['blocks'])"
 sleep 1
-HUB=$(cli hub status | awk '{print $2}')
+HUB=$(hub_pid)
 kill -9 "$HUB"
 check "the worker exits" 'wait_gone "$WORKER"'
 check "the agent exits" 'wait_gone "$AGENT"'
@@ -298,6 +326,13 @@ cli workspace restore smoke >/dev/null
 check "restoring brings the work back" '[ -f "$WT/survived.txt" ]'
 OUT=$(cli send "$SID" "What was the first file you created in this conversation? Reply with only its file name." 2>&1)
 check "and the conversation with it" 'echo "$OUT" | grep -q survived.txt'
+
+section "The prompt cache, across the run"
+# Nothing waits an hour, so any prompt said to have found the cache expired found something else, such as an agent
+# started again whose CLI no longer reads what the one before cached.
+for each in "$SID" "$ASID" "$MSID" "$QSID"; do
+  check "no prompt in ${each:0:8} is said to have found the cache expired" '[ "$(expired_in "$each")" = 0 ]'
+done
 
 section "Cost of this run"
 q "$SID" "'  session 1: \${:.4f}'.format(sum(e['body'].get('cost_usd') or 0 for e in events if e['body']['type'] == 'turn_ended'))"

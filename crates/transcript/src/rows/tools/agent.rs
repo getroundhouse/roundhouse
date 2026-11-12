@@ -14,7 +14,7 @@ use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
-    TestSupportExt as _, div,
+    TestSupportExt as _, WeakEntity, div,
 };
 use look::Hand as _;
 use protocol::event::{ContentBlock, SessionEvent};
@@ -32,6 +32,7 @@ use crate::long_texts::LongTexts;
 use crate::rows::around::{Around, blocks_of};
 use crate::rows::shown::{self, Gather};
 use crate::rows::{agent_text, render_block};
+use crate::transcript::Transcript;
 
 pub(super) fn draw(
     call: &Agent,
@@ -46,7 +47,8 @@ pub(super) fn draw(
     // The tab reads the subagent's work by its call, which only a hub that keeps it apart can, whether or not its
     // record has come, or ever will, as for one recorded before the agent said when its subagents started.
     if let Some(subagent) = subagent.filter(|s| s.apart) {
-        line = line.action(open_tab(subagent.call.clone(), call.title(), toggle));
+        let id = ElementId::Name(format!("open-subagent/{}", subagent.call).into());
+        line = line.action(open_tab(id, subagent.call.clone(), call.title(), &toggle.shared.this));
     }
     if call.described().is_some() {
         line = line.found(toggle);
@@ -104,11 +106,18 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" · "))
 }
 
-/// The button that asks for the subagent's work in the subagent tab. It says Open, and it's outlined, as a button that
-/// opens something is, so it reads as the way in, apart from the line, whose click opens the call where it is.
-fn open_tab(call: ToolUseId, title: &str, toggle: &Toggle) -> AnyElement {
-    let (this, title) = (toggle.shared.this.clone(), title.to_string());
-    Button::new(ElementId::Name(format!("open-subagent/{call}").into()))
+/// The button that asks for the work of the subagent `call` started in the subagent tab, which is named `title` until
+/// its record comes. It says Open, and it's outlined, as a button that opens something is, so it reads as the way in,
+/// apart from the call's line, whose click opens the call where it is. A subagent's line in the background has it
+/// too, so the way to its tab is at the chat's end wherever its call is.
+pub(in crate::rows) fn open_tab(
+    id: ElementId,
+    call: ToolUseId,
+    title: &str,
+    this: &WeakEntity<Transcript>,
+) -> AnyElement {
+    let (this, title) = (this.clone(), title.to_string());
+    Button::new(id)
         .hand()
         .outline()
         .xsmall()

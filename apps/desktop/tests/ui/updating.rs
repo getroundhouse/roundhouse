@@ -57,6 +57,16 @@ fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, ty
     ui
 }
 
+/// Starts a comment on the diff, which only the app has until it's saved, so restarting would lose it.
+fn start_a_comment(ui: &mut Ui<'_>) {
+    let workspace = ui.view().selected.clone().unwrap();
+    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
+    let diff = ui.open_changes();
+    ui.open_diff_of(&diff, "a.txt");
+    ui.start_comment(&diff, "a.txt", 2);
+    ui.input("Why this word?");
+}
+
 /// What the card asks before restarting to update, while it asks.
 fn restart_question(ui: &Ui<'_>) -> Option<(&'static str, String)> {
     let question = ui.view().update_question.clone()?;
@@ -66,15 +76,16 @@ fn restart_question(ui: &Ui<'_>) -> Option<(&'static str, String)> {
 
 /// In the card, in place of its button, rather than in a dialog.
 #[gpui_kit::test]
-fn restarting_to_update_asks_first_when_something_typed_would_be_lost(cx: &mut TestAppContext) {
+fn restarting_to_update_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
+    start_a_comment(&mut ui);
 
     ui.click("restart-to-update");
 
     let (title, detail) = restart_question(&ui).unwrap();
     assert_eq!(title, "Restart to update?");
-    assert_eq!(detail, "What's typed in 1 chat hasn't been sent, and restarting loses it.");
+    assert_eq!(detail, "Something in 1 comment hasn't been sent, and restarting loses it.");
     assert!(ui.has("update-question"));
     assert!(!ui.has("restart-to-update"));
     assert!(!ui.cx.has_pending_prompt());
@@ -83,6 +94,39 @@ fn restarting_to_update_asks_first_when_something_typed_would_be_lost(cx: &mut T
     assert!(ui.has("restart-to-update"));
     assert!(!ui.has("update-problem"), "it didn't try to install");
     assert_eq!(ui.composer_text(), "say:not sent yet");
+}
+
+/// The hub keeps what's typed and attached in a composer, and restarting waits for it to get there, so restarting
+/// loses none of it.
+#[gpui_kit::test]
+fn restarting_to_update_doesnt_ask_about_whats_typed_or_attached_in_a_composer(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "say:kept");
+    ui.attach_a_file("build.log", "error at line 42\n");
+
+    ui.click("restart-to-update");
+
+    assert_eq!(restart_question(&ui), None);
+    assert!(ui.has("update-problem"));
+}
+
+/// What's typed and not yet kept, since typing hasn't paused, is on its way to the hub, so restarting waits for it
+/// rather than asking.
+#[gpui_kit::test]
+fn restarting_to_update_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing_with_an_update_ready(cx, &stack, "say:kept");
+    let chat = ui.active_chat();
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    // Once the hub has answered a change, the one after it waits for typing to pause. One letter, as typing several
+    // can take longer than the pause in a test.
+    ui.input("!");
+
+    ui.click("restart-to-update");
+
+    ui.wait("it to go ahead", |ui| ui.has("update-problem"));
+    assert_eq!(restart_question(&ui), None);
+    assert_eq!(stack.client().session_get(&chat).unwrap().draft.text, "say:kept!");
 }
 
 /// What's left in the new-workspace dialog is for a first chat, and restarting would lose it too.
@@ -100,22 +144,24 @@ fn restarting_to_update_counts_what_was_left_in_the_new_workspace_dialog(cx: &mu
     ui.click("restart-to-update");
 
     let (_, detail) = restart_question(&ui).unwrap();
-    assert_eq!(detail, "What's typed in 1 chat hasn't been sent, and restarting loses it.");
+    assert_eq!(detail, "Something in 1 chat hasn't been sent, and restarting loses it.");
 }
 
 /// The card doesn't hold anything else up, so more can be typed while it asks, and it says so before losing it.
 #[gpui_kit::test]
-fn restarting_anyway_asks_again_when_more_is_typed_since_it_asked(cx: &mut TestAppContext) {
+fn restarting_anyway_asks_again_when_more_would_be_lost_since_it_asked(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:not sent yet");
+    start_a_comment(&mut ui);
     ui.click("restart-to-update");
-    ui.new_chat();
-    ui.input("say:nor this");
+    ui.open_new_workspace();
+    ui.input("half a thought");
+    ui.press("escape");
 
     ui.click("update-go-ahead");
 
     let (_, detail) = restart_question(&ui).unwrap();
-    assert_eq!(detail, "What's typed in 2 chats hasn't been sent, and restarting loses it.");
+    assert_eq!(detail, "Something in 1 chat and 1 comment hasn't been sent, and restarting loses it.");
     assert!(!ui.has("update-problem"), "it didn't try to install");
     // Only an app Velopack installed can install an update, so here it says it couldn't, which shows it went ahead.
     ui.click("update-go-ahead");

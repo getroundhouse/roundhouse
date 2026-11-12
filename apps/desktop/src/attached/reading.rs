@@ -59,13 +59,13 @@ pub(crate) fn pick<T: 'static>(
     .detach();
 }
 
-/// Reads off the main thread, then adds each file that passed to the list `files` finds in `T`, and hands what to
-/// say about each one refused, or that the list had no room for, to `refused`.
+/// Reads off the main thread, then adds each file that passed to the list `files` finds in `T`, then hands `added`
+/// what to say about each one refused, or that the list had no room for.
 pub(crate) fn read_into<T: 'static>(
     reading: Reading,
     cx: &mut Context<T>,
     files: impl FnOnce(&mut T) -> &mut Attachments + 'static,
-    refused: impl Fn(&mut T, String, &mut Context<T>) + 'static,
+    added: impl FnOnce(&mut T, Vec<String>, &mut Context<T>) + 'static,
 ) {
     cx.spawn(async move |this, cx| {
         let read = cx.background_spawn(async move { reading() }).await;
@@ -78,9 +78,7 @@ pub(crate) fn read_into<T: 'static>(
                     Err(not_attached) => problems.push(not_attached.to_string()),
                 }
             }
-            for problem in problems {
-                refused(t, problem, cx);
-            }
+            added(t, problems, cx);
             cx.notify();
         });
     })

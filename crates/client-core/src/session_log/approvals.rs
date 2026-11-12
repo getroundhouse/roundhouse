@@ -38,6 +38,7 @@ impl SessionLog {
                 | EventBody::AgentOther { .. }
                 | EventBody::AgentCompacting { .. }
                 | EventBody::AgentCompacted { .. }
+                | EventBody::CacheExpired { .. }
                 | EventBody::Unknown => {}
             }
         }

@@ -1,7 +1,7 @@
 //! Work left running in the background, listed whole each time it changes, as the real CLI does. It outlives the
 //! turn that started it. When it finishes, the agent picks up again by itself, and on SIGTERM it stops and the list
 //! empties before the process exits, as with the real CLI. A monitor is the same, started by a `Monitor` call, which
-//! only the `task_started` after the list says.
+//! only the `task_started` after the list says. A subagent in the background is listed here too, while it works.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,9 +16,17 @@ use crate::{Config, Input, Out, Prompt, emit};
 /// How often a task looks for its file, and for SIGTERM.
 const POLL: Duration = Duration::from_millis(20);
 
-/// What's running, by ID and file.
-static TASKS: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
+/// What's running, in the order it started.
+static TASKS: Mutex<Vec<Task>> = Mutex::new(Vec::new());
 static TERMINATED: AtomicBool = AtomicBool::new(false);
+
+/// A task in the list, as the CLI lists it.
+struct Task {
+    id: String,
+    /// Its `task_type`: `local_bash` for a command or a monitor, and `local_agent` for a subagent.
+    kind: &'static str,
+    description: String,
+}
 
 /// The call that starts a task.
 #[derive(Clone, Copy)]
@@ -51,8 +59,7 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         }
     };
     let id = format!("task_{tool_use_id}");
-    TASKS.lock().push((id.clone(), PathBuf::from(file)));
-    list(turn.config, turn.out);
+    listed(turn.config, turn.out, &id, "local_bash", &format!("Wait for {file}"));
     emit(
         turn.out,
         json!({"type":"system","subtype":"task_started","task_id":id,"tool_use_id":tool_use_id,
@@ -65,9 +72,8 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        TASKS.lock().retain(|(task, _)| *task != id);
         notify(&config, &out, &id, "completed");
-        list(&config, &out);
+        unlisted(&config, &out, &id);
         // The real CLI tells the agent, which starts a turn of its own, or joins the one that's running.
         let _ =
             config.input.send(Input::Resume(Prompt { text: format!("say:finished {}", file.display()), uuid: None }));
@@ -75,14 +81,23 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
     false
 }
 
+/// Adds a task to the list, and lists them all.
+pub(crate) fn listed(config: &Config, out: &Out, id: &str, kind: &'static str, description: &str) {
+    TASKS.lock().push(Task { id: id.to_string(), kind, description: description.to_string() });
+    list(config, out);
+}
+
+/// Takes a task out of the list, and lists the rest.
+pub(crate) fn unlisted(config: &Config, out: &Out, id: &str) {
+    TASKS.lock().retain(|task| task.id != id);
+    list(config, out);
+}
+
 fn list(config: &Config, out: &Out) {
     let tasks: Vec<_> = TASKS
         .lock()
         .iter()
-        .map(|(id, file)| {
-            let description = format!("Wait for {}", file.display());
-            json!({"task_id":id,"task_type":"local_bash","description":description})
-        })
+        .map(|task| json!({"task_id":task.id,"task_type":task.kind,"description":task.description}))
         .collect();
     emit(
         out,
@@ -116,8 +131,8 @@ fn watch_for_sigterm(config: &Config, out: &Out) {
             std::thread::sleep(POLL);
         }
         let stopped: Vec<_> = TASKS.lock().drain(..).collect();
-        for (id, _) in &stopped {
-            notify(&config, &out, id, "stopped");
+        for task in &stopped {
+            notify(&config, &out, &task.id, "stopped");
         }
         list(&config, &out);
         std::process::exit(143);

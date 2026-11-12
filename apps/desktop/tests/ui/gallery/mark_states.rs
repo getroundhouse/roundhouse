@@ -1,7 +1,7 @@
 //! Every state the status mark can show, in one picture: each thing its agent can be doing, against each colour a
 //! pull request gives its fan, at the sidebar's size and at Home's. A tab's mark is the `None` one at Home's size,
-//! since a chat's mark doesn't show the pull request. Under them, the ring a background task has. Each is drawn by the
-//! app's own mark, held still as the screens hold it.
+//! since a chat's mark doesn't show the pull request. Under them, the ring a background task has, and the robot a
+//! subagent at work in the background has, each drawn by the app's own code, held still as the screens hold them.
 
 #![cfg(test)]
 
@@ -83,6 +83,7 @@ impl Render for Sheet {
         let rings = RINGS
             .iter()
             .map(|ring| h_flex().child(label(ring_name(*ring))).child(cell().child(look::task_ring(*ring, cx))));
+        let robot = h_flex().child(label("A subagent at work")).child(cell().child(look::robot_at_work(cx)));
         v_flex()
             .size_full()
             .bg(theme.sidebar)
@@ -90,6 +91,7 @@ impl Render for Sheet {
             .child(h_flex().child(label("Its pull request")).children(heads))
             .children(marks.collect::<Vec<_>>())
             .children(rings.collect::<Vec<_>>())
+            .child(robot)
     }
 }
 
@@ -98,7 +100,7 @@ pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
     let mut cx = headless::app(text_system);
     cx.update(|cx| look::hold_still(0, cx));
     #[expect(clippy::cast_precision_loss, reason = "a dozen rows and columns")]
-    let (rows, columns) = ((1 + SIGNALS.len() + RINGS.len()) as f32, WORKS.len() as f32);
+    let (rows, columns) = ((1 + SIGNALS.len() + RINGS.len() + 1) as f32, WORKS.len() as f32);
     let width = px(MARGIN * 2. + LABEL + columns * CELL);
     let height = px(MARGIN * 2. + rows * ROW);
     headless::draw(&mut cx, size(width, height), |_| Sheet)

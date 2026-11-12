@@ -29,6 +29,7 @@ use protocol::client::{
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
+use protocol::model::{AttachmentId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 use stream::Stream;
 
@@ -57,6 +58,11 @@ impl ClientError {
     /// The hub is too old to know this request. Hide or disable whatever needed it.
     pub fn is_unsupported(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unsupported)
+    }
+
+    /// The hub has no such thing, such as a file it was never given or has let go of.
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::NotFound)
     }
 
     /// There's a real break between this client and the hub, so only [`HubAdmin`] can reach it.
@@ -138,6 +144,9 @@ struct Inner {
     running: Arc<commands::Running>,
     /// Each chat's prompts, in the order they were written.
     lines: Arc<lines::Lines>,
+    /// The files this connection has added to a session, or read back from one, so a prompt that carries one doesn't
+    /// send its bytes again.
+    given: Mutex<HashSet<(SessionId, AttachmentId)>>,
 }
 
 impl Inner {
@@ -194,6 +203,7 @@ impl Client {
             hub_version: OnceLock::new(),
             running: Arc::default(),
             lines: Arc::default(),
+            given: Mutex::default(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()

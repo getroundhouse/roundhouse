@@ -262,8 +262,20 @@ fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
         (kind("subagent"), kind("monitor"), kind("command")),
         (TaskKind::Subagent, TaskKind::Monitor, TaskKind::Command)
     );
-    let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor };
+    let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor, call: None };
     assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);
+}
+
+/// A list the hub stored before it kept which call started each task, or sent by a hub that doesn't, names none, so
+/// a subagent's line has no button to its tab. One that names a call keeps it.
+#[test]
+fn a_background_task_from_a_hub_that_doesnt_keep_its_call_has_none() {
+    let older: AgentTask = serde_json::from_str(r#"{"id":"t1","description":null,"kind":"subagent"}"#).unwrap();
+    let newer = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_1"}"#;
+    let task: AgentTask = serde_json::from_str(newer).unwrap();
+
+    assert_eq!((older.call, task.call.clone()), (None, Some("toolu_1".into())));
+    assert_eq!(serde_json::to_string(&task).unwrap(), newer);
 }
 
 #[test]

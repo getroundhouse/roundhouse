@@ -9,7 +9,7 @@ use super::{Store, StoreError, StoredSession, lock};
 #[cfg(test)]
 mod tests;
 
-/// A session after asking to change how far it's read, and whether that changed anything.
+/// A session after asking to change something kept on it, such as how far it's read, and whether that changed anything.
 pub struct Reading {
     pub session: StoredSession,
     pub changed: bool,

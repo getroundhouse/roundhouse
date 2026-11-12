@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{advisor, background, read, subagent};
+use crate::{advisor, background, cache, read, subagent};
 
 mod prose;
 
@@ -78,7 +78,7 @@ impl Turn<'_> {
         eof: &mut bool,
     ) -> bool {
         let id = message_id();
-        self.stream_event(&id, json!({"type":"message_start","message":{"id":id,"role":"assistant"}}));
+        cache::message_start(self, &id);
         let name = block.name();
         self.stream_event(&id, json!({"type":"content_block_start","index":0,"content_block":{"type":name,(name):""}}));
         let mut text = String::new();
@@ -242,6 +242,10 @@ fn answer(turn: &Turn, command: &str) -> Option<String> {
     if command == "effort" {
         return Some(format!("effort={}", crate::current_effort()));
     }
+    if command == "cold" {
+        cache::expire();
+        return Some("the cache had expired".to_string());
+    }
     if command == "keep-effort" {
         *crate::KEEPS_EFFORT.lock() = true;
         return Some("keeping my effort".to_string());
@@ -338,16 +342,8 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
     }
-    let subagent = command
-        .strip_prefix("agent:")
-        .map(|what| (what, true, 1))
-        .or_else(|| command.strip_prefix("agent-foreground:").map(|what| (what, false, 1)))
-        .or_else(|| {
-            let (calls, what) = command.strip_prefix("agent-calls:")?.split_once(':')?;
-            Some((what, true, calls.parse().unwrap()))
-        });
-    if let Some((description, in_background, calls)) = subagent {
-        return subagent::start(turn, description, in_background, calls, rx, queued, eof);
+    if let Some(asked) = subagent::Asked::read(command) {
+        return subagent::start(turn, &asked, rx, queued, eof);
     }
     if let Some((call, file)) = background::Call::read(command) {
         return background::start(turn, call, file);

@@ -192,6 +192,7 @@ fn apply(
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => {}
     }
     // The same rule decided what was committed, so this is the start the record now has.

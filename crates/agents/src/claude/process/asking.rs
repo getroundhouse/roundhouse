@@ -46,6 +46,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
+        | EventBody::CacheExpired { .. }
         | EventBody::Unknown => Work::Other,
     }
 }

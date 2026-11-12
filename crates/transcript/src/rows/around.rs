@@ -10,7 +10,7 @@ use crate::calls::agent;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::questions;
-use crate::transcript::Model;
+use crate::transcript::{IdleCache, Model};
 
 mod nearby;
 mod reply;
@@ -42,6 +42,9 @@ pub(super) struct Around {
     pub(super) prompt: PromptState,
     /// For a turn's end: the agent the chat runs, which its card names.
     pub(super) agent: AgentKind,
+    /// For the newest turn's end: what the cache holds of the conversation while it can expire, which its line and
+    /// card say. An older turn's say nothing of it, since only the newest can still be warm.
+    pub(super) cache: Option<IdleCache>,
     /// For a change of mode: the mode before it, when the log says.
     pub(super) mode_before: Option<PermissionMode>,
     /// For a compaction: whether it's open to its summary.
@@ -101,6 +104,7 @@ impl Around {
             carried: Vec::new(),
             prompt: PromptState::Taken,
             agent: m.agent,
+            cache: (seq == m.at_work.reply_seq).then(|| m.at_work.cache.clone()).flatten(),
             mode_before: None,
             open: false,
         };

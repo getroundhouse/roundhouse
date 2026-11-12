@@ -1,6 +1,7 @@
 # shellcheck shell=bash
-# What the packaging scripts share: the app's name to Velopack, and running the `vpk` that dotnet-tools.json pins.
-# Sourced by `package.sh` and `package-windows.sh`, with HERE set to this directory.
+# What the packaging scripts share: the app's name to Velopack, running the `vpk` that dotnet-tools.json pins, and
+# reading what it made. Sourced by `package.sh`, `package-windows.sh` and `package-linux.sh`, with HERE set to this
+# directory.
 
 # Velopack's name for the app, which names its packages, and the directory it installs in on Windows.
 # shellcheck disable=SC2034  # The scripts that source this use it.
@@ -44,4 +45,13 @@ check_newer() {
     [.Assets[].Version | select(parts >= ($version | parts))] | first // empty' "$releases/$feed")"
   [ -z "$newer" ] || die "$releases already has version $newer, and vpk only adds a newer one than every one there.
 Package into another --out"
+}
+
+# Prints the full package FEED in RELEASES lists for VERSION, once it's there.
+full_package() {
+  local releases=$1 feed=$2 full
+  full="$(jq -r --arg version "$VERSION" \
+    '[.Assets[] | select(.Version == $version and .Type == "Full") | .FileName] | first // empty' "$releases/$feed")"
+  [ -n "$full" ] && [ -f "$releases/$full" ] || die "$feed doesn't list a full package for $VERSION that's there"
+  echo "$full"
 }

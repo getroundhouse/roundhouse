@@ -16,8 +16,8 @@ use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
-use crate::right_click;
 use crate::sides::{self, Side, Sidebar};
+use crate::{prompt_cache, right_click};
 
 /// Every tab is the same width, so the row doesn't shift when a chat gets its title.
 pub(super) const TAB_WIDTH: Pixels = px(200.);
@@ -39,6 +39,8 @@ impl WorkspacePane {
         let unread = self.shows_unread(session);
         let needs_a_look = unread || crate::sidebar::signal::waiting_on_you([session]);
         let mark = crate::sidebar::signal::chat(session);
+        let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
+            .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
             .hand()
@@ -79,6 +81,7 @@ impl WorkspacePane {
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
                     .child(look::chat_mark(mark, look::Size::Inline, cx))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
+                    .children(expiring)
                     // Hidden rather than left out, so the title doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
@@ -276,6 +279,7 @@ impl WorkspacePane {
     fn chat(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
+        let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
@@ -298,6 +302,12 @@ impl WorkspacePane {
                     .text_xs()
                     .text_color(muted),
                 )
+            })
+            // What the next prompt costs, with a clock as the newest turn's line has.
+            .when_some(cache_expired, |d, said| {
+                let clock = look::cache_mark(look::CacheMark::Clock, look::faint());
+                let line = h_flex().gap_1p5().child(clock).child(said);
+                d.child(transcript::in_column(line).flex_none().py_1().text_xs().text_color(muted))
             })
             .child(composer)
             .into_any_element()

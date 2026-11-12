@@ -9,9 +9,9 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AgentKind, AttachmentId, DiffComment, FileContents, GitDiff, InstanceId, Place, PullRequest, Records,
-    Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, SetupStatus, Subagent, Title, TitleSource, ToolUseId,
-    Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
+    Account, AgentKind, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId,
+    ModelName, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus,
+    SetupStatus, Subagent, Title, TitleSource, ToolUseId, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
 };
 use protocol::tail::Tail;
 
@@ -181,8 +181,10 @@ impl World {
             user_active_at_ms: None,
             background_tasks,
             context: None,
+            prompt_cache: None,
             queued: Vec::new(),
             queue_held: false,
+            draft: protocol::model::Draft::default(),
             rev: Rev::default(),
         });
         self.logs.insert(id.clone(), log);
@@ -223,6 +225,42 @@ impl World {
         let chat = session.id.clone();
         self.worked_in(&chat, started_ms);
         self
+    }
+
+    /// Has the turn a chat's log ends with end this many minutes before [`NOW_MS`], and three seconds after its agent's
+    /// newest request was sent to Opus 5.5 with a 1h cache, as the chat's record says, with its context holding 313.5k
+    /// tokens unless it says otherwise. The turn takes as long as it did. It's the chat's newest reply, which has been
+    /// read.
+    pub(crate) fn cached(&mut self, id: &SessionId, minutes_before_now: i64) {
+        let used_at_ms = NOW_MS - minutes_before_now * MINUTE_MS;
+        let ended = self.logs.get_mut(id).and_then(|log| log.last_mut()).unwrap();
+        let EventBody::TurnEnded { started_at_ms, .. } = &mut ended.body else { panic!("the log ends mid-turn") };
+        let moved_ms = used_at_ms + 3_000 - ended.ts_ms;
+        *started_at_ms = started_at_ms.map(|at| at + moved_ms);
+        ended.ts_ms += moved_ms;
+        let reply = ended.seq;
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        session.turn_started_at_ms = session.turn_started_at_ms.map(|at| at + moved_ms);
+        (session.reply_seq, session.read_seq) = (reply, reply);
+        let context = session.context.get_or_insert(ContextUsage {
+            used_tokens: 313_500,
+            max_tokens: 500_000,
+            parts: Vec::new(),
+        });
+        let (model, tokens) = (Some(ModelName::named("claude-opus-5-5")), context.used_tokens);
+        session.prompt_cache = Some(PromptCache { used_at_ms, ttl: CacheTtl::OneHour, model, tokens });
+    }
+
+    /// Has everything in a chat before its event `seq` happen `idle_ms` earlier, so it had been idle that long when
+    /// that one came.
+    pub(crate) fn idle_before(&mut self, id: &SessionId, seq: Seq, idle_ms: i64) {
+        for event in self.logs.get_mut(id).unwrap().iter_mut().filter(|event| event.seq < seq) {
+            event.ts_ms -= idle_ms;
+            if let EventBody::TurnEnded { started_at_ms, .. } = &mut event.body {
+                *started_at_ms = started_at_ms.map(|at| at - idle_ms);
+            }
+        }
+        self.sessions.iter_mut().find(|s| &s.id == id).unwrap().created_at_ms -= idle_ms;
     }
 
     /// Makes the end of a chat's log a reply nobody has read.

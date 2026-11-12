@@ -29,7 +29,7 @@ pub(crate) fn set(cx: &mut App) {
     cx.on_action(|_: &Hide, cx| cx.hide());
     cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
-    cx.on_action(|_: &Quit, cx| cx.quit());
+    cx.on_action(|_: &Quit, cx| crate::app::quit(cx));
     cx.on_action(|_: &Minimize, cx| in_front(cx, Window::minimize_window));
     cx.on_action(|_: &Zoom, cx| in_front(cx, Window::zoom_window));
 }

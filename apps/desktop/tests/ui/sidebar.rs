@@ -7,14 +7,10 @@ use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Held, Stack, Ui, home_row, pull_request};
+use crate::support::{Held, Stack, Ui, home_row, pencil, pull_request, sidebar_row as row};
 
 /// More than the sidebar has room for in the window.
 const WORKSPACES: usize = 40;
-
-fn row(id: &WorkspaceId) -> ElementId {
-    ElementId::Name(SharedString::from(format!("workspace-{id}")))
-}
 
 fn archive_button(id: &WorkspaceId) -> ElementId {
     ElementId::Name(SharedString::from(format!("archive-{id}")))
@@ -114,6 +110,40 @@ fn a_rows_archive_button_stays_under_a_press_while_the_pointer_moves(cx: &mut Te
     assert_eq!(ui.view().selected.as_ref(), Some(&showing), "letting go doesn't open the workspace instead");
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
+}
+
+/// Shows the workspace, as its row does, and waits until it's showing.
+fn show(ui: &mut Ui, id: &WorkspaceId) {
+    ui.click(row(id));
+    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(id) && !ui.has("home-page"));
+}
+
+#[gpui_kit::test]
+fn a_rows_pencil_shows_while_something_typed_in_it_isnt_sent(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let (other, typed_in) = (ui.new_workspace(), ui.new_workspace());
+    ui.input("  ");
+    show(&mut ui, &other);
+    assert!(!ui.has(pencil(&typed_in)), "spaces alone aren't a prompt");
+
+    show(&mut ui, &typed_in);
+    ui.input("half typed");
+    assert!(!ui.has(pencil(&typed_in)), "not on the workspace showing, whose composer is in view");
+    ui.click("home");
+    ui.wait("Home", |ui| ui.has("home-page"));
+    assert!(ui.visible(pencil(&typed_in)), "but while Home shows in its place");
+    show(&mut ui, &other);
+    assert!(ui.visible(pencil(&typed_in)), "and once another workspace shows");
+    assert!(!ui.has(pencil(&other)), "nothing's typed in that one");
+    ui.hover(row(&typed_in));
+    assert!(ui.visible(pencil(&typed_in)) && ui.visible(archive_button(&typed_in)), "it stays beside the button");
+
+    show(&mut ui, &typed_in);
+    ui.press("enter");
+    ui.wait("the prompt to be taken", |ui| ui.composer_text().is_empty());
+    show(&mut ui, &other);
+    assert!(!ui.has(pencil(&typed_in)), "sending it leaves nothing unsent");
 }
 
 #[gpui_kit::test]

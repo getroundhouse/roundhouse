@@ -111,6 +111,9 @@ impl Printer {
             EventBody::CompactionAsked { keeping } => self.line(event.seq, &asked_to_compact(keeping.as_deref())),
             EventBody::AgentCompacting { written_chars } => self.line(event.seq, &compacting(*written_chars)),
             EventBody::AgentCompacted { outcome, .. } => self.line(event.seq, &compacted(outcome)),
+            EventBody::CacheExpired { idle_ms, written_tokens, .. } => {
+                self.line(event.seq, &cache_expired(*idle_ms, *written_tokens));
+            }
             EventBody::PromptTaken { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentLimits { .. }
@@ -288,6 +291,12 @@ fn compacting(written_chars: Option<u64>) -> String {
     format!("compacting the conversation{written}")
 }
 
+/// That a prompt found the cache expired, how long the chat had been idle, and how much it wrote again.
+fn cache_expired(idle_ms: u64, written_tokens: u64) -> String {
+    let idle_min = idle_ms / 60_000;
+    format!("the cache had expired after {idle_min} min idle, so {written_tokens} tokens were written to it again")
+}
+
 /// What compacting did, or why it couldn't.
 fn compacted(outcome: &CompactionOutcome) -> String {
     match outcome {
@@ -307,7 +316,7 @@ mod tests {
     use super::Printer;
 
     fn task(id: &str, kind: TaskKind) -> AgentTask {
-        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind }
+        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
     }
 
     #[test]

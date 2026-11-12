@@ -16,7 +16,7 @@ use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSetti
 use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
 use crate::model_picker::{Picked, model_picker};
-use crate::{StopAgent, attached};
+use crate::{StopAgent, attached, prompt_cache};
 
 /// Its corners, which plan mode's texture stays inside.
 const CORNER: Rems = rems(0.5);
@@ -30,7 +30,7 @@ pub(super) enum Hub {
 }
 
 /// The box a prompt is typed in, and what Enter does there: while the agent works, Enter steers it, and Cmd-Enter
-/// queues what's typed for after it finishes.
+/// queues what's typed for after it finishes. What's typed is kept as it changes.
 pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) -> (Entity<TextareaState>, Subscription) {
     let input = cx.new(|cx| {
         TextareaState::new(window, cx)
@@ -39,14 +39,16 @@ pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) ->
             .submit_on_enter(true)
             .placeholder("Ask the agent to do something")
     });
-    let on_enter = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
-        if let InputEvent::PressEnter { shift: false, secondary } = event {
+    let on_enter = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| match event {
+        InputEvent::PressEnter { shift: false, secondary } => {
             if *secondary && this.session().is_some_and(|s| s.status.is_active()) {
                 this.queue_typed(window, cx);
             } else {
                 this.submit(window, cx);
             }
         }
+        InputEvent::Change => this.keep_typed(false, cx),
+        InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
     });
     (input, on_enter)
 }
@@ -74,11 +76,14 @@ impl WorkspacePane {
             let keeping = (!rest.is_empty()).then(|| rest.to_string());
             transcript.update(cx, |t, cx| t.compact(keeping, Some(text.clone()), cx));
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            self.keep_typed(true, cx);
             return cx.notify();
         }
         let files = self.attached.take();
         if transcript.update(cx, |t, cx| t.send_prompt_with(text, files, cx)) {
             self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+            // At once, so what was sent can't come back as a draft. A prompt that fails comes back as one.
+            self.keep_typed(true, cx);
         }
         cx.notify();
     }
@@ -169,7 +174,9 @@ impl WorkspacePane {
 
     /// The model and its effort of the chat showing.
     fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let model_and_effort = self.session().map(|s| (s.model.clone(), s.effort));
+        let now_ms = look::now_ms(cx);
+        let model_and_effort =
+            self.session().map(|s| (s.model.clone(), s.effort, prompt_cache::switching_note(s, now_ms)));
         let this = cx.weak_entity();
         let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
             let _ = this.update(cx, |t, cx| match picked {
@@ -182,8 +189,8 @@ impl WorkspacePane {
             .min_w_0()
             .gap_0p5()
             // Only a chat has a model, so there's none to show while the workspace's first is being made.
-            .when_some(model_and_effort, |row, (model, effort)| {
-                row.child(model_picker("model-picker", &model, effort, models))
+            .when_some(model_and_effort, |row, (model, effort, switching)| {
+                row.child(model_picker("model-picker", &model, effort, switching, models))
             })
     }
 

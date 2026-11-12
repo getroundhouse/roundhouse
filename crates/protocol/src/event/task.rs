@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::TaskId;
+use crate::model::{TaskId, ToolUseId};
 
 /// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
 /// started it ends.
@@ -14,6 +14,10 @@ pub struct AgentTask {
     pub description: Option<String>,
     #[serde(default)]
     pub kind: TaskKind,
+    /// The call that started it, once the agent has said, so a subagent's line can open the subagent tab, which
+    /// reads its work by its call. None from an agent or a hub that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<ToolUseId>,
 }
 
 /// What a background task is, which says whether it's the agent's own work and whether it's doing anything.

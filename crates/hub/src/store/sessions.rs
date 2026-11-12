@@ -1,21 +1,27 @@
 //! Sessions.
 
 use protocol::model::{
-    AgentKind, ClientRequestId, ContextUsage, ModelName, QueuedPrompt, Rev, Session, SessionSettingsChange,
-    SessionStatus, Title,
+    AgentKind, ClientRequestId, ContextUsage, Draft, ModelName, PromptCache, QueuedPrompt, Rev, Session,
+    SessionSettingsChange, SessionStatus, Title,
 };
-use protocol::model::{SessionId, WorkspaceId};
+use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
+use super::drafts::forget_draft;
 use super::made::{Made, inserted, made_by};
 use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
 
-pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms";
+pub(super) const SESSION_COLUMNS: &str = "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft";
 
 /// A session's queue, from its column.
 pub(super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
     serde_json::from_str(json)
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(17, rusqlite::types::Type::Text, Box::new(e)))
+}
+
+/// A draft for its column: NULL when nothing is typed.
+pub(super) fn draft_column(draft: &Draft) -> serde_json::Result<Option<String>> {
+    (!draft.is_empty()).then(|| serde_json::to_string(draft)).transpose()
 }
 
 pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
@@ -45,7 +51,14 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             context: row.get::<_, Option<String>>(21)?.and_then(|json| serde_json::from_str(&json).ok()),
             account: row.get::<_, Option<String>>(22)?.map(Into::into),
             user_active_at_ms: row.get(23)?,
-            rev: rev_of(row, 24)?,
+            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
+            prompt_cache: row.get::<_, Option<String>>(24)?.and_then(|json| serde_json::from_str(&json).ok()),
+            // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
+            draft: row
+                .get::<_, Option<String>>(25)?
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default(),
+            rev: rev_of(row, 26)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -69,7 +82,7 @@ impl Store {
         tx.execute(
             &format!(
                 "INSERT INTO sessions ({SESSION_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -96,6 +109,8 @@ impl Store {
                 session.context.as_ref().map(serde_json::to_string).transpose()?,
                 session.account.as_ref().map(protocol::model::AccountId::as_str),
                 session.user_active_at_ms,
+                session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
+                draft_column(&session.draft)?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -157,10 +172,29 @@ impl Store {
         Ok(())
     }
 
-    pub fn set_session_closed(&self, id: &SessionId, closed_at_ms: Option<i64>) -> Result<(), StoreError> {
-        lock(&self.writer)
-            .execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id.as_str()])?;
+    /// What the API's cache holds of the session's conversation from here on, or `None` once it holds none of it.
+    pub fn set_session_cache(&self, id: &SessionId, cache: Option<&PromptCache>) -> Result<(), StoreError> {
+        lock(&self.writer).execute(
+            "UPDATE sessions SET prompt_cache = ? WHERE id = ?",
+            params![cache.map(serde_json::to_string).transpose()?, id.as_str()],
+        )?;
         Ok(())
+    }
+
+    /// Closes the session, or opens it again with `None`. Its draft goes as it closes, with its composer, and so does
+    /// each file the draft named that nothing else will send, which this returns, so the caller lets go of their bytes
+    /// too. One transaction, so a draft kept meanwhile either comes first and goes too, or finds the session closed.
+    pub fn set_session_closed(
+        &self,
+        id: &SessionId,
+        closed_at_ms: Option<i64>,
+    ) -> Result<Vec<AttachmentId>, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute("UPDATE sessions SET closed_at_ms = ? WHERE id = ?", params![closed_at_ms, id.as_str()])?;
+        let let_go_of = if closed_at_ms.is_some() { forget_draft(&tx, id)? } else { Vec::new() };
+        tx.commit()?;
+        Ok(let_go_of)
     }
 
     /// Deletes a session nothing has been sent in, with nothing in its log and nothing queued, along with what it

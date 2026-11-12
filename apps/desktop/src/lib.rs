@@ -6,6 +6,7 @@ mod ago;
 mod alert;
 pub mod all_files;
 pub mod app;
+pub mod appimage;
 mod assets;
 mod attached;
 pub mod busy;
@@ -23,6 +24,7 @@ pub mod image_diff;
 mod menus;
 mod model_picker;
 pub mod new_workspace;
+mod prompt_cache;
 pub mod pull_request;
 mod rename;
 mod reorder;
@@ -165,8 +167,9 @@ pub fn open_main_window(
     })
 }
 
-pub fn run(checkout: Option<Checkout>) {
-    gpui_kit::application().with_assets(Assets).run(|cx| {
+/// `appimage` is where the app runs from, if it's an `AppImage`, which `appimage::leave_behind` says.
+pub fn run(checkout: Option<Checkout>, appimage: Option<appimage::AppImage>) {
+    gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
@@ -176,7 +179,7 @@ pub fn run(checkout: Option<Checkout>) {
             open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
         });
         match opened {
-            Ok(data_dir) => updates::start(&data_dir, cx),
+            Ok(data_dir) => updates::start(&data_dir, appimage.as_ref(), cx),
             Err(e) => {
                 eprintln!("couldn't open a window: {e:#}");
                 // Not by quitting, which exits with 0, as an app that someone quit does. Nothing is open to wait for.

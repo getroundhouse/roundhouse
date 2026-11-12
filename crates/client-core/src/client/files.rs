@@ -28,7 +28,19 @@ impl Client {
         let ClientResponse::Attachment(attachment) = reply else {
             return unexpected(&reply);
         };
+        self.inner.given.lock().insert((session_id.clone(), id.clone()));
         Ok(attachment)
+    }
+
+    /// Whether this connection has added the file to the session, or read it back from it, so the hub has it, unless
+    /// it has let go of it since.
+    pub(crate) fn has_given(&self, session_id: &SessionId, id: &AttachmentId) -> bool {
+        self.inner.given.lock().contains(&(session_id.clone(), id.clone()))
+    }
+
+    /// Takes back what [`Self::has_given`] says, for a file the hub turned out not to have.
+    pub(crate) fn forget_given(&self, session_id: &SessionId, id: &AttachmentId) {
+        self.inner.given.lock().remove(&(session_id.clone(), id.clone()));
     }
 
     pub fn attachment_read(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Vec<u8>> {
@@ -36,7 +48,18 @@ impl Client {
         let ClientResponse::AttachmentData { data } = reply else {
             return unexpected(&reply);
         };
+        self.inner.given.lock().insert((session_id.clone(), id.clone()));
         Ok(data.into_vec())
+    }
+
+    /// See [`ClientRequest::AttachmentRemove`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn attachment_remove(&self, session_id: &SessionId, id: &AttachmentId) -> Result<()> {
+        let reply = self.call(ClientRequest::AttachmentRemove { session_id: session_id.clone(), id: id.clone() })?;
+        let ClientResponse::Ok = reply else {
+            return unexpected(&reply);
+        };
+        self.forget_given(session_id, id);
+        Ok(())
     }
 
     /// See [`ClientRequest::WorkspaceFiles`]. A hub older than this refuses it, as `is_unsupported` says.

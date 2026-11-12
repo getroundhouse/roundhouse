@@ -18,6 +18,7 @@ ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts 
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 tools/package/package.sh          # Packages this commit as Roundhouse.app, unsigned, in target/package. Needs the .NET SDK
 tools/package/package-windows.sh --prebuilt DIR   # Packages Windows binaries, built on Windows by tools/build.sh, as the installer and its updates, unsigned. On a Mac or Linux, with the .NET SDK. `--arch arm64` for ARM64 ones
+tools/package/package-linux.sh --prebuilt DIR     # Packages Linux binaries, built in Ubuntu 22.04 by tools/build.sh, as the AppImage and its updates. On Linux, with the .NET SDK and squashfs-tools. `--arch arm64` for ARM64 ones
 python3 -m unittest discover -s tools/package   # The scripts that publish releases, against a directory for the bucket, and the one that makes the Windows icon
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
@@ -53,6 +54,6 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 - **Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits into layers that can each be reviewed alone, make them a stack with `gh stack` rather than one big PR. A feature that reaches from the protocol through the hub and client-core to a client is one: a PR for each layer, from the bottom, so each can merge while the ones above it are reviewed, rather than one branch meeting everything that lands on `main`. Independent changes get their own PR from `main`.
 - **Report only what you've verified.** Say what's unverified. "Running" only means an agent hasn't exited, so check processes and file timestamps before describing what it's doing.
 - **Check primary sources for licenses.** Read `Cargo.toml` and the license terms, not GitHub's label, which reported `gpui-mobile` as AGPL when it's tri-licensed with Apache-2.0.
-- **Keep strong copyleft out of shipped code.** No GPL, AGPL or LGPL, so Zed's GPL-3.0 crates are out and only GPUI's Apache-2.0 crates are in. `docs/architecture.md` has why, and `tools/policy` checks it.
+- **Keep strong copyleft out of shipped code.** No GPL, AGPL or LGPL, so Zed's GPL-3.0 crates are out and only GPUI's Apache-2.0 crates are in. `docs/architecture.md` has why, and the one exception, and `tools/policy` checks it.
 - **Conductor is an inspiration, not a spec.** This is a new product, so describe it on its own terms, and don't call it a clone or a replacement. Its look is a starting point for ours, so it feels familiar. Don't copy its code, icons or other assets, or use its name. Reading its settings and variables is a compatibility feature, nothing more.
 - **Keep client data and credentials out of the repo.** Fixtures are synthetic, and docs use aggregate numbers only.

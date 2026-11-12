@@ -11,6 +11,7 @@
 
 mod approved;
 mod baselines;
+mod cache_screens;
 mod capture;
 mod chats;
 mod compaction_chats;
@@ -135,6 +136,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(TOOL_SCREENS)
         .chain(subagent_chats::SCREENS)
         .chain(compaction_chats::SCREENS)
+        .chain(cache_screens::SCREENS)
         .chain(UPDATE_SCREENS)
 }
 

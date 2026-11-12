@@ -7,8 +7,11 @@
 #
 # The Windows app goes the same way in jobs of its own, so neither platform's release waits on the other's or fails
 # with it: built on Windows, with no secrets, then packaged by vpk on Linux, which packages for Windows, and published
-# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. x64 and
+# to a feed of its own in the same bucket. It's unsigned, so Windows warns whoever downloads the installer. amd64 and
 # ARM64 each go through those jobs, and one failing leaves the other's release alone.
+#
+# The Linux app goes the same way, as an AppImage: built in Ubuntu 22.04, so it needs no glibc newer than 22.04's, then
+# packaged by vpk on Linux and published to a feed of its own, for amd64 and for ARM64.
 #
 # The `release` environment's secrets:
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
@@ -41,6 +44,7 @@ on:
       - apps/desktop/icons/**
       - apps/desktop/src/updates/update-feed.*
       - .github/workflows/release.yml
+      - .github/install-linux-packages.sh
   workflow_dispatch:
 
 permissions:
@@ -88,17 +92,16 @@ jobs:
       # the hardened runtime and the entitlements. The runner image has .NET's SDKs.
       - name: Package, signed ad hoc
         run: tools/package/package.sh --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package" --sign -
+      # Short, because a hub left running by a step that failed could hold the step open.
       - name: Run the packaged CLI and a hub from the package
+        timeout-minutes: 5
         env:
           BUILD: ${{ steps.build.outputs.build }}
         run: |
-          cli="$RUNNER_TEMP/package/Roundhouse.app/Contents/MacOS/roundhouse"
-          export ROUNDHOUSE_HOME="$RUNNER_TEMP/smoke/home" ROUNDHOUSE_WORKSPACES="$RUNNER_TEMP/smoke/workspaces"
-          # Needs a hub, so it starts one.
-          "$cli" repo list
-          "$cli" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
-          "$cli" hub stop
-          grep -q " version $BUILD " "$RUNNER_TEMP/smoke/status.txt"
+          tools/package/smoke.sh "$RUNNER_TEMP/package/Roundhouse.app/Contents/MacOS" "$BUILD" "$RUNNER_TEMP/smoke"
+      - name: Show the hub's log
+        if: always()
+        run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
       - name: Keep the binaries for the release job
         if: github.ref == 'refs/heads/main'
         run: tar -cf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries" .
@@ -261,7 +264,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x64
+          - arch: amd64
             target: x86_64-pc-windows-msvc
             runner: windows-latest-amd64-8cores
           - arch: arm64
@@ -300,28 +303,13 @@ jobs:
           rustup target add "$CARGO_BUILD_TARGET"
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-      # What package.sh checks of the Mac's binaries, which packaging on Linux can't run. A package's build is its
-      # version, so this is what the hub and the CLI will say they are. Short, because a hub left running by a step
-      # that failed could hold the step open.
+      # What packaging on Linux can't run. A package's build is its version, so this is what the hub and the CLI will
+      # say they are. Short, because a hub left running by a step that failed could hold the step open.
       - name: Run the built CLI and a hub from the build
         timeout-minutes: 5
         env:
           BUILD: ${{ steps.build.outputs.build }}
-        run: |
-          bins="$RUNNER_TEMP/binaries"
-          mkdir -p "$RUNNER_TEMP/smoke"
-          export ROUNDHOUSE_HOME="$RUNNER_TEMP/smoke/home" ROUNDHOUSE_WORKSPACES="$RUNNER_TEMP/smoke/workspaces"
-          # Whatever fails, no hub is left behind.
-          trap '"$bins/roundhouse.exe" hub stop > /dev/null 2>&1 || true' EXIT
-          for bin in roundhoused roundhouse; do
-            said="$("$bins/$bin.exe" --version)"
-            [ "$said" = "$bin $BUILD" ] || { echo "::error::$bin says it's \"$said\", not $BUILD"; exit 1; }
-          done
-          # Needs a hub, so it starts one, from the copy of the daemon a stamped build makes.
-          "$bins/roundhouse.exe" repo list
-          "$bins/roundhouse.exe" hub status | tee "$RUNNER_TEMP/smoke/status.txt"
-          "$bins/roundhouse.exe" hub stop
-          grep -q " version $BUILD " "$RUNNER_TEMP/smoke/status.txt"
+        run: tools/package/smoke.sh "$RUNNER_TEMP/binaries" "$BUILD" "$RUNNER_TEMP/smoke"
       - name: Show the hub's log
         if: always()
         run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
@@ -351,7 +339,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        arch: [amd64, arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -380,8 +368,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: x64
-            channel: win
+          - arch: amd64
+            channel: win-amd64
           - arch: arm64
             channel: win-arm64
     environment: release
@@ -430,6 +418,229 @@ jobs:
       - name: Package
         if: steps.feed.outputs.state == 'new'
         run: tools/package/package-windows.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" --out "$PACKAGE"
+      - name: Sign the new feed
+        if: steps.feed.outputs.state == 'new'
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+        run: |
+          feed="$(tools/package/publish.py --channel "$CHANNEL" merge --version "$VERSION" --keep "$KEEP" \
+            --work "$PACKAGE")"
+          trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
+          (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
+          tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
+      - name: Publish
+        if: steps.feed.outputs.state == 'new'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
+        run: |
+          tools/package/publish.py --channel "$CHANNEL" upload --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE"
+      - name: Check what apps read
+        run: |
+          tools/package/publish.py --channel "$CHANNEL" check --url "$UPDATE_URL" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE"
+
+  # The Linux binaries, built in Ubuntu 22.04, so they need no glibc newer than its 2.35, and the app runs on 22.04 and
+  # every distro since. The org's 8-core runner for ARM64, as ci.yml's checks use. It compiles every dependency, so no
+  # key is here.
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-latest-arm64-8cores
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:22.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      # ci.yml's LINUX_PACKAGES, which GPUI's Linux crates build against, and then what the steps here need, with
+      # zstd for actions/cache, which otherwise falls back to gzip.
+      PACKAGES: >-
+        pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
+        libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+        build-essential ca-certificates curl git jq
+        zstd
+      # rustup's own installer, pinned by version and checksum. It installs the toolchain rust-toolchain.toml names.
+      RUSTUP_VERSION: 1.29.3
+    steps:
+      # Before the checkout, which fetches the history the version counts only with git.
+      - name: Install what the build needs
+        run: |
+          apt-get update -qq
+          xargs apt-get install -y -qq --no-install-recommends <<< "$PACKAGES"
+      - name: Install rustup
+        run: |
+          case "$(uname -m)" in
+            x86_64) sum=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55 ;;
+            aarch64) sum=9f608c142e0e38a78957d0661ba1dfaf0b6fb37184cfaa4b9a0aa57af6184282 ;;
+          esac
+          init="$RUNNER_TEMP/rustup-init"
+          curl -sSf -o "$init" \
+            "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/$(uname -m)-unknown-linux-gnu/rustup-init"
+          echo "$sum  $init" | sha256sum -c -
+          chmod +x "$init"
+          "$init" -y -q --default-toolchain none --profile minimal --no-modify-path
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # build.sh counts the commits for the version.
+          fetch-depth: 0
+          persist-credentials: false
+      # The checkout is the runner's user's, and the container runs as root, and git reads no repository someone else
+      # owns until it's told to.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Not linux-, which ci.yml restores from, since this target/ holds release builds made on 22.04.
+          key: release-linux-${{ matrix.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: release-linux-${{ matrix.arch }}-
+      - name: Build
+        id: build
+        run: |
+          build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      # What packaging can't run, as for Windows. Short, because a hub left running by a step that failed could hold
+      # the step open.
+      - name: Run the built CLI and a hub from the build
+        timeout-minutes: 5
+        env:
+          BUILD: ${{ steps.build.outputs.build }}
+        run: tools/package/smoke.sh "$RUNNER_TEMP/binaries" "$BUILD" "$RUNNER_TEMP/smoke"
+      - name: Show the hub's log
+        if: always()
+        run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
+      # In a tar, since an artifact keeps no file's mode. On a PR too, since packaging is checked from them. Its path
+      # is the container's, which runner.temp isn't in a container's job.
+      - id: tar
+        run: |
+          tar -cf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries" .
+          echo "path=$RUNNER_TEMP/binaries.tar" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-binaries-${{ matrix.arch }}
+          path: ${{ steps.tar.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  # On a PR, packages the Linux binaries as the release job below does, so the PR shows packaging still works. The
+  # runner image has .NET's SDK, and vpk makes the AppImage with squashfs-tools. It runs even if one processor's build
+  # failed, and then only that one's fails here, for want of its binaries.
+  package-linux:
+    needs: build-linux
+    if: ${{ !cancelled() && github.ref != 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LINUX_PACKAGES: squashfs-tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-binaries-${{ matrix.arch }}
+          path: ${{ runner.temp }}
+      - run: .github/install-linux-packages.sh
+      - env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir "$RUNNER_TEMP/binaries"
+          tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
+          tools/package/package-linux.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" --out "$RUNNER_TEMP/package"
+      - run: ls -l "$RUNNER_TEMP/package/releases"
+
+  # Packages and publishes the Linux binaries. It compiles nothing, and each key is only in the steps that use it.
+  # Running it again is safe, as for the Mac's. Each processor's goes to a channel of its own, and runs even if the
+  # other's build failed.
+  release-linux:
+    needs: build-linux
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            channel: linux-amd64
+          - arch: arm64
+            channel: linux-arm64
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARCH: ${{ matrix.arch }}
+      CHANNEL: ${{ matrix.channel }}
+      STORE: s3://${{ vars.RELEASES_BUCKET }}
+      S3_ENDPOINT: ${{ vars.RELEASES_S3_ENDPOINT }}
+      S3_REGION: ${{ vars.RELEASES_REGION }}
+      # How many releases the feed lists, and the bucket keeps packages for.
+      KEEP: "10"
+      LINUX_PACKAGES: squashfs-tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-binaries-${{ matrix.arch }}
+          path: ${{ runner.temp }}
+      - run: .github/install-linux-packages.sh
+      # Outside the checkout, and empty, since publish.py starts from an empty directory.
+      - run: |
+          echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
+          version="$(tools/package/package-linux.sh --print-version)"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
+          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
+          mkdir "$RUNNER_TEMP/binaries"
+          tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
+
+      # Before the feed's key is set up, so a version no app would take stops here, and only once the published feed
+      # matches its signature, so nothing in the bucket gets into the feed this signs.
+      - name: Read the published feed
+        id: feed
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_RELEASES_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_RELEASES_KEY }}
+        run: |
+          state="$(tools/package/publish.py --channel "$CHANNEL" prepare --store "$STORE" --key "$FEED_PUBLIC_KEY" \
+            --version "$VERSION" --work "$PACKAGE")"
+          echo "$VERSION is $state"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+      # vpk makes a delta from the newest full package, which prepare put in releases/.
+      - name: Package
+        if: steps.feed.outputs.state == 'new'
+        run: tools/package/package-linux.sh --arch "$ARCH" --prebuilt "$RUNNER_TEMP/binaries" --out "$PACKAGE"
       - name: Sign the new feed
         if: steps.feed.outputs.state == 'new'
         env:
