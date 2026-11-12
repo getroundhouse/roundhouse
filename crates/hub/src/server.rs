@@ -16,6 +16,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
+use crate::attachment_files::FileFor;
 use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::listener::Listener;
@@ -292,24 +293,27 @@ async fn handle(
             C::PromptRecorded { seq, duplicate }
         }
         R::AttachmentAdd { session_id, id, name, media_type, data } => {
-            C::Attachment(hub.attachment_add(session_id, id, name, media_type, data, AddedBy::Client).await?)
+            let kept_for = FileFor::Session(session_id);
+            C::Attachment(hub.file_add(kept_for, id, name, media_type, data, AddedBy::Client).await?)
         }
-        R::AttachmentRead { session_id, id } => C::AttachmentData { data: hub.attachment_read(session_id, id).await? },
+        R::AttachmentRead { session_id, id } => {
+            C::AttachmentData { data: hub.file_read(FileFor::Session(session_id), id).await? }
+        }
         R::AttachmentRemove { session_id, id } => {
-            hub.attachment_remove(session_id, id).await?;
+            hub.file_remove(FileFor::Session(session_id), id).await?;
             C::Ok
         }
         R::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) => {
             C::WorkspaceDraft(hub.workspace_draft_keep(draft).await?)
         }
         R::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, name, media_type, data }) => {
-            C::Attachment(hub.workspace_draft_file_add(id, name, media_type, data).await?)
+            C::Attachment(hub.file_add(FileFor::NewWorkspace, id, name, media_type, data, AddedBy::Client).await?)
         }
         R::WorkspaceDraftFileRead(drafts::WorkspaceDraftFileRead { id }) => {
-            C::AttachmentData { data: hub.workspace_draft_file_read(id).await? }
+            C::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? }
         }
         R::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id }) => {
-            hub.workspace_draft_file_remove(id).await?;
+            hub.file_remove(FileFor::NewWorkspace, id).await?;
             C::Ok
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),

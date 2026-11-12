@@ -20,6 +20,7 @@ use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
+use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::store::{self, StoredSession};
@@ -340,7 +341,7 @@ impl LiveSession {
             let starts = self.configuring.lock().await;
             let let_go_of = hub.blocking(move |store| store.set_session_closed(&id, Some(closed_at))).await?;
             self.state.lock().closed_at_ms = Some(closed_at);
-            hub.let_go_of_bytes(&self.id, &let_go_of).await;
+            hub.let_go_of_bytes(&FileFor::Session(self.id.clone()), &let_go_of).await;
             // Closing it ended its waits. It's closed whether or not they come off its list.
             if let Err(e) = self.unlist_waits_holding(&starts).await {
                 warn!(session = %self.id, "couldn't take a closed chat's waits off its list: {e}");

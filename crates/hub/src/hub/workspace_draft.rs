@@ -1,16 +1,15 @@
 //! What's in the new-workspace dialog and not made yet, and the files waiting with it, which the hub keeps before any
-//! workspace or chat exists to add them to. What each file is goes in the database, and its bytes in
-//! `attachment_files`, as a chat's do.
+//! workspace or chat exists to add them to. Its files are added, read and let go of as a chat's are, by `attachments`,
+//! and only letting go of those nothing names is the dialog's own.
 
 use std::time::Duration;
 
-use protocol::attachment::{Attachment, AttachmentBytes, MediaType, file_name};
-use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{AttachmentId, WorkspaceDraft, WorkspaceDraftToKeep};
+use protocol::client::{ApiError, HubNotice};
+use protocol::model::{WorkspaceDraft, WorkspaceDraftToKeep};
 use tracing::warn;
 
 use super::Hub;
-use super::attachments::checked;
+use crate::attachment_files::FileFor;
 use crate::store::{Store, now_ms};
 
 #[cfg(test)]
@@ -40,11 +39,7 @@ impl Hub {
             warn!("couldn't let go of the new-workspace dialog's files nothing names: {e}");
             Vec::new()
         });
-        for id in unnamed {
-            if let Err(e) = self.attachment_files.remove_draft_file(&id).await {
-                warn!(attachment = %id, "couldn't let go of a file nothing will send: {e}");
-            }
-        }
+        self.let_go_of_bytes(&FileFor::NewWorkspace, &unnamed).await;
     }
 
     /// As the hub starts, before it serves anything, lets go of the dialog's files nothing has named for long, and of
@@ -58,64 +53,5 @@ impl Hub {
         if let Err(e) = tidied {
             warn!("couldn't tidy the new-workspace dialog's files: {e}");
         }
-    }
-
-    /// Sent again with the same ID, it returns what the first one added without looking at the rest, as a chat's file
-    /// does.
-    pub(crate) async fn workspace_draft_file_add(
-        &self,
-        id: AttachmentId,
-        name: String,
-        media_type: MediaType,
-        data: AttachmentBytes,
-    ) -> Result<Attachment, ApiError> {
-        self.attachment_files.check_draft_file(&id)?;
-        let earlier = {
-            let id = id.clone();
-            self.blocking(move |store| store.workspace_draft_file(&id)).await?
-        };
-        if let Some(earlier) = earlier {
-            return Ok(earlier);
-        }
-        checked(media_type, &data)?;
-        let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
-        let file = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
-        self.attachment_files.write_draft_file(&id, data.into_vec()).await?;
-        let added = self.blocking(move |store| store.add_workspace_draft_file(&file)).await;
-        if added.is_err() {
-            let _ = self.attachment_files.remove_draft_file(&id).await;
-        }
-        added
-    }
-
-    pub(crate) async fn workspace_draft_file_read(&self, id: AttachmentId) -> Result<AttachmentBytes, ApiError> {
-        let file = {
-            let id = id.clone();
-            self.blocking(move |store| store.workspace_draft_file(&id)).await?
-        };
-        let Some(file) = file else {
-            return Err(ApiError::new(ErrorCode::NotFound, format!("no attachment {id}")));
-        };
-        match self.attachment_files.read_draft_file(&id).await? {
-            Some(bytes) => Ok(AttachmentBytes::new(bytes)),
-            None => Err(ApiError::new(
-                ErrorCode::NotFound,
-                format!("{} can't be read: the hub no longer has it", file.name),
-            )),
-        }
-    }
-
-    /// Lets go of a file the draft doesn't name, and of its bytes. One whose bytes can't be let go of is only left on
-    /// disk, so it's logged.
-    pub(crate) async fn workspace_draft_file_remove(&self, id: AttachmentId) -> Result<(), ApiError> {
-        self.attachment_files.check_draft_file(&id)?;
-        let removed = {
-            let id = id.clone();
-            self.blocking(move |store| store.let_go_of_workspace_draft_file(&id)).await?
-        };
-        if removed && let Err(e) = self.attachment_files.remove_draft_file(&id).await {
-            warn!(attachment = %id, "couldn't let go of a file nothing will send: {e}");
-        }
-        Ok(())
     }
 }
