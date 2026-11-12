@@ -7,8 +7,8 @@ use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, HubSettings, HubSettingsChange, NewDraft, PromptLine, PullRequest, Records, Repo, RepoId, Rev, Seq,
-    Session, SessionId, Subagent, ToolUseId, Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, NewDraft, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
+    SessionId, Subagent, ToolUseId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
@@ -215,15 +215,6 @@ impl Client {
 
     pub fn session_get(&self, id: &SessionId) -> Result<Session> {
         self.expect_session(ClientRequest::SessionGet { id: id.clone() })
-    }
-
-    /// Every prompt in the session, oldest first, as a line each. A hub older than this refuses it as unsupported.
-    pub fn session_prompt_list(&self, id: &SessionId) -> Result<Vec<PromptLine>> {
-        let reply = self.call(ClientRequest::SessionPromptList { id: id.clone() })?;
-        let ClientResponse::Prompts { prompts } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(prompts)
     }
 
     /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says. A hub older than

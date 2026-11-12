@@ -12,6 +12,7 @@ use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, Err
 use protocol::frame;
 use protocol::model::{Place, Seq, Session};
 
+mod compactions;
 mod prompts;
 mod views;
 
@@ -71,6 +72,8 @@ pub(super) fn answered_simply(request: &ClientRequest) -> Option<ReplyOutcome> {
     } else if matches!(request, ClientRequest::SessionReadPlaces { .. }) {
         let placed = ClientResponse::PlacedEvents { events: Vec::new(), last_place: Place::new(LAST_SEQ) };
         Some(ReplyOutcome::Response(placed))
+    } else if matches!(request, ClientRequest::SessionCompactionList { .. }) {
+        Some(ReplyOutcome::Response(ClientResponse::Compactions { compactions: Vec::new() }))
     } else if matches!(request, ClientRequest::SessionUnsubscribe { .. }) {
         None
     } else {
