@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use desktop::app::Quitting;
 use gpui_kit::test::TestWindowExt as _;
@@ -13,7 +13,7 @@ use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext};
 use protocol::event::EventBody;
 
 use crate::menus::choose;
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, TIMEOUT, Ui};
 
 #[gpui_kit::test]
 fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
@@ -141,9 +141,17 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
 struct Frozen(String);
 
 impl Frozen {
+    /// Returns once every thread of the process has stopped. Linux hands `SIGSTOP` to one thread, and stops the rest
+    /// only once that one runs, so on a busy machine another can still read a request and answer it after `kill`
+    /// has returned.
     fn stop(pid: u32) -> Self {
         let frozen = Self(pid.to_string());
         frozen.signal("-STOP");
+        let deadline = Instant::now() + TIMEOUT;
+        while !stopped(&frozen.0) {
+            assert!(Instant::now() < deadline, "process {} never stopped", frozen.0);
+            std::thread::sleep(Duration::from_millis(1));
+        }
         frozen
     }
 
@@ -170,6 +178,24 @@ impl Drop for Frozen {
     fn drop(&mut self) {
         self.signal("-CONT");
     }
+}
+
+/// Whether every thread of the process has stopped, or is gone, as each one's `stat` says: its state follows its name,
+/// which is in parentheses and can hold anything, so it's read from after the last of them.
+#[cfg(target_os = "linux")]
+fn stopped(pid: &str) -> bool {
+    let Ok(threads) = std::fs::read_dir(format!("/proc/{pid}/task")) else { return false };
+    threads.flatten().all(|thread| {
+        let stat = std::fs::read_to_string(thread.path().join("stat")).unwrap_or_default();
+        stat.rsplit_once(") ").is_some_and(|(_, after)| after.starts_with(['T', 't', 'Z', 'X']))
+    })
+}
+
+/// Whether the process has stopped, as `ps` says, which on a Mac is once all of it has.
+#[cfg(not(target_os = "linux"))]
+fn stopped(pid: &str) -> bool {
+    let shown = std::process::Command::new("ps").args(["-o", "stat=", "-p", pid]).output().unwrap();
+    String::from_utf8_lossy(&shown.stdout).trim_start().starts_with('T')
 }
 
 /// Closing the window quits the app, so it asks as quitting does, and the window stays open while it asks.
