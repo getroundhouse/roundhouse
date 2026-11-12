@@ -3,6 +3,7 @@
 #[cfg(feature = "testing")]
 mod account;
 mod admin;
+mod agent_list;
 mod api;
 mod commands;
 mod feed;

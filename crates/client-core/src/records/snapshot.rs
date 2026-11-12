@@ -14,11 +14,14 @@ use protocol::model::{
 };
 
 use super::Taken;
+use crate::Agents;
 
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     records: Arc<Listed>,
     subagents: Arc<SubagentsListed>,
+    /// Not a record, but read beside them, as [`super::HubRecords`] says.
+    agents: Arc<Agents>,
 }
 
 /// Every record but subagents, as views read them.
@@ -138,8 +141,14 @@ impl SubagentsListed {
 }
 
 impl Snapshot {
-    pub(super) fn new(records: Arc<Listed>, subagents: Arc<SubagentsListed>) -> Self {
-        Snapshot { records, subagents }
+    pub(super) fn new(records: Arc<Listed>, subagents: Arc<SubagentsListed>, agents: Arc<Agents>) -> Self {
+        Snapshot { records, subagents, agents }
+    }
+
+    /// What each kind of agent the hub runs is called and offers. None until the hub has said, and for good from a hub
+    /// too old to say.
+    pub fn agents(&self) -> &Agents {
+        &self.agents
     }
 
     /// By name.
@@ -224,7 +233,14 @@ pub struct Changes<'a> {
 impl Changes<'_> {
     /// Whether anything changed at all.
     pub fn any(&self) -> bool {
-        !Arc::ptr_eq(&self.now.records, &self.then.records) || !Arc::ptr_eq(&self.now.subagents, &self.then.subagents)
+        !Arc::ptr_eq(&self.now.records, &self.then.records)
+            || !Arc::ptr_eq(&self.now.subagents, &self.then.subagents)
+            || self.agents()
+    }
+
+    /// Whether what the hub says of its agents changed, which only a new connection does.
+    pub fn agents(&self) -> bool {
+        !Arc::ptr_eq(&self.now.agents, &self.then.agents)
     }
 
     /// Whether the workspace's own record changed.

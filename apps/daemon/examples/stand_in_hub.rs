@@ -1,7 +1,8 @@
 //! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real
 //! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. With
 //! `--speaks-this-protocol` it takes a hello, as an older build would, and serves a hub with nothing in it, so the
-//! app can use it, and refuses anything else. It holds the same lock as a real hub. A test can change how many agents
+//! app can use it, refuses `agent_list` as unsupported, as a build from before hubs described their agents would, and
+//! refuses anything else. It holds the same lock as a real hub. A test can change how many agents
 //! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory,
 //! and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes by what it
 //! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy.
@@ -152,6 +153,12 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
             ClientRequest::RecordsList if args.speaks_this_protocol => {
                 let nothing = ClientResponse::Records(Records::default());
                 reply(&writer, request.id, ReplyOutcome::Response(nothing));
+            }
+            // As a hub from before hubs described their agents: one that speaks this protocol refuses a request it
+            // doesn't know and carries on.
+            ClientRequest::AgentList if args.speaks_this_protocol => {
+                let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
+                reply(&writer, request.id, ReplyOutcome::Error(unknown));
             }
             ClientRequest::HubStatus => {
                 let status = ClientResponse::HubStatus(status(args, paths));

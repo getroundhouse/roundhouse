@@ -14,6 +14,7 @@ pub mod file_text;
 pub mod records;
 pub mod session_log;
 
+mod agents;
 mod approval;
 mod attachments;
 mod client;
@@ -22,6 +23,7 @@ mod sending;
 #[cfg(test)]
 mod stand_in_hub;
 
+pub use agents::Agents;
 pub use approval::{Answered, Approval};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{Drafts, Where};

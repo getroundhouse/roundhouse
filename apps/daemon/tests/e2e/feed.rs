@@ -199,3 +199,16 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     });
     assert_eq!(feed.snapshot().comments(&workspace.id), [kept]);
 }
+
+/// What the hub's agents offer reaches a client's copy from the adapters the daemon was built with.
+#[test]
+fn a_client_copy_holds_what_each_kind_of_agent_offers_as_its_adapter_describes_it() {
+    let stack = Stack::start();
+    let client = stack.client();
+
+    let feed = RecordsFeed::start(&client);
+
+    wait_until("the copy to have caught up", || feed.connected());
+    assert_eq!(feed.snapshot().agents().of(AgentKind::Claude), Some(&agents::claude::description()));
+    assert_eq!(client.agent_list().unwrap(), agents::descriptions());
+}
