@@ -216,6 +216,24 @@ fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace 
     }
 }
 
+/// One found on a branch other than the one checked out isn't the workspace's now, but none found on no branch, as
+/// where `gh` can't work at all, says nothing of any branch.
+#[test]
+fn only_what_was_found_on_a_branch_can_be_another_branchs() {
+    use crate::model::{BranchName, Branches, Head};
+    let on = |pull_request: Option<PullRequest>, branch: Option<&str>| crate::model::Workspace {
+        branches: Some(Branches { head: Head::Branch { name: BranchName::from("next") }, had: Vec::new() }),
+        pull_request_branch: branch.map(BranchName::from),
+        ..workspace(Some(PullRequestFound { pull_request }))
+    };
+
+    assert!(on(Some(open()), Some("aspen")).pull_request_found_on_another_branch());
+    assert!(on(None, Some("aspen")).pull_request_found_on_another_branch(), "the branch on now may have one");
+    assert!(on(Some(open()), None).pull_request_found_on_another_branch(), "found before branches were kept");
+    assert!(!on(Some(open()), Some("next")).pull_request_found_on_another_branch());
+    assert!(!on(None, None).pull_request_found_on_another_branch(), "as where gh can't work");
+}
+
 proptest! {
     #![proptest_config(Config {
         rng_seed: RngSeed::Fixed(1),

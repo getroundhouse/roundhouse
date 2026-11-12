@@ -47,6 +47,17 @@ fn pushing_is_a_push_and_committing_isnt() {
     assert_eq!(moved(&before, &other_pushed), None, "only the branch checked out has its pull request read");
 }
 
+/// As after `git checkout main && git pull`, which moves the branch and what the worktree knows of its upstream to
+/// the same commit.
+#[test]
+fn a_pull_isnt_a_push() {
+    let before = on("main", &[("main", "1", Some("1"))]);
+
+    let pulled = on("main", &[("main", "2", Some("2"))]);
+
+    assert_eq!(moved(&before, &pulled), None);
+}
+
 #[test]
 fn a_first_push_is_a_push() {
     let before = on("aspen", &[("aspen", "1", None)]);

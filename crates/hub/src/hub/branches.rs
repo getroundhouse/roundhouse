@@ -1,7 +1,7 @@
 //! Each workspace's branches, which its worker watches and the hub keeps on the workspace's record, so every client
 //! knows which branch each worktree is on, and what's been committed and pushed, as it happens rather than when a turn
-//! ends. A pull request is its branch's, so the hub reads it again as soon as the worktree checks out a branch other
-//! than the one it was found on, a merged one included, or pushes the one it's on.
+//! ends. A pull request is its branch's, so the hub reads it again when the worktree checks out a branch other than
+//! the one it was found on, a merged one included, or pushes the one it's on, spaced out as an agent's own reads are.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,18 +72,19 @@ impl Hub {
         // With nothing recorded before, there's nothing to say what moved. A pull request found on another branch is
         // read in turn even so, merged or not.
         match before.and_then(|before| moved(&before, &branches)) {
-            Some(Moved::Switched) => self.read_pull_request_through(id, link.clone(), When::OnAnotherBranch),
-            Some(Moved::Pushed) => self.read_pull_request_through(id, link.clone(), When::Always),
+            Some(Moved::Switched) => self.read_pull_request_after_move(id, link.clone(), When::OnAnotherBranch),
+            Some(Moved::Pushed) => self.read_pull_request_after_move(id, link.clone(), When::Always),
             None => {}
         }
     }
 }
 
 /// What moved for the pull request between two reads of the branches. A push changes where the branch checked out
-/// is pushed, or brings what the worktree knows of it there up to the branch's own newest commit. A fetch moves only
-/// what's there, such as `origin/main` under a branch made from it, which tracks it, and a commit moves only the
-/// branch, so neither is a push, and GitHub has nothing new of the branch until one. A detached HEAD has no pull
-/// request.
+/// is pushed, or brings what the worktree knows of it there up to the branch's own newest commit, which hasn't moved.
+/// A fetch moves only what's there, such as `origin/main` under a branch made from it, which tracks it, a commit moves
+/// only the branch, and a pull moves both to the same commit, so none is a push, and GitHub has nothing new of the
+/// branch until one. Nor is a commit pushed before the branches are next read, which a turn's end reads instead. A
+/// detached HEAD has no pull request.
 fn moved(before: &Branches, after: &Branches) -> Option<Moved> {
     if !matches!(after.head, Head::Branch { .. }) {
         return None;
@@ -96,8 +97,9 @@ fn moved(before: &Branches, after: &Branches) -> Option<Moved> {
     let (was_pushed, is_pushed) = (was.upstream.as_ref(), is.upstream.as_ref());
     let to = |upstream: &Upstream| (upstream.remote.clone(), upstream.name.clone());
     let elsewhere = was_pushed.map(to) != is_pushed.map(to);
-    let caught_up = is_pushed.is_some_and(|pushed| {
-        pushed.tip.as_ref() == Some(&is.tip) && was_pushed.map(|was| &was.tip) != Some(&pushed.tip)
-    });
+    let caught_up = was.tip == is.tip
+        && is_pushed.is_some_and(|pushed| {
+            pushed.tip.as_ref() == Some(&is.tip) && was_pushed.map(|was| &was.tip) != Some(&pushed.tip)
+        });
     (elsewhere || caught_up).then_some(Moved::Pushed)
 }

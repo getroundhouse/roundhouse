@@ -313,10 +313,13 @@ impl Workspace {
 
     /// Whether what the hub last found of its pull request was for another branch than the one checked out, so it's
     /// no longer what the workspace's branch has, whatever it says. Not when nothing's been found yet, nor when it's
-    /// not known what's checked out, or HEAD is detached, which has no pull request.
+    /// not known what's checked out, or HEAD is detached, which has no pull request. Nor when none was found on no
+    /// branch, as where `gh` can't work at all, such as without a login, which checking out another doesn't change.
     pub fn pull_request_found_on_another_branch(&self) -> bool {
         let Some(Head::Branch { name }) = self.branches.as_ref().map(|branches| &branches.head) else { return false };
-        self.pull_request.is_some() && self.pull_request_branch.as_ref() != Some(name)
+        let found_on_a_branch = self.pull_request.is_some() && self.pull_request_branch.is_some();
+        let found = self.known_pull_request().is_some() || found_on_a_branch;
+        found && self.pull_request_branch.as_ref() != Some(name)
     }
 
     /// What to call it on screen: its title, or its name until it has one.

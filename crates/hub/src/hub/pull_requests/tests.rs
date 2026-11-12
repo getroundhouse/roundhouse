@@ -57,3 +57,28 @@ async fn an_agent_is_refused_the_part_of_githubs_limit_kept_for_everything_else(
 
     assert_eq!(agent.unwrap_err().code, ErrorCode::Unavailable, "not what the client's read found");
 }
+
+/// A branch that's moved is the agent's doing, so the read it brings waits as one an agent asks for does.
+#[tokio::test(start_paused = true)]
+async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let says = says(Some(open()));
+    let link = reading(&hub, &says);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    *says.lock() = Ok(Some(PullRequest { title: "Pushed".into(), ..open() }));
+    let moved_at = tokio::time::Instant::now();
+
+    hub.read_pull_request_after_move(&"w".into(), link, When::Always);
+    let mut title = None;
+    for _ in 0..600 {
+        title = hub.workspace(&"w".into()).await.unwrap().known_pull_request().map(|pr| pr.title.clone());
+        if title.as_deref() == Some("Pushed") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    assert_eq!(title.as_deref(), Some("Pushed"), "read again");
+    assert!(moved_at.elapsed() >= AGENT_SPACING, "after {:?}", moved_at.elapsed());
+}

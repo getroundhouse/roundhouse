@@ -39,13 +39,15 @@ const AGENT_SPACING: Duration = Duration::from_secs(10);
 /// Who a read is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Asked {
-    /// Someone is waiting on it, so it goes at once: a client that asked, an agent whose turn has ended, which may
-    /// have committed, pushed or opened a pull request, or a worktree that's checked out another branch or pushed.
+    /// Someone is waiting on it, so it goes at once: a client that asked, or an agent whose turn has ended, which may
+    /// have committed, pushed or opened a pull request.
     Waiting,
-    /// An agent asked, through the worker's tools. It goes at once, as a read someone waits on does, but no sooner than
+    /// An agent asked, through the worker's tools, or its worktree checked out another branch or pushed the one it's
+    /// on, which an agent can do over and over. It goes at once, as a read someone waits on does, but no sooner than
     /// [`AGENT_SPACING`] after the last, and leaves the part of GitHub's limit kept for everything else, as a read in
-    /// turn does. So an agent asking in a loop can't spend the limit that the user's own `gh` and the other agents
-    /// share. It's never answered with what was known before, which may be from before the agent pushed.
+    /// turn does. So an agent asking, switching or pushing in a loop can't spend the limit that the user's own `gh`
+    /// and the other agents share. It's never answered with what was known before, which may be from before the agent
+    /// pushed.
     Agent,
     /// Nobody asked, and it's this workspace's turn, so it waits for the budget.
     InTurn,
@@ -246,18 +248,23 @@ impl Hub {
     /// After an agent's turn. Only through the worker that's running, as the agent's is, so this never starts one.
     pub(crate) fn read_pull_request_after_turn(self: &Arc<Self>, id: &WorkspaceId) {
         if let Some(link) = self.existing_worker(id) {
-            self.read_pull_request_through(id, link, When::Always);
+            self.read_pull_request_through(id, link, Asked::Waiting, When::Always);
         }
     }
 
-    /// For something that may have changed it, such as a turn that's ended, or the worktree checking out another
-    /// branch or pushing the one it's on, through the worker it happened in.
-    pub(super) fn read_pull_request_through(self: &Arc<Self>, id: &WorkspaceId, link: Arc<WorkerLink>, when: When) {
+    /// After the worktree checked out another branch or pushed the one it's on, through the worker that saw it, as
+    /// [`Asked::Agent`] says.
+    pub(super) fn read_pull_request_after_move(self: &Arc<Self>, id: &WorkspaceId, link: Arc<WorkerLink>, when: When) {
+        self.read_pull_request_through(id, link, Asked::Agent, when);
+    }
+
+    /// For something that may have changed it, through the worker it happened in.
+    fn read_pull_request_through(self: &Arc<Self>, id: &WorkspaceId, link: Arc<WorkerLink>, asked: Asked, when: When) {
         let (hub, id) = (self.clone(), id.clone());
         tokio::spawn(async move {
             let Ok(workspace) = hub.workspace(&id).await else { return };
             let Some(path) = workspace.path.filter(|_| workspace.status == WorkspaceStatus::Ready) else { return };
-            let read = hub.read_pull_request(&id, path, &link, Asked::Waiting, when).await;
+            let read = hub.read_pull_request(&id, path, &link, asked, when).await;
             if let Err(e) = read.and_then(Answer::or_known) {
                 debug!(%id, "reading the pull request as it may have changed: {}", e.message);
             }
