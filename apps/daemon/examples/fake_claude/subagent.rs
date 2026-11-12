@@ -1,8 +1,9 @@
 //! A subagent, started in the background as the real CLI starts one: the call's result only says it started, and
-//! the subagent's own call and report come later, naming the call as their parent. Its report streams in a few
-//! pieces, so a test can see what it's writing, and cut it off. The CLI's word on the task it runs as comes around
-//! that, as the real CLI's does: that it started, after the call, and that it finished, after its report. One in the
-//! foreground is the same, but for the call's result, which comes last, with the report.
+//! the subagent's own calls and report come later, naming the call as their parent. It makes one call, or as many as
+//! it's asked for, for a subagent tab long enough to scroll. Its report streams in a few pieces, so a test can see
+//! what it's writing, and cut it off. The CLI's word on the task it runs as comes around that, as the real CLI's does:
+//! that it started, after the calls, and that it finished, after its report. One in the foreground is the same, but
+//! for the call's result, which comes last, with the report.
 
 use std::collections::VecDeque;
 use std::sync::mpsc::Receiver;
@@ -24,6 +25,7 @@ pub(crate) fn start(
     turn: &mut Turn,
     description: &str,
     in_background: bool,
+    calls: usize,
     rx: &Receiver<Input>,
     queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
@@ -44,8 +46,10 @@ pub(crate) fn start(
         return true;
     }
     let mut within = Turn { parent: Some(&agent), ..*turn };
-    let call = within.named_tool_use("Bash", json!({"command":"ls","description":"List what's here"}));
-    within.tool_result(&call, "README.md", false);
+    for _ in 0..calls {
+        let call = within.named_tool_use("Bash", json!({"command":"ls","description":"List what's here"}));
+        within.tool_result(&call, "README.md", false);
+    }
     let report = ["There's ", "a README ", "here."].map(String::from).to_vec();
     if within.say(Block::Text, report, WRITES_EVERY, rx, queued, eof) {
         return true;

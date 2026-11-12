@@ -2,11 +2,19 @@
 //! away from.
 
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, ScrollDelta, TestAppContext, point, px};
+use look::Region;
 use look::motion::SCROLL;
+use protocol::model::seq_index;
 
-use super::{A_FRAME, open_on_a_long_session, thumb};
+use super::{A_FRAME, open_on_a_long_session, thumb, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
+use crate::tools::in_a_new_workspace;
+
+/// The fake agent's commands come with no description, so their line says they run something.
+const COMMAND_LINE: &str = "Run";
+/// The call the fake agent's subagent makes.
+const SUBAGENT_CALL: &str = "List what's here";
 
 /// Someone who scrolls back down to the latest row is keeping to it again, and the button that would take them
 /// there goes. The list finds the end in sight as it lays the rows out, which is after the button is drawn.
@@ -79,6 +87,101 @@ fn reduce_motion_turned_on_partway_takes_the_scroll_the_rest_of_the_way_at_once(
 
     assert!((thumb(&ui) - 1.).abs() < f32::EPSILON, "it's at the latest row, not at {}", thumb(&ui));
     assert!(!shows(&mut ui));
+}
+
+/// The button sits at the chat's bottom left, on the composer's left edge, which reaches a little past the column's,
+/// so it's over the edge of the chat, and it rests 8px above the composer. In a pane too narrow for the composer to be
+/// centred, the composer keeps a margin from the pane's edge, which the button could match without following the
+/// composer, so the button is checked again in a pane the composer is centred in, with the diff hidden.
+#[gpui_kit::test]
+fn the_button_sits_on_the_composers_left_edge_just_above_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_on_a_long_session(cx, &stack);
+    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
+    assert!(shows(&mut ui));
+    on_the_composers_edge_just_above_it(&mut ui);
+
+    ui.click("toggle-diff");
+
+    assert!(shows(&mut ui), "it's still scrolled up");
+    let (pane, composer) = (bounds(&mut ui, Region::Transcript.id()), bounds(&mut ui, Region::Composer.id()));
+    assert!(composer.left() - pane.left() > px(16.), "the composer isn't centred, at {:?}", composer.left());
+    on_the_composers_edge_just_above_it(&mut ui);
+}
+
+/// The button takes the pointer from what's under it, so a click on it over a tool call's line, which a narrow pane
+/// has under it, doesn't open the call too.
+#[gpui_kit::test]
+fn a_click_on_the_button_leaves_the_call_under_it_closed(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_on_a_session_of_commands(cx, &stack);
+    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
+    assert!(shows(&mut ui));
+    let middle = bounds(&mut ui, Region::LatestButton.id()).center();
+    let lines = ui.labelled(COMMAND_LINE);
+    let under = lines.iter().find(|line| line.bounds().contains(&middle)).expect("a call's line under the button");
+    let line = under.path().last().unwrap().clone();
+
+    ui.click(button(&ui));
+
+    let open = ui.cx.update_window(ui.handle, |_, window, _| window.try_find(line).and_then(|l| l.expanded())).unwrap();
+    assert_eq!(open, Some(false), "the call under the button opened");
+}
+
+/// A subagent's tab has nothing under it, since a subagent can't be prompted, so there the button rests 8px above the
+/// tab's bottom edge, as it rests above a chat's composer.
+#[gpui_kit::test]
+fn in_a_subagent_s_tab_the_button_rests_above_the_tab_s_bottom_edge(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    ui.input("agent-calls:60:Look around; say:done");
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    ui.wait("the button that opens the subagent tab", |ui| !ui.shown("open-subagent/").is_empty());
+    let open = ui.shown("open-subagent/").remove(0);
+    ui.click(open);
+    ui.wait("the subagent's work", |ui| ui.labelled(SUBAGENT_CALL).len() > 10);
+    ui.settle(A_FRAME);
+
+    ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
+
+    ui.settle(A_FRAME);
+    let (tab, button) = (bounds(&mut ui, Region::Transcript.id()), bounds(&mut ui, Region::LatestButton.id()));
+    let room = tab.bottom() - button.bottom();
+    assert!((room - px(8.)).abs() < px(0.5), "it rests {room:?} above the tab's bottom edge, not 8px");
+}
+
+/// Checks that the button is on the composer's left edge, and 8px above it.
+fn on_the_composers_edge_just_above_it(ui: &mut Ui<'_>) {
+    let (button, composer) = (bounds(ui, Region::LatestButton.id()), bounds(ui, Region::Composer.id()));
+    assert!(
+        (button.left() - composer.left()).abs() < px(0.5),
+        "it's at {:?}, not on the composer's edge at {:?}",
+        button.left(),
+        composer.left()
+    );
+    let room = composer.top() - button.bottom();
+    assert!((room - px(8.)).abs() < px(0.5), "it rests {room:?} above the composer, not 8px");
+}
+
+/// A session of sixty commands, open in the app at its end, so a call's line can be scrolled under the button.
+fn open_on_a_session_of_commands<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+    let session = stack.chat_in_a_new_workspace();
+    // A few to a prompt, as a person would ask.
+    for _ in 0..3 {
+        stack.run(&session, &["tool:echo signal"; 20].join("; "));
+    }
+    let total = seq_index(stack.client().session_get(&session).unwrap().last_seq);
+    let mut ui = Ui::open(cx, stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    wait_for_the_list_to_settle(&mut ui, total - 1);
+    ui
+}
+
+/// Where the element with this ID was drawn.
+fn bounds(ui: &mut Ui<'_>, id: &'static str) -> Bounds<Pixels> {
+    ui.frame();
+    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 /// The button back down to the latest row of the session shown.

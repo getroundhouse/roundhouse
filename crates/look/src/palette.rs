@@ -11,8 +11,9 @@ pub fn faint() -> Hsla {
     hex(0x006f_6964)
 }
 
-/// The edge of a field on the sidebar, such as Settings' search: lighter than a line, since it's something to type in
-/// rather than something that separates.
+/// The edge of a field on the sidebar, such as Settings' search, and of the button back down to a chat's end, which
+/// sits over the chat's text: lighter than a line, since each is something to use rather than something that
+/// separates.
 pub fn field_edge() -> Hsla {
     hex(0x0043_4140)
 }

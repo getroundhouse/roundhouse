@@ -18,17 +18,18 @@ use std::rc::Rc;
 
 use gpui_kit::base::motion::transition;
 use gpui_kit::base::{ScrollBounce, ScrollbarHandle};
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, IconName};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, ElementId, EntityId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Point, Role, Size, StatefulInteractiveElement as _, Styled as _, Window, div, point, px, rems, size,
+    Pixels, Point, Role, Size, StatefulInteractiveElement as _, Styled as _, Window, div, point, px, size,
 };
 use look::motion::Scrolling;
 use look::{InRegion as _, Off as _, Region};
 
+use crate::around_column;
 use crate::scroll_area::hears_the_wheel;
 use crate::transcript::Transcript;
 
@@ -47,6 +48,12 @@ use state::State;
 
 /// The space above the first row and below the last.
 const EDGE: Pixels = px(8.);
+/// The side of the square button back to the latest row.
+const LATEST_BUTTON_SIDE: Pixels = px(28.);
+/// How far the button back to the latest row rests above what's under the chat, such as the composer.
+const LATEST_BUTTON_ROOM: Pixels = px(8.);
+/// How far the button back to the latest row rises to where it rests as it fades in.
+const LATEST_BUTTON_RISE: Pixels = px(4.);
 
 #[derive(Clone)]
 pub struct TranscriptList {
@@ -163,12 +170,14 @@ impl TranscriptList {
     }
 
     /// The list, drawing each row with `row`, which gives `None` for a row that hasn't been fetched. `want` is told
-    /// which of those to fetch.
+    /// which of those to fetch. `room_under` is what's left between the list and what's under it, such as the
+    /// composer, which the button back to the latest row counts as part of its own room.
     pub(crate) fn render(
         &self,
         id: ElementId,
         mut row: impl FnMut(usize, &mut Window, &mut App) -> Option<AnyElement> + 'static,
         want: impl Fn(usize) + 'static,
+        room_under: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
@@ -208,13 +217,21 @@ impl TranscriptList {
             // Before the rows, so a block in one knows which gesture the wheel is part of when it hears it.
             .child(hears_the_wheel())
             .child(viewport)
-            .children(self.jump_button(id, window, cx))
+            .children(self.jump_button(id, room_under, window, cx))
             .into_any_element()
     }
 
     /// The button back to the latest row, which fades in once someone has scrolled away from it, and out as soon as
-    /// it's clicked.
-    fn jump_button(&self, id: ElementId, window: &mut Window, cx: &mut App) -> Option<gpui_kit::Div> {
+    /// it's clicked. It sits on the composer's left edge, which reaches a little past the column's, so it's over the
+    /// edge of the chat, and out of the way of a prompt, at the column's right. The composer reaches less far in a
+    /// narrow pane, so there the button covers more of the column's start.
+    fn jump_button(
+        &self,
+        id: ElementId,
+        room_under: Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<gpui_kit::Div> {
         let wanted = self.is_scrolled_up() && !self.state.borrow().is_heading_to_latest();
         let shown = transition(
             (id.clone(), "jump-button-visibility"),
@@ -226,32 +243,47 @@ impl TranscriptList {
         if shown <= 0. {
             return None;
         }
-        let colors = cx.theme().semantic_tokens().colors;
+        let (theme, edge) = (cx.theme(), look::field_edge());
+        // Its edge is lighter than a line, so it reads as something to press over whatever is under it rather than as
+        // a divider. A custom button's edge is its colour whatever state it's in, so the edge stays as the pointer
+        // lights it, where a secondary one's would turn to a line's.
+        let style =
+            ButtonCustomVariant::new(cx).color(edge).hover(theme.secondary_hover).active(theme.secondary_active);
         let list = self.clone();
+        // A small button's icon, on a square a little bigger, so it's easy to hit over the chat. The kit draws a custom
+        // button's colour faintly as its fill, so the pane's colour is set on the button itself, which hover and press
+        // still change. Its edge and icon are set there too, over the kit's style for a button that's off, so it looks
+        // the same as it fades out, off so it isn't pressed again.
         let button = Button::new((id, "jump-to-latest"))
-            .secondary()
-            .icon(IconName::ArrowDown)
+            .custom(style)
+            .small()
+            .icon(IconName::ChevronDown)
+            .accessibility_label("Jump to latest")
             .tooltip("Jump to latest")
-            .rounded(cx.theme().radius_full())
+            .size(LATEST_BUTTON_SIDE)
             .border_1()
-            .border_color(colors.border)
-            .bg(colors.background)
-            .text_color(colors.foreground)
+            .border_color(edge)
+            .bg(theme.background)
+            .text_color(theme.foreground)
             .on_click(move |_, _, cx| {
                 list.scroll_to_latest(cx);
                 cx.notify(list.view);
             })
             .off_while(!wanted);
+        // In a box only as big as the button, which takes the pointer from what's under it, such as a tool call's line,
+        // which a narrow pane has under it, so a click doesn't open the call too, but lets the wheel through to the
+        // chat. The box is also the button's region, which a picture of it is cut to.
+        let button = div().block_mouse_except_scroll().region(Region::LatestButton).child(button);
+        // Rising to where it rests, with what the list leaves under it counted in.
+        let bottom = LATEST_BUTTON_ROOM - room_under - LATEST_BUTTON_RISE * (1. - shown);
         Some(
             div()
                 .absolute()
                 .left_0()
                 .right_0()
-                .bottom(rems(0.5 + shown * 0.5))
-                .flex()
-                .justify_center()
+                .bottom(bottom)
                 .opacity(shown)
-                .child(button),
+                .child(around_column(div().flex().child(button))),
         )
     }
 }

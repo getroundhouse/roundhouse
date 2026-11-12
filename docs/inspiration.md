@@ -37,6 +37,7 @@ From screenshots of a long chat, on a Retina display:
 
 - At the top right of the chat, just left of its scrollbar, is a short tick for each prompt, about 20px wide and 8px apart, in grey, with the one in view in white. It reads as a map of the chat's prompts, and of where you are among them.
 - Resting the pointer on the ticks opens a raised list over them, which hides them while it's open, so the ticks themselves are never clicked. It's about 255px wide, with one row per prompt, about 26px tall, each cut short with an ellipsis. The prompt in view has a lighter row, and the list scrolls, with its own scrollbar, once there are more than about a dozen.
+- A chat scrolled up from its end has a button back down at its bottom left: a 28px square with corners of about 6px, on the pane's colour, with an edge of about `#434140` and a small chevron pointing down, nearly white. Its left edge is on the composer's, so it reaches about 3px over the chat's left edge, and it sits about 9px above the composer.
 
 ## Settings' sidebar
 

@@ -338,11 +338,16 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
     }
-    let subagent = command.strip_prefix("agent:").map(|what| (what, true));
-    if let Some((description, in_background)) =
-        subagent.or(command.strip_prefix("agent-foreground:").map(|what| (what, false)))
-    {
-        return subagent::start(turn, description, in_background, rx, queued, eof);
+    let subagent = command
+        .strip_prefix("agent:")
+        .map(|what| (what, true, 1))
+        .or_else(|| command.strip_prefix("agent-foreground:").map(|what| (what, false, 1)))
+        .or_else(|| {
+            let (calls, what) = command.strip_prefix("agent-calls:")?.split_once(':')?;
+            Some((what, true, calls.parse().unwrap()))
+        });
+    if let Some((description, in_background, calls)) = subagent {
+        return subagent::start(turn, description, in_background, calls, rx, queued, eof);
     }
     if let Some((call, file)) = background::Call::read(command) {
         return background::start(turn, call, file);

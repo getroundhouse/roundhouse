@@ -26,7 +26,7 @@ pub use attachments::{file_card, image_format};
 pub use calls::agent::shown_kind;
 pub use list::{Place, TranscriptList};
 pub use questions::QuestionPanel;
-pub use rows::{around_column, in_column, subagent_standing};
+pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, subagent_standing};
 pub use transcript::{Transcript, TranscriptEvent};
 
 /// How long a new question ignores keys, which a test can wait out.

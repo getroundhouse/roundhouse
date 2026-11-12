@@ -370,6 +370,7 @@ impl Render for Transcript {
         // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
         // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
         let tail = self.list.row_count().saturating_sub(1);
+        let room_under = crate::rows::room_under(&self.model.borrow());
         let rows = self.list.render(
             ElementId::Name(self.list_id.clone().into()),
             move |ix, _, cx| {
@@ -379,6 +380,7 @@ impl Render for Transcript {
                 })
             },
             move |row| wanted.want(row),
+            room_under,
             window,
             cx,
         );
