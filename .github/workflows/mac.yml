@@ -39,6 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: git config --global user.name ci && git config --global user.email ci@example.com
+      # The Zig that builds Ghostty's terminal core, which its build script runs. Its own cache is off, since it would
+      # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.1
+          use-cache: false
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

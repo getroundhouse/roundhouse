@@ -1,0 +1,17 @@
+[package]
+name = "terminal-state"
+description = "What a terminal shows, kept from what the program in it writes, and the bytes that draw it again in another terminal. No IO and no UI."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+libghostty-vt.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

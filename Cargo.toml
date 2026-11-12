@@ -13,6 +13,7 @@ members = [
     "apps/desktop",
     "crates/transcript",
     "crates/look",
+    "crates/terminal-state",
     "tools/policy",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
@@ -27,6 +28,7 @@ default-members = [
     "crates/client-core",
     "apps/daemon",
     "apps/cli",
+    "crates/terminal-state",
     "tools/policy",
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
@@ -48,6 +50,7 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }
 look = { path = "crates/look" }
+terminal-state = { path = "crates/terminal-state" }
 desktop = { path = "apps/desktop" }
 
 anyhow = "1"
@@ -73,6 +76,9 @@ hyper = { version = "1", features = ["http1", "server"] }
 # Already under GPUI. Runs hyper's connections on tokio.
 hyper-util = { version = "0.1", features = ["tokio"] }
 libc = "0.2"
+# Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
+# Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "cd4d497e8c698b27054a677ce19d1bd1a1a4d8bf" }
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does.
 markdown = "1"
